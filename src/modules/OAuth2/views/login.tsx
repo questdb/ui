@@ -9,7 +9,7 @@ import { Badge, Text, Form, Button, IconButton } from "../../../components"
 import { setValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { useSettings } from "../../../providers"
-import { getSSOUserNameWithClientID } from "../utils"
+import { getSSOUserNameWithClientID, SIGN_IN_ERROR_TITLE } from "../utils"
 import { RawDqlResult } from "utils/questdb/types"
 import { LoadingSpinner } from "../../../components/LoadingSpinner"
 import { Box } from "../../../components/Box"
@@ -300,6 +300,7 @@ export const Login = ({
   const version = settings["release.version"]
   const [loading, setLoading] = useState(false)
   const redirectErrorRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
     if (redirectErrorTitle || redirectErrorMessage) {
@@ -396,7 +397,7 @@ export const Login = ({
             <Box flexDirection="column" gap="0" align="flex-start">
               <span id="sign-in-error-title">
                 <Text size="lg" weight={600} color="statusDanger">
-                  {redirectErrorTitle ?? "Something went wrong."}
+                  {redirectErrorTitle ?? SIGN_IN_ERROR_TITLE}
                 </Text>
               </span>
               <span id="sign-in-error-message">
@@ -410,7 +411,10 @@ export const Login = ({
               label="Dismiss sign-in error"
               size="lg"
               variant="secondary"
-              onClick={resetErrors}
+              onClick={() => {
+                resetErrors()
+                titleRef.current?.focus()
+              }}
             >
               <XIcon size={24} />
             </ErrorCloseButton>
@@ -427,7 +431,9 @@ export const Login = ({
               height="48"
             />
           </LogoContainer>
-          <Title>Sign in to QuestDB</Title>
+          <Title ref={titleRef} tabIndex={-1}>
+            Sign in to QuestDB
+          </Title>
           <Card>
             {settings["acl.oidc.enabled"] && (
               <SSOCard>

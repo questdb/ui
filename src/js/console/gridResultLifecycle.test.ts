@@ -21,22 +21,16 @@ describe("legacy grid result lifecycle", () => {
     expect(newRender).toHaveBeenCalledTimes(1)
   })
 
-  it("drops old pagination and second-phase layout callbacks", () => {
+  it("drops old asynchronous pagination callbacks", () => {
     vi.useFakeTimers()
     const lifecycle = createGridResultLifecycle()
     const oldPage = vi.fn()
-    const oldLayout = vi.fn()
-    let finishLayout!: () => void
-    lifecycle.replaceResult(() => {
-      finishLayout = lifecycle.guard(oldLayout)
-    })
+    lifecycle.replaceResult(vi.fn())
     vi.advanceTimersByTime(0)
     const receivePage = lifecycle.guard(oldPage)
     lifecycle.replaceResult(vi.fn())
     receivePage({ dataset: [[1]] })
-    finishLayout()
     expect(oldPage).not.toHaveBeenCalled()
-    expect(oldLayout).not.toHaveBeenCalled()
   })
 
   it("keeps current callbacks and debounces page loads", () => {

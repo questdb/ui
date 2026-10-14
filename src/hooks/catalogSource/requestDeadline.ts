@@ -1,4 +1,4 @@
-import { REFRESH_TIMEOUT_MS } from "../../utils/questdb/client"
+import { REFRESH_WAIT_TIMEOUT_MS } from "../../utils/questdb/tokenRefresh"
 import { SOURCE_TIMEOUT_MS } from "./sourceState"
 
 export const createCatalogRequestDeadline = (
@@ -22,7 +22,7 @@ export const createCatalogRequestDeadline = (
   // after onRequestStart, even if refreshing consumed the entire first 10s.
   // A query can also wait for a refresh after a 401, between two requests.
   const allowRefreshThenRequest = () =>
-    schedule(REFRESH_TIMEOUT_MS + SOURCE_TIMEOUT_MS)
+    schedule(REFRESH_WAIT_TIMEOUT_MS + SOURCE_TIMEOUT_MS)
   allowRefreshThenRequest()
   return {
     promise,

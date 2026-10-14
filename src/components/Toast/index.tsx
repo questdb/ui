@@ -12,7 +12,6 @@ import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
 import { CloseCircle, ErrorWarning, Information } from "../icons"
 import { CheckmarkOutline } from "../icons"
 import { useTheme } from "styled-components"
-import { getThemeColor } from "../../theme/runtime"
 
 import "react-toastify/dist/ReactToastify.css"
 import "../../styles/_toast.scss"
@@ -70,12 +69,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.INFO} />,
       className: "toast-info-container",
       progressStyle: {
-        background: getThemeColor("statusInfo"),
+        background: "var(--qdb-color-statusInfo)",
       },
       style: {
-        borderColor: getThemeColor("statusInfo"),
-        background: getThemeColor("surfaceRaised"),
-        color: getThemeColor("contentPrimary"),
+        borderColor: "var(--qdb-color-statusInfo)",
+        background: "var(--qdb-color-surfaceRaised)",
+        color: "var(--qdb-color-contentPrimary)",
       },
       ...options,
     })
@@ -85,12 +84,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.SUCCESS} />,
       className: "toast-success-container",
       progressStyle: {
-        background: getThemeColor("statusSuccess"),
+        background: "var(--qdb-color-statusSuccess)",
       },
       style: {
-        borderColor: getThemeColor("statusSuccess"),
-        background: getThemeColor("surfaceRaised"),
-        color: getThemeColor("contentPrimary"),
+        borderColor: "var(--qdb-color-statusSuccess)",
+        background: "var(--qdb-color-surfaceRaised)",
+        color: "var(--qdb-color-contentPrimary)",
       },
       ...options,
     })
@@ -100,12 +99,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.WARNING} />,
       className: "toast-warning-container",
       progressStyle: {
-        background: getThemeColor("statusWarning"),
+        background: "var(--qdb-color-statusWarning)",
       },
       style: {
-        borderColor: getThemeColor("statusWarning"),
-        background: getThemeColor("surfaceRaised"),
-        color: getThemeColor("contentPrimary"),
+        borderColor: "var(--qdb-color-statusWarning)",
+        background: "var(--qdb-color-surfaceRaised)",
+        color: "var(--qdb-color-contentPrimary)",
       },
       ...options,
     })
@@ -114,13 +113,13 @@ const toast = {
     return rtToast.error(content, {
       icon: <ToastIcon type={BadgeType.ERROR} />,
       progressStyle: {
-        background: getThemeColor("statusDanger"),
+        background: "var(--qdb-color-statusDanger)",
       },
       className: "toast-error-container",
       style: {
-        borderColor: getThemeColor("statusDanger"),
-        background: getThemeColor("surfaceRaised"),
-        color: getThemeColor("contentPrimary"),
+        borderColor: "var(--qdb-color-statusDanger)",
+        background: "var(--qdb-color-surfaceRaised)",
+        color: "var(--qdb-color-contentPrimary)",
       },
       ...options,
     })

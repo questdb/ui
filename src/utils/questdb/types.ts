@@ -112,6 +112,9 @@ export type RawResult =
 export type ErrorResult = RawErrorResult & {
   type: Type.ERROR
   status: number
+  // Authentication already switched to the login view. Do not persist a
+  // "sign in again" notification into the next editor session.
+  sessionEnded?: boolean
 }
 
 export type NoticeResult = RawNoticeResult & {

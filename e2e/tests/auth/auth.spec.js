@@ -445,6 +445,18 @@ describe("Auth - OIDC sign-in errors", () => {
     cy.contains("access_denied: Sign-in cancelled").should("not.exist")
   })
 
+  it("restores focus to the sign-in heading when the error is dismissed", () => {
+    cy.intercept("POST", tokenUrl, {
+      statusCode: 400,
+      body: { error: "invalid_grant" },
+    })
+    visitCallback("?code=bad-code")
+    cy.getByDataHook("sign-in-error").should("be.focused")
+    cy.get('[aria-label="Dismiss sign-in error"]').focus().click()
+    cy.getByDataHook("sign-in-error").should("not.exist")
+    cy.contains("h2", "Sign in to QuestDB").should("be.focused")
+  })
+
   for (const { failure, reply, message } of [
     {
       failure: "cannot be reached",
@@ -599,6 +611,14 @@ describe("Auth - OIDC ID token", () => {
       failure: "non-JSON 502",
       reply: { statusCode: 502, body: "<html>Bad Gateway</html>" },
     },
+    {
+      failure: "JSON 503",
+      reply: { statusCode: 503, body: { error: "temporarily_unavailable" } },
+    },
+    {
+      failure: "JSON 429",
+      reply: { statusCode: 429, body: { error: "rate_limited" } },
+    },
   ]) {
     it(`loads the editor after a refresh ${failure} and explains a later 401`, () => {
       const initial = idToken("initial", 20)
@@ -641,6 +661,38 @@ describe("Auth - OIDC ID token", () => {
         .should("eq", "true")
     })
   }
+
+  it("does not carry a session-ended query notification into password re-login", () => {
+    cy.clock(Date.now(), ["Date"])
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 3600) },
+      refreshReply: { statusCode: 400, body: { error: "invalid_grant" } },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.getEditor().should("be.visible")
+    cy.clearEditor()
+    cy.typeQuery("select 42")
+    cy.tick(3601000)
+    // No SQL request is sent: refresh ends the session first, so runLine's
+    // usual @exec wait would be incorrect here.
+    cy.clickRunIconInLine(1)
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: /alter user .* create token type rest/ },
+      },
+      { body: { columns: [], count: 1, dataset: [["admin", "rest-token"]] } },
+    )
+    cy.loginWithUserAndPassword()
+    cy.getEditor().should("be.visible")
+    cy.getByDataHook("notifications-wrapper").should(
+      "not.contain.text",
+      "Your session has ended. Please sign in again.",
+    )
+    cy.get('[data-hook="expand-notifications"]').should("not.exist")
+  })
 
   it("clears retained password credentials only when signing in with SSO", () => {
     const initial = idToken("initial", 3600)
@@ -744,6 +796,40 @@ describe("Auth - OIDC token without a lifetime", () => {
       },
     })
     stubConsoleRequests()
+  })
+
+  for (const expires_in of ["3600", 0, -1, null]) {
+    it(`signs in with optional lifetime ${JSON.stringify(expires_in)} and null fields`, () => {
+      cy.intercept("POST", tokenUrl, {
+        body: {
+          access_token: "mock-access-token",
+          expires_in,
+          refresh_token: null,
+          id_token: null,
+          token_type: null,
+          error: null,
+          error_description: null,
+        },
+      })
+      visitCallback("?code=code-from-the-provider")
+      cy.getEditor().should("be.visible")
+    })
+  }
+
+  it("offers retry instead of a blank page when the initial SQL auth check fails", () => {
+    cy.intercept("POST", tokenUrl, { access_token: "mock-access-token" })
+    let attempts = 0
+    cy.intercept(
+      { method: "GET", url: `${baseUrl}/exec*`, query: { query: "SELECT 1" } },
+      (req) => {
+        attempts++
+        req.reply(attempts === 1 ? { statusCode: 502 } : { body: queryResult })
+      },
+    )
+    visitCallback("?code=code-from-the-provider")
+    cy.contains("QuestDB is not reachable [502]").should("be.visible")
+    cy.contains("button", "Retry connection").click()
+    cy.getEditor().should("be.visible")
   })
 
   it("signs in, never refreshes the token, and signs out once the server rejects it", () => {

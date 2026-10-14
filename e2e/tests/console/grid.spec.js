@@ -181,6 +181,8 @@ describe("questdb grid", () => {
         .should("have.text", "1")
       cy.get(".qg-viewport").scrollTo(0, 2500 * rowHeight)
       cy.wrap(null).should(() => expect(releaseOldPage).to.be.a("function"))
+      // Placeholder rows must not advertise loaded data to browser tests.
+      cy.get('.qg-r[data-row-index="2500"]:visible').should("not.exist")
 
       cy.clearEditor()
       cy.typeQuery("select x * 1000 a from long_sequence(5000)")

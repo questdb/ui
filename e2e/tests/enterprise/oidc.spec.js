@@ -61,14 +61,14 @@ describe("OIDC", () => {
       cy.getEditor().should("not.exist")
     })
 
-    it("should login via OIDC", () => {
+    it("should login via OIDC with an unknown (zero) lifetime", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       interceptTokenRequest({
         access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
         id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
         token_type: "Bearer",
-        expires_in: 300,
+        expires_in: 0,
       })
       cy.getByDataHook("button-sso-login").click()
       cy.wait("@authorizationCode")
@@ -80,6 +80,22 @@ describe("OIDC", () => {
 
       cy.logout()
       cy.getByDataHook("auth-login").should("be.visible")
+    })
+
+    it("accepts an IdP's string expiry with null optional fields", () => {
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      interceptTokenRequest({
+        access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+        refresh_token: null,
+        id_token: null,
+        token_type: "Bearer",
+        expires_in: "300",
+      })
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.getEditor().should("be.visible")
+      cy.executeSQL("select current_user();")
+      cy.getGridRow(0).should("contain", "john doe")
     })
 
     it("uses the SSO token instead of retained REST credentials", () => {

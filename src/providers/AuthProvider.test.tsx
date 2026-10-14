@@ -198,6 +198,86 @@ describe("AuthProvider token installation", () => {
     expect(ssoAuthState.getAuthPayload()?.refresh_token).toBe("rotated")
   })
 
+  it.each([429, 500, 503])(
+    "keeps the session on JSON HTTP %s refresh failure",
+    async (status) => {
+      await mount()
+      const session = ssoAuthState.getAuthPayload()
+      vi.mocked(fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "temporarily_unavailable" }), {
+          status,
+        }),
+      )
+      await expect(
+        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
+      ).rejects.toThrow(`Identity provider unavailable (HTTP ${status})`)
+      expect(ssoAuthState.getAuthPayload()).toBe(session)
+      expect(
+        renderer?.root.findAllByProps({ "data-hook": "mock-login" }),
+      ).toHaveLength(0)
+    },
+  )
+
+  it("ends the session for an explicit invalid_grant refresh error", async () => {
+    await mount()
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }),
+    )
+    await act(async () => {
+      await expect(
+        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
+      ).resolves.toBeUndefined()
+    })
+    expect(ssoAuthState.getAuthPayload()).toBeNull()
+  })
+
+  it("discards an aborted request's late body even before logout", async () => {
+    await mount()
+    const session = ssoAuthState.getAuthPayload()
+    const network = new AbortController()
+    const deadline = new AbortController()
+    let finishBody!: (body: TokenResponse) => void
+    const body = new Promise<TokenResponse>((resolve) => {
+      finishBody = resolve
+    })
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 200,
+      json: () => body,
+    } as Response)
+    const result = auth.refreshAuthToken(
+      mocks.settings,
+      "initial-refresh",
+      deadline.signal,
+      network.signal,
+    )
+    await Promise.resolve()
+    network.abort()
+    finishBody({
+      ...initialToken,
+      access_token: "obsolete",
+      refresh_token: "obsolete",
+    })
+    await expect(result).resolves.toBeUndefined()
+    expect(ssoAuthState.getAuthPayload()).toBe(session)
+    expect(vi.mocked(fetch).mock.lastCall?.[1]?.signal).toBe(network.signal)
+  })
+
+  it("keeps public callbacks stable after successful refresh", async () => {
+    await mount()
+    const before = auth
+    vi.mocked(fetch).mockResolvedValueOnce(
+      tokenResponse({ ...initialToken, access_token: "renewed" }),
+    )
+    await act(async () => {
+      await auth.refreshAuthToken(mocks.settings, "initial-refresh")
+    })
+    expect(auth.refreshAuthToken).toBe(before.refreshAuthToken)
+    expect(auth.logout).toBe(before.logout)
+    expect(auth.redirectToAuthorizationUrl).toBe(
+      before.redirectToAuthorizationUrl,
+    )
+  })
+
   it("shows a persistent consequence-aware warning and dismisses it on success or logout", async () => {
     await mount()
     ssoAuthState.markRefreshFailed()
@@ -264,13 +344,14 @@ describe("AuthProvider bearer expiry", () => {
     async ({ groupsInToken, id_token }) => {
       // A provider without lifetimes wants the token used until it is rejected.
       mocks.settings["acl.oidc.groups.encoded.in.token"] = groupsInToken
-      signInToken = {
+      // A provider's extra field is deliberately outside TokenResponse.
+      const wireResponse = {
         ...initialToken,
         id_token,
         expires_in: undefined,
-        // A provider's own field, which is not the bearer's expiry
         expires_at: "2000-01-01T00:00:00.000Z",
       }
+      signInToken = wireResponse
       await mount()
       expect(auth.sessionData?.expires_at).toBeUndefined()
       expect(ssoAuthState.getAuthPayload()?.expires_at).toBeUndefined()

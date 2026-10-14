@@ -323,7 +323,11 @@ export function grid(rootElement, _paginationFn, id) {
         row.rowIndex = -1
       }
       row.style.top = rowIndex * rh - o + "px"
-      row.dataset.rowIndex = String(rowIndex)
+      if (row.rowIndex >= 0) {
+        row.dataset.rowIndex = String(row.rowIndex)
+      } else {
+        delete row.dataset.rowIndex
+      }
       row.className = `qg-r${focusedRowIndex === rowIndex ? " qg-r-active" : ""}`
     }
   }
@@ -2182,7 +2186,7 @@ export function grid(rootElement, _paginationFn, id) {
   function setData(_data) {
     resultLifecycle.replaceResult(() => {
       setDataPart1(_data)
-      layoutStoreComputeKeyAndHash(resultLifecycle.guard(setDataPart2))
+      layoutStoreComputeKeyAndHash(setDataPart2)
     })
     initialFocusSkipped = false
     triggerEvent("selection.change", { hasSelection: false })

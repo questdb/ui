@@ -1,6 +1,9 @@
 import { AuthPayload } from "./types"
 
-class SsoAuthState {
+// Tab-local authentication for ALL login methods. The SSO payload is only
+// present for OIDC; stored REST/basic credentials do not make another tab
+// authenticated. Keep these predicates distinct when handling a 401.
+class AuthSessionState {
   private authPayload: AuthPayload | null = null
   private refreshFailed = false
   private authenticated = false
@@ -16,6 +19,7 @@ class SsoAuthState {
     this.authenticated = true
   }
 
+  // Any successful login in this tab (SSO, password or HTTP basic).
   isAuthenticated(): boolean {
     return this.authenticated
   }
@@ -39,10 +43,12 @@ class SsoAuthState {
     return this.authPayload
   }
 
+  // An installed OIDC session, eligible for token refresh.
   isSSOAuthenticated(): boolean {
     return !!this.authPayload
   }
 
+  // Ends the tab's session for every login method, not just OIDC.
   clearAuthPayload() {
     this.sessionId++
     this.authPayload = null
@@ -51,4 +57,5 @@ class SsoAuthState {
   }
 }
 
-export const ssoAuthState = new SsoAuthState()
+// Historical export name; this also owns non-SSO session lifecycle.
+export const ssoAuthState = new AuthSessionState()

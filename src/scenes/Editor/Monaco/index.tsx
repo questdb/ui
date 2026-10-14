@@ -101,6 +101,7 @@ import type { ConversationId } from "../../../providers/AIConversationProvider/t
 
 type IndividualQueryResult = {
   success: boolean
+  sessionEnded?: boolean
   result?: QuestDB.QueryRawResult
   notification:
     | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
@@ -1579,6 +1580,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     } catch (_error: unknown) {
       const error = _error as ErrorResult
+      if (error.sessionEnded) {
+        return { success: false, sessionEnded: true, notification: null }
+      }
 
       const bufferIdStr = activeBufferId.toString()
       if (!executionRefs.current[bufferIdStr]) {
@@ -1755,6 +1759,19 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       toggleGlyphWidgetLoading(lineNumber, true)
 
       const result = await runIndividualQuery(query, i === queries.length - 1)
+      if (result.sessionEnded) {
+        // Do not run the remaining statements or persist the previous
+        // session's notifications after authentication changes.
+        isRunningScriptRef.current = false
+        scriptStopRef.current = true
+        dispatch(actions.query.stopRunning())
+        if (scriptQueryKeyRef.current !== null) {
+          questExecution.releaseExecution(scriptQueryKeyRef.current)
+          scriptQueryKeyRef.current = null
+        }
+        setTabsDisabled(false)
+        return
+      }
 
       toggleGlyphWidgetLoading(lineNumber, false)
       loadingGlyphLineNumberRef.current = null
@@ -2174,6 +2191,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
           .catch((error: ErrorResult) => {
             const { inflightQuery, currentQueryKey } = settleExecution()
+            // The login view already communicates this failure. React 17 can
+            // run this catch before passive unmount cleanup; never carry it
+            // into a subsequent in-tab login via Redux notifications.
+            if (error.sessionEnded) return
 
             if (editorRef?.current && monacoRef?.current) {
               const model = editorRef.current.getModel()

@@ -165,6 +165,12 @@ describe("Client queryRaw NOTICE timings", () => {
   })
 })
 
+const installToken = (overrides: Partial<AuthPayload> = {}): AuthPayload => {
+  const payload = { access_token: "new", token_type: "Bearer", ...overrides }
+  ssoAuthState.setAuthPayload(payload)
+  return payload
+}
+
 describe("Client token refresh", () => {
   const setExpiringToken = () => {
     ssoAuthState.setAuthPayload({
@@ -288,7 +294,7 @@ describe("Client token refresh", () => {
     const refresh = vi
       .fn()
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce({ access_token: "new" })
+      .mockImplementationOnce(() => Promise.resolve(installToken()))
     client.refreshTokenMethod = refresh
     await client.queryRaw("SELECT 1")
 
@@ -327,11 +333,15 @@ describe("Client token refresh", () => {
     const first = client.queryRaw("SELECT 1")
     expect(fetchMock).toHaveBeenCalledTimes(1)
     setExpiringToken()
-    const refresh = vi.fn().mockResolvedValue({
-      access_token: "new",
-      id_token: "new-id",
-      groups_encoded_in_token: true,
-    })
+    const refresh = vi.fn(() =>
+      Promise.resolve(
+        installToken({
+          access_token: "new",
+          id_token: "new-id",
+          groups_encoded_in_token: true,
+        }),
+      ),
+    )
     client.refreshTokenMethod = refresh
     const second = client.queryRaw("SELECT 2")
     expect((await second).type).toBe(Type.NOTICE)
@@ -379,7 +389,7 @@ describe("Client token refresh", () => {
         refresh_token: "next",
         expires_at: new Date(Date.now() + 300_000).toString(),
       } as AuthPayload)
-      return Promise.resolve({ access_token: "new" })
+      return Promise.resolve(ssoAuthState.getAuthPayload()!)
     })
     const onUnauthorized = vi.fn()
     eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, onUnauthorized)
@@ -398,7 +408,8 @@ describe("Client token refresh", () => {
         status: 401,
         statusText: "Unauthorized",
       } as Response)
-      await expect(first).rejects.toMatchObject({ status: 401 })
+      expect((await first).type).toBe(Type.NOTICE)
+      expect(fetchMock).toHaveBeenCalledTimes(3)
       expect(onUnauthorized).not.toHaveBeenCalled()
       expect(ssoAuthState.getAuthPayload()?.access_token).toBe("new")
     } finally {
@@ -460,11 +471,7 @@ describe("Client token refresh", () => {
           id_token: nextId,
           expires_at: new Date(Date.now() + 300_000).toString(),
         })
-        return Promise.resolve({
-          access_token: nextAccess,
-          id_token: nextId,
-          groups_encoded_in_token: groupsEncoded,
-        })
+        return Promise.resolve(ssoAuthState.getAuthPayload()!)
       }
       const onUnauthorized = vi.fn()
       eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, onUnauthorized)
@@ -541,10 +548,10 @@ describe("Client token refresh", () => {
         }),
     )
     vi.stubGlobal("fetch", fetchMock)
-    let resolveRefresh!: (token: Partial<AuthPayload>) => void
+    let resolveRefresh!: (token: AuthPayload) => void
     const client = new Client()
     client.refreshTokenMethod = () =>
-      new Promise<Partial<AuthPayload>>((resolve) => {
+      new Promise<AuthPayload>((resolve) => {
         resolveRefresh = resolve
       })
     const onRequestStart = vi.fn()
@@ -558,7 +565,7 @@ describe("Client token refresh", () => {
     expect(onRequestStart).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
 
-    resolveRefresh({ access_token: "new" })
+    resolveRefresh(installToken())
     await vi.advanceTimersByTimeAsync(20)
     const result = await query
     expect(onRefreshWait).toHaveBeenCalledTimes(1)
@@ -623,7 +630,7 @@ describe("Client token refresh", () => {
     let rejectRefresh!: (reason: Error) => void
     const refresh = vi.fn().mockImplementation(
       () =>
-        new Promise<Partial<AuthPayload>>((_, reject) => {
+        new Promise<AuthPayload>((_, reject) => {
           rejectRefresh = reject
         }),
     )
@@ -649,9 +656,9 @@ describe("Client token refresh", () => {
       vi.fn().mockResolvedValue(response({ notice: "hint" })),
     )
     const client = new Client()
-    let resolveRefresh!: (token: Partial<AuthPayload>) => void
+    let resolveRefresh!: (token: AuthPayload) => void
     client.refreshTokenMethod = () =>
-      new Promise<Partial<AuthPayload>>((resolve) => {
+      new Promise<AuthPayload>((resolve) => {
         resolveRefresh = resolve
       })
     const first = client.queryRaw("SELECT 1")
@@ -661,7 +668,7 @@ describe("Client token refresh", () => {
     client.abort(queryId)
     await expect(promise).rejects.toMatchObject({ error: "Cancelled by user" })
     expect(fetch).not.toHaveBeenCalled()
-    resolveRefresh({ access_token: "new" })
+    resolveRefresh(installToken())
     expect((await first).type).toBe(Type.NOTICE)
     expect(fetch).toHaveBeenCalledTimes(1)
   })
@@ -677,7 +684,7 @@ describe("Client token refresh", () => {
     const client = new Client()
     client.setCommonHeaders({ Authorization: "Bearer stale" })
     const refresh = vi.fn(
-      (_signal?: AbortSignal) => new Promise<Partial<AuthPayload>>(() => {}),
+      (_signal: AbortSignal) => new Promise<AuthPayload>(() => {}),
     )
     client.refreshTokenMethod = refresh
     const first = client.queryRaw("SELECT 1")
@@ -690,7 +697,7 @@ describe("Client token refresh", () => {
     expect((await second).type).toBe(Type.NOTICE)
     expect(errorSpy).toHaveBeenCalledWith(
       "Failed to refresh the auth token",
-      expect.objectContaining({ message: "Token request timed out" }),
+      expect.objectContaining({ message: "Request timed out" }),
     )
     expect(fetch).toHaveBeenCalledTimes(2)
   })
@@ -701,12 +708,12 @@ describe("Client token refresh", () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ notice: "hint" }))
     vi.stubGlobal("fetch", fetchMock)
     vi.spyOn(console, "error").mockImplementation(() => {})
-    let resolveRefresh!: (token: Partial<AuthPayload>) => void
+    let resolveRefresh!: (token: AuthPayload) => void
     const client = new Client()
     client.setCommonHeaders({ Authorization: "Bearer stale" })
     const refresh = vi.fn(
       () =>
-        new Promise<Partial<AuthPayload>>((resolve) => {
+        new Promise<AuthPayload>((resolve) => {
           resolveRefresh = resolve
         }),
     )
@@ -733,21 +740,14 @@ describe("Client token refresh", () => {
     expect(ssoAuthState.hasRefreshFailed()).toBe(false)
   })
 
-  it.each([
-    { response: "an OAuth error response", token: { error: "invalid_grant" } },
-    {
-      // OIDC lets a refresh response omit the ID token
-      response: "a response without the ID token the server expects",
-      token: { access_token: "new", groups_encoded_in_token: true },
-    },
-  ])("does not overwrite the header for $response", async ({ token }) => {
+  it("does not overwrite the header when no token is installed", async () => {
     setExpiringToken()
     const fetchMock = vi.fn().mockResolvedValue(response({ notice: "hint" }))
     vi.stubGlobal("fetch", fetchMock)
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
     const client = new Client()
     client.setCommonHeaders({ Authorization: "Bearer stale" })
-    client.refreshTokenMethod = vi.fn().mockResolvedValue(token)
+    client.refreshTokenMethod = vi.fn().mockResolvedValue(undefined)
     await client.queryRaw("SELECT 1")
     expect(fetchMock).toHaveBeenCalledWith(
       expect.any(String),

@@ -3,6 +3,9 @@ import { Settings } from "../../providers/SettingsProvider/types"
 import { AuthPayload, SignInError, TokenResponse } from "./types"
 import { DeadlineExceededError, withDeadline } from "../../utils/withDeadline"
 import { StoreKey } from "../../utils/localStorage/types"
+import { getValue } from "../../utils/localStorage"
+
+export const SIGN_IN_ERROR_TITLE = "Something went wrong."
 
 type TokenPayload = Partial<{
   grant_type: string
@@ -114,6 +117,17 @@ export const getBearerAuthorization = (payload: Partial<AuthPayload>) => {
   return bearer ? `Bearer ${bearer}` : undefined
 }
 
+// SSO is tab-local and takes precedence over credentials another tab may save.
+export const getStoredCredentialAuthorization = () => {
+  const restToken = getValue(StoreKey.REST_TOKEN)
+  return restToken
+    ? `Bearer ${restToken}`
+    : getValue(StoreKey.BASIC_AUTH_HEADER) || undefined
+}
+
+export const getAuthorization = (payload?: Partial<AuthPayload> | null) =>
+  payload ? getBearerAuthorization(payload) : getStoredCredentialAuthorization()
+
 export type GrantType = "authorization_code" | "refresh_token"
 
 const MISSING_ID_TOKEN_MESSAGES: Record<GrantType, string> = {
@@ -154,7 +168,8 @@ export const getAuthToken = async (
   )
 }
 
-// How long both the sign-in and the refresh wait for the token endpoint
+// Sign-in aborts the request at this deadline. Refresh only releases waiting
+// queries here; its separate network deadline allows a late rotated token.
 export const TOKEN_REQUEST_TIMEOUT_MS = 10_000
 
 type CodeExchange =
@@ -162,7 +177,7 @@ type CodeExchange =
   | { signInError: SignInError }
 
 const signInFailure = (errorMessage: string): CodeExchange => ({
-  signInError: { errorTitle: "Something went wrong.", errorMessage },
+  signInError: { errorTitle: SIGN_IN_ERROR_TITLE, errorMessage },
 })
 
 const SIGN_IN_TIMED_OUT = `The identity provider did not respond within ${TOKEN_REQUEST_TIMEOUT_MS / 1000} seconds. Please try again.`
@@ -184,11 +199,15 @@ const requestTokens = async (
   }
   try {
     return { tokenResponse: await readAuthTokenResponse(response) }
-  } catch {
+  } catch (error) {
+    // Do not log the response body: it may contain credentials.
+    console.error("Invalid identity-provider token response", error)
     return signInFailure(
       signal.aborted
         ? SIGN_IN_TIMED_OUT
-        : `The identity provider returned an unexpected response (HTTP ${response.status}). Please try again.`,
+        : response.status >= 200 && response.status < 300
+          ? "The identity provider returned an invalid token response. Please ask your administrator to check the SSO configuration."
+          : `The identity provider returned an unexpected response (HTTP ${response.status}). Please try again.`,
     )
   }
 }
@@ -220,11 +239,19 @@ export const readAuthTokenResponse = async (
   response: Response,
   deadlineSignal?: AbortSignal,
 ): Promise<TokenResponse> => {
-  const body: unknown = await response.json()
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    throw new Error("Invalid token response")
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    // JSON parser errors can include snippets of the body (and credentials).
+    // Keep the diagnostic safe for the sign-in logger.
+    throw new Error("Invalid token response: expected JSON")
   }
-  const tokenResponse = body as TokenResponse
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new Error("Invalid token response: expected an object")
+  }
+  const fields = body as Record<string, unknown>
+  const tokenResponse: TokenResponse = {}
   for (const key of [
     "access_token",
     "id_token",
@@ -233,23 +260,27 @@ export const readAuthTokenResponse = async (
     "error",
     "error_description",
   ] as const) {
-    if (
-      tokenResponse[key] !== undefined &&
-      typeof tokenResponse[key] !== "string"
-    ) {
-      throw new Error("Invalid token response")
+    const value = fields[key]
+    // Some IdPs return JSON null for omitted optional fields.
+    if (value === undefined || value === null) continue
+    if (typeof value !== "string") {
+      throw new Error(`Invalid token response: ${key} must be a string`)
     }
+    tokenResponse[key] = value
   }
+  // Entra's legacy/B2C endpoints can serialise this lifetime as a string.
+  // An unusable optional lifetime means unknown expiry, not invalid tokens.
+  const lifetime =
+    typeof fields.expires_in === "string" && /^\d+$/.test(fields.expires_in)
+      ? Number(fields.expires_in)
+      : fields.expires_in
   if (
-    tokenResponse.expires_in !== undefined &&
-    (typeof tokenResponse.expires_in !== "number" ||
-      !Number.isFinite(tokenResponse.expires_in) ||
-      tokenResponse.expires_in <= 0 ||
-      Number.isNaN(
-        new Date(Date.now() + tokenResponse.expires_in * 1000).getTime(),
-      ))
+    typeof lifetime === "number" &&
+    Number.isFinite(lifetime) &&
+    lifetime > 0 &&
+    !Number.isNaN(new Date(Date.now() + lifetime * 1000).getTime())
   ) {
-    throw new Error("Invalid token response")
+    tokenResponse.expires_in = lifetime
   }
   // Preserve a late rotated refresh token, but don't let a late OAuth error
   // log out a session whose waiting queries have already been released.

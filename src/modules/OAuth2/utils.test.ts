@@ -9,12 +9,18 @@ import {
   getBearerAuthorization,
   getTokenExpirationDate,
   readAuthTokenResponse,
+  getAuthorization,
+  getStoredCredentialAuthorization,
 } from "./utils"
+import "../../test/stubBrowserGlobals"
+import { StoreKey } from "../../utils/localStorage/types"
 import type { AuthPayload } from "./types"
 
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
+  vi.restoreAllMocks()
+  localStorage.clear()
 })
 
 describe("token expiration", () => {
@@ -204,7 +210,94 @@ describe("missing ID token", () => {
   })
 })
 
+describe("normalised token responses", () => {
+  it.each(["3599", 3599])("accepts lifetime %j", async (expires_in) => {
+    const result = await readAuthTokenResponse(
+      new Response(
+        JSON.stringify({
+          access_token: "access",
+          expires_in,
+        }),
+      ),
+    )
+    expect(result).toEqual({ access_token: "access", expires_in: 3599 })
+  })
+
+  it.each([0, -1, 1e20, null, "unknown", "", {}, "Infinity"])(
+    "treats unusable optional lifetime %j as unknown",
+    async (expires_in) => {
+      await expect(
+        readAuthTokenResponse(
+          new Response(
+            JSON.stringify({
+              access_token: "access",
+              expires_in,
+            }),
+          ),
+        ),
+      ).resolves.toEqual({ access_token: "access" })
+    },
+  )
+
+  it("drops null optional fields, OAuth errors and client-derived fields", async () => {
+    await expect(
+      readAuthTokenResponse(
+        new Response(
+          JSON.stringify({
+            access_token: "access",
+            id_token: null,
+            refresh_token: null,
+            token_type: null,
+            error: null,
+            error_description: null,
+            expires_at: "2000-01-01",
+            groups_encoded_in_token: true,
+            extra: "ignored",
+          }),
+        ),
+      ),
+    ).resolves.toEqual({ access_token: "access" })
+  })
+
+  it("does not expose a malformed response body through parser diagnostics", async () => {
+    await expect(
+      readAuthTokenResponse(
+        new Response('{"access_token":"secret"} malformed'),
+      ),
+    ).rejects.toThrow("Invalid token response: expected JSON")
+  })
+
+  it("identifies the malformed field without including credentials", async () => {
+    await expect(
+      readAuthTokenResponse(
+        new Response(
+          JSON.stringify({
+            access_token: "secret",
+            refresh_token: 123,
+          }),
+        ),
+      ),
+    ).rejects.toThrow("Invalid token response: refresh_token must be a string")
+  })
+})
+
+describe("credential precedence", () => {
+  it("prefers the tab's SSO bearer over stored REST/basic credentials", () => {
+    localStorage.setItem(StoreKey.REST_TOKEN, "rest")
+    localStorage.setItem(StoreKey.BASIC_AUTH_HEADER, "Basic password")
+    expect(getAuthorization({ access_token: "sso" })).toBe("Bearer sso")
+    expect(getStoredCredentialAuthorization()).toBe("Bearer rest")
+    localStorage.removeItem(StoreKey.REST_TOKEN)
+    expect(getAuthorization()).toBe("Basic password")
+    localStorage.clear()
+    expect(getAuthorization()).toBeUndefined()
+  })
+})
+
 describe("authorization code exchange", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+  })
   const settings = { "acl.oidc.token.endpoint": "/token" } as Settings
   const payload = { grant_type: "authorization_code", code: "code" }
 
@@ -318,10 +411,8 @@ describe("authorization code exchange", () => {
     "token",
     123,
     { access_token: 123 },
-    { expires_in: "3600" },
-    { expires_in: 1e20 },
-    { expires_in: 0 },
-    { expires_in: -1 },
+    { id_token: 123 },
+    { refresh_token: {} },
   ])("explains an invalid JSON token response: %j", async (body) => {
     vi.stubGlobal(
       "fetch",
@@ -334,7 +425,7 @@ describe("authorization code exchange", () => {
     ).resolves.toMatchObject({
       signInError: {
         errorMessage:
-          "The identity provider returned an unexpected response (HTTP 200). Please try again.",
+          "The identity provider returned an invalid token response. Please ask your administrator to check the SSO configuration.",
       },
     })
   })
@@ -379,7 +470,7 @@ describe("bearer authorization", () => {
 })
 
 describe("OIDC refresh requests", () => {
-  it("passes the refresh deadline's AbortSignal to fetch", async () => {
+  it("passes an explicit network cancellation signal to fetch", async () => {
     const fetchMock = vi.fn().mockResolvedValue({})
     vi.stubGlobal("fetch", fetchMock)
     const controller = new AbortController()
@@ -427,6 +518,6 @@ describe("OIDC refresh requests", () => {
         { json: () => Promise.resolve({ error: "invalid_grant" }) } as Response,
         controller.signal,
       ),
-    ).rejects.toThrow("Token request timed out")
+    ).rejects.toThrow("Request timed out")
   })
 })

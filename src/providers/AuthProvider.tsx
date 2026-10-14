@@ -2,10 +2,12 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
 } from "react"
+import { unstable_batchedUpdates } from "react-dom"
 import {
   AuthPayload,
   LogoutOptions,
@@ -24,6 +26,7 @@ import {
   getMissingIdTokenError,
   removeSSOUserNameWithClientID,
   GrantType,
+  SIGN_IN_ERROR_TITLE,
 } from "../modules/OAuth2/utils"
 import {
   generateCodeChallenge,
@@ -41,12 +44,13 @@ import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
 import { toast } from "../components/Toast"
 
 type ContextProps = {
-  sessionData?: Partial<AuthPayload>
+  sessionData?: AuthPayload
   logout: (options?: LogoutOptions) => void
   refreshAuthToken: (
     settings: Settings,
     refreshToken: string | undefined,
-    signal?: AbortSignal,
+    deadlineSignal?: AbortSignal,
+    requestSignal?: AbortSignal,
   ) => Promise<AuthPayload | undefined>
   redirectToAuthorizationUrl: (options?: { prompt?: "login" | "none" }) => void
 }
@@ -133,7 +137,10 @@ const getDefaultRedirectUri = () =>
 
 export const AuthContext = createContext<ContextProps>(defaultValues)
 
-const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
+const reducer = (s: State, n: Partial<State>) =>
+  Object.entries(n).every(([key, value]) => s[key as keyof State] === value)
+    ? s
+    : { ...s, ...n }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { settings } = useSettings()
@@ -154,7 +161,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   ): AuthPayload | undefined => {
     if (!tokenResponse.access_token) {
       logout({
-        errorTitle: "Something went wrong.",
+        errorTitle: SIGN_IN_ERROR_TITLE,
         errorMessage:
           tokenResponse.error_description ??
           (grantType === "refresh_token"
@@ -164,8 +171,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return undefined
     }
     const payload = {
-      ...tokenResponse,
       access_token: tokenResponse.access_token,
+      id_token: tokenResponse.id_token,
+      expires_in: tokenResponse.expires_in,
       token_type: tokenResponse.token_type ?? "Bearer",
       // Some providers rotate this token, others omit it on refresh.
       refresh_token:
@@ -200,7 +208,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       removeValue(StoreKey.REST_TOKEN)
       removeValue(StoreKey.BASIC_AUTH_HEADER)
     }
-    setSessionData(installed)
+    // React 17 does not batch promise callbacks automatically.
+    unstable_batchedUpdates(() => {
+      setSessionData(installed)
+      dispatch({ view: View.ready })
+    })
     setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
     return installed
   }
@@ -208,18 +220,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const refreshAuthToken = async (
     settings: Settings,
     refreshToken: string | undefined,
-    signal?: AbortSignal,
+    deadlineSignal?: AbortSignal,
+    requestSignal?: AbortSignal,
   ) => {
     const originalSession = ssoAuthState.getAuthPayload()
-    const response = await getAuthToken(settings, {
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: settings["acl.oidc.client.id"],
-    })
-    // The signal marks the wait deadline, not network cancellation. Keep a
-    // late success because the provider may already have rotated the token.
-    const tokenResponse = await readAuthTokenResponse(response, signal)
-    if (!originalSession || ssoAuthState.getAuthPayload() !== originalSession) {
+    const response = await getAuthToken(
+      settings,
+      {
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: settings["acl.oidc.client.id"],
+      },
+      requestSignal,
+    )
+    // Transient HTTP failures take the same backoff path as transport failures,
+    // regardless of whether their bodies are JSON or HTML.
+    if (response.status === 429 || response.status >= 500) {
+      throw new Error(`Identity provider unavailable (HTTP ${response.status})`)
+    }
+    // The wait signal marks late errors, not network cancellation. Preserve a
+    // late rotated token until the separate request deadline expires.
+    const tokenResponse = await readAuthTokenResponse(response, deadlineSignal)
+    if (
+      requestSignal?.aborted ||
+      !originalSession ||
+      ssoAuthState.getAuthPayload() !== originalSession
+    ) {
       return undefined
     }
     return setAuthToken(tokenResponse, settings, "refresh_token")
@@ -315,7 +341,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // If the error is not in response for a silent authorization code request, display the error
           restoreUrlAfterOAuthCallback()
           logout({
-            errorTitle: "Something went wrong.",
+            errorTitle: SIGN_IN_ERROR_TITLE,
             errorMessage:
               oauth2Error.error + ": " + oauth2Error.error_description,
           })
@@ -427,7 +453,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }: LogoutOptions = {}) => {
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
     ssoAuthState.clearAuthPayload()
-    setSessionData(undefined)
     removeValue(StoreKey.OAUTH_PROMPT)
     sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
     removeValue(StoreKey.REST_TOKEN)
@@ -443,14 +468,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       window.location.reload()
       return
     }
-    dispatch({ view: View.login, errorTitle, errorMessage, isDisconnection })
+    unstable_batchedUpdates(() => {
+      setSessionData(undefined)
+      dispatch({ view: View.login, errorTitle, errorMessage, isDisconnection })
+    })
   }
-
-  useEffect(() => {
-    if (sessionData) {
-      dispatch({ view: View.ready })
-    }
-  }, [sessionData])
 
   useEffect(() => {
     // If user has no access to the HTTP protocol, they will receive a 403 error response
@@ -480,17 +502,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [])
 
+  // Stable public callbacks delegate to this render's implementation.
+  const callbacks = useRef({
+    logout,
+    refreshAuthToken,
+    redirectToAuthorizationUrl,
+  })
+  callbacks.current = { logout, refreshAuthToken, redirectToAuthorizationUrl }
+  const stableCallbacks = useMemo<Omit<ContextProps, "sessionData">>(
+    () => ({
+      logout: (options) => callbacks.current.logout(options),
+      refreshAuthToken: (...args) =>
+        callbacks.current.refreshAuthToken(...args),
+      redirectToAuthorizationUrl: (options) =>
+        callbacks.current.redirectToAuthorizationUrl(options),
+    }),
+    [],
+  )
+  const contextValue = useMemo<ContextProps>(
+    () => ({ sessionData, ...stableCallbacks }),
+    [sessionData, stableCallbacks],
+  )
+
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => null,
     [View.ready]: () => (
-      <AuthContext.Provider
-        value={{
-          sessionData,
-          logout,
-          refreshAuthToken,
-          redirectToAuthorizationUrl,
-        }}
-      >
+      <AuthContext.Provider value={contextValue}>
         {children}
       </AuthContext.Provider>
     ),

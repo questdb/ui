@@ -22,15 +22,23 @@
  *
  ******************************************************************************/
 
-import React, { createContext, useEffect, useState } from "react"
+import React, {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import * as QuestDB from "../../utils/questdb"
 import { useAuth } from "../AuthProvider"
-import { AuthPayload } from "../../modules/OAuth2/types"
-import { getValue } from "../../utils/localStorage"
-import { StoreKey } from "../../utils/localStorage/types"
+import { questClient } from "../../utils/questdb/queryClient"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { Button, Text } from "../../components"
+import { Box } from "../../components/Box"
 import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
-import { getBearerAuthorization, hasUIAuth } from "../../modules/OAuth2/utils"
+import { getAuthorization, hasUIAuth } from "../../modules/OAuth2/utils"
 import { useSettings } from "../SettingsProvider"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
@@ -40,7 +48,6 @@ import {
 } from "../../modules/ConsoleEventTracker"
 import { QueryExecutionConfirmDialog } from "../../components/QueryExecutionConfirmDialog"
 
-const questClient = new QuestDB.Client()
 const questExecution = new QuestDB.QueryExecutionManager()
 
 type ContextProps = {
@@ -75,58 +82,63 @@ export const QuestProvider: React.FC = ({ children }) => {
   )
   const [commitHash, setCommitHash] = useState<string>("")
 
-  const finishAuthCheck = async () => {
-    // The initial check tells us if the user has permission to use the HTTP protocol.
-    // If not, this will trigger a full-screen error page, preventing the subsequent requests to be made.
+  const [authCheckError, setAuthCheckError] = useState<string>()
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  const finishAuthCheck = useCallback(async () => {
+    const sessionId = ssoAuthState.getSessionId()
+    setAuthCheckError(undefined)
     try {
       await questClient.queryRaw("SELECT 1")
-      setAuthCheckFinished(true)
-    } catch {
-      // The client reports connection/auth failures. In particular, a refresh
-      // that ends the session cancels this check without an unhandled rejection.
+      if (mounted.current && ssoAuthState.getSessionId() === sessionId) {
+        setAuthCheckFinished(true)
+      }
+    } catch (error) {
+      const failure = error as Partial<QuestDB.ErrorResult>
+      // AuthProvider handles session-ended/protocol-denied errors. Connection
+      // listeners and toasts below this gate are not mounted yet, so report
+      // other failures here rather than leaving a permanently blank page.
+      if (
+        mounted.current &&
+        ssoAuthState.getSessionId() === sessionId &&
+        !failure.sessionEnded &&
+        String(failure.error) !== "Cancelled by user"
+      ) {
+        setAuthCheckError(failure.error || "Could not connect to QuestDB.")
+      }
     }
-  }
+  }, [])
 
-  const setupClient = (sessionData: Partial<AuthPayload>) => {
-    const authorization = getBearerAuthorization(sessionData)
+  useEffect(() => {
+    const authorization = getAuthorization(sessionData)
     questClient.setCommonHeaders(
       authorization ? { Authorization: authorization } : {},
     )
+    questClient.refreshTokenMethod = sessionData
+      ? (deadlineSignal, requestSignal) =>
+          refreshAuthToken(
+            settings,
+            ssoAuthState.getAuthPayload()?.refresh_token,
+            deadlineSignal,
+            requestSignal,
+          )
+      : undefined
+    if (!authCheckFinished) void finishAuthCheck()
+  }, [
+    sessionData,
+    settings,
+    refreshAuthToken,
+    authCheckFinished,
+    finishAuthCheck,
+  ])
 
-    questClient.refreshTokenMethod = (signal) => {
-      return refreshAuthToken(settings, sessionData.refresh_token, signal)
-    }
-
-    void finishAuthCheck()
-  }
-
-  // User has been logged in with OAuth2
   useEffect(() => {
-    if (sessionData) {
-      setupClient(sessionData)
-    }
-  }, [sessionData])
-
-  useEffect(() => {
-    // Stored REST/basic credentials must not override an active SSO session.
-    if (!sessionData) {
-      const restToken = getValue(StoreKey.REST_TOKEN)
-      if (restToken) {
-        questClient.setCommonHeaders({
-          Authorization: `Bearer ${restToken}`,
-        })
-        void finishAuthCheck()
-      } else {
-        const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-        if (basicAuth) {
-          questClient.setCommonHeaders({
-            Authorization: basicAuth,
-          })
-          void finishAuthCheck()
-        }
-      }
-    }
-
     // TODO: Remove this, use info from `/settings` (`type` and `version`) and run this hook on `settings` dep
     // Get the build version info
     void questClient
@@ -159,17 +171,34 @@ export const QuestProvider: React.FC = ({ children }) => {
     }
   }, [telemetryConfig?.enabled, telemetryConfig?.id])
 
-  if (!authCheckFinished) return null
+  const contextValue = useMemo(
+    () => ({
+      quest: questClient,
+      questExecution,
+      buildVersion,
+      commitHash,
+    }),
+    [buildVersion, commitHash],
+  )
+
+  if (!authCheckFinished)
+    return authCheckError ? (
+      <Box flexDirection="column" gap="2rem" align="center">
+        <div role="alert">
+          <Text>{authCheckError}</Text>
+        </div>
+        <Button
+          onClick={() => {
+            void finishAuthCheck()
+          }}
+        >
+          Retry connection
+        </Button>
+      </Box>
+    ) : null
 
   return (
-    <QuestContext.Provider
-      value={{
-        quest: questClient,
-        questExecution,
-        buildVersion,
-        commitHash,
-      }}
-    >
+    <QuestContext.Provider value={contextValue}>
       {children}
       <QueryExecutionConfirmDialog />
     </QuestContext.Provider>

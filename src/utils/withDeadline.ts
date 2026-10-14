@@ -1,6 +1,6 @@
 export class DeadlineExceededError extends Error {
   constructor() {
-    super("Token request timed out")
+    super("Request timed out")
     this.name = "DeadlineExceededError"
   }
 }

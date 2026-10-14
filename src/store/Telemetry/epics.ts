@@ -34,7 +34,7 @@ import {
   scan,
   delayWhen,
 } from "rxjs/operators"
-import { defer, from, NEVER, of, timer, throwError } from "rxjs"
+import { defer, EMPTY, from, NEVER, of, timer, throwError } from "rxjs"
 
 const MAX_RETRIES = 5
 const RETRY_BASE_DELAY_MS = 1000
@@ -55,47 +55,25 @@ import {
 
 import { fromFetch } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
-import { getValue } from "../../utils/localStorage"
-import { StoreKey } from "../../utils/localStorage/types"
-import { getBearerAuthorization } from "../../modules/OAuth2/utils"
+import { questClient as quest } from "../../utils/questdb/queryClient"
 import {
   sendServerInfoTelemetry,
   getTelemetryTimestamp,
 } from "../../utils/telemetry"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
-
-const quest = new QuestDB.Client()
 
 export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
   action$,
 ) =>
   action$.pipe(
     ofType<StoreAction, TelemetryAction>(TelemetryAT.START),
-    switchMap(() => {
-      // Set an authorization header for the QuestDB client instance within the telemetry epic
-      const authPayload = ssoAuthState.getAuthPayload()
-      const authorization = authPayload && getBearerAuthorization(authPayload)
-      if (authorization) {
-        quest.setCommonHeaders({ Authorization: authorization })
-      } else {
-        const restToken = getValue(StoreKey.REST_TOKEN)
-        if (restToken) {
-          quest.setCommonHeaders({
-            Authorization: `Bearer ${restToken}`,
-          })
-        } else {
-          const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-          if (basicAuth) {
-            quest.setCommonHeaders({
-              Authorization: basicAuth,
-            })
-          }
-        }
-      }
-      return from(
+    switchMap(() =>
+      from(
         quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`),
-      )
-    }),
+      ).pipe(
+        // Keep the root epic alive so a later login/START can retry.
+        catchError(() => EMPTY),
+      ),
+    ),
     switchMap((response) => {
       if (response.type === QuestDB.Type.DQL) {
         return of(actions.telemetry.setConfig(response.data[0]))
@@ -181,7 +159,12 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
             .replace(/\s+/g, " ")
             .trim(),
         ),
-      ).pipe(map((result) => ({ type: "data" as const, result, remoteConfig })))
+      ).pipe(
+        map((result) => ({ type: "data" as const, result, remoteConfig })),
+        // A failed SQL query must not terminate all telemetry epics. Preserve
+        // the cursor and schedule the next check through the existing path.
+        catchError(() => of({ type: "skip" as const, remoteConfig })),
+      )
     }),
     withLatestFrom(state$),
     switchMap(([payload, state]) => {

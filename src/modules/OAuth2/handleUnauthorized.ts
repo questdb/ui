@@ -6,6 +6,8 @@ import type { LogoutOptions } from "./types"
 
 type Logout = (options?: LogoutOptions) => void
 
+// Handles both OIDC and password sessions on an OIDC-enabled server. Only
+// OIDC refresh failures receive the expired-SSO message.
 export const handleSSOUnauthorized = (logout: Logout) => {
   // A failed refresh can release many queries with the same expired token.
   // Once the first 401 logs out, their remaining responses are not new
