@@ -1,6 +1,7 @@
 import { Base64 } from "js-base64"
 import { Settings } from "../../providers/SettingsProvider/types"
-import { AuthPayload } from "./types"
+import { AuthPayload, SignInError, TokenResponse } from "./types"
+import { DeadlineExceededError, withDeadline } from "../../utils/withDeadline"
 import { StoreKey } from "../../utils/localStorage/types"
 
 type TokenPayload = Partial<{
@@ -74,7 +75,8 @@ const getJwtExpiration = (jwt: string | undefined) => {
       exp?: unknown
     } | null
     const exp = claims?.exp
-    return typeof exp === "number" && Number.isFinite(exp)
+    return typeof exp === "number" &&
+      !Number.isNaN(new Date(exp * 1000).getTime())
       ? exp * 1000
       : undefined
   } catch {
@@ -99,13 +101,22 @@ export const getTokenExpirationDate = (
   )
 }
 
+// The server validates the bearer; clients share this helper so stale-401
+// comparisons use exactly the same authorization value as outgoing requests.
+export const getBearerAuthorization = (payload: Partial<AuthPayload>) => {
+  const bearer = payload.groups_encoded_in_token
+    ? payload.id_token
+    : payload.access_token
+  return bearer ? `Bearer ${bearer}` : undefined
+}
+
 export type GrantType = "authorization_code" | "refresh_token"
 
 const MISSING_ID_TOKEN_MESSAGES: Record<GrantType, string> = {
   authorization_code:
-    "The server requires an ID token for authentication (acl.oidc.groups.encoded.in.token), but the identity provider did not return one. Check that the openid scope is requested.",
+    "Your identity provider did not send the information needed to sign you in. Please ask your administrator to check the SSO configuration.",
   refresh_token:
-    "The server requires an ID token for authentication (acl.oidc.groups.encoded.in.token), but the identity provider did not return one when refreshing your session. Please sign in again.",
+    "Your identity provider did not send the information needed to keep you signed in. You can sign in again, but please ask your administrator to check the SSO configuration to prevent this happening again.",
 }
 
 // The server cannot authenticate an ID token bearer without the ID token. OIDC
@@ -113,7 +124,7 @@ const MISSING_ID_TOKEN_MESSAGES: Record<GrantType, string> = {
 export const getMissingIdTokenError = (
   tokenResponse: Pick<AuthPayload, "id_token" | "groups_encoded_in_token">,
   grantType: GrantType,
-) =>
+): SignInError | undefined =>
   tokenResponse.groups_encoded_in_token && !tokenResponse.id_token
     ? {
         errorTitle: "Missing ID token",
@@ -142,10 +153,8 @@ export const getAuthToken = async (
 // How long both the sign-in and the refresh wait for the token endpoint
 export const TOKEN_REQUEST_TIMEOUT_MS = 10_000
 
-export type SignInError = { errorTitle: string; errorMessage: string }
-
 type CodeExchange =
-  | { tokenResponse: AuthPayload }
+  | { tokenResponse: TokenResponse }
   | { signInError: SignInError }
 
 const signInFailure = (errorMessage: string): CodeExchange => ({
@@ -170,7 +179,7 @@ const requestTokens = async (
     )
   }
   try {
-    return { tokenResponse: (await response.json()) as AuthPayload }
+    return { tokenResponse: await readAuthTokenResponse(response) }
   } catch {
     return signInFailure(
       signal.aborted
@@ -189,33 +198,60 @@ export const exchangeAuthorizationCode = async (
   payload: TokenPayload,
 ): Promise<CodeExchange> => {
   const controller = new AbortController()
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  // Aborting fails both the request and the body read, and the race ends the
-  // sign-in even if neither settles.
-  const deadline = new Promise<CodeExchange>((resolve) => {
-    timeout = setTimeout(() => {
-      controller.abort()
-      resolve(signInFailure(SIGN_IN_TIMED_OUT))
-    }, TOKEN_REQUEST_TIMEOUT_MS)
-  })
   try {
-    return await Promise.race([
+    return await withDeadline(
       requestTokens(settings, payload, controller.signal),
-      deadline,
-    ])
-  } finally {
-    clearTimeout(timeout)
+      TOKEN_REQUEST_TIMEOUT_MS,
+      () => controller.abort(),
+    )
+  } catch (error) {
+    if (error instanceof DeadlineExceededError) {
+      return signInFailure(SIGN_IN_TIMED_OUT)
+    }
+    throw error
   }
 }
 
 export const readAuthTokenResponse = async (
   response: Response,
-  signal?: AbortSignal,
-): Promise<AuthPayload> => {
-  const tokenResponse = (await response.json()) as AuthPayload
-  // A response body can finish after the refresh deadline. Never install a
-  // late token or run the logout path of a late OAuth error response.
-  if (signal?.aborted) throw new Error("Token refresh timed out")
+  deadlineSignal?: AbortSignal,
+): Promise<TokenResponse> => {
+  const body: unknown = await response.json()
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new Error("Invalid token response")
+  }
+  const tokenResponse = body as TokenResponse
+  for (const key of [
+    "access_token",
+    "id_token",
+    "refresh_token",
+    "token_type",
+    "error",
+    "error_description",
+  ] as const) {
+    if (
+      tokenResponse[key] !== undefined &&
+      typeof tokenResponse[key] !== "string"
+    ) {
+      throw new Error("Invalid token response")
+    }
+  }
+  if (
+    tokenResponse.expires_in !== undefined &&
+    (typeof tokenResponse.expires_in !== "number" ||
+      !Number.isFinite(tokenResponse.expires_in) ||
+      tokenResponse.expires_in <= 0 ||
+      Number.isNaN(
+        new Date(Date.now() + tokenResponse.expires_in * 1000).getTime(),
+      ))
+  ) {
+    throw new Error("Invalid token response")
+  }
+  // Preserve a late rotated refresh token, but don't let a late OAuth error
+  // log out a session whose waiting queries have already been released.
+  if (deadlineSignal?.aborted && !tokenResponse.access_token) {
+    throw new DeadlineExceededError()
+  }
   return tokenResponse
 }
 

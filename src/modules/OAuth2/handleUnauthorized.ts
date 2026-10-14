@@ -2,22 +2,15 @@ import { getValue, removeValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { ssoAuthState } from "./ssoAuthState"
 
-type Logout = (options?: {
-  promptForLogin?: boolean
-  clearSSOSession?: boolean
-  errorTitle?: string
-  errorMessage?: string
-}) => void
+import type { LogoutOptions } from "./types"
+
+type Logout = (options?: LogoutOptions) => void
 
 export const handleSSOUnauthorized = (logout: Logout) => {
   // A failed refresh can release many queries with the same expired token.
   // Once the first 401 logs out, their remaining responses are not new
   // redirects and must not clear the saved SSO session or login error.
-  if (
-    !ssoAuthState.isSSOAuthenticated() &&
-    !getValue(StoreKey.REST_TOKEN) &&
-    !getValue(StoreKey.BASIC_AUTH_HEADER)
-  ) {
+  if (!ssoAuthState.isAuthenticated()) {
     return
   }
 

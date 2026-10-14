@@ -2,7 +2,7 @@ import { isServerError } from "../../utils"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { AuthPayload } from "../../modules/OAuth2/types"
+import { AuthPayload, AuthSessionEndedError } from "../../modules/OAuth2/types"
 import { API_VERSION } from "../../consts"
 import {
   Type,
@@ -32,13 +32,19 @@ import {
   ValidateQueryErrorResult,
 } from "./types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
-import { TOKEN_REQUEST_TIMEOUT_MS } from "../../modules/OAuth2/utils"
+import {
+  getBearerAuthorization,
+  TOKEN_REQUEST_TIMEOUT_MS,
+} from "../../modules/OAuth2/utils"
+import { withDeadline } from "../withDeadline"
 
 export type QueryId = number
 
 export const REFRESH_TIMEOUT_MS = TOKEN_REQUEST_TIMEOUT_MS
 const REFRESH_RETRY_DELAY_MS = 5_000
 const MAX_REFRESH_RETRY_DELAY_MS = 30_000
+const REFRESH_WINDOW_MS = 30_000
+const MIN_SUCCESS_REFRESH_INTERVAL_MS = 30_000
 
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
@@ -62,24 +68,46 @@ export class Client {
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
   private static refreshPromise: Promise<void> | null = null
+  private static refreshSessionId: number | null = null
   private static refreshRetryCount = 0
   private static retryRefreshAfter = 0
   private static retryForAuthPayload: AuthPayload | null = null
-  refreshTokenMethod: (signal?: AbortSignal) => Promise<Partial<AuthPayload>> =
-    () => Promise.resolve({})
+  refreshTokenMethod?: (
+    deadlineSignal?: AbortSignal,
+  ) => Promise<Partial<AuthPayload> | undefined>
 
-  private tokenNeedsRefresh() {
+  private static resetRefreshBackoff(authPayload: AuthPayload | null) {
+    Client.retryForAuthPayload = authPayload
+    Client.refreshRetryCount = 0
+    Client.retryRefreshAfter = 0
+  }
+
+  private static syncRefreshSession() {
+    if (Client.refreshSessionId !== ssoAuthState.getSessionId()) {
+      // A hung request from a logged-out session must not block a new login.
+      // Its provider-side installation guard will discard the eventual reply.
+      Client.refreshPromise = null
+      Client.refreshSessionId = null
+    }
     const authPayload = ssoAuthState.getAuthPayload()
     if (Client.retryForAuthPayload !== authPayload) {
       // A new login must never inherit the previous session's backoff.
-      Client.retryForAuthPayload = authPayload
-      Client.refreshRetryCount = 0
-      Client.retryRefreshAfter = 0
+      Client.resetRefreshBackoff(authPayload)
     }
-    return (
-      authPayload &&
-      authPayload.refresh_token &&
-      new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
+  }
+
+  static __resetRefreshStateForTests() {
+    Client.refreshPromise = null
+    Client.refreshSessionId = null
+    Client.resetRefreshBackoff(null)
+  }
+
+  private tokenNeedsRefresh() {
+    const authPayload = ssoAuthState.getAuthPayload()
+    return !!(
+      authPayload?.refresh_token &&
+      new Date(authPayload.expires_at).getTime() - Date.now() <
+        REFRESH_WINDOW_MS
     )
   }
 
@@ -87,47 +115,32 @@ export class Client {
     this.commonHeaders = headers
   }
 
-  private refreshAuthToken = async () => {
-    const controller = new AbortController()
-    let timeout: ReturnType<typeof setTimeout> | undefined
-    try {
-      // The timeout covers fetch AND response.json(). Aborting alone is not
-      // enough: an uncooperative fetch mock or body reader may never settle.
-      const deadline = new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => {
-          controller.abort()
-          reject(new Error("Token refresh timed out"))
-        }, REFRESH_TIMEOUT_MS)
-      })
-      const newToken = await Promise.race([
-        this.refreshTokenMethod(controller.signal),
-        deadline,
-      ])
-      const bearer = newToken.groups_encoded_in_token
-        ? newToken.id_token
-        : newToken.access_token
-      // An OAuth error, or a response without the ID token the server expects,
-      // has no bearer: the auth provider reports it and ends the session.
-      if (bearer) {
-        // Each request captured its own headers at fetch time; no drain of
-        // in-flight queries is necessary before replacing this object.
-        this.setCommonHeaders({
-          ...this.commonHeaders,
-          Authorization: `Bearer ${bearer}`,
-        })
-        Client.refreshRetryCount = 0
-        Client.retryRefreshAfter = 0
-      }
-    } catch (error) {
-      // Keep the current token. It may remain valid until expires_at; later
-      // queries retry after backoff, and a 401 after expiry triggers logout.
+  private startRefresh() {
+    if (Client.refreshPromise || !this.refreshTokenMethod) return
+    const originalSession = ssoAuthState.getAuthPayload()
+    const sessionId = ssoAuthState.getSessionId()
+    const deadlineController = new AbortController()
+    const refreshMethod = this.refreshTokenMethod
+    let failureReported = false
+    const reportFailure = (error: unknown) => {
+      if (failureReported || ssoAuthState.getAuthPayload() !== originalSession)
+        return
+      failureReported = true
       Client.refreshRetryCount++
-      Client.retryRefreshAfter =
-        Date.now() +
+      const now = Date.now()
+      const expiry = originalSession
+        ? new Date(originalSession.expires_at).getTime()
+        : NaN
+      const retryAfter =
+        now +
         Math.min(
           REFRESH_RETRY_DELAY_MS * 2 ** (Client.refreshRetryCount - 1),
           MAX_REFRESH_RETRY_DELAY_MS,
         )
+      // Retry by expiry if it is still ahead. Once expired, keep ordinary
+      // backoff so a failing provider cannot be hammered by polling queries.
+      Client.retryRefreshAfter =
+        expiry > now ? Math.min(expiry, retryAfter) : retryAfter
       console.error("Failed to refresh the auth token", error)
       if (
         ssoAuthState.isSSOAuthenticated() &&
@@ -136,9 +149,52 @@ export class Client {
         ssoAuthState.markRefreshFailed()
         eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED)
       }
-    } finally {
-      if (timeout !== undefined) clearTimeout(timeout)
     }
+    const request = Promise.resolve()
+      .then(() => refreshMethod(deadlineController.signal))
+      .then((newToken) => {
+        const currentSession = ssoAuthState.getAuthPayload()
+        if (
+          !newToken ||
+          !currentSession ||
+          ssoAuthState.getSessionId() !== sessionId
+        )
+          return
+        const authorization = getBearerAuthorization(newToken)
+        if (!authorization) return
+        this.setCommonHeaders({
+          ...this.commonHeaders,
+          Authorization: authorization,
+        })
+        Client.resetRefreshBackoff(currentSession)
+        const remaining =
+          new Date(currentSession.expires_at).getTime() - Date.now()
+        // Bound successful refreshes too: skew (or very short ID tokens) can
+        // leave every new token inside the refresh window. Remember the new
+        // payload so the next query's session sync doesn't erase the throttle.
+        Client.retryRefreshAfter =
+          Date.now() +
+          (remaining > 0
+            ? Math.max(
+                1,
+                Math.min(MIN_SUCCESS_REFRESH_INTERVAL_MS, remaining / 2),
+              )
+            : MIN_SUCCESS_REFRESH_INTERVAL_MS)
+      })
+      .catch(reportFailure)
+    const wait = withDeadline(request, REFRESH_TIMEOUT_MS, () => {
+      // Mark late errors as stale, but don't abort the network request: the
+      // provider may have rotated the refresh token before sending its body.
+      deadlineController.abort()
+    }).catch(reportFailure)
+    Client.refreshPromise = wait
+    Client.refreshSessionId = sessionId
+    // Retain even a timed-out request's slot until it settles, preventing
+    // overlapping refreshes that would reuse a rotated token.
+    const clearRefresh = () => {
+      if (Client.refreshPromise === wait) Client.refreshPromise = null
+    }
+    void request.then(clearRefresh, clearRefresh)
   }
 
   private awaitRefresh = (refresh: Promise<void>, signal: AbortSignal) => {
@@ -321,30 +377,65 @@ export class Client {
     let authorizationAtFetch: string | undefined
 
     try {
-      if (
-        !Client.refreshPromise &&
-        this.tokenNeedsRefresh() &&
-        Date.now() >= Client.retryRefreshAfter
-      ) {
-        const refresh = this.refreshAuthToken()
-        Client.refreshPromise = refresh
-        const clearRefresh = () => {
-          if (Client.refreshPromise === refresh) Client.refreshPromise = null
-        }
-        void refresh.then(clearRefresh, clearRefresh)
+      const originalSession = ssoAuthState.getAuthPayload()
+      const originalSessionId = ssoAuthState.getSessionId()
+      Client.syncRefreshSession()
+      if (this.tokenNeedsRefresh() && Date.now() >= Client.retryRefreshAfter) {
+        this.startRefresh()
       }
+      const refreshedForRequest = !!Client.refreshPromise
       if (Client.refreshPromise) {
         await this.awaitRefresh(Client.refreshPromise, controller.signal)
       }
-
-      onRequestStart?.()
-      const headers = this.commonHeaders
-      authorizationAtFetch = headers.Authorization
-      fetchStartedAt = Date.now()
-      response = await fetch(`exec?${Client.encodeParams(payload)}`, {
-        signal: controller.signal,
-        headers,
-      })
+      const ensureSession = () => {
+        if (
+          originalSession &&
+          (!ssoAuthState.isSSOAuthenticated() ||
+            ssoAuthState.getSessionId() !== originalSessionId)
+        ) {
+          throw new AuthSessionEndedError()
+        }
+        if (controller.signal.aborted)
+          throw new DOMException("Aborted", "AbortError")
+      }
+      ensureSession()
+      const send = () => {
+        onRequestStart?.()
+        const headers = this.commonHeaders
+        authorizationAtFetch = headers.Authorization
+        fetchStartedAt = Date.now()
+        return fetch(`exec?${Client.encodeParams(payload)}`, {
+          signal: controller.signal,
+          headers,
+        })
+      }
+      const sessionAtFetch = ssoAuthState.getAuthPayload()
+      response = await send()
+      if (
+        response.status === 401 &&
+        !refreshedForRequest &&
+        sessionAtFetch?.refresh_token &&
+        sessionAtFetch === ssoAuthState.getAuthPayload() &&
+        authorizationAtFetch === getBearerAuthorization(sessionAtFetch) &&
+        !ssoAuthState.hasRefreshFailed() &&
+        this.refreshTokenMethod
+      ) {
+        // The server's clock is authoritative. A slow browser clock may not
+        // have opened the refresh window yet. A 401 executes no SQL, so one
+        // refresh-and-retry is safe even for writes, but never retry a 403.
+        this.startRefresh()
+        if (Client.refreshPromise) {
+          await this.awaitRefresh(Client.refreshPromise, controller.signal)
+        }
+        ensureSession()
+        if (
+          !ssoAuthState.hasRefreshFailed() &&
+          (ssoAuthState.getAuthPayload() !== sessionAtFetch ||
+            this.commonHeaders.Authorization !== authorizationAtFetch)
+        ) {
+          response = await send()
+        }
+      }
     } catch (error) {
       this.removeController(queryId)
 
@@ -357,6 +448,10 @@ export class Client {
       const genericErrorPayload = {
         ...err,
         error: "An error occurred, please try again",
+      }
+
+      if (error instanceof AuthSessionEndedError) {
+        return Promise.reject({ ...err, error: error.message })
       }
 
       if (error instanceof DOMException) {
@@ -472,7 +567,7 @@ export class Client {
         errorPayload.error = `Unauthorized`
         const currentAuthPayload = ssoAuthState.getAuthPayload()
         const currentAuthorization = currentAuthPayload
-          ? `Bearer ${currentAuthPayload.groups_encoded_in_token ? currentAuthPayload.id_token : currentAuthPayload.access_token}`
+          ? getBearerAuthorization(currentAuthPayload)
           : this.commonHeaders.Authorization
         // Reject an older request without logging out a session using a
         // different bearer. A refresh can also return the same bearer value.

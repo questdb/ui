@@ -22,10 +22,7 @@ afterEach(() => {
   vi.useRealTimers()
   ssoAuthState.clearAuthPayload()
   // The refresh is shared between Client instances, but never between tests.
-  Reflect.set(Client, "refreshPromise", null)
-  Reflect.set(Client, "refreshRetryCount", 0)
-  Reflect.set(Client, "retryRefreshAfter", 0)
-  Reflect.set(Client, "retryForAuthPayload", null)
+  Client.__resetRefreshStateForTests()
 })
 
 const rawDqlResult = (
@@ -209,6 +206,7 @@ describe("Client token refresh", () => {
   })
 
   it("notifies the auth provider only once per failure episode", async () => {
+    vi.useFakeTimers()
     setExpiringToken()
     vi.stubGlobal(
       "fetch",
@@ -221,7 +219,9 @@ describe("Client token refresh", () => {
     eventBus.subscribe(EventType.MSG_AUTH_REFRESH_FAILED, onFailure)
     try {
       await client.queryRaw("SELECT 1")
+      await vi.advanceTimersByTimeAsync(5_000)
       await client.queryRaw("SELECT 2")
+      expect(client.refreshTokenMethod).toHaveBeenCalledTimes(2)
       expect(onFailure).toHaveBeenCalledTimes(1)
     } finally {
       eventBus.unsubscribe(EventType.MSG_AUTH_REFRESH_FAILED, onFailure)
@@ -240,7 +240,16 @@ describe("Client token refresh", () => {
     const refresh = vi
       .fn()
       .mockRejectedValueOnce(new Error("network down"))
-      .mockResolvedValueOnce({ access_token: "new" })
+      .mockImplementationOnce(() => {
+        const payload = {
+          access_token: "new",
+          refresh_token: "rotated",
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+        } as AuthPayload
+        ssoAuthState.setAuthPayload(payload)
+        return Promise.resolve(payload)
+      })
+      .mockRejectedValue(new Error("offline again"))
     client.refreshTokenMethod = refresh
 
     await client.queryRaw("SELECT 1")
@@ -250,11 +259,22 @@ describe("Client token refresh", () => {
     await vi.advanceTimersByTimeAsync(1)
     await client.queryRaw("SELECT 3")
     expect(refresh).toHaveBeenCalledTimes(2)
-    expect(ssoAuthState.hasRefreshFailed()).toBe(true)
+    expect(ssoAuthState.hasRefreshFailed()).toBe(false)
     expect(fetch).toHaveBeenLastCalledWith(
       expect.any(String),
       expect.objectContaining({ headers: { Authorization: "Bearer new" } }),
     )
+    // Once the renewed token enters its window, the next failure starts a
+    // new episode and must back off for 5 seconds, not 10.
+    await vi.advanceTimersByTimeAsync(31_000)
+    await client.queryRaw("SELECT 4")
+    expect(refresh).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(4_999)
+    await client.queryRaw("SELECT 5")
+    expect(refresh).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1)
+    await client.queryRaw("SELECT 6")
+    expect(refresh).toHaveBeenCalledTimes(4)
   })
 
   it("does not carry refresh backoff into a new SSO session", async () => {
@@ -565,6 +585,7 @@ describe("Client token refresh", () => {
     const secondClient = new Client()
     const first = firstClient.queryRaw("SELECT 1")
     const second = secondClient.queryRaw("SELECT 2")
+    await Promise.resolve()
     expect(refresh).toHaveBeenCalledTimes(1)
     expect(fetch).not.toHaveBeenCalled()
     rejectRefresh(new Error("offline"))
@@ -614,6 +635,7 @@ describe("Client token refresh", () => {
     client.refreshTokenMethod = refresh
     const first = client.queryRaw("SELECT 1")
     const second = new Client().queryRaw("SELECT 2")
+    await Promise.resolve()
     const signal = refresh.mock.calls[0][0]
     await vi.advanceTimersByTimeAsync(10_000)
     expect(signal?.aborted).toBe(true)
@@ -621,12 +643,12 @@ describe("Client token refresh", () => {
     expect((await second).type).toBe(Type.NOTICE)
     expect(errorSpy).toHaveBeenCalledWith(
       "Failed to refresh the auth token",
-      expect.objectContaining({ message: "Token refresh timed out" }),
+      expect.objectContaining({ message: "Token request timed out" }),
     )
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
-  it("does not install a late token after the refresh deadline", async () => {
+  it("installs a late rotated token without starting overlapping refreshes", async () => {
     vi.useFakeTimers()
     setExpiringToken()
     const fetchMock = vi.fn().mockResolvedValue(response({ notice: "hint" }))
@@ -635,20 +657,33 @@ describe("Client token refresh", () => {
     let resolveRefresh!: (token: Partial<AuthPayload>) => void
     const client = new Client()
     client.setCommonHeaders({ Authorization: "Bearer stale" })
-    client.refreshTokenMethod = () =>
-      new Promise<Partial<AuthPayload>>((resolve) => {
-        resolveRefresh = resolve
-      })
+    const refresh = vi.fn(
+      () =>
+        new Promise<Partial<AuthPayload>>((resolve) => {
+          resolveRefresh = resolve
+        }),
+    )
+    client.refreshTokenMethod = refresh
     const first = client.queryRaw("SELECT 1")
     await vi.advanceTimersByTimeAsync(10_000)
     await first
-    resolveRefresh({ access_token: "late" })
-    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(5_000)
     await client.queryRaw("SELECT 2")
+    expect(refresh).toHaveBeenCalledTimes(1)
+    const latePayload = {
+      access_token: "late",
+      refresh_token: "rotated",
+      expires_at: new Date(Date.now() + 300_000).toISOString(),
+    } as AuthPayload
+    ssoAuthState.setAuthPayload(latePayload)
+    resolveRefresh(latePayload)
+    await vi.advanceTimersByTimeAsync(0)
+    await client.queryRaw("SELECT 3")
     expect(fetchMock).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ headers: { Authorization: "Bearer stale" } }),
+      expect.objectContaining({ headers: { Authorization: "Bearer late" } }),
     )
+    expect(ssoAuthState.hasRefreshFailed()).toBe(false)
   })
 
   it.each([

@@ -1,5 +1,7 @@
 /// <reference types="cypress" />
 
+const { seedNotebookOnboarding } = require("../../utils")
+
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`
 
@@ -29,16 +31,20 @@ const queryResult = {
 const stubConsoleRequests = () => {
   cy.intercept(
     { method: "GET", url: `${baseUrl}/exec*` },
-    { statusCode: 200, body: queryResult },
+    { statusCode: 200, body: { columns: [], dataset: [], count: 0 } },
   )
   cy.intercept({ method: "GET", url: `${baseUrl}/warnings*` }, [])
   cy.intercept({ method: "GET", url: `${baseUrl}/chk*` }, { status: "Exists" })
 }
 
-const visitCallback = (query, flow) =>
+const visitCallback = (query, flow, credentials = {}) =>
   cy.visit(`${baseUrl}${query}`, {
     onBeforeLoad(win) {
       win.localStorage.clear()
+      seedNotebookOnboarding(win)
+      Object.entries(credentials).forEach(([key, value]) => {
+        win.localStorage.setItem(key, value)
+      })
       if (flow) {
         win.localStorage.setItem(STORE_KEY.oauthState, flow.state)
         win.localStorage.setItem(STORE_KEY.pkceCodeVerifier, flow.codeVerifier)
@@ -461,7 +467,9 @@ describe("Auth - OIDC sign-in errors", () => {
 
       // Then the console shows the login page with the error
       cy.getByDataHook("auth-login").should("be.visible")
-      cy.contains(message).closest("[role='alert']").should("be.focused")
+      cy.contains(message)
+        .closest("[data-hook='sign-in-error']")
+        .should("be.focused")
     })
   }
 
@@ -486,7 +494,7 @@ describe("Auth - OIDC sign-in errors", () => {
     cy.contains(
       "The identity provider did not respond within 10 seconds. Please try again.",
     )
-      .closest("[role='alert']")
+      .closest("[data-hook='sign-in-error']")
       .should("be.focused")
   })
 })
@@ -513,7 +521,12 @@ describe("Auth - OIDC ID token", () => {
   // Signs in with SSO to a server that expects the ID token as the bearer.
   // The provider returns the ID token given for each grant type, while the
   // token response's expires_in describes the access token.
-  const signIn = ({ idTokens, accessTokenLifetime = 3600 }) => {
+  const signIn = ({
+    idTokens,
+    accessTokenLifetime = 3600,
+    refreshReply,
+    credentials,
+  }) => {
     const grants = []
 
     interceptSettings({
@@ -533,6 +546,11 @@ describe("Auth - OIDC ID token", () => {
     cy.intercept({ method: "POST", url: tokenUrl }, (req) => {
       const grant = new URLSearchParams(req.body).get("grant_type")
       grants.push(grant)
+      if (grant === "refresh_token" && refreshReply) {
+        req.alias = "refreshFailure"
+        req.reply(refreshReply)
+        return
+      }
       req.reply({
         access_token: `${grant}-access-token`,
         refresh_token: "refresh-token",
@@ -556,7 +574,7 @@ describe("Auth - OIDC ID token", () => {
       { statusCode: 200, body: queryResult },
     ).as("sessionStart")
 
-    visitCallback("?code=code-from-the-provider")
+    visitCallback("?code=code-from-the-provider", undefined, credentials)
     cy.wait("@settings")
     return grants
   }
@@ -564,15 +582,84 @@ describe("Auth - OIDC ID token", () => {
   const expectMissingIdTokenError = (detail) => {
     cy.getByDataHook("auth-login").should("be.visible")
     cy.contains("Missing ID token")
-      .closest("[role='alert']")
+      .closest("[data-hook='sign-in-error']")
       .should("be.focused")
-    cy.contains(
-      "The server requires an ID token for authentication (acl.oidc.groups.encoded.in.token)",
+    cy.contains("ask your administrator to check the SSO configuration").should(
+      "be.visible",
     )
+    cy.contains("Your identity provider did not send the information")
       .should("be.visible")
       .and("contain", detail)
     cy.getEditor().should("not.exist")
   }
+
+  for (const { failure, reply } of [
+    { failure: "network error", reply: { forceNetworkError: true } },
+    {
+      failure: "non-JSON 502",
+      reply: { statusCode: 502, body: "<html>Bad Gateway</html>" },
+    },
+  ]) {
+    it(`loads the editor after a refresh ${failure} and explains a later 401`, () => {
+      const initial = idToken("initial", 20)
+      signIn({ idTokens: { authorization_code: initial }, refreshReply: reply })
+      cy.wait("@refreshFailure")
+      cy.wait("@authCheck")
+        .its("request.headers.authorization")
+        .should("eq", `Bearer ${initial}`)
+      cy.getEditor().should("be.visible")
+      cy.contains(
+        "Could not refresh your SSO session. We'll retry, but you may be signed out when your current session expires.",
+      ).should("be.visible")
+      // A persistent warning has no running auto-close animation.
+      cy.get("#sso-refresh-failed .Toastify__progress-bar").should(
+        "not.have.class",
+        "Toastify__progress-bar--animated",
+      )
+      cy.intercept(
+        {
+          method: "GET",
+          url: `${baseUrl}/exec*`,
+          query: { query: "select current_user()" },
+        },
+        { statusCode: 401, body: "Unauthorized" },
+      )
+      cy.clearEditor()
+      cy.typeQuery("select current_user()")
+      cy.runLine()
+      cy.getByDataHook("auth-login").should("be.visible")
+      cy.getByDataHook("sign-in-error")
+        .should("be.focused")
+        .and("contain.text", "Your SSO session has expired")
+      cy.contains(
+        "Could not refresh your SSO session. Please sign in again.",
+      ).should("be.visible")
+      cy.get("#sso-refresh-failed").should("not.exist")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.session.active")
+        .should("eq", "true")
+    })
+  }
+
+  it("clears retained password credentials only when signing in with SSO", () => {
+    const initial = idToken("initial", 3600)
+    signIn({
+      idTokens: { authorization_code: initial },
+      credentials: {
+        "rest.token": "expired-rest-token",
+        "basic.auth.header": "Basic expired",
+      },
+    })
+    cy.wait("@authCheck")
+      .its("request.headers.authorization")
+      .should("eq", `Bearer ${initial}`)
+    cy.getEditor().should("be.visible")
+    cy.window().then(({ localStorage }) => {
+      expect(localStorage.getItem("rest.token")).to.be.null
+      expect(localStorage.getItem("basic.auth.header")).to.be.null
+    })
+  })
 
   it("refreshes an ID token that expires before the access token", () => {
     // Given an ID token within the 30s refresh window, and an access token
@@ -622,7 +709,7 @@ describe("Auth - OIDC ID token", () => {
 
     // Then the console explains the problem instead of starting a session,
     // and drops the used code from the URL
-    expectMissingIdTokenError("Check that the openid scope is requested.")
+    expectMissingIdTokenError("needed to sign you in.")
     cy.get("@sessionStart.all").should("have.length", 0)
     cy.location("search").should("eq", "")
   })
@@ -632,13 +719,8 @@ describe("Auth - OIDC ID token", () => {
     const initial = idToken("initial", 20)
     signIn({ idTokens: { authorization_code: initial } })
 
-    // Then the console ends the session with an explanation, and the query
-    // waiting for the refresh keeps the last ID token, not "Bearer undefined"
-    expectMissingIdTokenError(
-      "when refreshing your session. Please sign in again.",
-    )
-    cy.wait("@authCheck")
-      .its("request.headers.authorization")
-      .should("eq", `Bearer ${initial}`)
+    // Then the console ends the session and cancels the waiting SQL request.
+    expectMissingIdTokenError("needed to keep you signed in.")
+    cy.get("@authCheck.all").should("have.length", 0)
   })
 })

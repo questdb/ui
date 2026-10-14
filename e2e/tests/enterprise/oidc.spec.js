@@ -181,7 +181,7 @@ describe("OIDC", () => {
       cy.executeSQL("select current_user();")
       cy.getByDataHook("auth-login").should("be.visible")
       cy.contains("Your SSO session has expired")
-        .closest("[role='alert']")
+        .closest("[data-hook='sign-in-error']")
         .should("be.focused")
       cy.contains(
         "Could not refresh your SSO session. Please sign in again.",

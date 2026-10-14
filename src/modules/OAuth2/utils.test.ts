@@ -6,6 +6,7 @@ import {
   exchangeAuthorizationCode,
   getAuthToken,
   getMissingIdTokenError,
+  getBearerAuthorization,
   getTokenExpirationDate,
   readAuthTokenResponse,
 } from "./utils"
@@ -132,11 +133,11 @@ describe("missing ID token", () => {
   it.each([
     {
       grantType: "authorization_code",
-      detail: "did not return one. Check that the openid scope is requested.",
+      detail: "needed to sign you in.",
     },
     {
       grantType: "refresh_token",
-      detail: "when refreshing your session. Please sign in again.",
+      detail: "needed to keep you signed in.",
     },
   ] as const)(
     "explains a missing ID token bearer after the $grantType grant",
@@ -147,9 +148,10 @@ describe("missing ID token", () => {
       )
       expect(error?.errorTitle).toBe("Missing ID token")
       expect(error?.errorMessage).toContain(
-        "The server requires an ID token for authentication (acl.oidc.groups.encoded.in.token)",
+        "ask your administrator to check the SSO configuration",
       )
       expect(error?.errorMessage).toContain(detail)
+      expect(error?.errorMessage).not.toContain("acl.oidc")
     },
   )
 
@@ -277,6 +279,33 @@ describe("authorization code exchange", () => {
     await expect(exchange).resolves.toEqual(timedOut)
   })
 
+  it.each([
+    null,
+    [],
+    "token",
+    123,
+    { access_token: 123 },
+    { expires_in: "3600" },
+    { expires_in: 1e20 },
+    { expires_in: 0 },
+    { expires_in: -1 },
+  ])("explains an invalid JSON token response: %j", async (body) => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue({ status: 200, json: () => Promise.resolve(body) }),
+    )
+    await expect(
+      exchangeAuthorizationCode(settings, payload),
+    ).resolves.toMatchObject({
+      signInError: {
+        errorMessage:
+          "The identity provider returned an unexpected response (HTTP 200). Please try again.",
+      },
+    })
+  })
+
   it("clears the timeout once the response arrives", async () => {
     vi.useFakeTimers()
     vi.stubGlobal(
@@ -291,6 +320,28 @@ describe("authorization code exchange", () => {
       { tokenResponse: { access_token: "token" } },
     )
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe("bearer authorization", () => {
+  it("uses the access token unless the server requires the ID token", () => {
+    expect(
+      getBearerAuthorization({ access_token: "access", id_token: "id" }),
+    ).toBe("Bearer access")
+    expect(
+      getBearerAuthorization({
+        access_token: "access",
+        id_token: "id",
+        groups_encoded_in_token: true,
+      }),
+    ).toBe("Bearer id")
+    expect(
+      getBearerAuthorization({
+        access_token: "access",
+        groups_encoded_in_token: true,
+      }),
+    ).toBeUndefined()
+    expect(getBearerAuthorization({})).toBeUndefined()
   })
 })
 
@@ -319,7 +370,7 @@ describe("OIDC refresh requests", () => {
     )
   })
 
-  it("discards a response body that resolves after the deadline", async () => {
+  it("preserves a successful response body that resolves after the wait deadline", async () => {
     const controller = new AbortController()
     let resolveBody!: (value: AuthPayload) => void
     const body = new Promise<AuthPayload>((resolve) => {
@@ -332,6 +383,17 @@ describe("OIDC refresh requests", () => {
 
     controller.abort()
     resolveBody({ access_token: "late" } as AuthPayload)
-    await expect(result).rejects.toThrow("Token refresh timed out")
+    await expect(result).resolves.toEqual({ access_token: "late" })
+  })
+
+  it("does not apply a late OAuth error after the wait deadline", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      readAuthTokenResponse(
+        { json: () => Promise.resolve({ error: "invalid_grant" }) } as Response,
+        controller.signal,
+      ),
+    ).rejects.toThrow("Token request timed out")
   })
 })

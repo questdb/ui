@@ -30,7 +30,7 @@ import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
-import { hasUIAuth } from "../../modules/OAuth2/utils"
+import { getBearerAuthorization, hasUIAuth } from "../../modules/OAuth2/utils"
 import { useSettings } from "../SettingsProvider"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
@@ -78,15 +78,20 @@ export const QuestProvider: React.FC = ({ children }) => {
   const finishAuthCheck = async () => {
     // The initial check tells us if the user has permission to use the HTTP protocol.
     // If not, this will trigger a full-screen error page, preventing the subsequent requests to be made.
-    await questClient.queryRaw("SELECT 1")
-
-    setAuthCheckFinished(true)
+    try {
+      await questClient.queryRaw("SELECT 1")
+      setAuthCheckFinished(true)
+    } catch {
+      // The client reports connection/auth failures. In particular, a refresh
+      // that ends the session cancels this check without an unhandled rejection.
+    }
   }
 
   const setupClient = (sessionData: Partial<AuthPayload>) => {
-    questClient.setCommonHeaders({
-      Authorization: `Bearer ${sessionData.groups_encoded_in_token ? sessionData.id_token : sessionData.access_token}`,
-    })
+    const authorization = getBearerAuthorization(sessionData)
+    questClient.setCommonHeaders(
+      authorization ? { Authorization: authorization } : {},
+    )
 
     questClient.refreshTokenMethod = (signal) => {
       return refreshAuthToken(settings, sessionData.refresh_token, signal)
@@ -131,6 +136,9 @@ export const QuestProvider: React.FC = ({ children }) => {
           setBuildVersion(formatVersion(result.dataset[0][0] as string))
           setCommitHash(formatCommitHash(result.dataset[0][0] as string))
         }
+      })
+      .catch(() => {
+        // Authentication can end while the initial build query is waiting.
       })
   }, [])
 

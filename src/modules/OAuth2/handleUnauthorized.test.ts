@@ -32,6 +32,36 @@ describe("SSO unauthorized responses", () => {
     expect(localStorage.getItem(StoreKey.SSO_SESSION_ACTIVE)).toBe("true")
   })
 
+  it.each([StoreKey.REST_TOKEN, StoreKey.BASIC_AUTH_HEADER])(
+    "handles the current tab's 401 even after another tab removes %s",
+    (key) => {
+      localStorage.setItem(key, "credential")
+      ssoAuthState.markNonSSOAuthenticated()
+      localStorage.removeItem(key)
+      const logout = vi.fn(() => ssoAuthState.clearAuthPayload())
+      handleSSOUnauthorized(logout)
+      handleSSOUnauthorized(logout)
+      expect(logout).toHaveBeenCalledTimes(1)
+      expect(logout).toHaveBeenCalledWith({})
+    },
+  )
+
+  it("does not treat another tab's stored credentials as a login in this tab", () => {
+    localStorage.setItem(StoreKey.REST_TOKEN, "another-tab")
+    const logout = vi.fn()
+    handleSSOUnauthorized(logout)
+    expect(logout).not.toHaveBeenCalled()
+  })
+
+  it("handles a new password login after the previous session logged out", () => {
+    const logout = vi.fn(() => ssoAuthState.clearAuthPayload())
+    for (let i = 0; i < 2; i++) {
+      ssoAuthState.markNonSSOAuthenticated()
+      handleSSOUnauthorized(logout)
+    }
+    expect(logout).toHaveBeenCalledTimes(2)
+  })
+
   it("still breaks a loop of six distinct failed logins", () => {
     const logout = vi.fn(() => ssoAuthState.clearAuthPayload())
 

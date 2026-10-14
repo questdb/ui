@@ -170,6 +170,9 @@ const RedirectErrorContainer = styled(ErrorContainer)`
   z-index: 1;
   border-color: ${({ theme }) => theme.color.statusDanger};
   width: 560px;
+  &:focus {
+    outline: none;
+  }
   background: ${({ theme }) => theme.color.surfaceCanvas};
   box-shadow:
     0 1px 2px ${({ theme }) => theme.color.shadowMedium},
@@ -367,16 +370,19 @@ export const Login = ({
         {(redirectErrorTitle || redirectErrorMessage) && (
           <RedirectErrorContainer
             ref={redirectErrorRef}
-            role="alert"
+            data-hook="sign-in-error"
+            role="group"
+            aria-labelledby="sign-in-error-title"
+            aria-describedby="sign-in-error-message"
             tabIndex={-1}
           >
-            <PlugsContainer>
+            <PlugsContainer aria-hidden="true">
               {isDisconnection ? (
                 <img
                   src="assets/plugs.svg"
                   width="24"
                   height="24"
-                  alt="Plug"
+                  alt=""
                   style={{ flexShrink: "0" }}
                 />
               ) : (
@@ -388,12 +394,17 @@ export const Login = ({
               )}
             </PlugsContainer>
             <Box flexDirection="column" gap="0" align="flex-start">
-              <Text size="lg" weight={600} color="statusDanger">
-                {redirectErrorTitle ?? "Something went wrong."}
-              </Text>
-              <Text size="lg" color="statusDanger">
-                {redirectErrorMessage ?? "Error logging in. Please try again."}
-              </Text>
+              <span id="sign-in-error-title">
+                <Text size="lg" weight={600} color="statusDanger">
+                  {redirectErrorTitle ?? "Something went wrong."}
+                </Text>
+              </span>
+              <span id="sign-in-error-message">
+                <Text size="lg" color="statusDanger">
+                  {redirectErrorMessage ??
+                    "Error logging in. Please try again."}
+                </Text>
+              </span>
             </Box>
             <ErrorCloseButton
               label="Dismiss sign-in error"
