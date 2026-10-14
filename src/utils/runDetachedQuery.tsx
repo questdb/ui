@@ -16,6 +16,7 @@ import * as QuestDB from "./questdb"
 import type { ExecutionRefs } from "../scenes/Editor/index"
 import type { Dispatch } from "redux"
 import actions from "../store/Query/actions"
+import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 
 export type RunDetachedQueryConfig = {
   normalizedSQL: string
@@ -42,6 +43,7 @@ export async function runDetachedQuery(
     releaseExecution,
   } = config
 
+  const sessionId = ssoAuthState.getSessionId()
   const { promise, queryId } = quest.queryRaw(normalizedSQL, {
     limit: "0,1000",
     explain: true,
@@ -51,6 +53,7 @@ export async function runDetachedQuery(
 
   try {
     const result = await promise
+    if (ssoAuthState.getSessionId() !== sessionId) return
 
     if (!executionRefs.current[namespaceKey]) {
       executionRefs.current[namespaceKey] = {}
@@ -119,7 +122,7 @@ export async function runDetachedQuery(
     const error = _error as Partial<QuestDB.ErrorResult> & { message?: string }
     // Login already reports the ended session; do not carry this error into
     // the next login. The finally block still settles and releases execution.
-    if (error.sessionEnded) return
+    if (error.sessionEnded || ssoAuthState.getSessionId() !== sessionId) return
 
     if (!executionRefs.current[namespaceKey]) {
       executionRefs.current[namespaceKey] = {}
@@ -147,6 +150,7 @@ export async function runDetachedQuery(
       ),
     )
   } finally {
+    dispatch(actions.settleLoadingNotification(namespaceKey, queryId))
     config.onSettled?.()
     releaseExecution(queryKey)
   }

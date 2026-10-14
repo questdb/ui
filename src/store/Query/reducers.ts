@@ -26,7 +26,15 @@ import {
   createDetachedQueryKey,
   parseQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
-import { QueryAction, QueryAT, QueryStateShape, RunningType } from "../../types"
+import {
+  NotificationShape,
+  NotificationType,
+  QueryAction,
+  QueryAT,
+  QueryKey,
+  QueryStateShape,
+  RunningType,
+} from "../../types"
 import type { InformationSchemaColumn } from "utils/questdb"
 
 export const initialState: QueryStateShape = {
@@ -61,7 +69,10 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         const updatedQueryNotifications = {
           ...existingQueryNotifications,
           latest: cleanNotification,
-          [isExplain ? "explain" : "regular"]: cleanNotification,
+          // Transient loading state must not replace the last completed run.
+          ...(cleanNotification.type === NotificationType.LOADING
+            ? {}
+            : { [isExplain ? "explain" : "regular"]: cleanNotification }),
         }
 
         return {
@@ -154,6 +165,61 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         notifications: filteredNotifications,
+      }
+    }
+
+    case QueryAT.SETTLE_LOADING_NOTIFICATION: {
+      const { bufferId, queryId } = action.payload
+      const matches = (notification?: NotificationShape | null) =>
+        notification?.type === NotificationType.LOADING &&
+        notification.queryId === queryId
+      const notifications = state.notifications.filter(
+        (notification) => !matches(notification),
+      )
+      const bufferNotifications = state.queryNotifications[bufferId] || {}
+      let updatedBufferNotifications = bufferNotifications
+      for (const [key, group] of Object.entries(bufferNotifications)) {
+        if (!matches(group.latest)) continue
+        if (updatedBufferNotifications === bufferNotifications) {
+          updatedBufferNotifications = { ...bufferNotifications }
+        }
+        const { regular, explain } = group
+        const latest =
+          regular && explain
+            ? regular.createdAt >= explain.createdAt
+              ? regular
+              : explain
+            : (regular ?? explain)
+        if (latest) {
+          updatedBufferNotifications[key as QueryKey] = { ...group, latest }
+        } else {
+          delete updatedBufferNotifications[key as QueryKey]
+        }
+      }
+      const activeNotification = matches(state.activeNotification)
+        ? null
+        : state.activeNotification
+      if (
+        notifications.length === state.notifications.length &&
+        updatedBufferNotifications === bufferNotifications &&
+        activeNotification === state.activeNotification
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        notifications:
+          notifications.length === state.notifications.length
+            ? state.notifications
+            : notifications,
+        activeNotification,
+        queryNotifications:
+          updatedBufferNotifications === bufferNotifications
+            ? state.queryNotifications
+            : {
+                ...state.queryNotifications,
+                [bufferId]: updatedBufferNotifications,
+              },
       }
     }
 

@@ -538,6 +538,7 @@ describe("Auth - OIDC ID token", () => {
     accessTokenLifetime = 3600,
     refreshReply,
     credentials,
+    authCheckReply,
   }) => {
     const grants = []
 
@@ -579,7 +580,7 @@ describe("Auth - OIDC ID token", () => {
         url: `${baseUrl}/exec*`,
         query: { query: /^SELECT 1$/ },
       },
-      { statusCode: 200, body: queryResult },
+      authCheckReply ?? { statusCode: 200, body: queryResult },
     ).as("authCheck")
     cy.intercept(
       { method: "GET", url: `${baseUrl}/exec*`, query: { session: "true" } },
@@ -589,6 +590,19 @@ describe("Auth - OIDC ID token", () => {
     visitCallback("?code=code-from-the-provider", undefined, credentials)
     cy.wait("@settings")
     return grants
+  }
+
+  const passwordRelogin = () => {
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: /alter user .* create token type rest/ },
+      },
+      { body: { columns: [], count: 1, dataset: [["admin", "rest-token"]] } },
+    )
+    cy.loginWithUserAndPassword()
+    cy.getEditor().should("be.visible")
   }
 
   const expectMissingIdTokenError = (detail) => {
@@ -677,21 +691,146 @@ describe("Auth - OIDC ID token", () => {
     // usual @exec wait would be incorrect here.
     cy.clickRunIconInLine(1)
     cy.getByDataHook("auth-login").should("be.visible")
-    cy.intercept(
-      {
-        method: "GET",
-        url: `${baseUrl}/exec*`,
-        query: { query: /alter user .* create token type rest/ },
-      },
-      { body: { columns: [], count: 1, dataset: [["admin", "rest-token"]] } },
-    )
-    cy.loginWithUserAndPassword()
-    cy.getEditor().should("be.visible")
+    passwordRelogin()
     cy.getByDataHook("notifications-wrapper").should(
       "not.contain.text",
       "Your session has ended. Please sign in again.",
     )
     cy.get('[data-hook="expand-notifications"]').should("not.exist")
+  })
+
+  it("removes an already-visible loading notification before password re-login", () => {
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 3600) },
+      refreshReply: {
+        delay: 2000,
+        statusCode: 400,
+        body: { error: "invalid_grant" },
+      },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.getEditor().should("be.visible")
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: "select 42" },
+      },
+      { statusCode: 401, body: "Unauthorized" },
+    ).as("rejectedQuery")
+    cy.clearEditor()
+    cy.typeQuery("select 42")
+    cy.clickRunIconInLine(1)
+    cy.wait("@rejectedQuery")
+    cy.getByDataHook("loading-notification").should("be.visible")
+    cy.getByDataHook("auth-login").should("be.visible")
+    passwordRelogin()
+    // Restore the original query's selection, not just the initial log view.
+    cy.clickLine(1)
+    cy.getByDataHook("loading-notification").should("not.exist")
+    cy.get('[data-hook="expand-notifications"]').should("not.exist")
+    cy.get("@rejectedQuery.all").should("have.length", 1)
+  })
+
+  it("stops a script on authentication loss even when continuing after errors", () => {
+    const statements = []
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 3600) },
+      refreshReply: { statusCode: 400, body: { error: "invalid_grant" } },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.getEditor().should("be.visible")
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: /^select (111|222|333|444|555);?$/ },
+      },
+      (req) => {
+        const query = new URL(req.url).searchParams.get("query")
+        const value = Number(query.match(/\d+/)[0])
+        statements.push(value)
+        req.reply(
+          value === 222
+            ? { statusCode: 401, body: "Unauthorized" }
+            : {
+                body: {
+                  query,
+                  columns: [{ name: "value", type: "INT" }],
+                  count: 1,
+                  dataset: [[value]],
+                },
+              },
+        )
+      },
+    )
+    cy.clearEditor()
+    cy.typeQuery("select 111;\nselect 222;\nselect 333;")
+    cy.clickRunScript(true)
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.then(() => expect(statements).to.deep.equal([111, 222]))
+    passwordRelogin()
+    cy.getByDataHook("loading-notification").should("not.exist")
+    cy.get('[data-hook="expand-notifications"]').should("not.exist")
+    cy.getByDataHook("notifications-wrapper").should(
+      "not.contain.text",
+      "Running completed",
+    )
+    cy.clearEditor()
+    cy.typeQuery("select 444;\nselect 555;")
+    cy.clickRunScript()
+    cy.getByDataHook("success-notification")
+      .invoke("text")
+      .should("match", /Running completed.*2 successful\s+queries/)
+    cy.then(() => expect(statements).to.deep.equal([111, 222, 444, 555]))
+  })
+
+  it("starts telemetry only after the auth check and uses the refreshed SSO bearer", () => {
+    const initial = idToken("initial", 20)
+    const refreshed = idToken("refreshed", 3600)
+    let authRequested = false
+    let releaseAuth
+    const telemetryHeaders = []
+    signIn({
+      idTokens: { authorization_code: initial, refresh_token: refreshed },
+      credentials: { "auto.refresh.tables": "false" },
+      authCheckReply: (req) => {
+        authRequested = true
+        return new Promise((resolve) => {
+          releaseAuth = () => {
+            req.reply({ body: queryResult })
+            resolve()
+          }
+        })
+      },
+    })
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: /^telemetry_config limit -1$/i },
+      },
+      (req) => {
+        telemetryHeaders.push(req.headers.authorization)
+        req.reply({ body: { columns: [], count: 0, dataset: [] } })
+      },
+    ).as("telemetrySQL")
+    cy.wrap(null).should(() => {
+      expect(authRequested).to.equal(true)
+      expect(telemetryHeaders).to.deep.equal([])
+    })
+    cy.getEditor().should("not.exist")
+    cy.then(() => releaseAuth())
+    cy.wait("@authCheck")
+      .its("request.headers.authorization")
+      .should("eq", `Bearer ${refreshed}`)
+    cy.wait("@telemetrySQL")
+      .its("request.headers.authorization")
+      .should("eq", `Bearer ${refreshed}`)
+    cy.getEditor().should("be.visible")
+    cy.then(() =>
+      expect(telemetryHeaders).to.deep.equal([`Bearer ${refreshed}`]),
+    )
   })
 
   it("clears retained password credentials only when signing in with SSO", () => {

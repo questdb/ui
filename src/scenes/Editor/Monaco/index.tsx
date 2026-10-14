@@ -98,6 +98,7 @@ import {
   GlyphWidgetOptions,
 } from "./glyphUtils"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
+import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
 
 type IndividualQueryResult = {
   success: boolean
@@ -1449,6 +1450,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const runIndividualQuery = async (
     query: Request,
     isLast: boolean,
+    sessionId: number,
   ): Promise<IndividualQueryResult> => {
     const editor = editorRef.current
     const model = editorRef.current?.getModel()
@@ -1479,35 +1481,42 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       validationTimeoutRef.current = null
     }
 
-    dispatch(
-      actions.query.setActiveNotification({
-        type: NotificationType.LOADING,
-        query: `${activeBufferRef.current.label}@${0}-${0}`,
-        content: (
-          <Box gap="1rem" align="center">
-            <Text color="contentPrimary">
-              Running query &quot;
-              {effectiveQueryText.length > 30
-                ? `${effectiveQueryText.slice(0, 30)}...`
-                : effectiveQueryText}
-              &quot;
-            </Text>
-          </Box>
-        ),
-        createdAt: new Date(),
-      }),
-    )
-
+    let scriptQueryId: QuestDB.QueryId | null = null
     try {
-      const { promise: scriptQueryPromise, queryId: scriptQueryId } =
-        quest.queryRaw(normalizeQueryText(effectiveQueryText), {
+      const { promise: scriptQueryPromise, queryId } = quest.queryRaw(
+        normalizeQueryText(effectiveQueryText),
+        {
           limit: "0,1000",
           explain: true,
           cancellable: true,
-        })
-      editorQueryIdRef.current = scriptQueryId
+        },
+      )
+      scriptQueryId = queryId
+      editorQueryIdRef.current = queryId
+      dispatch(
+        actions.query.setActiveNotification({
+          type: NotificationType.LOADING,
+          queryId,
+          query: `${activeBufferRef.current.label}@${0}-${0}`,
+          content: (
+            <Box gap="1rem" align="center">
+              <Text color="contentPrimary">
+                Running query &quot;
+                {effectiveQueryText.length > 30
+                  ? `${effectiveQueryText.slice(0, 30)}...`
+                  : effectiveQueryText}
+                &quot;
+              </Text>
+            </Box>
+          ),
+          createdAt: new Date(),
+        }),
+      )
 
       const result = await scriptQueryPromise
+      if (ssoAuthState.getSessionId() !== sessionId) {
+        return { success: false, sessionEnded: true, notification: null }
+      }
 
       const bufferIdStr = activeBufferId.toString()
       if (executionRefs.current[bufferIdStr]) {
@@ -1580,7 +1589,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     } catch (_error: unknown) {
       const error = _error as ErrorResult
-      if (error.sessionEnded) {
+      if (error.sessionEnded || ssoAuthState.getSessionId() !== sessionId) {
         return { success: false, sessionEnded: true, notification: null }
       }
 
@@ -1608,6 +1617,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         success: false,
         notification,
         result: undefined,
+      }
+    } finally {
+      if (scriptQueryId !== null) {
+        dispatch(
+          actions.query.settleLoadingNotification(
+            activeBufferId,
+            scriptQueryId,
+          ),
+        )
       }
     }
   }
@@ -1725,6 +1743,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
       return
     }
+    const sessionId = ssoAuthState.getSessionId()
     const queriesToRun = runPlan.runAll ? undefined : runPlan.queries
     const runningAllQueries = !queriesToRun
     // Clear all notifications & execution refs for the buffer
@@ -1746,8 +1765,29 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     // setActiveNotification / toggleGlyphWidgetLoading aren't clobbered.
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
+    const stopEndedScript = () => {
+      isRunningScriptRef.current = false
+      scriptStopRef.current = true
+      dispatch(actions.query.stopRunning())
+      if (scriptQueryKeyRef.current !== null) {
+        questExecution.releaseExecution(scriptQueryKeyRef.current)
+        scriptQueryKeyRef.current = null
+      }
+      setTabsDisabled(false)
+      if (editorRef.current === editor) {
+        if (loadingGlyphLineNumberRef.current !== null) {
+          toggleGlyphWidgetLoading(loadingGlyphLineNumberRef.current, false)
+          loadingGlyphLineNumberRef.current = null
+        }
+        editor.updateOptions({ readOnly: false })
+      }
+    }
     const startTime = Date.now()
     for (let i = 0; i < queries.length; i++) {
+      if (ssoAuthState.getSessionId() !== sessionId) {
+        stopEndedScript()
+        return
+      }
       const query = queries[i]
       const lineNumber = query.row + 1
       editor.revealPositionInCenterIfOutsideViewport({
@@ -1758,18 +1798,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       loadingGlyphLineNumberRef.current = lineNumber
       toggleGlyphWidgetLoading(lineNumber, true)
 
-      const result = await runIndividualQuery(query, i === queries.length - 1)
-      if (result.sessionEnded) {
-        // Do not run the remaining statements or persist the previous
-        // session's notifications after authentication changes.
-        isRunningScriptRef.current = false
-        scriptStopRef.current = true
-        dispatch(actions.query.stopRunning())
-        if (scriptQueryKeyRef.current !== null) {
-          questExecution.releaseExecution(scriptQueryKeyRef.current)
-          scriptQueryKeyRef.current = null
-        }
-        setTabsDisabled(false)
+      const result = await runIndividualQuery(
+        query,
+        i === queries.length - 1,
+        sessionId,
+      )
+      if (result.sessionEnded || ssoAuthState.getSessionId() !== sessionId) {
+        // Teardown can turn a session-ending response into cancellation. Check
+        // the generation too, before touching Monaco or publishing results.
+        stopEndedScript()
         return
       }
 
@@ -2031,6 +2068,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               actions.query.addNotification(
                 {
                   type: NotificationType.LOADING,
+                  queryId,
                   query: inflightQueryRef.current?.queryKey ?? parentQueryKey,
                   isExplain: isRunningExplain,
                   content: (
@@ -2038,7 +2076,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                       <Text color="contentPrimary">Running...</Text>
                       <CancelButton
                         variant="dangerGhost"
-                        onClick={() => toggleRunning()}
+                        onClick={() => {
+                          if (
+                            isCurrentRun() &&
+                            editorQueryIdRef.current === queryId
+                          ) {
+                            quest.abort(queryId)
+                            toggleRunning(RunningType.NONE)
+                          }
+                        }}
                       >
                         <Stop size="18px" />
                       </CancelButton>
@@ -2293,6 +2339,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             }
           })
           .finally(() => {
+            dispatch(
+              actions.query.settleLoadingNotification(targetBufferId, queryId),
+            )
             if (isCurrentRun()) {
               inflightQueryRef.current = null
             }

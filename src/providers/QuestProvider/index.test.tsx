@@ -142,6 +142,7 @@ describe("QuestProvider authentication gate", () => {
           expect(
             renderer?.root.findAllByProps({ "data-hook": "ready" }),
           ).toHaveLength(0)
+          expect(mocks.dispatch).not.toHaveBeenCalled()
 
           if (change === "replacement") {
             localStorage.setItem(key, replacement)
@@ -159,6 +160,11 @@ describe("QuestProvider authentication gate", () => {
           expect(mocks.headers).toHaveBeenLastCalledWith({
             Authorization: authorization,
           })
+          expect(mocks.dispatch).toHaveBeenCalledTimes(1)
+          expect(mocks.dispatch).toHaveBeenCalledWith({ type: "start" })
+          expect(mocks.headers.mock.invocationCallOrder[0]).toBeLessThan(
+            mocks.dispatch.mock.invocationCallOrder[0],
+          )
         },
       )
 

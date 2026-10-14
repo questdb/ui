@@ -535,6 +535,7 @@ const AIChatWindow: React.FC = () => {
               actions.query.addNotification(
                 {
                   query: queryKey,
+                  queryId: queryId ?? undefined,
                   type: NotificationType.LOADING,
                   content: (
                     <Box gap="1rem" align="center">

@@ -8,6 +8,7 @@ import { MANUAL_RETRY_POLICY } from "./sourceState"
 import { Client } from "../../utils/questdb/client"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 import type { Options } from "../../utils/questdb"
+import type { AuthPayload } from "../../modules/OAuth2/types"
 
 vi.mock("../../providers", async () => {
   const { createContext } = await import("react")
@@ -30,37 +31,44 @@ const transformResponse = () => []
 const renderSource = (quest: Client) => {
   vi.spyOn(console, "error").mockImplementation(() => {})
   let status: string | undefined
-  const Harness = () => {
-    const { state } = useCatalogSource({
-      sourceKey: "catalog",
+  let readyData: unknown
+  type Props = { sourceKey: string; enabled: boolean }
+  const Harness = ({ sourceKey, enabled }: Props) => {
+    const { state, lastReadyData } = useCatalogSource({
+      sourceKey,
       revalidateKey: 0,
       sourceName: "Tables",
-      enabled: true,
-      query: "tables()",
+      enabled,
+      query: sourceKey === "catalog" ? "tables()" : sourceKey,
       pollIntervalMs: null,
       retryPolicy: MANUAL_RETRY_POLICY,
       transformResponse,
     })
     status = state.status
+    readyData = lastReadyData
     return null
   }
+  const value = {
+    quest,
+    questExecution: {} as React.ContextType<
+      typeof QuestContext
+    >["questExecution"],
+    buildVersion: { type: "oss" as const, version: "" },
+    commitHash: "",
+  }
+  const tree = (props: Props) => (
+    <QuestContext.Provider value={value}>
+      <Harness {...props} />
+    </QuestContext.Provider>
+  )
   act(() => {
-    renderer = create(
-      <QuestContext.Provider
-        value={{
-          quest,
-          questExecution: {} as React.ContextType<
-            typeof QuestContext
-          >["questExecution"],
-          buildVersion: { type: "oss", version: "" },
-          commitHash: "",
-        }}
-      >
-        <Harness />
-      </QuestContext.Provider>,
-    )
+    renderer = create(tree({ sourceKey: "catalog", enabled: true }))
   })
-  return () => status
+  return {
+    status: () => status,
+    data: () => readyData,
+    update: (props: Props) => act(() => renderer?.update(tree(props))),
+  }
 }
 
 const mount = (startImmediately: boolean) => {
@@ -70,7 +78,7 @@ const mount = (startImmediately: boolean) => {
     if (startImmediately) options.onRequestStart?.()
     return { queryId: 1, promise: new Promise(() => {}) }
   })
-  const status = renderSource({ queryRaw, abort } as unknown as Client)
+  const { status } = renderSource({ queryRaw, abort } as unknown as Client)
   return { abort, queryRaw, status }
 }
 
@@ -149,7 +157,7 @@ describe("useCatalogSource deadline integration", () => {
       }),
     )
     client.refreshTokenMethod = refresh
-    const status = renderSource(client)
+    const { status } = renderSource(client)
 
     // The refresh ends 10.5s after the first request started: past that
     // request's 10s timeout, but within the refresh's own 10s bound.
@@ -164,4 +172,83 @@ describe("useCatalogSource deadline integration", () => {
     )
     expect(status()).toBe("ready")
   })
+
+  it.each(["retarget", "disable", "unmount"])(
+    "cleans an abandoned source during shared refresh on %s",
+    async (change) => {
+      vi.useFakeTimers()
+      const client = new Client()
+      const abort = vi.spyOn(client, "abort")
+      ssoAuthState.setAuthPayload({
+        access_token: "old",
+        refresh_token: "refresh",
+        token_type: "Bearer",
+        expires_at: new Date(Date.now() + 20_000).toISOString(),
+      })
+      let finishRefresh!: () => void
+      const refresh = vi.fn(
+        () =>
+          new Promise<AuthPayload>((resolve) => {
+            finishRefresh = () => {
+              const payload = {
+                access_token: "fresh",
+                token_type: "Bearer",
+                refresh_token: "rotated",
+                expires_at: new Date(Date.now() + 300_000).toISOString(),
+              }
+              ssoAuthState.setAuthPayload(payload)
+              resolve(payload)
+            }
+          }),
+      )
+      client.refreshTokenMethod = refresh
+      const fetchMock = vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({ columns: [], count: 0, dataset: [] }),
+            ),
+          ),
+        )
+      vi.stubGlobal("fetch", fetchMock)
+      const source = renderSource(client)
+      await advance(1_000)
+      // Another source must still be able to use the same refresh.
+      const current = client.queryRaw("current-source")
+      if (change === "unmount") {
+        act(() => renderer?.unmount())
+      } else {
+        source.update({
+          sourceKey: "new-source",
+          enabled: change === "retarget",
+        })
+      }
+      await advance(0)
+      expect(abort).toHaveBeenCalledWith(1)
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(source.data()).toBeNull()
+      finishRefresh()
+      await advance(0)
+      await current
+
+      expect(refresh).toHaveBeenCalledTimes(1)
+      const queries = fetchMock.mock.calls.map(([url]) =>
+        new URL(url as string, "http://localhost").searchParams.get("query"),
+      )
+      expect(queries).not.toContain("tables()")
+      expect(queries).toEqual(
+        change === "retarget"
+          ? ["current-source", "new-source"]
+          : ["current-source"],
+      )
+      if (change === "retarget") {
+        expect(source.status()).toBe("ready")
+        expect(source.data()).toEqual([])
+      }
+      expect(vi.getTimerCount()).toBe(0)
+      await advance(20_000)
+      expect(abort).toHaveBeenCalledTimes(1)
+    },
+  )
 })
