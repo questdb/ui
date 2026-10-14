@@ -255,9 +255,8 @@ export class Client {
     if (refreshedForRequest) await waitForRefresh()
     const ensureSession = () => {
       if (
-        originalSession &&
-        (!ssoAuthState.isSSOAuthenticated() ||
-          ssoAuthState.getSessionId() !== sessionId)
+        ssoAuthState.getSessionId() !== sessionId ||
+        (originalSession && !ssoAuthState.isSSOAuthenticated())
       )
         throw new AuthSessionEndedError()
       if (signal.aborted) throw new DOMException("Aborted", "AbortError")
@@ -342,7 +341,19 @@ export class Client {
     let response: Response
     let fetchStartedAt = 0
     let authorizationAtFetch: string | undefined
-    let sessionId: number
+    let sessionId = ssoAuthState.getSessionId()
+    const ensureCurrentSession = () => {
+      if (ssoAuthState.getSessionId() !== sessionId) {
+        throw new AuthSessionEndedError()
+      }
+    }
+    const sessionEndedResult = () => ({
+      position: -1,
+      query,
+      type: Type.ERROR,
+      error: new AuthSessionEndedError().message,
+      sessionEnded: true,
+    })
 
     try {
       ;({ response, authorizationAtFetch, fetchStartedAt, sessionId } =
@@ -364,12 +375,11 @@ export class Client {
         error: "An error occurred, please try again",
       }
 
-      if (error instanceof AuthSessionEndedError) {
-        return Promise.reject({
-          ...err,
-          error: error.message,
-          sessionEnded: true,
-        })
+      if (
+        error instanceof AuthSessionEndedError ||
+        ssoAuthState.getSessionId() !== sessionId
+      ) {
+        return Promise.reject(sessionEndedResult())
       }
 
       if (error instanceof DOMException) {
@@ -388,6 +398,9 @@ export class Client {
     }
 
     try {
+      // Refresh logout no longer drains older SQL. Fence every completion,
+      // including body reads and failures, before publishing or returning it.
+      ensureCurrentSession()
       if (
         response.ok ||
         response.status === 400 ||
@@ -397,6 +410,7 @@ export class Client {
         try {
           responseText = await response.text()
         } catch (error) {
+          ensureCurrentSession()
           if (error instanceof DOMException && error.name === "AbortError") {
             return Promise.reject({
               position: -1,
@@ -410,6 +424,7 @@ export class Client {
             type: Type.ERROR,
           })
         }
+        ensureCurrentSession()
         const fetchTime = (Date.now() - fetchStartedAt) * 1e6
         let data
         try {
@@ -422,6 +437,7 @@ export class Client {
         }
 
         eventBus.publish(EventType.MSG_CONNECTION_OK)
+        ensureCurrentSession()
 
         if (response.status === 403) {
           eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, data)
@@ -502,6 +518,7 @@ export class Client {
         try {
           errorText = (await response.text()).trim()
         } catch (error) {
+          ensureCurrentSession()
           if (error instanceof DOMException && error.name === "AbortError") {
             return Promise.reject({
               position: -1,
@@ -512,6 +529,7 @@ export class Client {
           }
           throw error
         }
+        ensureCurrentSession()
         if (errorText.startsWith("{")) {
           const data = JSON.parse(errorText) as ErrorResult
           errorPayload.error = data.error
@@ -521,7 +539,16 @@ export class Client {
         eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, errorPayload)
       }
 
+      ensureCurrentSession()
       return Promise.reject(errorPayload)
+    } catch (error) {
+      if (
+        error instanceof AuthSessionEndedError ||
+        ssoAuthState.getSessionId() !== sessionId
+      ) {
+        return Promise.reject(sessionEndedResult())
+      }
+      throw error
     } finally {
       this.removeController(queryId)
     }

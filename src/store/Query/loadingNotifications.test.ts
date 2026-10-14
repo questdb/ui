@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import query, { initialState } from "./reducers"
 import actions from "./actions"
 import { NotificationType } from "./types"
@@ -99,10 +99,41 @@ describe("settling loading notifications", () => {
         createdAt: new Date(),
       }),
     )
-    const next = query(state, actions.settleLoadingNotification(1, 2))
+    const scanHistory = vi.spyOn(state.notifications, "filter")
+    const scanGroups = vi.fn(Reflect.ownKeys)
+    state.queryNotifications[1] = new Proxy<
+      (typeof state.queryNotifications)[1]
+    >(state.queryNotifications[1], { ownKeys: scanGroups })
+    const next = query(state, actions.settleActiveLoadingNotification(2))
 
+    expect(scanHistory).not.toHaveBeenCalled()
+    expect(scanGroups).not.toHaveBeenCalled()
+    scanHistory.mockRestore()
     expect(next.notifications).toBe(completed.notifications)
     expect(next.queryNotifications).toBe(completed.queryNotifications)
     expect(next.activeNotification).toBeNull()
+    expect(query(next, actions.settleActiveLoadingNotification(2))).toBe(next)
+  })
+
+  it("preserves a newer script or a completed active notification", () => {
+    const active = {
+      query: key,
+      queryId: 3,
+      type: NotificationType.LOADING,
+      content: "Newer script…",
+      createdAt: new Date(),
+    }
+    const state = query(initialState, actions.setActiveNotification(active))
+    expect(query(state, actions.settleActiveLoadingNotification(2))).toBe(state)
+    const completed = query(
+      state,
+      actions.setActiveNotification({
+        ...active,
+        type: NotificationType.SUCCESS,
+      }),
+    )
+    expect(query(completed, actions.settleActiveLoadingNotification(3))).toBe(
+      completed,
+    )
   })
 })

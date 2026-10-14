@@ -282,6 +282,89 @@ describe("QuestProvider authentication gate", () => {
     ).toHaveLength(1)
   })
 
+  it("does not start another probe when credentials refresh during a retry", async () => {
+    mocks.sessionData = { access_token: "old", token_type: "Bearer" }
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject({ error: "QuestDB is not reachable [502]" })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    let failRetry!: (error: { error: string }) => void
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? new Promise((_, reject) => {
+            failRetry = reject
+          })
+        : Promise.resolve({ type: "dml" }),
+    )
+    const button = renderer!.root.findByType("button")
+    await act(async () => {
+      button.props.onClick()
+      await Promise.resolve()
+    })
+    mocks.sessionData = { access_token: "refreshed", token_type: "Bearer" }
+    await act(async () => {
+      renderer!.update(
+        <QuestProvider>
+          <div data-hook="ready" />
+        </QuestProvider>,
+      )
+      await Promise.resolve()
+    })
+    expect(
+      mocks.queryRaw.mock.calls.filter(([query]) => query === "SELECT 1"),
+    ).toHaveLength(2)
+    expect(button.props["aria-busy"]).toBe(true)
+    expect(mocks.headers).toHaveBeenLastCalledWith({
+      Authorization: "Bearer refreshed",
+    })
+    await act(async () => {
+      failRetry({ error: "QuestDB is not reachable [502]" })
+      await Promise.resolve()
+    })
+    expect(button.props["aria-busy"]).toBe(false)
+  })
+
+  it("announces consecutive identical retry failures", async () => {
+    const error = { error: "QuestDB is not reachable [502]" }
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject(error)
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    const alert = renderer!.root.findByProps({ role: "alert" })
+    const button = renderer!.root.findByType("button")
+    let reject!: (error: { error: string }) => void
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? new Promise((_, rejectQuery) => {
+            reject = rejectQuery
+          })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await act(async () => {
+      button.props.onClick()
+      await Promise.resolve()
+    })
+    expect(
+      renderer!.root.findByProps({ role: "status" }).findByType("span")
+        .children,
+    ).toEqual(["Reconnecting…"])
+    await act(async () => {
+      reject(error)
+      await Promise.resolve()
+    })
+    expect(renderer!.root.findByProps({ role: "alert" })).toBe(alert)
+    expect(alert.findByType("span").children).toEqual([error.error])
+    expect(
+      renderer!.root.findByProps({ role: "status" }).findByType("span")
+        .children,
+    ).toEqual(["Connection failed. Retry connection."])
+    expect(renderer!.root.findByType("button")).toBe(button)
+  })
+
   it("does not persist session-ended errors into the authentication gate", async () => {
     mocks.queryRaw.mockRejectedValue({
       error: "Your session has ended",

@@ -75,6 +75,7 @@ export enum QueryAT {
   CLEANUP_BUFFER_NOTIFICATIONS = "QUERY/CLEANUP_BUFFER_NOTIFICATIONS",
   REMOVE_NOTIFICATION = "QUERY/REMOVE_NOTIFICATION",
   SETTLE_LOADING_NOTIFICATION = "QUERY/SETTLE_LOADING_NOTIFICATION",
+  SETTLE_ACTIVE_LOADING_NOTIFICATION = "QUERY/SETTLE_ACTIVE_LOADING_NOTIFICATION",
   UPDATE_NOTIFICATION_KEY = "QUERY/UPDATE_NOTIFICATION_KEY",
   UPDATE_NOTIFICATION_KEYS = "QUERY/UPDATE_NOTIFICATION_KEYS",
   MOVE_NOTIFICATION_NAMESPACE = "QUERY/MOVE_NOTIFICATION_NAMESPACE",
@@ -115,6 +116,11 @@ type SettleLoadingNotificationAction = Readonly<{
     bufferId: NotificationNamespaceKey
     queryId: number
   }
+}>
+
+type SettleActiveLoadingNotificationAction = Readonly<{
+  type: QueryAT.SETTLE_ACTIVE_LOADING_NOTIFICATION
+  payload: { queryId: number }
 }>
 
 type SetResultAction = Readonly<{
@@ -188,6 +194,7 @@ export type QueryAction =
   | CleanupBufferNotificationsAction
   | RemoveNotificationAction
   | SettleLoadingNotificationAction
+  | SettleActiveLoadingNotificationAction
   | UpdateNotificationKeyAction
   | UpdateNotificationKeysAction
   | MoveNotificationNamespaceAction

@@ -451,7 +451,14 @@ describe("Auth - OIDC sign-in errors", () => {
       body: { error: "invalid_grant" },
     })
     visitCallback("?code=bad-code")
-    cy.getByDataHook("sign-in-error").should("be.focused")
+    cy.getByDataHook("sign-in-error")
+      .should("be.focused")
+      .should(($error) => {
+        const win = $error[0].ownerDocument.defaultView
+        const style = win.getComputedStyle($error[0])
+        expect(style.outlineStyle).not.to.equal("none")
+        expect(parseFloat(style.outlineWidth)).to.be.greaterThan(0)
+      })
     cy.get('[aria-label="Dismiss sign-in error"]').focus().click()
     cy.getByDataHook("sign-in-error").should("not.exist")
     cy.contains("h2", "Sign in to QuestDB").should("be.focused")
@@ -675,6 +682,31 @@ describe("Auth - OIDC ID token", () => {
         .should("eq", "true")
     })
   }
+
+  it("shows and allows keyboard dismissal of a refresh warning while the SQL gate fails", () => {
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 20) },
+      refreshReply: {
+        statusCode: 503,
+        body: { error: "temporarily_unavailable" },
+      },
+      authCheckReply: { statusCode: 502 },
+    })
+    cy.wait("@refreshFailure")
+    cy.wait("@authCheck")
+    cy.contains("QuestDB is not reachable [502]").should("be.visible")
+    cy.getEditor().should("not.exist")
+    cy.get("#sso-refresh-failed")
+      .should("be.visible")
+      .and("contain.text", "Could not refresh your SSO session.")
+      .find(".Toastify__close-button")
+      .focus()
+      .should("be.focused")
+      .and("have.css", "opacity", "1")
+      .click()
+    cy.get("#sso-refresh-failed").should("not.exist")
+    cy.contains("button", "Retry connection").should("be.visible")
+  })
 
   it("does not carry a session-ended query notification into password re-login", () => {
     cy.clock(Date.now(), ["Date"])

@@ -92,6 +92,7 @@ export const QuestProvider: React.FC = ({ children }) => {
 
   const [authCheckError, setAuthCheckError] = useState<string>()
   const [authCheckPending, setAuthCheckPending] = useState(false)
+  const authCheckInFlight = useRef(false)
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
@@ -101,6 +102,10 @@ export const QuestProvider: React.FC = ({ children }) => {
   }, [])
 
   const finishAuthCheck = useCallback(async () => {
+    // Token installation reruns the credentials effect while its probe is
+    // still waiting. Share that attempt; state alone cannot guard same-turn calls.
+    if (authCheckInFlight.current) return
+    authCheckInFlight.current = true
     const sessionId = ssoAuthState.getSessionId()
     setAuthCheckPending(true)
     try {
@@ -111,8 +116,8 @@ export const QuestProvider: React.FC = ({ children }) => {
     } catch (error) {
       const failure = error as Partial<QuestDB.ErrorResult>
       // AuthProvider handles session-ended/protocol-denied errors. Connection
-      // listeners and toasts below this gate are not mounted yet, so report
-      // other failures here rather than leaving a permanently blank page.
+      // listeners below this gate are not mounted yet, so report other failures
+      // here rather than leaving a permanently blank page.
       if (
         mounted.current &&
         ssoAuthState.getSessionId() === sessionId &&
@@ -122,6 +127,7 @@ export const QuestProvider: React.FC = ({ children }) => {
         setAuthCheckError(failure.error || "Could not connect to QuestDB.")
       }
     } finally {
+      authCheckInFlight.current = false
       if (mounted.current && ssoAuthState.getSessionId() === sessionId) {
         setAuthCheckPending(false)
       }
@@ -205,7 +211,9 @@ export const QuestProvider: React.FC = ({ children }) => {
         </div>
         <div role="status">
           <Text color="contentPrimary">
-            {authCheckPending ? "Reconnecting…" : ""}
+            {authCheckPending
+              ? "Reconnecting…"
+              : "Connection failed. Retry connection."}
           </Text>
         </div>
         {/* Keep the button focusable while busy; native disabled can drop focus. */}

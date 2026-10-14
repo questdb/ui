@@ -168,6 +168,18 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       }
     }
 
+    case QueryAT.SETTLE_ACTIVE_LOADING_NOTIFICATION: {
+      // Script progress lives only here. Never scan retained history/groups
+      // for every statement, and never clear a newer execution's progress.
+      if (
+        state.activeNotification?.type !== NotificationType.LOADING ||
+        state.activeNotification.queryId !== action.payload.queryId
+      ) {
+        return state
+      }
+      return { ...state, activeNotification: null }
+    }
+
     case QueryAT.SETTLE_LOADING_NOTIFICATION: {
       const { bufferId, queryId } = action.payload
       const matches = (notification?: NotificationShape | null) =>

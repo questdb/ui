@@ -10,6 +10,7 @@ import { EventType } from "../modules/EventBus/types"
 import { StoreKey } from "../utils/localStorage/types"
 import type { Settings } from "./SettingsProvider/types"
 import type { TokenResponse } from "../modules/OAuth2/types"
+import { isRefreshable, tokenRefresh } from "../utils/questdb/tokenRefresh"
 
 const mocks = vi.hoisted(() => ({
   settings: {} as Settings,
@@ -77,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => renderer?.unmount())
   ssoAuthState.clearAuthPayload()
+  tokenRefresh.syncSession()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   vi.clearAllMocks()
@@ -146,6 +148,36 @@ describe("AuthProvider token installation", () => {
         .errorTitle,
     ).toBe("Missing ID token")
     expect(body).not.toHaveProperty("groups_encoded_in_token")
+  })
+
+  it("synchronizes the refresh coordinator immediately on non-reloading logout", async () => {
+    await mount()
+    const session = ssoAuthState.getAuthPayload()
+    if (!isRefreshable(session)) throw new Error("Expected refreshable session")
+    const request = new AbortController()
+    let requestSignal: AbortSignal | undefined
+    tokenRefresh.syncSession()
+    tokenRefresh.start(
+      session,
+      (_deadline, signal) => {
+        requestSignal = signal
+        return new Promise((resolve) =>
+          request.signal.addEventListener("abort", () => resolve(undefined)),
+        )
+      },
+      vi.fn(),
+    )
+    await Promise.resolve()
+    const wait = tokenRefresh.wait
+    expect(wait).toBeDefined()
+    const sync = vi.spyOn(tokenRefresh, "syncSession")
+    act(() => auth.logout())
+    expect(sync).toHaveBeenCalledOnce()
+    expect(ssoAuthState.getAuthPayload()).toBeNull()
+    expect(tokenRefresh.wait).toBeUndefined()
+    expect(requestSignal?.aborted).toBe(true)
+    request.abort()
+    await wait
   })
 
   it("ignores a late success after logout instead of reinstalling the session", async () => {

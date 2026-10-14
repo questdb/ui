@@ -1620,12 +1620,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     } finally {
       if (scriptQueryId !== null) {
-        dispatch(
-          actions.query.settleLoadingNotification(
-            activeBufferId,
-            scriptQueryId,
-          ),
-        )
+        dispatch(actions.query.settleActiveLoadingNotification(scriptQueryId))
       }
     }
   }

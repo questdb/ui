@@ -170,9 +170,6 @@ const RedirectErrorContainer = styled(ErrorContainer)`
   z-index: 1;
   border-color: ${({ theme }) => theme.color.statusDanger};
   width: 560px;
-  &:focus {
-    outline: none;
-  }
   background: ${({ theme }) => theme.color.surfaceCanvas};
   box-shadow:
     0 1px 2px ${({ theme }) => theme.color.shadowMedium},

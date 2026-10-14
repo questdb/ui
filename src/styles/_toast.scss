@@ -35,7 +35,8 @@
   transition: none;
 }
 
-.Toastify__close-button:hover {
+.Toastify__close-button:hover,
+.Toastify__close-button:focus {
   opacity: 1;
 }
 

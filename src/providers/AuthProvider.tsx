@@ -42,6 +42,7 @@ import { useSettings } from "./SettingsProvider"
 import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
 import { toast } from "../components/Toast"
+import { tokenRefresh } from "../utils/questdb/tokenRefresh"
 
 type ContextProps = {
   sessionData?: AuthPayload
@@ -453,6 +454,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }: LogoutOptions = {}) => {
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
     ssoAuthState.clearAuthPayload()
+    // Release retained credentials and pending refresh work without waiting
+    // for another SQL request (logout may leave this document on the login page).
+    tokenRefresh.syncSession()
     removeValue(StoreKey.OAUTH_PROMPT)
     sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
     removeValue(StoreKey.REST_TOKEN)

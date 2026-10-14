@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import type { Dispatch, MutableRefObject, SetStateAction } from "react"
 import type {
   CellResult,
@@ -1027,7 +1027,9 @@ export const useCellExecution = ({
     [cellsRef, updateCells, bufferId],
   )
 
-  useEffect(() => {
+  // Legacy React roots may resume a query before passive unmount effects run.
+  // Invalidate runs during the commit so teardown cannot overwrite saved results.
+  useLayoutEffect(() => {
     const barrierControllersMap = barrierAbortsRef.current
     const controllersMap = abortControllersRef.current
     const runGenerations = runGenerationRef.current

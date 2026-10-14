@@ -424,6 +424,167 @@ describe("transient post-expiry refresh recovery", () => {
   )
 })
 
+describe("query completion session isolation", () => {
+  const resultBody = JSON.stringify({
+    columns: [{ name: "table_name", type: "STRING" }],
+    dataset: [["private_old_session_table"]],
+    count: 1,
+  })
+
+  describe.each(["response", "body"] as const)("delayed %s", (phase) => {
+    it.each(phase === "response" ? [200, 400, 401, 403, 502] : [200, 400, 403])(
+      "discards HTTP %s after refresh logout and password re-login",
+      async (status) => {
+        vi.useFakeTimers()
+        ssoAuthState.setAuthPayload(
+          token({
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+          }),
+        )
+        const body =
+          status === 200
+            ? resultBody
+            : JSON.stringify({ error: "Access denied to protocol [HTTP]" })
+        let finish!: () => void
+        const held = new Promise<Response>((resolve) => {
+          if (phase === "response") {
+            finish = () => resolve(new Response(body, { status }))
+          } else {
+            const text = new Promise<string>((resolveBody) => {
+              finish = () => resolveBody(body)
+            })
+            resolve({
+              ok: status === 200,
+              status,
+              text: () => text,
+            } as Response)
+          }
+        })
+        vi.stubGlobal("fetch", vi.fn().mockReturnValue(held))
+        const client = new Client()
+        client.setCommonHeaders({ Authorization: "Bearer old" })
+        const commitCatalog = vi.fn()
+        const publish = vi.spyOn(eventBus, "publish")
+        const oldQuery = client.showTables().then(commitCatalog)
+        const rejected = expect(oldQuery).rejects.toMatchObject({
+          sessionEnded: true,
+        })
+        await vi.advanceTimersByTimeAsync(31_000)
+        client.refreshTokenMethod = () => {
+          ssoAuthState.clearAuthPayload()
+          return Promise.resolve(undefined)
+        }
+        await expect(client.queryRaw("SELECT 1")).rejects.toMatchObject({
+          sessionEnded: true,
+        })
+        ssoAuthState.markNonSSOAuthenticated()
+        client.setCommonHeaders({ Authorization: "Bearer new-user" })
+        publish.mockClear()
+
+        finish()
+        await rejected
+
+        expect(commitCatalog).not.toHaveBeenCalled()
+        expect(publish).not.toHaveBeenCalled()
+        expect(ssoAuthState.isAuthenticated()).toBe(true)
+      },
+    )
+  })
+
+  it.each(["network", "body"] as const)(
+    "suppresses an old session's delayed %s failure",
+    async (phase) => {
+      ssoAuthState.setAuthPayload(token())
+      let fail!: (error: Error) => void
+      const pending = new Promise<never>((_, reject) => {
+        fail = reject
+      })
+      const readBody = vi.fn(() => pending)
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockReturnValue(
+            phase === "network"
+              ? pending
+              : Promise.resolve({ ok: true, status: 200, text: readBody }),
+          ),
+      )
+      const publish = vi.spyOn(eventBus, "publish")
+      const client = new Client()
+      const query = client.queryRaw("SELECT 1")
+      const rejected = expect(query).rejects.toMatchObject({
+        sessionEnded: true,
+      })
+      if (phase === "body")
+        await vi.waitFor(() => expect(readBody).toHaveBeenCalled())
+      ssoAuthState.clearAuthPayload()
+      ssoAuthState.markNonSSOAuthenticated()
+      fail(new Error("Old request failed"))
+      await rejected
+      expect(publish).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([200, 403, 502])(
+    "discards a password session's delayed HTTP %s result after re-login",
+    async (status) => {
+      ssoAuthState.markNonSSOAuthenticated()
+      let finish!: (response: Response) => void
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          () =>
+            new Promise<Response>((resolve) => {
+              finish = resolve
+            }),
+        ),
+      )
+      const publish = vi.spyOn(eventBus, "publish")
+      const client = new Client()
+      client.setCommonHeaders({ Authorization: "Bearer user-a" })
+      const query = client.queryRaw("SELECT 1")
+      const rejected = expect(query).rejects.toMatchObject({
+        sessionEnded: true,
+      })
+      ssoAuthState.clearAuthPayload()
+      ssoAuthState.markNonSSOAuthenticated()
+      client.setCommonHeaders({ Authorization: "Bearer user-b" })
+      finish(
+        new Response(
+          status === 200 ? resultBody : "Access denied to protocol [HTTP]",
+          { status },
+        ),
+      )
+      await rejected
+      expect(publish).not.toHaveBeenCalled()
+      expect(ssoAuthState.isAuthenticated()).toBe(true)
+    },
+  )
+
+  it("allows a delayed result after token refresh in the same session", async () => {
+    ssoAuthState.setAuthPayload(token())
+    let finish!: (response: Response) => void
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve
+          }),
+      ),
+    )
+    const client = new Client()
+    const query = client.showTables()
+    ssoAuthState.setAuthPayload(token({ access_token: "refreshed" }))
+    finish(new Response(resultBody))
+    await expect(query).resolves.toMatchObject({
+      type: "dql",
+      data: [{ table_name: "private_old_session_table" }],
+    })
+  })
+})
+
 describe("REST/basic 401 comparison", () => {
   it.each(["Bearer rest-token", "Basic dXNlcjpwYXNz"])(
     "publishes a 401 for the current %s header",
