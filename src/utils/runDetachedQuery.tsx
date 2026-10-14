@@ -116,11 +116,10 @@ export async function runDetachedQuery(
       eventBus.publish(EventType.MSG_QUERY_DATASET, result)
     }
   } catch (_error: unknown) {
-    const error = _error as {
-      error?: string
-      message?: string
-      position?: number
-    }
+    const error = _error as Partial<QuestDB.ErrorResult> & { message?: string }
+    // Login already reports the ended session; do not carry this error into
+    // the next login. The finally block still settles and releases execution.
+    if (error.sessionEnded) return
 
     if (!executionRefs.current[namespaceKey]) {
       executionRefs.current[namespaceKey] = {}

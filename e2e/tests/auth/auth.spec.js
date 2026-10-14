@@ -816,19 +816,50 @@ describe("Auth - OIDC token without a lifetime", () => {
     })
   }
 
-  it("offers retry instead of a blank page when the initial SQL auth check fails", () => {
+  it("keeps readable recovery UI and keyboard focus while retrying the initial SQL check", () => {
     cy.intercept("POST", tokenUrl, { access_token: "mock-access-token" })
     let attempts = 0
+    let completeRetry
     cy.intercept(
       { method: "GET", url: `${baseUrl}/exec*`, query: { query: "SELECT 1" } },
       (req) => {
         attempts++
-        req.reply(attempts === 1 ? { statusCode: 502 } : { body: queryResult })
+        if (attempts === 1) {
+          req.reply({ statusCode: 502 })
+          return
+        }
+        return new Promise((resolve) => {
+          completeRetry = () => {
+            req.reply({ body: queryResult })
+            resolve()
+          }
+        })
       },
     )
     visitCallback("?code=code-from-the-provider")
+    cy.contains("QuestDB is not reachable [502]")
+      .should("be.visible")
+      .should(($error) => {
+        const win = $error[0].ownerDocument.defaultView
+        expect(win.getComputedStyle($error[0]).color).to.equal(
+          win.getComputedStyle(win.document.body).color,
+        )
+      })
+    cy.contains("button", "Retry connection").focus().click()
+    cy.contains("button", "Retry connection")
+      .should("be.focused")
+      .and("have.attr", "aria-disabled", "true")
+      .and("have.attr", "aria-busy", "true")
+      .and("not.be.disabled")
+      .click()
+    cy.get('[role="status"]').should("contain.text", "Reconnecting…")
     cy.contains("QuestDB is not reachable [502]").should("be.visible")
-    cy.contains("button", "Retry connection").click()
+    cy.getEditor().should("not.exist")
+    cy.wrap(null).should(() => {
+      expect(attempts).to.equal(2)
+      expect(completeRetry).to.be.a("function")
+    })
+    cy.then(() => completeRetry())
     cy.getEditor().should("be.visible")
   })
 

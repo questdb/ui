@@ -203,6 +203,10 @@ describe("QuestProvider authentication gate", () => {
     expect(
       renderer?.root.findByProps({ role: "alert" }).findByType("span").children,
     ).toEqual(["QuestDB is not reachable [502]"])
+    expect(
+      renderer?.root.findByProps({ role: "alert" }).findByType("span").props
+        .color,
+    ).toBe("contentPrimary")
     mocks.queryRaw.mockResolvedValue({ type: "dml" })
     await act(async () => {
       renderer?.root.findByType("button").props.onClick()
@@ -210,6 +214,65 @@ describe("QuestProvider authentication gate", () => {
     })
     expect(
       renderer?.root.findAllByProps({ "data-hook": "ready" }),
+    ).toHaveLength(1)
+  })
+
+  it("keeps the recovery panel and retry button mounted while retrying", async () => {
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject({ error: "QuestDB is not reachable [502]" })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    const button = renderer!.root.findByType("button")
+    let failRetry!: (error: { error: string }) => void
+    const retry = new Promise((_, reject) => {
+      failRetry = reject
+    })
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1" ? retry : Promise.resolve({ type: "dml" }),
+    )
+    await act(async () => {
+      button.props.onClick()
+      await Promise.resolve()
+    })
+
+    expect(renderer!.root.findByType("button")).toBe(button)
+    expect(button.props.disabled).not.toBe(true)
+    expect(button.props["aria-disabled"]).toBe(true)
+    expect(button.props["aria-busy"]).toBe(true)
+    expect(renderer!.root.findByProps({ role: "alert" })).toBeDefined()
+    expect(
+      renderer!.root.findByProps({ role: "status" }).findByType("span")
+        .children,
+    ).toContain("Reconnecting…")
+    const attempts = mocks.queryRaw.mock.calls.length
+    act(() => {
+      button.props.onClick()
+    })
+    expect(mocks.queryRaw).toHaveBeenCalledTimes(attempts)
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "ready" }),
+    ).toHaveLength(0)
+
+    await act(async () => {
+      failRetry({ error: "Still unavailable" })
+      await Promise.resolve()
+    })
+    expect(renderer!.root.findByType("button")).toBe(button)
+    expect(button.props["aria-disabled"]).toBe(false)
+    expect(button.props["aria-busy"]).toBe(false)
+    expect(
+      renderer!.root.findByProps({ role: "alert" }).findByType("span").children,
+    ).toEqual(["Still unavailable"])
+
+    mocks.queryRaw.mockResolvedValue({ type: "dml" })
+    await act(async () => {
+      button.props.onClick()
+      await Promise.resolve()
+    })
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "ready" }),
     ).toHaveLength(1)
   })
 

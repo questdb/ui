@@ -91,6 +91,7 @@ export const QuestProvider: React.FC = ({ children }) => {
   const [commitHash, setCommitHash] = useState<string>("")
 
   const [authCheckError, setAuthCheckError] = useState<string>()
+  const [authCheckPending, setAuthCheckPending] = useState(false)
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
@@ -101,7 +102,7 @@ export const QuestProvider: React.FC = ({ children }) => {
 
   const finishAuthCheck = useCallback(async () => {
     const sessionId = ssoAuthState.getSessionId()
-    setAuthCheckError(undefined)
+    setAuthCheckPending(true)
     try {
       await questClient.queryRaw("SELECT 1")
       if (mounted.current && ssoAuthState.getSessionId() === sessionId) {
@@ -119,6 +120,10 @@ export const QuestProvider: React.FC = ({ children }) => {
         String(failure.error) !== "Cancelled by user"
       ) {
         setAuthCheckError(failure.error || "Could not connect to QuestDB.")
+      }
+    } finally {
+      if (mounted.current && ssoAuthState.getSessionId() === sessionId) {
+        setAuthCheckPending(false)
       }
     }
   }, [])
@@ -196,11 +201,19 @@ export const QuestProvider: React.FC = ({ children }) => {
     return authCheckError ? (
       <Box flexDirection="column" gap="2rem" align="center">
         <div role="alert">
-          <Text>{authCheckError}</Text>
+          <Text color="contentPrimary">{authCheckError}</Text>
         </div>
+        <div role="status">
+          <Text color="contentPrimary">
+            {authCheckPending ? "Reconnecting…" : ""}
+          </Text>
+        </div>
+        {/* Keep the button focusable while busy; native disabled can drop focus. */}
         <Button
+          aria-disabled={authCheckPending}
+          aria-busy={authCheckPending}
           onClick={() => {
-            void finishAuthCheck()
+            if (!authCheckPending) void finishAuthCheck()
           }}
         >
           Retry connection
