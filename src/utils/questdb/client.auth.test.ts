@@ -48,10 +48,9 @@ describe("SSO refresh safety", () => {
           }),
         )}.signature`,
       })
-      return {
-        ...payload,
-        expires_at: getTokenExpirationDate(payload).toISOString(),
-      }
+      const expiresAt = getTokenExpirationDate(payload)
+      if (!expiresAt) throw new Error("The test ID token must have an exp")
+      return { ...payload, expires_at: expiresAt.toISOString() }
     }
     ssoAuthState.setAuthPayload(issue())
     const fetchMock = vi.fn().mockImplementation(ok)
@@ -144,6 +143,37 @@ describe("SSO refresh safety", () => {
       })
       expect(fetchMock).toHaveBeenCalledTimes(2)
       expect(client.refreshTokenMethod).toHaveBeenCalledTimes(1)
+      expect(listener).toHaveBeenCalledTimes(1)
+    } finally {
+      cleanup()
+    }
+  })
+
+  it("never refreshes a token of unknown expiry, and reports its 401", async () => {
+    // Given a provider that sent no lifetime, although it sent a refresh token
+    const { expires_at: _, ...unknownExpiry } = token()
+    ssoAuthState.setAuthPayload(unknownExpiry)
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(ok)
+      .mockImplementation(unauthorized)
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    client.setCommonHeaders({ Authorization: "Bearer old" })
+    const refresh = vi.fn()
+    client.refreshTokenMethod = refresh
+    const { listener, cleanup } = listen(EventType.MSG_CONNECTION_UNAUTHORIZED)
+    try {
+      await client.queryRaw("SELECT 1")
+
+      // When the server rejects the expired token
+      await expect(client.queryRaw("SELECT 2")).rejects.toMatchObject({
+        status: 401,
+      })
+
+      // Then nothing is refreshed or retried: the user signs in again.
+      expect(refresh).not.toHaveBeenCalled()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
       expect(listener).toHaveBeenCalledTimes(1)
     } finally {
       cleanup()

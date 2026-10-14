@@ -26,6 +26,29 @@ describe("catalog request deadline", () => {
     deadline.clear()
   })
 
+  it("allows a refresh after a rejected request before restarting the SQL timeout", async () => {
+    vi.useFakeTimers()
+    const onTimeout = vi.fn()
+    const deadline = createCatalogRequestDeadline("query activity", onTimeout)
+    deadline.onRequestStart()
+    // The server rejects the token after 2s, then the refresh takes 8.5s.
+    await vi.advanceTimersByTimeAsync(2_000)
+    deadline.onRefreshWait()
+    await vi.advanceTimersByTimeAsync(8_500)
+    expect(onTimeout).not.toHaveBeenCalled()
+
+    deadline.onRequestStart()
+    await vi.advanceTimersByTimeAsync(9_999)
+    expect(onTimeout).not.toHaveBeenCalled()
+    const rejection = expect(deadline.promise).rejects.toThrow(
+      "query activity request timed out",
+    )
+    await vi.advanceTimersByTimeAsync(1)
+    await rejection
+    expect(onTimeout).toHaveBeenCalledTimes(1)
+    deadline.clear()
+  })
+
   it("keeps the normal ten-second SQL timeout without refresh", async () => {
     vi.useFakeTimers()
     const onTimeout = vi.fn()

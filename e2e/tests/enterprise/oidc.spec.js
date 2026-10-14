@@ -199,7 +199,7 @@ describe("OIDC", () => {
         access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
         token_type: "Bearer",
-        expires_in: 0,
+        expires_in: 300,
       })
       cy.getByDataHook("button-sso-login").click()
       cy.wait("@authorizationCode")

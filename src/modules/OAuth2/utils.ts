@@ -87,18 +87,22 @@ const getJwtExpiration = (jwt: string | undefined) => {
 // expires_in is the lifetime of the access token, so an ID token bearer expires
 // at its exp claim instead. exp is not rebased onto iat, because some IdPs
 // (e.g. Entra ID) backdate iat by several minutes to allow for clock skew.
+// Returns undefined when the bearer's expiry is unknown, because a provider may
+// omit expires_in.
 export const getTokenExpirationDate = (
   tokenResponse: Pick<
     AuthPayload,
     "id_token" | "expires_in" | "groups_encoded_in_token"
   >,
-) => {
+): Date | undefined => {
   const idTokenExpiration = tokenResponse.groups_encoded_in_token
     ? getJwtExpiration(tokenResponse.id_token)
     : undefined
-  return new Date(
-    idTokenExpiration ?? Date.now() + tokenResponse.expires_in * 1000,
-  )
+  if (idTokenExpiration !== undefined) return new Date(idTokenExpiration)
+  const lifetime = tokenResponse.expires_in
+  if (lifetime === undefined || !(lifetime > 0)) return undefined
+  const expiration = new Date(Date.now() + lifetime * 1000)
+  return Number.isNaN(expiration.getTime()) ? undefined : expiration
 }
 
 // The server validates the bearer; clients share this helper so stale-401

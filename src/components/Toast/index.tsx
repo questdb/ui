@@ -147,5 +147,13 @@ export const ToastContainer = (props?: ToastContainerProps) => {
     ...props,
   }
 
-  return <RTToastContainer {...mergedProps} />
+  // Modal dialogs hide the rest of the page from assistive technology, except
+  // live regions. This region, the container markup of later react-toastify
+  // versions, keeps warnings such as an SSO refresh failure announced while a
+  // dialog is open. It must exist before the dialog opens.
+  return (
+    <div aria-live="polite" aria-atomic="false" aria-relevant="additions text">
+      <RTToastContainer {...mergedProps} />
+    </div>
+  )
 }

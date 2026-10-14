@@ -548,22 +548,69 @@ describe("Client token refresh", () => {
         resolveRefresh = resolve
       })
     const onRequestStart = vi.fn()
-    const query = client.queryRaw("SELECT 1", { onRequestStart })
+    const onRefreshWait = vi.fn()
+    const query = client.queryRaw("SELECT 1", {
+      onRequestStart,
+      onRefreshWait,
+    })
     await vi.advanceTimersByTimeAsync(5_000)
+    expect(onRefreshWait).toHaveBeenCalledTimes(1)
     expect(onRequestStart).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
 
     resolveRefresh({ access_token: "new" })
     await vi.advanceTimersByTimeAsync(20)
     const result = await query
+    expect(onRefreshWait).toHaveBeenCalledTimes(1)
     expect(onRequestStart).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.not.stringContaining("onRequestStart"),
+      expect.not.stringMatching(/onRequestStart|onRefreshWait/),
       expect.any(Object),
     )
     expect(result.type).toBe(Type.DQL)
     if (result.type !== Type.DQL) throw new Error("expected DQL")
     expect(result.timings.fetch).toBe(20_000_000)
+  })
+
+  it("reports the refresh wait between a 401 and its retry", async () => {
+    // The browser thinks the token is valid, but the server rejects it once.
+    const issue = (access_token: string) => ({
+      access_token,
+      refresh_token: "refresh",
+      token_type: "Bearer",
+      expires_at: new Date(Date.now() + 300_000).toISOString(),
+    })
+    ssoAuthState.setAuthPayload(issue("stale"))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+      } as Response)
+      .mockResolvedValue(response({ notice: "hint" }))
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    client.setCommonHeaders({ Authorization: "Bearer stale" })
+    client.refreshTokenMethod = () => {
+      const payload = issue("fresh")
+      ssoAuthState.setAuthPayload(payload)
+      return Promise.resolve(payload)
+    }
+    const phases: string[] = []
+
+    const result = await client.queryRaw("SELECT 1", {
+      onRefreshWait: () => phases.push("refresh"),
+      onRequestStart: () => phases.push("request"),
+    })
+
+    expect(result.type).toBe(Type.NOTICE)
+    // A caller's request deadline must not run during the recovery refresh.
+    expect(phases).toEqual(["request", "refresh", "request"])
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.not.stringMatching(/onRequestStart|onRefreshWait/),
+      expect.objectContaining({ headers: { Authorization: "Bearer fresh" } }),
+    )
   })
 
   it("releases queries across Client instances after one rejection", async () => {

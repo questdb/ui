@@ -20,9 +20,13 @@ export const createCatalogRequestDeadline = (
 
   // The refresh is bounded independently; SQL still gets its full timeout
   // after onRequestStart, even if refreshing consumed the entire first 10s.
-  schedule(REFRESH_TIMEOUT_MS + SOURCE_TIMEOUT_MS)
+  // A query can also wait for a refresh after a 401, between two requests.
+  const allowRefreshThenRequest = () =>
+    schedule(REFRESH_TIMEOUT_MS + SOURCE_TIMEOUT_MS)
+  allowRefreshThenRequest()
   return {
     promise,
+    onRefreshWait: allowRefreshThenRequest,
     onRequestStart: () => schedule(SOURCE_TIMEOUT_MS),
     clear: () => {
       if (timeoutId !== null) clearTimeout(timeoutId)

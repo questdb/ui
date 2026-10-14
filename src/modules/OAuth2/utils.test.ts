@@ -30,9 +30,9 @@ describe("token expiration", () => {
 
   const expiration = (tokenResponse: {
     groups_encoded_in_token: boolean
-    expires_in: number
+    expires_in?: number
     id_token?: string
-  }) => getTokenExpirationDate(tokenResponse as AuthPayload).getTime()
+  }) => getTokenExpirationDate(tokenResponse as AuthPayload)?.getTime()
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -126,6 +126,39 @@ describe("token expiration", () => {
         id_token: idToken,
       }),
     ).toBe(now + 300_000)
+  })
+
+  it("does not need expires_in for an ID token bearer with an exp claim", () => {
+    // OAuth recommends, but does not require, the access token's lifetime.
+    expect(
+      expiration({
+        groups_encoded_in_token: true,
+        id_token: jwt({ iat: nowSeconds, exp: nowSeconds + 600 }),
+      }),
+    ).toBe(now + 600_000)
+  })
+
+  it.each([
+    {
+      bearer: "an access token without expires_in",
+      tokenResponse: {
+        groups_encoded_in_token: false,
+        id_token: jwt({ iat: nowSeconds, exp: nowSeconds + 600 }),
+      },
+    },
+    {
+      bearer: "an ID token without an exp claim or expires_in",
+      tokenResponse: {
+        groups_encoded_in_token: true,
+        id_token: jwt({ iat: nowSeconds }),
+      },
+    },
+    {
+      bearer: "an access token with a non-positive expires_in",
+      tokenResponse: { groups_encoded_in_token: false, expires_in: 0 },
+    },
+  ])("has no expiration for $bearer", ({ tokenResponse }) => {
+    expect(expiration(tokenResponse)).toBeUndefined()
   })
 })
 

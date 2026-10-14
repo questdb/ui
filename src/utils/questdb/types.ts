@@ -366,6 +366,11 @@ export type Options = {
   cancellable?: boolean
   /** Invoked immediately before the SQL fetch, after any token refresh wait. */
   onRequestStart?: () => void
+  /**
+   * Invoked when the query starts waiting for a token refresh: before its first
+   * fetch, or before retrying a fetch that the server rejected with 401.
+   */
+  onRefreshWait?: () => void
 }
 
 export type Release = {

@@ -1,5 +1,6 @@
 import "../test/stubBrowserGlobals"
 import React from "react"
+import { Base64 } from "js-base64"
 import { act, create, ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthProvider, useAuth } from "./AuthProvider"
@@ -35,11 +36,16 @@ const initialToken = {
   expires_in: 3600,
   token_type: "Bearer",
 }
+let signInToken: TokenResponse = initialToken
 const tokenResponse = (body: TokenResponse) =>
   new Response(JSON.stringify(body), { status: 200 })
+// Unsigned, as only the claims are read: the server verifies the signature.
+const idToken = (exp: number) =>
+  `header.${Base64.encodeURI(JSON.stringify({ exp }))}.signature`
 
 beforeEach(() => {
   localStorage.clear()
+  signInToken = initialToken
   vi.stubGlobal("sessionStorage", {
     getItem: () => null,
     setItem: vi.fn(),
@@ -62,7 +68,7 @@ beforeEach(() => {
     "fetch",
     vi.fn((url: string) =>
       Promise.resolve(
-        url === "/token" ? tokenResponse(initialToken) : new Response(""),
+        url === "/token" ? tokenResponse(signInToken) : new Response(""),
       ),
     ),
   )
@@ -89,6 +95,10 @@ const mount = async () => {
     )
     await Promise.resolve()
   })
+  // Signed in, so `auth` comes from this render rather than an earlier test.
+  expect(
+    renderer?.root.findAllByProps({ "data-hook": "mock-login" }),
+  ).toHaveLength(0)
   expect(auth.sessionData?.access_token).toBe("initial")
 }
 
@@ -192,8 +202,9 @@ describe("AuthProvider token installation", () => {
     await mount()
     ssoAuthState.markRefreshFailed()
     act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
+    // A refresh still pending at its deadline is not retried, so promise none.
     expect(mocks.toastError).toHaveBeenCalledWith(
-      expect.stringContaining("you may be signed out"),
+      "Could not refresh your SSO session. You may be signed out when your current session expires.",
       { autoClose: false, toastId: "sso-refresh-failed" },
     )
     mocks.toastDismiss.mockClear()
@@ -208,5 +219,78 @@ describe("AuthProvider token installation", () => {
     mocks.toastDismiss.mockClear()
     act(() => auth.logout())
     expect(mocks.toastDismiss).toHaveBeenCalledWith("sso-refresh-failed")
+  })
+})
+
+describe("AuthProvider bearer expiry", () => {
+  it("installs an ID token bearer without expires_in at sign-in and on refresh", async () => {
+    // OAuth only recommends expires_in, the access token's lifetime.
+    mocks.settings["acl.oidc.groups.encoded.in.token"] = true
+    const signInExpiry = Math.floor(Date.now() / 1000) + 600
+    signInToken = {
+      ...initialToken,
+      id_token: idToken(signInExpiry),
+      expires_in: undefined,
+    }
+    await mount()
+    expect(auth.sessionData?.expires_at).toBe(
+      new Date(signInExpiry * 1000).toISOString(),
+    )
+
+    const refreshExpiry = signInExpiry + 600
+    vi.mocked(fetch).mockResolvedValueOnce(
+      tokenResponse({
+        access_token: "renewed",
+        id_token: idToken(refreshExpiry),
+        token_type: "Bearer",
+      }),
+    )
+    await act(async () => {
+      await expect(
+        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
+      ).resolves.toMatchObject({
+        id_token: idToken(refreshExpiry),
+        expires_at: new Date(refreshExpiry * 1000).toISOString(),
+      })
+    })
+    expect(ssoAuthState.getAuthPayload()?.id_token).toBe(idToken(refreshExpiry))
+  })
+
+  it.each([
+    { bearer: "access token", groupsInToken: false, id_token: "initial-id" },
+    { bearer: "ID token", groupsInToken: true, id_token: "not-a-jwt" },
+  ])(
+    "signs in with an $bearer bearer of unknown expiry, leaving it unscheduled",
+    async ({ groupsInToken, id_token }) => {
+      // A provider without lifetimes wants the token used until it is rejected.
+      mocks.settings["acl.oidc.groups.encoded.in.token"] = groupsInToken
+      signInToken = {
+        ...initialToken,
+        id_token,
+        expires_in: undefined,
+        // A provider's own field, which is not the bearer's expiry
+        expires_at: "2000-01-01T00:00:00.000Z",
+      }
+      await mount()
+      expect(auth.sessionData?.expires_at).toBeUndefined()
+      expect(ssoAuthState.getAuthPayload()?.expires_at).toBeUndefined()
+    },
+  )
+
+  it("installs a refreshed token of unknown expiry", async () => {
+    await mount()
+    vi.mocked(fetch).mockResolvedValueOnce(
+      tokenResponse({ access_token: "renewed", token_type: "Bearer" }),
+    )
+    await act(async () => {
+      await expect(
+        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
+      ).resolves.toMatchObject({
+        access_token: "renewed",
+        expires_at: undefined,
+      })
+    })
+    expect(ssoAuthState.getAuthPayload()?.access_token).toBe("renewed")
+    expect(ssoAuthState.getAuthPayload()?.expires_at).toBeUndefined()
   })
 })

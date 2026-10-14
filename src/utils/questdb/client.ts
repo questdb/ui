@@ -46,6 +46,14 @@ const MAX_REFRESH_RETRY_DELAY_MS = 30_000
 const REFRESH_WINDOW_MS = 30_000
 const MIN_SUCCESS_REFRESH_INTERVAL_MS = 30_000
 
+// Without a lifetime from the provider, which then typically issues no refresh
+// tokens either, a token is never refreshed. It is used until the server
+// rejects it, and the user signs in again.
+const isRefreshable = (
+  authPayload: AuthPayload | null,
+): authPayload is AuthPayload & { refresh_token: string; expires_at: string } =>
+  !!authPayload?.refresh_token && authPayload.expires_at !== undefined
+
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
 export const buildDDLQuery = (name: string, kind: TableKind): string => {
@@ -104,8 +112,8 @@ export class Client {
 
   private tokenNeedsRefresh() {
     const authPayload = ssoAuthState.getAuthPayload()
-    return !!(
-      authPayload?.refresh_token &&
+    return (
+      isRefreshable(authPayload) &&
       new Date(authPayload.expires_at).getTime() - Date.now() <
         REFRESH_WINDOW_MS
     )
@@ -128,7 +136,7 @@ export class Client {
       failureReported = true
       Client.refreshRetryCount++
       const now = Date.now()
-      const expiry = originalSession
+      const expiry = originalSession?.expires_at
         ? new Date(originalSession.expires_at).getTime()
         : NaN
       const retryAfter =
@@ -167,8 +175,9 @@ export class Client {
           Authorization: authorization,
         })
         Client.resetRefreshBackoff(currentSession)
-        const remaining =
-          new Date(currentSession.expires_at).getTime() - Date.now()
+        const remaining = currentSession.expires_at
+          ? new Date(currentSession.expires_at).getTime() - Date.now()
+          : NaN
         // Bound successful refreshes too: skew (or very short ID tokens) can
         // leave every new token inside the refresh window. Remember the new
         // payload so the next query's session sync doesn't erase the throttle.
@@ -362,7 +371,12 @@ export class Client {
     controller: AbortController,
     queryId: QueryId,
   ): Promise<QueryRawResult> {
-    const { cancellable: _, onRequestStart, ...queryOptions } = options ?? {}
+    const {
+      cancellable: _,
+      onRequestStart,
+      onRefreshWait,
+      ...queryOptions
+    } = options ?? {}
     const payload = {
       count: true,
       src: "con",
@@ -383,9 +397,13 @@ export class Client {
       if (this.tokenNeedsRefresh() && Date.now() >= Client.retryRefreshAfter) {
         this.startRefresh()
       }
+      const waitForRefresh = (refresh: Promise<void>) => {
+        onRefreshWait?.()
+        return this.awaitRefresh(refresh, controller.signal)
+      }
       const refreshedForRequest = !!Client.refreshPromise
       if (Client.refreshPromise) {
-        await this.awaitRefresh(Client.refreshPromise, controller.signal)
+        await waitForRefresh(Client.refreshPromise)
       }
       const ensureSession = () => {
         if (
@@ -414,7 +432,7 @@ export class Client {
       if (
         response.status === 401 &&
         !refreshedForRequest &&
-        sessionAtFetch?.refresh_token &&
+        isRefreshable(sessionAtFetch) &&
         sessionAtFetch === ssoAuthState.getAuthPayload() &&
         authorizationAtFetch === getBearerAuthorization(sessionAtFetch) &&
         !ssoAuthState.hasRefreshFailed() &&
@@ -425,7 +443,7 @@ export class Client {
         // refresh-and-retry is safe even for writes, but never retry a 403.
         this.startRefresh()
         if (Client.refreshPromise) {
-          await this.awaitRefresh(Client.refreshPromise, controller.signal)
+          await waitForRefresh(Client.refreshPromise)
         }
         ensureSession()
         if (

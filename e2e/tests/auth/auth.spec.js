@@ -609,7 +609,7 @@ describe("Auth - OIDC ID token", () => {
         .should("eq", `Bearer ${initial}`)
       cy.getEditor().should("be.visible")
       cy.contains(
-        "Could not refresh your SSO session. We'll retry, but you may be signed out when your current session expires.",
+        "Could not refresh your SSO session. You may be signed out when your current session expires.",
       ).should("be.visible")
       // A persistent warning has no running auto-close animation.
       cy.get("#sso-refresh-failed .Toastify__progress-bar").should(
@@ -722,5 +722,65 @@ describe("Auth - OIDC ID token", () => {
     // Then the console ends the session and cancels the waiting SQL request.
     expectMissingIdTokenError("needed to keep you signed in.")
     cy.get("@authCheck.all").should("have.length", 0)
+  })
+})
+
+describe("Auth - OIDC token without a lifetime", () => {
+  const tokenUrl = "https://oauth.example.com/token"
+
+  beforeEach(() => {
+    interceptSettings({
+      config: {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": true,
+        "acl.basic.auth.realm.enabled": false,
+        "acl.oidc.enabled": true,
+        "acl.oidc.client.id": "test-client",
+        "acl.oidc.authorization.endpoint": "https://oauth.example.com/auth",
+        "acl.oidc.token.endpoint": tokenUrl,
+        "acl.oidc.state.required": false,
+        "acl.oidc.groups.encoded.in.token": false,
+      },
+    })
+    stubConsoleRequests()
+  })
+
+  it("signs in, never refreshes the token, and signs out once the server rejects it", () => {
+    // Given a provider that sends no expires_in, although it sends a refresh
+    // token
+    const grants = []
+    cy.intercept({ method: "POST", url: tokenUrl }, (req) => {
+      grants.push(new URLSearchParams(req.body).get("grant_type"))
+      req.reply({
+        access_token: "mock-access-token",
+        refresh_token: "refresh-token",
+        token_type: "Bearer",
+      })
+    })
+    visitCallback("?code=code-from-the-provider")
+    cy.wait("@settings")
+
+    // Then the console signs in, and uses the token without refreshing it
+    cy.getEditor().should("be.visible")
+    cy.wrap(grants).should("deep.equal", ["authorization_code"])
+
+    // When the server rejects the expired token
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: "select current_user()" },
+      },
+      { statusCode: 401, body: "Unauthorized" },
+    ).as("rejected")
+    cy.clearEditor()
+    cy.typeQuery("select current_user()")
+    cy.runLine()
+
+    // Then the user signs in again, without a refresh or a retried query
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.get("@rejected.all").should("have.length", 1)
+    cy.wrap(grants).should("deep.equal", ["authorization_code"])
   })
 })

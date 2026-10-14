@@ -152,7 +152,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     settings: Settings,
     grantType: GrantType,
   ): AuthPayload | undefined => {
-    if (!tokenResponse.access_token || !tokenResponse.expires_in) {
+    if (!tokenResponse.access_token) {
       logout({
         errorTitle: "Something went wrong.",
         errorMessage:
@@ -166,7 +166,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const payload = {
       ...tokenResponse,
       access_token: tokenResponse.access_token,
-      expires_in: tokenResponse.expires_in,
       token_type: tokenResponse.token_type ?? "Bearer",
       // Some providers rotate this token, others omit it on refresh.
       refresh_token:
@@ -188,7 +187,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     const installed: AuthPayload = {
       ...payload,
-      expires_at: getTokenExpirationDate(payload).toISOString(),
+      // The refresh is scheduled by the bearer's expiry: an ID token's exp claim
+      // needs no expires_in, which OAuth only recommends. Without any expiry,
+      // the token is never refreshed. Always set, so that a provider's own
+      // expires_at field is never used.
+      expires_at: getTokenExpirationDate(payload)?.toISOString(),
     }
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
     ssoAuthState.setAuthPayload(installed)
@@ -233,11 +236,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       subscribe(EventType.MSG_AUTH_REFRESH_FAILED, () => {
         const authPayload = ssoAuthState.getAuthPayload()
         if (
-          authPayload &&
+          authPayload?.expires_at &&
           new Date(authPayload.expires_at).getTime() > Date.now()
         ) {
           toast.error(
-            "Could not refresh your SSO session. We'll retry, but you may be signed out when your current session expires.",
+            "Could not refresh your SSO session. You may be signed out when your current session expires.",
             { autoClose: false, toastId: REFRESH_FAILED_TOAST_ID },
           )
         }
