@@ -64,6 +64,10 @@ import { QuestContext, QuestProvider } from "."
 let renderer: ReactTestRenderer | undefined
 beforeEach(() => {
   mocks.sessionData = undefined
+  mocks.settings = {
+    "acl.enabled": true,
+    "acl.basic.auth.realm.enabled": false,
+  }
   mocks.queryRaw.mockReset().mockResolvedValue({ type: "dml" })
   mocks.headers.mockClear()
   localStorage.clear()
@@ -93,6 +97,99 @@ describe("QuestProvider authentication gate", () => {
           ([headers]) => headers.Authorization === "Bearer sso",
         ),
       ).toBe(true)
+    },
+  )
+
+  describe.each([
+    {
+      key: StoreKey.REST_TOKEN,
+      credential: "first-user",
+      authorization: "Bearer first-user",
+      replacement: "other-user",
+      replacementAuthorization: "Bearer other-user",
+    },
+    {
+      key: StoreKey.BASIC_AUTH_HEADER,
+      credential: "Basic first-user",
+      authorization: "Basic first-user",
+      replacement: "Basic other-user",
+      replacementAuthorization: "Basic other-user",
+    },
+  ])(
+    "$key session snapshot",
+    ({
+      key,
+      credential,
+      authorization,
+      replacement,
+      replacementAuthorization,
+    }) => {
+      it.each(["replacement", "removal"])(
+        "keeps its credentials after another tab's %s during the initial check",
+        async (change) => {
+          let finishAuthCheck!: (result: { type: string }) => void
+          const authCheck = new Promise<{ type: string }>((resolve) => {
+            finishAuthCheck = resolve
+          })
+          mocks.queryRaw.mockImplementation((query: string) =>
+            query === "SELECT 1" ? authCheck : Promise.resolve({ type: "dml" }),
+          )
+          localStorage.setItem(key, credential)
+          await mount()
+          expect(mocks.headers).toHaveBeenLastCalledWith({
+            Authorization: authorization,
+          })
+          expect(
+            renderer?.root.findAllByProps({ "data-hook": "ready" }),
+          ).toHaveLength(0)
+
+          if (change === "replacement") {
+            localStorage.setItem(key, replacement)
+          } else {
+            localStorage.removeItem(key)
+          }
+          await act(async () => {
+            finishAuthCheck({ type: "dml" })
+            await Promise.resolve()
+          })
+
+          expect(
+            renderer?.root.findAllByProps({ "data-hook": "ready" }),
+          ).toHaveLength(1)
+          expect(mocks.headers).toHaveBeenLastCalledWith({
+            Authorization: authorization,
+          })
+        },
+      )
+
+      it("keeps its credentials when settings change", async () => {
+        localStorage.setItem(key, credential)
+        await mount()
+        localStorage.setItem(key, replacement)
+        mocks.settings = { ...mocks.settings, "release.version": "updated" }
+        await act(async () => {
+          renderer?.update(
+            <QuestProvider>
+              <div data-hook="ready" />
+            </QuestProvider>,
+          )
+          await Promise.resolve()
+        })
+        expect(mocks.headers).toHaveBeenLastCalledWith({
+          Authorization: authorization,
+        })
+      })
+
+      it("captures the current credentials on a new provider mount", async () => {
+        localStorage.setItem(key, credential)
+        await mount()
+        localStorage.setItem(key, replacement)
+        act(() => renderer?.unmount())
+        await mount()
+        expect(mocks.headers).toHaveBeenLastCalledWith({
+          Authorization: replacementAuthorization,
+        })
+      })
     },
   )
 
@@ -147,5 +244,8 @@ describe("QuestProvider authentication gate", () => {
     expect(
       mocks.queryRaw.mock.calls.filter(([q]) => q === "SELECT 1"),
     ).toHaveLength(count)
+    expect(mocks.headers).toHaveBeenLastCalledWith({
+      Authorization: "Bearer refreshed",
+    })
   })
 })

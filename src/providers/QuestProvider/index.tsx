@@ -38,7 +38,11 @@ import { Button, Text } from "../../components"
 import { Box } from "../../components/Box"
 import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
-import { getAuthorization, hasUIAuth } from "../../modules/OAuth2/utils"
+import {
+  getBearerAuthorization,
+  getStoredCredentialAuthorization,
+  hasUIAuth,
+} from "../../modules/OAuth2/utils"
 import { useSettings } from "../SettingsProvider"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
@@ -73,6 +77,10 @@ export const QuestProvider: React.FC = ({ children }) => {
   const dispatch = useDispatch()
   const { settings } = useSettings()
   const { sessionData, refreshAuthToken } = useAuth()
+  // Password credentials are shared across browser tabs; retain this tab's login.
+  const [nonSSOAuthorization] = useState(() =>
+    getStoredCredentialAuthorization(),
+  )
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const [authCheckFinished, setAuthCheckFinished] = useState(
     !hasUIAuth(settings),
@@ -116,7 +124,9 @@ export const QuestProvider: React.FC = ({ children }) => {
   }, [])
 
   useEffect(() => {
-    const authorization = getAuthorization(sessionData)
+    const authorization = sessionData
+      ? getBearerAuthorization(sessionData)
+      : nonSSOAuthorization
     questClient.setCommonHeaders(
       authorization ? { Authorization: authorization } : {},
     )
@@ -132,6 +142,7 @@ export const QuestProvider: React.FC = ({ children }) => {
     if (!authCheckFinished) void finishAuthCheck()
   }, [
     sessionData,
+    nonSSOAuthorization,
     settings,
     refreshAuthToken,
     authCheckFinished,
