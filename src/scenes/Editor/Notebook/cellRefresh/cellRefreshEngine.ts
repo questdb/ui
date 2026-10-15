@@ -296,6 +296,11 @@ const sameStateValue = (a: unknown, b: unknown): boolean => {
   return false
 }
 
+type PendingSnapshot = {
+  results: SingleQueryResult[]
+  durationMs: number
+}
+
 type Entry = {
   kind: CellEntryKind
   cellId: string
@@ -327,7 +332,7 @@ type Entry = {
   persistedResults: WeakMap<SingleQueryResult[], string>
   lastPersistedErrorsSig: string | null
   lastClearedSqlHash: string | null
-  pendingSnapshot: { results: SingleQueryResult[]; durationMs: number } | null
+  pendingSnapshot: PendingSnapshot | null
   snapshotTimer: ReturnType<typeof setTimeout> | null
 }
 
@@ -336,6 +341,10 @@ export class CellRefreshEngine {
   // A same-session refresh keeps this identity; logout/re-login invalidates it.
   private readonly sessionId = ssoAuthState.getSessionId()
   private entries = new Map<string, Entry>()
+  private teardownSnapshots: Array<{
+    entry: Entry
+    snapshot: PendingSnapshot
+  }> = []
   private listeners = new PerKeyListeners()
   private visibilityByCell = new Map<string, boolean>()
   private lastSyncedEntryCells: EntrySyncKey[] | null = null
@@ -394,7 +403,9 @@ export class CellRefreshEngine {
     }
   }
 
-  destroy() {
+  // Stop work during the unmount commit without serializing result datasets.
+  // Pending snapshots are retained for destroy() in passive cleanup.
+  detach() {
     eventBus.unsubscribe(
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
@@ -412,6 +423,15 @@ export class CellRefreshEngine {
     this.pendingRefreshSeeds.clear()
     this.pendingRunCounts.clear()
     this.lastSyncedEntryCells = null
+  }
+
+  destroy() {
+    this.detach()
+    const snapshots = this.teardownSnapshots
+    this.teardownSnapshots = []
+    for (const { entry, snapshot } of snapshots) {
+      void this.persistSnapshot(entry, snapshot.results, snapshot.durationMs)
+    }
   }
 
   sync(cells: NotebookCell[], autoRefreshDefault?: AutoRefresh) {
@@ -810,8 +830,7 @@ export class CellRefreshEngine {
     const pending = entry.pendingSnapshot
     this.dropPendingSnapshot(entry)
     if (reason === "teardown" && pending) {
-      entry.lastSnapshotAt = 0
-      this.queueSnapshot(entry, pending.results, pending.durationMs)
+      this.teardownSnapshots.push({ entry, snapshot: pending })
     }
     this.stopResultLoadWait(entry)
     this.abortRound(entry)

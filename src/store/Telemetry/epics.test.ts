@@ -121,6 +121,91 @@ describe("startTelemetry epic", () => {
     }
   })
 
+  it.each([
+    { status: 401, error: "Unauthorized" },
+    {
+      sessionEnded: true,
+      error: "Your session has ended. Please sign in again.",
+    },
+  ])(
+    "stops authentication-failure retries but accepts a fresh config: %j",
+    async (failure) => {
+      vi.useFakeTimers()
+      const actions$ = new Subject<StoreAction>()
+      const state$ = new StateObservable(new Subject(), {})
+      const remoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
+      mockGetRemoteConfig.mockReturnValue(remoteConfig)
+      mockQueryRaw
+        .mockRejectedValueOnce(failure)
+        .mockResolvedValueOnce({ type: QuestDB.Type.DQL, count: 0 })
+      const next = vi.fn((action: StoreAction) => actions$.next(action))
+      const error = vi.fn()
+      const sub = startTelemetry(
+        new ActionsObservable(actions$),
+        state$ as StateObservable<StoreShape>,
+        undefined,
+      ).subscribe({ next, error })
+      try {
+        actions$.next({
+          type: TelemetryAT.SET_REMOTE_CONFIG,
+          payload: remoteConfig,
+        })
+        await vi.advanceTimersByTimeAsync(3 * 3_600_000)
+
+        expect(mockQueryRaw).toHaveBeenCalledTimes(1)
+        expect(next).not.toHaveBeenCalled()
+        expect(error).not.toHaveBeenCalled()
+
+        // A later login can restart the loop without recreating the root epic.
+        actions$.next({
+          type: TelemetryAT.SET_REMOTE_CONFIG,
+          payload: remoteConfig,
+        })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(mockQueryRaw).toHaveBeenCalledTimes(2)
+        expect(error).not.toHaveBeenCalled()
+      } finally {
+        sub.unsubscribe()
+        vi.useRealTimers()
+      }
+    },
+  )
+
+  it("cancels an existing hourly continuation on authentication rejection", async () => {
+    vi.useFakeTimers()
+    const actions$ = new Subject<StoreAction>()
+    const state$ = new StateObservable(new Subject(), {})
+    const remoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
+    mockGetRemoteConfig.mockReturnValue(remoteConfig)
+    mockQueryRaw
+      .mockResolvedValueOnce({ type: QuestDB.Type.DQL, count: 0 })
+      .mockRejectedValueOnce({ status: 401, error: "Unauthorized" })
+    const next = vi.fn((action: StoreAction) => actions$.next(action))
+    const error = vi.fn()
+    const sub = startTelemetry(
+      new ActionsObservable(actions$),
+      state$ as StateObservable<StoreShape>,
+      undefined,
+    ).subscribe({ next, error })
+    const action: StoreAction = {
+      type: TelemetryAT.SET_REMOTE_CONFIG,
+      payload: remoteConfig,
+    }
+    try {
+      actions$.next(action)
+      await vi.advanceTimersByTimeAsync(0)
+      actions$.next(action)
+      await vi.advanceTimersByTimeAsync(3 * 3_600_000)
+
+      expect(mockQueryRaw).toHaveBeenCalledTimes(2)
+      expect(next).not.toHaveBeenCalled()
+      expect(error).not.toHaveBeenCalled()
+    } finally {
+      sub.unsubscribe()
+      vi.useRealTimers()
+    }
+  })
+
   it("keeps getServerInfo alive for the next START after a rejected query", async () => {
     const actions$ = new Subject<StoreAction>()
     const state$ = new StateObservable(new Subject(), {})

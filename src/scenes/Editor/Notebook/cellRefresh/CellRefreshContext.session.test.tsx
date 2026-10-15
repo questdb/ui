@@ -198,6 +198,43 @@ describe("notebook refresh authentication sessions", () => {
     },
   )
 
+  it("retains the final snapshot without persisting it during layout teardown", async () => {
+    const { engine, cellsRef } = mountNotebook(true)
+    ssoAuthState.setAuthPayload({ access_token: "old", token_type: "Bearer" })
+    let value = 99
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              columns: [{ name: "value", type: "INT" }],
+              dataset: [[value++]],
+              count: 1,
+            }),
+          ),
+        ),
+      ),
+    )
+    await act(async () => {
+      await engine.refresh("cell")
+      await engine.refresh("cell")
+    })
+    const finalResults = cellsRef.current[0].result?.results
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+    // Observe layout cleanup separately: act would also flush passive effects.
+    renderer!.update(<div>Another buffer</div>)
+
+    expect(engine.getState("cell")).toBeUndefined()
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    act(() => renderer!.unmount())
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(persistCellSnapshot).mock.calls[1][0].results).toBe(
+      finalResults,
+    )
+  })
+
   it.each([true, false])(
     "still saves refreshes within the same session (draw=%s)",
     async (draw) => {

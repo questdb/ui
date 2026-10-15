@@ -161,13 +161,21 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
         ),
       ).pipe(
         map((result) => ({ type: "data" as const, result, remoteConfig })),
-        // A failed SQL query must not terminate all telemetry epics. Preserve
-        // the cursor and schedule the next check through the existing path.
-        catchError(() => of({ type: "skip" as const, remoteConfig })),
+        // Keep the root listener alive for a later login, but stop the old
+        // session's loop on authentication failure. Transient failures retry.
+        catchError((error: unknown) =>
+          error &&
+          typeof error === "object" &&
+          (("status" in error && error.status === 401) ||
+            ("sessionEnded" in error && error.sessionEnded === true))
+            ? of({ type: "stop" as const })
+            : of({ type: "skip" as const, remoteConfig }),
+        ),
       )
     }),
     withLatestFrom(state$),
     switchMap(([payload, state]) => {
+      if (payload.type === "stop") return EMPTY
       const config = selectors.telemetry.getConfig(state)
 
       if (payload.type === "skip") {

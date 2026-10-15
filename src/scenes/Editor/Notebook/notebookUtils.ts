@@ -356,10 +356,12 @@ const UNVERIFIABLE_ERROR_MARKERS = [
 export const isUnverifiableExecError = (exec: {
   type: string
   error?: string
+  sessionEnded?: boolean
 }): boolean =>
   exec.type === "error" &&
-  exec.error !== undefined &&
-  UNVERIFIABLE_ERROR_MARKERS.some((m) => exec.error?.includes(m) ?? false)
+  (exec.sessionEnded === true ||
+    (exec.error !== undefined &&
+      UNVERIFIABLE_ERROR_MARKERS.some((m) => exec.error?.includes(m) ?? false)))
 
 export const UNVERIFIED_RUN_NOTE =
   "Run outcome unverified: the request did not return a confirmation, so the " +

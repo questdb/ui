@@ -45,8 +45,12 @@ export const useCellRefreshEngine = (options: {
   // continuations can replace or delete the last saved frame.
   useLayoutEffect(() => {
     engine.attach()
-    return () => engine.destroy()
+    return () => engine.detach()
   }, [engine])
+
+  // Flushing pending frames can serialize large datasets. Keep it outside
+  // the layout cleanup so switching buffers can paint first.
+  useEffect(() => () => engine.destroy(), [engine])
 
   useEffect(() => {
     engine.sync(cells, autoRefreshDefault)

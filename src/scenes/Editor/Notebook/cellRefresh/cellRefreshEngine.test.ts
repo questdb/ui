@@ -568,6 +568,61 @@ describe("CellRefreshEngine", () => {
       },
     )
 
+    it.each([false, true])(
+      "defers a detached engine's final snapshot until destruction (logout=%s)",
+      async (logout) => {
+        deps.executeSingle = incrementingResults()
+        syncOnScreen([drawCell("c1", "select 1", "1s")])
+        await flushAsync()
+        await vi.advanceTimersByTimeAsync(1000)
+        const finalResults = cellResults.get("c1")?.results
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+        engine.detach()
+
+        expect(engine.getState("c1")).toBeUndefined()
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+        await vi.advanceTimersByTimeAsync(15_000)
+        expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+        if (logout) ssoAuthState.clearAuthPayload()
+        engine.destroy()
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(logout ? 1 : 2)
+        if (!logout) {
+          expect(vi.mocked(persistCellSnapshot).mock.calls[1][0].results).toBe(
+            finalResults,
+          )
+        }
+        engine.destroy()
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(logout ? 1 : 2)
+      },
+    )
+
+    it("aborts a detached engine's live round before its late result settles", async () => {
+      let finish!: (result: QueryExecResult) => void
+      let signal!: AbortSignal
+      deps.executeSingle = vi.fn((_sql: string, abortSignal?: AbortSignal) => {
+        signal = abortSignal!
+        return new Promise<QueryExecResult>((resolve) => {
+          finish = resolve
+        })
+      })
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(signal.aborted).toBe(false)
+
+      engine.detach()
+
+      expect(signal.aborted).toBe(true)
+      expect(engine.getState("c1")).toBeUndefined()
+      finish(dqlResult("select 1"))
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+    })
+
     it("persists the throttle-blocked final frame on engine teardown", async () => {
       // Given a polling chart with a changed frame blocked by the throttle
       deps.executeSingle = incrementingResults()

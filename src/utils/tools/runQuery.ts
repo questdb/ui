@@ -15,7 +15,12 @@ export type RunQueryRawResult =
       notice?: string
     }
   | { type: "ddl" | "dml" | "notice"; durationMs?: number; message?: string }
-  | { type: "error"; error: string; position?: number }
+  | {
+      type: "error"
+      error: string
+      position?: number
+      sessionEnded?: boolean
+    }
 
 // Wire shape is (string | number | boolean | null)[] — array/object cells
 // (e.g. QuestDB ARRAY columns) get flattened to a JSON string so the agent
@@ -134,16 +139,26 @@ export const mapQueryRawToResult = async (
       }
       return { type: "notice", durationMs, message: res.notice }
     }
-    return { type: "error", error: res.error, position: res.position }
+    return {
+      type: "error",
+      error: res.error,
+      position: res.position,
+      ...(res.sessionEnded === true ? { sessionEnded: true } : {}),
+    }
   } catch (e) {
     if (e && typeof e === "object" && "error" in e) {
-      const errLike = e as { error?: unknown; position?: unknown }
+      const errLike = e as {
+        error?: unknown
+        position?: unknown
+        sessionEnded?: unknown
+      }
       if (typeof errLike.error === "string") {
         return {
           type: "error",
           error: errLike.error,
           position:
             typeof errLike.position === "number" ? errLike.position : -1,
+          ...(errLike.sessionEnded === true ? { sessionEnded: true } : {}),
         }
       }
     }
