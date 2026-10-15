@@ -27,6 +27,7 @@ export type RunDetachedQueryConfig = {
   executionRefs: React.MutableRefObject<ExecutionRefs>
   releaseExecution: (queryKey: QueryKey) => void
   onQueryStarted?: (queryId: QueryId) => void
+  isLoadingNotificationPublished?: () => boolean
   onSettled?: () => void
 }
 
@@ -150,7 +151,9 @@ export async function runDetachedQuery(
       ),
     )
   } finally {
-    dispatch(actions.settleLoadingNotification(namespaceKey, queryId))
+    if (config.isLoadingNotificationPublished?.()) {
+      dispatch(actions.settleLoadingNotification(namespaceKey, queryId))
+    }
     config.onSettled?.()
     releaseExecution(queryKey)
   }

@@ -1,5 +1,6 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 import type {
   CellResult,
   NotebookVariable,
@@ -87,6 +88,7 @@ type RunCommitOutcome =
         | "cell_changed"
         | "user_changed"
         | "storage_full"
+        | "session_ended"
         | RunCancellation
     }
 
@@ -216,15 +218,32 @@ const emptySummary = (): RunCellSummary => ({
   results: [],
 })
 
+const sessionEndedSummary = (): RunCellSummary => ({
+  ...emptySummary(),
+  unverified: true,
+  note:
+    "The authentication session ended. Results were not saved. " +
+    "Statements already sent may have executed; verify before retrying writes.",
+})
+
 const executeCellQueries = async (args: {
   queries: string[]
   queryText: string
+  sessionId: number
   variables: NotebookVariable[] | undefined
   quest: Client
   signal?: AbortSignal
   supersedeSignal: AbortSignal
 }): Promise<CellResult> => {
-  const { queries, queryText, variables, quest, signal, supersedeSignal } = args
+  const {
+    queries,
+    queryText,
+    sessionId,
+    variables,
+    quest,
+    signal,
+    supersedeSignal,
+  } = args
   const runAbort = new AbortController()
   let aborted = false
   const onAbort = () => {
@@ -252,7 +271,7 @@ const executeCellQueries = async (args: {
       // flight when the abort landed still records its REAL awaited outcome
       // below — it may have completed server-side, and reporting it as
       // cancelled would push the agent into re-running a committed write.
-      if (aborted) {
+      if (aborted || ssoAuthState.getSessionId() !== sessionId) {
         for (let j = i; j < queries.length; j++) {
           results[j] = cancelledResult(queries[j], "user")
         }
@@ -306,13 +325,21 @@ const executeCellQueries = async (args: {
 const executeCellQueriesParallel = async (args: {
   queries: string[]
   classified: ClassifiedStatement[]
+  sessionId: number
   variables: NotebookVariable[] | undefined
   quest: Client
   signal?: AbortSignal
   supersedeSignal: AbortSignal
 }): Promise<CellResult> => {
-  const { queries, classified, variables, quest, signal, supersedeSignal } =
-    args
+  const {
+    queries,
+    classified,
+    sessionId,
+    variables,
+    quest,
+    signal,
+    supersedeSignal,
+  } = args
   const runAbort = new AbortController()
   let aborted = false
   const onAbort = () => {
@@ -339,23 +366,22 @@ const executeCellQueriesParallel = async (args: {
           results[index] = errorResult(query, stmt.error ?? "Invalid statement")
           return
         }
-        if (aborted) {
+        if (aborted || ssoAuthState.getSessionId() !== sessionId) {
           results[index] = cancelledResult(query, "user")
           return
         }
         let exec: QueryExecResult
         try {
-          exec = await statementRequestLimiter(
-            () =>
-              executeSingleRaw(
-                quest,
-                query,
-                variables,
-                runAbort.signal,
-                NOTEBOOK_ROW_CAP,
-              ),
-            runAbort.signal,
-          )
+          exec = await statementRequestLimiter(() => {
+            if (ssoAuthState.getSessionId() !== sessionId) runAbort.abort()
+            return executeSingleRaw(
+              quest,
+              query,
+              variables,
+              runAbort.signal,
+              NOTEBOOK_ROW_CAP,
+            )
+          }, runAbort.signal)
         } catch {
           results[index] = cancelledResult(query, "user")
           return
@@ -394,6 +420,8 @@ export const runHeadlessCell = async (
   sql?: string,
   gate?: RunCellGate,
 ): Promise<RunCellSummary> => {
+  const sessionId = ssoAuthState.getSessionId()
+  const isCurrentSession = () => ssoAuthState.getSessionId() === sessionId
   const prep = await enqueueBufferTask(bufferId, async () => {
     const view = await readNotebookView(bufferId)
     return {
@@ -403,6 +431,7 @@ export const runHeadlessCell = async (
       mountEpochAtPrep: getMountEpoch(bufferId),
     }
   })
+  if (!isCurrentSession()) return sessionEndedSummary()
   if (prep.cell.type === "markdown") return emptySummary()
   if (sql !== undefined && sql !== prep.cell.value) {
     return {
@@ -441,6 +470,7 @@ export const runHeadlessCell = async (
           claim.signal,
         ),
     )
+    if (!isCurrentSession()) return sessionEndedSummary()
     if (claim.signal.aborted) {
       return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
     }
@@ -463,6 +493,7 @@ export const runHeadlessCell = async (
         ? await executeCellQueriesParallel({
             queries,
             classified,
+            sessionId,
             variables: prep.variables,
             quest,
             signal,
@@ -471,11 +502,14 @@ export const runHeadlessCell = async (
         : await executeCellQueries({
             queries,
             queryText,
+            sessionId,
             variables: prep.variables,
             quest,
             signal,
             supersedeSignal: claim.signal,
           })
+
+    if (!isCurrentSession()) return sessionEndedSummary()
 
     const outcome = await enqueueBufferTask(
       bufferId,
@@ -491,6 +525,9 @@ export const runHeadlessCell = async (
             return { committed: false, reason: "notebook_archived" }
           }
           return { committed: false, reason: "notebook_gone" }
+        }
+        if (!isCurrentSession()) {
+          return { committed: false, reason: "session_ended" }
         }
         const currentCell = view.cells.find((c) => c.id === cellId)
         if (!currentCell) {
@@ -518,10 +555,14 @@ export const runHeadlessCell = async (
         const parts = partsOf(view)
         let commit: CommitOutcome
         try {
-          commit = await commitView(bufferId, {
-            ...parts,
-            cells: patchCellRunResult(parts.cells, cellId, ranResult),
-          })
+          commit = await commitView(
+            bufferId,
+            {
+              ...parts,
+              cells: patchCellRunResult(parts.cells, cellId, ranResult),
+            },
+            isCurrentSession,
+          )
         } catch {
           return { committed: false, reason: "storage_full" }
         }
@@ -530,6 +571,9 @@ export const runHeadlessCell = async (
         }
         if (commit === "deleted") {
           return { committed: false, reason: "notebook_gone" }
+        }
+        if (commit === "discarded" || !isCurrentSession()) {
+          return { committed: false, reason: "session_ended" }
         }
         const snapshotSaved = await persistCellSnapshot({
           bufferId,
@@ -547,12 +591,15 @@ export const runHeadlessCell = async (
 
     const summary = summarizeCellResults({ ...prep.cell, result: ranResult })
     if (outcome.committed) {
-      if (!signal?.aborted) emitAgentEdit({ bufferId, cellId })
+      if (isCurrentSession() && !signal?.aborted)
+        emitAgentEdit({ bufferId, cellId })
       return outcome.snapshotSaved
         ? summary
         : { ...summary, note: RESULT_NOT_SAVED_RUN_NOTE }
     }
     switch (outcome.reason) {
+      case "session_ended":
+        return sessionEndedSummary()
       case "mounted":
         return { ...summary, unverified: true, note: MOUNTED_MID_RUN_NOTE }
       case "user_changed":

@@ -8,6 +8,7 @@ import type {
 } from "../../../../store/notebook"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { ssoAuthState } from "../../../../modules/OAuth2/ssoAuthState"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 import type { CellResultStatus } from "../resultHydration/cellResultHydration"
@@ -546,6 +547,26 @@ describe("CellRefreshEngine", () => {
       // snapshot the toggle-off just deleted
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
     })
+
+    it.each(["timer", "flush", "teardown"] as const)(
+      "discards an old session's throttled snapshot on %s",
+      async (boundary) => {
+        deps.executeSingle = incrementingResults()
+        syncOnScreen([drawCell("c1", "select 1", "1s")])
+        await flushAsync()
+        await vi.advanceTimersByTimeAsync(1000)
+        engine.setVisible("c1", false)
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+        ssoAuthState.clearAuthPayload()
+        if (boundary === "timer") await vi.advanceTimersByTimeAsync(11_000)
+        else if (boundary === "flush") await engine.flushPendingSnapshots()
+        else engine.destroy()
+
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+        expect(deleteCellSnapshot).not.toHaveBeenCalled()
+      },
+    )
 
     it("persists the throttle-blocked final frame on engine teardown", async () => {
       // Given a polling chart with a changed frame blocked by the throttle

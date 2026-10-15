@@ -2051,6 +2051,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           queryToRun = `EXPLAIN ${originalQueryText}`
         }
 
+        let loadingNotificationPublished = false
         // give the notification a slight delay to prevent flashing for fast queries
         notificationTimeoutRef.current = window.setTimeout(() => {
           if (
@@ -2059,6 +2060,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             requestRef.current &&
             editor
           ) {
+            loadingNotificationPublished = true
             dispatch(
               actions.query.addNotification(
                 {
@@ -2334,9 +2336,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             }
           })
           .finally(() => {
-            dispatch(
-              actions.query.settleLoadingNotification(targetBufferId, queryId),
-            )
+            if (loadingNotificationPublished) {
+              dispatch(
+                actions.query.settleLoadingNotification(
+                  targetBufferId,
+                  queryId,
+                ),
+              )
+            }
             if (isCurrentRun()) {
               inflightQueryRef.current = null
             }

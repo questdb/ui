@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -40,7 +41,9 @@ export const useCellRefreshEngine = (options: {
     depsRef.current = deps
   }, [deps])
 
-  useEffect(() => {
+  // Abort rounds during the unmount commit, before session-ended query
+  // continuations can replace or delete the last saved frame.
+  useLayoutEffect(() => {
     engine.attach()
     return () => engine.destroy()
   }, [engine])

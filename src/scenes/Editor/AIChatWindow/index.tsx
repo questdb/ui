@@ -530,7 +530,9 @@ const AIChatWindow: React.FC = () => {
         bufferId: notificationNamespaceKey,
         queryKey,
         execute: () => {
+          let loadingNotificationPublished = false
           const timeoutId = window.setTimeout(() => {
+            loadingNotificationPublished = true
             dispatch(
               actions.query.addNotification(
                 {
@@ -570,6 +572,7 @@ const AIChatWindow: React.FC = () => {
             onQueryStarted: (nextQueryId) => {
               queryId = nextQueryId
             },
+            isLoadingNotificationPublished: () => loadingNotificationPublished,
             onSettled: () => {
               if (notificationTimeoutRef.current === timeoutId) {
                 window.clearTimeout(timeoutId)

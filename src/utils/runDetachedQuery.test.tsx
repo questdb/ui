@@ -81,9 +81,7 @@ describe("runDetachedQuery", () => {
 
     await runDetachedQuery(config)
 
-    expect(dispatch.mock.calls).toEqual([
-      [actions.settleLoadingNotification(config.namespaceKey, 1)],
-    ])
+    expect(dispatch).not.toHaveBeenCalled()
     expect(config.executionRefs.current).toEqual({})
     expectSettled()
   })
@@ -97,7 +95,7 @@ describe("runDetachedQuery", () => {
 
     await runDetachedQuery(config)
 
-    expect(dispatch).toHaveBeenCalledTimes(2)
+    expect(dispatch).toHaveBeenCalledTimes(1)
     expect(dispatch.mock.calls[0][0]).toMatchObject({
       type: QueryAT.ADD_NOTIFICATION,
       payload: {
@@ -189,9 +187,7 @@ describe("runDetachedQuery", () => {
       finish()
       await execution
 
-      expect(dispatch.mock.calls).toEqual([
-        [actions.settleLoadingNotification(config.namespaceKey, 1)],
-      ])
+      expect(dispatch).not.toHaveBeenCalled()
       expect(config.executionRefs.current).toEqual({})
       expect(
         vi
@@ -206,6 +202,7 @@ describe("runDetachedQuery", () => {
   )
 
   it("settles already-published loading state on session end", async () => {
+    config.isLoadingNotificationPublished = () => true
     let state = reducer(
       initialState,
       actions.addNotification(
@@ -236,6 +233,7 @@ describe("runDetachedQuery", () => {
   })
 
   it("discards errors from an ended session and preserves newer loading state", async () => {
+    config.isLoadingNotificationPublished = () => true
     let reject!: (error: unknown) => void
     queryRaw.mockReturnValue({
       queryId: 1,
@@ -268,6 +266,24 @@ describe("runDetachedQuery", () => {
 
     expect(state).toBe(current)
     expect(config.executionRefs.current).toEqual({})
+    expectSettled()
+  })
+
+  it("skips history settlement when a fast query never published loading", async () => {
+    config.isLoadingNotificationPublished = vi.fn(() => false)
+    queryRaw.mockReturnValue({
+      queryId: 1,
+      promise: Promise.resolve({ type: Type.DML, query: config.normalizedSQL }),
+    })
+
+    await runDetachedQuery(config)
+
+    expect(config.isLoadingNotificationPublished).toHaveBeenCalledOnce()
+    expect(
+      dispatch.mock.calls.some(
+        ([action]) => action.type === QueryAT.SETTLE_LOADING_NOTIFICATION,
+      ),
+    ).toBe(false)
     expectSettled()
   })
 
