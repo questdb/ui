@@ -234,9 +234,11 @@ export const QuestProvider: React.FC = ({ children }) => {
             <Text color="statusDanger">{authCheckError}</Text>
           </div>
           <div role="status">
-            {authCheckPending && (
-              <Text color="contentPrimary">Reconnecting…</Text>
-            )}
+            <Text color="contentPrimary">
+              {authCheckPending
+                ? "Reconnecting…"
+                : "Connection failed. Retry connection."}
+            </Text>
           </div>
           {/* Keep the button focusable while busy; native disabled can drop focus. */}
           <Button

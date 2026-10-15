@@ -250,6 +250,7 @@ export class Client {
     payload: Record<string, string | number | boolean | undefined>,
     signal: AbortSignal,
     ensureCurrentSession: () => void,
+    execution: { requestNotSent: boolean },
     lifecycle?: QueryLifecycle,
   ) {
     const originalPayload = ssoAuthState.getAuthPayload()
@@ -277,14 +278,22 @@ export class Client {
     }
     let authorizationAtFetch: string | undefined
     let fetchStartedAt = 0
-    const send = () => {
+    const send = async () => {
       ensureCanSend()
       lifecycle?.onRequestStart?.()
       // Read the installed bearer immediately before every authenticated fetch.
       const headers = this.requestHeaders()
       authorizationAtFetch = headers.Authorization
       fetchStartedAt = Date.now()
-      return fetch(`exec?${Client.encodeParams(payload)}`, { signal, headers })
+      execution.requestNotSent = false
+      const response = await fetch(`exec?${Client.encodeParams(payload)}`, {
+        signal,
+        headers,
+      })
+      // A rejected bearer executed no SQL. A subsequent refresh failure must
+      // retain that definitive outcome until another SQL attempt is sent.
+      if (response.status === 401) execution.requestNotSent = true
+      return response
     }
     const sessionAtFetch = ssoAuthState.getAuthPayload()
     let response = await send()
@@ -355,6 +364,7 @@ export class Client {
     let fetchStartedAt = 0
     let authorizationAtFetch: string | undefined
     const session = ssoAuthState.capture()
+    const execution = { requestNotSent: true }
     const ensureCurrentSession = () => {
       if (!session.isCurrent()) throw new SessionEndedError()
     }
@@ -364,6 +374,7 @@ export class Client {
       type: Type.ERROR,
       error: new SessionEndedError().message,
       sessionEnded: true,
+      ...(execution.requestNotSent ? { requestNotSent: true } : {}),
     })
 
     try {
@@ -372,6 +383,7 @@ export class Client {
           payload,
           controller.signal,
           ensureCurrentSession,
+          execution,
           lifecycle,
         ))
     } catch (error) {

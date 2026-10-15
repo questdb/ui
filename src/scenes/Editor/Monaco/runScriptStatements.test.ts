@@ -28,6 +28,7 @@ describe("script session boundaries", () => {
         { success: true, notification: "second insert" },
       ],
       sessionEnded: true,
+      outcomeUnknown: true,
     })
     expect(execute).toHaveBeenCalledTimes(3)
   })
@@ -39,8 +40,54 @@ describe("script session boundaries", () => {
     const execute = vi.fn<[], Promise<Outcome>>()
     expect(
       await runScriptStatements(["insert"], session, execute, () => false),
-    ).toEqual({ results: [], sessionEnded: true })
+    ).toEqual({ results: [], sessionEnded: true, outcomeUnknown: false })
     expect(execute).not.toHaveBeenCalled()
+  })
+
+  it.each([0, 2])(
+    "does not mark a never-sent statement uncertain after %s confirmed statements",
+    async (confirmed) => {
+      const queries = Array.from({ length: confirmed + 2 }, (_, i) => i)
+      const execute = vi.fn((query: number): Promise<Outcome> => {
+        if (query === confirmed) {
+          authSessionState.endSession()
+          return Promise.resolve({
+            success: false,
+            sessionEnded: true,
+            requestNotSent: true,
+          })
+        }
+        return Promise.resolve({ success: true })
+      })
+      const result = await runScriptStatements(
+        queries,
+        authSessionState.capture(),
+        execute,
+        () => false,
+      )
+      expect(result).toEqual({
+        results: Array.from({ length: confirmed }, () => ({ success: true })),
+        sessionEnded: true,
+        outcomeUnknown: false,
+      })
+      expect(execute).toHaveBeenCalledTimes(confirmed + 1)
+    },
+  )
+
+  it("keeps a first statement uncertain when it was already in flight", async () => {
+    const execute = vi.fn((): Promise<Outcome> => {
+      authSessionState.endSession()
+      return Promise.resolve({ success: false, sessionEnded: true })
+    })
+    expect(
+      await runScriptStatements(
+        [1, 2],
+        authSessionState.capture(),
+        execute,
+        () => false,
+      ),
+    ).toEqual({ results: [], sessionEnded: true, outcomeUnknown: true })
+    expect(execute).toHaveBeenCalledOnce()
   })
 
   it("preserves the failing outcome when stop-on-failure ends an ordinary script", async () => {
@@ -57,6 +104,7 @@ describe("script session boundaries", () => {
     expect(result).toEqual({
       results: [{ success: false, notification: "error" }],
       sessionEnded: false,
+      outcomeUnknown: false,
     })
     expect(execute).toHaveBeenCalledTimes(1)
   })

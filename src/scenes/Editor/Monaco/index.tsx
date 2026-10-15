@@ -105,6 +105,7 @@ import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
 type IndividualQueryResult = {
   success: boolean
   sessionEnded?: boolean
+  requestNotSent?: boolean
   result?: QuestDB.QueryRawResult
   notification:
     | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
@@ -1590,7 +1591,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     } catch (_error: unknown) {
       const error = _error as ErrorResult
       if (isSessionEnded(error) || !session.isCurrent()) {
-        return { success: false, sessionEnded: true, notification: null }
+        return {
+          success: false,
+          sessionEnded: true,
+          requestNotSent: error.requestNotSent,
+          notification: null,
+        }
       }
 
       const bufferIdStr = activeBufferId.toString()
@@ -1781,37 +1787,40 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     }
     const startTime = Date.now()
-    const { results: individualQueryResults, sessionEnded } =
-      await runScriptStatements(
-        queries,
-        session,
-        async (query, i) => {
-          const lineNumber = query.row + 1
-          editor.revealPositionInCenterIfOutsideViewport({
-            lineNumber,
-            column: query.column,
-          })
-          loadingGlyphLineNumberRef.current = lineNumber
-          toggleGlyphWidgetLoading(lineNumber, true)
-          const result = await runIndividualQuery(
-            query,
-            i === queries.length - 1,
-            session,
-          )
-          if (
-            session.isCurrent() &&
-            !isSessionEnded(result) &&
-            editorRef.current === editor
-          ) {
-            toggleGlyphWidgetLoading(lineNumber, false)
-            loadingGlyphLineNumberRef.current = null
-          }
-          return result
-        },
-        (result) =>
-          scriptStopRef.current ||
-          (!result.success && stopAfterFailureRef.current && runningAllQueries),
-      )
+    const {
+      results: individualQueryResults,
+      sessionEnded,
+      outcomeUnknown,
+    } = await runScriptStatements(
+      queries,
+      session,
+      async (query, i) => {
+        const lineNumber = query.row + 1
+        editor.revealPositionInCenterIfOutsideViewport({
+          lineNumber,
+          column: query.column,
+        })
+        loadingGlyphLineNumberRef.current = lineNumber
+        toggleGlyphWidgetLoading(lineNumber, true)
+        const result = await runIndividualQuery(
+          query,
+          i === queries.length - 1,
+          session,
+        )
+        if (
+          session.isCurrent() &&
+          !isSessionEnded(result) &&
+          editorRef.current === editor
+        ) {
+          toggleGlyphWidgetLoading(lineNumber, false)
+          loadingGlyphLineNumberRef.current = null
+        }
+        return result
+      },
+      (result) =>
+        scriptStopRef.current ||
+        (!result.success && stopAfterFailureRef.current && runningAllQueries),
+    )
     successfulQueries = individualQueryResults.filter(
       (result) => result.success,
     ).length
@@ -1899,7 +1908,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               {failedQueries > 0 ? `${failedQueries} failed` : ""}{" "}
               {failedQueries + successfulQueries !== 1 ? " queries" : " query"}
               {sessionEnded &&
-                "; session ended. The last statement's outcome is unknown; verify before running again."}
+                (outcomeUnknown
+                  ? "; session ended. The last statement's outcome is unknown; verify before running again."
+                  : individualQueryResults.length === 0
+                    ? "; session ended. No statements were sent."
+                    : "; session ended. No further statements were sent.")}
             </Text>
           ),
           type: completedGracefully

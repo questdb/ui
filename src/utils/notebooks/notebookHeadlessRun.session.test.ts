@@ -379,6 +379,50 @@ describe("headless notebook authentication sessions", () => {
     }
   })
 
+  it("reports no execution when the session ends during queued preparation", async () => {
+    let release!: () => void
+    let started!: () => void
+    const queued = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    const blocker = enqueueBufferTask(BUFFER_ID, () => {
+      started()
+      return new Promise<void>((resolve) => {
+        release = resolve
+      })
+    })
+    await queued
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const run = makeRun(new Client())
+    ssoAuthState.clearAuthPayload()
+    release()
+    await blocker
+    const summary = await run
+    expect(summary).toMatchObject({ success: false, queryCount: 0 })
+    expect(summary).not.toHaveProperty("unverified")
+    expect(summary.note).toContain("nothing was executed")
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expectPreviousResult()
+  })
+
+  it("reports no execution when refresh ends the session before the first SQL send", async () => {
+    vi.setSystemTime(Date.now() + 31_000)
+    const client = new Client()
+    client.refreshTokenMethod = () => {
+      ssoAuthState.clearAuthPayload()
+      return Promise.resolve(undefined)
+    }
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const summary = await makeRun(client)
+    expect(summary).toMatchObject({ success: false, queryCount: 0 })
+    expect(summary).not.toHaveProperty("unverified")
+    expect(summary.note).toContain("nothing was executed")
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expectPreviousResult()
+  })
+
   it("does not launch SQL when the session changes during validation", async () => {
     const client = new Client()
     let finish!: () => void
@@ -410,7 +454,10 @@ describe("headless notebook authentication sessions", () => {
     ssoAuthState.clearAuthPayload()
     ssoAuthState.markNonSSOAuthenticated()
     finish()
-    expect(await run).toMatchObject({ unverified: true })
+    const summary = await run
+    expect(summary).toMatchObject({ success: false, queryCount: 0 })
+    expect(summary).not.toHaveProperty("unverified")
+    expect(summary.note).toContain("nothing was executed")
     expect(fetchMock).not.toHaveBeenCalled()
     await expectPreviousResult()
   })

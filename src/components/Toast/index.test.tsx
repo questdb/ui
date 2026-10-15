@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest"
+import React from "react"
+import { act, create, type ReactTestRenderer } from "react-test-renderer"
+import { ThemeProvider } from "styled-components"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { darkTheme } from "../../theme"
 
 const messages = vi.hoisted(() => ({
   info: vi.fn(),
@@ -20,7 +24,64 @@ vi.mock("../icons", () => ({
   Information: () => null,
   CheckmarkOutline: () => null,
 }))
-import { toast } from "."
+import { NOTIFICATION_SHORTCUT, ToastContainer, toast } from "."
+
+let renderer: ReactTestRenderer | undefined
+
+afterEach(() => {
+  act(() => renderer?.unmount())
+  renderer = undefined
+  vi.unstubAllGlobals()
+  vi.clearAllMocks()
+})
+
+const mountNotifications = () => {
+  const focus = vi.fn()
+  const querySelector = vi.fn().mockReturnValue({ focus })
+  const closest = vi.fn().mockReturnValue(null)
+  const addEventListener = vi.fn<
+    [string, (event: KeyboardEvent) => void],
+    void
+  >()
+  const removeEventListener = vi.fn()
+  vi.stubGlobal("document", {
+    activeElement: { closest },
+    addEventListener,
+    removeEventListener,
+  })
+  act(() => {
+    renderer = create(
+      <ThemeProvider theme={darkTheme}>
+        <ToastContainer />
+      </ThemeProvider>,
+      { createNodeMock: () => ({ querySelector }) },
+    )
+  })
+  const onKeyDown = addEventListener.mock.calls[0][1]
+  const press = (overrides: Partial<KeyboardEvent> = {}) => {
+    const event = {
+      key: "n",
+      code: "KeyN",
+      altKey: true,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      defaultPrevented: false,
+      preventDefault: vi.fn(),
+      ...overrides,
+    }
+    onKeyDown(event as KeyboardEvent)
+    return event
+  }
+  return {
+    focus,
+    querySelector,
+    closest,
+    press,
+    removeEventListener,
+    onKeyDown,
+  }
+}
 
 describe("toast theme styles", () => {
   it.each(["info", "success", "warning", "error"] as const)(
@@ -49,4 +110,56 @@ describe("toast theme styles", () => {
       )
     },
   )
+})
+
+describe("notification keyboard access", () => {
+  it("advertises Alt+N and focuses the first notification control", () => {
+    const { press, focus } = mountNotifications()
+    expect(renderer!.root.findByProps({ role: "region" }).props).toMatchObject({
+      "aria-keyshortcuts": NOTIFICATION_SHORTCUT,
+    })
+    expect(NOTIFICATION_SHORTCUT).toBe("Alt+N")
+    expect(press().preventDefault).toHaveBeenCalledOnce()
+    // Option-modified characters vary by keyboard layout; the physical code
+    // must still identify the shortcut.
+    expect(press({ key: "˜" }).preventDefault).toHaveBeenCalledOnce()
+    expect(focus).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    { key: "t", code: "KeyT" },
+    { altKey: false },
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { defaultPrevented: true },
+  ])("does not consume unrelated or handled keys %j", (event) => {
+    const { press, focus } = mountNotifications()
+    expect(press(event).preventDefault).not.toHaveBeenCalled()
+    expect(focus).not.toHaveBeenCalled()
+  })
+
+  it("preserves modal focus and works after the dialog is closed", () => {
+    const { press, closest, focus } = mountNotifications()
+    closest.mockReturnValue({ role: "dialog" })
+    expect(press().preventDefault).not.toHaveBeenCalled()
+    expect(focus).not.toHaveBeenCalled()
+    closest.mockReturnValue(null)
+    expect(press().preventDefault).toHaveBeenCalledOnce()
+    expect(focus).toHaveBeenCalledOnce()
+  })
+
+  it("does not consume the shortcut when no notification control exists", () => {
+    const { press, querySelector, focus } = mountNotifications()
+    querySelector.mockReturnValue(null)
+    expect(press().preventDefault).not.toHaveBeenCalled()
+    expect(focus).not.toHaveBeenCalled()
+  })
+
+  it("removes the keyboard listener on unmount", () => {
+    const { removeEventListener, onKeyDown } = mountNotifications()
+    act(() => renderer!.unmount())
+    expect(removeEventListener).toHaveBeenCalledWith("keydown", onKeyDown)
+    renderer = undefined
+  })
 })

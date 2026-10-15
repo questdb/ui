@@ -402,22 +402,26 @@ describe("QuestProvider authentication gate", () => {
           })
         : Promise.resolve({ type: "dml" }),
     )
-    await act(async () => {
-      button.props.onClick()
-      await Promise.resolve()
-    })
-    expect(
-      renderer!.root.findByProps({ role: "status" }).findByType("span")
-        .children,
-    ).toEqual(["Reconnecting…"])
-    await act(async () => {
-      reject(error)
-      await Promise.resolve()
-    })
-    expect(renderer!.root.findByProps({ role: "alert" })).toBe(alert)
-    expect(alert.findByType("span").children).toEqual([error.error])
-    expect(renderer!.root.findByProps({ role: "status" }).children).toEqual([])
-    expect(renderer!.root.findByType("button")).toBe(button)
+    const status = renderer!.root.findByProps({ role: "status" })
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await act(async () => {
+        button.props.onClick()
+        await Promise.resolve()
+      })
+      expect(status.findByType("span").children).toEqual(["Reconnecting…"])
+      await act(async () => {
+        reject(error)
+        await Promise.resolve()
+      })
+      expect(renderer!.root.findByProps({ role: "alert" })).toBe(alert)
+      expect(alert.findByType("span").children).toEqual([error.error])
+      expect(renderer!.root.findByProps({ role: "status" })).toBe(status)
+      expect(status.findByType("span").children).toEqual([
+        "Connection failed. Retry connection.",
+      ])
+      expect(renderer!.root.findByType("button")).toBe(button)
+      expect(button.props["aria-busy"]).toBe(false)
+    }
   })
 
   it("does not persist session-ended errors into the authentication gate", async () => {

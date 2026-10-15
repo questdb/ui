@@ -222,6 +222,13 @@ const emptySummary = (): RunCellSummary => ({
   results: [],
 })
 
+const sessionEndedBeforeLaunchSummary = (): RunCellSummary => ({
+  ...emptySummary(),
+  note:
+    "Run NOT started: the authentication session ended before execution, so nothing was executed. " +
+    "Sign in again before re-running.",
+})
+
 const sessionEndedSummary = (): RunCellSummary => ({
   ...emptySummary(),
   unverified: true,
@@ -434,7 +441,7 @@ export const runHeadlessCell = async (
       mountEpochAtPrep: getMountEpoch(bufferId),
     }
   })
-  if (!isCurrentSession()) return sessionEndedSummary()
+  if (!isCurrentSession()) return sessionEndedBeforeLaunchSummary()
   if (prep.cell.type === "markdown") return emptySummary()
   if (sql !== undefined && sql !== prep.cell.value) {
     return {
@@ -473,7 +480,7 @@ export const runHeadlessCell = async (
           claim.signal,
         ),
     )
-    if (!isCurrentSession()) return sessionEndedSummary()
+    if (!isCurrentSession()) return sessionEndedBeforeLaunchSummary()
     if (claim.signal.aborted) {
       return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
     }
@@ -512,7 +519,16 @@ export const runHeadlessCell = async (
             supersedeSignal: claim.signal,
           })
 
-    if (!isCurrentSession()) return sessionEndedSummary()
+    if (!isCurrentSession()) {
+      const nothingExecuted = ranResult.results.every(
+        (result) =>
+          result.type === "cancelled" ||
+          (result.type === "error" && result.requestNotSent),
+      )
+      return nothingExecuted
+        ? sessionEndedBeforeLaunchSummary()
+        : sessionEndedSummary()
+    }
 
     const snapshot = prepareCellSnapshot({
       bufferId,

@@ -28,6 +28,7 @@ vi.mock("./SettingsProvider", () => ({
   useSettings: () => ({ settings: mocks.settings }),
 }))
 vi.mock("../components/Toast", () => ({
+  NOTIFICATION_SHORTCUT: "Alt+N",
   toast: {
     error: mocks.toastError,
     dismiss: mocks.toastDismiss,
@@ -361,6 +362,11 @@ describe("AuthProvider token installation", () => {
     ])
     expect(warning.root.findByType("button").children).toEqual([
       "Sign in again",
+    ])
+    expect(warning.root.findByType("small").children).toEqual([
+      "Close any open dialog, then press ",
+      "Alt+N",
+      " to focus this notification.",
     ])
     warning.unmount()
     mocks.toastDismiss.mockClear()

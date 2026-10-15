@@ -200,7 +200,7 @@ describe("OIDC", () => {
         .closest("[data-hook='sign-in-error']")
         .should("be.focused")
       cy.contains(
-        "Could not refresh your SSO session. Please sign in again.",
+        "Could not renew your SSO session. Please sign in again.",
       ).should("be.visible")
       cy.getByDataHook("button-sso-continue").should("be.visible")
       cy.window()

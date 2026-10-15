@@ -13,6 +13,7 @@ import { getTokenExpirationDate } from "../../modules/OAuth2/utils"
 import { Base64 } from "js-base64"
 import type { AuthPayload } from "../../modules/OAuth2/types"
 import { isUnverifiableExecError } from "../../scenes/Editor/Notebook/notebookUtils"
+import { mapQueryRawToResult } from "../tools/runQuery"
 
 const token = (overrides: Partial<AuthPayload> = {}): AuthPayload => ({
   access_token: "old",
@@ -287,31 +288,64 @@ describe("SSO refresh safety", () => {
     }
   })
 
-  it("does not send parked writes after refresh ends the session", async () => {
-    ssoAuthState.setAuthPayload(
-      token({ expires_at: new Date(Date.now() + 20_000).toISOString() }),
+  it.each([
+    { lifetime: 20_000, requests: 0 },
+    { lifetime: 300_000, requests: 1 },
+  ])(
+    "keeps a write definitively not-sent when refresh ends the session after $requests SQL requests",
+    async ({ lifetime, requests }) => {
+      ssoAuthState.setAuthPayload(
+        token({ expires_at: new Date(Date.now() + lifetime).toISOString() }),
+      )
+      const fetchMock = vi.fn().mockImplementation(unauthorized)
+      vi.stubGlobal("fetch", fetchMock)
+      const client = new Client()
+      client.setCommonHeaders({ Authorization: "Bearer old" })
+      client.refreshTokenMethod = () => {
+        ssoAuthState.clearAuthPayload()
+        return Promise.resolve(undefined)
+      }
+      const { listener, cleanup } = listen(EventType.MSG_CONNECTION_ERROR)
+      try {
+        const failure = await mapQueryRawToResult(
+          client,
+          "INSERT INTO trades VALUES (1)",
+          100,
+        )
+        expect(failure).toMatchObject({
+          type: "error",
+          error: "Your session has ended. Please sign in again.",
+          sessionEnded: true,
+          requestNotSent: true,
+        })
+        expect(isUnverifiableExecError(failure)).toBe(false)
+        expect(fetchMock).toHaveBeenCalledTimes(requests)
+        expect(listener).not.toHaveBeenCalled()
+      } finally {
+        cleanup()
+      }
+    },
+  )
+
+  it("keeps an in-flight write uncertain when its session ends", async () => {
+    ssoAuthState.setAuthPayload(token())
+    let finish!: (response: Response) => void
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((resolve) => (finish = resolve))),
     )
-    const fetchMock = vi.fn().mockImplementation(ok)
-    vi.stubGlobal("fetch", fetchMock)
-    const client = new Client()
-    client.setCommonHeaders({ Authorization: "Bearer old" })
-    client.refreshTokenMethod = () => {
-      ssoAuthState.clearAuthPayload() // AuthProvider rejected a missing ID token.
-      return Promise.resolve(undefined)
-    }
-    const { listener, cleanup } = listen(EventType.MSG_CONNECTION_ERROR)
-    try {
-      await expect(
-        client.queryRaw("INSERT INTO trades VALUES (1)"),
-      ).rejects.toMatchObject({
-        error: "Your session has ended. Please sign in again.",
-        sessionEnded: true,
-      })
-      expect(fetchMock).not.toHaveBeenCalled()
-      expect(listener).not.toHaveBeenCalled()
-    } finally {
-      cleanup()
-    }
+    const pending = mapQueryRawToResult(
+      new Client(),
+      "INSERT INTO trades VALUES (1)",
+      100,
+    )
+    ssoAuthState.clearAuthPayload()
+    finish(ok())
+    const failure = await pending
+    expect(failure).toMatchObject({ type: "error", sessionEnded: true })
+    expect(failure).not.toHaveProperty("requestNotSent")
+    expect(isUnverifiableExecError(failure)).toBe(true)
+    expect(fetch).toHaveBeenCalledOnce()
   })
 
   it("does not let an old in-flight refresh block or overwrite a new login", async () => {

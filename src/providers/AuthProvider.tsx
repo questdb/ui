@@ -40,7 +40,7 @@ import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
 import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
-import { toast } from "../components/Toast"
+import { NOTIFICATION_SHORTCUT, toast } from "../components/Toast"
 import { Button } from "../components/Button"
 
 type ContextProps = {
@@ -250,7 +250,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             >
               Sign in again
             </Button>
-            <small>Press Alt+T to focus this notification.</small>
+            <small>
+              Close any open dialog, then press {NOTIFICATION_SHORTCUT} to focus
+              this notification.
+            </small>
           </div>,
           {
             autoClose: false,

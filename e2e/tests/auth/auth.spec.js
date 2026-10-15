@@ -702,7 +702,7 @@ describe("Auth - OIDC ID token", () => {
     cy.get("#sso-refresh-failed")
       .should("be.visible")
       .and("contain.text", "Could not renew your SSO session.")
-    cy.get("body").trigger("keydown", { key: "t", code: "KeyT", altKey: true })
+    cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
     cy.get("#sso-refresh-failed button").first().should("be.focused")
     cy.get("#sso-refresh-failed")
       .find(".Toastify__close-button")
@@ -712,6 +712,110 @@ describe("Auth - OIDC ID token", () => {
       .click()
     cy.get("#sso-refresh-failed").should("not.exist")
     cy.contains("button", "Retry connection").should("be.visible")
+  })
+
+  it("focuses the notification from Monaco without opening a new tab", () => {
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 20) },
+      refreshReply: {
+        statusCode: 503,
+        body: { error: "temporarily_unavailable" },
+      },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.wait("@refreshFailure")
+    cy.getEditor().should("be.visible")
+    cy.get("#sso-refresh-failed").should("be.visible")
+    cy.get('[role="region"][aria-label="Notifications"]').should(
+      "have.attr",
+      "aria-keyshortcuts",
+      "Alt+N",
+    )
+    cy.getEditorTabs()
+      .its("length")
+      .then((count) => {
+        cy.window().then((win) => {
+          win.monaco.editor.getEditors()[0].focus()
+          win.document.activeElement.dispatchEvent(
+            new win.KeyboardEvent("keydown", {
+              key: "n",
+              code: "KeyN",
+              keyCode: 78,
+              which: 78,
+              altKey: true,
+              bubbles: true,
+              cancelable: true,
+            }),
+          )
+        })
+        cy.get("#sso-refresh-failed button").first().should("be.focused")
+        cy.getEditorTabs().should("have.length", count)
+      })
+  })
+
+  it("instructs closing a modal before focusing the notification", () => {
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 20) },
+      refreshReply: {
+        statusCode: 503,
+        body: { error: "temporarily_unavailable" },
+      },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.wait("@refreshFailure")
+    cy.getEditor().should("be.visible")
+    cy.get("#sso-refresh-failed").should(
+      "contain.text",
+      "Close any open dialog, then press Alt+N to focus this notification.",
+    )
+    cy.getByDataHook("help-panel-button").click()
+    cy.getByDataHook("help-link-contact-us").click()
+    cy.get('form[name="feedback-dialog"] input[name="email"]').focus()
+    cy.focused().trigger("keydown", { key: "n", code: "KeyN", altKey: true })
+    cy.get('form[name="feedback-dialog"] input[name="email"]').should(
+      "be.focused",
+    )
+    cy.get(".Toastify").closest('[aria-hidden="true"]').should("not.exist")
+    cy.get('[aria-label="Close contact dialog"]').click()
+    cy.get('form[name="feedback-dialog"]').should("not.exist")
+    cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
+    cy.get("#sso-refresh-failed button").first().should("be.focused")
+    cy.get("#sso-refresh-failed .Toastify__close-button").click()
+    cy.get("#sso-refresh-failed").should("not.exist")
+  })
+
+  it("reports no statements sent when refresh ends a script before execution", () => {
+    const statements = []
+    cy.clock(Date.now(), ["Date"])
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 3600) },
+      refreshReply: { statusCode: 400, body: { error: "invalid_grant" } },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.getEditor().should("be.visible")
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: /^insert into probe values/ },
+      },
+      (req) => {
+        statements.push(new URL(req.url).searchParams.get("query"))
+        req.reply({ body: { dml: true } })
+      },
+    )
+    cy.clearEditor()
+    cy.typeQuery("insert into probe values (1);\ninsert into probe values (2);")
+    cy.tick(3601000)
+    cy.clickRunScript()
+    cy.getByDataHook("auth-login").should("be.visible")
+    passwordRelogin()
+    cy.getByDataHook("expand-notifications").click()
+    cy.getByDataHook("notifications-wrapper")
+      .should("contain.text", "Stopped after running 0")
+      .and("contain.text", "No statements were sent.")
+      .and("not.contain.text", "outcome is unknown")
+    cy.then(() => expect(statements).to.deep.equal([]))
   })
 
   it("does not carry a session-ended query notification into password re-login", () => {
@@ -1046,7 +1150,7 @@ describe("Auth - OIDC token without a lifetime", () => {
     })
   }
 
-  it("keeps readable recovery UI and keyboard focus while retrying the initial SQL check", () => {
+  it("keeps recovery focus and announces failure before a successful retry", () => {
     cy.intercept("POST", tokenUrl, { access_token: "mock-access-token" })
     let attempts = 0
     let completeRetry
@@ -1060,7 +1164,9 @@ describe("Auth - OIDC token without a lifetime", () => {
         }
         return new Promise((resolve) => {
           completeRetry = () => {
-            req.reply({ body: queryResult })
+            req.reply(
+              attempts === 2 ? { statusCode: 502 } : { body: queryResult },
+            )
             resolve()
           }
         })
@@ -1090,6 +1196,17 @@ describe("Auth - OIDC token without a lifetime", () => {
       expect(attempts).to.equal(2)
       expect(completeRetry).to.be.a("function")
     })
+    cy.then(() => completeRetry())
+    cy.get('[role="status"]').should(
+      "contain.text",
+      "Connection failed. Retry connection.",
+    )
+    cy.contains("button", "Retry connection")
+      .should("be.focused")
+      .and("have.attr", "aria-busy", "false")
+      .click()
+    cy.get('[role="status"]').should("contain.text", "Reconnecting…")
+    cy.wrap(null).should(() => expect(attempts).to.equal(3))
     cy.then(() => completeRetry())
     cy.getEditor().should("be.visible")
   })

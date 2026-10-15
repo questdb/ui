@@ -24,6 +24,7 @@ type StyledIconProps = {
 export type ToastOptions = RTToastOptions
 
 export const useNotificationCenter = RTNotificationCenter
+export const NOTIFICATION_SHORTCUT = "Alt+N"
 
 export const ToastIcon = ({
   type,
@@ -140,7 +141,16 @@ export const ToastContainer = (props?: ToastContainerProps) => {
         !event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
-        (event.code !== "KeyT" && event.key.toLowerCase() !== "t")
+        event.shiftKey ||
+        (event.code !== "KeyN" && event.key.toLowerCase() !== "n")
+      )
+        return
+      // Follow the warning's close-dialog-first instruction rather than
+      // attempting to move focus outside the active modal's focus scope.
+      if (
+        document.activeElement?.closest(
+          '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+        )
       )
         return
       const control = region.current?.querySelector<HTMLButtonElement>(
@@ -177,7 +187,7 @@ export const ToastContainer = (props?: ToastContainerProps) => {
       ref={region}
       role="region"
       aria-label="Notifications"
-      aria-keyshortcuts="Alt+T"
+      aria-keyshortcuts={NOTIFICATION_SHORTCUT}
       aria-live="polite"
       aria-atomic="false"
       aria-relevant="additions text"
