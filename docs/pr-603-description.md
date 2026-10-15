@@ -62,11 +62,11 @@ OAuth rejection still returns the user to sign-in.
   available outside the SQL gate and during dialogs; use live theme tokens; warn
   both before and after token expiry; prevent incidental click dismissal;
   restore a dismissed warning on subsequent failures; provide expiry
-  information, a sign-in action and Alt+T keyboard access. Renewal failures use
+  information, a sign-in action and Alt+N keyboard access. Renewal failures use
   consistent copy.
 - **Test infrastructure and dependencies:** add React 17 test-renderer and its
   types; extend unit and stubbed browser regressions; allowlist fake test tokens
-  in gitleaks; update the QuestDB E2E submodule (23 server commits, including
+  in gitleaks; update the QuestDB E2E submodule (24 server commits, including
   permission-aware table visibility).
 - **Enterprise CI:** add `.github/workflows/enterprise_e2e.yml`, an opt-in Azure
   dispatch using `vars.ENTERPRISE_E2E_ENABLED` and `secrets.ENT_DISPATCH_PAT`.

@@ -784,6 +784,67 @@ describe("Auth - OIDC ID token", () => {
     cy.get("#sso-refresh-failed").should("not.exist")
   })
 
+  it("preserves the rename input selection when Alt+N is pressed inside a Radix dialog", () => {
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 20) },
+      refreshReply: {
+        statusCode: 503,
+        body: { error: "temporarily_unavailable" },
+      },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.wait("@refreshFailure")
+    cy.getEditor().should("be.visible")
+    cy.get("#sso-refresh-failed").should("be.visible")
+    cy.getByDataHook("import-panel-button").click()
+    cy.get('input[type="file"]').selectFile(
+      {
+        contents: Cypress.Buffer.from("value\n1\n"),
+        fileName: "probe.csv",
+        mimeType: "text/csv",
+      },
+      { force: true },
+    )
+    cy.contains("button", "probe.csv").click()
+    cy.contains("Change table name").should("be.visible")
+    cy.get('form[name="rename-table"] input[name="name"]').then(($input) => {
+      const input = $input[0]
+      input.focus()
+      input.setSelectionRange(2, 2)
+      input.dispatchEvent(
+        new input.ownerDocument.defaultView.KeyboardEvent("keydown", {
+          key: "n",
+          code: "KeyN",
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      )
+      expect(input.ownerDocument.activeElement).to.equal(input)
+      expect([input.selectionStart, input.selectionEnd]).to.deep.equal([2, 2])
+    })
+  })
+
+  it("hands focus to Login after the warning's sign-in action", () => {
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 20) },
+      refreshReply: {
+        statusCode: 503,
+        body: { error: "temporarily_unavailable" },
+      },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.wait("@refreshFailure")
+    cy.get("#sso-refresh-failed").should("be.visible")
+    cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
+    cy.get("#sso-refresh-failed button").first().should("be.focused").click()
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.contains("h2", "Sign in to QuestDB").should("be.focused")
+    cy.get('form[name="login"] input[name="username"]')
+      .type("admin")
+      .should("be.focused")
+  })
+
   it("reports no statements sent when refresh ends a script before execution", () => {
     const statements = []
     cy.clock(Date.now(), ["Date"])

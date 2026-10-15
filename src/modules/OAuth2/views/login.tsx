@@ -302,6 +302,8 @@ export const Login = ({
   useEffect(() => {
     if (redirectErrorTitle || redirectErrorMessage) {
       redirectErrorRef.current?.focus()
+    } else {
+      titleRef.current?.focus()
     }
   }, [redirectErrorTitle, redirectErrorMessage])
 

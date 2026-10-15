@@ -1068,6 +1068,54 @@ describe("createDexieNotebookController — runCell", () => {
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
+  it.each([
+    "mounted",
+    "mount_epoch",
+    "cancelled",
+    "user_changed",
+    "cell_changed",
+  ])("does not serialize a result discarded because of %s", async (reason) => {
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const { quest, pending: inFlight, respondNext } = makeQuest()
+    let claimed = false
+    let seq = 0
+    const controller = makeController(
+      { isBufferClaimed: () => claimed, getBufferSeq: () => seq },
+      quest,
+    )
+    const run = controller.runCell("a")
+    await vi.waitFor(() => expect(inFlight).toHaveLength(1))
+
+    switch (reason) {
+      case "mounted":
+        claimed = true
+        break
+      case "mount_epoch":
+        claimLive(BUFFER_ID)
+        releaseLive(BUFFER_ID)
+        break
+      case "cancelled":
+        cancelHeadlessBufferRuns(BUFFER_ID, "notebook_archived")
+        break
+      case "user_changed":
+        seq++
+        break
+      case "cell_changed":
+        await seedNotebook({ cells: [cell("a", "SELECT 2")] })
+        break
+    }
+    const serialize = vi.fn(() => [[42]])
+    respondNext({
+      ...dqlResult,
+      columns: [{ name: "value", type: "INT" }],
+      dataset: Object.assign([[42]], { toJSON: serialize }),
+    })
+
+    expect((await run).unverified).toBe(true)
+    expect(serialize).not.toHaveBeenCalled()
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
   it("drops the result and reports unverified when the user changed the notebook mid-run", async () => {
     // Given a run in flight on a background notebook
     await seedNotebook({ cells: [cell("a", "SELECT 1")] })

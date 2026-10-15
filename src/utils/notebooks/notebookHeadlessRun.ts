@@ -530,14 +530,6 @@ export const runHeadlessCell = async (
         : sessionEndedSummary()
     }
 
-    const snapshot = prepareCellSnapshot({
-      bufferId,
-      cellId,
-      results: ranResult.results,
-      savedAt: Date.now(),
-      activeResultIndex: ranResult.activeResultIndex,
-      ...(ranResult.script ? { script: ranResult.script } : {}),
-    })
     const outcome = await enqueueBufferTask(
       bufferId,
       async (): Promise<RunCommitOutcome> => {
@@ -579,6 +571,16 @@ export const runHeadlessCell = async (
         if (currentCell.value !== queryText) {
           return { committed: false, reason: "cell_changed" }
         }
+        // Preparation serializes the full dataset before capping it. Reject
+        // stale results first, and keep this work outside the transaction.
+        const snapshot = prepareCellSnapshot({
+          bufferId,
+          cellId,
+          results: ranResult.results,
+          savedAt: Date.now(),
+          activeResultIndex: ranResult.activeResultIndex,
+          ...(ranResult.script ? { script: ranResult.script } : {}),
+        })
         const parts = partsOf(view)
         const resultParts = {
           ...parts,

@@ -139,15 +139,21 @@ describe("notification keyboard access", () => {
     expect(focus).not.toHaveBeenCalled()
   })
 
-  it("preserves modal focus and works after the dialog is closed", () => {
-    const { press, closest, focus } = mountNotifications()
-    closest.mockReturnValue({ role: "dialog" })
-    expect(press().preventDefault).not.toHaveBeenCalled()
-    expect(focus).not.toHaveBeenCalled()
-    closest.mockReturnValue(null)
-    expect(press().preventDefault).toHaveBeenCalledOnce()
-    expect(focus).toHaveBeenCalledOnce()
-  })
+  it.each(["dialog", "alertdialog"])(
+    "preserves %s focus without requiring aria-modal",
+    (role) => {
+      const { press, closest, focus } = mountNotifications()
+      closest.mockReturnValue({ role })
+      expect(press().preventDefault).not.toHaveBeenCalled()
+      expect(closest).toHaveBeenCalledWith(
+        '[role="dialog"], [role="alertdialog"]',
+      )
+      expect(focus).not.toHaveBeenCalled()
+      closest.mockReturnValue(null)
+      expect(press().preventDefault).toHaveBeenCalledOnce()
+      expect(focus).toHaveBeenCalledOnce()
+    },
+  )
 
   it("does not consume the shortcut when no notification control exists", () => {
     const { press, querySelector, focus } = mountNotifications()

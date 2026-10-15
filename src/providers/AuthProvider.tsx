@@ -40,8 +40,8 @@ import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
 import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
-import { NOTIFICATION_SHORTCUT, toast } from "../components/Toast"
-import { Button } from "../components/Button"
+import { toast } from "../components/Toast"
+import { RefreshFailedWarning } from "../modules/OAuth2/views/refreshFailedWarning"
 
 type ContextProps = {
   sessionData?: AuthPayload
@@ -231,30 +231,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       subscribe(EventType.MSG_AUTH_REFRESH_FAILED, () => {
         const authPayload = ssoAuthState.getAuthPayload()
         if (!authPayload || toast.isActive(REFRESH_FAILED_TOAST_ID)) return
-        const expiry = authPayload.expires_at
-          ? new Date(authPayload.expires_at)
-          : undefined
-        const remaining = expiry && expiry.getTime() > Date.now()
         toast.error(
-          <div>
-            <p>
-              {remaining
-                ? `Could not renew your SSO session. Your current token expires at ${expiry.toLocaleTimeString()}.`
-                : "Could not renew your SSO session. Queries are paused until renewal succeeds."}
-            </p>
-            <Button
-              size="sm"
-              onClick={() =>
-                callbacks.current.logout({ clearSSOSession: true })
-              }
-            >
-              Sign in again
-            </Button>
-            <small>
-              Close any open dialog, then press {NOTIFICATION_SHORTCUT} to focus
-              this notification.
-            </small>
-          </div>,
+          <RefreshFailedWarning
+            expiresAt={authPayload.expires_at}
+            onSignIn={() => callbacks.current.logout({ clearSSOSession: true })}
+          />,
           {
             autoClose: false,
             closeOnClick: false,

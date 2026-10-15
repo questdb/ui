@@ -148,9 +148,7 @@ export const ToastContainer = (props?: ToastContainerProps) => {
       // Follow the warning's close-dialog-first instruction rather than
       // attempting to move focus outside the active modal's focus scope.
       if (
-        document.activeElement?.closest(
-          '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
-        )
+        document.activeElement?.closest('[role="dialog"], [role="alertdialog"]')
       )
         return
       const control = region.current?.querySelector<HTMLButtonElement>(
