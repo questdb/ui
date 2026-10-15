@@ -74,6 +74,7 @@ import { SchemaProvider, useSchema, type SelectedTable } from "./SchemaContext"
 import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { fetchColumns as fetchSchemaColumns } from "./fetchColumns"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -224,28 +225,12 @@ const Schema = ({
     }
   }
 
-  const fetchColumns = async () => {
-    const queries = [
-      "information_schema.questdb_columns()",
-      "information_schema.columns()", // fallback for older servers
-    ]
-
-    for (const query of queries) {
-      try {
-        const response =
-          await quest.query<QuestDB.InformationSchemaColumn>(query)
-
-        if (response?.type === QuestDB.Type.DQL) {
-          dispatch(actions.query.setColumns(response.data))
-          return
-        }
-      } catch {
-        // let's try another query
-      }
-    }
-
-    dispatchState({ view: View.error })
-  }
+  const fetchColumns = () =>
+    fetchSchemaColumns(
+      quest,
+      (columns) => dispatch(actions.query.setColumns(columns)),
+      () => dispatchState({ view: View.error }),
+    )
 
   const copySchemasToClipboard = async () => {
     void trackEvent(ConsoleEvent.SCHEMA_COPY_MULTIPLE)

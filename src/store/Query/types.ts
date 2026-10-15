@@ -55,6 +55,11 @@ export type QueryNotifications = Readonly<{
   explain?: NotificationShape
 }>
 
+export type PendingLoadingNotification = Readonly<{
+  bufferId: NotificationNamespaceKey
+  queryKeys: QueryKey[]
+}>
+
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
@@ -66,6 +71,7 @@ export type QueryStateShape = Readonly<{
     Record<QueryKey, QueryNotifications>
   >
   activeNotification: NotificationShape | null
+  pendingLoadingNotifications: Record<number, PendingLoadingNotification>
   queriesToRun: QueriesToRun
 }>
 

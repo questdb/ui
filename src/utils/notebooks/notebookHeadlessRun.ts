@@ -1,6 +1,7 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { db } from "../../store/db"
 import type {
   CellResult,
   NotebookVariable,
@@ -54,7 +55,6 @@ import {
   partsOf,
   readNotebookView,
   requireCellIn,
-  type CommitOutcome,
 } from "./notebookDexieView"
 import {
   getMountEpoch,
@@ -553,44 +553,59 @@ export const runHeadlessCell = async (
           return { committed: false, reason: "cell_changed" }
         }
         const parts = partsOf(view)
-        let commit: CommitOutcome
+        const sessionEnded = new Error("Session ended during notebook commit")
         try {
-          commit = await commitView(
-            bufferId,
-            {
-              ...parts,
-              cells: patchCellRunResult(parts.cells, cellId, ranResult),
+          // The metadata and snapshot share one acceptance point. Throwing on
+          // invalidation rolls back both, including an update already issued
+          // by commitView. Once accepted, transaction completion saves the pair
+          // even if logout happens before its completion event is delivered.
+          return await db.transaction(
+            "rw",
+            db.buffers,
+            db.notebook_results,
+            async (): Promise<RunCommitOutcome> => {
+              const commit = await commitView(
+                bufferId,
+                {
+                  ...parts,
+                  cells: patchCellRunResult(parts.cells, cellId, ranResult),
+                },
+                isCurrentSession,
+              )
+              if (commit === "archived") {
+                return { committed: false, reason: "notebook_archived" }
+              }
+              if (commit === "deleted") {
+                return { committed: false, reason: "notebook_gone" }
+              }
+              if (commit === "discarded" || !isCurrentSession()) {
+                throw sessionEnded
+              }
+              const snapshotSaved = await persistCellSnapshot({
+                bufferId,
+                cellId,
+                results: ranResult.results,
+                savedAt: Date.now(),
+                activeResultIndex: ranResult.activeResultIndex,
+                ...(ranResult.script ? { script: ranResult.script } : {}),
+              })
+              if (!isCurrentSession()) throw sessionEnded
+              return { committed: true, snapshotSaved }
             },
-            isCurrentSession,
           )
-        } catch {
-          return { committed: false, reason: "storage_full" }
+        } catch (error) {
+          return {
+            committed: false,
+            reason: error === sessionEnded ? "session_ended" : "storage_full",
+          }
         }
-        if (commit === "archived") {
-          return { committed: false, reason: "notebook_archived" }
-        }
-        if (commit === "deleted") {
-          return { committed: false, reason: "notebook_gone" }
-        }
-        if (commit === "discarded" || !isCurrentSession()) {
-          return { committed: false, reason: "session_ended" }
-        }
-        const snapshotSaved = await persistCellSnapshot({
-          bufferId,
-          cellId,
-          results: ranResult.results,
-          savedAt: Date.now(),
-          activeResultIndex: ranResult.activeResultIndex,
-          ...(ranResult.script ? { script: ranResult.script } : {}),
-        })
-        // Headless saves land on unmounted buffers
-        void pruneToRecentNotebooks()
-        return { committed: true, snapshotSaved }
       },
     )
 
     const summary = summarizeCellResults({ ...prep.cell, result: ranResult })
     if (outcome.committed) {
+      // Only prune after the encompassing transaction has committed.
+      void pruneToRecentNotebooks()
       if (isCurrentSession() && !signal?.aborted)
         emitAgentEdit({ bufferId, cellId })
       return outcome.snapshotSaved

@@ -31,11 +31,30 @@ import {
   NotificationType,
   QueryAction,
   QueryAT,
-  QueryKey,
   QueryStateShape,
   RunningType,
 } from "../../types"
 import type { InformationSchemaColumn } from "utils/questdb"
+import type { PendingLoadingNotification } from "./types"
+
+// Only in-flight executions are indexed. Rekey/cleanup operations may inspect
+// this small set; settling a query never traverses completed history/groups.
+const updatePendingLoading = (
+  pending: QueryStateShape["pendingLoadingNotifications"],
+  update: (
+    entry: PendingLoadingNotification,
+  ) => PendingLoadingNotification | undefined,
+): QueryStateShape["pendingLoadingNotifications"] => {
+  let next = pending
+  for (const [id, entry] of Object.entries(pending)) {
+    const updated = update(entry)
+    if (updated === entry) continue
+    if (next === pending) next = { ...pending }
+    if (updated) next[Number(id)] = updated
+    else delete next[Number(id)]
+  }
+  return next
+}
 
 export const initialState: QueryStateShape = {
   notifications: [],
@@ -44,6 +63,7 @@ export const initialState: QueryStateShape = {
   running: RunningType.NONE,
   queryNotifications: {},
   activeNotification: null,
+  pendingLoadingNotifications: {},
   queriesToRun: [],
 }
 
@@ -62,6 +82,11 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         createdAt: action.payload.createdAt || new Date(),
       }
       const { bufferId: _, ...cleanNotification } = notificationWithTimestamp
+      const isLoading = cleanNotification.type === NotificationType.LOADING
+      // Loading is transient selection/active state, never retained log history.
+      const notifications = isLoading
+        ? state.notifications
+        : [...state.notifications, cleanNotification]
 
       if (bufferId !== undefined) {
         const bufferNotifications = state.queryNotifications[bufferId] || {}
@@ -77,7 +102,17 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
 
         return {
           ...state,
-          notifications: [...state.notifications, cleanNotification],
+          notifications,
+          pendingLoadingNotifications:
+            isLoading && cleanNotification.queryId !== undefined
+              ? {
+                  ...state.pendingLoadingNotifications,
+                  [cleanNotification.queryId]: {
+                    bufferId,
+                    queryKeys: [queryText],
+                  },
+                }
+              : state.pendingLoadingNotifications,
           queryNotifications: {
             ...state.queryNotifications,
             [bufferId]: {
@@ -93,7 +128,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
 
       return {
         ...state,
-        notifications: [...state.notifications, cleanNotification],
+        notifications,
         ...(updateActiveNotification
           ? { activeNotification: cleanNotification }
           : {}),
@@ -105,6 +140,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         ...state,
         notifications: [],
         queryNotifications: {},
+        pendingLoadingNotifications: {},
         activeNotification: null,
       }
     }
@@ -130,6 +166,10 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         ...state,
         notifications: filteredNotifications,
         queryNotifications: updatedQueryNotifications,
+        pendingLoadingNotifications: updatePendingLoading(
+          state.pendingLoadingNotifications,
+          (entry) => (entry.bufferId === bufferId ? undefined : entry),
+        ),
         activeNotification: updatedActiveNotification,
       }
     }
@@ -155,6 +195,18 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         return {
           ...state,
           notifications: filteredNotifications,
+          pendingLoadingNotifications: updatePendingLoading(
+            state.pendingLoadingNotifications,
+            (entry) => {
+              if (entry.bufferId !== bufferId) return entry
+              const queryKeys = entry.queryKeys.filter(
+                (key) => key !== action.payload,
+              )
+              return queryKeys.length === 0
+                ? undefined
+                : { ...entry, queryKeys }
+            },
+          ),
           queryNotifications: {
             ...state.queryNotifications,
             [bufferId]: updatedBufferNotifications,
@@ -181,17 +233,24 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
     }
 
     case QueryAT.SETTLE_LOADING_NOTIFICATION: {
-      const { bufferId, queryId } = action.payload
+      const { queryId } = action.payload
       const matches = (notification?: NotificationShape | null) =>
         notification?.type === NotificationType.LOADING &&
         notification.queryId === queryId
-      const notifications = state.notifications.filter(
-        (notification) => !matches(notification),
-      )
-      const bufferNotifications = state.queryNotifications[bufferId] || {}
+      const pending = state.pendingLoadingNotifications[queryId]
+      const activeNotification = matches(state.activeNotification)
+        ? null
+        : state.activeNotification
+      if (!pending && activeNotification === state.activeNotification) {
+        return state
+      }
+      const bufferNotifications = pending
+        ? state.queryNotifications[pending.bufferId] || {}
+        : {}
       let updatedBufferNotifications = bufferNotifications
-      for (const [key, group] of Object.entries(bufferNotifications)) {
-        if (!matches(group.latest)) continue
+      for (const key of pending?.queryKeys ?? []) {
+        const group = bufferNotifications[key]
+        if (!matches(group?.latest)) continue
         if (updatedBufferNotifications === bufferNotifications) {
           updatedBufferNotifications = { ...bufferNotifications }
         }
@@ -203,34 +262,25 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
               : explain
             : (regular ?? explain)
         if (latest) {
-          updatedBufferNotifications[key as QueryKey] = { ...group, latest }
+          updatedBufferNotifications[key] = { ...group, latest }
         } else {
-          delete updatedBufferNotifications[key as QueryKey]
+          delete updatedBufferNotifications[key]
         }
       }
-      const activeNotification = matches(state.activeNotification)
-        ? null
-        : state.activeNotification
-      if (
-        notifications.length === state.notifications.length &&
-        updatedBufferNotifications === bufferNotifications &&
-        activeNotification === state.activeNotification
-      ) {
-        return state
-      }
+      const pendingLoadingNotifications = pending
+        ? { ...state.pendingLoadingNotifications }
+        : state.pendingLoadingNotifications
+      if (pending) delete pendingLoadingNotifications[queryId]
       return {
         ...state,
-        notifications:
-          notifications.length === state.notifications.length
-            ? state.notifications
-            : notifications,
         activeNotification,
+        pendingLoadingNotifications,
         queryNotifications:
-          updatedBufferNotifications === bufferNotifications
+          updatedBufferNotifications === bufferNotifications || !pending
             ? state.queryNotifications
             : {
                 ...state.queryNotifications,
-                [bufferId]: updatedBufferNotifications,
+                [pending.bufferId]: updatedBufferNotifications,
               },
       }
     }
@@ -276,6 +326,21 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         return {
           ...state,
           notifications: updatedNotifications,
+          pendingLoadingNotifications: updatePendingLoading(
+            state.pendingLoadingNotifications,
+            (entry) => {
+              if (
+                entry.bufferId !== bufferId ||
+                !entry.queryKeys.includes(oldKey)
+              ) {
+                return entry
+              }
+              const queryKeys = preserveOldKey
+                ? [...new Set([...entry.queryKeys, newKey])]
+                : entry.queryKeys.map((key) => (key === oldKey ? newKey : key))
+              return { ...entry, queryKeys }
+            },
+          ),
           queryNotifications: {
             ...state.queryNotifications,
             [bufferId]: updatedBufferNotifications,
@@ -342,6 +407,18 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         notifications: updatedNotifications,
+        pendingLoadingNotifications: updatePendingLoading(
+          state.pendingLoadingNotifications,
+          (entry) =>
+            entry.bufferId === bufferId
+              ? {
+                  ...entry,
+                  queryKeys: entry.queryKeys.map(
+                    (key) => keyMap.get(key) ?? key,
+                  ),
+                }
+              : entry,
+        ),
         queryNotifications: {
           ...state.queryNotifications,
           [bufferId]: updatedBufferNotifications,
@@ -382,6 +459,18 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         queryNotifications: updatedQueryNotifications,
+        pendingLoadingNotifications: updatePendingLoading(
+          state.pendingLoadingNotifications,
+          (entry) =>
+            entry.bufferId === fromBufferId
+              ? {
+                  bufferId: toBufferId,
+                  queryKeys: entry.queryKeys.includes(detachedQueryKey)
+                    ? [...new Set([...entry.queryKeys, newQueryKey])]
+                    : entry.queryKeys,
+                }
+              : entry,
+        ),
       }
     }
 

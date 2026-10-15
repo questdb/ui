@@ -1,3 +1,4 @@
+import type { Transaction } from "dexie"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { db } from "../../store/db"
@@ -175,7 +176,7 @@ export const commitView = async (
   const outcome = await db.transaction(
     "rw",
     db.buffers,
-    async (): Promise<CommitOutcome> => {
+    async (transaction): Promise<CommitOutcome> => {
       const buffer = await bufferStore.getById(bufferId)
       if (!buffer) return "deleted"
       if (buffer.archived) return "archived"
@@ -188,10 +189,18 @@ export const commitView = async (
           parts.settings,
         ),
       })
+      if (updated !== 0) {
+        // Headless runs nest this write in a metadata/snapshot transaction.
+        // Never publish a change that its enclosing transaction rolls back.
+        let rootTransaction: Transaction = transaction
+        while (rootTransaction.parent) rootTransaction = rootTransaction.parent
+        rootTransaction.on("complete", () =>
+          schedulePublishSearchUpdate(bufferId),
+        )
+      }
       return updated === 0 ? "deleted" : "committed"
     },
   )
-  if (outcome === "committed") schedulePublishSearchUpdate(bufferId)
   return outcome
 }
 

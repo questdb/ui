@@ -3,6 +3,7 @@ import query, { initialState } from "./reducers"
 import actions from "./actions"
 import { NotificationType } from "./types"
 import type { QueryKey } from "./types"
+import { createDetachedQueryKey } from "../../scenes/Editor/Monaco/utils"
 
 const key: QueryKey = "select 42@0-9"
 const loading = (queryId: number, bufferId: string | number = 1) =>
@@ -17,11 +18,13 @@ const loading = (queryId: number, bufferId: string | number = 1) =>
   )
 
 describe("settling loading notifications", () => {
-  it("removes the ended execution from history, selection and active state", () => {
+  it("keeps loading out of history and removes the ended selection and active state", () => {
     const state = query(initialState, loading(1))
     const next = query(state, actions.settleLoadingNotification(1, 1))
 
-    expect(next.notifications).toEqual([])
+    expect(state.notifications).toBe(initialState.notifications)
+    expect(next.notifications).toBe(state.notifications)
+    expect(next.pendingLoadingNotifications).toEqual({})
     expect(next.queryNotifications[1][key]).toBeUndefined()
     expect(next.activeNotification).toBeNull()
     expect(query(next, actions.settleLoadingNotification(1, 1))).toBe(next)
@@ -54,7 +57,7 @@ describe("settling loading notifications", () => {
     const state = query(query(initialState, loading(1)), loading(2))
     const next = query(state, actions.settleLoadingNotification(1, 1))
 
-    expect(next.notifications).toEqual([state.notifications[1]])
+    expect(next.notifications).toBe(state.notifications)
     expect(next.queryNotifications[1][key]).toBe(
       state.queryNotifications[1][key],
     )
@@ -65,7 +68,7 @@ describe("settling loading notifications", () => {
     const state = query(query(initialState, loading(1)), loading(2, "chat"))
     const next = query(state, actions.settleLoadingNotification(1, 1))
 
-    expect(next.notifications).toEqual([state.notifications[1]])
+    expect(next.notifications).toBe(state.notifications)
     expect(next.queryNotifications[1][key]).toBeUndefined()
     expect(next.queryNotifications.chat).toBe(state.queryNotifications.chat)
     expect(next.activeNotification).toBe(state.activeNotification)
@@ -83,6 +86,128 @@ describe("settling loading notifications", () => {
     expect(next.queryNotifications[1][movedKey]).toBeUndefined()
     expect(next.activeNotification).toBeNull()
   })
+
+  it("settles a completed slow query without scanning history or completed groups", () => {
+    const state = query(
+      query(initialState, loading(1)),
+      actions.addNotification({ query: key, queryId: 1, content: "Done" }, 1),
+    )
+    const scanHistory = vi.spyOn(state.notifications, "filter")
+    const scanGroups = vi.fn(Reflect.ownKeys)
+    state.queryNotifications[1] = new Proxy<
+      (typeof state.queryNotifications)[1]
+    >(state.queryNotifications[1], {
+      ownKeys: scanGroups,
+    })
+
+    const next = query(state, actions.settleLoadingNotification(1, 1))
+
+    expect(scanHistory).not.toHaveBeenCalled()
+    expect(scanGroups).not.toHaveBeenCalled()
+    scanHistory.mockRestore()
+    expect(next.notifications).toBe(state.notifications)
+    expect(next.queryNotifications).toBe(state.queryNotifications)
+    expect(next.activeNotification).toBe(state.activeNotification)
+    expect(next.pendingLoadingNotifications).toEqual({})
+    expect(query(next, actions.settleLoadingNotification(1, 1))).toBe(next)
+  })
+
+  it("settles all aliases when a loading query is rekeyed with preserveOldKey", () => {
+    const movedKey: QueryKey = "select 42@10-19"
+    const state = query(
+      query(initialState, loading(1)),
+      actions.updateNotificationKey(key, movedKey, 1, true),
+    )
+    const next = query(state, actions.settleLoadingNotification(1, 1))
+
+    expect(next.queryNotifications[1]).toEqual({})
+    expect(next.pendingLoadingNotifications).toEqual({})
+  })
+
+  it("retains the original loading index when a newer destination blocks rekeying", () => {
+    const movedKey: QueryKey = "select 42@10-19"
+    const state = query(
+      query(initialState, loading(1)),
+      actions.addNotification(
+        {
+          query: movedKey,
+          content: "Newer result",
+          createdAt: new Date(Date.now() + 1000),
+        },
+        1,
+      ),
+    )
+    const blocked = query(
+      state,
+      actions.updateNotificationKey(key, movedKey, 1),
+    )
+    expect(blocked).toBe(state)
+
+    const next = query(blocked, actions.settleLoadingNotification(1, 1))
+
+    expect(next.queryNotifications[1][key]).toBeUndefined()
+    expect(next.queryNotifications[1][movedKey]).toBe(
+      state.queryNotifications[1][movedKey],
+    )
+    expect(next.pendingLoadingNotifications).toEqual({})
+  })
+
+  it("tracks loading keys across an atomic batch rekey", () => {
+    const movedKey: QueryKey = "select 42@10-19"
+    const state = query(
+      query(initialState, loading(1)),
+      actions.updateNotificationKeys([{ oldKey: key, newKey: movedKey }], 1),
+    )
+    const next = query(state, actions.settleLoadingNotification(1, 1))
+
+    expect(next.queryNotifications[1]).toEqual({})
+    expect(next.activeNotification).toBeNull()
+    expect(next.pendingLoadingNotifications).toEqual({})
+  })
+
+  it("settles a moved namespace and its editor alias using the original execution", () => {
+    const detachedKey = createDetachedQueryKey("select 42")
+    const state = query(
+      query(
+        initialState,
+        actions.addNotification(
+          {
+            query: detachedKey,
+            queryId: 1,
+            type: NotificationType.LOADING,
+            content: "Running…",
+          },
+          "chat",
+        ),
+      ),
+      actions.moveNotificationNamespace("chat", 1, key),
+    )
+    const next = query(state, actions.settleLoadingNotification("chat", 1))
+
+    expect(next.queryNotifications.chat).toBeUndefined()
+    expect(next.queryNotifications[1]).toEqual({})
+    expect(next.activeNotification).toBeNull()
+    expect(next.pendingLoadingNotifications).toEqual({})
+  })
+
+  it.each(["all", "buffer", "query"])(
+    "cleans the pending index on %s cleanup",
+    (kind) => {
+      const state = query(initialState, loading(1))
+      const action =
+        kind === "all"
+          ? actions.cleanupNotifications()
+          : kind === "buffer"
+            ? actions.cleanupBufferNotifications(1)
+            : actions.removeNotification(key, 1)
+      const next = query(state, action)
+
+      expect(next.pendingLoadingNotifications).toEqual({})
+      expect(
+        query(next, actions.settleLoadingNotification(1, 1)).notifications,
+      ).toBe(next.notifications)
+    },
+  )
 
   it("clears an active-only script notification without touching history", () => {
     const completed = query(

@@ -11,8 +11,9 @@ const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 
 // Resolves true when the result is durably saved, false when the write failed
 // (after surfacing the toast). The live path ignores the result — the run is
-// already in React state. The headless path commits the run status separately;
-// a false here means only the offline result-rows snapshot was lost, which it
+// already in React state. The headless path also writes run metadata in its
+// transaction, but permits a caught snapshot failure; a false here means only
+// the offline result-rows snapshot was lost, which it
 // surfaces to the agent as a soft success (RESULT_NOT_SAVED_RUN_NOTE), not as a
 // "not recorded" outcome.
 //

@@ -1,5 +1,6 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { Transaction } from "dexie"
 import { Client } from "../questdb/client"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 import { db } from "../../store/db"
@@ -225,6 +226,125 @@ describe("headless notebook authentication sessions", () => {
     expect(await makeRun(new Client())).toMatchObject({ unverified: true })
     expect(reads).toBe(3)
     await expectPreviousResult()
+  })
+
+  it.each(["pending update", "completed update", "snapshot"])(
+    "rolls back metadata and snapshot on logout during %s",
+    async (phase) => {
+      const previousError: SingleQueryResult[] = [
+        { type: "error", query: "select 1", error: "Previous failure" },
+      ]
+      await bufferStore.update(BUFFER_ID, {
+        notebookViewState: {
+          cells: [
+            {
+              id: "cell",
+              position: 0,
+              value: "select 1",
+              lastRunStatus: "error",
+              lastRunError: "Previous failure",
+            },
+          ],
+        },
+      })
+      await saveCellSnapshot({
+        bufferId: BUFFER_ID,
+        cellId: "cell",
+        results: previousError,
+        savedAt: 1,
+      })
+      const before = await db.buffers.get(BUFFER_ID)
+      const update = bufferStore.update.bind(bufferStore)
+      const put = db.notebook_results.put.bind(db.notebook_results)
+      if (phase === "snapshot") {
+        vi.spyOn(db.notebook_results, "put").mockImplementation(
+          (snapshot, key) =>
+            put(snapshot, key).then((result) => {
+              ssoAuthState.clearAuthPayload()
+              return result
+            }),
+        )
+      } else {
+        vi.spyOn(bufferStore, "update").mockImplementation((id, patch) => {
+          const pending = update(id, patch)
+          if (phase === "pending update") ssoAuthState.clearAuthPayload()
+          return pending.then((count) => {
+            if (phase === "completed update") ssoAuthState.clearAuthPayload()
+            return count
+          })
+        })
+      }
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(() => Promise.resolve(response())),
+      )
+
+      const summary = await makeRun(new Client())
+
+      expect(summary.unverified).toBe(true)
+      expect(summary.note).toMatch(/session.*ended/i)
+      expect(await db.buffers.get(BUFFER_ID)).toEqual(before)
+      expect(await loadCellSnapshot(BUFFER_ID, "cell")).toMatchObject({
+        results: previousError,
+        savedAt: 1,
+      })
+    },
+  )
+
+  it("keeps the soft-success contract for a caught IndexedDB snapshot write error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(response())),
+    )
+    const put = db.notebook_results.put.bind(db.notebook_results)
+    // NaN is a number in TypeScript but not a valid IndexedDB key. This
+    // delegates to the real write/error handling, rather than rejecting a mock.
+    vi.spyOn(db.notebook_results, "put").mockImplementationOnce((snapshot) =>
+      put({ ...snapshot, bufferId: Number.NaN }),
+    )
+    vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+    const summary = await makeRun(new Client())
+
+    expect(summary.success).toBe(true)
+    expect(summary.unverified).toBeFalsy()
+    expect(summary.note).toMatch(/No re-run is needed/)
+    expect(
+      (await db.buffers.get(BUFFER_ID))?.notebookViewState?.cells[0]
+        .bottomHeight,
+    ).toBeDefined()
+  })
+
+  it("keeps the accepted metadata/snapshot pair when logout follows transaction completion", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(response())),
+    )
+    const logout = () => ssoAuthState.clearAuthPayload()
+    const updating: Parameters<typeof db.buffers.hook.updating.subscribe>[0] = (
+      _changes,
+      _key,
+      _buffer,
+      transaction: Transaction,
+    ) => {
+      while (transaction.parent) transaction = transaction.parent
+      transaction.on("complete", logout)
+    }
+    db.buffers.hook("updating", updating)
+    try {
+      await makeRun(new Client())
+
+      expect(ssoAuthState.isAuthenticated()).toBe(false)
+      expect(
+        (await db.buffers.get(BUFFER_ID))?.notebookViewState?.cells[0]
+          .lastRunStatus,
+      ).toBe("success")
+      expect(
+        (await loadCellSnapshot(BUFFER_ID, "cell"))?.results[0],
+      ).toMatchObject({ type: "dql", dataset: [[99]] })
+    } finally {
+      db.buffers.hook("updating").unsubscribe(updating)
+    }
   })
 
   it("does not launch SQL when the session changes during validation", async () => {
