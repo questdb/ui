@@ -1743,7 +1743,7 @@ describe("createDexieNotebookController — runCell", () => {
     const controller = makeController({}, quest)
     const updateSpy = vi
       .spyOn(bufferStore, "update")
-      .mockRejectedValueOnce(new Error("QuotaExceededError"))
+      .mockRejectedValue(new Error("QuotaExceededError"))
     try {
       const run = controller.runCell("a")
       await vi.waitFor(() => respondNext(dqlResult))

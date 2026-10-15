@@ -9,7 +9,7 @@ import {
   getBearerAuthorization,
   getTokenExpirationDate,
   readAuthTokenResponse,
-  getAuthorization,
+  buildInstalledPayload,
   getStoredCredentialAuthorization,
 } from "./utils"
 import "../../test/stubBrowserGlobals"
@@ -21,6 +21,63 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   localStorage.clear()
+})
+
+describe("installed payload normalization", () => {
+  const previous = {
+    access_token: "old",
+    refresh_token: "r1",
+    token_type: "Bearer",
+  }
+  it("retains only a refresh grant's omitted refresh token", () => {
+    expect(
+      buildInstalledPayload(
+        { access_token: "new" },
+        false,
+        "refresh_token",
+        previous,
+      ),
+    ).toMatchObject({
+      payload: {
+        access_token: "new",
+        refresh_token: "r1",
+        expires_at: undefined,
+      },
+    })
+    expect(
+      buildInstalledPayload(
+        { access_token: "new" },
+        false,
+        "authorization_code",
+        previous,
+      ),
+    ).toMatchObject({ payload: { refresh_token: undefined } })
+  })
+  it("installs a rotated refresh token", () => {
+    expect(
+      buildInstalledPayload(
+        { access_token: "new", refresh_token: "r2" },
+        false,
+        "refresh_token",
+        previous,
+      ),
+    ).toMatchObject({ payload: { refresh_token: "r2" } })
+  })
+  it("uses consistent actionable wording for a rejected refresh grant", () => {
+    expect(
+      buildInstalledPayload(
+        { error: "invalid_grant", error_description: "Revoked." },
+        false,
+        "refresh_token",
+        previous,
+      ),
+    ).toEqual({
+      error: {
+        errorTitle: "Your SSO session has expired",
+        errorMessage: "Revoked. Please sign in again.",
+      },
+    })
+  })
 })
 
 describe("token expiration", () => {
@@ -285,12 +342,12 @@ describe("credential precedence", () => {
   it("prefers the tab's SSO bearer over stored REST/basic credentials", () => {
     localStorage.setItem(StoreKey.REST_TOKEN, "rest")
     localStorage.setItem(StoreKey.BASIC_AUTH_HEADER, "Basic password")
-    expect(getAuthorization({ access_token: "sso" })).toBe("Bearer sso")
+    expect(getBearerAuthorization({ access_token: "sso" })).toBe("Bearer sso")
     expect(getStoredCredentialAuthorization()).toBe("Bearer rest")
     localStorage.removeItem(StoreKey.REST_TOKEN)
-    expect(getAuthorization()).toBe("Basic password")
+    expect(getStoredCredentialAuthorization()).toBe("Basic password")
     localStorage.clear()
-    expect(getAuthorization()).toBeUndefined()
+    expect(getStoredCredentialAuthorization()).toBeUndefined()
   })
 })
 

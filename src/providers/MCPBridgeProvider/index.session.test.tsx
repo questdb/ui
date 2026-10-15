@@ -100,7 +100,6 @@ afterEach(() => {
   renderer = undefined
   mocks.tools = undefined
   ssoAuthState.clearAuthPayload()
-  Client.__resetRefreshStateForTests()
   clearStatementClassCache()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()

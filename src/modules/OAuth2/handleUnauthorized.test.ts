@@ -26,7 +26,7 @@ describe("SSO unauthorized responses", () => {
     expect(logout).toHaveBeenCalledTimes(1)
     expect(logout).toHaveBeenCalledWith({
       errorTitle: "Your SSO session has expired",
-      errorMessage: "Could not refresh your SSO session. Please sign in again.",
+      errorMessage: "Could not renew your SSO session. Please sign in again.",
     })
     expect(localStorage.getItem(StoreKey.OAUTH_REDIRECT_COUNT)).toBe("1")
     expect(localStorage.getItem(StoreKey.SSO_SESSION_ACTIVE)).toBe("true")

@@ -1,4 +1,3 @@
-import { REFRESH_WAIT_TIMEOUT_MS } from "../../utils/questdb/tokenRefresh"
 import { SOURCE_TIMEOUT_MS } from "./sourceState"
 
 export const createCatalogRequestDeadline = (
@@ -21,9 +20,9 @@ export const createCatalogRequestDeadline = (
   // The refresh is bounded independently; SQL still gets its full timeout
   // after onRequestStart, even if refreshing consumed the entire first 10s.
   // A query can also wait for a refresh after a 401, between two requests.
-  const allowRefreshThenRequest = () =>
-    schedule(REFRESH_WAIT_TIMEOUT_MS + SOURCE_TIMEOUT_MS)
-  allowRefreshThenRequest()
+  const allowRefreshThenRequest = (refreshTimeoutMs: number) =>
+    schedule(refreshTimeoutMs + SOURCE_TIMEOUT_MS)
+  schedule(SOURCE_TIMEOUT_MS)
   return {
     promise,
     onRefreshWait: allowRefreshThenRequest,

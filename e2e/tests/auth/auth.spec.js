@@ -124,6 +124,7 @@ describe("Auth - OIDC", () => {
 
 describe("Auth - Basic", () => {
   before(() => {
+    stubConsoleRequests()
     interceptSettings({
       config: {
         "release.type": "EE",
@@ -568,6 +569,7 @@ describe("Auth - OIDC ID token", () => {
       grants.push(grant)
       if (grant === "refresh_token" && refreshReply) {
         req.alias = "refreshFailure"
+        if (typeof refreshReply === "function") return refreshReply(req)
         req.reply(refreshReply)
         return
       }
@@ -650,7 +652,8 @@ describe("Auth - OIDC ID token", () => {
         .should("eq", `Bearer ${initial}`)
       cy.getEditor().should("be.visible")
       cy.contains(
-        "Could not refresh your SSO session. You may be signed out when your current session expires.",
+        "Could not renew your SSO session. Your current token expires at",
+        { matchCase: false },
       ).should("be.visible")
       // A persistent warning has no running auto-close animation.
       cy.get("#sso-refresh-failed .Toastify__progress-bar").should(
@@ -673,7 +676,7 @@ describe("Auth - OIDC ID token", () => {
         .should("be.focused")
         .and("contain.text", "Your SSO session has expired")
       cy.contains(
-        "Could not refresh your SSO session. Please sign in again.",
+        "Could not renew your SSO session. Please sign in again.",
       ).should("be.visible")
       cy.get("#sso-refresh-failed").should("not.exist")
       cy.window()
@@ -698,7 +701,10 @@ describe("Auth - OIDC ID token", () => {
     cy.getEditor().should("not.exist")
     cy.get("#sso-refresh-failed")
       .should("be.visible")
-      .and("contain.text", "Could not refresh your SSO session.")
+      .and("contain.text", "Could not renew your SSO session.")
+    cy.get("body").trigger("keydown", { key: "t", code: "KeyT", altKey: true })
+    cy.get("#sso-refresh-failed button").first().should("be.focused")
+    cy.get("#sso-refresh-failed")
       .find(".Toastify__close-button")
       .focus()
       .should("be.focused")
@@ -731,14 +737,61 @@ describe("Auth - OIDC ID token", () => {
     cy.get('[data-hook="expand-notifications"]').should("not.exist")
   })
 
-  it("removes an already-visible loading notification before password re-login", () => {
+  it("cancels from the loading notification without starting another request", () => {
+    let releaseQuery
     signIn({
       idTokens: { authorization_code: idToken("initial", 3600) },
-      refreshReply: {
-        delay: 2000,
-        statusCode: 400,
-        body: { error: "invalid_grant" },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.getEditor().should("be.visible")
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: "select 4242" },
       },
+      (req) =>
+        new Promise((resolve) => {
+          releaseQuery = () => {
+            req.reply({ body: queryResult })
+            resolve()
+          }
+        }),
+    ).as("cancelledQuery")
+    cy.clearEditor()
+    cy.typeQuery("select 4242")
+    cy.clickRunIconInLine(1)
+    cy.getByDataHook("loading-notification-cancel").should("be.visible").click()
+    cy.then(() => releaseQuery())
+    cy.getByDataHook("loading-notification").should("not.exist")
+    cy.getByDataHook("error-notification").should(
+      "contain.text",
+      "Cancelled by user",
+    )
+    cy.get("@cancelledQuery.all").should("have.length", 1)
+    // Run is re-enabled, and a subsequent query is independent of the cancelled one.
+    cy.clearEditor()
+    cy.typeQuery("select 43")
+    cy.intercept(
+      { method: "GET", url: `${baseUrl}/exec*`, query: { query: "select 43" } },
+      { body: queryResult },
+    )
+    cy.runLine()
+    cy.getByDataHook("success-notification").should("be.visible")
+    cy.get("@cancelledQuery.all").should("have.length", 1)
+  })
+
+  it("removes an already-visible loading notification before password re-login", () => {
+    let releaseRefresh
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 3600) },
+      refreshReply: (req) =>
+        new Promise((resolve) => {
+          releaseRefresh = () => {
+            req.reply({ statusCode: 400, body: { error: "invalid_grant" } })
+            resolve()
+          }
+        }),
       credentials: { "auto.refresh.tables": "false" },
     })
     cy.getEditor().should("be.visible")
@@ -752,9 +805,14 @@ describe("Auth - OIDC ID token", () => {
     ).as("rejectedQuery")
     cy.clearEditor()
     cy.typeQuery("select 42")
+    cy.clock(Date.now(), ["setTimeout", "clearTimeout"])
     cy.clickRunIconInLine(1)
     cy.wait("@rejectedQuery")
+    cy.wrap(null).should(() => expect(releaseRefresh).to.be.a("function"))
+    cy.tick(1000)
     cy.getByDataHook("loading-notification").should("be.visible")
+    cy.then(() => releaseRefresh())
+    cy.clock().invoke("restore")
     cy.getByDataHook("auth-login").should("be.visible")
     passwordRelogin()
     // Restore the original query's selection, not just the initial log view.
@@ -803,11 +861,12 @@ describe("Auth - OIDC ID token", () => {
     cy.then(() => expect(statements).to.deep.equal([111, 222]))
     passwordRelogin()
     cy.getByDataHook("loading-notification").should("not.exist")
-    cy.get('[data-hook="expand-notifications"]').should("not.exist")
-    cy.getByDataHook("notifications-wrapper").should(
-      "not.contain.text",
-      "Running completed",
-    )
+    cy.getByDataHook("expand-notifications").click()
+    cy.getByDataHook("notifications-wrapper")
+      .should("contain.text", "select 111")
+      .and("contain.text", "Stopped after running 1 successful")
+      .and("contain.text", "session ended")
+      .and("not.contain.text", "Running completed")
     cy.clearEditor()
     cy.typeQuery("select 444;\nselect 555;")
     cy.clickRunScript()
@@ -1012,10 +1071,11 @@ describe("Auth - OIDC token without a lifetime", () => {
       .should("be.visible")
       .should(($error) => {
         const win = $error[0].ownerDocument.defaultView
-        expect(win.getComputedStyle($error[0]).color).to.equal(
+        expect(win.getComputedStyle($error[0]).color).not.to.equal(
           win.getComputedStyle(win.document.body).color,
         )
       })
+    cy.contains("h1", "Could not connect to QuestDB").should("be.focused")
     cy.contains("button", "Retry connection").focus().click()
     cy.contains("button", "Retry connection")
       .should("be.focused")

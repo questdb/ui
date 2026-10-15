@@ -33,8 +33,24 @@ import {
   catchError,
   scan,
   delayWhen,
+  takeUntil,
 } from "rxjs/operators"
-import { defer, EMPTY, from, NEVER, of, timer, throwError } from "rxjs"
+import {
+  defer,
+  EMPTY,
+  from,
+  NEVER,
+  of,
+  timer,
+  throwError,
+  Observable,
+} from "rxjs"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { isSessionEnded } from "../../modules/OAuth2/session"
+
+const sessionEnded$ = new Observable<void>((subscriber) =>
+  authSessionState.onEnd(() => subscriber.next()),
+)
 
 const MAX_RETRIES = 5
 const RETRY_BASE_DELAY_MS = 1000
@@ -72,6 +88,7 @@ export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
       ).pipe(
         // Keep the root epic alive so a later login/START can retry.
         catchError(() => EMPTY),
+        takeUntil(sessionEnded$),
       ),
     ),
     switchMap((response) => {
@@ -96,7 +113,7 @@ export const getLatestTelemetryTimestamp: Epic<
       if (serverInfo) {
         void sendServerInfoTelemetry(serverInfo)
       }
-      return getTelemetryTimestamp(serverInfo)
+      return getTelemetryTimestamp(serverInfo).pipe(takeUntil(sessionEnded$))
     }),
     map((response) => {
       // Start the loop even if fetching remote config fails.
@@ -166,11 +183,11 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
         catchError((error: unknown) =>
           error &&
           typeof error === "object" &&
-          (("status" in error && error.status === 401) ||
-            ("sessionEnded" in error && error.sessionEnded === true))
+          (("status" in error && error.status === 401) || isSessionEnded(error))
             ? of({ type: "stop" as const })
             : of({ type: "skip" as const, remoteConfig }),
         ),
+        takeUntil(sessionEnded$),
       )
     }),
     withLatestFrom(state$),
@@ -182,6 +199,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
         // No lastUpdated, schedule next check
         return of(null).pipe(
           delay(TELEMETRY_INTERVAL_MS),
+          takeUntil(sessionEnded$),
           map(() =>
             actions.telemetry.setRemoteConfig(payload.remoteConfig ?? {}),
           ),
@@ -241,6 +259,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
           }),
           catchError(() => of(remoteConfig)),
           delay(TELEMETRY_INTERVAL_MS),
+          takeUntil(sessionEnded$),
           map((cfg) => actions.telemetry.setRemoteConfig(cfg ?? {})),
         )
       }
@@ -248,6 +267,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
       // No data to send, but still schedule next check in 1 hour
       return of(null).pipe(
         delay(TELEMETRY_INTERVAL_MS),
+        takeUntil(sessionEnded$),
         map(() => actions.telemetry.setRemoteConfig(remoteConfig ?? {})),
       )
     }),

@@ -30,16 +30,19 @@ import React, {
   useRef,
   useState,
 } from "react"
+import styled from "styled-components"
 import * as QuestDB from "../../utils/questdb"
 import { useAuth } from "../AuthProvider"
 import { questClient } from "../../utils/questdb/queryClient"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
-import { Button, Text } from "../../components"
+import { questExecution } from "../../utils/questdb/queryExecution"
+import { isSessionEnded } from "../../modules/OAuth2/session"
+import { CloseOutline } from "../../components/icons"
+import { Button, Text, CenteredLayout } from "../../components"
 import { Box } from "../../components/Box"
 import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
 import {
-  getBearerAuthorization,
   getStoredCredentialAuthorization,
   hasUIAuth,
 } from "../../modules/OAuth2/utils"
@@ -52,7 +55,12 @@ import {
 } from "../../modules/ConsoleEventTracker"
 import { QueryExecutionConfirmDialog } from "../../components/QueryExecutionConfirmDialog"
 
-const questExecution = new QuestDB.QueryExecutionManager()
+const ConsoleMain = styled.main`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+`
 
 type ContextProps = {
   quest: QuestDB.Client
@@ -94,10 +102,22 @@ export const QuestProvider: React.FC = ({ children }) => {
   const [authCheckPending, setAuthCheckPending] = useState(false)
   const authCheckInFlight = useRef(false)
   const mounted = useRef(false)
+  const recoveryHeading = useRef<HTMLHeadingElement>(null)
+  const consoleMain = useRef<HTMLElement>(null)
+  const focusConsoleAfterRetry = useRef(false)
+  useEffect(() => {
+    if (authCheckError && !authCheckFinished) recoveryHeading.current?.focus()
+    if (authCheckFinished && focusConsoleAfterRetry.current) {
+      focusConsoleAfterRetry.current = false
+      consoleMain.current?.focus()
+    }
+  }, [authCheckError, authCheckFinished])
   useEffect(() => {
     mounted.current = true
     return () => {
       mounted.current = false
+      questClient.setCommonHeaders({})
+      questClient.refreshTokenMethod = undefined
     }
   }, [])
 
@@ -106,11 +126,11 @@ export const QuestProvider: React.FC = ({ children }) => {
     // still waiting. Share that attempt; state alone cannot guard same-turn calls.
     if (authCheckInFlight.current) return
     authCheckInFlight.current = true
-    const sessionId = ssoAuthState.getSessionId()
+    const session = ssoAuthState.capture()
     setAuthCheckPending(true)
     try {
       await questClient.queryRaw("SELECT 1")
-      if (mounted.current && ssoAuthState.getSessionId() === sessionId) {
+      if (mounted.current && session.isCurrent()) {
         setAuthCheckFinished(true)
       }
     } catch (error) {
@@ -120,24 +140,23 @@ export const QuestProvider: React.FC = ({ children }) => {
       // here rather than leaving a permanently blank page.
       if (
         mounted.current &&
-        ssoAuthState.getSessionId() === sessionId &&
-        !failure.sessionEnded &&
+        session.isCurrent() &&
+        !isSessionEnded(error) &&
         String(failure.error) !== "Cancelled by user"
       ) {
         setAuthCheckError(failure.error || "Could not connect to QuestDB.")
       }
     } finally {
       authCheckInFlight.current = false
-      if (mounted.current && ssoAuthState.getSessionId() === sessionId) {
+      if (mounted.current && session.isCurrent()) {
         setAuthCheckPending(false)
       }
     }
   }, [])
 
   useEffect(() => {
-    const authorization = sessionData
-      ? getBearerAuthorization(sessionData)
-      : nonSSOAuthorization
+    // SSO bearer headers are derived from the installed payload at fetch time.
+    const authorization = sessionData ? undefined : nonSSOAuthorization
     questClient.setCommonHeaders(
       authorization ? { Authorization: authorization } : {},
     )
@@ -205,34 +224,43 @@ export const QuestProvider: React.FC = ({ children }) => {
 
   if (!authCheckFinished)
     return authCheckError ? (
-      <Box flexDirection="column" gap="2rem" align="center">
-        <div role="alert">
-          <Text color="contentPrimary">{authCheckError}</Text>
-        </div>
-        <div role="status">
-          <Text color="contentPrimary">
-            {authCheckPending
-              ? "Reconnecting…"
-              : "Connection failed. Retry connection."}
-          </Text>
-        </div>
-        {/* Keep the button focusable while busy; native disabled can drop focus. */}
-        <Button
-          aria-disabled={authCheckPending}
-          aria-busy={authCheckPending}
-          onClick={() => {
-            if (!authCheckPending) void finishAuthCheck()
-          }}
-        >
-          Retry connection
-        </Button>
-      </Box>
+      <CenteredLayout>
+        <Box flexDirection="column" gap="2rem" align="center">
+          <h1 ref={recoveryHeading} tabIndex={-1}>
+            Could not connect to QuestDB
+          </h1>
+          <div role="alert">
+            <CloseOutline aria-hidden="true" />
+            <Text color="statusDanger">{authCheckError}</Text>
+          </div>
+          <div role="status">
+            {authCheckPending && (
+              <Text color="contentPrimary">Reconnecting…</Text>
+            )}
+          </div>
+          {/* Keep the button focusable while busy; native disabled can drop focus. */}
+          <Button
+            aria-disabled={authCheckPending}
+            aria-busy={authCheckPending}
+            onClick={() => {
+              if (!authCheckPending) {
+                focusConsoleAfterRetry.current = true
+                void finishAuthCheck()
+              }
+            }}
+          >
+            Retry connection
+          </Button>
+        </Box>
+      </CenteredLayout>
     ) : null
 
   return (
     <QuestContext.Provider value={contextValue}>
-      {children}
-      <QueryExecutionConfirmDialog />
+      <ConsoleMain ref={consoleMain} tabIndex={-1} aria-label="QuestDB console">
+        {children}
+        <QueryExecutionConfirmDialog />
+      </ConsoleMain>
     </QuestContext.Provider>
   )
 }

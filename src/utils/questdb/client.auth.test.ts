@@ -1,6 +1,7 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { Client } from "./client"
+import type { ErrorResult } from "./types"
 import {
   REFRESH_RETRY_DELAY_MS,
   REFRESH_REQUEST_TIMEOUT_MS,
@@ -11,6 +12,7 @@ import { EventType } from "../../modules/EventBus/types"
 import { getTokenExpirationDate } from "../../modules/OAuth2/utils"
 import { Base64 } from "js-base64"
 import type { AuthPayload } from "../../modules/OAuth2/types"
+import { isUnverifiableExecError } from "../../scenes/Editor/Notebook/notebookUtils"
 
 const token = (overrides: Partial<AuthPayload> = {}): AuthPayload => ({
   access_token: "old",
@@ -31,13 +33,91 @@ const listen = (type: EventType) => {
 
 afterEach(() => {
   ssoAuthState.clearAuthPayload()
-  Client.__resetRefreshStateForTests()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 
 describe("SSO refresh safety", () => {
+  it("reports expired-token backoff as not-sent, never as a database outage or uncertain write", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    ssoAuthState.setAuthPayload(
+      token({ expires_at: new Date(Date.now() - 1).toISOString() }),
+    )
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    client.refreshTokenMethod = vi
+      .fn()
+      .mockRejectedValue(new Error("IdP unavailable"))
+    const connection = listen(EventType.MSG_CONNECTION_ERROR)
+    const refresh = listen(EventType.MSG_AUTH_REFRESH_FAILED)
+    try {
+      for (let i = 0; i < 2; i++) {
+        const failure = await client
+          .queryRaw("insert into trades values (1)")
+          .catch((error: unknown) => error as ErrorResult)
+        expect(failure).toMatchObject({
+          type: "error",
+          requestNotSent: true,
+        })
+        if (failure.type !== "error")
+          throw new Error("Expected a renewal error")
+        expect(failure.error).toContain("query was not sent")
+        expect(isUnverifiableExecError(failure)).toBe(false)
+      }
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(connection.listener).not.toHaveBeenCalled()
+      expect(refresh.listener).toHaveBeenCalledOnce()
+    } finally {
+      connection.cleanup()
+      refresh.cleanup()
+    }
+  })
+
+  it.each([20_000, 300_000])(
+    "waits through the hard deadline after a 401 (token lifetime %s)",
+    async (lifetime) => {
+      vi.useFakeTimers()
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      ssoAuthState.setAuthPayload(
+        token({ expires_at: new Date(Date.now() + lifetime).toISOString() }),
+      )
+      const client = new Client()
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementationOnce(unauthorized).mockImplementation(ok),
+      )
+      client.refreshTokenMethod = () =>
+        new Promise((resolve) =>
+          setTimeout(() => {
+            const payload = token({ access_token: "rotated" })
+            ssoAuthState.setAuthPayload(payload)
+            resolve(payload)
+          }, 15_000),
+        )
+      const unauthorizedEvent = listen(EventType.MSG_CONNECTION_UNAUTHORIZED)
+      try {
+        let settled = false
+        const query = client
+          .queryRaw("insert into trades values (1)")
+          .then((result) => {
+            settled = true
+            return result
+          })
+        await vi.advanceTimersByTimeAsync(10_000)
+        expect(settled).toBe(false)
+        expect(ssoAuthState.isAuthenticated()).toBe(true)
+        expect(unauthorizedEvent.listener).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(5_000)
+        expect((await query).type).toBe("dml")
+        expect(unauthorizedEvent.listener).not.toHaveBeenCalled()
+      } finally {
+        unauthorizedEvent.cleanup()
+      }
+    },
+  )
+
   it("bounds successful refreshes when the browser is ahead by an ID-token lifetime", async () => {
     vi.useFakeTimers()
     const providerNow = Date.UTC(2026, 0, 1)
@@ -350,7 +430,7 @@ describe("transient post-expiry refresh recovery", () => {
     }
   })
 
-  it("ends the session only after repeated post-expiry failures", async () => {
+  it("keeps the session during repeated transient post-expiry failures", async () => {
     vi.useFakeTimers()
     vi.spyOn(console, "error").mockImplementation(() => {})
     ssoAuthState.setAuthPayload(
@@ -374,7 +454,8 @@ describe("transient post-expiry refresh recovery", () => {
       await expect(client.queryRaw("SELECT 3")).rejects.toMatchObject({
         type: "error",
       })
-      expect(listener).toHaveBeenCalledTimes(1)
+      expect(listener).not.toHaveBeenCalled()
+      expect(ssoAuthState.isAuthenticated()).toBe(true)
       expect(fetchMock).not.toHaveBeenCalled()
     } finally {
       cleanup()
@@ -404,12 +485,12 @@ describe("transient post-expiry refresh recovery", () => {
       const first = client.queryRaw("SELECT 1").catch(() => {})
       // If not in the refresh window, the server-side 401 starts recovery.
       await vi.advanceTimersByTimeAsync(10_000)
-      await first
       expect(requests).toHaveLength(1)
       expect(requests[0].aborted).toBe(false)
       const duration = Math.min(lifetime, REFRESH_REQUEST_TIMEOUT_MS)
       await vi.advanceTimersByTimeAsync(duration - 10_000)
       expect(requests[0].aborted).toBe(true)
+      await first
       client.refreshTokenMethod = vi.fn(() => {
         const payload = token({ access_token: "recovered" })
         ssoAuthState.setAuthPayload(payload)

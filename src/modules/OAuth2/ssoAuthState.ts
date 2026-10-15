@@ -8,6 +8,28 @@ class AuthSessionState {
   private refreshFailed = false
   private authenticated = false
   private sessionId = 0
+  private beforeEndListeners = new Set<() => void>()
+  private endListeners = new Set<() => void>()
+
+  capture() {
+    const sessionId = this.sessionId
+    return { isCurrent: () => this.sessionId === sessionId }
+  }
+
+  // Only already-accepted data may be flushed here, never new network work.
+  beforeEnd(listener: () => void) {
+    this.beforeEndListeners.add(listener)
+    return () => {
+      this.beforeEndListeners.delete(listener)
+    }
+  }
+
+  onEnd(listener: () => void) {
+    this.endListeners.add(listener)
+    return () => {
+      this.endListeners.delete(listener)
+    }
+  }
 
   getSessionId() {
     return this.sessionId
@@ -49,13 +71,21 @@ class AuthSessionState {
   }
 
   // Ends the tab's session for every login method, not just OIDC.
-  clearAuthPayload() {
+  endSession() {
+    this.beforeEndListeners.forEach((listener) => listener())
     this.sessionId++
     this.authPayload = null
     this.authenticated = false
     this.refreshFailed = false
+    this.endListeners.forEach((listener) => listener())
+  }
+
+  // Compatibility for existing consumers. New lifecycle code uses endSession.
+  clearAuthPayload() {
+    this.endSession()
   }
 }
 
-// Historical export name; this also owns non-SSO session lifecycle.
-export const ssoAuthState = new AuthSessionState()
+export const authSessionState = new AuthSessionState()
+// Compatibility alias: both names refer to the same tab-local session.
+export const ssoAuthState = authSessionState

@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 import $ from "jquery"
+import { isSessionEnded } from "../../modules/OAuth2/session"
 import React, {
   useCallback,
   useContext,
@@ -207,7 +208,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         const error = err as ErrorResult
         // Login already reports ended sessions. Suppress only the notification,
         // preserving running-state cleanup and the order of ordinary errors.
-        if (!error.sessionEnded) {
+        if (!isSessionEnded(error)) {
           dispatch(
             actions.query.addNotification({
               query: `${sql}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,

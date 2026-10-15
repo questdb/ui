@@ -6,6 +6,11 @@ import { StoreKey } from "../../utils/localStorage/types"
 import { getValue } from "../../utils/localStorage"
 
 export const SIGN_IN_ERROR_TITLE = "Something went wrong."
+export const SESSION_EXPIRED_TITLE = "Your SSO session has expired"
+export const sessionRenewalError = (description?: string): SignInError => ({
+  errorTitle: SESSION_EXPIRED_TITLE,
+  errorMessage: `${description || "Could not renew your SSO session."} Please sign in again.`,
+})
 
 type TokenPayload = Partial<{
   grant_type: string
@@ -125,9 +130,6 @@ export const getStoredCredentialAuthorization = () => {
     : getValue(StoreKey.BASIC_AUTH_HEADER) || undefined
 }
 
-export const getAuthorization = (payload?: Partial<AuthPayload> | null) =>
-  payload ? getBearerAuthorization(payload) : getStoredCredentialAuthorization()
-
 export type GrantType = "authorization_code" | "refresh_token"
 
 const MISSING_ID_TOKEN_MESSAGES: Record<GrantType, string> = {
@@ -149,6 +151,49 @@ export const getMissingIdTokenError = (
         errorMessage: MISSING_ID_TOKEN_MESSAGES[grantType],
       }
     : undefined
+
+// Pure normalization: only the response for this grant may supply a bearer;
+// only a refresh may retain the previous refresh token. Endpoint expires_at
+// fields are never trusted for scheduling.
+export const buildInstalledPayload = (
+  response: TokenResponse,
+  groupsEncodedInToken: boolean | undefined,
+  grant: GrantType,
+  previous: AuthPayload | null,
+): { payload: AuthPayload } | { error: SignInError } => {
+  if (!response.access_token) {
+    return {
+      error:
+        grant === "refresh_token"
+          ? sessionRenewalError(response.error_description)
+          : {
+              errorTitle: SIGN_IN_ERROR_TITLE,
+              errorMessage:
+                response.error_description ??
+                "Could not complete the sign-in. Please try again.",
+            },
+    }
+  }
+  const payload: AuthPayload = {
+    access_token: response.access_token,
+    id_token: response.id_token,
+    expires_in: response.expires_in,
+    token_type: response.token_type ?? "Bearer",
+    refresh_token:
+      response.refresh_token ??
+      (grant === "refresh_token" ? previous?.refresh_token : undefined),
+    groups_encoded_in_token: groupsEncodedInToken,
+  }
+  const error = getMissingIdTokenError(payload, grant)
+  return error
+    ? { error }
+    : {
+        payload: {
+          ...payload,
+          expires_at: getTokenExpirationDate(payload)?.toISOString(),
+        },
+      }
+}
 
 export const getAuthToken = async (
   settings: Settings,

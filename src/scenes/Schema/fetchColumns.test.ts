@@ -39,7 +39,6 @@ beforeEach(() => {
 
 afterEach(() => {
   ssoAuthState.clearAuthPayload()
-  Client.__resetRefreshStateForTests()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()

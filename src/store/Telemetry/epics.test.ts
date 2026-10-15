@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { of, Subject } from "rxjs"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { ActionsObservable, StateObservable } from "redux-observable"
 import {
   TelemetryAT,
@@ -88,6 +89,35 @@ import { getServerInfo, startTelemetry } from "./epics"
 import * as QuestDB from "../../utils/questdb"
 
 describe("startTelemetry epic", () => {
+  it("cancels a scheduled poll at logout but accepts the next login's config", async () => {
+    vi.useFakeTimers()
+    authSessionState.markNonSSOAuthenticated()
+    mockGetRemoteConfig.mockReturnValue({})
+    const actions$ = new Subject<StoreAction>()
+    const state$ = new StateObservable(new Subject(), {})
+    const next = vi.fn()
+    const sub = startTelemetry(
+      new ActionsObservable(actions$),
+      state$ as StateObservable<StoreShape>,
+      undefined,
+    ).subscribe(next)
+    try {
+      actions$.next({ type: TelemetryAT.SET_REMOTE_CONFIG, payload: {} })
+      await vi.advanceTimersByTimeAsync(1000)
+      authSessionState.endSession()
+      await vi.advanceTimersByTimeAsync(3_600_000)
+      expect(next).not.toHaveBeenCalled()
+      authSessionState.markNonSSOAuthenticated()
+      actions$.next({ type: TelemetryAT.SET_REMOTE_CONFIG, payload: {} })
+      await vi.advanceTimersByTimeAsync(3_600_000)
+      expect(next).toHaveBeenCalledOnce()
+    } finally {
+      sub.unsubscribe()
+      authSessionState.endSession()
+      vi.useRealTimers()
+    }
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
   })

@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { StoreKey } from "../../utils/localStorage/types"
 import type { AuthPayload } from "../../modules/OAuth2/types"
 import type { Settings } from "../SettingsProvider/types"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { questClient } from "../../utils/questdb/queryClient"
 
 const mocks = vi.hoisted(() => ({
   sessionData: undefined as AuthPayload | undefined,
@@ -12,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   queryRaw: vi.fn(),
   headers: vi.fn<[Record<string, string>], void>(),
   dispatch: vi.fn(),
+  headingFocus: vi.fn(),
+  mainFocus: vi.fn(),
   settings: {
     "acl.enabled": true,
     "acl.basic.auth.realm.enabled": false,
@@ -52,7 +56,12 @@ vi.mock("../../modules/ConsoleEventTracker", () => ({
 vi.mock("../../components/QueryExecutionConfirmDialog", () => ({
   QueryExecutionConfirmDialog: () => null,
 }))
-vi.mock("../../components", () => ({ Text: "span", Button: "button" }))
+vi.mock("../../components", () => ({
+  Text: "span",
+  Button: "button",
+  CenteredLayout: "section",
+}))
+vi.mock("../../utils/questdb/queryExecution", () => ({ questExecution: {} }))
 vi.mock("../../components/Box", () => ({
   Box: ({ children }: React.PropsWithChildren<unknown>) => (
     <div>{children}</div>
@@ -71,6 +80,7 @@ beforeEach(() => {
   mocks.queryRaw.mockReset().mockResolvedValue({ type: "dml" })
   mocks.headers.mockClear()
   localStorage.clear()
+  ssoAuthState.endSession()
 })
 afterEach(() => {
   act(() => renderer?.unmount())
@@ -78,12 +88,62 @@ afterEach(() => {
 })
 const mount = async (children = <div data-hook="ready" />) => {
   await act(async () => {
-    renderer = create(<QuestProvider>{children}</QuestProvider>)
+    renderer = create(<QuestProvider>{children}</QuestProvider>, {
+      createNodeMock: (element) => ({
+        focus: element.type === "h1" ? mocks.headingFocus : mocks.mainFocus,
+      }),
+    })
     await Promise.resolve()
   })
 }
 
 describe("QuestProvider authentication gate", () => {
+  it("reads a rotated refresh token when the installed refresh method runs", async () => {
+    mocks.sessionData = {
+      access_token: "old",
+      refresh_token: "r1",
+      token_type: "Bearer",
+    }
+    ssoAuthState.setAuthPayload(mocks.sessionData)
+    await mount()
+    const refresh = questClient.refreshTokenMethod!
+    ssoAuthState.setAuthPayload({ ...mocks.sessionData, refresh_token: "r2" })
+    const deadline = new AbortController().signal
+    const network = new AbortController().signal
+    await refresh(deadline, network)
+    expect(mocks.refresh).toHaveBeenLastCalledWith(
+      mocks.settings,
+      "r2",
+      deadline,
+      network,
+    )
+  })
+
+  it("releases password headers and refresh callbacks on unmount", async () => {
+    localStorage.setItem(StoreKey.REST_TOKEN, "private")
+    await mount()
+    act(() => renderer?.unmount())
+    expect(mocks.headers).toHaveBeenLastCalledWith({})
+    expect(questClient.refreshTokenMethod).toBeUndefined()
+  })
+
+  it("focuses recovery and then the console after a successful Retry", async () => {
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject({ error: "Offline" })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    expect(mocks.headingFocus).toHaveBeenCalledOnce()
+    mocks.mainFocus.mockClear()
+    mocks.queryRaw.mockResolvedValue({ type: "dml" })
+    await act(async () => {
+      renderer!.root.findByType("button").props.onClick()
+      await Promise.resolve()
+    })
+    expect(mocks.mainFocus).toHaveBeenCalledOnce()
+  })
+
   it.each([StoreKey.REST_TOKEN, StoreKey.BASIC_AUTH_HEADER])(
     "does not let retained %s overwrite SSO credentials",
     async (key) => {
@@ -94,7 +154,7 @@ describe("QuestProvider authentication gate", () => {
       expect(localStorage.getItem(key)).toBe("other-tab")
       expect(
         mocks.headers.mock.calls.every(
-          ([headers]) => headers.Authorization === "Bearer sso",
+          ([headers]) => headers.Authorization === undefined,
         ),
       ).toBe(true)
     },
@@ -212,7 +272,7 @@ describe("QuestProvider authentication gate", () => {
     expect(
       renderer?.root.findByProps({ role: "alert" }).findByType("span").props
         .color,
-    ).toBe("contentPrimary")
+    ).toBe("statusDanger")
     mocks.queryRaw.mockResolvedValue({ type: "dml" })
     await act(async () => {
       renderer?.root.findByType("button").props.onClick()
@@ -316,9 +376,7 @@ describe("QuestProvider authentication gate", () => {
       mocks.queryRaw.mock.calls.filter(([query]) => query === "SELECT 1"),
     ).toHaveLength(2)
     expect(button.props["aria-busy"]).toBe(true)
-    expect(mocks.headers).toHaveBeenLastCalledWith({
-      Authorization: "Bearer refreshed",
-    })
+    expect(mocks.headers).toHaveBeenLastCalledWith({})
     await act(async () => {
       failRetry({ error: "QuestDB is not reachable [502]" })
       await Promise.resolve()
@@ -358,10 +416,7 @@ describe("QuestProvider authentication gate", () => {
     })
     expect(renderer!.root.findByProps({ role: "alert" })).toBe(alert)
     expect(alert.findByType("span").children).toEqual([error.error])
-    expect(
-      renderer!.root.findByProps({ role: "status" }).findByType("span")
-        .children,
-    ).toEqual(["Connection failed. Retry connection."])
+    expect(renderer!.root.findByProps({ role: "status" }).children).toEqual([])
     expect(renderer!.root.findByType("button")).toBe(button)
   })
 
@@ -396,8 +451,6 @@ describe("QuestProvider authentication gate", () => {
     expect(
       mocks.queryRaw.mock.calls.filter(([q]) => q === "SELECT 1"),
     ).toHaveLength(count)
-    expect(mocks.headers).toHaveBeenLastCalledWith({
-      Authorization: "Bearer refreshed",
-    })
+    expect(mocks.headers).toHaveBeenLastCalledWith({})
   })
 })

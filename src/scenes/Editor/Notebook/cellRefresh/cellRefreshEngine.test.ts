@@ -549,7 +549,7 @@ describe("CellRefreshEngine", () => {
     })
 
     it.each(["timer", "flush", "teardown"] as const)(
-      "discards an old session's throttled snapshot on %s",
+      "flushes an accepted throttled snapshot before logout, without duplicating it on %s",
       async (boundary) => {
         deps.executeSingle = incrementingResults()
         syncOnScreen([drawCell("c1", "select 1", "1s")])
@@ -563,7 +563,7 @@ describe("CellRefreshEngine", () => {
         else if (boundary === "flush") await engine.flushPendingSnapshots()
         else engine.destroy()
 
-        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
         expect(deleteCellSnapshot).not.toHaveBeenCalled()
       },
     )
@@ -588,14 +588,12 @@ describe("CellRefreshEngine", () => {
 
         if (logout) ssoAuthState.clearAuthPayload()
         engine.destroy()
-        expect(persistCellSnapshot).toHaveBeenCalledTimes(logout ? 1 : 2)
-        if (!logout) {
-          expect(vi.mocked(persistCellSnapshot).mock.calls[1][0].results).toBe(
-            finalResults,
-          )
-        }
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+        expect(vi.mocked(persistCellSnapshot).mock.calls[1][0].results).toBe(
+          finalResults,
+        )
         engine.destroy()
-        expect(persistCellSnapshot).toHaveBeenCalledTimes(logout ? 1 : 2)
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
       },
     )
 

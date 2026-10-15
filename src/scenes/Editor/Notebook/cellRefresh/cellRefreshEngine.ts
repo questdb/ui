@@ -339,7 +339,8 @@ type Entry = {
 export class CellRefreshEngine {
   // The mounted engine belongs to one login, not to a particular bearer.
   // A same-session refresh keeps this identity; logout/re-login invalidates it.
-  private readonly sessionId = ssoAuthState.getSessionId()
+  private readonly session = ssoAuthState.capture()
+  private unsubscribeBeforeEnd?: () => void
   private entries = new Map<string, Entry>()
   private teardownSnapshots: Array<{
     entry: Entry
@@ -386,10 +387,17 @@ export class CellRefreshEngine {
   }
 
   private isCurrentSession() {
-    return ssoAuthState.getSessionId() === this.sessionId
+    return this.session.isCurrent()
   }
 
   attach() {
+    this.unsubscribeBeforeEnd?.()
+    this.unsubscribeBeforeEnd = ssoAuthState.beforeEnd(() => {
+      // These frames were accepted by this session before logout. Start their
+      // writes while it is still current; no late network result is admitted.
+      void this.flushPendingSnapshots()
+      this.persistTeardownSnapshots()
+    })
     eventBus.subscribe(
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
@@ -427,6 +435,12 @@ export class CellRefreshEngine {
 
   destroy() {
     this.detach()
+    this.persistTeardownSnapshots()
+    this.unsubscribeBeforeEnd?.()
+    this.unsubscribeBeforeEnd = undefined
+  }
+
+  private persistTeardownSnapshots() {
     const snapshots = this.teardownSnapshots
     this.teardownSnapshots = []
     for (const { entry, snapshot } of snapshots) {

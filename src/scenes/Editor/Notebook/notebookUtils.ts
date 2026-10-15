@@ -1,4 +1,8 @@
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
+import {
+  isSessionEnded,
+  type SessionFailure,
+} from "../../../modules/OAuth2/session"
 import type {
   AgentCellView,
   AutoRefresh,
@@ -286,7 +290,11 @@ export const singleResultFromExec = (
         fetchedAt: Date.now(),
       }
     case "error":
-      return errorResult(query, exec.error ?? "Unknown error")
+      return {
+        ...errorResult(query, exec.error ?? "Unknown error"),
+        ...(isSessionEnded(exec) ? { sessionEnded: true } : {}),
+        ...(exec.requestNotSent ? { requestNotSent: true } : {}),
+      }
     default:
       return { type: exec.type, query, fetchedAt: Date.now() }
   }
@@ -351,15 +359,18 @@ const UNVERIFIABLE_ERROR_MARKERS = [
   "Failed to read response",
   "Invalid JSON response from the server",
   "QuestDB is not reachable",
+  "Your session has ended. Please sign in again.",
 ]
 
-export const isUnverifiableExecError = (exec: {
-  type: string
-  error?: string
-  sessionEnded?: boolean
-}): boolean =>
+export const isUnverifiableExecError = (
+  exec: {
+    type: string
+    error?: string
+  } & SessionFailure,
+): boolean =>
   exec.type === "error" &&
-  (exec.sessionEnded === true ||
+  !exec.requestNotSent &&
+  (isSessionEnded(exec) ||
     (exec.error !== undefined &&
       UNVERIFIABLE_ERROR_MARKERS.some((m) => exec.error?.includes(m) ?? false)))
 

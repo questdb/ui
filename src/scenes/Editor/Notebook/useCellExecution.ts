@@ -38,6 +38,7 @@ import {
 import { hasPendingResult, statementKeysFor } from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
+import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
 
 export type DrawGateOutcome =
   | { granted: true }
@@ -50,10 +51,11 @@ const publishSchemaIfMutating = (exec: QueryExecResult): void => {
 }
 
 const beginCellRun = (runGenerations: Map<string, number>, cellId: string) => {
+  const session = authSessionState.capture()
   const generation = (runGenerations.get(cellId) ?? 0) + 1
   runGenerations.set(cellId, generation)
 
-  return () => runGenerations.get(cellId) === generation
+  return () => session.isCurrent() && runGenerations.get(cellId) === generation
 }
 
 // The reason the cell's controllers were aborted with, when any were.
@@ -129,8 +131,11 @@ export const launchStatement = async (
   query: string,
 ): Promise<StatementLaunch> => {
   let launched = false
+  const session = authSessionState.capture()
   try {
     const exec = await statementRequestLimiter(() => {
+      if (!session.isCurrent())
+        throw new DOMException("Session ended", "AbortError")
       launched = true
       return execute()
     }, signal)
@@ -672,6 +677,7 @@ export const useCellExecution = ({
       // is the gesture-time value, and the claim keeps the running window open
       // while the run is still validating.
       const valueAtRunStart = cell.value
+      const session = authSessionState.capture()
       const claim = claimBarrier(cellId, externalSignal)
       const bail = (outcome: CellRunOutcome): CellRunOutcome => {
         releaseIdleCell(cellId)
@@ -694,9 +700,8 @@ export const useCellExecution = ({
         claim.release()
       }
 
-      // Re-check the claim after the barrier await: a cancel, delete, or
-      // mode change that landed during validation would otherwise launch —
-      // and commit — the run.
+      // Neither a new login nor a cancelled validation may launch old SQL.
+      if (!session.isCurrent()) return bail({ ...notRun, superseded: true })
       if (claim.signal.aborted || externalSignal?.aborted) {
         return bail({
           ...notRun,

@@ -2,7 +2,11 @@ import { isServerError } from "../../utils"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { AuthPayload } from "../../modules/OAuth2/types"
+import {
+  AuthRefreshUnavailableError,
+  isSessionEnded,
+  SessionEndedError,
+} from "../../modules/OAuth2/session"
 import { API_VERSION } from "../../consts"
 import {
   Type,
@@ -12,6 +16,7 @@ import {
   Table,
   Column,
   Options,
+  QueryLifecycle,
   RawResult,
   Release,
   NewsItem,
@@ -37,17 +42,13 @@ import {
   awaitRefresh,
   isRefreshable,
   RefreshTokenMethod,
+  RefreshableAuthPayload,
+  REFRESH_REQUEST_TIMEOUT_MS,
+  REFRESH_WAIT_TIMEOUT_MS,
   tokenRefresh,
 } from "./tokenRefresh"
 
 export type QueryId = number
-
-class AuthSessionEndedError extends Error {
-  constructor() {
-    super("Your session has ended. Please sign in again.")
-    this.name = "AuthSessionEndedError"
-  }
-}
 
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
@@ -72,25 +73,27 @@ export class Client {
   private commonHeaders: Record<string, string> = {}
   refreshTokenMethod?: RefreshTokenMethod
 
-  static __resetRefreshStateForTests() {
-    tokenRefresh.resetForTests()
-  }
-
   setCommonHeaders(headers: Record<string, string>) {
     this.commonHeaders = headers
   }
 
-  private startRefresh(
-    session: AuthPayload & { refresh_token: string; expires_at: string },
-  ) {
-    tokenRefresh.start(session, this.refreshTokenMethod, (payload) => {
-      const authorization = getBearerAuthorization(payload)
-      if (authorization)
-        this.setCommonHeaders({
-          ...this.commonHeaders,
-          Authorization: authorization,
-        })
-    })
+  private currentAuthorization() {
+    const payload = ssoAuthState.getAuthPayload()
+    return payload
+      ? getBearerAuthorization(payload)
+      : this.commonHeaders.Authorization
+  }
+
+  private requestHeaders() {
+    const { Authorization: _, ...headers } = this.commonHeaders
+    const authorization = this.currentAuthorization()
+    return authorization
+      ? { ...headers, Authorization: authorization }
+      : headers
+  }
+
+  private startRefresh(payload: RefreshableAuthPayload) {
+    tokenRefresh.start(payload, this.refreshTokenMethod)
   }
 
   static encodeParams = (
@@ -209,11 +212,17 @@ export class Client {
   queryRaw(
     query: string,
     options: Options & { cancellable: true },
+    lifecycle?: QueryLifecycle,
   ): { promise: Promise<QueryRawResult>; queryId: QueryId }
-  queryRaw(query: string, options?: Options): Promise<QueryRawResult>
   queryRaw(
     query: string,
     options?: Options,
+    lifecycle?: QueryLifecycle,
+  ): Promise<QueryRawResult>
+  queryRaw(
+    query: string,
+    options?: Options,
+    lifecycle?: QueryLifecycle,
   ):
     | Promise<QueryRawResult>
     | { promise: Promise<QueryRawResult>; queryId: QueryId } {
@@ -221,7 +230,13 @@ export class Client {
     const controller = new AbortController()
     this._controllers.set(queryId, controller)
 
-    const promise = this._executeQueryRaw(query, options, controller, queryId)
+    const promise = this._executeQueryRaw(
+      query,
+      options,
+      controller,
+      queryId,
+      lifecycle,
+    )
 
     if (options?.cancellable) {
       this._activeQueryId = queryId
@@ -234,58 +249,62 @@ export class Client {
   private async sendQuery(
     payload: Record<string, string | number | boolean | undefined>,
     signal: AbortSignal,
-    options?: Options,
+    ensureCurrentSession: () => void,
+    lifecycle?: QueryLifecycle,
   ) {
-    const originalSession = ssoAuthState.getAuthPayload()
-    const sessionId = ssoAuthState.getSessionId()
+    const originalPayload = ssoAuthState.getAuthPayload()
     tokenRefresh.syncSession()
     if (
-      isRefreshable(originalSession) &&
-      tokenRefresh.needsRefresh(originalSession)
+      isRefreshable(originalPayload) &&
+      tokenRefresh.needsRefresh(originalPayload)
     ) {
-      this.startRefresh(originalSession)
+      this.startRefresh(originalPayload)
     }
-    const waitForRefresh = async () => {
-      const wait = tokenRefresh.wait
+    const waitForRefresh = async (untilCompletion = false) => {
+      const wait = untilCompletion ? tokenRefresh.completion : tokenRefresh.wait
       if (!wait) return
-      options?.onRefreshWait?.()
+      lifecycle?.onRefreshWait?.(
+        untilCompletion ? REFRESH_REQUEST_TIMEOUT_MS : REFRESH_WAIT_TIMEOUT_MS,
+      )
       await awaitRefresh(wait, signal)
     }
-    const refreshedForRequest = !!tokenRefresh.wait
-    if (refreshedForRequest) await waitForRefresh()
-    const ensureSession = () => {
-      if (
-        ssoAuthState.getSessionId() !== sessionId ||
-        (originalSession && !ssoAuthState.isSSOAuthenticated())
-      )
-        throw new AuthSessionEndedError()
+    const waitedBeforeFetch = !!tokenRefresh.wait
+    if (waitedBeforeFetch) await waitForRefresh()
+    const ensureCanSend = () => {
+      ensureCurrentSession()
       if (signal.aborted) throw new DOMException("Aborted", "AbortError")
       tokenRefresh.ensureUsableToken()
     }
     let authorizationAtFetch: string | undefined
     let fetchStartedAt = 0
     const send = () => {
-      ensureSession()
-      options?.onRequestStart?.()
-      // Coordination is shared, headers are not. Read the installed bearer at
-      // send time so every instance uses a refresh completed by another one.
-      const session = ssoAuthState.getAuthPayload()
-      const authorization = session && getBearerAuthorization(session)
-      const headers = authorization
-        ? { ...this.commonHeaders, Authorization: authorization }
-        : this.commonHeaders
+      ensureCanSend()
+      lifecycle?.onRequestStart?.()
+      // Read the installed bearer immediately before every authenticated fetch.
+      const headers = this.requestHeaders()
       authorizationAtFetch = headers.Authorization
       fetchStartedAt = Date.now()
       return fetch(`exec?${Client.encodeParams(payload)}`, { signal, headers })
     }
     const sessionAtFetch = ssoAuthState.getAuthPayload()
     let response = await send()
-    if (response.status === 401 && originalSession) {
-      ensureSession()
-      const currentSession = ssoAuthState.getAuthPayload()
-      const currentAuthorization =
-        currentSession && getBearerAuthorization(currentSession)
-      if (
+    if (response.status === 401 && originalPayload) {
+      ensureCurrentSession()
+      const currentPayload = ssoAuthState.getAuthPayload()
+      const currentAuthorization = this.currentAuthorization()
+      if (tokenRefresh.completion) {
+        // A pre-fetch wait may have expired while its rotating request is
+        // still running. A rejected old bearer must not cancel that request.
+        await waitForRefresh(true)
+        ensureCurrentSession()
+        if (ssoAuthState.hasRefreshFailed())
+          throw new AuthRefreshUnavailableError()
+        if (
+          this.currentAuthorization() !== authorizationAtFetch ||
+          ssoAuthState.getAuthPayload() !== sessionAtFetch
+        )
+          response = await send()
+      } else if (
         currentAuthorization &&
         currentAuthorization !== authorizationAtFetch
       ) {
@@ -293,28 +312,26 @@ export class Client {
         // SQL, so even a write can be resent once with the new bearer.
         response = await send()
       } else if (
-        !refreshedForRequest &&
-        isRefreshable(currentSession) &&
-        sessionAtFetch === currentSession &&
+        !waitedBeforeFetch &&
+        isRefreshable(currentPayload) &&
+        sessionAtFetch === currentPayload &&
         authorizationAtFetch === currentAuthorization &&
         !ssoAuthState.hasRefreshFailed() &&
         this.refreshTokenMethod
       ) {
         // A slow browser clock may not have opened the refresh window. The
         // server is authoritative; bypass success throttling for this 401.
-        this.startRefresh(currentSession)
-        await waitForRefresh()
-        ensureSession()
-        if (
-          !ssoAuthState.hasRefreshFailed() &&
-          (ssoAuthState.getAuthPayload() !== sessionAtFetch ||
-            this.commonHeaders.Authorization !== authorizationAtFetch)
-        ) {
+        this.startRefresh(currentPayload)
+        // A 401 executed no SQL. Retain rotating refreshes until their hard deadline.
+        await waitForRefresh(true)
+        ensureCurrentSession()
+        if (ssoAuthState.hasRefreshFailed())
+          throw new AuthRefreshUnavailableError()
+        if (ssoAuthState.getAuthPayload() !== sessionAtFetch)
           response = await send()
-        }
       }
     }
-    return { response, authorizationAtFetch, fetchStartedAt, sessionId }
+    return { response, authorizationAtFetch, fetchStartedAt }
   }
 
   private async _executeQueryRaw(
@@ -322,13 +339,9 @@ export class Client {
     options: Options | undefined,
     controller: AbortController,
     queryId: QueryId,
+    lifecycle?: QueryLifecycle,
   ): Promise<QueryRawResult> {
-    const {
-      cancellable: _,
-      onRequestStart,
-      onRefreshWait,
-      ...queryOptions
-    } = options ?? {}
+    const { cancellable: _, ...queryOptions } = options ?? {}
     const payload = {
       count: true,
       src: "con",
@@ -341,26 +354,26 @@ export class Client {
     let response: Response
     let fetchStartedAt = 0
     let authorizationAtFetch: string | undefined
-    let sessionId = ssoAuthState.getSessionId()
+    const session = ssoAuthState.capture()
     const ensureCurrentSession = () => {
-      if (ssoAuthState.getSessionId() !== sessionId) {
-        throw new AuthSessionEndedError()
-      }
+      if (!session.isCurrent()) throw new SessionEndedError()
     }
-    const sessionEndedResult = () => ({
+    const sessionEndedResult = (): ErrorResult => ({
       position: -1,
       query,
       type: Type.ERROR,
-      error: new AuthSessionEndedError().message,
+      error: new SessionEndedError().message,
       sessionEnded: true,
     })
 
     try {
-      ;({ response, authorizationAtFetch, fetchStartedAt, sessionId } =
-        await this.sendQuery(payload, controller.signal, {
-          onRequestStart,
-          onRefreshWait,
-        }))
+      ;({ response, authorizationAtFetch, fetchStartedAt } =
+        await this.sendQuery(
+          payload,
+          controller.signal,
+          ensureCurrentSession,
+          lifecycle,
+        ))
     } catch (error) {
       this.removeController(queryId)
 
@@ -375,11 +388,16 @@ export class Client {
         error: "An error occurred, please try again",
       }
 
-      if (
-        error instanceof AuthSessionEndedError ||
-        ssoAuthState.getSessionId() !== sessionId
-      ) {
+      if (isSessionEnded(error) || !session.isCurrent()) {
         return Promise.reject(sessionEndedResult())
+      }
+
+      if (error instanceof AuthRefreshUnavailableError) {
+        return Promise.reject({
+          ...err,
+          error: error.message,
+          requestNotSent: true,
+        })
       }
 
       if (error instanceof DOMException) {
@@ -398,8 +416,8 @@ export class Client {
     }
 
     try {
-      // Refresh logout no longer drains older SQL. Fence every completion,
-      // including body reads and failures, before publishing or returning it.
+      // Fence all completions, body reads and failures against the login that
+      // launched the request before publishing or returning anything.
       ensureCurrentSession()
       if (
         response.ok ||
@@ -457,14 +475,14 @@ export class Client {
           }
         }
 
-        if (data.error) {
+        if (data.error !== undefined) {
           return Promise.reject({
             ...data,
             type: Type.ERROR,
           })
         }
 
-        if (data.notice) {
+        if (data.notice !== undefined) {
           return {
             ...data,
             ...(data.timings
@@ -499,14 +517,11 @@ export class Client {
 
       if (response.status === 401) {
         errorPayload.error = `Unauthorized`
-        const currentAuthPayload = ssoAuthState.getAuthPayload()
-        const currentAuthorization = currentAuthPayload
-          ? getBearerAuthorization(currentAuthPayload)
-          : this.commonHeaders.Authorization
+        const currentAuthorization = this.currentAuthorization()
         // Reject an older request without logging out a session using a
         // different bearer. A refresh can also return the same bearer value.
         if (
-          ssoAuthState.getSessionId() === sessionId &&
+          session.isCurrent() &&
           authorizationAtFetch === currentAuthorization
         ) {
           eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
@@ -542,10 +557,7 @@ export class Client {
       ensureCurrentSession()
       return Promise.reject(errorPayload)
     } catch (error) {
-      if (
-        error instanceof AuthSessionEndedError ||
-        ssoAuthState.getSessionId() !== sessionId
-      ) {
+      if (isSessionEnded(error) || !session.isCurrent()) {
         return Promise.reject(sessionEndedResult())
       }
       throw error
@@ -561,7 +573,7 @@ export class Client {
     const response = await fetch(
       `api/v1/sql/validate?${Client.encodeParams({ query })}`,
       {
-        headers: this.commonHeaders,
+        headers: this.requestHeaders(),
         signal,
       },
     )
@@ -674,7 +686,7 @@ export class Client {
         j: name,
         version: API_VERSION,
       })}`,
-      { headers: this.commonHeaders },
+      { headers: this.requestHeaders() },
     )
     return (await response.json()) as FileCheckResponse
   }
@@ -715,8 +727,9 @@ export class Client {
     return new Promise((resolve, reject) => {
       const request = new XMLHttpRequest()
       request.open("POST", `imp?${new URLSearchParams(params)}`)
-      Object.keys(this.commonHeaders).forEach((key) => {
-        request.setRequestHeader(key, this.commonHeaders[key])
+      const headers = this.requestHeaders()
+      Object.keys(headers).forEach((key) => {
+        request.setRequestHeader(key, headers[key])
       })
       request.upload.addEventListener("progress", (e) => {
         const percent_completed = (e.loaded / e.total) * 100
@@ -748,7 +761,7 @@ export class Client {
     const { version, ...prefs } = preferences
     const response: Response = await fetch(`settings?version=${version}`, {
       method: "PUT",
-      headers: this.commonHeaders,
+      headers: this.requestHeaders(),
       body: JSON.stringify(prefs),
     })
     if (!response.ok) {

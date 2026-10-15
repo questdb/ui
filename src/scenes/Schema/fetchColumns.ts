@@ -1,9 +1,7 @@
+import { isSessionEnded } from "../../modules/OAuth2/session"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 import { Type } from "../../utils/questdb/types"
-import type {
-  ErrorResult,
-  InformationSchemaColumn,
-} from "../../utils/questdb/types"
+import type { InformationSchemaColumn } from "../../utils/questdb/types"
 import type { Client } from "../../utils/questdb/client"
 
 // Both compatibility attempts belong to one operation. A terminal rejection
@@ -13,8 +11,7 @@ export const fetchColumns = async (
   onColumns: (columns: InformationSchemaColumn[]) => void,
   onError: () => void,
 ): Promise<void> => {
-  const sessionId = ssoAuthState.getSessionId()
-  const isCurrentSession = () => ssoAuthState.getSessionId() === sessionId
+  const { isCurrent: isCurrentSession } = ssoAuthState.capture()
   const queries = [
     "information_schema.questdb_columns()",
     "information_schema.columns()", // fallback for older servers
@@ -30,7 +27,7 @@ export const fetchColumns = async (
         return
       }
     } catch (error) {
-      if (!isCurrentSession() || (error as ErrorResult)?.sessionEnded) return
+      if (!isCurrentSession() || isSessionEnded(error)) return
       // Only ordinary query failures are eligible for the compatibility retry.
     }
   }

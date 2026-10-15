@@ -71,11 +71,14 @@ export const useCatalogSource = <T>({
     })
 
     try {
-      const request = quest.queryRaw(query, {
-        cancellable: true,
-        onRefreshWait: deadline.onRefreshWait,
-        onRequestStart: deadline.onRequestStart,
-      })
+      const request = quest.queryRaw(
+        query,
+        { cancellable: true },
+        {
+          onRefreshWait: deadline.onRefreshWait,
+          onRequestStart: deadline.onRequestStart,
+        },
+      )
       queryId = request.queryId
       activeQueryIdRef.current = request.queryId
 

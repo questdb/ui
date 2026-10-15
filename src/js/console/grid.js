@@ -2186,6 +2186,8 @@ export function grid(rootElement, _paginationFn, id) {
   function setData(_data) {
     resultLifecycle.replaceResult(() => {
       setDataPart1(_data)
+      // Resolve the column-set key before restoring its widths/order/frozen
+      // column; layout state belongs to this result, not the previous grid.
       layoutStoreComputeKeyAndHash(setDataPart2)
     })
     initialFocusSkipped = false

@@ -10,6 +10,7 @@ describe("catalog request deadline", () => {
     vi.useFakeTimers()
     const onTimeout = vi.fn()
     const deadline = createCatalogRequestDeadline("table metadata", onTimeout)
+    deadline.onRefreshWait(10_000)
 
     await vi.advanceTimersByTimeAsync(10_000)
     expect(onTimeout).not.toHaveBeenCalled()
@@ -33,7 +34,7 @@ describe("catalog request deadline", () => {
     deadline.onRequestStart()
     // The server rejects the token after 2s, then the refresh takes 8.5s.
     await vi.advanceTimersByTimeAsync(2_000)
-    deadline.onRefreshWait()
+    deadline.onRefreshWait(10_000)
     await vi.advanceTimersByTimeAsync(8_500)
     expect(onTimeout).not.toHaveBeenCalled()
 

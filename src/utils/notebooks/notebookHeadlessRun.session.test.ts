@@ -1,6 +1,7 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { Transaction } from "dexie"
+import Dexie, { type Transaction } from "dexie"
+import { toast } from "../../components/Toast"
 import { Client } from "../questdb/client"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 import { db } from "../../store/db"
@@ -91,7 +92,6 @@ afterEach(() => {
   __resetNotebookBufferQueuesForTests()
   __resetNotebookDexieViewForTests()
   ssoAuthState.clearAuthPayload()
-  Client.__resetRefreshStateForTests()
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -313,6 +313,38 @@ describe("headless notebook authentication sessions", () => {
       (await db.buffers.get(BUFFER_ID))?.notebookViewState?.cells[0]
         .bottomHeight,
     ).toBeDefined()
+  })
+
+  it("falls back to metadata-only storage after the root snapshot transaction aborts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(response())),
+    )
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const warning = vi.spyOn(toast, "error")
+    const put = db.notebook_results.put.bind(db.notebook_results)
+    vi.spyOn(db.notebook_results, "put").mockImplementationOnce(
+      (snapshot, key) => {
+        const transaction = Dexie.currentTransaction
+        return put(snapshot, key).then((result) => {
+          // The snapshot request succeeded; failure belongs to the encompassing
+          // transaction, so the snapshot's promise cannot catch it.
+          transaction.abort()
+          return result
+        })
+      },
+    )
+    const summary = await makeRun(new Client())
+    expect(summary.success).toBe(true)
+    expect(summary.note).toMatch(/No re-run is needed/)
+    expect(summary.unverified).toBeFalsy()
+    const cell = (await db.buffers.get(BUFFER_ID))?.notebookViewState?.cells[0]
+    expect(cell?.lastRunStatus).toBe("success")
+    expect(typeof cell?.bottomHeight).toBe("number")
+    expect((await loadCellSnapshot(BUFFER_ID, "cell"))?.results).toEqual(
+      previous,
+    )
+    expect(warning).toHaveBeenCalled()
   })
 
   it("keeps the accepted metadata/snapshot pair when logout follows transaction completion", async () => {

@@ -1,4 +1,5 @@
 import { AuthPayload } from "../../modules/OAuth2/types"
+import { AuthRefreshUnavailableError } from "../../modules/OAuth2/session"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 import { TOKEN_REQUEST_TIMEOUT_MS } from "../../modules/OAuth2/utils"
 import { eventBus } from "../../modules/EventBus"
@@ -12,7 +13,12 @@ export const REFRESH_REQUEST_TIMEOUT_MS = 60_000
 export const REFRESH_RETRY_DELAY_MS = 5_000
 const MAX_RETRY_DELAY_MS = 30_000
 const REFRESH_WINDOW_MS = 30_000
-const MAX_EXPIRED_FAILURES = 3
+const MAX_SUCCESS_THROTTLE_MS = 30_000
+
+export type RefreshableAuthPayload = AuthPayload & {
+  refresh_token: string
+  expires_at: string
+}
 
 // Both signals are required: one marks late OAuth errors, the other cancels
 // network work at the hard deadline/session change. Only an installed payload
@@ -24,7 +30,7 @@ export type RefreshTokenMethod = (
 
 export const isRefreshable = (
   payload: AuthPayload | null,
-): payload is AuthPayload & { refresh_token: string; expires_at: string } =>
+): payload is RefreshableAuthPayload =>
   !!payload?.refresh_token &&
   payload.expires_at !== undefined &&
   Number.isFinite(new Date(payload.expires_at).getTime())
@@ -32,18 +38,17 @@ export const isRefreshable = (
 class TokenRefreshCoordinator {
   private pending: {
     wait: Promise<void>
+    completion: Promise<void>
     sessionId: number
     cancel: () => void
   } | null = null
   private retryPayload: AuthPayload | null = null
   private failures = 0
-  private expiredFailures = 0
   private retryAfter = 0
 
   private resetBackoff(payload: AuthPayload | null) {
     this.retryPayload = payload
     this.failures = 0
-    this.expiredFailures = 0
     this.retryAfter = 0
   }
 
@@ -63,6 +68,10 @@ class TokenRefreshCoordinator {
     return this.pending?.wait
   }
 
+  get completion() {
+    return this.pending?.completion
+  }
+
   needsRefresh(payload: AuthPayload | null) {
     return (
       isRefreshable(payload) &&
@@ -71,9 +80,9 @@ class TokenRefreshCoordinator {
     )
   }
 
-  // Never release queries with a known-expired bearer following a transient
-  // refresh failure. They report a connection error, then polling/user retry
-  // can recover after backoff. Sustained post-expiry failure ends the session.
+  // Never send a known-expired bearer after a transient refresh failure.
+  // Keep the login intact: transport/5xx failures do not prove revocation.
+  // Authoritative OAuth rejections are handled by AuthProvider.
   ensureUsableToken() {
     const payload = ssoAuthState.getAuthPayload()
     if (
@@ -81,17 +90,13 @@ class TokenRefreshCoordinator {
       ssoAuthState.hasRefreshFailed() &&
       new Date(payload.expires_at).getTime() <= Date.now()
     ) {
-      throw new Error("Waiting to retry the identity provider")
+      throw new AuthRefreshUnavailableError()
     }
   }
 
   start(
-    originalSession: AuthPayload & {
-      refresh_token: string
-      expires_at: string
-    },
+    originalSession: RefreshableAuthPayload,
     refresh: RefreshTokenMethod | undefined,
-    onSuccess: (payload: AuthPayload) => void,
   ) {
     if (this.pending || !refresh) return
     const sessionId = ssoAuthState.getSessionId()
@@ -112,18 +117,13 @@ class TokenRefreshCoordinator {
       const retryAfter =
         now +
         Math.min(
-          REFRESH_RETRY_DELAY_MS * 2 ** Math.min(this.failures - 1, 3),
+          REFRESH_RETRY_DELAY_MS * 2 ** (this.failures - 1),
           MAX_RETRY_DELAY_MS,
         )
       this.retryAfter = expiry > now ? Math.min(expiry, retryAfter) : retryAfter
       console.error("Failed to refresh the auth token", error)
-      if (!ssoAuthState.hasRefreshFailed()) {
-        ssoAuthState.markRefreshFailed()
-        eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED)
-      }
-      if (expiry <= now && ++this.expiredFailures >= MAX_EXPIRED_FAILURES) {
-        eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED)
-      }
+      ssoAuthState.markRefreshFailed()
+      eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED)
     }
     const request = Promise.resolve()
       .then(() => refresh(deadline.signal, requestController.signal))
@@ -135,7 +135,6 @@ class TokenRefreshCoordinator {
           ssoAuthState.getSessionId() !== sessionId
         )
           return
-        onSuccess(payload)
         this.resetBackoff(ssoAuthState.getAuthPayload())
         const remaining = payload.expires_at
           ? new Date(payload.expires_at).getTime() - Date.now()
@@ -145,8 +144,11 @@ class TokenRefreshCoordinator {
         this.retryAfter =
           Date.now() +
           (remaining > 0
-            ? Math.max(REFRESH_RETRY_DELAY_MS, Math.min(30_000, remaining / 2))
-            : 30_000)
+            ? Math.max(
+                REFRESH_RETRY_DELAY_MS,
+                Math.min(MAX_SUCCESS_THROTTLE_MS, remaining / 2),
+              )
+            : MAX_SUCCESS_THROTTLE_MS)
       })
       .catch(reportFailure)
 
@@ -174,27 +176,21 @@ class TokenRefreshCoordinator {
         ),
       )
     })
-    const wait = withDeadline(
-      Promise.race([request, hardDeadline]),
-      REFRESH_WAIT_TIMEOUT_MS,
-      () => deadline.abort(),
+    const completion = Promise.race([request, hardDeadline])
+    const wait = withDeadline(completion, REFRESH_WAIT_TIMEOUT_MS, () =>
+      deadline.abort(),
     ).catch(reportFailure)
-    this.pending = { wait, sessionId, cancel }
+    this.pending = { wait, completion, sessionId, cancel }
     void request.finally(() => {
       clearTimeout(hardTimer)
       if (this.pending?.wait === wait) this.pending = null
     })
   }
-
-  resetForTests() {
-    this.pending?.cancel()
-    this.pending = null
-    this.resetBackoff(null)
-  }
 }
 
-// Refresh coordination is shared; Client request headers/controllers are not.
+// All SQL consumers share refresh coordination for the tab's login.
 export const tokenRefresh = new TokenRefreshCoordinator()
+ssoAuthState.onEnd(() => tokenRefresh.syncSession())
 
 export const awaitRefresh = (refresh: Promise<void>, signal: AbortSignal) => {
   if (signal.aborted)

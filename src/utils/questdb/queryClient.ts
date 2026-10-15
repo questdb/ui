@@ -1,5 +1,13 @@
 import { Client } from "./client"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { tokenRefresh } from "./tokenRefresh"
 
 // Console and telemetry SQL share credentials and refresh handling. Configure
 // this instance in QuestProvider before starting any store telemetry epics.
 export const questClient = new Client()
+authSessionState.onEnd(() => {
+  questClient.abort()
+  questClient.setCommonHeaders({})
+  questClient.refreshTokenMethod = undefined
+  tokenRefresh.syncSession()
+})

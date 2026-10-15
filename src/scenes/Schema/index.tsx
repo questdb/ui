@@ -74,7 +74,7 @@ import { SchemaProvider, useSchema, type SelectedTable } from "./SchemaContext"
 import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import { fetchColumns as fetchSchemaColumns } from "./fetchColumns"
+import { fetchColumns } from "./fetchColumns"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -225,8 +225,8 @@ const Schema = ({
     }
   }
 
-  const fetchColumns = () =>
-    fetchSchemaColumns(
+  const refreshColumns = () =>
+    fetchColumns(
       quest,
       (columns) => dispatch(actions.query.setColumns(columns)),
       () => dispatchState({ view: View.error }),
@@ -281,7 +281,7 @@ const Schema = ({
 
   useEffect(() => {
     void fetchTables()
-    void fetchColumns()
+    void refreshColumns()
 
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
       if (error) {
@@ -294,7 +294,7 @@ const Schema = ({
       // The connection has been re-established, and we have an error in memory
       if (errorRef.current !== null) {
         void fetchTables()
-        void fetchColumns()
+        void refreshColumns()
       }
     })
   }, [])
@@ -307,7 +307,7 @@ const Schema = ({
     ) {
       latestFocusChangeTimestampRef.current = now
       void fetchTables()
-      void fetchColumns()
+      void refreshColumns()
     }
   }, [])
 
@@ -315,7 +315,7 @@ const Schema = ({
     if (autoRefreshTables) {
       eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
         void fetchTables()
-        void fetchColumns()
+        void refreshColumns()
       })
 
       window.addEventListener("focus", focusListener)
@@ -501,7 +501,7 @@ const Schema = ({
                           !autoRefreshTables,
                         )
                         void fetchTables()
-                        void fetchColumns()
+                        void refreshColumns()
                       }}
                       selected={autoRefreshTables}
                     >

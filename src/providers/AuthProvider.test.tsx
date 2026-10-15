@@ -14,15 +14,27 @@ import { isRefreshable, tokenRefresh } from "../utils/questdb/tokenRefresh"
 
 const mocks = vi.hoisted(() => ({
   settings: {} as Settings,
-  toastError: vi.fn(),
+  toastError: vi.fn<
+    [
+      React.ReactElement,
+      { autoClose: boolean; closeOnClick: boolean; toastId: string },
+    ],
+    void
+  >(),
   toastDismiss: vi.fn(),
+  toastActive: vi.fn(() => false),
 }))
 vi.mock("./SettingsProvider", () => ({
   useSettings: () => ({ settings: mocks.settings }),
 }))
 vi.mock("../components/Toast", () => ({
-  toast: { error: mocks.toastError, dismiss: mocks.toastDismiss },
+  toast: {
+    error: mocks.toastError,
+    dismiss: mocks.toastDismiss,
+    isActive: mocks.toastActive,
+  },
 }))
+vi.mock("../components/Button", () => ({ Button: "button" }))
 vi.mock("../modules/OAuth2/views/login", () => ({
   Login: (props: Record<string, unknown>) =>
     React.createElement("div", { ...props, "data-hook": "mock-login" }),
@@ -47,6 +59,7 @@ const idToken = (exp: number) =>
 beforeEach(() => {
   localStorage.clear()
   signInToken = initialToken
+  mocks.toastActive.mockReturnValue(false)
   vi.stubGlobal("sessionStorage", {
     getItem: () => null,
     setItem: vi.fn(),
@@ -105,6 +118,33 @@ const mount = async () => {
 }
 
 describe("AuthProvider token installation", () => {
+  it("warns after expiry, avoids duplicates, and restores a dismissed warning", async () => {
+    await mount()
+    ssoAuthState.setAuthPayload({
+      ...initialToken,
+      expires_at: new Date(Date.now() - 1).toISOString(),
+    })
+    act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
+    expect(mocks.toastError).toHaveBeenCalledOnce()
+    const warning = create(mocks.toastError.mock.calls[0][0])
+    expect(warning.root.findByType("p").children).toEqual([
+      expect.stringContaining("Queries are paused"),
+    ])
+    mocks.toastActive.mockReturnValue(true)
+    act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
+    expect(mocks.toastError).toHaveBeenCalledOnce()
+    mocks.toastActive.mockReturnValue(false)
+    act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
+    expect(mocks.toastError).toHaveBeenCalledTimes(2)
+    act(() => {
+      ;(
+        warning.root.findByType("button").props as { onClick: () => void }
+      ).onClick()
+    })
+    expect(ssoAuthState.isAuthenticated()).toBe(false)
+    warning.unmount()
+  })
+
   it("clears password credentials on sign-in, but preserves another tab's credentials on refresh", async () => {
     localStorage.setItem(StoreKey.REST_TOKEN, "stale")
     localStorage.setItem(StoreKey.BASIC_AUTH_HEADER, "Basic stale")
@@ -157,16 +197,12 @@ describe("AuthProvider token installation", () => {
     const request = new AbortController()
     let requestSignal: AbortSignal | undefined
     tokenRefresh.syncSession()
-    tokenRefresh.start(
-      session,
-      (_deadline, signal) => {
-        requestSignal = signal
-        return new Promise((resolve) =>
-          request.signal.addEventListener("abort", () => resolve(undefined)),
-        )
-      },
-      vi.fn(),
-    )
+    tokenRefresh.start(session, (_deadline, signal) => {
+      requestSignal = signal
+      return new Promise((resolve) =>
+        request.signal.addEventListener("abort", () => resolve(undefined)),
+      )
+    })
     await Promise.resolve()
     const wait = tokenRefresh.wait
     expect(wait).toBeDefined()
@@ -226,7 +262,7 @@ describe("AuthProvider token installation", () => {
           init?.body instanceof URLSearchParams &&
           init.body.get("grant_type") === "refresh_token",
       )
-    expect(refreshCall?.[1]?.signal).toBeUndefined()
+    expect(refreshCall?.[1]?.signal?.aborted).toBe(false)
     expect(ssoAuthState.getAuthPayload()?.refresh_token).toBe("rotated")
   })
 
@@ -314,11 +350,19 @@ describe("AuthProvider token installation", () => {
     await mount()
     ssoAuthState.markRefreshFailed()
     act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
-    // A refresh still pending at its deadline is not retried, so promise none.
-    expect(mocks.toastError).toHaveBeenCalledWith(
-      "Could not refresh your SSO session. You may be signed out when your current session expires.",
-      { autoClose: false, toastId: "sso-refresh-failed" },
-    )
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.any(Object), {
+      autoClose: false,
+      closeOnClick: false,
+      toastId: "sso-refresh-failed",
+    })
+    const warning = create(mocks.toastError.mock.calls[0][0])
+    expect(warning.root.findByType("p").children).toEqual([
+      expect.stringContaining("expires at"),
+    ])
+    expect(warning.root.findByType("button").children).toEqual([
+      "Sign in again",
+    ])
+    warning.unmount()
     mocks.toastDismiss.mockClear()
     vi.mocked(fetch).mockResolvedValueOnce(
       tokenResponse({ ...initialToken, access_token: "renewed" }),

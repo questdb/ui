@@ -21,8 +21,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
   ssoAuthState.clearAuthPayload()
-  // The refresh is shared between Client instances, but never between tests.
-  Client.__resetRefreshStateForTests()
 })
 
 const rawDqlResult = (
@@ -211,7 +209,7 @@ describe("Client token refresh", () => {
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
-  it("notifies the auth provider only once per failure episode", async () => {
+  it("notifies on retry failures so a dismissed warning can be restored", async () => {
     vi.useFakeTimers()
     setExpiringToken()
     vi.stubGlobal(
@@ -228,7 +226,7 @@ describe("Client token refresh", () => {
       await vi.advanceTimersByTimeAsync(5_000)
       await client.queryRaw("SELECT 2")
       expect(client.refreshTokenMethod).toHaveBeenCalledTimes(2)
-      expect(onFailure).toHaveBeenCalledTimes(1)
+      expect(onFailure).toHaveBeenCalledTimes(2)
     } finally {
       eventBus.unsubscribe(EventType.MSG_AUTH_REFRESH_FAILED, onFailure)
     }
@@ -556,7 +554,7 @@ describe("Client token refresh", () => {
       })
     const onRequestStart = vi.fn()
     const onRefreshWait = vi.fn()
-    const query = client.queryRaw("SELECT 1", {
+    const query = client.queryRaw("SELECT 1", undefined, {
       onRequestStart,
       onRefreshWait,
     })
@@ -606,7 +604,7 @@ describe("Client token refresh", () => {
     }
     const phases: string[] = []
 
-    const result = await client.queryRaw("SELECT 1", {
+    const result = await client.queryRaw("SELECT 1", undefined, {
       onRefreshWait: () => phases.push("refresh"),
       onRequestStart: () => phases.push("request"),
     })

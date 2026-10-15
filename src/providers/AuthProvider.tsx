@@ -21,9 +21,8 @@ import {
   exchangeAuthorizationCode,
   readAuthTokenResponse,
   getSSOUserNameWithClientID,
-  getTokenExpirationDate,
+  buildInstalledPayload,
   getBearerAuthorization,
-  getMissingIdTokenError,
   removeSSOUserNameWithClientID,
   GrantType,
   SIGN_IN_ERROR_TITLE,
@@ -42,7 +41,7 @@ import { useSettings } from "./SettingsProvider"
 import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
 import { toast } from "../components/Toast"
-import { tokenRefresh } from "../utils/questdb/tokenRefresh"
+import { Button } from "../components/Button"
 
 type ContextProps = {
   sessionData?: AuthPayload
@@ -160,48 +159,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     settings: Settings,
     grantType: GrantType,
   ): AuthPayload | undefined => {
-    if (!tokenResponse.access_token) {
-      logout({
-        errorTitle: SIGN_IN_ERROR_TITLE,
-        errorMessage:
-          tokenResponse.error_description ??
-          (grantType === "refresh_token"
-            ? "Could not renew your SSO session. Please sign in again."
-            : "Could not complete the sign-in. Please try again."),
-      })
+    const result = buildInstalledPayload(
+      tokenResponse,
+      settings["acl.oidc.groups.encoded.in.token"],
+      grantType,
+      ssoAuthState.getAuthPayload(),
+    )
+    if ("error" in result) {
+      callbacks.current.logout(result.error)
       return undefined
     }
-    const payload = {
-      access_token: tokenResponse.access_token,
-      id_token: tokenResponse.id_token,
-      expires_in: tokenResponse.expires_in,
-      token_type: tokenResponse.token_type ?? "Bearer",
-      // Some providers rotate this token, others omit it on refresh.
-      refresh_token:
-        tokenResponse.refresh_token ??
-        (grantType === "refresh_token"
-          ? ssoAuthState.getAuthPayload()?.refresh_token
-          : undefined),
-      groups_encoded_in_token: settings["acl.oidc.groups.encoded.in.token"],
-    }
-    const missingIdTokenError = getMissingIdTokenError(payload, grantType)
-    if (missingIdTokenError) {
-      console.warn(
-        "The server requires an ID token (acl.oidc.groups.encoded.in.token). Check the openid scope and ID-token issuance for the " +
-          grantType +
-          " grant.",
-      )
-      logout(missingIdTokenError)
-      return undefined
-    }
-    const installed: AuthPayload = {
-      ...payload,
-      // The refresh is scheduled by the bearer's expiry: an ID token's exp claim
-      // needs no expires_in, which OAuth only recommends. Without any expiry,
-      // the token is never refreshed. Always set, so that a provider's own
-      // expires_at field is never used.
-      expires_at: getTokenExpirationDate(payload)?.toISOString(),
-    }
+    const installed = result.payload
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
     ssoAuthState.setAuthPayload(installed)
     // A background refresh must not erase a different tab's password login.
@@ -221,8 +189,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const refreshAuthToken = async (
     settings: Settings,
     refreshToken: string | undefined,
-    deadlineSignal?: AbortSignal,
-    requestSignal?: AbortSignal,
+    deadlineSignal: AbortSignal = new AbortController().signal,
+    requestSignal: AbortSignal = new AbortController().signal,
   ) => {
     const originalSession = ssoAuthState.getAuthPayload()
     const response = await getAuthToken(
@@ -243,7 +211,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // late rotated token until the separate request deadline expires.
     const tokenResponse = await readAuthTokenResponse(response, deadlineSignal)
     if (
-      requestSignal?.aborted ||
+      requestSignal.aborted ||
       !originalSession ||
       ssoAuthState.getAuthPayload() !== originalSession
     ) {
@@ -262,19 +230,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (settings["acl.oidc.enabled"]) {
       subscribe(EventType.MSG_AUTH_REFRESH_FAILED, () => {
         const authPayload = ssoAuthState.getAuthPayload()
-        if (
-          authPayload?.expires_at &&
-          new Date(authPayload.expires_at).getTime() > Date.now()
-        ) {
-          toast.error(
-            "Could not refresh your SSO session. You may be signed out when your current session expires.",
-            { autoClose: false, toastId: REFRESH_FAILED_TOAST_ID },
-          )
-        }
+        if (!authPayload || toast.isActive(REFRESH_FAILED_TOAST_ID)) return
+        const expiry = authPayload.expires_at
+          ? new Date(authPayload.expires_at)
+          : undefined
+        const remaining = expiry && expiry.getTime() > Date.now()
+        toast.error(
+          <div>
+            <p>
+              {remaining
+                ? `Could not renew your SSO session. Your current token expires at ${expiry.toLocaleTimeString()}.`
+                : "Could not renew your SSO session. Queries are paused until renewal succeeds."}
+            </p>
+            <Button
+              size="sm"
+              onClick={() =>
+                callbacks.current.logout({ clearSSOSession: true })
+              }
+            >
+              Sign in again
+            </Button>
+            <small>Press Alt+T to focus this notification.</small>
+          </div>,
+          {
+            autoClose: false,
+            closeOnClick: false,
+            toastId: REFRESH_FAILED_TOAST_ID,
+          },
+        )
       })
 
       subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
-        handleSSOUnauthorized(logout)
+        handleSSOUnauthorized((options) => callbacks.current.logout(options))
       })
 
       // Clear the 401 auth redirect loop in case the connection is back to normal
@@ -304,7 +291,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           (!state || state !== stateParam)
         ) {
           // the callback cannot be tied to a login this browser started
-          logout({ promptForLogin: true })
+          callbacks.current.logout({ promptForLogin: true })
           return
         }
 
@@ -318,7 +305,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             settings["acl.oidc.redirect.uri"] || getDefaultRedirectUri(),
         })
         if ("signInError" in exchange) {
-          logout(exchange.signInError)
+          callbacks.current.logout(exchange.signInError)
           return
         }
         const { tokenResponse } = exchange
@@ -337,11 +324,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (previousPrompt === "none") {
           // If we requested authorization code silently (prompt=none), it could be that the user
           // does not have an active SSO session, so let's send the user to re-authenticate (prompt=login)
-          redirectToAuthorizationUrl({ isRetry: true })
+          callbacks.current.redirectToAuthorizationUrl({ isRetry: true })
         } else {
           // If the error is not in response for a silent authorization code request, display the error
           restoreUrlAfterOAuthCallback()
-          logout({
+          callbacks.current.logout({
             errorTitle: SIGN_IN_ERROR_TITLE,
             errorMessage:
               oauth2Error.error + ": " + oauth2Error.error_description,
@@ -354,7 +341,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       ) {
         // No REST token, so it is a page reload for an SSO user
         // who didn't explicitly log out — try to request a token silently
-        redirectToAuthorizationUrl({ prompt: "none" })
+        callbacks.current.redirectToAuthorizationUrl({ prompt: "none" })
       } else {
         // Stop loading and display the login state
         uiAuthLogin()
@@ -364,7 +351,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
       subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
-        logout()
+        if (ssoAuthState.isAuthenticated()) callbacks.current.logout()
       })
 
       //username + pwd via login page
@@ -453,10 +440,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     clearSSOSession,
   }: LogoutOptions = {}) => {
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
-    ssoAuthState.clearAuthPayload()
-    // Release retained credentials and pending refresh work without waiting
-    // for another SQL request (logout may leave this document on the login page).
-    tokenRefresh.syncSession()
+    ssoAuthState.endSession()
+    // Session-end listeners clear client credentials, pending confirmations,
+    // refresh work and telemetry timers even when this document does not reload.
     removeValue(StoreKey.OAUTH_PROMPT)
     sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
     removeValue(StoreKey.REST_TOKEN)
@@ -488,7 +474,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           errorPayload &&
           errorPayload.error.match(/Access denied.* \[HTTP]/gm)
         ) {
-          logout({
+          callbacks.current.logout({
             errorTitle: "Oops. You've been disconnected.",
             errorMessage:
               "You are not authorized to use the Web Console. You may try login again or contact your account administrator.",

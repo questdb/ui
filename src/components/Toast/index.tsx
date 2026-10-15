@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect, useRef } from "react"
 import {
   ToastContainer as RTToastContainer,
   ToastContainerProps,
@@ -132,6 +132,28 @@ export { toast }
 
 export const ToastContainer = (props?: ToastContainerProps) => {
   const theme = useTheme()
+  const region = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const focusNotification = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        !event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        (event.code !== "KeyT" && event.key.toLowerCase() !== "t")
+      )
+        return
+      const control = region.current?.querySelector<HTMLButtonElement>(
+        ".Toastify__toast button",
+      )
+      if (control) {
+        event.preventDefault()
+        control.focus()
+      }
+    }
+    document.addEventListener("keydown", focusNotification)
+    return () => document.removeEventListener("keydown", focusNotification)
+  }, [])
   const mergedProps: ToastContainerProps = {
     autoClose: 3000,
     draggable: false,
@@ -151,7 +173,15 @@ export const ToastContainer = (props?: ToastContainerProps) => {
   // versions, keeps warnings such as an SSO refresh failure announced while a
   // dialog is open. It must exist before the dialog opens.
   return (
-    <div aria-live="polite" aria-atomic="false" aria-relevant="additions text">
+    <div
+      ref={region}
+      role="region"
+      aria-label="Notifications"
+      aria-keyshortcuts="Alt+T"
+      aria-live="polite"
+      aria-atomic="false"
+      aria-relevant="additions text"
+    >
       <RTToastContainer {...mergedProps} />
     </div>
   )

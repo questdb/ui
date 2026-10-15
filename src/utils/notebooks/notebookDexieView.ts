@@ -158,7 +158,8 @@ export const partsOf = (view: NotebookViewState): ViewParts => ({
   focusedCellId: view.focusedCellId ?? null,
 })
 
-export type CommitOutcome = "committed" | "archived" | "deleted" | "discarded"
+export type CommitOutcome = "committed" | "archived" | "deleted"
+type GuardedCommitOutcome = CommitOutcome | "discarded"
 
 // Re-reads the row inside the write transaction and rejects an archived or
 // deleted buffer atomically with the update. Archive and delete both bypass the
@@ -168,15 +169,24 @@ export type CommitOutcome = "committed" | "archived" | "deleted" | "discarded"
 // pretend it committed, surfacing the hidden edit when the notebook is restored.
 // An optional guard fences async work (such as a query from an ended auth
 // session) after the transaction's read, immediately before issuing the write.
-export const commitView = async (
+export function commitView(
+  bufferId: number,
+  parts: ViewParts,
+): Promise<CommitOutcome>
+export function commitView(
+  bufferId: number,
+  parts: ViewParts,
+  canCommit: () => boolean,
+): Promise<GuardedCommitOutcome>
+export async function commitView(
   bufferId: number,
   parts: ViewParts,
   canCommit?: () => boolean,
-): Promise<CommitOutcome> => {
+): Promise<GuardedCommitOutcome> {
   const outcome = await db.transaction(
     "rw",
     db.buffers,
-    async (transaction): Promise<CommitOutcome> => {
+    async (transaction): Promise<GuardedCommitOutcome> => {
       const buffer = await bufferStore.getById(bufferId)
       if (!buffer) return "deleted"
       if (buffer.archived) return "archived"

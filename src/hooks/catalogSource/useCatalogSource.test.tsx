@@ -7,7 +7,7 @@ import { useCatalogSource } from "./useCatalogSource"
 import { MANUAL_RETRY_POLICY } from "./sourceState"
 import { Client } from "../../utils/questdb/client"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
-import type { Options } from "../../utils/questdb"
+import type { Options, QueryLifecycle } from "../../utils/questdb"
 import type { AuthPayload } from "../../modules/OAuth2/types"
 
 vi.mock("../../providers", async () => {
@@ -23,7 +23,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   ssoAuthState.clearAuthPayload()
-  Client.__resetRefreshStateForTests()
 })
 
 const transformResponse = () => []
@@ -74,10 +73,13 @@ const renderSource = (quest: Client) => {
 const mount = (startImmediately: boolean) => {
   vi.useFakeTimers()
   const abort = vi.fn()
-  const queryRaw = vi.fn((_query: string, options: Options) => {
-    if (startImmediately) options.onRequestStart?.()
-    return { queryId: 1, promise: new Promise(() => {}) }
-  })
+  const queryRaw = vi.fn(
+    (_query: string, _options: Options, lifecycle: QueryLifecycle) => {
+      if (startImmediately) lifecycle.onRequestStart?.()
+      else lifecycle.onRefreshWait?.(10_000)
+      return { queryId: 1, promise: new Promise(() => {}) }
+    },
+  )
   const { status } = renderSource({ queryRaw, abort } as unknown as Client)
   return { abort, queryRaw, status }
 }
@@ -91,7 +93,7 @@ const advance = async (ms: number) => {
 describe("useCatalogSource deadline integration", () => {
   it("wires onRequestStart so SQL gets 10 seconds, not the combined 20", async () => {
     const hook = mount(true)
-    expect(hook.queryRaw.mock.calls[0][1].onRequestStart).toBeTypeOf("function")
+    expect(hook.queryRaw.mock.calls[0][2].onRequestStart).toBeTypeOf("function")
     await advance(9_999)
     expect(hook.status()).toBe("loading")
     expect(hook.abort).not.toHaveBeenCalled()
@@ -103,7 +105,7 @@ describe("useCatalogSource deadline integration", () => {
   it("gives SQL its full budget after waiting for refresh", async () => {
     const hook = mount(false)
     await advance(9_000)
-    act(() => hook.queryRaw.mock.calls[0][1].onRequestStart?.())
+    act(() => hook.queryRaw.mock.calls[0][2].onRequestStart?.())
     await advance(9_999)
     expect(hook.status()).toBe("loading")
     await advance(1)

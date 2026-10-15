@@ -3,6 +3,7 @@ import { StoreKey } from "../../utils/localStorage/types"
 import { ssoAuthState } from "./ssoAuthState"
 
 import type { LogoutOptions } from "./types"
+import { sessionRenewalError } from "./utils"
 
 type Logout = (options?: LogoutOptions) => void
 
@@ -17,11 +18,7 @@ export const handleSSOUnauthorized = (logout: Logout) => {
   }
 
   const logoutOptions = ssoAuthState.hasRefreshFailed()
-    ? {
-        errorTitle: "Your SSO session has expired",
-        errorMessage:
-          "Could not refresh your SSO session. Please sign in again.",
-      }
+    ? sessionRenewalError()
     : {}
   const count = parseInt(getValue(StoreKey.OAUTH_REDIRECT_COUNT), 10)
   if (!isNaN(count) && count >= 5) {

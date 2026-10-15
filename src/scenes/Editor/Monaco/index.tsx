@@ -98,6 +98,8 @@ import {
   GlyphWidgetOptions,
 } from "./glyphUtils"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
+import { runScriptStatements } from "./runScriptStatements"
+import { isSessionEnded } from "../../../modules/OAuth2/session"
 import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
 
 type IndividualQueryResult = {
@@ -1450,7 +1452,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const runIndividualQuery = async (
     query: Request,
     isLast: boolean,
-    sessionId: number,
+    session: ReturnType<typeof ssoAuthState.capture>,
   ): Promise<IndividualQueryResult> => {
     const editor = editorRef.current
     const model = editorRef.current?.getModel()
@@ -1481,7 +1483,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       validationTimeoutRef.current = null
     }
 
-    let scriptQueryId: QuestDB.QueryId | null = null
     try {
       const { promise: scriptQueryPromise, queryId } = quest.queryRaw(
         normalizeQueryText(effectiveQueryText),
@@ -1491,7 +1492,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           cancellable: true,
         },
       )
-      scriptQueryId = queryId
       editorQueryIdRef.current = queryId
       dispatch(
         actions.query.setActiveNotification({
@@ -1514,7 +1514,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       )
 
       const result = await scriptQueryPromise
-      if (ssoAuthState.getSessionId() !== sessionId) {
+      if (!session.isCurrent()) {
         return { success: false, sessionEnded: true, notification: null }
       }
 
@@ -1589,7 +1589,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     } catch (_error: unknown) {
       const error = _error as ErrorResult
-      if (error.sessionEnded || ssoAuthState.getSessionId() !== sessionId) {
+      if (isSessionEnded(error) || !session.isCurrent()) {
         return { success: false, sessionEnded: true, notification: null }
       }
 
@@ -1617,10 +1617,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         success: false,
         notification,
         result: undefined,
-      }
-    } finally {
-      if (scriptQueryId !== null) {
-        dispatch(actions.query.settleActiveLoadingNotification(scriptQueryId))
       }
     }
   }
@@ -1738,7 +1734,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
       return
     }
-    const sessionId = ssoAuthState.getSessionId()
+    const session = ssoAuthState.capture()
     const queriesToRun = runPlan.runAll ? undefined : runPlan.queries
     const runningAllQueries = !queriesToRun
     // Clear all notifications & execution refs for the buffer
@@ -1751,8 +1747,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     isRunningScriptRef.current = true
     setTabsDisabled(true)
     const queries = queriesToRun ?? getAllQueries(editor)
-    const individualQueryResults: Array<IndividualQueryResult> = []
-
     editor.updateOptions({ readOnly: true })
 
     // Drain pending microtasks (e.g., an aborted chat query's rejection
@@ -1760,9 +1754,18 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     // setActiveNotification / toggleGlyphWidgetLoading aren't clobbered.
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-    const stopEndedScript = () => {
+    const finishScriptRun = () => {
       isRunningScriptRef.current = false
-      scriptStopRef.current = true
+      scriptStopRef.current = false
+      stopAfterFailureRef.current = true
+      if (editorQueryIdRef.current !== null) {
+        dispatch(
+          actions.query.settleActiveLoadingNotification(
+            editorQueryIdRef.current,
+          ),
+        )
+        editorQueryIdRef.current = null
+      }
       dispatch(actions.query.stopRunning())
       if (scriptQueryKeyRef.current !== null) {
         questExecution.releaseExecution(scriptQueryKeyRef.current)
@@ -1778,54 +1781,50 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     }
     const startTime = Date.now()
-    for (let i = 0; i < queries.length; i++) {
-      if (ssoAuthState.getSessionId() !== sessionId) {
-        stopEndedScript()
-        return
-      }
-      const query = queries[i]
-      const lineNumber = query.row + 1
-      editor.revealPositionInCenterIfOutsideViewport({
-        lineNumber,
-        column: query.column,
-      })
-
-      loadingGlyphLineNumberRef.current = lineNumber
-      toggleGlyphWidgetLoading(lineNumber, true)
-
-      const result = await runIndividualQuery(
-        query,
-        i === queries.length - 1,
-        sessionId,
+    const { results: individualQueryResults, sessionEnded } =
+      await runScriptStatements(
+        queries,
+        session,
+        async (query, i) => {
+          const lineNumber = query.row + 1
+          editor.revealPositionInCenterIfOutsideViewport({
+            lineNumber,
+            column: query.column,
+          })
+          loadingGlyphLineNumberRef.current = lineNumber
+          toggleGlyphWidgetLoading(lineNumber, true)
+          const result = await runIndividualQuery(
+            query,
+            i === queries.length - 1,
+            session,
+          )
+          if (
+            session.isCurrent() &&
+            !isSessionEnded(result) &&
+            editorRef.current === editor
+          ) {
+            toggleGlyphWidgetLoading(lineNumber, false)
+            loadingGlyphLineNumberRef.current = null
+          }
+          return result
+        },
+        (result) =>
+          scriptStopRef.current ||
+          (!result.success && stopAfterFailureRef.current && runningAllQueries),
       )
-      if (result.sessionEnded || ssoAuthState.getSessionId() !== sessionId) {
-        // Teardown can turn a session-ending response into cancellation. Check
-        // the generation too, before touching Monaco or publishing results.
-        stopEndedScript()
-        return
-      }
-
-      toggleGlyphWidgetLoading(lineNumber, false)
-      loadingGlyphLineNumberRef.current = null
-
-      individualQueryResults.push(result)
-      if (result.success) {
-        successfulQueries++
-      } else {
-        failedQueries++
-      }
-      if (
-        scriptStopRef.current ||
-        (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries)
-      ) {
-        break
-      }
-    }
+    successfulQueries = individualQueryResults.filter(
+      (result) => result.success,
+    ).length
+    failedQueries = individualQueryResults.length - successfulQueries
 
     const duration = (Date.now() - startTime) * 1e6
 
     const lastResult = individualQueryResults[individualQueryResults.length - 1]
-    if (lastResult && lastResult.result?.type === QuestDB.Type.DQL) {
+    if (
+      !sessionEnded &&
+      lastResult &&
+      lastResult.result?.type === QuestDB.Type.DQL
+    ) {
       dispatch(actions.query.setResult(lastResult.result))
       eventBus.publish(EventType.MSG_QUERY_DATASET, lastResult.result)
     }
@@ -1843,7 +1842,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           querySchemaMessageTypes.includes(result.result.type),
       )
 
-    if (querySchemaMessage) {
+    if (!sessionEnded && querySchemaMessage) {
       eventBus.publish(EventType.MSG_QUERY_SCHEMA, querySchemaMessage.result)
     }
 
@@ -1863,7 +1862,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       (acc, result, index) => (result.success ? acc : index),
       -1,
     )
-    if (lastFailureIndex !== -1) {
+    if (
+      !sessionEnded &&
+      editorRef.current === editor &&
+      lastFailureIndex !== -1
+    ) {
       editor.setPosition(
         {
           lineNumber: queries[lastFailureIndex].row + 1,
@@ -1872,23 +1875,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         "script",
       )
     }
-    editor.focus()
-    editor.revealPositionInCenterIfOutsideViewport(editor.getPosition()!)
-
-    const completedGracefully = queries.length === individualQueryResults.length
-    if (
-      completedGracefully ||
-      (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries) ||
-      scriptStopRef.current
-    ) {
-      isRunningScriptRef.current = false
-      dispatch(actions.query.stopRunning())
-      if (scriptQueryKeyRef.current !== null) {
-        questExecution.releaseExecution(scriptQueryKeyRef.current)
-        scriptQueryKeyRef.current = null
-      }
+    if (!sessionEnded && editorRef.current === editor) {
+      editor.focus()
+      editor.revealPositionInCenterIfOutsideViewport(editor.getPosition()!)
     }
 
+    const completedGracefully =
+      !sessionEnded && queries.length === individualQueryResults.length
     const notificationPrefix = completedGracefully
       ? `Running completed in ${formatTiming(duration)} with `
       : "Stopped after running "
@@ -1900,29 +1893,29 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           content: (
             <Text color="contentPrimary">
               {notificationPrefix}
+              {successfulQueries + failedQueries === 0 && "0"}
               {successfulQueries > 0 ? `${successfulQueries} successful` : ""}
               {successfulQueries > 0 && failedQueries > 0 ? " and " : ""}
               {failedQueries > 0 ? `${failedQueries} failed` : ""}{" "}
-              {failedQueries + successfulQueries > 1 ? " queries" : " query"}
+              {failedQueries + successfulQueries !== 1 ? " queries" : " query"}
+              {sessionEnded &&
+                "; session ended. The last statement's outcome is unknown; verify before running again."}
             </Text>
           ),
           type: completedGracefully
             ? NotificationType.SUCCESS
             : NotificationType.ERROR,
+          updateActiveNotification: !sessionEnded,
         },
         activeBufferRef.current.id,
       ),
     )
-    setTabsDisabled(false)
-    isRunningScriptRef.current = false
-    stopAfterFailureRef.current = true
-    editor.updateOptions({ readOnly: false })
-    if (scriptStopRef.current) {
-      scriptStopRef.current = false
-      if (!scriptConfirmationOpenRef.current) {
-        executePendingScriptRun()
-      }
-    }
+    const shouldRunPending =
+      !sessionEnded &&
+      scriptStopRef.current &&
+      !scriptConfirmationOpenRef.current
+    finishScriptRun()
+    if (shouldRunPending) executePendingScriptRun()
   }
 
   useEffect(() => {
@@ -2072,6 +2065,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                     <Box gap="1rem" align="center">
                       <Text color="contentPrimary">Running...</Text>
                       <CancelButton
+                        data-hook="loading-notification-cancel"
                         variant="dangerGhost"
                         onClick={() => {
                           if (
@@ -2237,7 +2231,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             // The login view already communicates this failure. React 17 can
             // run this catch before passive unmount cleanup; never carry it
             // into a subsequent in-tab login via Redux notifications.
-            if (error.sessionEnded) return
+            if (isSessionEnded(error)) return
 
             if (editorRef?.current && monacoRef?.current) {
               const model = editorRef.current.getModel()

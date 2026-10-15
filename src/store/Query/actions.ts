@@ -92,11 +92,11 @@ const removeNotification = (
 })
 
 const settleLoadingNotification = (
-  bufferId: NotificationNamespaceKey,
+  _bufferId: NotificationNamespaceKey,
   queryId: number,
 ): QueryAction => ({
   type: QueryAT.SETTLE_LOADING_NOTIFICATION,
-  payload: { bufferId, queryId },
+  payload: { queryId },
 })
 
 const settleActiveLoadingNotification = (queryId: number): QueryAction => ({

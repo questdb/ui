@@ -31,7 +31,6 @@ afterEach(() => {
   renderer = undefined
   clearStatementClassCache()
   ssoAuthState.clearAuthPayload()
-  Client.__resetRefreshStateForTests()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.clearAllMocks()

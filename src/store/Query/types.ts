@@ -118,10 +118,7 @@ type RemoveNotificationAction = Readonly<{
 
 type SettleLoadingNotificationAction = Readonly<{
   type: QueryAT.SETTLE_LOADING_NOTIFICATION
-  payload: {
-    bufferId: NotificationNamespaceKey
-    queryId: number
-  }
+  payload: { queryId: number }
 }>
 
 type SettleActiveLoadingNotificationAction = Readonly<{
