@@ -2345,12 +2345,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
           .finally(() => {
             if (loadingNotificationPublished) {
-              dispatch(
-                actions.query.settleLoadingNotification(
-                  targetBufferId,
-                  queryId,
-                ),
-              )
+              dispatch(actions.query.settleLoadingNotification(queryId))
             }
             if (isCurrentRun()) {
               inflightQueryRef.current = null

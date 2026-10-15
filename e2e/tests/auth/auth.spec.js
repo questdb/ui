@@ -465,6 +465,26 @@ describe("Auth - OIDC sign-in errors", () => {
     cy.contains("h2", "Sign in to QuestDB").should("be.focused")
   })
 
+  it("keeps password focus when submitting with an SSO error still visible", () => {
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { session: "true", query: /alter user .* create token/ },
+      },
+      { statusCode: 401, delay: 1000, body: "Unauthorized" },
+    ).as("passwordLogin")
+    visitCallback("?error=access_denied&error_description=Sign-in+cancelled")
+    cy.getByDataHook("sign-in-error").should("be.focused")
+    cy.get('form[name="login"] input[name="username"]').type("admin")
+    cy.get('form[name="login"] input[name="password"]').type("wrong{enter}")
+    cy.getByDataHook("sign-in-error").should("not.exist")
+    cy.get('form[name="login"] input[name="password"]').should("be.focused")
+    cy.wait("@passwordLogin")
+    cy.contains("Invalid username or password").should("be.visible")
+    cy.get('form[name="login"] input[name="password"]').should("be.focused")
+  })
+
   for (const { failure, reply, message } of [
     {
       failure: "cannot be reached",
@@ -643,7 +663,10 @@ describe("Auth - OIDC ID token", () => {
       reply: { statusCode: 429, body: { error: "rate_limited" } },
     },
   ]) {
-    it(`loads the editor after a refresh ${failure} and explains a later 401`, () => {
+    it(`keeps the session after a refresh ${failure} and a later SQL 401, then recovers`, () => {
+      // Freeze only Date so the SQL rejection occurs during refresh backoff;
+      // real timers still drive requests and notification transitions.
+      cy.clock(Date.now(), ["Date"])
       const initial = idToken("initial", 20)
       signIn({ idTokens: { authorization_code: initial }, refreshReply: reply })
       cy.wait("@refreshFailure")
@@ -667,22 +690,46 @@ describe("Auth - OIDC ID token", () => {
           query: { query: "select current_user()" },
         },
         { statusCode: 401, body: "Unauthorized" },
-      )
+      ).as("expiredBearerQuery")
       cy.clearEditor()
       cy.typeQuery("select current_user()")
       cy.runLine()
-      cy.getByDataHook("auth-login").should("be.visible")
-      cy.getByDataHook("sign-in-error")
-        .should("be.focused")
-        .and("contain.text", "Your SSO session has expired")
-      cy.contains(
-        "Could not renew your SSO session. Please sign in again.",
-      ).should("be.visible")
-      cy.get("#sso-refresh-failed").should("not.exist")
+      cy.wait("@expiredBearerQuery")
+      cy.contains("the query was not sent").should("be.visible")
+      cy.getEditor().should("be.visible")
+      cy.getByDataHook("auth-login").should("not.exist")
+      cy.get("#sso-refresh-failed").should("be.visible")
       cy.window()
         .its("localStorage")
         .invoke("getItem", "sso.session.active")
         .should("eq", "true")
+
+      const renewed = idToken("renewed", 3600)
+      cy.intercept("POST", tokenUrl, {
+        body: {
+          access_token: "renewed-access-token",
+          id_token: renewed,
+          refresh_token: "rotated-refresh-token",
+          token_type: "Bearer",
+          expires_in: 3600,
+        },
+      }).as("refreshRecovery")
+      cy.intercept(
+        {
+          method: "GET",
+          url: `${baseUrl}/exec*`,
+          query: { query: "select current_user()" },
+        },
+        { statusCode: 200, body: queryResult },
+      ).as("recoveredQuery")
+      cy.tick(5000)
+      cy.runLine()
+      cy.wait("@refreshRecovery")
+      cy.wait("@recoveredQuery")
+        .its("request.headers.authorization")
+        .should("eq", `Bearer ${renewed}`)
+      cy.get("#sso-refresh-failed").should("not.exist")
+      cy.getByDataHook("auth-login").should("not.exist")
     })
   }
 
@@ -702,6 +749,7 @@ describe("Auth - OIDC ID token", () => {
     cy.get("#sso-refresh-failed")
       .should("be.visible")
       .and("contain.text", "Could not renew your SSO session.")
+    cy.contains("button", "Retry connection").focus()
     cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
     cy.get("#sso-refresh-failed button").first().should("be.focused")
     cy.get("#sso-refresh-failed")
@@ -711,7 +759,9 @@ describe("Auth - OIDC ID token", () => {
       .and("have.css", "opacity", "1")
       .click()
     cy.get("#sso-refresh-failed").should("not.exist")
-    cy.contains("button", "Retry connection").should("be.visible")
+    cy.contains("button", "Retry connection")
+      .should("be.visible")
+      .and("be.focused")
   })
 
   it("focuses the notification from Monaco without opening a new tab", () => {

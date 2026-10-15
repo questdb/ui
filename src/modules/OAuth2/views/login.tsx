@@ -298,13 +298,17 @@ export const Login = ({
   const [loading, setLoading] = useState(false)
   const redirectErrorRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
+  const hasFocusedInitialView = useRef(false)
 
   useEffect(() => {
     if (redirectErrorTitle || redirectErrorMessage) {
       redirectErrorRef.current?.focus()
-    } else {
+    } else if (!hasFocusedInitialView.current) {
       titleRef.current?.focus()
     }
+    // Clearing an SSO error during password submission must not steal focus
+    // from the form. Explicit dismissal restores heading focus separately.
+    hasFocusedInitialView.current = true
   }, [redirectErrorTitle, redirectErrorMessage])
 
   const httpBasicAuthStrategy = isEE

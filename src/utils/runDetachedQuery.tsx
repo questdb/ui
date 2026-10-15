@@ -153,7 +153,7 @@ export async function runDetachedQuery(
     )
   } finally {
     if (config.isLoadingNotificationPublished?.()) {
-      dispatch(actions.settleLoadingNotification(namespaceKey, queryId))
+      dispatch(actions.settleLoadingNotification(queryId))
     }
     config.onSettled?.()
     releaseExecution(queryKey)

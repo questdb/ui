@@ -46,6 +46,88 @@ afterEach(() => {
 })
 
 describe("SSO refresh safety", () => {
+  it.each([0, 21_000])(
+    "preserves the session after a settled transient refresh failure and a SQL 401 delayed %s ms",
+    async (delay) => {
+      vi.useFakeTimers()
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const original = token({
+        expires_at: new Date(Date.now() + 20_000).toISOString(),
+      })
+      ssoAuthState.setAuthPayload(original)
+      const fetchMock = vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            setTimeout(() => resolve(unauthorized()), delay)
+          }),
+      )
+      vi.stubGlobal("fetch", fetchMock)
+      const client = new Client()
+      const refresh = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("offline"))
+        .mockImplementationOnce(() => {
+          const payload = token({ access_token: "recovered" })
+          ssoAuthState.setAuthPayload(payload)
+          return Promise.resolve(payload)
+        })
+      client.refreshTokenMethod = refresh
+      const unauthorizedEvent = listen(EventType.MSG_CONNECTION_UNAUTHORIZED)
+      const connectionError = listen(EventType.MSG_CONNECTION_ERROR)
+      const expectRenewalFailure = async () => {
+        const pending = client
+          .queryRaw("INSERT INTO trades VALUES (1)")
+          .catch((error: unknown) => error as ErrorResult)
+        await vi.advanceTimersByTimeAsync(delay)
+        const failure = await pending
+        expect(failure).toMatchObject({
+          type: "error",
+          requestNotSent: true,
+        })
+        if (failure.type !== "error")
+          throw new Error("Expected a renewal error")
+        expect(failure.error).toContain("the query was not sent")
+        expect(failure).not.toHaveProperty("sessionEnded")
+        expect(isUnverifiableExecError(failure)).toBe(false)
+      }
+      try {
+        await expectRenewalFailure()
+        expect(tokenRefresh.completion).toBeUndefined()
+        expect(ssoAuthState.getAuthPayload()).toBe(original)
+        expect(ssoAuthState.isAuthenticated()).toBe(true)
+        expect(ssoAuthState.hasRefreshFailed()).toBe(true)
+        expect(refresh).toHaveBeenCalledOnce()
+        expect(fetchMock).toHaveBeenCalledOnce()
+
+        // A later query during backoff has no pre-fetch refresh to wait for.
+        if (delay === 0) {
+          await expectRenewalFailure()
+          expect(refresh).toHaveBeenCalledOnce()
+        }
+        expect(unauthorizedEvent.listener).not.toHaveBeenCalled()
+        expect(connectionError.listener).not.toHaveBeenCalled()
+
+        fetchMock.mockImplementation(() => Promise.resolve(ok()))
+        await vi.advanceTimersByTimeAsync(REFRESH_RETRY_DELAY_MS)
+        await expect(client.queryRaw("SELECT 1")).resolves.toMatchObject({
+          type: "dml",
+        })
+        expect(refresh).toHaveBeenCalledTimes(2)
+        expect(fetchMock).toHaveBeenLastCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            headers: { Authorization: "Bearer recovered" },
+          }),
+        )
+        expect(ssoAuthState.hasRefreshFailed()).toBe(false)
+        expect(unauthorizedEvent.listener).not.toHaveBeenCalled()
+      } finally {
+        unauthorizedEvent.cleanup()
+        connectionError.cleanup()
+      }
+    },
+  )
+
   it("reports expired-token backoff as not-sent, never as a database outage or uncertain write", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     ssoAuthState.setAuthPayload(

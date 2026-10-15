@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { ThemeProvider } from "styled-components"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../theme"
+import type { ToastContainerProps } from "react-toastify"
 
 const messages = vi.hoisted(() => ({
   info: vi.fn(),
@@ -10,15 +11,24 @@ const messages = vi.hoisted(() => ({
   warning: vi.fn(),
   error: vi.fn(),
   dismiss: vi.fn(),
+  closeToast: vi.fn(),
 }))
 vi.mock("react-toastify", () => ({
   toast: { ...messages, isActive: vi.fn() },
-  ToastContainer: () => null,
+  ToastContainer: ({ closeButton, theme }: ToastContainerProps) =>
+    typeof closeButton === "function"
+      ? closeButton({
+          closeToast: messages.closeToast,
+          type: "error",
+          theme: theme ?? "light",
+        })
+      : null,
   Slide: () => null,
 }))
 vi.mock("react-toastify/addons/use-notification-center", () => ({
   useNotificationCenter: vi.fn(),
 }))
+vi.mock("../Button/ButtonBase", () => ({ ButtonBase: "button" }))
 vi.mock("../icons", () => ({
   CloseCircle: () => null,
   ErrorWarning: () => null,
@@ -104,6 +114,7 @@ const mountNotifications = () => {
     onKeyDown,
     notification,
     origin,
+    control,
     moveFocus: (element: unknown) => {
       activeElement = element
     },
@@ -202,6 +213,43 @@ describe("notification keyboard access", () => {
       toast.dismiss(id)
       expect(origin.focus).toHaveBeenCalledOnce()
       expect(messages.dismiss).toHaveBeenCalledWith(id)
+    },
+  )
+
+  it("restores shortcut focus before the built-in close path removes the toast", () => {
+    const { press, origin, control } = mountNotifications()
+    press()
+    const event = { currentTarget: control, stopPropagation: vi.fn() }
+    messages.closeToast.mockImplementationOnce(() => {
+      expect(document.activeElement).toBe(origin)
+      expect(event.stopPropagation).toHaveBeenCalledOnce()
+    })
+    act(() => {
+      renderer!.root
+        .findByProps({ "aria-label": "Close notification" })
+        .props.onClick(event)
+    })
+    expect(origin.focus).toHaveBeenCalledOnce()
+    expect(messages.closeToast).toHaveBeenCalledWith(event)
+    expect(messages.dismiss).not.toHaveBeenCalled()
+  })
+
+  it.each(["no shortcut", "left notification", "disconnected origin"])(
+    "closes without restoring focus for %s",
+    (scenario) => {
+      const { press, origin, control, moveFocus } = mountNotifications()
+      if (scenario !== "no shortcut") press()
+      if (scenario === "left notification") moveFocus({ closest: () => null })
+      if (scenario === "disconnected origin") origin.isConnected = false
+      const event = { currentTarget: control, stopPropagation: vi.fn() }
+      act(() => {
+        renderer!.root
+          .findByProps({ "aria-label": "Close notification" })
+          .props.onClick(event)
+      })
+      expect(origin.focus).not.toHaveBeenCalled()
+      expect(event.stopPropagation).toHaveBeenCalledOnce()
+      expect(messages.closeToast).toHaveBeenCalledWith(event)
     },
   )
 

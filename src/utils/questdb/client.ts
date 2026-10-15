@@ -321,11 +321,17 @@ export class Client {
         // SQL, so even a write can be resent once with the new bearer.
         response = await send()
       } else if (
+        isRefreshable(currentPayload) &&
+        ssoAuthState.hasRefreshFailed()
+      ) {
+        // A settled transient failure is just as recoverable as a pending
+        // refresh. This 401 rejects the old bearer, not the refresh token.
+        throw new AuthRefreshUnavailableError()
+      } else if (
         !waitedBeforeFetch &&
         isRefreshable(currentPayload) &&
         sessionAtFetch === currentPayload &&
         authorizationAtFetch === currentAuthorization &&
-        !ssoAuthState.hasRefreshFailed() &&
         this.refreshTokenMethod
       ) {
         // A slow browser clock may not have opened the refresh window. The

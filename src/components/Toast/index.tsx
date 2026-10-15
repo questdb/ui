@@ -7,12 +7,15 @@ import {
   ToastOptions as RTToastOptions,
   ToastContent,
   Id,
+  type CloseButtonProps,
 } from "react-toastify"
+import { XIcon } from "@phosphor-icons/react"
 import { useNotificationCenter as RTNotificationCenter } from "react-toastify/addons/use-notification-center"
 import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
 import { CloseCircle, ErrorWarning, Information } from "../icons"
 import { CheckmarkOutline } from "../icons"
 import { useTheme } from "styled-components"
+import { ButtonBase } from "../Button/ButtonBase"
 
 import "react-toastify/dist/ReactToastify.css"
 import "../../styles/_toast.scss"
@@ -68,6 +71,43 @@ export const ToastIcon = ({
 // Weak keys let removed toast DOM (and its saved origin) be collected. Only
 // shortcut-driven focus moves establish an origin; ordinary tabbing does not.
 const notificationFocusOrigins = new WeakMap<HTMLElement, HTMLElement>()
+
+const restoreNotificationFocus = (id?: Id) => {
+  const notification =
+    typeof document === "undefined"
+      ? null
+      : document.activeElement?.closest<HTMLElement>(".Toastify__toast")
+  const origin = notification && notificationFocusOrigins.get(notification)
+  if (
+    notification &&
+    (id === undefined || notification.id === String(id)) &&
+    origin?.isConnected
+  ) {
+    // Toastify's onClose runs after removal, when focus has already fallen
+    // to body. Restore before dismissal, but only while this toast owns focus.
+    origin.focus()
+  }
+}
+
+const ToastCloseButton = ({
+  closeToast,
+  theme,
+  ariaLabel = "Close notification",
+}: CloseButtonProps) => (
+  <ButtonBase
+    className={`Toastify__close-button Toastify__close-button--${theme}`}
+    aria-label={ariaLabel}
+    onClick={(event) => {
+      event.stopPropagation()
+      const notification =
+        event.currentTarget.closest<HTMLElement>(".Toastify__toast")
+      if (notification) restoreNotificationFocus(notification.id)
+      closeToast(event)
+    }}
+  >
+    <XIcon size={14} aria-hidden="true" />
+  </ButtonBase>
+)
 
 const toast = {
   info: (content: ToastContent, options?: ToastOptions) => {
@@ -131,20 +171,7 @@ const toast = {
     })
   },
   dismiss: (id?: Id) => {
-    const notification =
-      typeof document === "undefined"
-        ? null
-        : document.activeElement?.closest<HTMLElement>(".Toastify__toast")
-    const origin = notification && notificationFocusOrigins.get(notification)
-    if (
-      notification &&
-      (id === undefined || notification.id === String(id)) &&
-      origin?.isConnected
-    ) {
-      // Toastify's onClose runs after removal, when focus has already fallen
-      // to body. Restore before dismissal, but only while this toast owns focus.
-      origin.focus()
-    }
+    restoreNotificationFocus(id)
     rtToast.dismiss(id)
   },
   isActive: rtToast.isActive,
@@ -200,7 +227,7 @@ export const ToastContainer = (props?: ToastContainerProps) => {
     theme: theme.mode,
     transition: Slide,
     hideProgressBar: false,
-    closeButton: true,
+    closeButton: ToastCloseButton,
     closeOnClick: true,
     pauseOnHover: true,
     pauseOnFocusLoss: false,

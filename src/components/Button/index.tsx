@@ -8,16 +8,15 @@ import { makeButtonVariant } from "./variants"
 import {
   assistantLinearGradientHorizontal,
   assistantLinearGradientVertical,
-  statusInfoFocus,
 } from "../../theme"
 import { BUTTON_HEIGHTS } from "./tokens"
+import { ButtonBase, type ButtonType } from "./ButtonBase"
 
 export { BUTTON_HEIGHTS, TOOLBAR_CONTROL_HEIGHT } from "./tokens"
+export { ButtonBase } from "./ButtonBase"
 
 export const sizes = ["sm", "md", "lg"] as const
 export type Size = (typeof sizes)[number]
-type Type = "button" | "submit"
-
 const getAssistantGradient = (props: ButtonProps & { theme: DefaultTheme }) =>
   props.gradientStyle === "vertical"
     ? assistantLinearGradientVertical(props.theme.color)
@@ -64,7 +63,7 @@ type BaseButtonProps = {
   onBlur?: (event: FocusEvent) => void
   size?: Size
   fullWidth?: boolean
-  type?: Type
+  type?: ButtonType
   title?: string
   rounded?: boolean
   prefixIcon?: React.ReactNode
@@ -165,43 +164,6 @@ export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
     return button
   },
 )
-
-// The one sanctioned native-button wrapper every other control extends.
-// eslint-disable-next-line no-restricted-syntax
-export const ButtonBase = styled.button.attrs<{
-  as?: React.ElementType
-  type?: Type
-}>(({ as, type }) =>
-  as == null || as === "button" ? { type: type ?? "button" } : {},
-)`
-  appearance: none;
-  box-sizing: border-box;
-  margin: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    opacity 120ms ease,
-    filter 120ms ease;
-
-  &&:focus-visible {
-    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
-    outline-offset: 2px;
-  }
-
-  &&:disabled,
-  &&[aria-disabled="true"] {
-    cursor: not-allowed;
-  }
-
-  &&:active:not(:disabled):not([aria-disabled="true"]):not([role="tab"]) {
-    filter: brightness(0.9);
-  }
-`
 
 const StyledButton = styled(ButtonBase)<ButtonProps>`
   display: inline-flex;

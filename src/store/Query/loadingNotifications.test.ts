@@ -20,14 +20,14 @@ const loading = (queryId: number, bufferId: string | number = 1) =>
 describe("settling loading notifications", () => {
   it("keeps loading out of history and removes the ended selection and active state", () => {
     const state = query(initialState, loading(1))
-    const next = query(state, actions.settleLoadingNotification(1, 1))
+    const next = query(state, actions.settleLoadingNotification(1))
 
     expect(state.notifications).toBe(initialState.notifications)
     expect(next.notifications).toBe(state.notifications)
     expect(next.pendingLoadingNotifications).toEqual({})
     expect(next.queryNotifications[1][key]).toBeUndefined()
     expect(next.activeNotification).toBeNull()
-    expect(query(next, actions.settleLoadingNotification(1, 1))).toBe(next)
+    expect(query(next, actions.settleLoadingNotification(1))).toBe(next)
   })
 
   it("retains completed history and restores the latest completed selection", () => {
@@ -46,7 +46,7 @@ describe("settling loading notifications", () => {
     )
     const completed = query(query(initialState, regular), explain)
     const state = query(completed, loading(3))
-    const next = query(state, actions.settleLoadingNotification(1, 3))
+    const next = query(state, actions.settleLoadingNotification(3))
 
     expect(next.notifications).toEqual(completed.notifications)
     expect(next.queryNotifications).toEqual(completed.queryNotifications)
@@ -55,7 +55,7 @@ describe("settling loading notifications", () => {
 
   it("does not remove a newer execution of the same SQL", () => {
     const state = query(query(initialState, loading(1)), loading(2))
-    const next = query(state, actions.settleLoadingNotification(1, 1))
+    const next = query(state, actions.settleLoadingNotification(1))
 
     expect(next.notifications).toBe(state.notifications)
     expect(next.queryNotifications[1][key]).toBe(
@@ -66,7 +66,7 @@ describe("settling loading notifications", () => {
 
   it("preserves another namespace's notification for the same SQL", () => {
     const state = query(query(initialState, loading(1)), loading(2, "chat"))
-    const next = query(state, actions.settleLoadingNotification(1, 1))
+    const next = query(state, actions.settleLoadingNotification(1))
 
     expect(next.notifications).toBe(state.notifications)
     expect(next.queryNotifications[1][key]).toBeUndefined()
@@ -80,7 +80,7 @@ describe("settling loading notifications", () => {
       query(initialState, loading(1)),
       actions.updateNotificationKey(key, movedKey, 1),
     )
-    const next = query(state, actions.settleLoadingNotification(1, 1))
+    const next = query(state, actions.settleLoadingNotification(1))
 
     expect(next.notifications).toEqual([])
     expect(next.queryNotifications[1][movedKey]).toBeUndefined()
@@ -100,7 +100,7 @@ describe("settling loading notifications", () => {
       ownKeys: scanGroups,
     })
 
-    const next = query(state, actions.settleLoadingNotification(1, 1))
+    const next = query(state, actions.settleLoadingNotification(1))
 
     expect(scanHistory).not.toHaveBeenCalled()
     expect(scanGroups).not.toHaveBeenCalled()
@@ -109,7 +109,7 @@ describe("settling loading notifications", () => {
     expect(next.queryNotifications).toBe(state.queryNotifications)
     expect(next.activeNotification).toBe(state.activeNotification)
     expect(next.pendingLoadingNotifications).toEqual({})
-    expect(query(next, actions.settleLoadingNotification(1, 1))).toBe(next)
+    expect(query(next, actions.settleLoadingNotification(1))).toBe(next)
   })
 
   it("settles all aliases when a loading query is rekeyed with preserveOldKey", () => {
@@ -118,7 +118,7 @@ describe("settling loading notifications", () => {
       query(initialState, loading(1)),
       actions.updateNotificationKey(key, movedKey, 1, true),
     )
-    const next = query(state, actions.settleLoadingNotification(1, 1))
+    const next = query(state, actions.settleLoadingNotification(1))
 
     expect(next.queryNotifications[1]).toEqual({})
     expect(next.pendingLoadingNotifications).toEqual({})
@@ -143,7 +143,7 @@ describe("settling loading notifications", () => {
     )
     expect(blocked).toBe(state)
 
-    const next = query(blocked, actions.settleLoadingNotification(1, 1))
+    const next = query(blocked, actions.settleLoadingNotification(1))
 
     expect(next.queryNotifications[1][key]).toBeUndefined()
     expect(next.queryNotifications[1][movedKey]).toBe(
@@ -158,7 +158,7 @@ describe("settling loading notifications", () => {
       query(initialState, loading(1)),
       actions.updateNotificationKeys([{ oldKey: key, newKey: movedKey }], 1),
     )
-    const next = query(state, actions.settleLoadingNotification(1, 1))
+    const next = query(state, actions.settleLoadingNotification(1))
 
     expect(next.queryNotifications[1]).toEqual({})
     expect(next.activeNotification).toBeNull()
@@ -182,7 +182,7 @@ describe("settling loading notifications", () => {
       ),
       actions.moveNotificationNamespace("chat", 1, key),
     )
-    const next = query(state, actions.settleLoadingNotification("chat", 1))
+    const next = query(state, actions.settleLoadingNotification(1))
 
     expect(next.queryNotifications.chat).toBeUndefined()
     expect(next.queryNotifications[1]).toEqual({})
@@ -204,7 +204,7 @@ describe("settling loading notifications", () => {
 
       expect(next.pendingLoadingNotifications).toEqual({})
       expect(
-        query(next, actions.settleLoadingNotification(1, 1)).notifications,
+        query(next, actions.settleLoadingNotification(1)).notifications,
       ).toBe(next.notifications)
     },
   )
