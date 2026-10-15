@@ -75,6 +75,8 @@ import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { fetchColumns } from "./fetchColumns"
+import { isSessionEnded } from "../../modules/OAuth2/session"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -146,6 +148,7 @@ const Schema = ({
   const { quest } = useContext(QuestContext)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
+  const recoveryInFlight = useRef(false)
   const [tables, setTables] = useState<QuestDB.Table[]>()
   const [materializedViews, setMaterializedViews] =
     useState<QuestDB.MaterializedView[]>()
@@ -161,34 +164,55 @@ const Schema = ({
   const { selectOpen, setSelectOpen, selectedTables, setSelectedTables } =
     useSchema()
 
+  const recordLoadingError = (error: unknown) => {
+    if (isSessionEnded(error)) return
+    const failure = error as Partial<ErrorResult> | null
+    const loadingError: ErrorResult = {
+      ...failure,
+      type: QuestDB.Type.ERROR,
+      error:
+        failure?.error ||
+        (error instanceof Error
+          ? error.message
+          : "Could not load database schema."),
+      position: failure?.position ?? -1,
+      query: failure?.query ?? "",
+    }
+    errorRef.current = loadingError
+    setLoadingError(loadingError)
+    dispatchState({ view: View.error })
+  }
+
   const fetchTables = async () => {
+    const session = ssoAuthState.capture()
     try {
       const response = await quest.showTables()
+      if (!session.isCurrent()) return
       if (response && response.type === QuestDB.Type.DQL) {
         errorRef.current = null
+        setLoadingError(null)
         const data = response.data.map((item) => ({
           ...item,
           table_type: item.table_type ?? (item.matView ? "M" : "T"),
         }))
         setTables(data)
         dispatch(actions.query.setTables(data))
-        void fetchMaterializedViews()
+        const details = [fetchMaterializedViews()]
         // we only need views() to get view state: invalid/valid + invalidation reason
         // so only fetch if there are views present - this avoids unnecessary errors on older servers
         if (data.some((t) => t.table_type === "V")) {
-          void fetchViews()
+          details.push(fetchViews())
         }
         if (data.some((t) => t.table_type === "L")) {
-          void fetchLiveViews()
+          details.push(fetchLiveViews())
         }
         dispatchState({ view: View.ready })
+        await Promise.all(details)
       } else {
-        dispatchState({ view: View.error })
+        recordLoadingError(response)
       }
     } catch (error) {
-      dispatchState({
-        view: View.error,
-      })
+      if (session.isCurrent()) recordLoadingError(error)
     }
   }
 
@@ -229,7 +253,7 @@ const Schema = ({
     fetchColumns(
       quest,
       (columns) => dispatch(actions.query.setColumns(columns)),
-      () => dispatchState({ view: View.error }),
+      recordLoadingError,
     )
 
   const copySchemasToClipboard = async () => {
@@ -283,20 +307,29 @@ const Schema = ({
     void fetchTables()
     void refreshColumns()
 
-    eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
+    const onConnectionError = (error?: ErrorResult) => {
       if (error) {
         errorRef.current = error
         setLoadingError(error)
       }
-    })
-
-    eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_OK, () => {
-      // The connection has been re-established, and we have an error in memory
-      if (errorRef.current !== null) {
-        void fetchTables()
-        void refreshColumns()
+    }
+    const onConnectionOK = () => {
+      if (errorRef.current !== null && !recoveryInFlight.current) {
+        // Ignore this round's own OK events, including table-detail requests,
+        // when a companion query still fails. A later external success retries.
+        errorRef.current = null
+        recoveryInFlight.current = true
+        void Promise.all([fetchTables(), refreshColumns()]).finally(() => {
+          recoveryInFlight.current = false
+        })
       }
-    })
+    }
+    eventBus.subscribe(EventType.MSG_CONNECTION_ERROR, onConnectionError)
+    eventBus.subscribe(EventType.MSG_CONNECTION_OK, onConnectionOK)
+    return () => {
+      eventBus.unsubscribe(EventType.MSG_CONNECTION_ERROR, onConnectionError)
+      eventBus.unsubscribe(EventType.MSG_CONNECTION_OK, onConnectionOK)
+    }
   }, [])
 
   const focusListener = useCallback(() => {

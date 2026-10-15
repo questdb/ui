@@ -16,7 +16,12 @@ import {
   __resetNotebookBufferQueuesForTests,
 } from "./notebookBufferQueue"
 import { __resetNotebookDexieViewForTests } from "./notebookDexieView"
-import { clearStatementClassCache } from "../tools/permissions"
+import {
+  classifyStatements,
+  clearStatementClassCache,
+} from "../tools/permissions"
+import * as requestLimiter from "../questdb/requestLimiter"
+import { questClient } from "../questdb/queryClient"
 import type { AuthPayload } from "../../modules/OAuth2/types"
 import type { SingleQueryResult } from "../../store/notebook"
 
@@ -160,7 +165,10 @@ describe("headless notebook authentication sessions", () => {
       client.setCommonHeaders({ Authorization: "Bearer new-user" })
       finish()
       const summary = await run
-      expect(summary).toMatchObject({ unverified: true })
+      expect(summary).toMatchObject({
+        unverified: true,
+        cancelled: "session_ended",
+      })
       expect(summary.note).toMatch(/session.*ended/i)
       await expectPreviousResult()
       expect(fetch).toHaveBeenCalledTimes(1)
@@ -203,7 +211,10 @@ describe("headless notebook authentication sessions", () => {
     release()
     await blocker
     const summary = await run
-    expect(summary).toMatchObject({ unverified: true })
+    expect(summary).toMatchObject({
+      unverified: true,
+      cancelled: "session_ended",
+    })
     expect(summary.note).toMatch(/session.*ended/i)
     await expectPreviousResult()
   })
@@ -223,7 +234,10 @@ describe("headless notebook authentication sessions", () => {
       vi.fn().mockImplementation(() => Promise.resolve(response())),
     )
 
-    expect(await makeRun(new Client())).toMatchObject({ unverified: true })
+    expect(await makeRun(new Client())).toMatchObject({
+      unverified: true,
+      cancelled: "session_ended",
+    })
     expect(reads).toBe(3)
     await expectPreviousResult()
   })
@@ -423,6 +437,94 @@ describe("headless notebook authentication sessions", () => {
     await expectPreviousResult()
   })
 
+  it("reports no execution when session aborts release a queued read's permit", async () => {
+    await classifyStatements("select 1", () =>
+      Promise.resolve({
+        query: "select 1",
+        columns: [],
+        timestamp: 0,
+      }),
+    )
+    let requestsStarted!: () => void
+    const occupied = new Promise<void>((resolve) => {
+      requestsStarted = resolve
+    })
+    const fetchMock = vi.fn((_url: string, options: RequestInit) => {
+      if (
+        fetchMock.mock.calls.length ===
+        requestLimiter.MAX_ACTIVE_STATEMENT_REQUESTS
+      )
+        requestsStarted()
+      return new Promise<Response>((_resolve, reject) => {
+        options.signal!.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true },
+        )
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const background = Promise.allSettled(
+      Array.from(
+        { length: requestLimiter.MAX_ACTIVE_STATEMENT_REQUESTS },
+        (_, index) =>
+          requestLimiter.statementRequestLimiter(() =>
+            questClient.queryRaw(`select ${index + 10}`),
+          ),
+      ),
+    )
+    await occupied
+
+    let queued!: () => void
+    const targetQueued = new Promise<void>((resolve) => {
+      queued = resolve
+    })
+    const limit = requestLimiter.statementRequestLimiter
+    vi.spyOn(requestLimiter, "statementRequestLimiter").mockImplementation(
+      (task, signal) => {
+        const result = limit(task, signal)
+        queued()
+        return result
+      },
+    )
+    const external = new AbortController()
+    const run = runHeadlessCell(
+      BUFFER_ID,
+      {
+        isBufferClaimed: () => false,
+        getQuest: () => questClient,
+        getBufferSeq: () => 0,
+      },
+      "cell",
+      external.signal,
+      undefined,
+      {
+        kind: "explicit",
+        permissions: {
+          grantSchemaAccess: true,
+          read: true,
+          write: true,
+        },
+      },
+    )
+    await targetQueued
+    ssoAuthState.endSession()
+    await background
+    const summary = await run
+    expect(external.signal.aborted).toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(
+      requestLimiter.MAX_ACTIVE_STATEMENT_REQUESTS,
+    )
+    expect(summary).toMatchObject({
+      success: false,
+      queryCount: 0,
+      cancelled: "session_ended",
+    })
+    expect(summary).not.toHaveProperty("unverified")
+    expect(summary.note).toContain("nothing was executed")
+    await expectPreviousResult()
+  })
+
   it("does not launch SQL when the session changes during validation", async () => {
     const client = new Client()
     let finish!: () => void
@@ -455,7 +557,11 @@ describe("headless notebook authentication sessions", () => {
     ssoAuthState.markNonSSOAuthenticated()
     finish()
     const summary = await run
-    expect(summary).toMatchObject({ success: false, queryCount: 0 })
+    expect(summary).toMatchObject({
+      success: false,
+      queryCount: 0,
+      cancelled: "session_ended",
+    })
     expect(summary).not.toHaveProperty("unverified")
     expect(summary.note).toContain("nothing was executed")
     expect(fetchMock).not.toHaveBeenCalled()

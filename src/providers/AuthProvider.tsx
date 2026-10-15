@@ -258,6 +258,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         : ""
       const urlParams = new URLSearchParams(window.location.search)
       const code = urlParams.get("code")
+      const retainedSession = ssoAuthState.getAuthPayload()
       const oauth2Error = new OAuth2Error(
         urlParams.get("error"),
         urlParams.get("error_description"),
@@ -318,6 +319,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               oauth2Error.error + ": " + oauth2Error.error_description,
           })
         }
+      } else if (retainedSession) {
+        // Settings recovery can remount the providers without ending this
+        // tab's SSO session. Resume its refresh capability as well as its bearer.
+        unstable_batchedUpdates(() => {
+          setSessionData(retainedSession)
+          dispatch({ view: View.ready })
+        })
       } else if (
         ssoUsername &&
         getValue(StoreKey.SSO_SESSION_ACTIVE) &&

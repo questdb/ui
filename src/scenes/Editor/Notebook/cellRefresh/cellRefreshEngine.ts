@@ -48,9 +48,13 @@ import {
 import type { CellRefreshView as CellRefreshAgentView } from "../../../../utils/notebooks/notebookController/notebookController"
 import {
   deleteCellSnapshot,
+  type NotebookResultSnapshot,
   type SnapshotRefreshState,
 } from "../../../../store/notebookResults"
-import { persistCellSnapshot } from "../persistCellSnapshot"
+import {
+  persistCellSnapshot,
+  reportSnapshotSaveFailure,
+} from "../persistCellSnapshot"
 import { PerKeyListeners } from "../perKeyListeners"
 import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
 
@@ -346,6 +350,8 @@ export class CellRefreshEngine {
     entry: Entry
     snapshot: PendingSnapshot
   }> = []
+  private acceptedSnapshotWrites: Array<() => Promise<void>> = []
+  private acceptedSnapshotTimer: ReturnType<typeof setTimeout> | null = null
   private listeners = new PerKeyListeners()
   private visibilityByCell = new Map<string, boolean>()
   private lastSyncedEntryCells: EntrySyncKey[] | null = null
@@ -393,10 +399,7 @@ export class CellRefreshEngine {
   attach() {
     this.unsubscribeBeforeEnd?.()
     this.unsubscribeBeforeEnd = ssoAuthState.beforeEnd(() => {
-      // These frames were accepted by this session before logout. Start their
-      // writes while it is still current; no late network result is admitted.
-      void this.flushPendingSnapshots()
-      this.persistTeardownSnapshots()
+      this.captureAcceptedSnapshots()
     })
     eventBus.subscribe(
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
@@ -436,6 +439,7 @@ export class CellRefreshEngine {
   destroy() {
     this.detach()
     this.persistTeardownSnapshots()
+    void this.flushAcceptedSnapshots()
     this.unsubscribeBeforeEnd?.()
     this.unsubscribeBeforeEnd = undefined
   }
@@ -446,6 +450,67 @@ export class CellRefreshEngine {
     for (const { entry, snapshot } of snapshots) {
       void this.persistSnapshot(entry, snapshot.results, snapshot.durationMs)
     }
+  }
+
+  // Capture only metadata and accepted frame references while the generation
+  // is current. Dataset serialization must not delay session invalidation.
+  private captureAcceptedSnapshots() {
+    if (!this.isCurrentSession()) return
+    for (const entry of this.entries.values()) {
+      const pending = entry.pendingSnapshot
+      if (!pending) continue
+      this.dropPendingSnapshot(entry)
+      entry.lastSnapshotAt = Date.now()
+      this.acceptedSnapshotWrites.push(
+        this.snapshotWrite(entry, pending.results, pending.durationMs),
+      )
+    }
+    for (const { entry, snapshot } of this.teardownSnapshots) {
+      this.acceptedSnapshotWrites.push(
+        this.snapshotWrite(entry, snapshot.results, snapshot.durationMs),
+      )
+    }
+    this.teardownSnapshots = []
+    if (this.acceptedSnapshotWrites.length === 0) return
+    this.acceptedSnapshotTimer = setTimeout(() => {
+      void this.flushAcceptedSnapshots()
+    }, 0)
+    // A reload can bypass the timer and passive cleanup. Start those accepted
+    // writes at the page boundary rather than losing the final frame.
+    if (typeof window !== "undefined") {
+      window.addEventListener("pagehide", this.flushAcceptedOnPageHide)
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.flushAcceptedOnHidden)
+    }
+  }
+
+  private flushAcceptedOnPageHide = () => {
+    void this.flushAcceptedSnapshots()
+  }
+
+  private flushAcceptedOnHidden = () => {
+    if (document.hidden) void this.flushAcceptedSnapshots()
+  }
+
+  private async flushAcceptedSnapshots(): Promise<void> {
+    if (this.acceptedSnapshotWrites.length === 0) return
+    if (this.acceptedSnapshotTimer !== null) {
+      clearTimeout(this.acceptedSnapshotTimer)
+      this.acceptedSnapshotTimer = null
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("pagehide", this.flushAcceptedOnPageHide)
+    }
+    if (typeof document !== "undefined") {
+      document.removeEventListener(
+        "visibilitychange",
+        this.flushAcceptedOnHidden,
+      )
+    }
+    const writes = this.acceptedSnapshotWrites
+    this.acceptedSnapshotWrites = []
+    await Promise.all(writes.map((write) => write()))
   }
 
   sync(cells: NotebookCell[], autoRefreshDefault?: AutoRefresh) {
@@ -1746,6 +1811,14 @@ export class CellRefreshEngine {
   ): Promise<void> {
     this.dropPendingSnapshot(entry)
     if (!this.isCurrentSession()) return Promise.resolve()
+    return this.snapshotWrite(entry, results, durationMs)()
+  }
+
+  private snapshotWrite(
+    entry: Entry,
+    results: SingleQueryResult[],
+    durationMs: number,
+  ): () => Promise<void> {
     const persistedSqlHash = sqlHash(entry.sql)
     const persistedErrorsSig = slotErrorsSignature(entry.state.slotErrors)
     const current = this.getDeps().getCellResult(entry.cellId)
@@ -1769,7 +1842,7 @@ export class CellRefreshEngine {
             message,
           }))
         : undefined
-    return persistCellSnapshot({
+    const snapshot: NotebookResultSnapshot = {
       bufferId: this.bufferId,
       cellId: entry.cellId,
       results,
@@ -1780,17 +1853,25 @@ export class CellRefreshEngine {
         : {}),
       ...(script ? { script } : {}),
       ...(refreshErrors ? { refreshErrors } : {}),
-    }).then((saved) => {
+    }
+    return async () => {
+      let saved: boolean
+      try {
+        saved = await persistCellSnapshot(snapshot)
+      } catch (error) {
+        reportSnapshotSaveFailure(error)
+        return
+      }
       if (!saved || !this.isCurrentSession()) return
       entry.persistedResults.set(results, persistedSqlHash)
       entry.lastPersistedErrorsSig = persistedErrorsSig
       entry.lastClearedSqlHash = null
       this.getDeps().onSnapshotPersisted(entry.cellId, results)
-    })
+    }
   }
 
   async flushPendingSnapshots(): Promise<void> {
-    const writes: Promise<void>[] = []
+    const writes: Promise<void>[] = [this.flushAcceptedSnapshots()]
     for (const entry of this.entries.values()) {
       const pending = entry.pendingSnapshot
       if (!pending) continue

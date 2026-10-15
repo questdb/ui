@@ -9,7 +9,7 @@ import type { Client } from "../../utils/questdb/client"
 export const fetchColumns = async (
   quest: Pick<Client, "query">,
   onColumns: (columns: InformationSchemaColumn[]) => void,
-  onError: () => void,
+  onError: (error: unknown) => void,
 ): Promise<void> => {
   const { isCurrent: isCurrentSession } = ssoAuthState.capture()
   const queries = [
@@ -17,6 +17,7 @@ export const fetchColumns = async (
     "information_schema.columns()", // fallback for older servers
   ]
 
+  let failure: unknown = new Error("Could not load schema columns.")
   for (const query of queries) {
     if (!isCurrentSession()) return
     try {
@@ -26,11 +27,13 @@ export const fetchColumns = async (
         onColumns(response.data)
         return
       }
+      if (response?.type === Type.ERROR) failure = response
     } catch (error) {
       if (!isCurrentSession() || isSessionEnded(error)) return
+      failure = error
       // Only ordinary query failures are eligible for the compatibility retry.
     }
   }
 
-  if (isCurrentSession()) onError()
+  if (isCurrentSession()) onError(failure)
 }

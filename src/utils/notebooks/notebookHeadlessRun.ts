@@ -222,19 +222,14 @@ const emptySummary = (): RunCellSummary => ({
   results: [],
 })
 
-const sessionEndedBeforeLaunchSummary = (): RunCellSummary => ({
-  ...emptySummary(),
-  note:
-    "Run NOT started: the authentication session ended before execution, so nothing was executed. " +
-    "Sign in again before re-running.",
-})
+const sessionEndedBeforeLaunchSummary = (): RunCellSummary =>
+  cancelledBeforeLaunchSummary("session_ended")
 
 const sessionEndedSummary = (): RunCellSummary => ({
   ...emptySummary(),
+  cancelled: "session_ended",
   unverified: true,
-  note:
-    "The authentication session ended. Results were not saved. " +
-    "Statements already sent may have executed; verify before retrying writes.",
+  note: midRunCancellationNote("session_ended"),
 })
 
 const executeCellQueries = async (args: {
@@ -384,7 +379,10 @@ const executeCellQueriesParallel = async (args: {
         let exec: QueryExecResult
         try {
           exec = await statementRequestLimiter(() => {
-            if (!isCurrentSession()) runAbort.abort()
+            if (!isCurrentSession()) {
+              runAbort.abort()
+              throw new DOMException("Session ended", "AbortError")
+            }
             return executeSingleRaw(
               quest,
               query,

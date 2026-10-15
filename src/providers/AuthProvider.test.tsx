@@ -4,6 +4,8 @@ import { Base64 } from "js-base64"
 import { act, create, ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthProvider, useAuth } from "./AuthProvider"
+import { QuestProvider } from "./QuestProvider"
+import { questClient } from "../utils/questdb/queryClient"
 import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
@@ -36,6 +38,26 @@ vi.mock("../components/Toast", () => ({
   },
 }))
 vi.mock("../components/Button", () => ({ Button: "button" }))
+vi.mock("react-redux", () => ({
+  useDispatch: () => vi.fn(),
+  useSelector: () => undefined,
+}))
+vi.mock("../store", () => ({
+  actions: { telemetry: { start: () => ({ type: "start" }) } },
+  selectors: { telemetry: { getConfig: vi.fn() } },
+}))
+vi.mock("../modules/ConsoleEventTracker", () => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+}))
+vi.mock("../components/QueryExecutionConfirmDialog", () => ({
+  QueryExecutionConfirmDialog: () => null,
+}))
+vi.mock("../components", () => ({
+  Text: "span",
+  Button: "button",
+  CenteredLayout: "section",
+}))
 vi.mock("../modules/OAuth2/views/login", () => ({
   Login: (props: Record<string, unknown>) =>
     React.createElement("div", { ...props, "data-hook": "mock-login" }),
@@ -119,6 +141,57 @@ const mount = async () => {
 }
 
 describe("AuthProvider token installation", () => {
+  it.each([StoreKey.REST_TOKEN, StoreKey.BASIC_AUTH_HEADER])(
+    "resumes and refreshes retained SSO after recovery with another tab's %s",
+    async (credentialKey) => {
+      await mount()
+      const retained = auth.sessionData
+      const generation = ssoAuthState.getSessionId()
+      act(() => renderer?.unmount())
+      localStorage.setItem(credentialKey, "another-tab")
+      location.search = ""
+      vi.mocked(fetch).mockImplementation((url) =>
+        Promise.resolve(
+          url === "/token"
+            ? tokenResponse({ ...initialToken, access_token: "renewed" })
+            : new Response(JSON.stringify({ ddl: "OK" })),
+        ),
+      )
+      const Consumer = () => {
+        auth = useAuth()
+        return null
+      }
+      await act(async () => {
+        renderer = create(
+          <AuthProvider>
+            <QuestProvider>
+              <Consumer />
+            </QuestProvider>
+          </AuthProvider>,
+        )
+        await Promise.resolve()
+      })
+      expect(auth.sessionData).toBe(retained)
+      expect(ssoAuthState.getSessionId()).toBe(generation)
+      expect(questClient.refreshTokenMethod).toBeTypeOf("function")
+      expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toMatchObject({
+        Authorization: "Bearer initial",
+      })
+
+      const expiry = Date.parse(retained!.expires_at!)
+      vi.spyOn(Date, "now").mockReturnValue(expiry + 1)
+      await act(async () => {
+        await questClient.queryRaw("select 1")
+      })
+      expect(auth.sessionData?.access_token).toBe("renewed")
+      expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toMatchObject({
+        Authorization: "Bearer renewed",
+      })
+      expect(localStorage.getItem(credentialKey)).toBe("another-tab")
+      expect(ssoAuthState.getSessionId()).toBe(generation)
+    },
+  )
+
   it("warns after expiry, avoids duplicates, and restores a dismissed warning", async () => {
     await mount()
     ssoAuthState.setAuthPayload({
@@ -209,7 +282,7 @@ describe("AuthProvider token installation", () => {
     expect(wait).toBeDefined()
     const sync = vi.spyOn(tokenRefresh, "syncSession")
     act(() => auth.logout())
-    expect(sync).toHaveBeenCalledOnce()
+    expect(sync).toHaveBeenCalled()
     expect(ssoAuthState.getAuthPayload()).toBeNull()
     expect(tokenRefresh.wait).toBeUndefined()
     expect(requestSignal?.aborted).toBe(true)

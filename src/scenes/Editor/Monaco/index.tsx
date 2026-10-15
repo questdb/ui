@@ -99,6 +99,7 @@ import {
 } from "./glyphUtils"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 import { runScriptStatements } from "./runScriptStatements"
+import { createScriptLoading } from "./scriptLoading"
 import { isSessionEnded } from "../../../modules/OAuth2/session"
 import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
 
@@ -1454,6 +1455,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     query: Request,
     isLast: boolean,
     session: ReturnType<typeof ssoAuthState.capture>,
+    onQueryStarted: (queryId: QuestDB.QueryId) => void,
   ): Promise<IndividualQueryResult> => {
     const editor = editorRef.current
     const model = editorRef.current?.getModel()
@@ -1494,6 +1496,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         },
       )
       editorQueryIdRef.current = queryId
+      onQueryStarted(queryId)
       dispatch(
         actions.query.setActiveNotification({
           type: NotificationType.LOADING,
@@ -1760,18 +1763,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     // setActiveNotification / toggleGlyphWidgetLoading aren't clobbered.
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
+    const loading = createScriptLoading((queryId) =>
+      dispatch(actions.query.settleActiveLoadingNotification(queryId)),
+    )
     const finishScriptRun = () => {
       isRunningScriptRef.current = false
       scriptStopRef.current = false
       stopAfterFailureRef.current = true
-      if (editorQueryIdRef.current !== null) {
-        dispatch(
-          actions.query.settleActiveLoadingNotification(
-            editorQueryIdRef.current,
-          ),
-        )
-        editorQueryIdRef.current = null
-      }
+      loading.finish()
+      editorQueryIdRef.current = null
       dispatch(actions.query.stopRunning())
       if (scriptQueryKeyRef.current !== null) {
         questExecution.releaseExecution(scriptQueryKeyRef.current)
@@ -1806,6 +1806,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           query,
           i === queries.length - 1,
           session,
+          loading.started,
         )
         if (
           session.isCurrent() &&

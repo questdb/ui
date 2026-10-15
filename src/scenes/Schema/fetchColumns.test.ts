@@ -89,6 +89,25 @@ describe("schema columns compatibility queries", () => {
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(onColumns).not.toHaveBeenCalled()
     expect(onError).toHaveBeenCalledOnce()
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: Type.ERROR,
+        query: "information_schema.columns()",
+      }),
+    )
+  })
+
+  it("passes local renewal errors to the panel for display and recovery", async () => {
+    const failure = {
+      error: "Could not renew your SSO session",
+      requestNotSent: true,
+    }
+    const client = new Client()
+    vi.spyOn(client, "query").mockRejectedValue(failure)
+    const onError = vi.fn()
+    await fetchColumns(client, vi.fn(), onError)
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError).toHaveBeenCalledWith(failure)
   })
 
   it.each([false, true])(
