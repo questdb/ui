@@ -141,6 +141,124 @@ const mount = async () => {
 }
 
 describe("AuthProvider token installation", () => {
+  const recoverDuringRefresh = async () => {
+    const Consumer = () => {
+      auth = useAuth()
+      return <span data-hook="console-live" />
+    }
+    const tree = () => (
+      <AuthProvider>
+        <QuestProvider>
+          <Consumer />
+        </QuestProvider>
+      </AuthProvider>
+    )
+    vi.mocked(fetch).mockImplementation((url) =>
+      Promise.resolve(
+        url === "/token"
+          ? tokenResponse(initialToken)
+          : new Response(JSON.stringify({ ddl: "OK" })),
+      ),
+    )
+    await act(async () => {
+      renderer = create(tree())
+      await Promise.resolve()
+    })
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+    ).toHaveLength(1)
+    const session = ssoAuthState.getAuthPayload()!
+    const generation = ssoAuthState.getSessionId()
+    vi.spyOn(Date, "now").mockReturnValue(
+      Date.parse(session.expires_at!) - 20_000,
+    )
+    vi.mocked(fetch).mockClear()
+    let finishRefresh!: (response: Response) => void
+    const pending = new Promise<Response>((resolve) => {
+      finishRefresh = resolve
+    })
+    vi.mocked(fetch).mockImplementation((url) =>
+      url === "/token"
+        ? pending
+        : Promise.resolve(new Response(JSON.stringify({ ddl: "OK" }))),
+    )
+    const query = questClient
+      .queryRaw("SELECT 99")
+      .catch((error: unknown) => error)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(tokenRefresh.completion).toBeDefined()
+    const requestSignal = vi.mocked(fetch).mock.lastCall?.[1]?.signal
+
+    // Settings error/retry removes and replaces both providers without ending
+    // this tab's session or cancelling its in-flight rotating refresh.
+    act(() => renderer!.unmount())
+    location.search = ""
+    await act(async () => {
+      renderer = create(tree())
+      await Promise.resolve()
+    })
+    expect(ssoAuthState.getAuthPayload()).toBe(session)
+    expect(ssoAuthState.getSessionId()).toBe(generation)
+    expect(requestSignal?.aborted).toBe(false)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    return { finishRefresh, query }
+  }
+
+  it("shows the mounted login when a refresh started before recovery ends the session", async () => {
+    const { finishRefresh, query } = await recoverDuringRefresh()
+    await act(async () => {
+      finishRefresh(
+        new Response(
+          JSON.stringify({
+            error: "invalid_grant",
+            error_description: "Revoked",
+          }),
+          { status: 400 },
+        ),
+      )
+      await query
+    })
+    expect(ssoAuthState.isAuthenticated()).toBe(false)
+    expect(
+      renderer!.root.findByProps({ "data-hook": "mock-login" }).props,
+    ).toMatchObject({
+      errorTitle: "Your SSO session has expired",
+      errorMessage: "Revoked Please sign in again.",
+    })
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+    ).toHaveLength(0)
+  })
+
+  it("keeps a rotated token when a refresh started before recovery succeeds", async () => {
+    const { finishRefresh, query } = await recoverDuringRefresh()
+    await act(async () => {
+      finishRefresh(
+        tokenResponse({
+          ...initialToken,
+          access_token: "renewed",
+          refresh_token: "rotated",
+        }),
+      )
+      await query
+    })
+    expect(ssoAuthState.getAuthPayload()).toMatchObject({
+      access_token: "renewed",
+      refresh_token: "rotated",
+    })
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
+    ).toHaveLength(0)
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+    ).toHaveLength(1)
+    expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer renewed",
+    })
+  })
+
   it.each([StoreKey.REST_TOKEN, StoreKey.BASIC_AUTH_HEADER])(
     "resumes and refreshes retained SSO after recovery with another tab's %s",
     async (credentialKey) => {

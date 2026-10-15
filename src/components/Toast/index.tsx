@@ -6,6 +6,7 @@ import {
   Slide,
   ToastOptions as RTToastOptions,
   ToastContent,
+  Id,
 } from "react-toastify"
 import { useNotificationCenter as RTNotificationCenter } from "react-toastify/addons/use-notification-center"
 import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
@@ -63,6 +64,10 @@ export const ToastIcon = ({
       )
   }
 }
+
+// Weak keys let removed toast DOM (and its saved origin) be collected. Only
+// shortcut-driven focus moves establish an origin; ordinary tabbing does not.
+const notificationFocusOrigins = new WeakMap<HTMLElement, HTMLElement>()
 
 const toast = {
   info: (content: ToastContent, options?: ToastOptions) => {
@@ -125,7 +130,23 @@ const toast = {
       ...options,
     })
   },
-  dismiss: rtToast.dismiss,
+  dismiss: (id?: Id) => {
+    const notification =
+      typeof document === "undefined"
+        ? null
+        : document.activeElement?.closest<HTMLElement>(".Toastify__toast")
+    const origin = notification && notificationFocusOrigins.get(notification)
+    if (
+      notification &&
+      (id === undefined || notification.id === String(id)) &&
+      origin?.isConnected
+    ) {
+      // Toastify's onClose runs after removal, when focus has already fallen
+      // to body. Restore before dismissal, but only while this toast owns focus.
+      origin.focus()
+    }
+    rtToast.dismiss(id)
+  },
   isActive: rtToast.isActive,
 }
 
@@ -155,6 +176,16 @@ export const ToastContainer = (props?: ToastContainerProps) => {
         ".Toastify__toast button",
       )
       if (control) {
+        const notification = control.closest<HTMLElement>(".Toastify__toast")
+        const origin = document.activeElement as HTMLElement | null
+        if (
+          notification &&
+          origin &&
+          typeof origin.focus === "function" &&
+          !region.current?.contains(origin)
+        ) {
+          notificationFocusOrigins.set(notification, origin)
+        }
         event.preventDefault()
         control.focus()
       }

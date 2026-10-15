@@ -419,6 +419,7 @@ export class Client {
             error.code === 20
               ? "Cancelled by user"
               : JSON.stringify(error).toString(),
+          ...(execution.requestNotSent ? { requestNotSent: true } : {}),
         })
       }
 

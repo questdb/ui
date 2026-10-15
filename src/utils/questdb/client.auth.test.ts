@@ -5,6 +5,7 @@ import type { ErrorResult } from "./types"
 import {
   REFRESH_RETRY_DELAY_MS,
   REFRESH_REQUEST_TIMEOUT_MS,
+  tokenRefresh,
 } from "./tokenRefresh"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 import { eventBus } from "../../modules/EventBus"
@@ -12,7 +13,12 @@ import { EventType } from "../../modules/EventBus/types"
 import { getTokenExpirationDate } from "../../modules/OAuth2/utils"
 import { Base64 } from "js-base64"
 import type { AuthPayload } from "../../modules/OAuth2/types"
-import { isUnverifiableExecError } from "../../scenes/Editor/Notebook/notebookUtils"
+import {
+  isUnverifiableExecError,
+  singleResultFromExec,
+  summarizeCellResults,
+} from "../../scenes/Editor/Notebook/notebookUtils"
+import { executeSingleRaw } from "../executeSingleRaw"
 import { mapQueryRawToResult } from "../tools/runQuery"
 
 const token = (overrides: Partial<AuthPayload> = {}): AuthPayload => ({
@@ -324,6 +330,121 @@ describe("SSO refresh safety", () => {
       } finally {
         cleanup()
       }
+    },
+  )
+
+  it.each([
+    { lifetime: 20_000, requests: 0 },
+    { lifetime: 300_000, requests: 1 },
+  ])(
+    "keeps a cancelled write definitively not-sent while refreshing after $requests SQL requests",
+    async ({ lifetime, requests }) => {
+      ssoAuthState.setAuthPayload(
+        token({ expires_at: new Date(Date.now() + lifetime).toISOString() }),
+      )
+      const fetchMock = vi.fn().mockImplementation(unauthorized)
+      vi.stubGlobal("fetch", fetchMock)
+      const client = new Client()
+      let finishRefresh!: (payload: AuthPayload) => void
+      let requestSignal: AbortSignal | undefined
+      let startRefresh!: () => void
+      const started = new Promise<void>((resolve) => {
+        startRefresh = resolve
+      })
+      client.refreshTokenMethod = vi.fn((_deadline, signal) => {
+        requestSignal = signal
+        startRefresh()
+        return new Promise<AuthPayload>((resolve) => {
+          finishRefresh = resolve
+        })
+      })
+      const controller = new AbortController()
+      const sql = "INSERT INTO trades VALUES (1)"
+      const pending = executeSingleRaw(
+        client,
+        sql,
+        undefined,
+        controller.signal,
+      )
+      await started
+      const completion = tokenRefresh.completion
+      controller.abort()
+      const result = await pending
+      expect(result).toMatchObject({
+        type: "error",
+        error: "Cancelled by user",
+        requestNotSent: true,
+      })
+      expect(isUnverifiableExecError(result)).toBe(false)
+      const summary = summarizeCellResults({
+        id: "cancelled",
+        position: 0,
+        value: sql,
+        result: {
+          results: [singleResultFromExec(result, sql)],
+          activeResultIndex: 0,
+          timestamp: Date.now(),
+        },
+      })
+      expect(summary).not.toHaveProperty("unverified")
+      expect(summary).not.toHaveProperty("note")
+      expect(fetchMock).toHaveBeenCalledTimes(requests)
+      expect(requestSignal?.aborted).toBe(false)
+
+      const payload = token({
+        access_token: "renewed",
+        refresh_token: "rotated",
+      })
+      ssoAuthState.setAuthPayload(payload)
+      finishRefresh(payload)
+      await completion
+      expect(fetchMock).toHaveBeenCalledTimes(requests)
+      expect(client.refreshTokenMethod).toHaveBeenCalledOnce()
+    },
+  )
+
+  it.each([false, true])(
+    "keeps cancellation of an unconfirmed SQL fetch uncertain (retry: %s)",
+    async (retry) => {
+      ssoAuthState.setAuthPayload(token())
+      let startRequest!: () => void
+      const started = new Promise<void>((resolve) => {
+        startRequest = resolve
+      })
+      const pendingFetch = (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal!.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          )
+          startRequest()
+        })
+      const fetchMock = vi.fn(pendingFetch)
+      if (retry)
+        fetchMock.mockImplementationOnce(() => Promise.resolve(unauthorized()))
+      vi.stubGlobal("fetch", fetchMock)
+      const client = new Client()
+      client.refreshTokenMethod = () => {
+        const payload = token({ access_token: "renewed" })
+        ssoAuthState.setAuthPayload(payload)
+        return Promise.resolve(payload)
+      }
+      const controller = new AbortController()
+      const pending = executeSingleRaw(
+        client,
+        "INSERT INTO trades VALUES (1)",
+        undefined,
+        controller.signal,
+      )
+      await started
+      controller.abort()
+      const result = await pending
+      expect(result).toMatchObject({
+        type: "error",
+        error: "Cancelled by user",
+      })
+      expect(result).not.toHaveProperty("requestNotSent")
+      expect(isUnverifiableExecError(result)).toBe(true)
+      expect(fetchMock).toHaveBeenCalledTimes(retry ? 2 : 1)
     },
   )
 

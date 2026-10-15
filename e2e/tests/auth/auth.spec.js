@@ -753,6 +753,59 @@ describe("Auth - OIDC ID token", () => {
       })
   })
 
+  for (const moveFocusAway of [false, true]) {
+    it(`preserves keyboard focus after late renewal (${moveFocusAway ? "user moved away" : "warning still focused"})`, () => {
+      signIn({
+        idTokens: { authorization_code: idToken("initial", 25) },
+        refreshReply: {
+          // The 10s wait expires, but this success arrives before the separate
+          // request deadline. Use a delayed reply, not a pending intercept
+          // callback whose own 10s command timeout would mask the app behavior.
+          delay: 15000,
+          body: {
+            access_token: "renewed-access-token",
+            id_token: idToken("renewed", 3600),
+            refresh_token: "rotated-refresh-token",
+            token_type: "Bearer",
+            expires_in: 3600,
+          },
+        },
+        credentials: { "auto.refresh.tables": "false" },
+      })
+      cy.get("#sso-refresh-failed", { timeout: 15000 }).should("be.visible")
+      cy.getEditor().should("be.visible")
+      let expectedFocus
+      cy.window().then((win) => {
+        win.monaco.editor.getEditors()[0].focus()
+        expectedFocus = win.document.activeElement
+        expectedFocus.dispatchEvent(
+          new win.KeyboardEvent("keydown", {
+            key: "n",
+            code: "KeyN",
+            altKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      })
+      cy.get("#sso-refresh-failed button").first().should("be.focused")
+      if (moveFocusAway) {
+        cy.getByDataHook("help-panel-button")
+          .focus()
+          .then(($button) => {
+            expectedFocus = $button[0]
+          })
+      }
+      cy.wait("@refreshFailure")
+      // Wait through Toastify's exit animation and collapse, not just dismiss.
+      cy.get("#sso-refresh-failed").should("not.exist")
+      cy.focused().should(($element) => {
+        expect($element[0]).to.equal(expectedFocus)
+      })
+      cy.getByDataHook("auth-login").should("not.exist")
+    })
+  }
+
   it("instructs closing a modal before focusing the notification", () => {
     signIn({
       idTokens: { authorization_code: idToken("initial", 20) },
@@ -944,6 +997,64 @@ describe("Auth - OIDC ID token", () => {
     cy.runLine()
     cy.getByDataHook("success-notification").should("be.visible")
     cy.get("@cancelledQuery.all").should("have.length", 1)
+  })
+
+  it("shows Login when a pending refresh fails after Settings recovery replaces the providers", () => {
+    let releaseRefresh
+    let failSettings = false
+    cy.clock(Date.now(), ["Date"])
+    const grants = signIn({
+      idTokens: { authorization_code: idToken("initial", 3600) },
+      refreshReply: (req) =>
+        new Promise((resolve) => {
+          releaseRefresh = () => {
+            req.reply({
+              statusCode: 400,
+              body: { error: "invalid_grant", error_description: "Revoked" },
+            })
+            resolve()
+          }
+        }),
+      credentials: { "auto.refresh.tables": "true" },
+    })
+    cy.getEditor().should("be.visible")
+    cy.get("@settings").then(({ response }) => {
+      cy.intercept({ method: "GET", url: `${baseUrl}/settings` }, (req) => {
+        req.reply(
+          failSettings
+            ? { statusCode: 503, body: "Unavailable" }
+            : { body: response.body },
+        )
+      })
+    })
+    cy.clearEditor()
+    cy.typeQuery("select 42")
+    cy.tick(3575000)
+    cy.clickRunIconInLine(1)
+    cy.wrap(null).should(() => expect(releaseRefresh).to.be.a("function"))
+    cy.window().then((win) => {
+      failSettings = true
+      win.dispatchEvent(new win.Event("focus"))
+    })
+    cy.contains("button", "Retry")
+      .should("be.visible")
+      .then(() => {
+        failSettings = false
+      })
+      .click()
+    cy.contains("button", "Retry").should("not.exist")
+    cy.then(() => {
+      expect(
+        grants.filter((grant) => grant === "refresh_token"),
+      ).to.have.length(1)
+      releaseRefresh()
+    })
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.getByDataHook("sign-in-error")
+      .should("be.focused")
+      .and("contain.text", "Your SSO session has expired")
+      .and("contain.text", "Revoked Please sign in again.")
+    cy.getEditor().should("not.exist")
   })
 
   it("removes an already-visible loading notification before password re-login", () => {

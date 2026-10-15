@@ -423,16 +423,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })
   }
 
-  const logout = ({
-    promptForLogin,
-    errorTitle,
-    errorMessage,
-    isDisconnection,
-    reload,
-    clearSSOSession,
-  }: LogoutOptions = {}) => {
+  const logout = (options: LogoutOptions = {}) => {
+    const { promptForLogin, reload, clearSSOSession } = options
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
-    ssoAuthState.endSession()
+    ssoAuthState.endSession(options)
     // Session-end listeners clear client credentials, pending confirmations,
     // refresh work and telemetry timers even when this document does not reload.
     removeValue(StoreKey.OAUTH_PROMPT)
@@ -448,15 +442,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     destroyServerSession()
     if (reload) {
       window.location.reload()
-      return
     }
-    unstable_batchedUpdates(() => {
-      setSessionData(undefined)
-      dispatch({ view: View.login, errorTitle, errorMessage, isDisconnection })
-    })
   }
 
   useEffect(() => {
+    // A rotating refresh can outlive Settings recovery and its original auth
+    // owner. Shared teardown must notify the mounted owner, not only the
+    // provider instance that started the refresh. Do not recursively log out.
+    unsubscribeRef.current.push(
+      ssoAuthState.onEnd(
+        ({ errorTitle, errorMessage, isDisconnection, reload } = {}) => {
+          if (reload) return
+          unstable_batchedUpdates(() => {
+            setSessionData(undefined)
+            dispatch({
+              view: View.login,
+              errorTitle,
+              errorMessage,
+              isDisconnection,
+            })
+          })
+        },
+      ),
+    )
     // If user has no access to the HTTP protocol, they will receive a 403 error response
     // containing a specific message type. If that happens, we display a full screen error page.
     subscribe<ErrorResult>(

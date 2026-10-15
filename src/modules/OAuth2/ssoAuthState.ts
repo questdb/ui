@@ -1,4 +1,4 @@
-import { AuthPayload } from "./types"
+import { AuthPayload, LogoutOptions } from "./types"
 
 // Tab-local authentication for ALL login methods. The SSO payload is only
 // present for OIDC; stored REST/basic credentials do not make another tab
@@ -9,7 +9,7 @@ class AuthSessionState {
   private authenticated = false
   private sessionId = 0
   private beforeEndListeners = new Set<() => void>()
-  private endListeners = new Set<() => void>()
+  private endListeners = new Set<(options?: LogoutOptions) => void>()
 
   capture() {
     const sessionId = this.sessionId
@@ -24,7 +24,7 @@ class AuthSessionState {
     }
   }
 
-  onEnd(listener: () => void) {
+  onEnd(listener: (options?: LogoutOptions) => void) {
     this.endListeners.add(listener)
     return () => {
       this.endListeners.delete(listener)
@@ -71,13 +71,13 @@ class AuthSessionState {
   }
 
   // Ends the tab's session for every login method, not just OIDC.
-  endSession() {
+  endSession(options?: LogoutOptions) {
     this.beforeEndListeners.forEach((listener) => listener())
     this.sessionId++
     this.authPayload = null
     this.authenticated = false
     this.refreshFailed = false
-    this.endListeners.forEach((listener) => listener())
+    this.endListeners.forEach((listener) => listener(options))
   }
 
   // Compatibility for existing consumers. New lifecycle code uses endSession.

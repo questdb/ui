@@ -9,9 +9,10 @@ const messages = vi.hoisted(() => ({
   success: vi.fn(),
   warning: vi.fn(),
   error: vi.fn(),
+  dismiss: vi.fn(),
 }))
 vi.mock("react-toastify", () => ({
-  toast: { ...messages, dismiss: vi.fn(), isActive: vi.fn() },
+  toast: { ...messages, isActive: vi.fn() },
   ToastContainer: () => null,
   Slide: () => null,
 }))
@@ -36,16 +37,37 @@ afterEach(() => {
 })
 
 const mountNotifications = () => {
-  const focus = vi.fn()
-  const querySelector = vi.fn().mockReturnValue({ focus })
+  let activeElement: unknown
   const closest = vi.fn().mockReturnValue(null)
+  const origin = {
+    closest,
+    isConnected: true,
+    focus: vi.fn(() => {
+      activeElement = origin
+    }),
+  }
+  activeElement = origin
+  const notification = { id: "sso-refresh-failed" }
+  const focus = vi.fn(() => {
+    activeElement = control
+  })
+  const control = {
+    closest: vi.fn((selector: string) =>
+      selector === ".Toastify__toast" ? notification : null,
+    ),
+    focus,
+  }
+  const querySelector = vi.fn().mockReturnValue(control)
+  const contains = (element: unknown) => element === control
   const addEventListener = vi.fn<
     [string, (event: KeyboardEvent) => void],
     void
   >()
   const removeEventListener = vi.fn()
   vi.stubGlobal("document", {
-    activeElement: { closest },
+    get activeElement() {
+      return activeElement
+    },
     addEventListener,
     removeEventListener,
   })
@@ -54,7 +76,7 @@ const mountNotifications = () => {
       <ThemeProvider theme={darkTheme}>
         <ToastContainer />
       </ThemeProvider>,
-      { createNodeMock: () => ({ querySelector }) },
+      { createNodeMock: () => ({ querySelector, contains }) },
     )
   })
   const onKeyDown = addEventListener.mock.calls[0][1]
@@ -80,6 +102,11 @@ const mountNotifications = () => {
     press,
     removeEventListener,
     onKeyDown,
+    notification,
+    origin,
+    moveFocus: (element: unknown) => {
+      activeElement = element
+    },
   }
 }
 
@@ -160,6 +187,55 @@ describe("notification keyboard access", () => {
     querySelector.mockReturnValue(null)
     expect(press().preventDefault).not.toHaveBeenCalled()
     expect(focus).not.toHaveBeenCalled()
+  })
+
+  it.each(["sso-refresh-failed", undefined])(
+    "returns shortcut focus before dismissing %s",
+    (id) => {
+      const { press, origin } = mountNotifications()
+      press()
+      // Repeating the shortcut inside the toast must not replace the origin.
+      press()
+      messages.dismiss.mockImplementationOnce(() => {
+        expect(document.activeElement).toBe(origin)
+      })
+      toast.dismiss(id)
+      expect(origin.focus).toHaveBeenCalledOnce()
+      expect(messages.dismiss).toHaveBeenCalledWith(id)
+    },
+  )
+
+  it("does not steal focus after the user leaves the notification", () => {
+    const { press, origin, moveFocus } = mountNotifications()
+    press()
+    moveFocus({ closest: () => null })
+    toast.dismiss("sso-refresh-failed")
+    expect(origin.focus).not.toHaveBeenCalled()
+    expect(messages.dismiss).toHaveBeenCalledWith("sso-refresh-failed")
+  })
+
+  it("does not move focus when a different toast is dismissed", () => {
+    const { press, origin } = mountNotifications()
+    press()
+    toast.dismiss("another-toast")
+    expect(origin.focus).not.toHaveBeenCalled()
+  })
+
+  it("does not restore a disconnected originating control", () => {
+    const { press, origin } = mountNotifications()
+    press()
+    origin.isConnected = false
+    toast.dismiss("sso-refresh-failed")
+    expect(origin.focus).not.toHaveBeenCalled()
+    expect(messages.dismiss).toHaveBeenCalledWith("sso-refresh-failed")
+  })
+
+  it("matches numeric toast IDs to the focused DOM toast", () => {
+    const { press, origin, notification } = mountNotifications()
+    notification.id = "42"
+    press()
+    toast.dismiss(42)
+    expect(origin.focus).toHaveBeenCalledOnce()
   })
 
   it("removes the keyboard listener on unmount", () => {
