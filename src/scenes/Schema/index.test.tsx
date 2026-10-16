@@ -114,14 +114,15 @@ const catalogResponse = (query: string) =>
         : { columns: [], dataset: [], count: 0 },
     ),
   )
-const mountSchema = async (client: Client) => {
+const mountSchema = async (client: Client, withSideMenu = false) => {
   await act(async () => {
     renderer = create(
       <ThemeProvider theme={darkTheme}>
         <QuestContext.Provider
           value={{ quest: client } as React.ContextType<typeof QuestContext>}
         >
-          <Schema open />
+          <Schema open={!withSideMenu} />
+          {withSideMenu && <Schema open />}
         </QuestContext.Provider>
       </ThemeProvider>,
     )
@@ -130,6 +131,95 @@ const mountSchema = async (client: Client) => {
 }
 
 describe("Schema renewal recovery", () => {
+  it("recovers both panels without retrying from a peer's delayed OK event", async () => {
+    mocks.autoRefreshTables = false
+    const client = new Client()
+    let recovering = false
+    const tableGates: Array<() => void> = []
+    const detailGates: Array<() => void> = []
+    const columnGates: Array<() => void> = []
+    const fetchMock = vi.fn((url: string) => {
+      const query = new URL(url, "http://test").searchParams.get("query") ?? ""
+      if (recovering && query.includes("columns()")) {
+        return new Promise<Response>((resolve) => {
+          columnGates.push(() =>
+            resolve(
+              new Response(
+                JSON.stringify({
+                  error: "Columns unavailable",
+                  position: -1,
+                  query,
+                }),
+                { status: 400 },
+              ),
+            ),
+          )
+        })
+      }
+      if (recovering && query.includes("materialized_views()")) {
+        return new Promise<Response>((resolve) => {
+          detailGates.push(() => resolve(catalogResponse(query)))
+        })
+      }
+      if (recovering && query.includes("tables()")) {
+        return new Promise<Response>((resolve) => {
+          tableGates.push(() => resolve(catalogResponse(query)))
+        })
+      }
+      return Promise.resolve(catalogResponse(query))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    await mountSchema(client, true)
+    const before = fetchMock.mock.calls.length
+    recovering = true
+    await act(async () => {
+      eventBus.publish(EventType.MSG_CONNECTION_ERROR, { error: "Offline" })
+      await client.queryRaw("select 1")
+    })
+    expect(tableGates).toHaveLength(2)
+    for (let index = 0; index < 2; index++) {
+      await act(async () => {
+        tableGates.shift()!()
+        await Promise.resolve()
+      })
+    }
+    expect(detailGates).toHaveLength(2)
+    // Exhaust both compatibility attempts after the tables have succeeded,
+    // rearming the errors while both materialized-view requests remain pending.
+    while (columnGates.length) {
+      await act(async () => {
+        columnGates.shift()!()
+        await Promise.resolve()
+      })
+    }
+    for (let index = 0; index < 2; index++) {
+      await act(async () => {
+        detailGates.shift()!()
+        await Promise.resolve()
+      })
+    }
+    expect(tableGates).toHaveLength(0)
+    expect(fetchMock).toHaveBeenCalledTimes(before + 9)
+    for (const panel of renderer!.root.findAllByType(VirtualTables)) {
+      const props = panel.props as React.ComponentProps<typeof VirtualTables>
+      expect(props.state.view).toBe(View.error)
+      expect(props.loadingError?.error).toBe("Columns unavailable")
+    }
+
+    // Suppression must end when the entire shared batch settles. Both panels,
+    // not just the first event subscriber, can recover on a later external OK.
+    recovering = false
+    await act(async () => {
+      await client.queryRaw("select 2")
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(before + 16)
+    for (const panel of renderer!.root.findAllByType(VirtualTables)) {
+      const props = panel.props as React.ComponentProps<typeof VirtualTables>
+      expect(props.state.view).toBe(View.ready)
+      expect(props.loadingError).toBeNull()
+    }
+  })
+
   it("does not retry from its own OK event when columns still fail", async () => {
     mocks.autoRefreshTables = false
     const client = new Client()

@@ -226,27 +226,35 @@ const emptySummary = (): RunCellSummary => ({
 const sessionEndedBeforeLaunchSummary = (): RunCellSummary =>
   cancelledBeforeLaunchSummary("session_ended")
 
-const sessionEndedSummary = (result: CellResult): RunCellSummary => ({
-  success: false,
-  queryCount: result.results.length,
-  // Keep confirmed execution history without returning old-session SQL,
-  // datasets, notices, or server error details to a still-settling caller.
-  results: result.results.map((statement) => {
-    if (statement.type === "cancelled") return "cancelled"
-    if (statement.type === "running" || statement.type === "queued")
-      return "pending"
-    if (statement.type === "error") {
-      if (statement.requestNotSent) return "ERROR: query not sent"
-      return isUnverifiableExecError(statement)
-        ? "ERROR: execution outcome unverified"
-        : "ERROR: query failed"
-    }
-    return "success"
-  }),
-  cancelled: "session_ended",
-  unverified: true,
-  note: midRunCancellationNote("session_ended"),
-})
+const sessionEndedSummary = (result: CellResult): RunCellSummary => {
+  const nothingExecuted = result.results.every(
+    (statement) =>
+      statement.type === "cancelled" ||
+      (statement.type === "error" && statement.requestNotSent),
+  )
+  if (nothingExecuted) return sessionEndedBeforeLaunchSummary()
+  return {
+    success: false,
+    queryCount: result.results.length,
+    // Keep confirmed execution history without returning old-session SQL,
+    // datasets, notices, or server error details to a still-settling caller.
+    results: result.results.map((statement) => {
+      if (statement.type === "cancelled") return "cancelled"
+      if (statement.type === "running" || statement.type === "queued")
+        return "pending"
+      if (statement.type === "error") {
+        if (statement.requestNotSent) return "ERROR: query not sent"
+        return isUnverifiableExecError(statement)
+          ? "ERROR: execution outcome unverified"
+          : "ERROR: query failed"
+      }
+      return "success"
+    }),
+    cancelled: "session_ended",
+    unverified: true,
+    note: midRunCancellationNote("session_ended"),
+  }
+}
 
 const executeCellQueries = async (args: {
   queries: string[]
@@ -385,7 +393,10 @@ const executeCellQueriesParallel = async (args: {
         const stmt = classified[index]
         if (stmt?.klass === "ERROR") {
           failedCount++
-          results[index] = errorResult(query, stmt.error ?? "Invalid statement")
+          results[index] = {
+            ...errorResult(query, stmt.error ?? "Invalid statement"),
+            requestNotSent: true,
+          }
           return
         }
         if (aborted || !isCurrentSession()) {
@@ -533,16 +544,7 @@ export const runHeadlessCell = async (
             supersedeSignal: claim.signal,
           })
 
-    if (!isCurrentSession()) {
-      const nothingExecuted = ranResult.results.every(
-        (result) =>
-          result.type === "cancelled" ||
-          (result.type === "error" && result.requestNotSent),
-      )
-      return nothingExecuted
-        ? sessionEndedBeforeLaunchSummary()
-        : sessionEndedSummary(ranResult)
-    }
+    if (!isCurrentSession()) return sessionEndedSummary(ranResult)
 
     const outcome = await enqueueBufferTask(
       bufferId,

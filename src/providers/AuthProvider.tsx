@@ -220,7 +220,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return setAuthToken(tokenResponse, settings, "refresh_token")
   }
 
-  const setupOAuth2 = async (settings: Settings) => {
+  const setupOAuth2 = async (
+    settings: Settings,
+    isCurrentOwner: () => boolean,
+  ) => {
     if (!settings["acl.enabled"]) {
       dispatch({ view: View.ready })
       return
@@ -281,6 +284,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
+        const session = ssoAuthState.capture()
         const exchange = await exchangeAuthorizationCode(settings, {
           grant_type: "authorization_code",
           code,
@@ -289,6 +293,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           redirect_uri:
             settings["acl.oidc.redirect.uri"] || getDefaultRedirectUri(),
         })
+        // Unlike rotating refreshes, an initial exchange belongs only to the
+        // provider and login that started it. Settings recovery or logout may
+        // have replaced that owner while its token response was pending.
+        if (!isCurrentOwner() || !session.isCurrent()) return
         if ("signInError" in exchange) {
           callbacks.current.logout(exchange.signInError)
           return
@@ -447,6 +455,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   useEffect(() => {
+    let active = true
     // Settings recovery may change the server's authentication mode. End the
     // old SSO lifecycle before subscribing this owner or reading password
     // credentials, without deleting those credentials through logout().
@@ -494,8 +503,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       },
     )
 
-    void setupOAuth2(settings)
+    void setupOAuth2(settings, () => active)
     return () => {
+      active = false
       unsubscribeRef.current.forEach((unsubscribe) => unsubscribe())
       unsubscribeRef.current = []
       toast.dismiss(REFRESH_FAILED_TOAST_ID)

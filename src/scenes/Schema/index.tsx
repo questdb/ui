@@ -75,6 +75,7 @@ import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { fetchColumns } from "./fetchColumns"
+import { subscribeSchemaRecovery } from "./schemaRecovery"
 import { isSessionEnded } from "../../modules/OAuth2/session"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
@@ -148,7 +149,6 @@ const Schema = ({
   const { quest } = useContext(QuestContext)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
-  const recoveryInFlight = useRef(false)
   const [tables, setTables] = useState<QuestDB.Table[]>()
   const [materializedViews, setMaterializedViews] =
     useState<QuestDB.MaterializedView[]>()
@@ -313,22 +313,15 @@ const Schema = ({
         setLoadingError(error)
       }
     }
-    const onConnectionOK = () => {
-      if (errorRef.current !== null && !recoveryInFlight.current) {
-        // Ignore this round's own OK events, including table-detail requests,
-        // when a companion query still fails. A later external success retries.
-        errorRef.current = null
-        recoveryInFlight.current = true
-        void Promise.all([fetchTables(), refreshColumns()]).finally(() => {
-          recoveryInFlight.current = false
-        })
-      }
-    }
+    const unsubscribeRecovery = subscribeSchemaRecovery(() => {
+      if (errorRef.current === null) return
+      errorRef.current = null
+      return Promise.all([fetchTables(), refreshColumns()])
+    })
     eventBus.subscribe(EventType.MSG_CONNECTION_ERROR, onConnectionError)
-    eventBus.subscribe(EventType.MSG_CONNECTION_OK, onConnectionOK)
     return () => {
       eventBus.unsubscribe(EventType.MSG_CONNECTION_ERROR, onConnectionError)
-      eventBus.unsubscribe(EventType.MSG_CONNECTION_OK, onConnectionOK)
+      unsubscribeRecovery()
     }
   }, [])
 

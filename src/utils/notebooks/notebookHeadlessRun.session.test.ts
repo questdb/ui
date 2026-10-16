@@ -542,6 +542,109 @@ describe("headless notebook authentication sessions", () => {
     await expectPreviousResult()
   })
 
+  it("reports no execution with validation errors when refresh ends before SQL is sent", async () => {
+    await db.buffers.update(BUFFER_ID, {
+      notebookViewState: {
+        cells: [
+          {
+            id: "cell",
+            position: 0,
+            value: "select * from missing_table; select 1;",
+            lastRunStatus: "success",
+          },
+        ],
+      },
+    })
+    vi.setSystemTime(Date.now() + 31_000)
+    const client = new Client()
+    client.refreshTokenMethod = () => {
+      ssoAuthState.clearAuthPayload()
+      return Promise.resolve(undefined)
+    }
+    const fetchMock = vi.fn((url: string) => {
+      expect(url).toContain("api/v1/sql/validate")
+      const query = new URL(url, "http://test").searchParams.get("query")!
+      return Promise.resolve(
+        query.includes("missing_table")
+          ? new Response(
+              JSON.stringify({
+                query,
+                error: "table does not exist",
+                position: 14,
+              }),
+              { status: 400 },
+            )
+          : new Response(JSON.stringify({ query, columns: [], timestamp: 0 })),
+      )
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const summary = await makeRun(client)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(summary).toMatchObject({
+      success: false,
+      queryCount: 0,
+      cancelled: "session_ended",
+    })
+    expect(summary).not.toHaveProperty("unverified")
+    expect(summary.note).toContain("nothing was executed")
+    await expectPreviousResult()
+  })
+
+  it("reports no execution for validation-only errors after waiting for the persistence queue", async () => {
+    await db.buffers.update(BUFFER_ID, {
+      notebookViewState: {
+        cells: [
+          {
+            id: "cell",
+            position: 0,
+            value: "select * from missing_one; select * from missing_two;",
+            lastRunStatus: "success",
+          },
+        ],
+      },
+    })
+    let release!: () => void
+    let blocker: Promise<void> | undefined
+    const fetchMock = vi.fn((url: string) => {
+      expect(url).toContain("api/v1/sql/validate")
+      // Preparation already released the buffer queue. Delay the result commit
+      // until after logout, without ever sending an execution request.
+      blocker ??= enqueueBufferTask(
+        BUFFER_ID,
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve
+          }),
+      )
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: "table does not exist",
+            position: 14,
+            query: new URL(url, "http://test").searchParams.get("query"),
+          }),
+          { status: 400 },
+        ),
+      )
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const run = makeRun(new Client())
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    ssoAuthState.clearAuthPayload()
+    release()
+    await blocker
+    const summary = await run
+    expect(summary).toMatchObject({
+      success: false,
+      queryCount: 0,
+      cancelled: "session_ended",
+    })
+    expect(summary).not.toHaveProperty("unverified")
+    expect(summary.note).toContain("nothing was executed")
+    await expectPreviousResult()
+  })
+
   it("reports no execution when session aborts release a queued read's permit", async () => {
     await classifyStatements("select 1", () =>
       Promise.resolve({

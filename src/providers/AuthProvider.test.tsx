@@ -13,9 +13,13 @@ import { StoreKey } from "../utils/localStorage/types"
 import type { Settings } from "./SettingsProvider/types"
 import type { TokenResponse } from "../modules/OAuth2/types"
 import { isRefreshable, tokenRefresh } from "../utils/questdb/tokenRefresh"
+import { SettingsProvider } from "./SettingsProvider"
+import { ThemeProvider } from "styled-components"
+import { darkTheme } from "../theme"
 
 const mocks = vi.hoisted(() => ({
   settings: {} as Settings,
+  useRealSettings: false,
   toastError: vi.fn<
     [
       React.ReactElement,
@@ -26,9 +30,16 @@ const mocks = vi.hoisted(() => ({
   toastDismiss: vi.fn(),
   toastActive: vi.fn(() => false),
 }))
-vi.mock("./SettingsProvider", () => ({
-  useSettings: () => ({ settings: mocks.settings }),
-}))
+vi.mock("./SettingsProvider", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./SettingsProvider")>()
+  return {
+    ...actual,
+    useSettings: () => {
+      const context = actual.useSettings()
+      return mocks.useRealSettings ? context : { settings: mocks.settings }
+    },
+  }
+})
 vi.mock("../components/Toast", () => ({
   NOTIFICATION_SHORTCUT: "Alt+N",
   toast: {
@@ -56,6 +67,7 @@ vi.mock("../components/QueryExecutionConfirmDialog", () => ({
 vi.mock("../components", () => ({
   Text: "span",
   Button: "button",
+  Box: "div",
   CenteredLayout: "section",
 }))
 vi.mock("../modules/OAuth2/views/login", () => ({
@@ -86,6 +98,7 @@ const idToken = (exp: number) =>
 beforeEach(() => {
   localStorage.clear()
   signInToken = initialToken
+  mocks.useRealSettings = false
   mocks.toastActive.mockReturnValue(false)
   vi.stubGlobal("sessionStorage", {
     getItem: () => null,
@@ -537,6 +550,35 @@ describe("AuthProvider token installation", () => {
     await wait
   })
 
+  it("ignores an initial code response after the mounted owner's session ends", async () => {
+    let finish!: (response: Response) => void
+    vi.mocked(fetch).mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve
+        }),
+    )
+    await act(async () => {
+      renderer = create(
+        <AuthProvider>
+          <span data-hook="console-live" />
+        </AuthProvider>,
+      )
+      await Promise.resolve()
+    })
+    expect(finish).toBeDefined()
+    act(() => ssoAuthState.endSession())
+    await act(async () => {
+      finish(tokenResponse(initialToken))
+      await Promise.resolve()
+    })
+    expect(ssoAuthState.isAuthenticated()).toBe(false)
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
+    ).toHaveLength(1)
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
   it("ignores a late success after logout instead of reinstalling the session", async () => {
     await mount()
     let resolve!: (response: Response) => void
@@ -703,6 +745,143 @@ describe("AuthProvider token installation", () => {
     expect(mocks.toastDismiss).toHaveBeenCalledWith("sso-refresh-failed")
   })
 })
+
+describe.each([
+  {
+    key: StoreKey.REST_TOKEN,
+    value: "recovered-password",
+    authorization: "Bearer recovered-password",
+  },
+  {
+    key: StoreKey.BASIC_AUTH_HEADER,
+    value: "Basic recovered-password",
+    authorization: "Basic recovered-password",
+  },
+])(
+  "AuthProvider initial exchange ownership ($key)",
+  ({ key, value, authorization }) => {
+    it.each(["success", "OAuth error", "network error"])(
+      "ignores late %s after Settings Retry recovery and password login",
+      async (outcome) => {
+        mocks.useRealSettings = true
+        mocks.settings["acl.oidc.state.required"] = true
+        location.search = "?code=test&state=expected"
+        localStorage.setItem(StoreKey.OAUTH_STATE, "expected")
+        vi.stubGlobal("history", {
+          replaceState: (_state: unknown, _title: string, url: string) => {
+            location.search = new URL(url, "http://localhost").search
+          },
+        })
+        let settingsCalls = 0
+        const settingsGates: Array<(response: Response) => void> = []
+        let finishCode!: (response: Response) => void
+        let rejectCode!: (error: Error) => void
+        const config = () =>
+          new Response(
+            JSON.stringify({
+              config: mocks.settings,
+              preferences: {},
+              "preferences.version": 1,
+            }),
+          )
+        vi.mocked(fetch).mockImplementation((url) => {
+          if (url === "settings") {
+            settingsCalls++
+            if (settingsCalls === 1)
+              return Promise.resolve(new Response("", { status: 503 }))
+            if (settingsCalls === 2 || settingsCalls === 3)
+              return new Promise((resolve) => settingsGates.push(resolve))
+            return Promise.resolve(config())
+          }
+          if (url === "warnings") return Promise.resolve(new Response("[]"))
+          if (url === "assets/console-configuration.json")
+            return Promise.resolve(new Response("{}"))
+          if (url === "/token")
+            return new Promise((resolve, reject) => {
+              finishCode = resolve
+              rejectCode = reject
+            })
+          return Promise.resolve(new Response(JSON.stringify({ ddl: "OK" })))
+        })
+        const Consumer = () => {
+          auth = useAuth()
+          return <span data-hook="console-live" />
+        }
+        await act(async () => {
+          renderer = create(
+            <ThemeProvider theme={darkTheme}>
+              <SettingsProvider>
+                <AuthProvider>
+                  <QuestProvider>
+                    <Consumer />
+                  </QuestProvider>
+                </AuthProvider>
+              </SettingsProvider>
+            </ThemeProvider>,
+          )
+          await Promise.resolve()
+        })
+        const retry = () =>
+          renderer!.root
+            .findAllByType("button")
+            .find((button) => button.children.includes("Retry"))!
+        // Both real Retry requests survive the transition to ready. The delayed
+        // failure removes the Auth owner whose initial code exchange is pending.
+        await act(async () => {
+          retry().props.onClick()
+          retry().props.onClick()
+          await Promise.resolve()
+        })
+        expect(settingsGates).toHaveLength(2)
+        await act(async () => {
+          settingsGates.shift()!(config())
+          await Promise.resolve()
+        })
+        expect(finishCode).toBeDefined()
+        expect(location.search).toBe("")
+        await act(async () => {
+          settingsGates.shift()!(new Response("", { status: 503 }))
+          await Promise.resolve()
+        })
+        await act(async () => {
+          retry().props.onClick()
+          await Promise.resolve()
+        })
+        const login = renderer!.root.findByProps({ "data-hook": "mock-login" })
+        await act(async () => {
+          localStorage.setItem(key, value)
+          login.props.onBasicAuthSuccess()
+          await Promise.resolve()
+        })
+        const recoveredSession = ssoAuthState.capture()
+        const callsBefore = vi.mocked(fetch).mock.calls.length
+        await act(async () => {
+          if (outcome === "network error") rejectCode(new Error("Offline"))
+          else
+            finishCode(
+              outcome === "success"
+                ? tokenResponse(initialToken)
+                : new Response(JSON.stringify({ error: "invalid_grant" }), {
+                    status: 400,
+                  }),
+            )
+          await Promise.resolve()
+        })
+        expect(localStorage.getItem(key)).toBe(value)
+        expect(ssoAuthState.getAuthPayload()).toBeNull()
+        expect(recoveredSession.isCurrent()).toBe(true)
+        expect(fetch).toHaveBeenCalledTimes(callsBefore)
+        expect(
+          renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+        ).toHaveLength(1)
+        await questClient.queryRaw("SELECT 987")
+        expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toMatchObject({
+          Authorization: authorization,
+        })
+      },
+    )
+  },
+)
 
 describe("AuthProvider bearer expiry", () => {
   it.each([0, "0"])(
