@@ -201,6 +201,19 @@ describe("token expiration", () => {
     ).toBe(now + 600_000)
   })
 
+  it.each([false, true])(
+    "expires immediately for zero lifetime (ID token bearer: %s)",
+    (groupsEncodedInToken) => {
+      expect(
+        expiration({
+          groups_encoded_in_token: groupsEncodedInToken,
+          expires_in: 0,
+          id_token: "opaque-token",
+        }),
+      ).toBe(now)
+    },
+  )
+
   it.each([
     {
       bearer: "an access token without expires_in",
@@ -217,8 +230,8 @@ describe("token expiration", () => {
       },
     },
     {
-      bearer: "an access token with a non-positive expires_in",
-      tokenResponse: { groups_encoded_in_token: false, expires_in: 0 },
+      bearer: "an access token with a negative expires_in",
+      tokenResponse: { groups_encoded_in_token: false, expires_in: -1 },
     },
   ])("has no expiration for $bearer", ({ tokenResponse }) => {
     expect(expiration(tokenResponse)).toBeUndefined()
@@ -268,7 +281,7 @@ describe("missing ID token", () => {
 })
 
 describe("normalised token responses", () => {
-  it.each(["3599", 3599])("accepts lifetime %j", async (expires_in) => {
+  it.each(["3599", 3599, "0", 0])("accepts lifetime %j", async (expires_in) => {
     const result = await readAuthTokenResponse(
       new Response(
         JSON.stringify({
@@ -277,10 +290,13 @@ describe("normalised token responses", () => {
         }),
       ),
     )
-    expect(result).toEqual({ access_token: "access", expires_in: 3599 })
+    expect(result).toEqual({
+      access_token: "access",
+      expires_in: Number(expires_in),
+    })
   })
 
-  it.each([0, -1, 1e20, null, "unknown", "", {}, "Infinity"])(
+  it.each([-1, 1e20, null, "unknown", "", {}, "Infinity"])(
     "treats unusable optional lifetime %j as unknown",
     async (expires_in) => {
       await expect(

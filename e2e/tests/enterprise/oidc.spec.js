@@ -234,6 +234,29 @@ describe("OIDC", () => {
       cy.getGridRow(0).should("contain", "john doe")
       cy.get("#sso-refresh-failed").should("not.exist")
       cy.getByDataHook("auth-login").should("not.exist")
+
+      // The next renewal must consume the refresh token from the recovery
+      // response, while keeping the bearer recognized by the EE fixture.
+      cy.intercept("POST", oidcTokenUrl, (req) => {
+        const body = new URLSearchParams(req.body)
+        expect(body.get("grant_type")).to.eq("refresh_token")
+        expect(body.get("refresh_token")).to.eq("rotated-refresh-token")
+        req.reply({
+          access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+          refresh_token: "next-refresh-token",
+          id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+          token_type: "Bearer",
+          expires_in: 3600,
+        })
+      }).as("rotatedRefresh")
+      cy.tick(3600000)
+      cy.runLine()
+      cy.wait("@rotatedRefresh")
+      cy.wait("@recoveredQuery")
+        .its("request.headers.authorization")
+        .should("eq", "Bearer gslpJtzmmi6RwaPSx0dYGD4tEkom") // gitleaks:allow
+      cy.getGridRow(0).should("contain", "john doe")
+      cy.getByDataHook("auth-login").should("not.exist")
     })
 
     it("shows the expired-session error when refresh is authoritatively rejected", () => {

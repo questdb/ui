@@ -108,7 +108,9 @@ export const getTokenExpirationDate = (
     : undefined
   if (idTokenExpiration !== undefined) return new Date(idTokenExpiration)
   const lifetime = tokenResponse.expires_in
-  if (lifetime === undefined || !(lifetime > 0)) return undefined
+  // Zero is a known, immediately expired lifetime, not an omitted expiry.
+  if (lifetime === undefined || !Number.isFinite(lifetime) || lifetime < 0)
+    return undefined
   const expiration = new Date(Date.now() + lifetime * 1000)
   return Number.isNaN(expiration.getTime()) ? undefined : expiration
 }
@@ -322,7 +324,7 @@ export const readAuthTokenResponse = async (
   if (
     typeof lifetime === "number" &&
     Number.isFinite(lifetime) &&
-    lifetime > 0 &&
+    lifetime >= 0 &&
     !Number.isNaN(new Date(Date.now() + lifetime * 1000).getTime())
   ) {
     tokenResponse.expires_in = lifetime

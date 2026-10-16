@@ -426,9 +426,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = (options: LogoutOptions = {}) => {
     const { promptForLogin, reload, clearSSOSession } = options
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
-    ssoAuthState.endSession(options)
-    // Session-end listeners clear client credentials, pending confirmations,
-    // refresh work and telemetry timers even when this document does not reload.
+    // Finish storage cleanup before session-end listeners can render Login.
     removeValue(StoreKey.OAUTH_PROMPT)
     sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
     removeValue(StoreKey.REST_TOKEN)
@@ -439,6 +437,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (promptForLogin && settings["acl.oidc.client.id"]) {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
+    // Session-end listeners clear client credentials, pending confirmations,
+    // refresh work and telemetry timers even when this document does not reload.
+    ssoAuthState.endSession(options)
     destroyServerSession()
     if (reload) {
       window.location.reload()
@@ -446,6 +447,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   useEffect(() => {
+    // Settings recovery may change the server's authentication mode. End the
+    // old SSO lifecycle before subscribing this owner or reading password
+    // credentials, without deleting those credentials through logout().
+    if (
+      ssoAuthState.isSSOAuthenticated() &&
+      (!settings["acl.enabled"] || !settings["acl.oidc.enabled"])
+    ) {
+      ssoAuthState.endSession()
+    }
     // A rotating refresh can outlive Settings recovery and its original auth
     // owner. Shared teardown must notify the mounted owner, not only the
     // provider instance that started the refresh. Do not recursively log out.

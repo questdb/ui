@@ -41,6 +41,8 @@ import { createMacaronsTheme } from "./utils/macarons"
 import { arrayEquals } from "./array-equals"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { isSessionEnded } from "../../modules/OAuth2/session"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 import { escapeHtml } from "../../utils/escapeHtml"
 import * as QuestDB from "../../utils/questdb"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -246,7 +248,7 @@ export function quickVis(
     requestActive = false
     eventBus.publish(EventType.MSG_QUERY_ERROR, {
       query: cachedQuery,
-      r: r.responseJSON,
+      r: r.responseJSON ?? r,
       status: r.status,
       statusText: r.statusText,
       delta: new Date().getTime() - queryExecutionTimestamp,
@@ -255,9 +257,11 @@ export function quickVis(
 
   async function executeQueryAndDraw() {
     const token = ++executionToken
+    const session = ssoAuthState.capture()
+    const queryKey = createDetachedQueryKey(query)
     const releaseIfOwner = () => {
       if (token !== executionToken) return
-      questExecution.releaseExecution(createDetachedQueryKey(query))
+      questExecution.releaseExecution(queryKey)
     }
     setDrawBtnToCancel()
     requestActive = true
@@ -276,6 +280,7 @@ export function quickVis(
       query === cachedQuery
     ) {
       draw(cachedResponse)
+      requestActive = false
       releaseIfOwner()
     } else {
       // create set of unique column names that are necessary to build a chart
@@ -313,16 +318,30 @@ export function quickVis(
       activeQueryId = queryId
       try {
         const response = await queryPromise
+        if (token !== executionToken || !session.isCurrent()) return
         if (response.type === QuestDB.Type.DQL) {
           handleServerResponse(response)
         } else {
           handleServerError(response)
         }
         eventBus.publish(EventType.MSG_QUERY_RUNNING)
+      } catch (error) {
+        if (
+          token === executionToken &&
+          session.isCurrent() &&
+          !isSessionEnded(error) &&
+          error?.error !== "Cancelled by user"
+        ) {
+          handleServerError(error)
+        }
       } finally {
-        activeQueryId = null
-        releaseIfOwner()
-        setDrawBtnToDraw()
+        // A cancelled execution can settle after a newer Draw has started.
+        if (token === executionToken) {
+          requestActive = false
+          activeQueryId = null
+          releaseIfOwner()
+          setDrawBtnToDraw()
+        }
       }
     }
   }

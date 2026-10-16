@@ -730,8 +730,78 @@ describe("Auth - OIDC ID token", () => {
         .should("eq", `Bearer ${renewed}`)
       cy.get("#sso-refresh-failed").should("not.exist")
       cy.getByDataHook("auth-login").should("not.exist")
+
+      // Exercise the installed rotated credential through the next real
+      // AuthProvider -> QuestProvider -> token POST, not just its storage.
+      const renewedAgain = idToken("renewed-again", 7200)
+      cy.intercept("POST", tokenUrl, (req) => {
+        const body = new URLSearchParams(req.body)
+        expect(body.get("grant_type")).to.eq("refresh_token")
+        expect(body.get("refresh_token")).to.eq("rotated-refresh-token")
+        req.reply({
+          access_token: "renewed-again-access-token",
+          id_token: renewedAgain,
+          refresh_token: "next-refresh-token",
+          token_type: "Bearer",
+          expires_in: 3600,
+        })
+      }).as("rotatedRefresh")
+      cy.clock().then((clock) => clock.setSystemTime(Date.now() + 3600000))
+      cy.runLine()
+      cy.wait("@rotatedRefresh")
+      cy.wait("@recoveredQuery")
+        .its("request.headers.authorization")
+        .should("eq", `Bearer ${renewedAgain}`)
+      cy.getByDataHook("auth-login").should("not.exist")
     })
   }
+
+  it("clears the remembered identity before the redirect guard forces sign-in", () => {
+    // Unknown expiry avoids a renewal on 401: this test targets the redirect
+    // guard's forced-login path, not refresh recovery or its connection events.
+    signIn({
+      idTokens: { authorization_code: "opaque-id-token" },
+      accessTokenLifetime: null,
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.getEditor().should("be.visible")
+    cy.window().then(({ localStorage }) => {
+      localStorage.setItem("sso.username.test-client", "previous-user")
+    })
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: "select current_user()" },
+      },
+      { statusCode: 401, body: "Unauthorized" },
+    ).as("rejectedIdentity")
+    cy.clearEditor()
+    cy.typeQuery("select current_user()")
+    cy.window()
+      .its("localStorage")
+      .invoke("setItem", "oauth.redirect.count", "5")
+    cy.runLine()
+    cy.wait("@rejectedIdentity")
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.getByDataHook("button-sso-continue").should("not.exist")
+    cy.getByDataHook("button-sso-login").should(
+      "contain.text",
+      "Single Sign-On (SSO)",
+    )
+    cy.window()
+      .its("localStorage")
+      .invoke("getItem", "sso.username.test-client")
+      .should("be.null")
+    cy.intercept("GET", "https://oauth.example.com/auth*", (req) => {
+      req.redirect(`${baseUrl}?error=access_denied`)
+    }).as("forcedSignIn")
+    cy.getByDataHook("button-sso-login").click()
+    cy.wait("@forcedSignIn").then(({ request }) => {
+      expect(new URL(request.url).searchParams.get("prompt")).to.eq("login")
+    })
+    cy.getByDataHook("auth-login").should("be.visible")
+  })
 
   it("shows and allows keyboard dismissal of a refresh warning while the SQL gate fails", () => {
     signIn({
@@ -1432,6 +1502,42 @@ describe("Auth - OIDC token without a lifetime", () => {
     cy.then(() => completeRetry())
     cy.getEditor().should("be.visible")
   })
+
+  for (const expires_in of [0, "0"]) {
+    it(`renews a zero-lifetime token (${JSON.stringify(expires_in)}) before SQL`, () => {
+      cy.intercept("POST", tokenUrl, (req) => {
+        const body = new URLSearchParams(req.body)
+        const refreshing = body.get("grant_type") === "refresh_token"
+        if (refreshing) {
+          expect(body.get("refresh_token")).to.eq("initial-refresh-token")
+          req.alias = "zeroLifetimeRefresh"
+        }
+        req.reply({
+          access_token: refreshing
+            ? "renewed-access-token"
+            : "expired-access-token",
+          refresh_token: refreshing
+            ? "rotated-refresh-token"
+            : "initial-refresh-token",
+          expires_in: refreshing ? 3600 : expires_in,
+        })
+      })
+      cy.intercept(
+        {
+          method: "GET",
+          url: `${baseUrl}/exec*`,
+          query: { query: "SELECT 1" },
+        },
+        { statusCode: 200, body: queryResult },
+      ).as("zeroLifetimeSQL")
+      visitCallback("?code=code-from-the-provider")
+      cy.wait("@zeroLifetimeRefresh")
+      cy.wait("@zeroLifetimeSQL")
+        .its("request.headers.authorization")
+        .should("eq", "Bearer renewed-access-token")
+      cy.getEditor().should("be.visible")
+    })
+  }
 
   it("signs in, never refreshes the token, and signs out once the server rejects it", () => {
     // Given a provider that sends no expires_in, although it sends a refresh

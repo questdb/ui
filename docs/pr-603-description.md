@@ -2,7 +2,9 @@
 
 This is a replacement PR description for the complete change set, including the
 local review follow-up. Apply it to GitHub when the follow-up is pushed; the
-local test results below do not describe the previously pushed head.
+local test results below describe the six-issue follow-up based on
+`908eba9dd43af4f7080599b4cb1f7760e2d65a67`, not the currently published PR head.
+Re-run validation if the follow-up changes before publication.
 
 ## Summary
 
@@ -89,18 +91,36 @@ OAuth rejection still returns the user to sign-in.
 | #21, #22, #24–#28 | Shared session handles/error guards; central authorization; pure token normalization; separate lifecycle options; remove unused helpers/reset hooks/payload fields; accurate local-error and commit-outcome types; clearer names/constants/comments. |
 | #29               | Document every shipped concern, the secret-using CI workflow and current validation results here, rather than describing this as only a refresh-loop change.                                                                                         |
 
+## Level-3 review follow-up
+
+- End retained SSO and cancel its refresh work when recovered settings switch to
+  password/browser-basic authentication or disable ACL, preserving stored
+  password credentials.
+- Preserve numeric and string zero lifetimes as immediate expiry so a usable
+  refresh token renews the bearer before SQL is sent.
+- Clear the remembered SSO identity before session-end listeners render Login,
+  preserving the redirect guard's forced reauthentication action.
+- Catch expected legacy Quick Vis teardown/cancellation rejections, fence stale
+  results, and release request state without clearing a newer Draw execution.
+- Verify the next token request consumes the rotated refresh token in both
+  stubbed browser recovery tests and the Enterprise recovery scenario.
+- Replace stale validation counts with the results and exact command below.
+
 ## Validation
 
-Local follow-up validation:
+Local six-issue follow-up validation (2026-10-16; working tree based on
+`908eba9dd43af4f7080599b4cb1f7760e2d65a67`):
 
 - `yarn typecheck` — passed.
 - `yarn lint` — passed, including color-token checks.
 - `yarn build` — passed (existing bundle-size advisory remains).
-- `yarn test:unit` — 2,838 tests in 148 files.
-- `yarn cypress run --spec 'e2e/tests/auth/auth.spec.js' --browser electron` —
-  38 passed against the production preview with stubbed HTTP responses.
+- `yarn test:unit` — 2,941 tests passed in 154 files.
+- `yarn cypress run --spec 'e2e/tests/auth/*.spec.js' --browser electron` — 60
+  passed against the production preview with stubbed HTTP responses: 50 auth, 6
+  notification and 4 unauthorized-recovery tests.
 - The full console E2E suite and live Enterprise OIDC lane were not run locally.
 
-Earlier counts in the old description were checkpoints of earlier revisions, not
-the final suite size. Live IdP/Enterprise integration still requires the private
-lane; the stubbed auth suite is not a substitute for it.
+These results cover the local follow-up above, not earlier revision checkpoints.
+The Enterprise rotation assertion was extended but not run locally. Live
+IdP/Enterprise integration still requires the private lane; the stubbed auth
+suite is not a substitute for it.

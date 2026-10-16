@@ -60,7 +60,11 @@ vi.mock("../components", () => ({
 }))
 vi.mock("../modules/OAuth2/views/login", () => ({
   Login: (props: Record<string, unknown>) =>
-    React.createElement("div", { ...props, "data-hook": "mock-login" }),
+    React.createElement("div", {
+      ...props,
+      "data-hook": "mock-login",
+      "data-sso-username": localStorage.getItem("sso.username.test-client"),
+    }),
 }))
 
 let renderer: ReactTestRenderer | undefined
@@ -309,6 +313,131 @@ describe("AuthProvider token installation", () => {
       expect(ssoAuthState.getSessionId()).toBe(generation)
     },
   )
+
+  it.each([
+    {
+      mode: "password",
+      key: StoreKey.REST_TOKEN,
+      value: "password-token",
+      authorization: "Bearer password-token",
+    },
+    {
+      mode: "password",
+      key: StoreKey.BASIC_AUTH_HEADER,
+      value: "Basic password",
+      authorization: "Basic password",
+    },
+    {
+      mode: "browser basic",
+      key: undefined,
+      value: undefined,
+      authorization: undefined,
+    },
+    {
+      mode: "disabled ACL",
+      key: undefined,
+      value: undefined,
+      authorization: undefined,
+    },
+  ])(
+    "ends retained SSO when settings recovery switches to $mode ($key)",
+    async ({ mode, key, value, authorization }) => {
+      await mount()
+      const generation = ssoAuthState.getSessionId()
+      const oldSession = ssoAuthState.capture()
+      act(() => renderer!.unmount())
+      location.search = ""
+      mocks.settings = {
+        "acl.enabled": mode !== "disabled ACL",
+        "acl.oidc.enabled": false,
+        "acl.basic.auth.realm.enabled": mode === "browser basic",
+      }
+      if (key && value) localStorage.setItem(key, value)
+      vi.mocked(fetch).mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({ ddl: "OK" }))),
+      )
+      await act(async () => {
+        renderer = create(
+          <AuthProvider>
+            <QuestProvider>
+              <span data-hook="console-live" />
+            </QuestProvider>
+          </AuthProvider>,
+        )
+        await Promise.resolve()
+      })
+      expect(ssoAuthState.getAuthPayload()).toBeNull()
+      expect(ssoAuthState.getSessionId()).toBeGreaterThan(generation)
+      expect(oldSession.isCurrent()).toBe(false)
+      expect(questClient.refreshTokenMethod).toBeUndefined()
+      expect(
+        renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+      ).toHaveLength(1)
+      if (key) expect(localStorage.getItem(key)).toBe(value)
+      await questClient.queryRaw("select 99")
+      const headers = vi.mocked(fetch).mock.lastCall?.[1]?.headers as Record<
+        string,
+        string
+      >
+      expect(headers.Authorization).toBe(authorization)
+    },
+  )
+
+  it("cancels a retained rotating refresh when recovered settings disable ACL", async () => {
+    const { finishRefresh, query } = await recoverDuringRefresh()
+    const requestSignal = vi.mocked(fetch).mock.lastCall?.[1]?.signal
+    ssoAuthState.markRefreshFailed()
+    act(() => renderer!.unmount())
+    mocks.settings = { "acl.enabled": false }
+    await act(async () => {
+      renderer = create(
+        <AuthProvider>
+          <QuestProvider>
+            <span data-hook="console-live" />
+          </QuestProvider>
+        </AuthProvider>,
+      )
+      await Promise.resolve()
+    })
+    expect(requestSignal?.aborted).toBe(true)
+    expect(tokenRefresh.completion).toBeUndefined()
+    expect(ssoAuthState.hasRefreshFailed()).toBe(false)
+    await act(async () => {
+      finishRefresh(
+        tokenResponse({
+          ...initialToken,
+          access_token: "obsolete",
+          refresh_token: "obsolete",
+        }),
+      )
+      await query
+    })
+    expect(ssoAuthState.getAuthPayload()).toBeNull()
+    await questClient.queryRaw("select 99")
+    expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).not.toHaveProperty(
+      "Authorization",
+    )
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+    ).toHaveLength(1)
+  })
+
+  it("clears the remembered identity before an asynchronous forced logout renders Login", async () => {
+    await mount()
+    localStorage.setItem("sso.username.test-client", "previous-user")
+    localStorage.setItem(StoreKey.OAUTH_REDIRECT_COUNT, "5")
+    // Deliberately outside act's outer batch: React 17 flushes the session-end
+    // listener synchronously when an asynchronous SQL 401 reaches logout.
+    await Promise.resolve().then(() =>
+      eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED),
+    )
+    expect(localStorage.getItem("sso.username.test-client")).toBeNull()
+    expect(
+      renderer!.root.findByProps({ "data-hook": "mock-login" }).props[
+        "data-sso-username"
+      ],
+    ).toBeNull()
+  })
 
   it("warns after expiry, avoids duplicates, and restores a dismissed warning", async () => {
     await mount()
@@ -576,6 +705,78 @@ describe("AuthProvider token installation", () => {
 })
 
 describe("AuthProvider bearer expiry", () => {
+  it.each([0, "0"])(
+    "renews a zero-lifetime response (%j) before sending SQL",
+    async (expiresIn) => {
+      vi.mocked(fetch).mockImplementation((url, init) => {
+        const grant = (init?.body as URLSearchParams | undefined)?.get(
+          "grant_type",
+        )
+        return Promise.resolve(
+          url === "/token"
+            ? new Response(
+                JSON.stringify({
+                  ...initialToken,
+                  expires_in: expiresIn,
+                  ...(grant === "refresh_token"
+                    ? {
+                        access_token: "renewed",
+                        refresh_token: "rotated",
+                        expires_in: 3600,
+                      }
+                    : {}),
+                }),
+              )
+            : new Response(JSON.stringify({ ddl: "OK" })),
+        )
+      })
+      const Consumer = () => {
+        auth = useAuth()
+        return <span data-hook="console-live" />
+      }
+      await act(async () => {
+        renderer = create(
+          <AuthProvider>
+            <QuestProvider>
+              <Consumer />
+            </QuestProvider>
+          </AuthProvider>,
+        )
+        await Promise.resolve()
+      })
+      expect(auth.sessionData).toMatchObject({
+        access_token: "renewed",
+        refresh_token: "rotated",
+      })
+      const refreshes = vi
+        .mocked(fetch)
+        .mock.calls.filter(
+          ([url, init]) =>
+            url === "/token" &&
+            (init?.body as URLSearchParams).get("grant_type") ===
+              "refresh_token",
+        )
+      expect(refreshes).toHaveLength(1)
+      expect(
+        (refreshes[0][1]?.body as URLSearchParams).get("refresh_token"),
+      ).toBe("initial-refresh")
+      const sqlCalls = vi
+        .mocked(fetch)
+        .mock.calls.filter(
+          ([url]) =>
+            typeof url === "string" &&
+            url.startsWith("exec?") &&
+            !url.includes("session=true"),
+        )
+      expect(sqlCalls.length).toBeGreaterThan(0)
+      for (const [, init] of sqlCalls)
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer renewed" })
+      expect(
+        renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+      ).toHaveLength(1)
+    },
+  )
+
   it("installs an ID token bearer without expires_in at sign-in and on refresh", async () => {
     // OAuth only recommends expires_in, the access token's lifetime.
     mocks.settings["acl.oidc.groups.encoded.in.token"] = true
