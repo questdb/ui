@@ -40,6 +40,7 @@ export type NotificationShape = Readonly<{
   sideContent?: ReactNode
   line2?: ReactNode
   type: NotificationType
+  queryId?: number
   jitCompiled?: boolean
   isMinimized?: boolean
   isExplain?: boolean
@@ -54,6 +55,11 @@ export type QueryNotifications = Readonly<{
   explain?: NotificationShape
 }>
 
+export type PendingLoadingNotification = Readonly<{
+  bufferId: NotificationNamespaceKey
+  queryKeys: QueryKey[]
+}>
+
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
@@ -65,6 +71,7 @@ export type QueryStateShape = Readonly<{
     Record<QueryKey, QueryNotifications>
   >
   activeNotification: NotificationShape | null
+  pendingLoadingNotifications: Record<number, PendingLoadingNotification>
   queriesToRun: QueriesToRun
 }>
 
@@ -73,6 +80,8 @@ export enum QueryAT {
   CLEANUP_NOTIFICATIONS = "QUERY/CLEANUP_NOTIFICATIONS",
   CLEANUP_BUFFER_NOTIFICATIONS = "QUERY/CLEANUP_BUFFER_NOTIFICATIONS",
   REMOVE_NOTIFICATION = "QUERY/REMOVE_NOTIFICATION",
+  SETTLE_LOADING_NOTIFICATION = "QUERY/SETTLE_LOADING_NOTIFICATION",
+  SETTLE_ACTIVE_LOADING_NOTIFICATION = "QUERY/SETTLE_ACTIVE_LOADING_NOTIFICATION",
   UPDATE_NOTIFICATION_KEY = "QUERY/UPDATE_NOTIFICATION_KEY",
   UPDATE_NOTIFICATION_KEYS = "QUERY/UPDATE_NOTIFICATION_KEYS",
   MOVE_NOTIFICATION_NAMESPACE = "QUERY/MOVE_NOTIFICATION_NAMESPACE",
@@ -105,6 +114,16 @@ type RemoveNotificationAction = Readonly<{
   payload: QueryKey
   bufferId?: NotificationNamespaceKey
   type: QueryAT.REMOVE_NOTIFICATION
+}>
+
+type SettleLoadingNotificationAction = Readonly<{
+  type: QueryAT.SETTLE_LOADING_NOTIFICATION
+  payload: { queryId: number }
+}>
+
+type SettleActiveLoadingNotificationAction = Readonly<{
+  type: QueryAT.SETTLE_ACTIVE_LOADING_NOTIFICATION
+  payload: { queryId: number }
 }>
 
 type SetResultAction = Readonly<{
@@ -177,6 +196,8 @@ export type QueryAction =
   | CleanupNotificationsAction
   | CleanupBufferNotificationsAction
   | RemoveNotificationAction
+  | SettleLoadingNotificationAction
+  | SettleActiveLoadingNotificationAction
   | UpdateNotificationKeyAction
   | UpdateNotificationKeysAction
   | MoveNotificationNamespaceAction

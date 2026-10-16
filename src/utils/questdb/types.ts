@@ -73,7 +73,7 @@ export type RawDmlResult = {
 export type RawErrorResult = {
   ddl: undefined
   dml: undefined
-  error: "<error message>"
+  error: string
   position: number
   query: string
 }
@@ -82,7 +82,7 @@ export type RawNoticeResult = {
   ddl: undefined
   dml: undefined
   error: undefined
-  notice: "<notice message>"
+  notice: string
   position: undefined
   query: string
   columns?: ColumnDefinition[]
@@ -109,10 +109,11 @@ export type RawResult =
   | RawErrorResult
   | RawNoticeResult
 
-export type ErrorResult = RawErrorResult & {
+export type ErrorResult = Omit<RawErrorResult, "ddl" | "dml"> & {
   type: Type.ERROR
-  status: number
-}
+  // Local failures and aborted/session-ended requests have no HTTP response.
+  status?: number
+} & import("../../modules/OAuth2/session").SessionFailure
 
 export type NoticeResult = RawNoticeResult & {
   type: Type.NOTICE
@@ -364,6 +365,17 @@ export type Options = {
   cols?: string
   src?: string
   cancellable?: boolean
+}
+
+// In-process lifecycle hooks are not SQL wire parameters.
+export type QueryLifecycle = {
+  /** Invoked immediately before the SQL fetch, after any token refresh wait. */
+  onRequestStart?: () => void
+  /**
+   * Invoked when the query starts waiting for a token refresh: before its first
+   * fetch, or before retrying a fetch that the server rejected with 401.
+   */
+  onRefreshWait?: (timeoutMs: number) => void
 }
 
 export type Release = {

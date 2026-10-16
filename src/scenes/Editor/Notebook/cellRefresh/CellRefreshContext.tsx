@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -40,10 +41,16 @@ export const useCellRefreshEngine = (options: {
     depsRef.current = deps
   }, [deps])
 
-  useEffect(() => {
+  // Abort rounds during the unmount commit, before session-ended query
+  // continuations can replace or delete the last saved frame.
+  useLayoutEffect(() => {
     engine.attach()
-    return () => engine.destroy()
+    return () => engine.detach()
   }, [engine])
+
+  // Flushing pending frames can serialize large datasets. Keep it outside
+  // the layout cleanup so switching buffers can paint first.
+  useEffect(() => () => engine.destroy(), [engine])
 
   useEffect(() => {
     engine.sync(cells, autoRefreshDefault)

@@ -1,5 +1,7 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { db } from "../../store/db"
 import type {
   CellResult,
   NotebookVariable,
@@ -26,6 +28,7 @@ import {
   CELL_CHANGED_BEFORE_RUN_NOTE,
   CELL_CHANGED_MID_RUN_NOTE,
   errorResult,
+  isUnverifiableExecError,
   MOUNTED_MID_RUN_NOTE,
   NOTEBOOK_ROW_CAP,
   RESULT_NOT_SAVED_RUN_NOTE,
@@ -46,14 +49,17 @@ import {
   NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
   NOTEBOOK_DELETED_MID_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/runCancellation"
-import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
+import {
+  prepareCellSnapshot,
+  persistPreparedCellSnapshot,
+  reportSnapshotSaveFailure,
+} from "../../scenes/Editor/Notebook/persistCellSnapshot"
 import { pruneToRecentNotebooks } from "../../store/notebookResults"
 import {
   commitView,
   partsOf,
   readNotebookView,
   requireCellIn,
-  type CommitOutcome,
 } from "./notebookDexieView"
 import {
   getMountEpoch,
@@ -87,6 +93,7 @@ type RunCommitOutcome =
         | "cell_changed"
         | "user_changed"
         | "storage_full"
+        | "session_ended"
         | RunCancellation
     }
 
@@ -216,15 +223,57 @@ const emptySummary = (): RunCellSummary => ({
   results: [],
 })
 
+const sessionEndedBeforeLaunchSummary = (): RunCellSummary =>
+  cancelledBeforeLaunchSummary("session_ended")
+
+const sessionEndedSummary = (result: CellResult): RunCellSummary => {
+  const nothingExecuted = result.results.every(
+    (statement) =>
+      statement.type === "cancelled" ||
+      (statement.type === "error" && statement.requestNotSent),
+  )
+  if (nothingExecuted) return sessionEndedBeforeLaunchSummary()
+  return {
+    success: false,
+    queryCount: result.results.length,
+    // Keep confirmed execution history without returning old-session SQL,
+    // datasets, notices, or server error details to a still-settling caller.
+    results: result.results.map((statement) => {
+      if (statement.type === "cancelled") return "cancelled"
+      if (statement.type === "running" || statement.type === "queued")
+        return "pending"
+      if (statement.type === "error") {
+        if (statement.requestNotSent) return "ERROR: query not sent"
+        return isUnverifiableExecError(statement)
+          ? "ERROR: execution outcome unverified"
+          : "ERROR: query failed"
+      }
+      return "success"
+    }),
+    cancelled: "session_ended",
+    unverified: true,
+    note: midRunCancellationNote("session_ended"),
+  }
+}
+
 const executeCellQueries = async (args: {
   queries: string[]
   queryText: string
+  isCurrentSession: () => boolean
   variables: NotebookVariable[] | undefined
   quest: Client
   signal?: AbortSignal
   supersedeSignal: AbortSignal
 }): Promise<CellResult> => {
-  const { queries, queryText, variables, quest, signal, supersedeSignal } = args
+  const {
+    queries,
+    queryText,
+    isCurrentSession,
+    variables,
+    quest,
+    signal,
+    supersedeSignal,
+  } = args
   const runAbort = new AbortController()
   let aborted = false
   const onAbort = () => {
@@ -252,7 +301,7 @@ const executeCellQueries = async (args: {
       // flight when the abort landed still records its REAL awaited outcome
       // below — it may have completed server-side, and reporting it as
       // cancelled would push the agent into re-running a committed write.
-      if (aborted) {
+      if (aborted || !isCurrentSession()) {
         for (let j = i; j < queries.length; j++) {
           results[j] = cancelledResult(queries[j], "user")
         }
@@ -306,13 +355,21 @@ const executeCellQueries = async (args: {
 const executeCellQueriesParallel = async (args: {
   queries: string[]
   classified: ClassifiedStatement[]
+  isCurrentSession: () => boolean
   variables: NotebookVariable[] | undefined
   quest: Client
   signal?: AbortSignal
   supersedeSignal: AbortSignal
 }): Promise<CellResult> => {
-  const { queries, classified, variables, quest, signal, supersedeSignal } =
-    args
+  const {
+    queries,
+    classified,
+    isCurrentSession,
+    variables,
+    quest,
+    signal,
+    supersedeSignal,
+  } = args
   const runAbort = new AbortController()
   let aborted = false
   const onAbort = () => {
@@ -336,26 +393,31 @@ const executeCellQueriesParallel = async (args: {
         const stmt = classified[index]
         if (stmt?.klass === "ERROR") {
           failedCount++
-          results[index] = errorResult(query, stmt.error ?? "Invalid statement")
+          results[index] = {
+            ...errorResult(query, stmt.error ?? "Invalid statement"),
+            requestNotSent: true,
+          }
           return
         }
-        if (aborted) {
+        if (aborted || !isCurrentSession()) {
           results[index] = cancelledResult(query, "user")
           return
         }
         let exec: QueryExecResult
         try {
-          exec = await statementRequestLimiter(
-            () =>
-              executeSingleRaw(
-                quest,
-                query,
-                variables,
-                runAbort.signal,
-                NOTEBOOK_ROW_CAP,
-              ),
-            runAbort.signal,
-          )
+          exec = await statementRequestLimiter(() => {
+            if (!isCurrentSession()) {
+              runAbort.abort()
+              throw new DOMException("Session ended", "AbortError")
+            }
+            return executeSingleRaw(
+              quest,
+              query,
+              variables,
+              runAbort.signal,
+              NOTEBOOK_ROW_CAP,
+            )
+          }, runAbort.signal)
         } catch {
           results[index] = cancelledResult(query, "user")
           return
@@ -394,6 +456,7 @@ export const runHeadlessCell = async (
   sql?: string,
   gate?: RunCellGate,
 ): Promise<RunCellSummary> => {
+  const { isCurrent: isCurrentSession } = ssoAuthState.capture()
   const prep = await enqueueBufferTask(bufferId, async () => {
     const view = await readNotebookView(bufferId)
     return {
@@ -403,6 +466,7 @@ export const runHeadlessCell = async (
       mountEpochAtPrep: getMountEpoch(bufferId),
     }
   })
+  if (!isCurrentSession()) return sessionEndedBeforeLaunchSummary()
   if (prep.cell.type === "markdown") return emptySummary()
   if (sql !== undefined && sql !== prep.cell.value) {
     return {
@@ -441,6 +505,7 @@ export const runHeadlessCell = async (
           claim.signal,
         ),
     )
+    if (!isCurrentSession()) return sessionEndedBeforeLaunchSummary()
     if (claim.signal.aborted) {
       return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
     }
@@ -463,6 +528,7 @@ export const runHeadlessCell = async (
         ? await executeCellQueriesParallel({
             queries,
             classified,
+            isCurrentSession,
             variables: prep.variables,
             quest,
             signal,
@@ -471,11 +537,14 @@ export const runHeadlessCell = async (
         : await executeCellQueries({
             queries,
             queryText,
+            isCurrentSession,
             variables: prep.variables,
             quest,
             signal,
             supersedeSignal: claim.signal,
           })
+
+    if (!isCurrentSession()) return sessionEndedSummary(ranResult)
 
     const outcome = await enqueueBufferTask(
       bufferId,
@@ -491,6 +560,9 @@ export const runHeadlessCell = async (
             return { committed: false, reason: "notebook_archived" }
           }
           return { committed: false, reason: "notebook_gone" }
+        }
+        if (!isCurrentSession()) {
+          return { committed: false, reason: "session_ended" }
         }
         const currentCell = view.cells.find((c) => c.id === cellId)
         if (!currentCell) {
@@ -515,23 +587,9 @@ export const runHeadlessCell = async (
         if (currentCell.value !== queryText) {
           return { committed: false, reason: "cell_changed" }
         }
-        const parts = partsOf(view)
-        let commit: CommitOutcome
-        try {
-          commit = await commitView(bufferId, {
-            ...parts,
-            cells: patchCellRunResult(parts.cells, cellId, ranResult),
-          })
-        } catch {
-          return { committed: false, reason: "storage_full" }
-        }
-        if (commit === "archived") {
-          return { committed: false, reason: "notebook_archived" }
-        }
-        if (commit === "deleted") {
-          return { committed: false, reason: "notebook_gone" }
-        }
-        const snapshotSaved = await persistCellSnapshot({
+        // Preparation serializes the full dataset before capping it. Reject
+        // stale results first, and keep this work outside the transaction.
+        const snapshot = prepareCellSnapshot({
           bufferId,
           cellId,
           results: ranResult.results,
@@ -539,20 +597,93 @@ export const runHeadlessCell = async (
           activeResultIndex: ranResult.activeResultIndex,
           ...(ranResult.script ? { script: ranResult.script } : {}),
         })
-        // Headless saves land on unmounted buffers
-        void pruneToRecentNotebooks()
-        return { committed: true, snapshotSaved }
+        const parts = partsOf(view)
+        const resultParts = {
+          ...parts,
+          cells: patchCellRunResult(parts.cells, cellId, ranResult),
+        }
+        const sessionEnded = new Error("Session ended during notebook commit")
+        try {
+          // The metadata and snapshot share one acceptance point. Throwing on
+          // invalidation rolls back both, including an update already issued
+          // by commitView. Once accepted, transaction completion saves the pair
+          // even if logout happens before its completion event is delivered.
+          return await db.transaction(
+            "rw",
+            db.buffers,
+            db.notebook_results,
+            async (): Promise<RunCommitOutcome> => {
+              const commit = await commitView(
+                bufferId,
+                resultParts,
+                isCurrentSession,
+              )
+              if (commit === "archived") {
+                return { committed: false, reason: "notebook_archived" }
+              }
+              if (commit === "deleted") {
+                return { committed: false, reason: "notebook_gone" }
+              }
+              if (commit === "discarded" || !isCurrentSession()) {
+                throw sessionEnded
+              }
+              const snapshotSaved = await persistPreparedCellSnapshot(snapshot)
+              if (!isCurrentSession()) throw sessionEnded
+              return { committed: true, snapshotSaved }
+            },
+          )
+        } catch (error) {
+          if (error === sessionEnded || !isCurrentSession()) {
+            return { committed: false, reason: "session_ended" }
+          }
+          reportSnapshotSaveFailure(error)
+          // A large snapshot can abort the ROOT transaction at commit, after
+          // all requests resolved. Preserve the small run record independently.
+          const canRetry = () =>
+            isCurrentSession() &&
+            claim.isCurrent() &&
+            !deps.isBufferClaimed() &&
+            getMountEpoch(bufferId) === prep.mountEpochAtPrep &&
+            deps.getBufferSeq() === prep.seqAtPrep
+          if (!canRetry()) return { committed: false, reason: "user_changed" }
+          try {
+            const commit = await commitView(bufferId, resultParts, canRetry)
+            switch (commit) {
+              case "committed":
+                return { committed: true, snapshotSaved: false }
+              case "archived":
+                return { committed: false, reason: "notebook_archived" }
+              case "deleted":
+                return { committed: false, reason: "notebook_gone" }
+              case "discarded":
+                return {
+                  committed: false,
+                  reason: isCurrentSession() ? "user_changed" : "session_ended",
+                }
+            }
+          } catch {
+            return {
+              committed: false,
+              reason: isCurrentSession() ? "storage_full" : "session_ended",
+            }
+          }
+        }
       },
     )
 
     const summary = summarizeCellResults({ ...prep.cell, result: ranResult })
     if (outcome.committed) {
-      if (!signal?.aborted) emitAgentEdit({ bufferId, cellId })
+      // Only prune after the encompassing transaction has committed.
+      void pruneToRecentNotebooks()
+      if (isCurrentSession() && !signal?.aborted)
+        emitAgentEdit({ bufferId, cellId })
       return outcome.snapshotSaved
         ? summary
         : { ...summary, note: RESULT_NOT_SAVED_RUN_NOTE }
     }
     switch (outcome.reason) {
+      case "session_ended":
+        return sessionEndedSummary(ranResult)
       case "mounted":
         return { ...summary, unverified: true, note: MOUNTED_MID_RUN_NOTE }
       case "user_changed":

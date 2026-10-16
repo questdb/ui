@@ -50,7 +50,7 @@ export type RunCancelReason =
   | "superseded"
 
 // A signal aborted without a known reason (the tool call itself was aborted).
-export type RunCancellation = RunCancelReason | "cancelled"
+export type RunCancellation = RunCancelReason | "cancelled" | "session_ended"
 
 const RUN_CANCEL_REASONS: ReadonlySet<string> = new Set<RunCancelReason>([
   "result_cleared",
@@ -87,13 +87,18 @@ const describeRunCancellation = (reason: RunCancellation): string => {
       return "a newer run of this cell started"
     case "cancelled":
       return "the request was cancelled"
+    case "session_ended":
+      return "the authentication session ended"
   }
 }
 
 export const cancelledBeforeRunNote = (reason: RunCancellation): string =>
-  `Run NOT started: ${describeRunCancellation(reason)} before validation ` +
-  "finished, so nothing was executed. Call get_notebook_state to see the " +
-  "current cell state; it is safe to re-run."
+  reason === "session_ended"
+    ? "Run NOT started: the authentication session ended before execution, so nothing was executed. " +
+      "Sign in again before re-running."
+    : `Run NOT started: ${describeRunCancellation(reason)} before execution, ` +
+      "so nothing was executed. Call get_notebook_state to see the " +
+      "current cell state; it is safe to re-run."
 
 const MODE_CHANGED_MID_RUN_NOTE =
   "Run completed, but the cell was switched to chart mode while it was " +
@@ -122,6 +127,11 @@ export const midRunCancellationNote = (reason: RunCancellation): string => {
       return SUPERSEDED_RUN_NOTE
     case "cancelled":
       return CANCELLED_MID_RUN_NOTE
+    case "session_ended":
+      return (
+        "The authentication session ended. Results were not saved. " +
+        "Statements already sent may have executed; verify before retrying writes."
+      )
   }
 }
 

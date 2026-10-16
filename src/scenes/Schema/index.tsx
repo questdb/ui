@@ -74,6 +74,10 @@ import { SchemaProvider, useSchema, type SelectedTable } from "./SchemaContext"
 import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { fetchColumns } from "./fetchColumns"
+import { subscribeSchemaRecovery } from "./schemaRecovery"
+import { isSessionEnded } from "../../modules/OAuth2/session"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -160,34 +164,55 @@ const Schema = ({
   const { selectOpen, setSelectOpen, selectedTables, setSelectedTables } =
     useSchema()
 
+  const recordLoadingError = (error: unknown) => {
+    if (isSessionEnded(error)) return
+    const failure = error as Partial<ErrorResult> | null
+    const loadingError: ErrorResult = {
+      ...failure,
+      type: QuestDB.Type.ERROR,
+      error:
+        failure?.error ||
+        (error instanceof Error
+          ? error.message
+          : "Could not load database schema."),
+      position: failure?.position ?? -1,
+      query: failure?.query ?? "",
+    }
+    errorRef.current = loadingError
+    setLoadingError(loadingError)
+    dispatchState({ view: View.error })
+  }
+
   const fetchTables = async () => {
+    const session = ssoAuthState.capture()
     try {
       const response = await quest.showTables()
+      if (!session.isCurrent()) return
       if (response && response.type === QuestDB.Type.DQL) {
         errorRef.current = null
+        setLoadingError(null)
         const data = response.data.map((item) => ({
           ...item,
           table_type: item.table_type ?? (item.matView ? "M" : "T"),
         }))
         setTables(data)
         dispatch(actions.query.setTables(data))
-        void fetchMaterializedViews()
+        const details = [fetchMaterializedViews()]
         // we only need views() to get view state: invalid/valid + invalidation reason
         // so only fetch if there are views present - this avoids unnecessary errors on older servers
         if (data.some((t) => t.table_type === "V")) {
-          void fetchViews()
+          details.push(fetchViews())
         }
         if (data.some((t) => t.table_type === "L")) {
-          void fetchLiveViews()
+          details.push(fetchLiveViews())
         }
         dispatchState({ view: View.ready })
+        await Promise.all(details)
       } else {
-        dispatchState({ view: View.error })
+        recordLoadingError(response)
       }
     } catch (error) {
-      dispatchState({
-        view: View.error,
-      })
+      if (session.isCurrent()) recordLoadingError(error)
     }
   }
 
@@ -224,28 +249,12 @@ const Schema = ({
     }
   }
 
-  const fetchColumns = async () => {
-    const queries = [
-      "information_schema.questdb_columns()",
-      "information_schema.columns()", // fallback for older servers
-    ]
-
-    for (const query of queries) {
-      try {
-        const response =
-          await quest.query<QuestDB.InformationSchemaColumn>(query)
-
-        if (response?.type === QuestDB.Type.DQL) {
-          dispatch(actions.query.setColumns(response.data))
-          return
-        }
-      } catch {
-        // let's try another query
-      }
-    }
-
-    dispatchState({ view: View.error })
-  }
+  const refreshColumns = () =>
+    fetchColumns(
+      quest,
+      (columns) => dispatch(actions.query.setColumns(columns)),
+      recordLoadingError,
+    )
 
   const copySchemasToClipboard = async () => {
     void trackEvent(ConsoleEvent.SCHEMA_COPY_MULTIPLE)
@@ -296,22 +305,24 @@ const Schema = ({
 
   useEffect(() => {
     void fetchTables()
-    void fetchColumns()
+    void refreshColumns()
 
-    eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
+    const onConnectionError = (error?: ErrorResult) => {
       if (error) {
         errorRef.current = error
         setLoadingError(error)
       }
+    }
+    const unsubscribeRecovery = subscribeSchemaRecovery(() => {
+      if (errorRef.current === null) return
+      errorRef.current = null
+      return Promise.all([fetchTables(), refreshColumns()])
     })
-
-    eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_OK, () => {
-      // The connection has been re-established, and we have an error in memory
-      if (errorRef.current !== null) {
-        void fetchTables()
-        void fetchColumns()
-      }
-    })
+    eventBus.subscribe(EventType.MSG_CONNECTION_ERROR, onConnectionError)
+    return () => {
+      eventBus.unsubscribe(EventType.MSG_CONNECTION_ERROR, onConnectionError)
+      unsubscribeRecovery()
+    }
   }, [])
 
   const focusListener = useCallback(() => {
@@ -322,7 +333,7 @@ const Schema = ({
     ) {
       latestFocusChangeTimestampRef.current = now
       void fetchTables()
-      void fetchColumns()
+      void refreshColumns()
     }
   }, [])
 
@@ -330,7 +341,7 @@ const Schema = ({
     if (autoRefreshTables) {
       eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
         void fetchTables()
-        void fetchColumns()
+        void refreshColumns()
       })
 
       window.addEventListener("focus", focusListener)
@@ -516,7 +527,7 @@ const Schema = ({
                           !autoRefreshTables,
                         )
                         void fetchTables()
-                        void fetchColumns()
+                        void refreshColumns()
                       }}
                       selected={autoRefreshTables}
                     >

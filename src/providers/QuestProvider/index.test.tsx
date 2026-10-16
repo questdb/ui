@@ -1,0 +1,460 @@
+import "../../test/stubBrowserGlobals"
+import React, { useContext } from "react"
+import { act, create, ReactTestRenderer } from "react-test-renderer"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { StoreKey } from "../../utils/localStorage/types"
+import type { AuthPayload } from "../../modules/OAuth2/types"
+import type { Settings } from "../SettingsProvider/types"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { questClient } from "../../utils/questdb/queryClient"
+
+const mocks = vi.hoisted(() => ({
+  sessionData: undefined as AuthPayload | undefined,
+  refresh: vi.fn(),
+  queryRaw: vi.fn(),
+  headers: vi.fn<[Record<string, string>], void>(),
+  dispatch: vi.fn(),
+  headingFocus: vi.fn(),
+  mainFocus: vi.fn(),
+  settings: {
+    "acl.enabled": true,
+    "acl.basic.auth.realm.enabled": false,
+  } as Settings,
+}))
+vi.mock("../AuthProvider", () => ({
+  useAuth: () => ({
+    sessionData: mocks.sessionData,
+    refreshAuthToken: mocks.refresh,
+  }),
+}))
+vi.mock("../SettingsProvider", () => ({
+  useSettings: () => ({ settings: mocks.settings }),
+}))
+vi.mock("../../utils/questdb/queryClient", () => ({
+  questClient: {
+    queryRaw: mocks.queryRaw,
+    setCommonHeaders: mocks.headers,
+    refreshTokenMethod: undefined,
+  },
+}))
+vi.mock("../../utils/questdb", () => ({
+  QueryExecutionManager: vi.fn(),
+  Type: { DQL: "dql" },
+}))
+vi.mock("react-redux", () => ({
+  useDispatch: () => mocks.dispatch,
+  useSelector: () => undefined,
+}))
+vi.mock("../../store", () => ({
+  actions: { telemetry: { start: () => ({ type: "start" }) } },
+  selectors: { telemetry: { getConfig: vi.fn() } },
+}))
+vi.mock("../../modules/ConsoleEventTracker", () => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+}))
+vi.mock("../../components/QueryExecutionConfirmDialog", () => ({
+  QueryExecutionConfirmDialog: () => null,
+}))
+vi.mock("../../components", () => ({
+  Text: "span",
+  Button: "button",
+  CenteredLayout: "section",
+}))
+vi.mock("../../utils/questdb/queryExecution", () => ({ questExecution: {} }))
+vi.mock("../../components/Box", () => ({
+  Box: ({ children }: React.PropsWithChildren<unknown>) => (
+    <div>{children}</div>
+  ),
+}))
+
+import { QuestContext, QuestProvider } from "."
+
+let renderer: ReactTestRenderer | undefined
+beforeEach(() => {
+  mocks.sessionData = undefined
+  mocks.settings = {
+    "acl.enabled": true,
+    "acl.basic.auth.realm.enabled": false,
+  }
+  mocks.queryRaw.mockReset().mockResolvedValue({ type: "dml" })
+  mocks.headers.mockClear()
+  localStorage.clear()
+  ssoAuthState.endSession()
+})
+afterEach(() => {
+  act(() => renderer?.unmount())
+  vi.clearAllMocks()
+})
+const mount = async (children = <div data-hook="ready" />) => {
+  await act(async () => {
+    renderer = create(<QuestProvider>{children}</QuestProvider>, {
+      createNodeMock: (element) => ({
+        focus: element.type === "h1" ? mocks.headingFocus : mocks.mainFocus,
+      }),
+    })
+    await Promise.resolve()
+  })
+}
+
+describe("QuestProvider authentication gate", () => {
+  it("reads a rotated refresh token when the installed refresh method runs", async () => {
+    mocks.sessionData = {
+      access_token: "old",
+      refresh_token: "r1",
+      token_type: "Bearer",
+    }
+    ssoAuthState.setAuthPayload(mocks.sessionData)
+    await mount()
+    const refresh = questClient.refreshTokenMethod!
+    ssoAuthState.setAuthPayload({ ...mocks.sessionData, refresh_token: "r2" })
+    const deadline = new AbortController().signal
+    const network = new AbortController().signal
+    await refresh(deadline, network)
+    expect(mocks.refresh).toHaveBeenLastCalledWith(
+      mocks.settings,
+      "r2",
+      deadline,
+      network,
+    )
+  })
+
+  it("releases password headers and refresh callbacks on unmount", async () => {
+    localStorage.setItem(StoreKey.REST_TOKEN, "private")
+    await mount()
+    act(() => renderer?.unmount())
+    expect(mocks.headers).toHaveBeenLastCalledWith({})
+    expect(questClient.refreshTokenMethod).toBeUndefined()
+  })
+
+  it("focuses recovery and then the console after a successful Retry", async () => {
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject({ error: "Offline" })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    expect(mocks.headingFocus).toHaveBeenCalledOnce()
+    mocks.mainFocus.mockClear()
+    mocks.queryRaw.mockResolvedValue({ type: "dml" })
+    await act(async () => {
+      renderer!.root.findByType("button").props.onClick()
+      await Promise.resolve()
+    })
+    expect(mocks.mainFocus).toHaveBeenCalledOnce()
+  })
+
+  it.each([StoreKey.REST_TOKEN, StoreKey.BASIC_AUTH_HEADER])(
+    "does not let retained %s overwrite SSO credentials",
+    async (key) => {
+      // These are deliberately NOT cleared by AuthProvider in this test.
+      localStorage.setItem(key, "other-tab")
+      mocks.sessionData = { access_token: "sso", token_type: "Bearer" }
+      await mount()
+      expect(localStorage.getItem(key)).toBe("other-tab")
+      expect(
+        mocks.headers.mock.calls.every(
+          ([headers]) => headers.Authorization === undefined,
+        ),
+      ).toBe(true)
+    },
+  )
+
+  describe.each([
+    {
+      key: StoreKey.REST_TOKEN,
+      credential: "first-user",
+      authorization: "Bearer first-user",
+      replacement: "other-user",
+      replacementAuthorization: "Bearer other-user",
+    },
+    {
+      key: StoreKey.BASIC_AUTH_HEADER,
+      credential: "Basic first-user",
+      authorization: "Basic first-user",
+      replacement: "Basic other-user",
+      replacementAuthorization: "Basic other-user",
+    },
+  ])(
+    "$key session snapshot",
+    ({
+      key,
+      credential,
+      authorization,
+      replacement,
+      replacementAuthorization,
+    }) => {
+      it.each(["replacement", "removal"])(
+        "keeps its credentials after another tab's %s during the initial check",
+        async (change) => {
+          let finishAuthCheck!: (result: { type: string }) => void
+          const authCheck = new Promise<{ type: string }>((resolve) => {
+            finishAuthCheck = resolve
+          })
+          mocks.queryRaw.mockImplementation((query: string) =>
+            query === "SELECT 1" ? authCheck : Promise.resolve({ type: "dml" }),
+          )
+          localStorage.setItem(key, credential)
+          await mount()
+          expect(mocks.headers).toHaveBeenLastCalledWith({
+            Authorization: authorization,
+          })
+          expect(
+            renderer?.root.findAllByProps({ "data-hook": "ready" }),
+          ).toHaveLength(0)
+          expect(mocks.dispatch).not.toHaveBeenCalled()
+
+          if (change === "replacement") {
+            localStorage.setItem(key, replacement)
+          } else {
+            localStorage.removeItem(key)
+          }
+          await act(async () => {
+            finishAuthCheck({ type: "dml" })
+            await Promise.resolve()
+          })
+
+          expect(
+            renderer?.root.findAllByProps({ "data-hook": "ready" }),
+          ).toHaveLength(1)
+          expect(mocks.headers).toHaveBeenLastCalledWith({
+            Authorization: authorization,
+          })
+          expect(mocks.dispatch).toHaveBeenCalledTimes(1)
+          expect(mocks.dispatch).toHaveBeenCalledWith({ type: "start" })
+          expect(mocks.headers.mock.invocationCallOrder[0]).toBeLessThan(
+            mocks.dispatch.mock.invocationCallOrder[0],
+          )
+        },
+      )
+
+      it("keeps its credentials when settings change", async () => {
+        localStorage.setItem(key, credential)
+        await mount()
+        localStorage.setItem(key, replacement)
+        mocks.settings = { ...mocks.settings, "release.version": "updated" }
+        await act(async () => {
+          renderer?.update(
+            <QuestProvider>
+              <div data-hook="ready" />
+            </QuestProvider>,
+          )
+          await Promise.resolve()
+        })
+        expect(mocks.headers).toHaveBeenLastCalledWith({
+          Authorization: authorization,
+        })
+      })
+
+      it("captures the current credentials on a new provider mount", async () => {
+        localStorage.setItem(key, credential)
+        await mount()
+        localStorage.setItem(key, replacement)
+        act(() => renderer?.unmount())
+        await mount()
+        expect(mocks.headers).toHaveBeenLastCalledWith({
+          Authorization: replacementAuthorization,
+        })
+      })
+    },
+  )
+
+  it("renders a recoverable error when SELECT 1 fails", async () => {
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject({ error: "QuestDB is not reachable [502]" })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    expect(
+      renderer?.root.findByProps({ role: "alert" }).findByType("span").children,
+    ).toEqual(["QuestDB is not reachable [502]"])
+    expect(
+      renderer?.root.findByProps({ role: "alert" }).findByType("span").props
+        .color,
+    ).toBe("statusDanger")
+    mocks.queryRaw.mockResolvedValue({ type: "dml" })
+    await act(async () => {
+      renderer?.root.findByType("button").props.onClick()
+      await Promise.resolve()
+    })
+    expect(
+      renderer?.root.findAllByProps({ "data-hook": "ready" }),
+    ).toHaveLength(1)
+  })
+
+  it("keeps the recovery panel and retry button mounted while retrying", async () => {
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject({ error: "QuestDB is not reachable [502]" })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    const button = renderer!.root.findByType("button")
+    let failRetry!: (error: { error: string }) => void
+    const retry = new Promise((_, reject) => {
+      failRetry = reject
+    })
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1" ? retry : Promise.resolve({ type: "dml" }),
+    )
+    await act(async () => {
+      button.props.onClick()
+      await Promise.resolve()
+    })
+
+    expect(renderer!.root.findByType("button")).toBe(button)
+    expect(button.props.disabled).not.toBe(true)
+    expect(button.props["aria-disabled"]).toBe(true)
+    expect(button.props["aria-busy"]).toBe(true)
+    expect(renderer!.root.findByProps({ role: "alert" })).toBeDefined()
+    expect(
+      renderer!.root.findByProps({ role: "status" }).findByType("span")
+        .children,
+    ).toContain("Reconnecting…")
+    const attempts = mocks.queryRaw.mock.calls.length
+    act(() => {
+      button.props.onClick()
+    })
+    expect(mocks.queryRaw).toHaveBeenCalledTimes(attempts)
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "ready" }),
+    ).toHaveLength(0)
+
+    await act(async () => {
+      failRetry({ error: "Still unavailable" })
+      await Promise.resolve()
+    })
+    expect(renderer!.root.findByType("button")).toBe(button)
+    expect(button.props["aria-disabled"]).toBe(false)
+    expect(button.props["aria-busy"]).toBe(false)
+    expect(
+      renderer!.root.findByProps({ role: "alert" }).findByType("span").children,
+    ).toEqual(["Still unavailable"])
+
+    mocks.queryRaw.mockResolvedValue({ type: "dml" })
+    await act(async () => {
+      button.props.onClick()
+      await Promise.resolve()
+    })
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "ready" }),
+    ).toHaveLength(1)
+  })
+
+  it("does not start another probe when credentials refresh during a retry", async () => {
+    mocks.sessionData = { access_token: "old", token_type: "Bearer" }
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject({ error: "QuestDB is not reachable [502]" })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    let failRetry!: (error: { error: string }) => void
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? new Promise((_, reject) => {
+            failRetry = reject
+          })
+        : Promise.resolve({ type: "dml" }),
+    )
+    const button = renderer!.root.findByType("button")
+    await act(async () => {
+      button.props.onClick()
+      await Promise.resolve()
+    })
+    mocks.sessionData = { access_token: "refreshed", token_type: "Bearer" }
+    await act(async () => {
+      renderer!.update(
+        <QuestProvider>
+          <div data-hook="ready" />
+        </QuestProvider>,
+      )
+      await Promise.resolve()
+    })
+    expect(
+      mocks.queryRaw.mock.calls.filter(([query]) => query === "SELECT 1"),
+    ).toHaveLength(2)
+    expect(button.props["aria-busy"]).toBe(true)
+    expect(mocks.headers).toHaveBeenLastCalledWith({})
+    await act(async () => {
+      failRetry({ error: "QuestDB is not reachable [502]" })
+      await Promise.resolve()
+    })
+    expect(button.props["aria-busy"]).toBe(false)
+  })
+
+  it("announces consecutive identical retry failures", async () => {
+    const error = { error: "QuestDB is not reachable [502]" }
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? Promise.reject(error)
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    const alert = renderer!.root.findByProps({ role: "alert" })
+    const button = renderer!.root.findByType("button")
+    let reject!: (error: { error: string }) => void
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? new Promise((_, rejectQuery) => {
+            reject = rejectQuery
+          })
+        : Promise.resolve({ type: "dml" }),
+    )
+    const status = renderer!.root.findByProps({ role: "status" })
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await act(async () => {
+        button.props.onClick()
+        await Promise.resolve()
+      })
+      expect(status.findByType("span").children).toEqual(["Reconnecting…"])
+      await act(async () => {
+        reject(error)
+        await Promise.resolve()
+      })
+      expect(renderer!.root.findByProps({ role: "alert" })).toBe(alert)
+      expect(alert.findByType("span").children).toEqual([error.error])
+      expect(renderer!.root.findByProps({ role: "status" })).toBe(status)
+      expect(status.findByType("span").children).toEqual([
+        "Connection failed. Retry connection.",
+      ])
+      expect(renderer!.root.findByType("button")).toBe(button)
+      expect(button.props["aria-busy"]).toBe(false)
+    }
+  })
+
+  it("does not persist session-ended errors into the authentication gate", async () => {
+    mocks.queryRaw.mockRejectedValue({
+      error: "Your session has ended",
+      sessionEnded: true,
+    })
+    await mount()
+    expect(renderer?.root.findAllByProps({ role: "alert" })).toHaveLength(0)
+  })
+
+  it("keeps QuestContext stable and skips SELECT 1 on token refresh", async () => {
+    const values: Array<React.ContextType<typeof QuestContext>> = []
+    const Consumer = () => {
+      values.push(useContext(QuestContext))
+      return null
+    }
+    mocks.sessionData = { access_token: "first", token_type: "Bearer" }
+    const child = <Consumer />
+    await mount(child)
+    const value = values[values.length - 1]
+    const count = mocks.queryRaw.mock.calls.filter(
+      ([q]) => q === "SELECT 1",
+    ).length
+    mocks.sessionData = { access_token: "refreshed", token_type: "Bearer" }
+    await act(async () => {
+      renderer?.update(<QuestProvider>{child}</QuestProvider>)
+      await Promise.resolve()
+    })
+    expect(values[values.length - 1]).toBe(value)
+    expect(
+      mocks.queryRaw.mock.calls.filter(([q]) => q === "SELECT 1"),
+    ).toHaveLength(count)
+    expect(mocks.headers).toHaveBeenLastCalledWith({})
+  })
+})

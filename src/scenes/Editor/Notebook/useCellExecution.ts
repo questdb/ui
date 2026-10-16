@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import type { Dispatch, MutableRefObject, SetStateAction } from "react"
 import type {
   CellResult,
@@ -38,6 +38,7 @@ import {
 import { hasPendingResult, statementKeysFor } from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
+import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
 
 export type DrawGateOutcome =
   | { granted: true }
@@ -50,10 +51,11 @@ const publishSchemaIfMutating = (exec: QueryExecResult): void => {
 }
 
 const beginCellRun = (runGenerations: Map<string, number>, cellId: string) => {
+  const session = authSessionState.capture()
   const generation = (runGenerations.get(cellId) ?? 0) + 1
   runGenerations.set(cellId, generation)
 
-  return () => runGenerations.get(cellId) === generation
+  return () => session.isCurrent() && runGenerations.get(cellId) === generation
 }
 
 // The reason the cell's controllers were aborted with, when any were.
@@ -119,6 +121,10 @@ type StatementLaunch =
   | { launched: true; exec: QueryExecResult }
   | { launched: false }
 
+const statementMayHaveExecuted = (launch: StatementLaunch): boolean =>
+  launch.launched &&
+  !(launch.exec.type === "error" && launch.exec.requestNotSent)
+
 // The limiter rejects a queued statement when its signal aborts, before any
 // request exists. Only a launched statement can have reached the server, so
 // only that one lands as the unverifiable "Cancelled by user" error; a queued
@@ -129,8 +135,11 @@ export const launchStatement = async (
   query: string,
 ): Promise<StatementLaunch> => {
   let launched = false
+  const session = authSessionState.capture()
   try {
     const exec = await statementRequestLimiter(() => {
+      if (!session.isCurrent())
+        throw new DOMException("Session ended", "AbortError")
       launched = true
       return execute()
     }, signal)
@@ -181,6 +190,7 @@ export const useCellExecution = ({
   onSnapshotPersisted,
 }: Options) => {
   const [runningCellIds, setRunningCellIds] = useState<Set<string>>(new Set())
+  const mountedRef = useRef(true)
 
   const abortControllersRef = useRef<Map<string, AbortController[]>>(new Map())
 
@@ -239,6 +249,7 @@ export const useCellExecution = ({
     ): Promise<CellRunOutcome> => {
       if (queries.length === 0) return { ok: false, superseded: false }
 
+      const session = authSessionState.capture()
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
 
@@ -275,6 +286,7 @@ export const useCellExecution = ({
 
       setRunningCellIds((prev) => new Set(prev).add(cellId))
 
+      let mayHaveExecuted = false
       let successCount = 0
       let failedCount = 0
       let cancelledCount = 0
@@ -310,11 +322,15 @@ export const useCellExecution = ({
             perQuery.signal,
             sql,
           )
+          mayHaveExecuted ||= statementMayHaveExecuted(launch)
           if (!isCurrentRun()) {
             return {
-              ok: runSucceeded(),
+              ok: mayHaveExecuted && runSucceeded(),
               superseded: true,
-              cancelled: cancellationOf(controllers),
+              notStarted: !mayHaveExecuted,
+              cancelled: session.isCurrent()
+                ? cancellationOf(controllers)
+                : "session_ended",
             }
           }
           if (!launch.launched) {
@@ -449,6 +465,7 @@ export const useCellExecution = ({
   )
 
   const releaseIdleCell = useCallback((cellId: string) => {
+    if (!mountedRef.current) return
     if (barrierAbortsRef.current.has(cellId)) return
     if (abortControllersRef.current.has(cellId)) return
     setRunningCellIds((prev) => {
@@ -472,6 +489,7 @@ export const useCellExecution = ({
       expectFullValue: boolean,
       valueAtRunStart: string,
     ): Promise<CellRunOutcome> => {
+      const session = authSessionState.capture()
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
 
@@ -505,6 +523,7 @@ export const useCellExecution = ({
       const finalResults = buildInitialScriptResults(queries)
       setRunningCellIds((prev) => new Set(prev).add(cellId))
 
+      let mayHaveExecuted = false
       let failedCount = 0
       let cancelledCount = 0
       const runSucceeded = () => failedCount === 0 && cancelledCount === 0
@@ -539,6 +558,7 @@ export const useCellExecution = ({
               perQuery.signal,
               sql,
             )
+            mayHaveExecuted ||= statementMayHaveExecuted(launch)
             if (!isCurrentRun()) return
             if (!launch.launched) {
               cancelStatement(index, sql)
@@ -554,9 +574,12 @@ export const useCellExecution = ({
 
         if (!isCurrentRun()) {
           return {
-            ok: runSucceeded(),
+            ok: mayHaveExecuted && runSucceeded(),
             superseded: true,
-            cancelled: cancellationOf(controllers),
+            notStarted: !mayHaveExecuted,
+            cancelled: session.isCurrent()
+              ? cancellationOf(controllers)
+              : "session_ended",
           }
         }
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
@@ -672,6 +695,7 @@ export const useCellExecution = ({
       // is the gesture-time value, and the claim keeps the running window open
       // while the run is still validating.
       const valueAtRunStart = cell.value
+      const session = authSessionState.capture()
       const claim = claimBarrier(cellId, externalSignal)
       const bail = (outcome: CellRunOutcome): CellRunOutcome => {
         releaseIdleCell(cellId)
@@ -694,9 +718,15 @@ export const useCellExecution = ({
         claim.release()
       }
 
-      // Re-check the claim after the barrier await: a cancel, delete, or
-      // mode change that landed during validation would otherwise launch —
-      // and commit — the run.
+      // Neither a new login nor a cancelled validation may launch old SQL.
+      if (!session.isCurrent()) {
+        return bail({
+          ...notRun,
+          superseded: true,
+          notStarted: true,
+          cancelled: "session_ended",
+        })
+      }
       if (claim.signal.aborted || externalSignal?.aborted) {
         return bail({
           ...notRun,
@@ -774,7 +804,10 @@ export const useCellExecution = ({
           return {
             ok,
             superseded: true,
-            cancelled: cancellationOf([ac]),
+            notStarted: !statementMayHaveExecuted(launch),
+            cancelled: session.isCurrent()
+              ? cancellationOf([ac])
+              : "session_ended",
           }
         }
         if (launch.launched) publishSchemaIfMutating(launch.exec)
@@ -1027,11 +1060,15 @@ export const useCellExecution = ({
     [cellsRef, updateCells, bufferId],
   )
 
-  useEffect(() => {
+  // Legacy React roots may resume a query before passive unmount effects run.
+  // Invalidate runs during the commit so teardown cannot overwrite saved results.
+  useLayoutEffect(() => {
+    mountedRef.current = true
     const barrierControllersMap = barrierAbortsRef.current
     const controllersMap = abortControllersRef.current
     const runGenerations = runGenerationRef.current
     return () => {
+      mountedRef.current = false
       // Supersede before aborting so both validation- and request-phase
       // continuations bail instead of launching after teardown or overwriting
       // the cell's last good snapshot with an abort result.

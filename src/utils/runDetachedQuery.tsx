@@ -16,6 +16,8 @@ import * as QuestDB from "./questdb"
 import type { ExecutionRefs } from "../scenes/Editor/index"
 import type { Dispatch } from "redux"
 import actions from "../store/Query/actions"
+import { isSessionEnded } from "../modules/OAuth2/session"
+import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 
 export type RunDetachedQueryConfig = {
   normalizedSQL: string
@@ -26,6 +28,7 @@ export type RunDetachedQueryConfig = {
   executionRefs: React.MutableRefObject<ExecutionRefs>
   releaseExecution: (queryKey: QueryKey) => void
   onQueryStarted?: (queryId: QueryId) => void
+  isLoadingNotificationPublished?: () => boolean
   onSettled?: () => void
 }
 
@@ -42,6 +45,7 @@ export async function runDetachedQuery(
     releaseExecution,
   } = config
 
+  const session = ssoAuthState.capture()
   const { promise, queryId } = quest.queryRaw(normalizedSQL, {
     limit: "0,1000",
     explain: true,
@@ -51,6 +55,7 @@ export async function runDetachedQuery(
 
   try {
     const result = await promise
+    if (!session.isCurrent()) return
 
     if (!executionRefs.current[namespaceKey]) {
       executionRefs.current[namespaceKey] = {}
@@ -116,11 +121,10 @@ export async function runDetachedQuery(
       eventBus.publish(EventType.MSG_QUERY_DATASET, result)
     }
   } catch (_error: unknown) {
-    const error = _error as {
-      error?: string
-      message?: string
-      position?: number
-    }
+    const error = _error as Partial<QuestDB.ErrorResult> & { message?: string }
+    // Login already reports the ended session; do not carry this error into
+    // the next login. The finally block still settles and releases execution.
+    if (isSessionEnded(error) || !session.isCurrent()) return
 
     if (!executionRefs.current[namespaceKey]) {
       executionRefs.current[namespaceKey] = {}
@@ -148,6 +152,9 @@ export async function runDetachedQuery(
       ),
     )
   } finally {
+    if (config.isLoadingNotificationPublished?.()) {
+      dispatch(actions.settleLoadingNotification(queryId))
+    }
     config.onSettled?.()
     releaseExecution(queryKey)
   }

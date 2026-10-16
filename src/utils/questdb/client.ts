@@ -2,7 +2,11 @@ import { isServerError } from "../../utils"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { AuthPayload } from "../../modules/OAuth2/types"
+import {
+  AuthRefreshUnavailableError,
+  isSessionEnded,
+  SessionEndedError,
+} from "../../modules/OAuth2/session"
 import { API_VERSION } from "../../consts"
 import {
   Type,
@@ -12,6 +16,7 @@ import {
   Table,
   Column,
   Options,
+  QueryLifecycle,
   RawResult,
   Release,
   NewsItem,
@@ -32,6 +37,16 @@ import {
   ValidateQueryErrorResult,
 } from "./types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { getBearerAuthorization } from "../../modules/OAuth2/utils"
+import {
+  awaitRefresh,
+  isRefreshable,
+  RefreshTokenMethod,
+  RefreshableAuthPayload,
+  REFRESH_REQUEST_TIMEOUT_MS,
+  REFRESH_WAIT_TIMEOUT_MS,
+  tokenRefresh,
+} from "./tokenRefresh"
 
 export type QueryId = number
 
@@ -56,49 +71,29 @@ export class Client {
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
-  private static refreshTokenPending = false
-  private static numOfPendingQueries = 0
-  refreshTokenMethod: () => Promise<Partial<AuthPayload>> = async (): Promise<
-    Partial<AuthPayload>
-  > => {
-    return Promise.resolve({})
-  }
-
-  private tokenNeedsRefresh() {
-    const authPayload = ssoAuthState.getAuthPayload()
-    return (
-      authPayload &&
-      authPayload.refresh_token &&
-      new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
-    )
-  }
+  refreshTokenMethod?: RefreshTokenMethod
 
   setCommonHeaders(headers: Record<string, string>) {
     this.commonHeaders = headers
   }
 
-  private refreshAuthToken = async () => {
-    Client.refreshTokenPending = true
-    await new Promise((resolve) => {
-      const interval = setInterval(async () => {
-        if (Client.numOfPendingQueries === 0) {
-          clearInterval(interval)
-          const newToken = await this.refreshTokenMethod()
-          if (newToken.access_token) {
-            this.setCommonHeaders({
-              ...this.commonHeaders,
-              Authorization: `Bearer ${
-                newToken.groups_encoded_in_token
-                  ? newToken.id_token
-                  : newToken.access_token
-              }`,
-            })
-          }
-          Client.refreshTokenPending = false
-          return resolve(true)
-        }
-      }, 50)
-    })
+  private currentAuthorization() {
+    const payload = ssoAuthState.getAuthPayload()
+    return payload
+      ? getBearerAuthorization(payload)
+      : this.commonHeaders.Authorization
+  }
+
+  private requestHeaders() {
+    const { Authorization: _, ...headers } = this.commonHeaders
+    const authorization = this.currentAuthorization()
+    return authorization
+      ? { ...headers, Authorization: authorization }
+      : headers
+  }
+
+  private startRefresh(payload: RefreshableAuthPayload) {
+    tokenRefresh.start(payload, this.refreshTokenMethod)
   }
 
   static encodeParams = (
@@ -217,11 +212,17 @@ export class Client {
   queryRaw(
     query: string,
     options: Options & { cancellable: true },
+    lifecycle?: QueryLifecycle,
   ): { promise: Promise<QueryRawResult>; queryId: QueryId }
-  queryRaw(query: string, options?: Options): Promise<QueryRawResult>
   queryRaw(
     query: string,
     options?: Options,
+    lifecycle?: QueryLifecycle,
+  ): Promise<QueryRawResult>
+  queryRaw(
+    query: string,
+    options?: Options,
+    lifecycle?: QueryLifecycle,
   ):
     | Promise<QueryRawResult>
     | { promise: Promise<QueryRawResult>; queryId: QueryId } {
@@ -229,7 +230,13 @@ export class Client {
     const controller = new AbortController()
     this._controllers.set(queryId, controller)
 
-    const promise = this._executeQueryRaw(query, options, controller, queryId)
+    const promise = this._executeQueryRaw(
+      query,
+      options,
+      controller,
+      queryId,
+      lifecycle,
+    )
 
     if (options?.cancellable) {
       this._activeQueryId = queryId
@@ -239,11 +246,115 @@ export class Client {
     return promise
   }
 
+  private async sendQuery(
+    payload: Record<string, string | number | boolean | undefined>,
+    signal: AbortSignal,
+    ensureCurrentSession: () => void,
+    execution: { requestNotSent: boolean },
+    lifecycle?: QueryLifecycle,
+  ) {
+    const originalPayload = ssoAuthState.getAuthPayload()
+    tokenRefresh.syncSession()
+    if (
+      isRefreshable(originalPayload) &&
+      tokenRefresh.needsRefresh(originalPayload)
+    ) {
+      this.startRefresh(originalPayload)
+    }
+    const waitForRefresh = async (untilCompletion = false) => {
+      const wait = untilCompletion ? tokenRefresh.completion : tokenRefresh.wait
+      if (!wait) return
+      lifecycle?.onRefreshWait?.(
+        untilCompletion ? REFRESH_REQUEST_TIMEOUT_MS : REFRESH_WAIT_TIMEOUT_MS,
+      )
+      await awaitRefresh(wait, signal)
+    }
+    const waitedBeforeFetch = !!tokenRefresh.wait
+    if (waitedBeforeFetch) await waitForRefresh()
+    const ensureCanSend = () => {
+      ensureCurrentSession()
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+      tokenRefresh.ensureUsableToken()
+    }
+    let authorizationAtFetch: string | undefined
+    let fetchStartedAt = 0
+    const send = async () => {
+      ensureCanSend()
+      lifecycle?.onRequestStart?.()
+      // Read the installed bearer immediately before every authenticated fetch.
+      const headers = this.requestHeaders()
+      authorizationAtFetch = headers.Authorization
+      fetchStartedAt = Date.now()
+      execution.requestNotSent = false
+      const response = await fetch(`exec?${Client.encodeParams(payload)}`, {
+        signal,
+        headers,
+      })
+      // A rejected bearer executed no SQL. A subsequent refresh failure must
+      // retain that definitive outcome until another SQL attempt is sent.
+      if (response.status === 401) execution.requestNotSent = true
+      return response
+    }
+    const sessionAtFetch = ssoAuthState.getAuthPayload()
+    let response = await send()
+    if (response.status === 401 && originalPayload) {
+      ensureCurrentSession()
+      const currentPayload = ssoAuthState.getAuthPayload()
+      const currentAuthorization = this.currentAuthorization()
+      if (tokenRefresh.completion) {
+        // A pre-fetch wait may have expired while its rotating request is
+        // still running. A rejected old bearer must not cancel that request.
+        await waitForRefresh(true)
+        ensureCurrentSession()
+        if (ssoAuthState.hasRefreshFailed())
+          throw new AuthRefreshUnavailableError()
+        if (
+          this.currentAuthorization() !== authorizationAtFetch ||
+          ssoAuthState.getAuthPayload() !== sessionAtFetch
+        )
+          response = await send()
+      } else if (
+        currentAuthorization &&
+        currentAuthorization !== authorizationAtFetch
+      ) {
+        // Another request already refreshed this session. A 401 executes no
+        // SQL, so even a write can be resent once with the new bearer.
+        response = await send()
+      } else if (
+        isRefreshable(currentPayload) &&
+        ssoAuthState.hasRefreshFailed()
+      ) {
+        // A settled transient failure is just as recoverable as a pending
+        // refresh. This 401 rejects the old bearer, not the refresh token.
+        throw new AuthRefreshUnavailableError()
+      } else if (
+        !waitedBeforeFetch &&
+        isRefreshable(currentPayload) &&
+        sessionAtFetch === currentPayload &&
+        authorizationAtFetch === currentAuthorization &&
+        this.refreshTokenMethod
+      ) {
+        // A slow browser clock may not have opened the refresh window. The
+        // server is authoritative; bypass success throttling for this 401.
+        this.startRefresh(currentPayload)
+        // A 401 executed no SQL. Retain rotating refreshes until their hard deadline.
+        await waitForRefresh(true)
+        ensureCurrentSession()
+        if (ssoAuthState.hasRefreshFailed())
+          throw new AuthRefreshUnavailableError()
+        if (ssoAuthState.getAuthPayload() !== sessionAtFetch)
+          response = await send()
+      }
+    }
+    return { response, authorizationAtFetch, fetchStartedAt }
+  }
+
   private async _executeQueryRaw(
     query: string,
     options: Options | undefined,
     controller: AbortController,
     queryId: QueryId,
+    lifecycle?: QueryLifecycle,
   ): Promise<QueryRawResult> {
     const { cancellable: _, ...queryOptions } = options ?? {}
     const payload = {
@@ -256,33 +367,33 @@ export class Client {
     }
 
     let response: Response
-
-    if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
-      await this.refreshAuthToken()
+    let fetchStartedAt = 0
+    let authorizationAtFetch: string | undefined
+    const session = ssoAuthState.capture()
+    const execution = { requestNotSent: true }
+    const ensureCurrentSession = () => {
+      if (!session.isCurrent()) throw new SessionEndedError()
     }
+    const sessionEndedResult = (): ErrorResult => ({
+      position: -1,
+      query,
+      type: Type.ERROR,
+      error: new SessionEndedError().message,
+      sessionEnded: true,
+      ...(execution.requestNotSent ? { requestNotSent: true } : {}),
+    })
 
-    if (Client.refreshTokenPending) {
-      await new Promise((resolve) => {
-        const interval = setInterval(() => {
-          if (!Client.refreshTokenPending) {
-            clearInterval(interval)
-            return resolve(true)
-          }
-        }, 50)
-      })
-    }
-
-    Client.numOfPendingQueries++
-
-    const start = new Date()
     try {
-      response = await fetch(`exec?${Client.encodeParams(payload)}`, {
-        signal: controller.signal,
-        headers: this.commonHeaders,
-      })
+      ;({ response, authorizationAtFetch, fetchStartedAt } =
+        await this.sendQuery(
+          payload,
+          controller.signal,
+          ensureCurrentSession,
+          execution,
+          lifecycle,
+        ))
     } catch (error) {
       this.removeController(queryId)
-      Client.numOfPendingQueries--
 
       const err = {
         position: -1,
@@ -295,6 +406,18 @@ export class Client {
         error: "An error occurred, please try again",
       }
 
+      if (isSessionEnded(error) || !session.isCurrent()) {
+        return Promise.reject(sessionEndedResult())
+      }
+
+      if (error instanceof AuthRefreshUnavailableError) {
+        return Promise.reject({
+          ...err,
+          error: error.message,
+          requestNotSent: true,
+        })
+      }
+
       if (error instanceof DOMException) {
         return Promise.reject({
           ...err,
@@ -302,6 +425,7 @@ export class Client {
             error.code === 20
               ? "Cancelled by user"
               : JSON.stringify(error).toString(),
+          ...(execution.requestNotSent ? { requestNotSent: true } : {}),
         })
       }
 
@@ -311,6 +435,9 @@ export class Client {
     }
 
     try {
+      // Fence all completions, body reads and failures against the login that
+      // launched the request before publishing or returning anything.
+      ensureCurrentSession()
       if (
         response.ok ||
         response.status === 400 ||
@@ -320,6 +447,7 @@ export class Client {
         try {
           responseText = await response.text()
         } catch (error) {
+          ensureCurrentSession()
           if (error instanceof DOMException && error.name === "AbortError") {
             return Promise.reject({
               position: -1,
@@ -333,7 +461,8 @@ export class Client {
             type: Type.ERROR,
           })
         }
-        const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
+        ensureCurrentSession()
+        const fetchTime = (Date.now() - fetchStartedAt) * 1e6
         let data
         try {
           data = JSON.parse(responseText) as RawResult
@@ -345,6 +474,7 @@ export class Client {
         }
 
         eventBus.publish(EventType.MSG_CONNECTION_OK)
+        ensureCurrentSession()
 
         if (response.status === 403) {
           eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, data)
@@ -364,14 +494,14 @@ export class Client {
           }
         }
 
-        if (data.error) {
+        if (data.error !== undefined) {
           return Promise.reject({
             ...data,
             type: Type.ERROR,
           })
         }
 
-        if (data.notice) {
+        if (data.notice !== undefined) {
           return {
             ...data,
             ...(data.timings
@@ -406,7 +536,15 @@ export class Client {
 
       if (response.status === 401) {
         errorPayload.error = `Unauthorized`
-        eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
+        const currentAuthorization = this.currentAuthorization()
+        // Reject an older request without logging out a session using a
+        // different bearer. A refresh can also return the same bearer value.
+        if (
+          session.isCurrent() &&
+          authorizationAtFetch === currentAuthorization
+        ) {
+          eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
+        }
       }
 
       if (response.status === 403) {
@@ -414,6 +552,7 @@ export class Client {
         try {
           errorText = (await response.text()).trim()
         } catch (error) {
+          ensureCurrentSession()
           if (error instanceof DOMException && error.name === "AbortError") {
             return Promise.reject({
               position: -1,
@@ -424,6 +563,7 @@ export class Client {
           }
           throw error
         }
+        ensureCurrentSession()
         if (errorText.startsWith("{")) {
           const data = JSON.parse(errorText) as ErrorResult
           errorPayload.error = data.error
@@ -433,10 +573,15 @@ export class Client {
         eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, errorPayload)
       }
 
+      ensureCurrentSession()
       return Promise.reject(errorPayload)
+    } catch (error) {
+      if (isSessionEnded(error) || !session.isCurrent()) {
+        return Promise.reject(sessionEndedResult())
+      }
+      throw error
     } finally {
       this.removeController(queryId)
-      Client.numOfPendingQueries--
     }
   }
 
@@ -447,7 +592,7 @@ export class Client {
     const response = await fetch(
       `api/v1/sql/validate?${Client.encodeParams({ query })}`,
       {
-        headers: this.commonHeaders,
+        headers: this.requestHeaders(),
         signal,
       },
     )
@@ -560,7 +705,7 @@ export class Client {
         j: name,
         version: API_VERSION,
       })}`,
-      { headers: this.commonHeaders },
+      { headers: this.requestHeaders() },
     )
     return (await response.json()) as FileCheckResponse
   }
@@ -601,8 +746,9 @@ export class Client {
     return new Promise((resolve, reject) => {
       const request = new XMLHttpRequest()
       request.open("POST", `imp?${new URLSearchParams(params)}`)
-      Object.keys(this.commonHeaders).forEach((key) => {
-        request.setRequestHeader(key, this.commonHeaders[key])
+      const headers = this.requestHeaders()
+      Object.keys(headers).forEach((key) => {
+        request.setRequestHeader(key, headers[key])
       })
       request.upload.addEventListener("progress", (e) => {
         const percent_completed = (e.loaded / e.total) * 100
@@ -634,7 +780,7 @@ export class Client {
     const { version, ...prefs } = preferences
     const response: Response = await fetch(`settings?version=${version}`, {
       method: "PUT",
-      headers: this.commonHeaders,
+      headers: this.requestHeaders(),
       body: JSON.stringify(prefs),
     })
     if (!response.ok) {

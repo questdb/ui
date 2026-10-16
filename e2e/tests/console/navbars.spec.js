@@ -35,4 +35,15 @@ describe("Sidebar tests", () => {
       cy.getByDataHook("form-submit-button").should("not.be.disabled")
     })
   })
+
+  it("keeps notifications available to screen readers while a dialog is open", () => {
+    cy.getByDataHook("help-panel-button").click()
+    cy.getByDataHook("help-link-contact-us").click()
+    cy.get('form[name="feedback-dialog"]').should("be.visible")
+    // The modal hides the console from assistive technology, except its live
+    // regions and their ancestors...
+    cy.get('#root [data-aria-hidden="true"]').should("exist")
+    // ...and must not hide the notification outlet, e.g. for an SSO warning.
+    cy.get(".Toastify").closest('[aria-hidden="true"]').should("not.exist")
+  })
 })

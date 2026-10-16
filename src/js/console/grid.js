@@ -28,6 +28,7 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { buildResultPageMarkdown } from "../../components/ResultGrid/resultPageMarkdown"
 import { toSingleLineDisplay } from "../../components/ResultGrid/inlineGridUtils"
 import { getThemeColor } from "../../theme/runtime"
+import { createGridResultLifecycle } from "./gridResultLifecycle"
 
 const hashString = (str) => {
   let hash = 0
@@ -109,6 +110,7 @@ export function grid(rootElement, _paginationFn, id) {
   let timestampIndex = -1
   let ogTimestampIndex = -1
   let data = []
+  const resultLifecycle = createGridResultLifecycle()
   let totalWidth = -1
   let deferVisualsCompute = false
   // number of divs in "rows" cache, has to be power of two
@@ -120,7 +122,6 @@ export function grid(rootElement, _paginationFn, id) {
   let loPage
   let hiPage
   let sql
-  let queryTimer
   let downKey = []
   // index of the leftmost visible column in the grid
   let visColumnLo = 0
@@ -322,6 +323,11 @@ export function grid(rootElement, _paginationFn, id) {
         row.rowIndex = -1
       }
       row.style.top = rowIndex * rh - o + "px"
+      if (row.rowIndex >= 0) {
+        row.dataset.rowIndex = String(row.rowIndex)
+      } else {
+        delete row.dataset.rowIndex
+      }
       row.className = `qg-r${focusedRowIndex === rowIndex ? " qg-r-active" : ""}`
     }
   }
@@ -390,18 +396,13 @@ export function grid(rootElement, _paginationFn, id) {
     }
 
     if (paginationFn) {
-      paginationFn(sql, lo + 1, hi, renderFunc)
+      paginationFn(sql, lo + 1, hi, resultLifecycle.guard(renderFunc))
       void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: hi })
     }
   }
 
   function loadPagesDelayed(p1, p2) {
-    if (queryTimer) {
-      clearTimeout(queryTimer)
-    }
-    queryTimer = setTimeout(function () {
-      loadPages(p1, p2)
-    }, 75)
+    resultLifecycle.schedulePageLoad(() => loadPages(p1, p2))
   }
 
   function computeDataPages(direction, t, b) {
@@ -2183,14 +2184,14 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function setData(_data) {
+    resultLifecycle.replaceResult(() => {
+      setDataPart1(_data)
+      // Resolve the column-set key before restoring its widths/order/frozen
+      // column; layout state belongs to this result, not the previous grid.
+      layoutStoreComputeKeyAndHash(setDataPart2)
+    })
     initialFocusSkipped = false
     triggerEvent("selection.change", { hasSelection: false })
-    setTimeout(() => {
-      setDataPart1(_data)
-      // This part of the update sequence requires layoutStore access.
-      // For that we need to calculate layout key and hash, which is async
-      layoutStoreComputeKeyAndHash(setDataPart2)
-    }, 0)
   }
 
   function addEventListener(eventName, eventHandler, selector) {

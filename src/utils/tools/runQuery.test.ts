@@ -196,6 +196,59 @@ describe("mapQueryRawToResult", () => {
     expect(res).toMatchObject({ type: "notice", message: "hint applied" })
   })
 
+  it.each([false, true])(
+    "preserves the session-ended outcome flag (rejected=%s)",
+    async (rejected) => {
+      const error = {
+        type: Type.ERROR,
+        error: "Your session has ended. Please sign in again.",
+        position: -1,
+        sessionEnded: true,
+      }
+      const queryRaw = vi.fn().mockReturnValue({
+        promise: rejected ? Promise.reject(error) : Promise.resolve(error),
+        queryId: 1,
+      })
+
+      const result = await mapQueryRawToResult(
+        { queryRaw, abort: vi.fn() } as never,
+        "INSERT INTO t VALUES (1)",
+        100,
+      )
+
+      expect(result).toEqual({
+        type: "error",
+        error: error.error,
+        position: -1,
+        sessionEnded: true,
+      })
+    },
+  )
+
+  it("preserves not-sent metadata for the agent's outcome classifier", async () => {
+    const error = {
+      type: Type.ERROR,
+      error: "Could not renew your SSO session; the query was not sent.",
+      position: -1,
+      requestNotSent: true,
+    }
+    const queryRaw = vi
+      .fn()
+      .mockReturnValue({ promise: Promise.reject(error), queryId: 1 })
+    expect(
+      await mapQueryRawToResult(
+        { queryRaw, abort: vi.fn() } as never,
+        "INSERT INTO t VALUES (1)",
+        100,
+      ),
+    ).toEqual({
+      type: "error",
+      error: error.error,
+      position: -1,
+      requestNotSent: true,
+    })
+  })
+
   it("sends the requested row limit to /exec using the cancellable queryRaw overload", async () => {
     const queryRaw = vi.fn().mockReturnValue(stubDqlReturn())
     const abort = vi.fn()

@@ -95,12 +95,13 @@ export type DdlDmlQueryResult = {
   fetchedAt?: number
 }
 
-export type ErrorQueryResult = {
-  type: "error"
-  query: string
-  error: string
-  fetchedAt?: number
-}
+export type ErrorQueryResult =
+  import("../modules/OAuth2/session").SessionFailure & {
+    type: "error"
+    query: string
+    error: string
+    fetchedAt?: number
+  }
 
 export type TransientQueryResult = {
   type: "running" | "queued"

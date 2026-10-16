@@ -28,14 +28,17 @@
   height: 0.3rem;
 }
 
+// Toastify pauses on hover, not keyboard focus. Override its inline running
+// state while a control is focused; leaving restores its current hover state.
+.Toastify__toast:focus-within .Toastify__progress-bar--animated {
+  animation-play-state: paused !important;
+}
+
 .Toastify__close-button {
+  color: var(--qdb-color-contentPrimary);
   opacity: 0.7;
   align-self: center;
   transition: none;
-}
-
-.Toastify__close-button:hover {
-  opacity: 1;
 }
 
 .Toastify__toast-body {

@@ -61,14 +61,14 @@ describe("OIDC", () => {
       cy.getEditor().should("not.exist")
     })
 
-    it("should login via OIDC", () => {
+    it("should login via OIDC with an unknown (zero) lifetime", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       interceptTokenRequest({
         access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
         id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
         token_type: "Bearer",
-        expires_in: 300,
+        expires_in: 0,
       })
       cy.getByDataHook("button-sso-login").click()
       cy.wait("@authorizationCode")
@@ -82,13 +82,241 @@ describe("OIDC", () => {
       cy.getByDataHook("auth-login").should("be.visible")
     })
 
+    it("accepts an IdP's string expiry with null optional fields", () => {
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      interceptTokenRequest({
+        access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+        refresh_token: null,
+        id_token: null,
+        token_type: "Bearer",
+        expires_in: "300",
+      })
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.getEditor().should("be.visible")
+      cy.executeSQL("select current_user();")
+      cy.getGridRow(0).should("contain", "john doe")
+    })
+
+    it("uses the SSO token instead of retained REST credentials", () => {
+      cy.window().then(({ localStorage }) => {
+        localStorage.setItem("rest.token", "expired-rest-token")
+        localStorage.setItem("basic.auth.header", "Basic expired")
+      })
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      interceptTokenRequest({
+        access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+        refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv", // gitleaks:allow
+        id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+        token_type: "Bearer",
+        expires_in: 300,
+      })
+
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.getEditor().should("be.visible")
+      cy.executeSQL("select current_user();")
+      cy.getGridRow(0).should("contain", "john doe")
+      cy.window().then(({ localStorage }) => {
+        expect(localStorage.getItem("rest.token")).to.be.null
+        expect(localStorage.getItem("basic.auth.header")).to.be.null
+      })
+    })
+
+    for (const { name, reply } of [
+      { name: "a network error", reply: { forceNetworkError: true } },
+      {
+        name: "a non-JSON 502",
+        reply: { statusCode: 502, body: "<html>Bad Gateway</html>" },
+      },
+    ]) {
+      it(`continues loading the editor when token refresh fails with ${name}`, () => {
+        interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+        cy.intercept("POST", oidcTokenUrl, (req) => {
+          if (
+            new URLSearchParams(req.body).get("grant_type") === "refresh_token"
+          ) {
+            req.alias = "refreshFailure"
+            req.reply(reply)
+          } else {
+            req.reply({
+              access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+              refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv", // gitleaks:allow
+              id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+              token_type: "Bearer",
+              expires_in: 20,
+            })
+          }
+        }).as("tokens")
+
+        cy.getByDataHook("button-sso-login").click()
+        cy.wait("@authorizationCode")
+        cy.wait("@refreshFailure")
+        cy.getEditor().should("be.visible")
+        cy.executeSQL("select current_user();")
+        cy.getGridRow(0).should("contain", "john doe")
+      })
+    }
+
+    it("keeps the session after a refresh network failure and a later SQL 401, then recovers", () => {
+      // Freeze Date only: keep the bearer valid during refresh backoff while
+      // real timers continue driving requests and notification transitions.
+      cy.clock(Date.now(), ["Date"])
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      cy.intercept("POST", oidcTokenUrl, (req) => {
+        if (
+          new URLSearchParams(req.body).get("grant_type") === "refresh_token"
+        ) {
+          req.alias = "refreshFailure"
+          req.reply({ forceNetworkError: true })
+        } else {
+          req.reply({
+            access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+            refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv", // gitleaks:allow
+            id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+            token_type: "Bearer",
+            expires_in: 20,
+          })
+        }
+      })
+
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.wait("@refreshFailure")
+      cy.getEditor().should("be.visible")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.username.client1")
+        .should("not.be.empty")
+
+      cy.intercept(
+        {
+          method: "GET",
+          url: "**/exec?*",
+          query: { query: "select current_user()" },
+          times: 1,
+        },
+        { statusCode: 401, body: "Unauthorized" },
+      ).as("rejectedBearerQuery")
+      cy.clearEditor()
+      cy.typeQuery("select current_user()")
+      cy.runLine()
+      cy.wait("@rejectedBearerQuery")
+      cy.contains("the query was not sent").should("be.visible")
+      cy.getEditor().should("be.visible")
+      cy.getByDataHook("auth-login").should("not.exist")
+      cy.get("#sso-refresh-failed").should("be.visible")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.session.active")
+        .should("eq", "true")
+
+      // The EE userinfo fixture recognizes this access token. Renew its
+      // lifetime and rotate the refresh token, then execute against real EE.
+      cy.intercept("POST", oidcTokenUrl, {
+        access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+        refresh_token: "rotated-refresh-token",
+        id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+        token_type: "Bearer",
+        expires_in: 3600,
+      }).as("refreshRecovery")
+      cy.intercept({
+        method: "GET",
+        url: "**/exec?*",
+        query: { query: "select current_user()" },
+      }).as("recoveredQuery")
+      cy.tick(5000)
+      cy.runLine()
+      cy.wait("@refreshRecovery")
+      cy.wait("@recoveredQuery")
+        .its("request.headers.authorization")
+        .should("eq", "Bearer gslpJtzmmi6RwaPSx0dYGD4tEkom") // gitleaks:allow
+      cy.getGridRow(0).should("contain", "john doe")
+      cy.get("#sso-refresh-failed").should("not.exist")
+      cy.getByDataHook("auth-login").should("not.exist")
+
+      // The next renewal must consume the refresh token from the recovery
+      // response, while keeping the bearer recognized by the EE fixture.
+      cy.intercept("POST", oidcTokenUrl, (req) => {
+        const body = new URLSearchParams(req.body)
+        expect(body.get("grant_type")).to.eq("refresh_token")
+        expect(body.get("refresh_token")).to.eq("rotated-refresh-token")
+        req.reply({
+          access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+          refresh_token: "next-refresh-token",
+          id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+          token_type: "Bearer",
+          expires_in: 3600,
+        })
+      }).as("rotatedRefresh")
+      cy.tick(3600000)
+      cy.runLine()
+      cy.wait("@rotatedRefresh")
+      cy.wait("@recoveredQuery")
+        .its("request.headers.authorization")
+        .should("eq", "Bearer gslpJtzmmi6RwaPSx0dYGD4tEkom") // gitleaks:allow
+      cy.getGridRow(0).should("contain", "john doe")
+      cy.getByDataHook("auth-login").should("not.exist")
+    })
+
+    it("shows the expired-session error when refresh is authoritatively rejected", () => {
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      cy.intercept("POST", oidcTokenUrl, (req) => {
+        if (
+          new URLSearchParams(req.body).get("grant_type") === "refresh_token"
+        ) {
+          req.alias = "refreshRejected"
+          req.reply({ statusCode: 400, body: { error: "invalid_grant" } })
+        } else {
+          req.reply({
+            access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+            refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv", // gitleaks:allow
+            id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+            token_type: "Bearer",
+            expires_in: 300,
+          })
+        }
+      })
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.getEditor().should("be.visible")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.username.client1")
+        .should("not.be.empty")
+
+      // The first SQL 401 triggers refresh while the token is locally valid.
+      // The invalid_grant, not that old bearer's rejection, ends the session.
+      cy.intercept(
+        {
+          method: "GET",
+          url: "**/exec?*",
+          query: { query: "select current_user()" },
+        },
+        { statusCode: 401, body: "Unauthorized" },
+      ).as("rejectedBearerQuery")
+      cy.clearEditor()
+      cy.typeQuery("select current_user()")
+      cy.runLine()
+      cy.wait("@rejectedBearerQuery")
+      cy.wait("@refreshRejected")
+      cy.getByDataHook("auth-login").should("be.visible")
+      cy.contains("Your SSO session has expired")
+        .closest("[data-hook='sign-in-error']")
+        .should("be.focused")
+      cy.contains(
+        "Could not renew your SSO session. Please sign in again.",
+      ).should("be.visible")
+      cy.getByDataHook("button-sso-continue").should("be.visible")
+    })
+
     it("should request a new token on page reload, even if there is no refresh token", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       interceptTokenRequest({
         access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
         token_type: "Bearer",
-        expires_in: 0,
+        expires_in: 300,
       })
       cy.getByDataHook("button-sso-login").click()
       cy.wait("@authorizationCode")

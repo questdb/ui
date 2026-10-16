@@ -19,6 +19,7 @@ import {
 } from "../../../../utils/questdb/requestLimiter"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { ssoAuthState } from "../../../../modules/OAuth2/ssoAuthState"
 import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
 import {
   autoRefreshIntervalMs,
@@ -47,9 +48,13 @@ import {
 import type { CellRefreshView as CellRefreshAgentView } from "../../../../utils/notebooks/notebookController/notebookController"
 import {
   deleteCellSnapshot,
+  type NotebookResultSnapshot,
   type SnapshotRefreshState,
 } from "../../../../store/notebookResults"
-import { persistCellSnapshot } from "../persistCellSnapshot"
+import {
+  persistCellSnapshot,
+  reportSnapshotSaveFailure,
+} from "../persistCellSnapshot"
 import { PerKeyListeners } from "../perKeyListeners"
 import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
 
@@ -295,6 +300,11 @@ const sameStateValue = (a: unknown, b: unknown): boolean => {
   return false
 }
 
+type PendingSnapshot = {
+  results: SingleQueryResult[]
+  durationMs: number
+}
+
 type Entry = {
   kind: CellEntryKind
   cellId: string
@@ -326,12 +336,22 @@ type Entry = {
   persistedResults: WeakMap<SingleQueryResult[], string>
   lastPersistedErrorsSig: string | null
   lastClearedSqlHash: string | null
-  pendingSnapshot: { results: SingleQueryResult[]; durationMs: number } | null
+  pendingSnapshot: PendingSnapshot | null
   snapshotTimer: ReturnType<typeof setTimeout> | null
 }
 
 export class CellRefreshEngine {
+  // The mounted engine belongs to one login, not to a particular bearer.
+  // A same-session refresh keeps this identity; logout/re-login invalidates it.
+  private readonly session = ssoAuthState.capture()
+  private unsubscribeBeforeEnd?: () => void
   private entries = new Map<string, Entry>()
+  private teardownSnapshots: Array<{
+    entry: Entry
+    snapshot: PendingSnapshot
+  }> = []
+  private acceptedSnapshotWrites: Array<() => Promise<void>> = []
+  private acceptedSnapshotTimer: ReturnType<typeof setTimeout> | null = null
   private listeners = new PerKeyListeners()
   private visibilityByCell = new Map<string, boolean>()
   private lastSyncedEntryCells: EntrySyncKey[] | null = null
@@ -372,7 +392,15 @@ export class CellRefreshEngine {
     this.batchUpdates = options.batchUpdates ?? ((fn) => fn())
   }
 
+  private isCurrentSession() {
+    return this.session.isCurrent()
+  }
+
   attach() {
+    this.unsubscribeBeforeEnd?.()
+    this.unsubscribeBeforeEnd = ssoAuthState.beforeEnd(() => {
+      this.captureAcceptedSnapshots()
+    })
     eventBus.subscribe(
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
@@ -386,7 +414,9 @@ export class CellRefreshEngine {
     }
   }
 
-  destroy() {
+  // Stop work during the unmount commit without serializing result datasets.
+  // Pending snapshots are retained for destroy() in passive cleanup.
+  detach() {
     eventBus.unsubscribe(
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
@@ -404,6 +434,83 @@ export class CellRefreshEngine {
     this.pendingRefreshSeeds.clear()
     this.pendingRunCounts.clear()
     this.lastSyncedEntryCells = null
+  }
+
+  destroy() {
+    this.detach()
+    this.persistTeardownSnapshots()
+    void this.flushAcceptedSnapshots()
+    this.unsubscribeBeforeEnd?.()
+    this.unsubscribeBeforeEnd = undefined
+  }
+
+  private persistTeardownSnapshots() {
+    const snapshots = this.teardownSnapshots
+    this.teardownSnapshots = []
+    for (const { entry, snapshot } of snapshots) {
+      void this.persistSnapshot(entry, snapshot.results, snapshot.durationMs)
+    }
+  }
+
+  // Capture only metadata and accepted frame references while the generation
+  // is current. Dataset serialization must not delay session invalidation.
+  private captureAcceptedSnapshots() {
+    if (!this.isCurrentSession()) return
+    for (const entry of this.entries.values()) {
+      const pending = entry.pendingSnapshot
+      if (!pending) continue
+      this.dropPendingSnapshot(entry)
+      entry.lastSnapshotAt = Date.now()
+      this.acceptedSnapshotWrites.push(
+        this.snapshotWrite(entry, pending.results, pending.durationMs),
+      )
+    }
+    for (const { entry, snapshot } of this.teardownSnapshots) {
+      this.acceptedSnapshotWrites.push(
+        this.snapshotWrite(entry, snapshot.results, snapshot.durationMs),
+      )
+    }
+    this.teardownSnapshots = []
+    if (this.acceptedSnapshotWrites.length === 0) return
+    this.acceptedSnapshotTimer = setTimeout(() => {
+      void this.flushAcceptedSnapshots()
+    }, 0)
+    // A reload can bypass the timer and passive cleanup. Start those accepted
+    // writes at the page boundary rather than losing the final frame.
+    if (typeof window !== "undefined") {
+      window.addEventListener("pagehide", this.flushAcceptedOnPageHide)
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.flushAcceptedOnHidden)
+    }
+  }
+
+  private flushAcceptedOnPageHide = () => {
+    void this.flushAcceptedSnapshots()
+  }
+
+  private flushAcceptedOnHidden = () => {
+    if (document.hidden) void this.flushAcceptedSnapshots()
+  }
+
+  private async flushAcceptedSnapshots(): Promise<void> {
+    if (this.acceptedSnapshotWrites.length === 0) return
+    if (this.acceptedSnapshotTimer !== null) {
+      clearTimeout(this.acceptedSnapshotTimer)
+      this.acceptedSnapshotTimer = null
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("pagehide", this.flushAcceptedOnPageHide)
+    }
+    if (typeof document !== "undefined") {
+      document.removeEventListener(
+        "visibilitychange",
+        this.flushAcceptedOnHidden,
+      )
+    }
+    const writes = this.acceptedSnapshotWrites
+    this.acceptedSnapshotWrites = []
+    await Promise.all(writes.map((write) => write()))
   }
 
   sync(cells: NotebookCell[], autoRefreshDefault?: AutoRefresh) {
@@ -802,8 +909,7 @@ export class CellRefreshEngine {
     const pending = entry.pendingSnapshot
     this.dropPendingSnapshot(entry)
     if (reason === "teardown" && pending) {
-      entry.lastSnapshotAt = 0
-      this.queueSnapshot(entry, pending.results, pending.durationMs)
+      this.teardownSnapshots.push({ entry, snapshot: pending })
     }
     this.stopResultLoadWait(entry)
     this.abortRound(entry)
@@ -1115,6 +1221,7 @@ export class CellRefreshEngine {
     entry: Entry,
     reason: FetchReason,
   ): Promise<number | void> {
+    if (!this.isCurrentSession()) return
     const manual = reason === "manual"
     // A poll tick must not abort the round a refresh click started — skip it;
     // the loop resumes on its own schedule once the manual round settles.
@@ -1219,7 +1326,7 @@ export class CellRefreshEngine {
       try {
         classified = await this.classifyForRound(entry, ac)
       } catch (e) {
-        if (ac.signal.aborted) return
+        if (ac.signal.aborted || !this.isCurrentSession()) return
         const message = e instanceof Error ? e.message : "validate failed"
         this.setState(entry, {
           classifyBlock: { kind: "failed", message },
@@ -1227,7 +1334,12 @@ export class CellRefreshEngine {
         })
         return
       }
-      if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
+      if (
+        ac.signal.aborted ||
+        !this.isCurrentSession() ||
+        !deps.isDrawCell(entry.cellId)
+      )
+        return
       const offender = classified.find((s) => s.klass === "DDL_DML")
       if (offender) {
         this.setState(entry, {
@@ -1263,14 +1375,19 @@ export class CellRefreshEngine {
             )
           const previous = carriedResults[index]
           if (previous) return Promise.resolve(toExecResult(previous))
-          return this.limitRequest(
-            () => deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP),
-            ac.signal,
-          ).catch((e) => errorExecResult(q, e))
+          return this.limitRequest(() => {
+            if (!this.isCurrentSession()) ac.abort()
+            return deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP)
+          }, ac.signal).catch((e) => errorExecResult(q, e))
         }),
       )
       const fetchDurationMs = Date.now() - fetchStartedAt
-      if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
+      if (
+        ac.signal.aborted ||
+        !this.isCurrentSession() ||
+        !deps.isDrawCell(entry.cellId)
+      )
+        return
       // Compare against the CURRENT cell.result, not a retained copy — the
       // hydration engine may have released or replaced it since the last tick,
       // and an unchanged frame must still be re-written in that case.
@@ -1340,7 +1457,7 @@ export class CellRefreshEngine {
       try {
         classified = await this.classifyForRound(entry, round)
       } catch (e) {
-        if (round.signal.aborted) return
+        if (round.signal.aborted || !this.isCurrentSession()) return
         const message = e instanceof Error ? e.message : "validate failed"
         this.setState(entry, {
           classifyBlock: { kind: "failed", message },
@@ -1348,7 +1465,7 @@ export class CellRefreshEngine {
         })
         return
       }
-      if (round.signal.aborted) return
+      if (round.signal.aborted || !this.isCurrentSession()) return
       const offender = classified.find((s) => s.klass === "DDL_DML")
       if (offender) {
         // A write cell is a blocked entry: no execution, old rows stay.
@@ -1394,20 +1511,24 @@ export class CellRefreshEngine {
       this.setState(entry, launchPatch)
       await Promise.all(
         launchSlots.map(async ({ key, index }) => {
-          if (round.signal.aborted) return
+          if (round.signal.aborted || !this.isCurrentSession()) return
           const slotAbort = new AbortController()
           entry.slotAborts.set(key, slotAbort)
           try {
-            const exec = await this.limitRequest(
-              () =>
-                deps.executeSingle(
-                  queries[index],
-                  slotAbort.signal,
-                  NOTEBOOK_ROW_CAP,
-                ),
-              slotAbort.signal,
+            const exec = await this.limitRequest(() => {
+              if (!this.isCurrentSession()) slotAbort.abort()
+              return deps.executeSingle(
+                queries[index],
+                slotAbort.signal,
+                NOTEBOOK_ROW_CAP,
+              )
+            }, slotAbort.signal)
+            if (
+              slotAbort.signal.aborted ||
+              round.signal.aborted ||
+              !this.isCurrentSession()
             )
-            if (slotAbort.signal.aborted || round.signal.aborted) return
+              return
             this.batchUpdates(() => {
               if (exec.type === "error") {
                 this.setSlotError(entry, key, exec.error ?? "Query failed")
@@ -1425,7 +1546,12 @@ export class CellRefreshEngine {
               }
             })
           } catch (e) {
-            if (slotAbort.signal.aborted || round.signal.aborted) return
+            if (
+              slotAbort.signal.aborted ||
+              round.signal.aborted ||
+              !this.isCurrentSession()
+            )
+              return
             this.batchUpdates(() =>
               this.setSlotError(entry, key, errorMessage(e)),
             )
@@ -1440,7 +1566,7 @@ export class CellRefreshEngine {
           }
         }),
       )
-      if (round.signal.aborted) return
+      if (round.signal.aborted || !this.isCurrentSession()) return
       this.setState(entry, { settledKey: queriesKey })
       this.persistGridFrame(entry, manual)
     } finally {
@@ -1600,6 +1726,7 @@ export class CellRefreshEngine {
   // — so an Off write grid still carries its block for the disabled selector
   // and auto_refresh_blocked. The shared text cache absorbs the mount burst.
   private ensureClassified(entry: Entry) {
+    if (!this.isCurrentSession()) return
     entry.classifyAbort?.abort()
     if (entry.state.queries.length === 0) {
       entry.classifyAbort = null
@@ -1615,7 +1742,12 @@ export class CellRefreshEngine {
       ),
     ).then(
       (classified) => {
-        if (ac.signal.aborted || entry.classifyAbort !== ac) return
+        if (
+          ac.signal.aborted ||
+          !this.isCurrentSession() ||
+          entry.classifyAbort !== ac
+        )
+          return
         entry.classifyAbort = null
         if (this.entries.get(entry.cellId) !== entry) return
         const offender = classified.find((s) => s.klass === "DDL_DML")
@@ -1636,6 +1768,7 @@ export class CellRefreshEngine {
   }
 
   private clearCellData(entry: Entry) {
+    if (!this.isCurrentSession()) return
     this.getDeps().setCellResult(entry.cellId, undefined)
     this.getDeps().noteResultMissing(entry.cellId)
     this.clearSnapshot(entry)
@@ -1650,6 +1783,7 @@ export class CellRefreshEngine {
     results: SingleQueryResult[],
     durationMs: number,
   ) {
+    if (!this.isCurrentSession()) return
     const now = Date.now()
     const throttledForMs = SNAPSHOT_THROTTLE_MS - (now - entry.lastSnapshotAt)
     if (throttledForMs > 0) {
@@ -1676,6 +1810,15 @@ export class CellRefreshEngine {
     durationMs: number,
   ): Promise<void> {
     this.dropPendingSnapshot(entry)
+    if (!this.isCurrentSession()) return Promise.resolve()
+    return this.snapshotWrite(entry, results, durationMs)()
+  }
+
+  private snapshotWrite(
+    entry: Entry,
+    results: SingleQueryResult[],
+    durationMs: number,
+  ): () => Promise<void> {
     const persistedSqlHash = sqlHash(entry.sql)
     const persistedErrorsSig = slotErrorsSignature(entry.state.slotErrors)
     const current = this.getDeps().getCellResult(entry.cellId)
@@ -1699,7 +1842,7 @@ export class CellRefreshEngine {
             message,
           }))
         : undefined
-    return persistCellSnapshot({
+    const snapshot: NotebookResultSnapshot = {
       bufferId: this.bufferId,
       cellId: entry.cellId,
       results,
@@ -1710,17 +1853,25 @@ export class CellRefreshEngine {
         : {}),
       ...(script ? { script } : {}),
       ...(refreshErrors ? { refreshErrors } : {}),
-    }).then((saved) => {
-      if (!saved) return
+    }
+    return async () => {
+      let saved: boolean
+      try {
+        saved = await persistCellSnapshot(snapshot)
+      } catch (error) {
+        reportSnapshotSaveFailure(error)
+        return
+      }
+      if (!saved || !this.isCurrentSession()) return
       entry.persistedResults.set(results, persistedSqlHash)
       entry.lastPersistedErrorsSig = persistedErrorsSig
       entry.lastClearedSqlHash = null
       this.getDeps().onSnapshotPersisted(entry.cellId, results)
-    })
+    }
   }
 
   async flushPendingSnapshots(): Promise<void> {
-    const writes: Promise<void>[] = []
+    const writes: Promise<void>[] = [this.flushAcceptedSnapshots()]
     for (const entry of this.entries.values()) {
       const pending = entry.pendingSnapshot
       if (!pending) continue
@@ -1734,6 +1885,7 @@ export class CellRefreshEngine {
 
   private clearSnapshot(entry: Entry) {
     this.dropPendingSnapshot(entry)
+    if (!this.isCurrentSession()) return
     const clearedSqlHash = sqlHash(entry.sql)
     if (entry.lastClearedSqlHash === clearedSqlHash) return
     void deleteCellSnapshot(this.bufferId, entry.cellId).then(

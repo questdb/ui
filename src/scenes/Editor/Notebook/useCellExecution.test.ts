@@ -39,6 +39,69 @@ describe("abortCellRunsOnUnmount", () => {
     expect(validation.signal.aborted).toBe(true)
     expect(generations.get("validating")).toBe(1)
   })
+
+  it("cancels a saturated statement queue without disturbing another notebook", async () => {
+    const holds = Array.from({ length: MAX_ACTIVE_STATEMENT_REQUESTS }, () => {
+      let release!: () => void
+      const promise = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return { promise, release }
+    })
+    const occupied = holds.map((hold) =>
+      statementRequestLimiter(() => hold.promise),
+    )
+    const validation = new AbortController()
+    const validate = vi.fn(() => Promise.resolve())
+    const validations = Promise.allSettled(
+      Array.from({ length: 8 }, () =>
+        statementRequestLimiter(validate, validation.signal),
+      ),
+    )
+    const controllers = Array.from(
+      { length: 1_024 },
+      () => new AbortController(),
+    )
+    const execute = vi.fn<[], Promise<QueryExecResult>>()
+    const queued = controllers.map((controller, index) =>
+      launchStatement(execute, controller.signal, `select ${index}`),
+    )
+    const unrelatedTask = vi.fn(() => Promise.resolve("other-notebook"))
+    const unrelated = statementRequestLimiter(unrelatedTask)
+    const barriers = new Map([["validating", new Set([validation])]])
+    const requests = new Map([["running", controllers]])
+    const generations = new Map([
+      ["validating", 4],
+      ["running", 9],
+    ])
+
+    try {
+      abortCellRunsOnUnmount(barriers, requests, generations)
+
+      expect(generations.get("validating")).toBe(5)
+      expect(generations.get("running")).toBe(10)
+      expect(barriers.size).toBe(0)
+      expect(requests.size).toBe(0)
+      expect(await Promise.all(queued)).toEqual(
+        controllers.map(() => ({ launched: false })),
+      )
+      for (const outcome of await validations) {
+        expect(outcome).toMatchObject({
+          status: "rejected",
+          reason: { name: "AbortError" },
+        })
+      }
+      expect(validate).not.toHaveBeenCalled()
+      expect(execute).not.toHaveBeenCalled()
+      expect(unrelatedTask).not.toHaveBeenCalled()
+    } finally {
+      holds.forEach((hold) => hold.release())
+      await Promise.all(occupied)
+    }
+
+    await expect(unrelated).resolves.toBe("other-notebook")
+    expect(unrelatedTask).toHaveBeenCalledOnce()
+  })
 })
 
 describe("launchStatement", () => {

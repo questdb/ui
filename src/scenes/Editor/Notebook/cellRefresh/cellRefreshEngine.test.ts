@@ -8,8 +8,12 @@ import type {
 } from "../../../../store/notebook"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { ssoAuthState } from "../../../../modules/OAuth2/ssoAuthState"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
-import { persistCellSnapshot } from "../persistCellSnapshot"
+import {
+  persistCellSnapshot,
+  reportSnapshotSaveFailure,
+} from "../persistCellSnapshot"
 import type { CellResultStatus } from "../resultHydration/cellResultHydration"
 import {
   CellRefreshEngine,
@@ -33,6 +37,7 @@ import {
 
 vi.mock("../persistCellSnapshot", () => ({
   persistCellSnapshot: vi.fn().mockResolvedValue(true),
+  reportSnapshotSaveFailure: vi.fn(),
 }))
 
 vi.mock("../../../../store/notebookResults", () => ({
@@ -170,6 +175,7 @@ const flushAsync = async () => {
 // The node test environment has no document; the engine only needs the
 // visibility surface, so stub exactly that.
 const fakeDocument = Object.assign(new EventTarget(), { hidden: false })
+const fakeWindow = new EventTarget()
 
 const setDocumentHidden = (hidden: boolean) => {
   fakeDocument.hidden = hidden
@@ -194,6 +200,7 @@ describe("CellRefreshEngine", () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.stubGlobal("window", fakeWindow)
     clearStatementClassCache()
     fakeDocument.hidden = false
     ;(globalThis as { document?: unknown }).document = fakeDocument
@@ -213,6 +220,7 @@ describe("CellRefreshEngine", () => {
     engine.destroy()
     delete (globalThis as { document?: unknown }).document
     vi.useRealTimers()
+    vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
 
@@ -545,6 +553,134 @@ describe("CellRefreshEngine", () => {
       // Then the blocked frame never persists — saving it would resurrect the
       // snapshot the toggle-off just deleted
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it.each(["timer", "flush", "teardown", "pagehide", "hidden"] as const)(
+      "captures before logout and persists once at the later %s boundary",
+      async (boundary) => {
+        deps.executeSingle = incrementingResults()
+        syncOnScreen([drawCell("c1", "select 1", "1s")])
+        await flushAsync()
+        await vi.advanceTimersByTimeAsync(1000)
+        engine.setVisible("c1", false)
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+        const finalResults = cellResults.get("c1")?.results
+        const generation = ssoAuthState.getSessionId()
+        deps.onSnapshotPersisted.mockClear()
+        ssoAuthState.clearAuthPayload()
+        expect(ssoAuthState.getSessionId()).toBe(generation + 1)
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+        if (boundary === "timer") await vi.advanceTimersByTimeAsync(11_000)
+        else if (boundary === "flush") await engine.flushPendingSnapshots()
+        else if (boundary === "pagehide")
+          fakeWindow.dispatchEvent(new Event("pagehide"))
+        else if (boundary === "hidden") setDocumentHidden(true)
+        else engine.destroy()
+
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+        expect(vi.mocked(persistCellSnapshot).mock.calls[1][0].results).toBe(
+          finalResults,
+        )
+        await vi.advanceTimersByTimeAsync(11_000)
+        engine.destroy()
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+        expect(deps.onSnapshotPersisted).not.toHaveBeenCalled()
+        expect(deleteCellSnapshot).not.toHaveBeenCalled()
+      },
+    )
+
+    it("invalidates the session before preparing accepted datasets", async () => {
+      deps.executeSingle = incrementingResults()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(1000)
+      engine.setVisible("c1", false)
+      const order: string[] = []
+      const unsubscribe = ssoAuthState.onEnd(() => {
+        order.push("invalidated")
+      })
+      vi.mocked(persistCellSnapshot).mockImplementationOnce((snapshot) => {
+        JSON.stringify(snapshot.results)
+        order.push("serialized")
+        return Promise.resolve(true)
+      })
+      try {
+        ssoAuthState.endSession()
+        expect(order).toEqual(["invalidated"])
+        await vi.advanceTimersByTimeAsync(0)
+        expect(order).toEqual(["invalidated", "serialized"])
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it("reports deferred preparation failures without interrupting logout", async () => {
+      deps.executeSingle = incrementingResults()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(1000)
+      engine.setVisible("c1", false)
+      const failure = new Error("Cannot serialize")
+      vi.mocked(persistCellSnapshot).mockImplementationOnce(() => {
+        throw failure
+      })
+      expect(() => ssoAuthState.endSession()).not.toThrow()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(reportSnapshotSaveFailure).toHaveBeenCalledWith(failure)
+    })
+
+    it.each([false, true])(
+      "defers a detached engine's final snapshot until destruction (logout=%s)",
+      async (logout) => {
+        deps.executeSingle = incrementingResults()
+        syncOnScreen([drawCell("c1", "select 1", "1s")])
+        await flushAsync()
+        await vi.advanceTimersByTimeAsync(1000)
+        const finalResults = cellResults.get("c1")?.results
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+        engine.detach()
+
+        expect(engine.getState("c1")).toBeUndefined()
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+        await vi.advanceTimersByTimeAsync(15_000)
+        expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+        if (logout) ssoAuthState.clearAuthPayload()
+        engine.destroy()
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+        expect(vi.mocked(persistCellSnapshot).mock.calls[1][0].results).toBe(
+          finalResults,
+        )
+        engine.destroy()
+        expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+      },
+    )
+
+    it("aborts a detached engine's live round before its late result settles", async () => {
+      let finish!: (result: QueryExecResult) => void
+      let signal!: AbortSignal
+      deps.executeSingle = vi.fn((_sql: string, abortSignal?: AbortSignal) => {
+        signal = abortSignal!
+        return new Promise<QueryExecResult>((resolve) => {
+          finish = resolve
+        })
+      })
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(signal.aborted).toBe(false)
+
+      engine.detach()
+
+      expect(signal.aborted).toBe(true)
+      expect(engine.getState("c1")).toBeUndefined()
+      finish(dqlResult("select 1"))
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
     })
 
     it("persists the throttle-blocked final frame on engine teardown", async () => {

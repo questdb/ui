@@ -91,6 +91,16 @@ const removeNotification = (
   type: QueryAT.REMOVE_NOTIFICATION,
 })
 
+const settleLoadingNotification = (queryId: number): QueryAction => ({
+  type: QueryAT.SETTLE_LOADING_NOTIFICATION,
+  payload: { queryId },
+})
+
+const settleActiveLoadingNotification = (queryId: number): QueryAction => ({
+  type: QueryAT.SETTLE_ACTIVE_LOADING_NOTIFICATION,
+  payload: { queryId },
+})
+
 const setResult = (payload: QueryRawResult | undefined): QueryAction => ({
   payload,
   type: QueryAT.SET_RESULT,
@@ -161,6 +171,8 @@ export default {
   cleanupNotifications,
   cleanupBufferNotifications,
   removeNotification,
+  settleLoadingNotification,
+  settleActiveLoadingNotification,
   updateNotificationKey,
   updateNotificationKeys,
   moveNotificationNamespace,

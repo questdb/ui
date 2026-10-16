@@ -1,3 +1,4 @@
+import type { Transaction } from "dexie"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { db } from "../../store/db"
@@ -158,6 +159,7 @@ export const partsOf = (view: NotebookViewState): ViewParts => ({
 })
 
 export type CommitOutcome = "committed" | "archived" | "deleted"
+type GuardedCommitOutcome = CommitOutcome | "discarded"
 
 // Re-reads the row inside the write transaction and rejects an archived or
 // deleted buffer atomically with the update. Archive and delete both bypass the
@@ -165,17 +167,30 @@ export type CommitOutcome = "committed" | "archived" | "deleted"
 // here after the user archived/deleted the notebook; a bare update() would
 // silently overwrite the archived row (or report 0 rows on a deleted one) and
 // pretend it committed, surfacing the hidden edit when the notebook is restored.
-export const commitView = async (
+// An optional guard fences async work (such as a query from an ended auth
+// session) after the transaction's read, immediately before issuing the write.
+export function commitView(
   bufferId: number,
   parts: ViewParts,
-): Promise<CommitOutcome> => {
+): Promise<CommitOutcome>
+export function commitView(
+  bufferId: number,
+  parts: ViewParts,
+  canCommit: () => boolean,
+): Promise<GuardedCommitOutcome>
+export async function commitView(
+  bufferId: number,
+  parts: ViewParts,
+  canCommit?: () => boolean,
+): Promise<GuardedCommitOutcome> {
   const outcome = await db.transaction(
     "rw",
     db.buffers,
-    async (): Promise<CommitOutcome> => {
+    async (transaction): Promise<GuardedCommitOutcome> => {
       const buffer = await bufferStore.getById(bufferId)
       if (!buffer) return "deleted"
       if (buffer.archived) return "archived"
+      if (canCommit && !canCommit()) return "discarded"
       const updated = await bufferStore.update(bufferId, {
         notebookViewState: buildPersistPayload(
           parts.cells,
@@ -184,10 +199,18 @@ export const commitView = async (
           parts.settings,
         ),
       })
+      if (updated !== 0) {
+        // Headless runs nest this write in a metadata/snapshot transaction.
+        // Never publish a change that its enclosing transaction rolls back.
+        let rootTransaction: Transaction = transaction
+        while (rootTransaction.parent) rootTransaction = rootTransaction.parent
+        rootTransaction.on("complete", () =>
+          schedulePublishSearchUpdate(bufferId),
+        )
+      }
       return updated === 0 ? "deleted" : "committed"
     },
   )
-  if (outcome === "committed") schedulePublishSearchUpdate(bufferId)
   return outcome
 }
 

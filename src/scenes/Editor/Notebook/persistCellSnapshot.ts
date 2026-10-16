@@ -9,12 +9,10 @@ import { capResultBytes, NOTEBOOK_BYTE_CAP } from "./notebookUtils"
 // quota is exhausted) collapses into a single toast instead of flooding.
 const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 
-// Resolves true when the result is durably saved, false when the write failed
-// (after surfacing the toast). The live path ignores the result — the run is
-// already in React state. The headless path commits the run status separately;
-// a false here means only the offline result-rows snapshot was lost, which it
-// surfaces to the agent as a soft success (RESULT_NOT_SAVED_RUN_NOTE), not as a
-// "not recorded" outcome.
+// Caps and serialization must happen before opening a multi-table write
+// transaction, so large result frames do not hold the editor buffers lock.
+// A nested write may resolve before its ROOT transaction commits. Headless
+// callers must catch root commit failures and retry metadata-only persistence.
 //
 // DELIBERATE — not a bug: a byte-capped save marks the
 // copy `truncated` and keeps `count` at the server value, so a release/
@@ -28,20 +26,28 @@ const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 // Deliberately save-only: the cross-notebook recency prune runs where a NEW
 // notebook can actually enter the table — notebook open, duplication, and the
 // headless run commit — not on every frame a live chart persists.
+export const prepareCellSnapshot = (
+  snapshot: NotebookResultSnapshot,
+): NotebookResultSnapshot => ({
+  ...snapshot,
+  results: snapshot.results.map((r) => capResultBytes(r, NOTEBOOK_BYTE_CAP)),
+})
+
+export const reportSnapshotSaveFailure = (error: unknown): false => {
+  console.error("Failed to persist notebook cell result", error)
+  toast.error(
+    "Couldn't save this cell's result for offline restore. It may be lost on reload or your browser storage might be full.",
+    { toastId: SNAPSHOT_SAVE_ERROR_TOAST_ID },
+  )
+  return false
+}
+
+export const persistPreparedCellSnapshot = (
+  snapshot: NotebookResultSnapshot,
+): Promise<boolean> =>
+  saveCellSnapshot(snapshot).then(() => true, reportSnapshotSaveFailure)
+
 export const persistCellSnapshot = (
   snapshot: NotebookResultSnapshot,
 ): Promise<boolean> =>
-  saveCellSnapshot({
-    ...snapshot,
-    results: snapshot.results.map((r) => capResultBytes(r, NOTEBOOK_BYTE_CAP)),
-  }).then(
-    () => true,
-    (error) => {
-      console.error("Failed to persist notebook cell result", error)
-      toast.error(
-        "Couldn't save this cell's result for offline restore. It may be lost on reload or your browser storage might be full.",
-        { toastId: SNAPSHOT_SAVE_ERROR_TOAST_ID },
-      )
-      return false
-    },
-  )
+  persistPreparedCellSnapshot(prepareCellSnapshot(snapshot))

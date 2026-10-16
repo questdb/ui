@@ -1,5 +1,9 @@
 import type { Client } from "../questdb/client"
 import { Type } from "../questdb/types"
+import {
+  isSessionEnded,
+  type SessionFailure,
+} from "../../modules/OAuth2/session"
 
 export const RUN_QUERY_DEFAULT_LIMIT = 100
 export const RUN_QUERY_MAX_LIMIT = 10_000
@@ -15,7 +19,11 @@ export type RunQueryRawResult =
       notice?: string
     }
   | { type: "ddl" | "dml" | "notice"; durationMs?: number; message?: string }
-  | { type: "error"; error: string; position?: number }
+  | ({
+      type: "error"
+      error: string
+      position?: number
+    } & SessionFailure)
 
 // Wire shape is (string | number | boolean | null)[] — array/object cells
 // (e.g. QuestDB ARRAY columns) get flattened to a JSON string so the agent
@@ -134,16 +142,28 @@ export const mapQueryRawToResult = async (
       }
       return { type: "notice", durationMs, message: res.notice }
     }
-    return { type: "error", error: res.error, position: res.position }
+    return {
+      type: "error",
+      error: res.error,
+      position: res.position,
+      ...(isSessionEnded(res) ? { sessionEnded: true } : {}),
+      ...(res.requestNotSent ? { requestNotSent: true } : {}),
+    }
   } catch (e) {
     if (e && typeof e === "object" && "error" in e) {
-      const errLike = e as { error?: unknown; position?: unknown }
+      const errLike = e as {
+        error?: unknown
+        position?: unknown
+        requestNotSent?: unknown
+      }
       if (typeof errLike.error === "string") {
         return {
           type: "error",
           error: errLike.error,
           position:
             typeof errLike.position === "number" ? errLike.position : -1,
+          ...(isSessionEnded(e) ? { sessionEnded: true } : {}),
+          ...(errLike.requestNotSent === true ? { requestNotSent: true } : {}),
         }
       }
     }

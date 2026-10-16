@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled, { useTheme } from "styled-components"
 import { User, Building } from "../../../components/icons"
 import { ErrorWarning } from "../../../components/icons"
@@ -9,7 +9,7 @@ import { Badge, Text, Form, Button, IconButton } from "../../../components"
 import { setValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { useSettings } from "../../../providers"
-import { getSSOUserNameWithClientID } from "../utils"
+import { getSSOUserNameWithClientID, SIGN_IN_ERROR_TITLE } from "../utils"
 import { RawDqlResult } from "utils/questdb/types"
 import { LoadingSpinner } from "../../../components/LoadingSpinner"
 import { Box } from "../../../components/Box"
@@ -296,6 +296,20 @@ export const Login = ({
       : ""
   const version = settings["release.version"]
   const [loading, setLoading] = useState(false)
+  const redirectErrorRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const hasFocusedInitialView = useRef(false)
+
+  useEffect(() => {
+    if (redirectErrorTitle || redirectErrorMessage) {
+      redirectErrorRef.current?.focus()
+    } else if (!hasFocusedInitialView.current) {
+      titleRef.current?.focus()
+    }
+    // Clearing an SSO error during password submission must not steal focus
+    // from the form. Explicit dismissal restores heading focus separately.
+    hasFocusedInitialView.current = true
+  }, [redirectErrorTitle, redirectErrorMessage])
 
   const httpBasicAuthStrategy = isEE
     ? {
@@ -358,14 +372,21 @@ export const Login = ({
       <LoginContainer data-hook="auth-login">
         <LoginBackground />
         {(redirectErrorTitle || redirectErrorMessage) && (
-          <RedirectErrorContainer>
-            <PlugsContainer>
+          <RedirectErrorContainer
+            ref={redirectErrorRef}
+            data-hook="sign-in-error"
+            role="group"
+            aria-labelledby="sign-in-error-title"
+            aria-describedby="sign-in-error-message"
+            tabIndex={-1}
+          >
+            <PlugsContainer aria-hidden="true">
               {isDisconnection ? (
                 <img
                   src="assets/plugs.svg"
                   width="24"
                   height="24"
-                  alt="Plug"
+                  alt=""
                   style={{ flexShrink: "0" }}
                 />
               ) : (
@@ -377,18 +398,26 @@ export const Login = ({
               )}
             </PlugsContainer>
             <Box flexDirection="column" gap="0" align="flex-start">
-              <Text size="lg" weight={600} color="statusDanger">
-                {redirectErrorTitle ?? "Something went wrong."}
-              </Text>
-              <Text size="lg" color="statusDanger">
-                {redirectErrorMessage ?? "Error logging in. Please try again."}
-              </Text>
+              <span id="sign-in-error-title">
+                <Text size="lg" weight={600} color="statusDanger">
+                  {redirectErrorTitle ?? SIGN_IN_ERROR_TITLE}
+                </Text>
+              </span>
+              <span id="sign-in-error-message">
+                <Text size="lg" color="statusDanger">
+                  {redirectErrorMessage ??
+                    "Error logging in. Please try again."}
+                </Text>
+              </span>
             </Box>
             <ErrorCloseButton
               label="Dismiss sign-in error"
               size="lg"
               variant="secondary"
-              onClick={resetErrors}
+              onClick={() => {
+                resetErrors()
+                titleRef.current?.focus()
+              }}
             >
               <XIcon size={24} />
             </ErrorCloseButton>
@@ -405,7 +434,9 @@ export const Login = ({
               height="48"
             />
           </LogoContainer>
-          <Title>Sign in to QuestDB</Title>
+          <Title ref={titleRef} tabIndex={-1}>
+            Sign in to QuestDB
+          </Title>
           <Card>
             {settings["acl.oidc.enabled"] && (
               <SSOCard>
