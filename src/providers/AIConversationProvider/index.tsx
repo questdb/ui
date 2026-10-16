@@ -261,6 +261,7 @@ export const AIConversationProvider: React.FC<{
   }, [activeConversationId])
 
   const isOpeningChatWindowRef = useRef(false)
+  const pendingChatDeletionRef = useRef<Promise<void> | null>(null)
 
   const persistMessages = useCallback(
     async (conversationId: ConversationId, updateTimestamp: boolean = true) => {
@@ -756,9 +757,12 @@ export const AIConversationProvider: React.FC<{
     dispatch(actions.console.closeSidebar())
     if (chatWindowState.activeConversationId) {
       if (activeConversationMessagesRef.current.length === 0) {
-        void aiConversationStore.deleteConversation(
-          chatWindowState.activeConversationId,
-        )
+        pendingChatDeletionRef.current = aiConversationStore
+          .deleteConversation(chatWindowState.activeConversationId)
+          .catch((error) => {
+            console.error("Failed to delete empty conversation:", error)
+            toast.error("Failed to delete empty conversation")
+          })
       }
     }
   }, [chatWindowState.activeConversationId])
@@ -798,19 +802,23 @@ export const AIConversationProvider: React.FC<{
   )
 
   const openOrCreateBlankChatWindow = useCallback(async () => {
+    // Closing an empty chat deletes it asynchronously, before the live query
+    // updates. Wait for that write and read fresh metadata before reopening.
+    await pendingChatDeletionRef.current
+    const metas = await aiConversationStore.getAllMetas()
     if (chatWindowState.activeConversationId) {
-      const existingMeta = conversationMetas.get(
-        chatWindowState.activeConversationId,
+      const existingMeta = metas.find(
+        (meta) => meta.id === chatWindowState.activeConversationId,
       )
       if (existingMeta) {
-        await openChatWindow(chatWindowState.activeConversationId)
+        await openChatWindow(existingMeta.id)
         return
       }
     }
 
-    if (conversationMetas.size > 0) {
-      const latestMeta = Array.from(conversationMetas.values()).reduce(
-        (latest, meta) => (meta.updatedAt > latest.updatedAt ? meta : latest),
+    if (metas.length > 0) {
+      const latestMeta = metas.reduce((latest, meta) =>
+        meta.updatedAt > latest.updatedAt ? meta : latest,
       )
       await openChatWindow(latestMeta.id)
       return
@@ -818,12 +826,7 @@ export const AIConversationProvider: React.FC<{
 
     const blankConversation = await createConversation({})
     await openChatWindow(blankConversation.id)
-  }, [
-    chatWindowState.activeConversationId,
-    conversationMetas,
-    openChatWindow,
-    createConversation,
-  ])
+  }, [chatWindowState.activeConversationId, openChatWindow, createConversation])
 
   const openBlankChatWindow = useCallback(async () => {
     const blankConversation = await createConversation({})
