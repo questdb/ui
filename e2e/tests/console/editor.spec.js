@@ -2602,7 +2602,7 @@ describe("editor settings", () => {
       cy.contains(".Toastify__toast--error", "Nothing to run")
         .should("be.visible")
         .within(() => {
-          cy.get("button[aria-label='close']").click()
+          cy.get("button[aria-label='Close notification']").click()
         })
       cy.then(() => expect(execQueries).to.deep.eq([]))
     }
