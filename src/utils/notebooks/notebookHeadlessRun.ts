@@ -28,6 +28,7 @@ import {
   CELL_CHANGED_BEFORE_RUN_NOTE,
   CELL_CHANGED_MID_RUN_NOTE,
   errorResult,
+  isUnverifiableExecError,
   MOUNTED_MID_RUN_NOTE,
   NOTEBOOK_ROW_CAP,
   RESULT_NOT_SAVED_RUN_NOTE,
@@ -225,8 +226,23 @@ const emptySummary = (): RunCellSummary => ({
 const sessionEndedBeforeLaunchSummary = (): RunCellSummary =>
   cancelledBeforeLaunchSummary("session_ended")
 
-const sessionEndedSummary = (): RunCellSummary => ({
-  ...emptySummary(),
+const sessionEndedSummary = (result: CellResult): RunCellSummary => ({
+  success: false,
+  queryCount: result.results.length,
+  // Keep confirmed execution history without returning old-session SQL,
+  // datasets, notices, or server error details to a still-settling caller.
+  results: result.results.map((statement) => {
+    if (statement.type === "cancelled") return "cancelled"
+    if (statement.type === "running" || statement.type === "queued")
+      return "pending"
+    if (statement.type === "error") {
+      if (statement.requestNotSent) return "ERROR: query not sent"
+      return isUnverifiableExecError(statement)
+        ? "ERROR: execution outcome unverified"
+        : "ERROR: query failed"
+    }
+    return "success"
+  }),
   cancelled: "session_ended",
   unverified: true,
   note: midRunCancellationNote("session_ended"),
@@ -525,7 +541,7 @@ export const runHeadlessCell = async (
       )
       return nothingExecuted
         ? sessionEndedBeforeLaunchSummary()
-        : sessionEndedSummary()
+        : sessionEndedSummary(ranResult)
     }
 
     const outcome = await enqueueBufferTask(
@@ -665,7 +681,7 @@ export const runHeadlessCell = async (
     }
     switch (outcome.reason) {
       case "session_ended":
-        return sessionEndedSummary()
+        return sessionEndedSummary(ranResult)
       case "mounted":
         return { ...summary, unverified: true, note: MOUNTED_MID_RUN_NOTE }
       case "user_changed":

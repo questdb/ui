@@ -545,13 +545,15 @@ const Row = ({
       onDoubleClick={handleExpandCollapse}
       onClick={handleClick}
       onKeyDown={(e) => {
-        e.preventDefault()
+        if (e.defaultPrevented) return
 
         if (
+          !e.altKey &&
           (e.metaKey || e.ctrlKey) &&
           (e.key === "c" || e.key === "C") &&
           (isTableKind || kind === "column")
         ) {
+          e.preventDefault()
           void trackEvent(ConsoleEvent.SCHEMA_NAME_COPY, {
             kind,
           })
@@ -565,7 +567,12 @@ const Row = ({
           pulseTimeoutRef.current = setTimeout(() => {
             setIsPulsing(false)
           }, 1000)
+          return
         }
+
+        // Leave unhandled shortcuts (including Alt+N for notifications) to
+        // their owners rather than cancelling the native event here.
+        if (e.altKey || e.metaKey || e.ctrlKey) return
 
         if (
           isExpandable &&
@@ -573,11 +580,13 @@ const Row = ({
             (e.key === "ArrowRight" && !expanded) ||
             (e.key === "ArrowLeft" && expanded))
         ) {
+          e.preventDefault()
           handleExpandCollapse()
         }
 
-        if (e.key === "Enter") {
-          onOpenDetailsDrawer?.()
+        if (e.key === "Enter" && onOpenDetailsDrawer) {
+          e.preventDefault()
+          onOpenDetailsDrawer()
         }
 
         const shouldGoToParent =
@@ -585,27 +594,34 @@ const Row = ({
         const shouldGoToNextSibling =
           ((!isExpandable || expanded) && e.key === "ArrowRight") ||
           e.key === "ArrowDown" ||
-          e.key === "Tab"
+          (e.key === "Tab" && !e.shiftKey)
 
         if (shouldGoToParent) {
+          e.preventDefault()
           navigateInTree({ to: "parent", id })
         }
         if (shouldGoToNextSibling) {
+          e.preventDefault()
           navigateInTree({ to: "next", id })
         }
         if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
+          e.preventDefault()
           navigateInTree({ to: "previous", id })
         }
         if (e.key === "Home") {
+          e.preventDefault()
           navigateInTree({ to: "start" })
         }
         if (e.key === "End") {
+          e.preventDefault()
           navigateInTree({ to: "end" })
         }
         if (e.key === "PageUp") {
+          e.preventDefault()
           navigateInTree({ to: "pageUp" })
         }
         if (e.key === "PageDown") {
+          e.preventDefault()
           navigateInTree({ to: "pageDown" })
         }
       }}

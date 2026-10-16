@@ -4,6 +4,8 @@ import Dexie, { type Transaction } from "dexie"
 import { toast } from "../../components/Toast"
 import { Client } from "../questdb/client"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import { loadCellSnapshot, saveCellSnapshot } from "../../store/notebookResults"
@@ -166,6 +168,9 @@ describe("headless notebook authentication sessions", () => {
       finish()
       const summary = await run
       expect(summary).toMatchObject({
+        success: false,
+        queryCount: 1,
+        results: ["ERROR: execution outcome unverified"],
         unverified: true,
         cancelled: "session_ended",
       })
@@ -175,48 +180,141 @@ describe("headless notebook authentication sessions", () => {
     },
   )
 
-  it("rechecks the session after waiting for the persistence queue", async () => {
-    let finish!: (value: Response) => void
-    let started!: () => void
-    const requestStarted = new Promise<void>((resolve) => {
-      started = resolve
-    })
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => {
-        started()
-        return new Promise<Response>((resolve) => {
-          finish = resolve
-        })
-      }),
-    )
-    const run = makeRun(new Client())
-    await requestStarted
-    let release!: () => void
-    let queueStarted!: () => void
-    const queueEntered = new Promise<void>((resolve) => {
-      queueStarted = resolve
-    })
-    const blocker = enqueueBufferTask(BUFFER_ID, () => {
-      queueStarted()
-      return new Promise<void>((resolve) => {
-        release = resolve
+  it.each([
+    {
+      kind: "confirmed write",
+      sql: "insert into private_table values (1)",
+      body: { dml: true },
+      status: "success",
+    },
+    {
+      kind: "confirmed read",
+      sql: "select * from private_table",
+      body: {
+        columns: [{ name: "private_column", type: "STRING" }],
+        dataset: [["private_value"]],
+        count: 1,
+      },
+      status: "success",
+    },
+    {
+      kind: "notice",
+      sql: "select * from private_table",
+      body: { notice: "private server notice" },
+      status: "success",
+    },
+    {
+      kind: "confirmed error",
+      sql: "select * from private_table",
+      body: { error: "private server error" },
+      status: "ERROR: query failed",
+    },
+  ])(
+    "preserves status-only $kind history after waiting for the persistence queue",
+    async ({ sql, body, status }) => {
+      await bufferStore.update(BUFFER_ID, {
+        notebookViewState: {
+          cells: [
+            { id: "cell", position: 0, value: sql, lastRunStatus: "success" },
+          ],
+        },
       })
+      let finish!: (value: Response) => void
+      let started!: () => void
+      const requestStarted = new Promise<void>((resolve) => {
+        started = resolve
+      })
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => {
+          started()
+          return new Promise<Response>((resolve) => {
+            finish = resolve
+          })
+        }),
+      )
+      const run = makeRun(new Client())
+      await requestStarted
+      let release!: () => void
+      let queueStarted!: () => void
+      const queueEntered = new Promise<void>((resolve) => {
+        queueStarted = resolve
+      })
+      const blocker = enqueueBufferTask(BUFFER_ID, () => {
+        queueStarted()
+        return new Promise<void>((resolve) => {
+          release = resolve
+        })
+      })
+      await queueEntered
+      finish(new Response(JSON.stringify(body)))
+      // Let the accepted query outcome enqueue its commit behind the blocker.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      ssoAuthState.clearAuthPayload()
+      release()
+      await blocker
+      const summary = await run
+      const { note, ...execution } = summary
+      expect(execution).toEqual({
+        success: false,
+        queryCount: 1,
+        results: [status],
+        unverified: true,
+        cancelled: "session_ended",
+      })
+      expect(note).toMatch(/session.*ended/i)
+      expect(JSON.stringify(summary)).not.toContain("private")
+      await expectPreviousResult()
+    },
+  )
+
+  it("keeps a confirmed script prefix when logout stops the next statement", async () => {
+    await bufferStore.update(BUFFER_ID, {
+      notebookViewState: {
+        cells: [
+          {
+            id: "cell",
+            position: 0,
+            value:
+              "insert into private_table values (1); insert into private_table values (2);",
+            lastRunStatus: "success",
+          },
+        ],
+      },
     })
-    await queueEntered
-    finish(response())
-    // Let the successful query enqueue its commit behind the blocker.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    ssoAuthState.clearAuthPayload()
-    release()
-    await blocker
-    const summary = await run
-    expect(summary).toMatchObject({
-      unverified: true,
-      cancelled: "session_ended",
-    })
-    expect(summary.note).toMatch(/session.*ended/i)
-    await expectPreviousResult()
+    const fetchMock = vi.fn((url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url.startsWith("api/v1/sql/validate")
+              ? { queryType: "INSERT" }
+              : { dml: true },
+          ),
+        ),
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    // A write has been accepted before the schema event is published. Logout
+    // here stops the next statement, not the already-confirmed outcome.
+    const logout = () => ssoAuthState.clearAuthPayload()
+    eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, logout)
+    try {
+      expect(await makeRun(new Client())).toMatchObject({
+        success: false,
+        queryCount: 2,
+        results: ["success", "cancelled"],
+        cancelled: "session_ended",
+        unverified: true,
+      })
+      const sqlCalls = fetchMock.mock.calls.filter(([url]) =>
+        url.startsWith("exec?"),
+      )
+      expect(sqlCalls).toHaveLength(1)
+      expect(decodeURIComponent(sqlCalls[0][0])).toContain("values (1)")
+      await expectPreviousResult()
+    } finally {
+      eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA, logout)
+    }
   })
 
   it("rechecks the session after the write transaction reads the notebook", async () => {
@@ -235,6 +333,8 @@ describe("headless notebook authentication sessions", () => {
     )
 
     expect(await makeRun(new Client())).toMatchObject({
+      queryCount: 1,
+      results: ["success"],
       unverified: true,
       cancelled: "session_ended",
     })
@@ -295,7 +395,12 @@ describe("headless notebook authentication sessions", () => {
 
       const summary = await makeRun(new Client())
 
-      expect(summary.unverified).toBe(true)
+      expect(summary).toMatchObject({
+        queryCount: 1,
+        results: ["success"],
+        cancelled: "session_ended",
+        unverified: true,
+      })
       expect(summary.note).toMatch(/session.*ended/i)
       expect(await db.buffers.get(BUFFER_ID)).toEqual(before)
       expect(await loadCellSnapshot(BUFFER_ID, "cell")).toMatchObject({

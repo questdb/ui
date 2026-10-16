@@ -158,7 +158,10 @@ describe("OIDC", () => {
       })
     }
 
-    it("shows the expired-session error after a failed refresh and a later 401", () => {
+    it("keeps the session after a refresh network failure and a later SQL 401, then recovers", () => {
+      // Freeze Date only: keep the bearer valid during refresh backoff while
+      // real timers continue driving requests and notification transitions.
+      cy.clock(Date.now(), ["Date"])
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       cy.intercept("POST", oidcTokenUrl, (req) => {
         if (
@@ -186,15 +189,94 @@ describe("OIDC", () => {
         .invoke("getItem", "sso.username.client1")
         .should("not.be.empty")
 
-      // Control the SQL response: the stubbed IdP expiry alone does not make
-      // the test server reject this token.
-      cy.intercept("GET", "**/exec?*", (req) => {
-        const query = new URL(req.url).searchParams.get("query")
-        if (query?.toLowerCase().includes("select current_user()")) {
-          req.reply({ statusCode: 401, body: "Unauthorized" })
+      cy.intercept(
+        {
+          method: "GET",
+          url: "**/exec?*",
+          query: { query: "select current_user()" },
+          times: 1,
+        },
+        { statusCode: 401, body: "Unauthorized" },
+      ).as("rejectedBearerQuery")
+      cy.clearEditor()
+      cy.typeQuery("select current_user()")
+      cy.runLine()
+      cy.wait("@rejectedBearerQuery")
+      cy.contains("the query was not sent").should("be.visible")
+      cy.getEditor().should("be.visible")
+      cy.getByDataHook("auth-login").should("not.exist")
+      cy.get("#sso-refresh-failed").should("be.visible")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.session.active")
+        .should("eq", "true")
+
+      // The EE userinfo fixture recognizes this access token. Renew its
+      // lifetime and rotate the refresh token, then execute against real EE.
+      cy.intercept("POST", oidcTokenUrl, {
+        access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+        refresh_token: "rotated-refresh-token",
+        id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+        token_type: "Bearer",
+        expires_in: 3600,
+      }).as("refreshRecovery")
+      cy.intercept({
+        method: "GET",
+        url: "**/exec?*",
+        query: { query: "select current_user()" },
+      }).as("recoveredQuery")
+      cy.tick(5000)
+      cy.runLine()
+      cy.wait("@refreshRecovery")
+      cy.wait("@recoveredQuery")
+        .its("request.headers.authorization")
+        .should("eq", "Bearer gslpJtzmmi6RwaPSx0dYGD4tEkom") // gitleaks:allow
+      cy.getGridRow(0).should("contain", "john doe")
+      cy.get("#sso-refresh-failed").should("not.exist")
+      cy.getByDataHook("auth-login").should("not.exist")
+    })
+
+    it("shows the expired-session error when refresh is authoritatively rejected", () => {
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      cy.intercept("POST", oidcTokenUrl, (req) => {
+        if (
+          new URLSearchParams(req.body).get("grant_type") === "refresh_token"
+        ) {
+          req.alias = "refreshRejected"
+          req.reply({ statusCode: 400, body: { error: "invalid_grant" } })
+        } else {
+          req.reply({
+            access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+            refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv", // gitleaks:allow
+            id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+            token_type: "Bearer",
+            expires_in: 300,
+          })
         }
       })
-      cy.executeSQL("select current_user();")
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.getEditor().should("be.visible")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.username.client1")
+        .should("not.be.empty")
+
+      // The first SQL 401 triggers refresh while the token is locally valid.
+      // The invalid_grant, not that old bearer's rejection, ends the session.
+      cy.intercept(
+        {
+          method: "GET",
+          url: "**/exec?*",
+          query: { query: "select current_user()" },
+        },
+        { statusCode: 401, body: "Unauthorized" },
+      ).as("rejectedBearerQuery")
+      cy.clearEditor()
+      cy.typeQuery("select current_user()")
+      cy.runLine()
+      cy.wait("@rejectedBearerQuery")
+      cy.wait("@refreshRejected")
       cy.getByDataHook("auth-login").should("be.visible")
       cy.contains("Your SSO session has expired")
         .closest("[data-hook='sign-in-error']")
@@ -203,10 +285,6 @@ describe("OIDC", () => {
         "Could not renew your SSO session. Please sign in again.",
       ).should("be.visible")
       cy.getByDataHook("button-sso-continue").should("be.visible")
-      cy.window()
-        .its("localStorage")
-        .invoke("getItem", "sso.session.active")
-        .should("eq", "true")
     })
 
     it("should request a new token on page reload, even if there is no refresh token", () => {
