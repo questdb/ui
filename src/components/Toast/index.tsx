@@ -16,6 +16,7 @@ import { CloseCircle, ErrorWarning, Information } from "../icons"
 import { CheckmarkOutline } from "../icons"
 import { useTheme } from "styled-components"
 import { ButtonBase } from "../Button/ButtonBase"
+import { altOption } from "../../utils/platform"
 
 import "react-toastify/dist/ReactToastify.css"
 import "../../styles/_toast.scss"
@@ -29,6 +30,7 @@ export type ToastOptions = RTToastOptions
 
 export const useNotificationCenter = RTNotificationCenter
 export const NOTIFICATION_SHORTCUT = "Alt+N"
+export const NOTIFICATION_SHORTCUT_LABEL = `${altOption === "Alt" ? "Alt+" : altOption}N`
 
 export const ToastIcon = ({
   type,
@@ -97,6 +99,7 @@ const ToastCloseButton = ({
   <ButtonBase
     className={`Toastify__close-button Toastify__close-button--${theme}`}
     aria-label={ariaLabel}
+    aria-keyshortcuts={NOTIFICATION_SHORTCUT}
     onClick={(event) => {
       event.stopPropagation()
       const notification =
@@ -186,11 +189,22 @@ export const ToastContainer = (props?: ToastContainerProps) => {
     const focusNotification = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
+        event.isComposing ||
+        event.keyCode === 229 ||
+        event.key === "Dead" ||
         !event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
         event.shiftKey ||
         (event.code !== "KeyN" && event.key.toLowerCase() !== "n")
+      )
+        return
+      const target = event.target as HTMLElement | null
+      if (
+        event.key.toLowerCase() !== "n" &&
+        target?.closest(
+          'input, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
+        )
       )
         return
       // Follow the warning's close-dialog-first instruction rather than
@@ -199,8 +213,18 @@ export const ToastContainer = (props?: ToastContainerProps) => {
         document.activeElement?.closest('[role="dialog"], [role="alertdialog"]')
       )
         return
-      const control = region.current?.querySelector<HTMLButtonElement>(
-        ".Toastify__toast button",
+      // Only active toasts retain a live role while Toastify animates exits.
+      // Prefer the persistent warning over older, short-lived notifications.
+      const notifications = Array.from(
+        region.current?.querySelectorAll<HTMLElement>(".Toastify__toast") ?? [],
+      ).filter((notification) =>
+        notification.querySelector('[role="alert"], [role="status"]'),
+      )
+      const notification =
+        notifications.find((item) => item.id === "sso-refresh-failed") ??
+        notifications[notifications.length - 1]
+      const control = notification?.querySelector<HTMLButtonElement>(
+        ".Toastify__close-button",
       )
       if (control) {
         const notification = control.closest<HTMLElement>(".Toastify__toast")
@@ -243,7 +267,6 @@ export const ToastContainer = (props?: ToastContainerProps) => {
       ref={region}
       role="region"
       aria-label="Notifications"
-      aria-keyshortcuts={NOTIFICATION_SHORTCUT}
       aria-live="polite"
       aria-atomic="false"
       aria-relevant="additions text"

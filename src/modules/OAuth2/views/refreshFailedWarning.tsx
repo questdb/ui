@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from "react"
 import { Button } from "../../../components/Button"
-import { NOTIFICATION_SHORTCUT } from "../../../components/Toast"
+import { NOTIFICATION_SHORTCUT_LABEL } from "../../../components/Toast"
+import { Box } from "../../../components/Box"
+import { Text } from "../../../components/Text"
+
+const MAX_TIMER_DELAY_MS = 2_147_483_647
 
 export const RefreshFailedWarning = ({
   expiresAt,
@@ -18,7 +22,10 @@ export const RefreshFailedWarning = ({
       const remaining = expiry - Date.now()
       setExpired(!(remaining > 0))
       if (remaining > 0) {
-        timer = setTimeout(updateExpiry, Math.min(remaining, 2_147_483_647))
+        timer = setTimeout(
+          updateExpiry,
+          Math.min(remaining, MAX_TIMER_DELAY_MS),
+        )
       }
     }
     updateExpiry()
@@ -26,19 +33,19 @@ export const RefreshFailedWarning = ({
   }, [expiry])
 
   return (
-    <div>
-      <p>
+    <Box flexDirection="column" gap="1rem" align="flex-start">
+      <Text>
         {expired
           ? "Could not renew your SSO session. Queries are paused until renewal succeeds."
           : `Could not renew your SSO session. Your current token expires at ${new Date(expiry).toLocaleTimeString()}.`}
-      </p>
+      </Text>
       <Button size="sm" onClick={onSignIn}>
         Sign in again
       </Button>
-      <small>
-        Close any open dialog, then press {NOTIFICATION_SHORTCUT} to focus this
-        notification.
-      </small>
-    </div>
+      <Text size="sm" color="contentSecondary">
+        Close any open dialog, then press {NOTIFICATION_SHORTCUT_LABEL} to focus
+        this notification.
+      </Text>
+    </Box>
   )
 }

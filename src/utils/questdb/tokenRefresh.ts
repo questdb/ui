@@ -1,6 +1,6 @@
 import { AuthPayload } from "../../modules/OAuth2/types"
 import { AuthRefreshUnavailableError } from "../../modules/OAuth2/session"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { TOKEN_REQUEST_TIMEOUT_MS } from "../../modules/OAuth2/utils"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -13,6 +13,7 @@ export const REFRESH_REQUEST_TIMEOUT_MS = 60_000
 export const REFRESH_RETRY_DELAY_MS = 5_000
 const MAX_RETRY_DELAY_MS = 30_000
 const REFRESH_WINDOW_MS = 30_000
+const MIN_SUCCESS_THROTTLE_MS = 5_000
 const MAX_SUCCESS_THROTTLE_MS = 30_000
 
 export type RefreshableAuthPayload = AuthPayload & {
@@ -37,8 +38,8 @@ export const isRefreshable = (
 
 class TokenRefreshCoordinator {
   private pending: {
-    wait: Promise<void>
-    completion: Promise<void>
+    softDeadline: Promise<void>
+    hardDeadline: Promise<void>
     sessionId: number
     cancel: () => void
   } | null = null
@@ -55,21 +56,25 @@ class TokenRefreshCoordinator {
   syncSession() {
     if (
       this.pending &&
-      this.pending.sessionId !== ssoAuthState.getSessionId()
+      this.pending.sessionId !== authSessionState.getSessionId()
     ) {
       this.pending.cancel()
       this.pending = null
     }
-    const payload = ssoAuthState.getAuthPayload()
+    const payload = authSessionState.getAuthPayload()
     if (this.retryPayload !== payload) this.resetBackoff(payload)
   }
 
-  get wait() {
-    return this.pending?.wait
+  get softDeadline() {
+    return this.pending?.softDeadline
   }
 
-  get completion() {
-    return this.pending?.completion
+  get hardDeadline() {
+    return this.pending?.hardDeadline
+  }
+
+  inBackoff() {
+    return Date.now() < this.retryAfter
   }
 
   needsRefresh(payload: AuthPayload | null) {
@@ -84,10 +89,10 @@ class TokenRefreshCoordinator {
   // Keep the login intact: transport/5xx failures do not prove revocation.
   // Authoritative OAuth rejections are handled by AuthProvider.
   ensureUsableToken() {
-    const payload = ssoAuthState.getAuthPayload()
+    const payload = authSessionState.getAuthPayload()
     if (
       isRefreshable(payload) &&
-      ssoAuthState.hasRefreshFailed() &&
+      authSessionState.hasRefreshFailed() &&
       new Date(payload.expires_at).getTime() <= Date.now()
     ) {
       throw new AuthRefreshUnavailableError()
@@ -99,7 +104,7 @@ class TokenRefreshCoordinator {
     refresh: RefreshTokenMethod | undefined,
   ) {
     if (this.pending || !refresh) return
-    const sessionId = ssoAuthState.getSessionId()
+    const sessionId = authSessionState.getSessionId()
     const deadline = new AbortController()
     const requestController = new AbortController()
     const expiry = new Date(originalSession.expires_at).getTime()
@@ -107,8 +112,8 @@ class TokenRefreshCoordinator {
     const reportFailure = (error: unknown) => {
       if (
         failureReported ||
-        ssoAuthState.getAuthPayload() !== originalSession ||
-        ssoAuthState.getSessionId() !== sessionId
+        authSessionState.getAuthPayload() !== originalSession ||
+        authSessionState.getSessionId() !== sessionId
       )
         return
       failureReported = true
@@ -122,7 +127,7 @@ class TokenRefreshCoordinator {
         )
       this.retryAfter = expiry > now ? Math.min(expiry, retryAfter) : retryAfter
       console.error("Failed to refresh the auth token", error)
-      ssoAuthState.markRefreshFailed()
+      authSessionState.markRefreshFailed()
       eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED)
     }
     const request = Promise.resolve()
@@ -131,11 +136,11 @@ class TokenRefreshCoordinator {
         if (
           requestController.signal.aborted ||
           !payload ||
-          !ssoAuthState.getAuthPayload() ||
-          ssoAuthState.getSessionId() !== sessionId
+          !authSessionState.getAuthPayload() ||
+          authSessionState.getSessionId() !== sessionId
         )
           return
-        this.resetBackoff(ssoAuthState.getAuthPayload())
+        this.resetBackoff(authSessionState.getAuthPayload())
         const remaining = payload.expires_at
           ? new Date(payload.expires_at).getTime() - Date.now()
           : 0
@@ -145,7 +150,7 @@ class TokenRefreshCoordinator {
           Date.now() +
           (remaining > 0
             ? Math.max(
-                REFRESH_RETRY_DELAY_MS,
+                MIN_SUCCESS_THROTTLE_MS,
                 Math.min(MAX_SUCCESS_THROTTLE_MS, remaining / 2),
               )
             : MAX_SUCCESS_THROTTLE_MS)
@@ -154,43 +159,39 @@ class TokenRefreshCoordinator {
 
     let hardTimer: ReturnType<typeof setTimeout>
     let cancel!: () => void
-    const hardDeadline = new Promise<void>((resolve) => {
+    const hardLimit = new Promise<void>((resolve) => {
       cancel = () => {
         clearTimeout(hardTimer)
         deadline.abort()
         requestController.abort()
         resolve()
       }
-      // Retain a timed-out slot only until expiry (or 60 seconds), with at
-      // least the ordinary wait deadline. Abort before freeing the slot; the
-      // provider must reject installation even if body reading ignores abort.
-      hardTimer = setTimeout(
-        () => {
-          reportFailure(new DeadlineExceededError())
-          cancel()
-          if (this.pending?.wait === wait) this.pending = null
-        },
-        Math.max(
-          REFRESH_WAIT_TIMEOUT_MS,
-          Math.min(REFRESH_REQUEST_TIMEOUT_MS, expiry - Date.now()),
-        ),
-      )
+      // Access-token expiry does not invalidate a rotating refresh. Keep its
+      // response for the full network deadline, independently of query waits.
+      // Abort before freeing the slot, even if body reading ignores abort.
+      hardTimer = setTimeout(() => {
+        reportFailure(new DeadlineExceededError())
+        cancel()
+        if (this.pending?.softDeadline === softDeadline) this.pending = null
+      }, REFRESH_REQUEST_TIMEOUT_MS)
     })
-    const completion = Promise.race([request, hardDeadline])
-    const wait = withDeadline(completion, REFRESH_WAIT_TIMEOUT_MS, () =>
-      deadline.abort(),
+    const hardDeadline = Promise.race([request, hardLimit])
+    const softDeadline = withDeadline(
+      hardDeadline,
+      REFRESH_WAIT_TIMEOUT_MS,
+      () => deadline.abort(),
     ).catch(reportFailure)
-    this.pending = { wait, completion, sessionId, cancel }
+    this.pending = { softDeadline, hardDeadline, sessionId, cancel }
     void request.finally(() => {
       clearTimeout(hardTimer)
-      if (this.pending?.wait === wait) this.pending = null
+      if (this.pending?.softDeadline === softDeadline) this.pending = null
     })
   }
 }
 
-// All SQL consumers share refresh coordination for the tab's login.
+// All authenticated requests share refresh coordination for the tab's login.
 export const tokenRefresh = new TokenRefreshCoordinator()
-ssoAuthState.onEnd(() => tokenRefresh.syncSession())
+authSessionState.onEnd(() => tokenRefresh.syncSession())
 
 export const awaitRefresh = (refresh: Promise<void>, signal: AbortSignal) => {
   if (signal.aborted)

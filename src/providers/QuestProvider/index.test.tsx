@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { StoreKey } from "../../utils/localStorage/types"
 import type { AuthPayload } from "../../modules/OAuth2/types"
 import type { Settings } from "../SettingsProvider/types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { questClient } from "../../utils/questdb/queryClient"
 
 const mocks = vi.hoisted(() => ({
@@ -80,7 +80,7 @@ beforeEach(() => {
   mocks.queryRaw.mockReset().mockResolvedValue({ type: "dml" })
   mocks.headers.mockClear()
   localStorage.clear()
-  ssoAuthState.endSession()
+  authSessionState.endSession()
 })
 afterEach(() => {
   act(() => renderer?.unmount())
@@ -104,10 +104,13 @@ describe("QuestProvider authentication gate", () => {
       refresh_token: "r1",
       token_type: "Bearer",
     }
-    ssoAuthState.setAuthPayload(mocks.sessionData)
+    authSessionState.setAuthPayload(mocks.sessionData)
     await mount()
     const refresh = questClient.refreshTokenMethod!
-    ssoAuthState.setAuthPayload({ ...mocks.sessionData, refresh_token: "r2" })
+    authSessionState.setAuthPayload({
+      ...mocks.sessionData,
+      refresh_token: "r2",
+    })
     const deadline = new AbortController().signal
     const network = new AbortController().signal
     await refresh(deadline, network)
@@ -258,6 +261,43 @@ describe("QuestProvider authentication gate", () => {
       })
     },
   )
+
+  it("fetches build information after Retry succeeds", async () => {
+    const versions: string[] = []
+    const Consumer = () => {
+      versions.push(useContext(QuestContext).buildVersion.version ?? "")
+      return null
+    }
+    mocks.queryRaw.mockRejectedValue({ error: "Offline" })
+    await mount(<Consumer />)
+    expect(mocks.queryRaw).not.toHaveBeenCalledWith(
+      "select build",
+      expect.anything(),
+    )
+    mocks.queryRaw.mockImplementation((query: string) =>
+      Promise.resolve(
+        query === "select build"
+          ? {
+              type: "dql",
+              count: 1,
+              dataset: [
+                [
+                  "Build Information: QuestDB Enterprise 9.0.0, Commit Hash abc123",
+                ],
+              ],
+            }
+          : { type: "dml" },
+      ),
+    )
+    await act(async () => {
+      renderer!.root.findByType("button").props.onClick()
+      await Promise.resolve()
+    })
+    expect(mocks.queryRaw).toHaveBeenCalledWith("select build", {
+      limit: "0,1000",
+    })
+    expect(versions.some((version) => version.length > 0)).toBe(true)
+  })
 
   it("renders a recoverable error when SELECT 1 fails", async () => {
     mocks.queryRaw.mockImplementation((query: string) =>

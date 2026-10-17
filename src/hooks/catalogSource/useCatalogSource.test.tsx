@@ -6,7 +6,7 @@ import { QuestContext } from "../../providers"
 import { useCatalogSource } from "./useCatalogSource"
 import { MANUAL_RETRY_POLICY } from "./sourceState"
 import { Client } from "../../utils/questdb/client"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import type { Options, QueryLifecycle } from "../../utils/questdb"
 import type { AuthPayload } from "../../modules/OAuth2/types"
 
@@ -22,7 +22,7 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
 })
 
 const transformResponse = () => []
@@ -131,7 +131,7 @@ describe("useCatalogSource deadline integration", () => {
       token_type: "Bearer",
       expires_at: new Date(Date.now() + 300_000).toISOString(),
     })
-    ssoAuthState.setAuthPayload(issue("stale"))
+    authSessionState.setAuthPayload(issue("stale"))
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(() =>
@@ -154,7 +154,7 @@ describe("useCatalogSource deadline integration", () => {
     client.setCommonHeaders({ Authorization: "Bearer stale" })
     const refresh = vi.fn(() =>
       later(8_500, issue("fresh")).then((payload) => {
-        ssoAuthState.setAuthPayload(payload)
+        authSessionState.setAuthPayload(payload)
         return payload
       }),
     )
@@ -181,7 +181,7 @@ describe("useCatalogSource deadline integration", () => {
       vi.useFakeTimers()
       const client = new Client()
       const abort = vi.spyOn(client, "abort")
-      ssoAuthState.setAuthPayload({
+      authSessionState.setAuthPayload({
         access_token: "old",
         refresh_token: "refresh",
         token_type: "Bearer",
@@ -198,7 +198,7 @@ describe("useCatalogSource deadline integration", () => {
                 refresh_token: "rotated",
                 expires_at: new Date(Date.now() + 300_000).toISOString(),
               }
-              ssoAuthState.setAuthPayload(payload)
+              authSessionState.setAuthPayload(payload)
               resolve(payload)
             }
           }),

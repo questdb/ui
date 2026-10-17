@@ -88,7 +88,7 @@ const persistedView = async (): Promise<NotebookViewState> => {
   return buffer.notebookViewState
 }
 
-// Responder-style quest stub: each queryRaw call resolves through `respond`,
+// Responder-style quest stub: each queryRaw call settles through `respond`,
 // so tests control per-query outcomes and timing.
 type PendingQuery = {
   sql: string
@@ -100,8 +100,17 @@ const makeQuest = (opts: { validate?: (sql: string) => unknown } = {}) => {
   const quest = {
     queryRaw: (sql: string) => {
       let resolve!: (result: unknown) => void
-      const promise = new Promise((res) => {
-        resolve = res
+      const promise = new Promise((res, reject) => {
+        resolve = (result) => {
+          if (
+            result &&
+            typeof result === "object" &&
+            "type" in result &&
+            result.type === "error"
+          )
+            reject(result)
+          else res(result)
+        }
       })
       pending.push({ sql, resolve })
       return { promise, queryId: `q-${pending.length}` }

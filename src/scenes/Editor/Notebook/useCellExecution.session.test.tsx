@@ -9,7 +9,7 @@ import {
   type QueryExecResult,
 } from "../../../utils/executeSingleRaw"
 import { Client } from "../../../utils/questdb/client"
-import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import {
   createNotebookController,
@@ -28,7 +28,7 @@ let renderer: ReactTestRenderer | undefined
 afterEach(() => {
   act(() => renderer?.unmount())
   renderer = undefined
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   clearStatementClassCache()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -117,7 +117,7 @@ describe("notebook execution session teardown", () => {
   it.each([false, true])(
     "reports a session ending during validation as not started (unmount=%s)",
     async (unmount) => {
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
       const execute = vi.fn()
       let finishValidation!: (result: ValidateQueryResult) => void
       let validationStarted!: () => void
@@ -139,7 +139,7 @@ describe("notebook execution session teardown", () => {
         permissions: { grantSchemaAccess: true, read: true, write: true },
       })
       await started
-      ssoAuthState.endSession()
+      authSessionState.endSession()
       // Do not flush passive teardown with act: the pending tool response can
       // escape before the MCP bridge is passively disposed.
       if (unmount) renderer!.update(<div>Sign in</div>)
@@ -160,7 +160,7 @@ describe("notebook execution session teardown", () => {
       const controller = mountNotebook(sql, (query, signal, limit) =>
         executeSingleRaw(client, query, [], signal, limit),
       )
-      ssoAuthState.setAuthPayload({
+      authSessionState.setAuthPayload({
         access_token: "old",
         refresh_token: "refresh",
         token_type: "Bearer",
@@ -169,7 +169,7 @@ describe("notebook execution session teardown", () => {
       const fetchMock = vi.fn()
       vi.stubGlobal("fetch", fetchMock)
       client.refreshTokenMethod = () => {
-        ssoAuthState.clearAuthPayload()
+        authSessionState.endSession()
         renderer!.update(<div>Sign in</div>)
         return Promise.resolve(undefined)
       }
@@ -182,7 +182,7 @@ describe("notebook execution session teardown", () => {
   it.each(["script", "parallel"])(
     "keeps a %s run unverified if an earlier statement may have executed",
     async (strategy) => {
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
       let finishSecond!: (result: QueryExecResult) => void
       let secondStarted!: () => void
       const started = new Promise<void>((resolve) => {
@@ -212,7 +212,7 @@ describe("notebook execution session teardown", () => {
       )
       const run = controller.runCell("cell")
       await started
-      ssoAuthState.endSession()
+      authSessionState.endSession()
       finishSecond({
         type: "error",
         query: "second statement",

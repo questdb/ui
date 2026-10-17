@@ -570,9 +570,18 @@ const Row = ({
           return
         }
 
-        // Leave unhandled shortcuts (including Alt+N for notifications) to
-        // their owners rather than cancelling the native event here.
-        if (e.altKey || e.metaKey || e.ctrlKey) return
+        // Tree focus must not scroll the page, select page text or navigate
+        // browser history. Keep native reload/find/zoom and notification access.
+        if (e.key === " ") e.preventDefault()
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+          e.preventDefault()
+          return
+        }
+        const historyArrow =
+          (e.altKey || e.metaKey) &&
+          (e.key === "ArrowLeft" || e.key === "ArrowRight")
+        if (historyArrow) e.preventDefault()
+        if ((e.altKey || e.metaKey || e.ctrlKey) && !historyArrow) return
 
         if (
           isExpandable &&

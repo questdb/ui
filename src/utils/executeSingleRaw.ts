@@ -3,7 +3,10 @@ import type { Client } from "./questdb/client"
 import type { ColumnDefinition, Timings } from "./questdb/types"
 import { expandGlobals } from "../scenes/Editor/Notebook/declareUtils"
 import type { NotebookVariable } from "../store/notebook"
-import { isSessionEnded, type SessionFailure } from "../modules/OAuth2/session"
+import {
+  sessionFailureOf,
+  type SessionFailure,
+} from "../modules/OAuth2/session"
 
 export const RESULT_DISPLAY_LIMIT = 50_000
 
@@ -82,18 +85,6 @@ export const executeSingleRaw = async (
       }
     }
 
-    if (result.type === QuestDB.Type.ERROR) {
-      return {
-        type: "error",
-        query: sql,
-        columns: [],
-        dataset: [],
-        count: 0,
-        error: result.error,
-        ...(result.requestNotSent ? { requestNotSent: true } : {}),
-      }
-    }
-
     return {
       type: result.type === QuestDB.Type.DDL ? "ddl" : "dml",
       query: sql,
@@ -111,8 +102,7 @@ export const executeSingleRaw = async (
       count: 0,
       error:
         (err?.error as string) ?? (err?.message as string) ?? "Unknown error",
-      ...(isSessionEnded(e) ? { sessionEnded: true } : {}),
-      ...(err?.requestNotSent === true ? { requestNotSent: true } : {}),
+      ...sessionFailureOf(e),
     }
   } finally {
     cleanup?.()

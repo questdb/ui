@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import Dexie, { type Transaction } from "dexie"
 import { toast } from "../../components/Toast"
 import { Client } from "../questdb/client"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { db } from "../../store/db"
@@ -11,6 +11,7 @@ import { bufferStore } from "../../store/buffers"
 import { loadCellSnapshot, saveCellSnapshot } from "../../store/notebookResults"
 import {
   runHeadlessCell,
+  cancelHeadlessCellRuns,
   __resetNotebookHeadlessRunsForTests,
 } from "./notebookHeadlessRun"
 import {
@@ -91,14 +92,14 @@ beforeEach(async () => {
     results: previous,
     savedAt: 1,
   })
-  ssoAuthState.setAuthPayload(token())
+  authSessionState.setAuthPayload(token())
 })
 
 afterEach(() => {
   __resetNotebookHeadlessRunsForTests()
   __resetNotebookBufferQueuesForTests()
   __resetNotebookDexieViewForTests()
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -155,7 +156,7 @@ describe("headless notebook authentication sessions", () => {
       await requestStarted
       vi.setSystemTime(Date.now() + 31_000)
       client.refreshTokenMethod = () => {
-        ssoAuthState.clearAuthPayload()
+        authSessionState.endSession()
         // Mirrors provider/MCP teardown after the headless claim has launched.
         external.abort()
         return Promise.resolve(undefined)
@@ -163,7 +164,7 @@ describe("headless notebook authentication sessions", () => {
       await expect(client.queryRaw("select 2")).rejects.toMatchObject({
         sessionEnded: true,
       })
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
       client.setCommonHeaders({ Authorization: "Bearer new-user" })
       finish()
       const summary = await run
@@ -250,7 +251,7 @@ describe("headless notebook authentication sessions", () => {
       finish(new Response(JSON.stringify(body)))
       // Let the accepted query outcome enqueue its commit behind the blocker.
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
-      ssoAuthState.clearAuthPayload()
+      authSessionState.endSession()
       release()
       await blocker
       const summary = await run
@@ -296,7 +297,7 @@ describe("headless notebook authentication sessions", () => {
     vi.stubGlobal("fetch", fetchMock)
     // A write has been accepted before the schema event is published. Logout
     // here stops the next statement, not the already-confirmed outcome.
-    const logout = () => ssoAuthState.clearAuthPayload()
+    const logout = () => authSessionState.endSession()
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, logout)
     try {
       expect(await makeRun(new Client())).toMatchObject({
@@ -323,7 +324,7 @@ describe("headless notebook authentication sessions", () => {
     vi.spyOn(bufferStore, "getById").mockImplementation((id) =>
       getById(id).then((buffer) => {
         // Preparation, commit validation, then the transaction's own read.
-        if (++reads === 3) ssoAuthState.clearAuthPayload()
+        if (++reads === 3) authSessionState.endSession()
         return buffer
       }),
     )
@@ -374,16 +375,16 @@ describe("headless notebook authentication sessions", () => {
         vi.spyOn(db.notebook_results, "put").mockImplementation(
           (snapshot, key) =>
             put(snapshot, key).then((result) => {
-              ssoAuthState.clearAuthPayload()
+              authSessionState.endSession()
               return result
             }),
         )
       } else {
         vi.spyOn(bufferStore, "update").mockImplementation((id, patch) => {
           const pending = update(id, patch)
-          if (phase === "pending update") ssoAuthState.clearAuthPayload()
+          if (phase === "pending update") authSessionState.endSession()
           return pending.then((count) => {
-            if (phase === "completed update") ssoAuthState.clearAuthPayload()
+            if (phase === "completed update") authSessionState.endSession()
             return count
           })
         })
@@ -466,12 +467,77 @@ describe("headless notebook authentication sessions", () => {
     expect(warning).toHaveBeenCalled()
   })
 
+  it.each(["mounted", "superseded"] as const)(
+    "reports %s instead of user_changed after a root commit failure",
+    async (reason) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(() => Promise.resolve(response())),
+      )
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      let mounted = false
+      const put = db.notebook_results.put.bind(db.notebook_results)
+      vi.spyOn(db.notebook_results, "put").mockImplementationOnce(
+        (snapshot, key) => {
+          const transaction = Dexie.currentTransaction
+          return put(snapshot, key).then((result) => {
+            if (reason === "mounted") mounted = true
+            else cancelHeadlessCellRuns(BUFFER_ID, ["cell"], "superseded")
+            transaction.abort()
+            return result
+          })
+        },
+      )
+      const client = new Client()
+      const summary = await runHeadlessCell(
+        BUFFER_ID,
+        {
+          isBufferClaimed: () => mounted,
+          getQuest: () => client,
+          getBufferSeq: () => 0,
+        },
+        "cell",
+      )
+      if (reason === "mounted")
+        expect(summary.note).toContain("opened this notebook")
+      else expect(summary.cancelled).toBe("superseded")
+      expect(summary.note).not.toContain("user changed")
+    },
+  )
+
+  it.each([{ notice: "private notice" }, { error: "private error" }])(
+    "redacts details if logout follows commit completion: %j",
+    async (body) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.resolve(new Response(JSON.stringify(body)))),
+      )
+      const updating: Parameters<
+        typeof db.buffers.hook.updating.subscribe
+      >[0] = (_changes, _key, _buffer, transaction: Transaction) => {
+        while (transaction.parent) transaction = transaction.parent
+        transaction.on("complete", () => authSessionState.endSession())
+      }
+      db.buffers.hook("updating", updating)
+      try {
+        const summary = await makeRun(new Client())
+        expect(summary).toMatchObject({
+          cancelled: "session_ended",
+          unverified: true,
+        })
+        expect(JSON.stringify(summary)).not.toContain("private")
+      } finally {
+        db.buffers.hook("updating").unsubscribe(updating)
+      }
+    },
+  )
+
   it("keeps the accepted metadata/snapshot pair when logout follows transaction completion", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(() => Promise.resolve(response())),
     )
-    const logout = () => ssoAuthState.clearAuthPayload()
+    const logout = () => authSessionState.endSession()
     const updating: Parameters<typeof db.buffers.hook.updating.subscribe>[0] = (
       _changes,
       _key,
@@ -485,7 +551,7 @@ describe("headless notebook authentication sessions", () => {
     try {
       await makeRun(new Client())
 
-      expect(ssoAuthState.isAuthenticated()).toBe(false)
+      expect(authSessionState.isAuthenticated()).toBe(false)
       expect(
         (await db.buffers.get(BUFFER_ID))?.notebookViewState?.cells[0]
           .lastRunStatus,
@@ -514,7 +580,7 @@ describe("headless notebook authentication sessions", () => {
     const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
     const run = makeRun(new Client())
-    ssoAuthState.clearAuthPayload()
+    authSessionState.endSession()
     release()
     await blocker
     const summary = await run
@@ -529,7 +595,7 @@ describe("headless notebook authentication sessions", () => {
     vi.setSystemTime(Date.now() + 31_000)
     const client = new Client()
     client.refreshTokenMethod = () => {
-      ssoAuthState.clearAuthPayload()
+      authSessionState.endSession()
       return Promise.resolve(undefined)
     }
     const fetchMock = vi.fn()
@@ -558,7 +624,7 @@ describe("headless notebook authentication sessions", () => {
     vi.setSystemTime(Date.now() + 31_000)
     const client = new Client()
     client.refreshTokenMethod = () => {
-      ssoAuthState.clearAuthPayload()
+      authSessionState.endSession()
       return Promise.resolve(undefined)
     }
     const fetchMock = vi.fn((url: string) => {
@@ -579,7 +645,9 @@ describe("headless notebook authentication sessions", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const summary = await makeRun(client)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // Validation now shares the SQL refresh gate, so expiry prevents even
+    // these non-query requests from leaving with the rejected bearer.
+    expect(fetchMock).not.toHaveBeenCalled()
     expect(summary).toMatchObject({
       success: false,
       queryCount: 0,
@@ -631,7 +699,7 @@ describe("headless notebook authentication sessions", () => {
     const run = makeRun(new Client())
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    ssoAuthState.clearAuthPayload()
+    authSessionState.endSession()
     release()
     await blocker
     const summary = await run
@@ -716,7 +784,7 @@ describe("headless notebook authentication sessions", () => {
       },
     )
     await targetQueued
-    ssoAuthState.endSession()
+    authSessionState.endSession()
     await background
     const summary = await run
     expect(external.signal.aborted).toBe(false)
@@ -761,8 +829,8 @@ describe("headless notebook authentication sessions", () => {
       { kind: "autoRun" },
     )
     await validationStarted
-    ssoAuthState.clearAuthPayload()
-    ssoAuthState.markNonSSOAuthenticated()
+    authSessionState.endSession()
+    authSessionState.markNonSSOAuthenticated()
     finish()
     const summary = await run
     expect(summary).toMatchObject({
@@ -785,7 +853,7 @@ describe("headless notebook authentication sessions", () => {
     const client = new Client()
     client.refreshTokenMethod = () => {
       const refreshed = token("fresh")
-      ssoAuthState.setAuthPayload(refreshed)
+      authSessionState.setAuthPayload(refreshed)
       return Promise.resolve(refreshed)
     }
     expect(await makeRun(client)).toMatchObject({ success: true })

@@ -1,5 +1,9 @@
 import type { editor } from "monaco-editor"
-import type { ColumnDefinition, Timings } from "../utils/questdb/types"
+import type {
+  ColumnDefinition,
+  Timings,
+  SessionFailure,
+} from "../utils/questdb/types"
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 import type { HighlightConfig } from "../components/ResultGrid/highlight/types"
@@ -95,13 +99,12 @@ export type DdlDmlQueryResult = {
   fetchedAt?: number
 }
 
-export type ErrorQueryResult =
-  import("../modules/OAuth2/session").SessionFailure & {
-    type: "error"
-    query: string
-    error: string
-    fetchedAt?: number
-  }
+export type ErrorQueryResult = SessionFailure & {
+  type: "error"
+  query: string
+  error: string
+  fetchedAt?: number
+}
 
 export type TransientQueryResult = {
   type: "running" | "queued"

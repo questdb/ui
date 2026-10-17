@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { Client } from "./client"
 import { stringifyWithBigInts } from "./serialize"
 import { Type } from "./types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import type { AuthPayload } from "../../modules/OAuth2/types"
@@ -20,7 +20,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   vi.useRealTimers()
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
 })
 
 const rawDqlResult = (
@@ -165,13 +165,13 @@ describe("Client queryRaw NOTICE timings", () => {
 
 const installToken = (overrides: Partial<AuthPayload> = {}): AuthPayload => {
   const payload = { access_token: "new", token_type: "Bearer", ...overrides }
-  ssoAuthState.setAuthPayload(payload)
+  authSessionState.setAuthPayload(payload)
   return payload
 }
 
 describe("Client token refresh", () => {
   const setExpiringToken = () => {
-    ssoAuthState.setAuthPayload({
+    authSessionState.setAuthPayload({
       access_token: "stale",
       refresh_token: "refresh",
       expires_at: new Date(Date.now() + 20_000).toString(),
@@ -201,7 +201,7 @@ describe("Client token refresh", () => {
       "Failed to refresh the auth token",
       expect.objectContaining({ message: "network down" }),
     )
-    expect(ssoAuthState.hasRefreshFailed()).toBe(true)
+    expect(authSessionState.hasRefreshFailed()).toBe(true)
 
     // Subsequent queries use the current token without hammering the IdP.
     await client.queryRaw("SELECT 2")
@@ -250,7 +250,7 @@ describe("Client token refresh", () => {
           refresh_token: "rotated",
           expires_at: new Date(Date.now() + 60_000).toISOString(),
         } as AuthPayload
-        ssoAuthState.setAuthPayload(payload)
+        authSessionState.setAuthPayload(payload)
         return Promise.resolve(payload)
       })
       .mockRejectedValue(new Error("offline again"))
@@ -263,7 +263,7 @@ describe("Client token refresh", () => {
     await vi.advanceTimersByTimeAsync(1)
     await client.queryRaw("SELECT 3")
     expect(refresh).toHaveBeenCalledTimes(2)
-    expect(ssoAuthState.hasRefreshFailed()).toBe(false)
+    expect(authSessionState.hasRefreshFailed()).toBe(false)
     expect(fetch).toHaveBeenLastCalledWith(
       expect.any(String),
       expect.objectContaining({ headers: { Authorization: "Bearer new" } }),
@@ -297,7 +297,7 @@ describe("Client token refresh", () => {
     await client.queryRaw("SELECT 1")
 
     // A different auth payload means a fresh login, even inside the backoff.
-    ssoAuthState.setAuthPayload({
+    authSessionState.setAuthPayload({
       access_token: "another-session",
       refresh_token: "refresh",
       expires_at: new Date(Date.now() + 20_000).toString(),
@@ -309,7 +309,7 @@ describe("Client token refresh", () => {
   it("updates only future requests on success and preserves other headers", async () => {
     // An in-flight request must keep its captured headers, but cannot delay
     // the refresh or new queries for minutes while its body is still loading.
-    ssoAuthState.setAuthPayload({
+    authSessionState.setAuthPayload({
       access_token: "stale",
       refresh_token: "refresh",
       expires_at: new Date(Date.now() + 60_000).toString(),
@@ -365,7 +365,7 @@ describe("Client token refresh", () => {
 
   it("does not log out a refreshed session for an earlier request's 401", async () => {
     vi.useFakeTimers()
-    ssoAuthState.setAuthPayload({
+    authSessionState.setAuthPayload({
       access_token: "old",
       refresh_token: "refresh",
       expires_at: new Date(Date.now() + 60_000).toString(),
@@ -382,12 +382,12 @@ describe("Client token refresh", () => {
     const client = new Client()
     client.setCommonHeaders({ Authorization: "Bearer old" })
     client.refreshTokenMethod = vi.fn(() => {
-      ssoAuthState.setAuthPayload({
+      authSessionState.setAuthPayload({
         access_token: "new",
         refresh_token: "next",
         expires_at: new Date(Date.now() + 300_000).toString(),
       } as AuthPayload)
-      return Promise.resolve(ssoAuthState.getAuthPayload()!)
+      return Promise.resolve(authSessionState.getAuthPayload()!)
     })
     const onUnauthorized = vi.fn()
     eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, onUnauthorized)
@@ -409,7 +409,7 @@ describe("Client token refresh", () => {
       expect((await first).type).toBe(Type.NOTICE)
       expect(fetchMock).toHaveBeenCalledTimes(3)
       expect(onUnauthorized).not.toHaveBeenCalled()
-      expect(ssoAuthState.getAuthPayload()?.access_token).toBe("new")
+      expect(authSessionState.getAuthPayload()?.access_token).toBe("new")
     } finally {
       eventBus.unsubscribe(
         EventType.MSG_CONNECTION_UNAUTHORIZED,
@@ -446,7 +446,7 @@ describe("Client token refresh", () => {
         groups_encoded_in_token: groupsEncoded,
         expires_at: new Date(Date.now() + 60_000).toString(),
       } as AuthPayload
-      ssoAuthState.setAuthPayload(oldPayload)
+      authSessionState.setAuthPayload(oldPayload)
 
       let finishFirst!: (value: Response) => void
       const firstResponse = new Promise<Response>((resolve) => {
@@ -463,13 +463,13 @@ describe("Client token refresh", () => {
       const bearer = groupsEncoded ? oldId : oldAccess
       client.setCommonHeaders({ Authorization: `Bearer ${bearer}` })
       client.refreshTokenMethod = () => {
-        ssoAuthState.setAuthPayload({
+        authSessionState.setAuthPayload({
           ...oldPayload,
           access_token: nextAccess,
           id_token: nextId,
           expires_at: new Date(Date.now() + 300_000).toString(),
         })
-        return Promise.resolve(ssoAuthState.getAuthPayload()!)
+        return Promise.resolve(authSessionState.getAuthPayload()!)
       }
       const onUnauthorized = vi.fn()
       eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, onUnauthorized)
@@ -585,7 +585,7 @@ describe("Client token refresh", () => {
       token_type: "Bearer",
       expires_at: new Date(Date.now() + 300_000).toISOString(),
     })
-    ssoAuthState.setAuthPayload(issue("stale"))
+    authSessionState.setAuthPayload(issue("stale"))
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -599,7 +599,7 @@ describe("Client token refresh", () => {
     client.setCommonHeaders({ Authorization: "Bearer stale" })
     client.refreshTokenMethod = () => {
       const payload = issue("fresh")
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       return Promise.resolve(payload)
     }
     const phases: string[] = []
@@ -727,7 +727,7 @@ describe("Client token refresh", () => {
       refresh_token: "rotated",
       expires_at: new Date(Date.now() + 300_000).toISOString(),
     } as AuthPayload
-    ssoAuthState.setAuthPayload(latePayload)
+    authSessionState.setAuthPayload(latePayload)
     resolveRefresh(latePayload)
     await vi.advanceTimersByTimeAsync(0)
     await client.queryRaw("SELECT 3")
@@ -735,7 +735,7 @@ describe("Client token refresh", () => {
       expect.any(String),
       expect.objectContaining({ headers: { Authorization: "Bearer late" } }),
     )
-    expect(ssoAuthState.hasRefreshFailed()).toBe(false)
+    expect(authSessionState.hasRefreshFailed()).toBe(false)
   })
 
   it("does not overwrite the header when no token is installed", async () => {

@@ -38,7 +38,7 @@ import { ErrorResult } from "../utils"
 import { Login } from "../modules/OAuth2/views/login"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
-import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../modules/OAuth2/ssoAuthState"
 import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
 import { toast } from "../components/Toast"
 import { RefreshFailedWarning } from "../modules/OAuth2/views/refreshFailedWarning"
@@ -144,6 +144,14 @@ const reducer = (s: State, n: Partial<State>) =>
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { settings } = useSettings()
+  const callbacks = useRef<
+    Omit<ContextProps, "sessionData" | "redirectToAuthorizationUrl"> & {
+      redirectToAuthorizationUrl: (options?: {
+        prompt?: "login" | "none"
+        isRetry?: boolean
+      }) => void
+    }
+  >(defaultValues)
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
   const [state, dispatch] = useReducer(reducer, initialState)
@@ -163,7 +171,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       tokenResponse,
       settings["acl.oidc.groups.encoded.in.token"],
       grantType,
-      ssoAuthState.getAuthPayload(),
+      authSessionState.getAuthPayload(),
     )
     if ("error" in result) {
       callbacks.current.logout(result.error)
@@ -171,12 +179,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     const installed = result.payload
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
-    ssoAuthState.setAuthPayload(installed)
-    // A background refresh must not erase a different tab's password login.
-    if (grantType === "authorization_code") {
-      removeValue(StoreKey.REST_TOKEN)
-      removeValue(StoreKey.BASIC_AUTH_HEADER)
-    }
+    authSessionState.setAuthPayload(installed)
+    // Login choice is tab-local; never erase another tab's password credentials.
+    sessionStorage.setItem(StoreKey.LOGIN_METHOD, "sso")
     // React 17 does not batch promise callbacks automatically.
     unstable_batchedUpdates(() => {
       setSessionData(installed)
@@ -192,7 +197,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     deadlineSignal: AbortSignal = new AbortController().signal,
     requestSignal: AbortSignal = new AbortController().signal,
   ) => {
-    const originalSession = ssoAuthState.getAuthPayload()
+    const originalSession = authSessionState.getAuthPayload()
     const response = await getAuthToken(
       settings,
       {
@@ -213,7 +218,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (
       requestSignal.aborted ||
       !originalSession ||
-      ssoAuthState.getAuthPayload() !== originalSession
+      authSessionState.getAuthPayload() !== originalSession
     ) {
       return undefined
     }
@@ -232,7 +237,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // Proceed with the OAuth2 flow only if it is enabled on the server
     if (settings["acl.oidc.enabled"]) {
       subscribe(EventType.MSG_AUTH_REFRESH_FAILED, () => {
-        const authPayload = ssoAuthState.getAuthPayload()
+        const authPayload = authSessionState.getAuthPayload()
         if (!authPayload || toast.isActive(REFRESH_FAILED_TOAST_ID)) return
         toast.error(
           <RefreshFailedWarning
@@ -261,7 +266,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         : ""
       const urlParams = new URLSearchParams(window.location.search)
       const code = urlParams.get("code")
-      const retainedSession = ssoAuthState.getAuthPayload()
+      const retainedSession = authSessionState.getAuthPayload()
       const oauth2Error = new OAuth2Error(
         urlParams.get("error"),
         urlParams.get("error_description"),
@@ -284,7 +289,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
-        const session = ssoAuthState.capture()
+        const session = authSessionState.capture()
         const exchange = await exchangeAuthorizationCode(settings, {
           grant_type: "authorization_code",
           code,
@@ -335,9 +340,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           dispatch({ view: View.ready })
         })
       } else if (
+        sessionStorage.getItem(StoreKey.LOGIN_METHOD) !== "password" &&
         ssoUsername &&
         getValue(StoreKey.SSO_SESSION_ACTIVE) &&
-        !getValue(StoreKey.REST_TOKEN)
+        (sessionStorage.getItem(StoreKey.LOGIN_METHOD) === "sso" ||
+          (!getValue(StoreKey.REST_TOKEN) &&
+            !getValue(StoreKey.BASIC_AUTH_HEADER)))
       ) {
         // No REST token, so it is a page reload for an SSO user
         // who didn't explicitly log out — try to request a token silently
@@ -351,7 +359,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
       subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
-        if (ssoAuthState.isAuthenticated()) callbacks.current.logout()
+        if (authSessionState.isAuthenticated()) callbacks.current.logout()
       })
 
       //username + pwd via login page
@@ -363,7 +371,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // run a simple query to force basic auth by browser
     const response = await fetch(`exec?query=select 42`)
     if (response.status === 200) {
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
       dispatch({ view: View.ready })
     } else {
       await basicAuthLogin()
@@ -392,7 +400,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const token = getValue(StoreKey.REST_TOKEN)
     const basicAuthHeader = getValue(StoreKey.BASIC_AUTH_HEADER)
     if (token || basicAuthHeader) {
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
+      sessionStorage.setItem(StoreKey.LOGIN_METHOD, "password")
       dispatch({ view: View.ready })
     } else {
       // Stop loading and display the login state
@@ -437,6 +446,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // Finish storage cleanup before session-end listeners can render Login.
     removeValue(StoreKey.OAUTH_PROMPT)
     sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
+    sessionStorage.removeItem(StoreKey.LOGIN_METHOD)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
     if (clearSSOSession) {
@@ -447,7 +457,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     // Session-end listeners clear client credentials, pending confirmations,
     // refresh work and telemetry timers even when this document does not reload.
-    ssoAuthState.endSession(options)
+    authSessionState.endSession(options)
     destroyServerSession()
     if (reload) {
       window.location.reload()
@@ -460,16 +470,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // old SSO lifecycle before subscribing this owner or reading password
     // credentials, without deleting those credentials through logout().
     if (
-      ssoAuthState.isSSOAuthenticated() &&
+      authSessionState.isSSOAuthenticated() &&
       (!settings["acl.enabled"] || !settings["acl.oidc.enabled"])
     ) {
-      ssoAuthState.endSession()
+      authSessionState.endSession()
     }
     // A rotating refresh can outlive Settings recovery and its original auth
     // owner. Shared teardown must notify the mounted owner, not only the
     // provider instance that started the refresh. Do not recursively log out.
     unsubscribeRef.current.push(
-      ssoAuthState.onEnd(
+      authSessionState.onEnd(
         ({ errorTitle, errorMessage, isDisconnection, reload } = {}) => {
           if (reload) return
           unstable_batchedUpdates(() => {
@@ -513,11 +523,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [])
 
   // Stable public callbacks delegate to this render's implementation.
-  const callbacks = useRef({
-    logout,
-    refreshAuthToken,
-    redirectToAuthorizationUrl,
-  })
   callbacks.current = { logout, refreshAuthToken, redirectToAuthorizationUrl }
   const stableCallbacks = useMemo<Omit<ContextProps, "sessionData">>(
     () => ({
@@ -549,7 +554,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           })
         }}
         onBasicAuthSuccess={() => {
-          ssoAuthState.markNonSSOAuthenticated()
+          sessionStorage.setItem(StoreKey.LOGIN_METHOD, "password")
+          authSessionState.markNonSSOAuthenticated()
           dispatch({ view: View.ready })
         }}
         resetErrors={() =>

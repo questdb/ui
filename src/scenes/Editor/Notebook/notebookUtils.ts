@@ -1,6 +1,8 @@
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
+  sessionFailureOf,
+  CANCELLED_BY_USER,
   type SessionFailure,
 } from "../../../modules/OAuth2/session"
 import type {
@@ -292,8 +294,7 @@ export const singleResultFromExec = (
     case "error":
       return {
         ...errorResult(query, exec.error ?? "Unknown error"),
-        ...(isSessionEnded(exec) ? { sessionEnded: true } : {}),
-        ...(exec.requestNotSent ? { requestNotSent: true } : {}),
+        ...sessionFailureOf(exec),
       }
     default:
       return { type: exec.type, query, fetchedAt: Date.now() }
@@ -354,7 +355,7 @@ export const capResultBytes = (
 export { sqlHash }
 
 const UNVERIFIABLE_ERROR_MARKERS = [
-  "Cancelled by user",
+  CANCELLED_BY_USER,
   "An error occurred, please try again",
   "Failed to read response",
   "Invalid JSON response from the server",

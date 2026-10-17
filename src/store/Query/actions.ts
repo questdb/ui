@@ -42,6 +42,8 @@ import {
   QueriesToRun,
 } from "../../types"
 
+const resetSession = (): QueryAction => ({ type: QueryAT.RESET_SESSION })
+
 const setTables = (payload: Table[]): QueryAction => ({
   payload: {
     tables: payload,
@@ -91,9 +93,12 @@ const removeNotification = (
   type: QueryAT.REMOVE_NOTIFICATION,
 })
 
-const settleLoadingNotification = (queryId: number): QueryAction => ({
+const settleLoadingNotification = (
+  queryId: number,
+  discardPrevious = false,
+): QueryAction => ({
   type: QueryAT.SETTLE_LOADING_NOTIFICATION,
-  payload: { queryId },
+  payload: { queryId, ...(discardPrevious ? { discardPrevious: true } : {}) },
 })
 
 const settleActiveLoadingNotification = (queryId: number): QueryAction => ({
@@ -171,6 +176,7 @@ export default {
   cleanupNotifications,
   cleanupBufferNotifications,
   removeNotification,
+  resetSession,
   settleLoadingNotification,
   settleActiveLoadingNotification,
   updateNotificationKey,

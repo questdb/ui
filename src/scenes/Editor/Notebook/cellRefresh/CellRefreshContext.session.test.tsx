@@ -6,7 +6,7 @@ import { useCellRefreshEngine } from "./CellRefreshContext"
 import { useCellsStore } from "../useCellsStore"
 import { Client } from "../../../../utils/questdb/client"
 import { executeSingleRaw } from "../../../../utils/executeSingleRaw"
-import { ssoAuthState } from "../../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../../modules/OAuth2/ssoAuthState"
 import { clearStatementClassCache } from "../../../../utils/tools/permissions"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
@@ -30,14 +30,14 @@ afterEach(() => {
   act(() => renderer?.unmount())
   renderer = undefined
   clearStatementClassCache()
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })
 
 const mountNotebook = (draw: boolean) => {
-  ssoAuthState.setAuthPayload({
+  authSessionState.setAuthPayload({
     access_token: "old",
     refresh_token: "refresh",
     token_type: "Bearer",
@@ -124,7 +124,7 @@ describe("notebook refresh authentication sessions", () => {
       const fetchMock = vi.fn()
       vi.stubGlobal("fetch", fetchMock)
       client.refreshTokenMethod = () => {
-        ssoAuthState.clearAuthPayload()
+        authSessionState.endSession()
         if (unmount) {
           // Do not use act: it flushes passive teardown and hides the race.
           renderer!.update(<div>Sign in</div>)
@@ -151,7 +151,10 @@ describe("notebook refresh authentication sessions", () => {
     "discards a delayed $phase after logout and re-login (draw=$draw)",
     async ({ draw, phase }) => {
       const { engine, previous, cellsRef } = mountNotebook(draw)
-      ssoAuthState.setAuthPayload({ access_token: "old", token_type: "Bearer" })
+      authSessionState.setAuthPayload({
+        access_token: "old",
+        token_type: "Bearer",
+      })
       let finish!: () => void
       let started!: () => void
       const requestStarted = new Promise<void>((resolve) => {
@@ -185,8 +188,8 @@ describe("notebook refresh authentication sessions", () => {
 
       const refresh = engine.refresh("cell")
       await requestStarted
-      ssoAuthState.clearAuthPayload()
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.endSession()
+      authSessionState.markNonSSOAuthenticated()
       finish()
       await refresh
 
@@ -199,7 +202,10 @@ describe("notebook refresh authentication sessions", () => {
 
   it("retains the final snapshot without persisting it during layout teardown", async () => {
     const { engine, cellsRef } = mountNotebook(true)
-    ssoAuthState.setAuthPayload({ access_token: "old", token_type: "Bearer" })
+    authSessionState.setAuthPayload({
+      access_token: "old",
+      token_type: "Bearer",
+    })
     let value = 99
     vi.stubGlobal(
       "fetch",
@@ -244,7 +250,7 @@ describe("notebook refresh authentication sessions", () => {
           token_type: "Bearer",
           expires_at: new Date(Date.now() + 300_000).toISOString(),
         }
-        ssoAuthState.setAuthPayload(refreshed)
+        authSessionState.setAuthPayload(refreshed)
         return Promise.resolve(refreshed)
       }
       vi.stubGlobal(

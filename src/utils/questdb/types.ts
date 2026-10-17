@@ -109,11 +109,17 @@ export type RawResult =
   | RawErrorResult
   | RawNoticeResult
 
+// Local execution metadata shared by the client, notebooks and agent adapters.
+export type SessionFailure = {
+  sessionEnded?: boolean
+  requestNotSent?: boolean
+}
+
 export type ErrorResult = Omit<RawErrorResult, "ddl" | "dml"> & {
   type: Type.ERROR
   // Local failures and aborted/session-ended requests have no HTTP response.
   status?: number
-} & import("../../modules/OAuth2/session").SessionFailure
+} & SessionFailure
 
 export type NoticeResult = RawNoticeResult & {
   type: Type.NOTICE

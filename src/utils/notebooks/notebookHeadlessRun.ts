@@ -1,6 +1,7 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { isSessionEnded, SessionEndedError } from "../../modules/OAuth2/session"
 import { db } from "../../store/db"
 import type {
   CellResult,
@@ -93,9 +94,65 @@ type RunCommitOutcome =
         | "cell_changed"
         | "user_changed"
         | "storage_full"
-        | "session_ended"
         | RunCancellation
     }
+
+type CommitFailureReason = Extract<
+  RunCommitOutcome,
+  { committed: false }
+>["reason"]
+
+const commitRunAtomically = (
+  bufferId: number,
+  resultParts: ReturnType<typeof partsOf>,
+  snapshot: ReturnType<typeof prepareCellSnapshot>,
+  isCurrentSession: () => boolean,
+): Promise<RunCommitOutcome> =>
+  db.transaction("rw", db.buffers, db.notebook_results, async () => {
+    const commit = await commitView(bufferId, resultParts, isCurrentSession)
+    if (commit === "archived")
+      return { committed: false, reason: "notebook_archived" }
+    if (commit === "deleted")
+      return { committed: false, reason: "notebook_gone" }
+    // Throwing rolls back metadata as well as the snapshot. A completion
+    // listener may end the session after acceptance without undoing the pair.
+    if (commit === "discarded" || !isCurrentSession())
+      throw new SessionEndedError()
+    const snapshotSaved = await persistPreparedCellSnapshot(snapshot)
+    if (!isCurrentSession()) throw new SessionEndedError()
+    return { committed: true, snapshotSaved }
+  })
+
+const retryMetadataOnly = async (
+  bufferId: number,
+  resultParts: ReturnType<typeof partsOf>,
+  invalidationReason: () => CommitFailureReason | undefined,
+): Promise<RunCommitOutcome> => {
+  const reason = invalidationReason()
+  if (reason) return { committed: false, reason }
+  try {
+    const commit = await commitView(
+      bufferId,
+      resultParts,
+      () => !invalidationReason(),
+    )
+    switch (commit) {
+      case "committed":
+        return { committed: true, snapshotSaved: false }
+      case "archived":
+        return { committed: false, reason: "notebook_archived" }
+      case "deleted":
+        return { committed: false, reason: "notebook_gone" }
+      case "discarded":
+        return {
+          committed: false,
+          reason: invalidationReason() ?? "user_changed",
+        }
+    }
+  } catch {
+    return { committed: false, reason: invalidationReason() ?? "storage_full" }
+  }
+}
 
 type HeadlessClaim = {
   controller: AbortController
@@ -456,7 +513,7 @@ export const runHeadlessCell = async (
   sql?: string,
   gate?: RunCellGate,
 ): Promise<RunCellSummary> => {
-  const { isCurrent: isCurrentSession } = ssoAuthState.capture()
+  const { isCurrent: isCurrentSession } = authSessionState.capture()
   const prep = await enqueueBufferTask(bufferId, async () => {
     const view = await readNotebookView(bufferId)
     return {
@@ -602,75 +659,36 @@ export const runHeadlessCell = async (
           ...parts,
           cells: patchCellRunResult(parts.cells, cellId, ranResult),
         }
-        const sessionEnded = new Error("Session ended during notebook commit")
         try {
-          // The metadata and snapshot share one acceptance point. Throwing on
-          // invalidation rolls back both, including an update already issued
-          // by commitView. Once accepted, transaction completion saves the pair
-          // even if logout happens before its completion event is delivered.
-          return await db.transaction(
-            "rw",
-            db.buffers,
-            db.notebook_results,
-            async (): Promise<RunCommitOutcome> => {
-              const commit = await commitView(
-                bufferId,
-                resultParts,
-                isCurrentSession,
-              )
-              if (commit === "archived") {
-                return { committed: false, reason: "notebook_archived" }
-              }
-              if (commit === "deleted") {
-                return { committed: false, reason: "notebook_gone" }
-              }
-              if (commit === "discarded" || !isCurrentSession()) {
-                throw sessionEnded
-              }
-              const snapshotSaved = await persistPreparedCellSnapshot(snapshot)
-              if (!isCurrentSession()) throw sessionEnded
-              return { committed: true, snapshotSaved }
-            },
+          return await commitRunAtomically(
+            bufferId,
+            resultParts,
+            snapshot,
+            isCurrentSession,
           )
         } catch (error) {
-          if (error === sessionEnded || !isCurrentSession()) {
+          if (isSessionEnded(error) || !isCurrentSession()) {
             return { committed: false, reason: "session_ended" }
           }
           reportSnapshotSaveFailure(error)
-          // A large snapshot can abort the ROOT transaction at commit, after
-          // all requests resolved. Preserve the small run record independently.
-          const canRetry = () =>
-            isCurrentSession() &&
-            claim.isCurrent() &&
-            !deps.isBufferClaimed() &&
-            getMountEpoch(bufferId) === prep.mountEpochAtPrep &&
-            deps.getBufferSeq() === prep.seqAtPrep
-          if (!canRetry()) return { committed: false, reason: "user_changed" }
-          try {
-            const commit = await commitView(bufferId, resultParts, canRetry)
-            switch (commit) {
-              case "committed":
-                return { committed: true, snapshotSaved: false }
-              case "archived":
-                return { committed: false, reason: "notebook_archived" }
-              case "deleted":
-                return { committed: false, reason: "notebook_gone" }
-              case "discarded":
-                return {
-                  committed: false,
-                  reason: isCurrentSession() ? "user_changed" : "session_ended",
-                }
-            }
-          } catch {
-            return {
-              committed: false,
-              reason: isCurrentSession() ? "storage_full" : "session_ended",
-            }
-          }
+          // Check the same causes, in the same order, as before the commit.
+          // Root commit failure can arrive after mount or cancellation changes.
+          return retryMetadataOnly(bufferId, resultParts, () => {
+            if (deps.isBufferClaimed()) return "mounted"
+            if (!isCurrentSession()) return "session_ended"
+            if (getMountEpoch(bufferId) !== prep.mountEpochAtPrep)
+              return "mounted"
+            if (!claim.isCurrent()) return runCancellationOf(claim.signal)
+            if (deps.getBufferSeq() !== prep.seqAtPrep) return "user_changed"
+            return undefined
+          })
         }
       },
     )
 
+    // Even a successful transaction can notify logout from its completion
+    // event. Redact every outcome, including archived/gone and committed runs.
+    if (!isCurrentSession()) return sessionEndedSummary(ranResult)
     const summary = summarizeCellResults({ ...prep.cell, result: ranResult })
     if (outcome.committed) {
       // Only prune after the encompassing transaction has committed.

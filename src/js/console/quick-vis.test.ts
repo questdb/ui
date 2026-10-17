@@ -11,7 +11,7 @@ import {
 } from "vitest"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { questClient } from "../../utils/questdb/queryClient"
 import { questExecution } from "../../utils/questdb/queryExecution"
 import { quickVis } from "./quick-vis"
@@ -85,7 +85,7 @@ let publish: MockInstance<Parameters<typeof eventBus.publish>, void>
 let subscribe: MockInstance<Parameters<typeof eventBus.subscribe>, void>
 
 beforeEach(() => {
-  ssoAuthState.markNonSSOAuthenticated()
+  authSessionState.markNonSSOAuthenticated()
   vi.stubGlobal(
     "fetch",
     vi.fn(() => Promise.resolve(new Response(JSON.stringify(result)))),
@@ -120,7 +120,7 @@ afterEach(() => {
   for (const [type, handler] of subscribe.mock.calls) {
     eventBus.unsubscribe(type, handler)
   }
-  ssoAuthState.endSession()
+  authSessionState.endSession()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   vi.clearAllMocks()
@@ -156,14 +156,14 @@ describe("legacy Quick Vis promise settlement", () => {
     )
     mocks.onDraw!()
     expect(questExecution.isAnyRunning()).toBe(true)
-    ssoAuthState.endSession()
+    authSessionState.endSession()
     await settle()
     expectNoQueryOutcome()
     expect(mocks.setOption).not.toHaveBeenCalled()
     expect(questExecution.isAnyRunning()).toBe(false)
 
     // Settlement must also release the local request flag, not just the manager.
-    ssoAuthState.markNonSSOAuthenticated()
+    authSessionState.markNonSSOAuthenticated()
     const cancel = vi.spyOn(questExecution, "cancelActive")
     mocks.onDraw!()
     expect(cancel).not.toHaveBeenCalled()

@@ -805,10 +805,9 @@ export const AIConversationProvider: React.FC<{
     // Closing an empty chat deletes it asynchronously, before the live query
     // updates. Wait for that write and read fresh metadata before reopening.
     await pendingChatDeletionRef.current
-    const metas = await aiConversationStore.getAllMetas()
     if (chatWindowState.activeConversationId) {
-      const existingMeta = metas.find(
-        (meta) => meta.id === chatWindowState.activeConversationId,
+      const existingMeta = await db.ai_conversations.get(
+        chatWindowState.activeConversationId,
       )
       if (existingMeta) {
         await openChatWindow(existingMeta.id)
@@ -816,10 +815,8 @@ export const AIConversationProvider: React.FC<{
       }
     }
 
-    if (metas.length > 0) {
-      const latestMeta = metas.reduce((latest, meta) =>
-        meta.updatedAt > latest.updatedAt ? meta : latest,
-      )
+    const latestMeta = await db.ai_conversations.orderBy("updatedAt").last()
+    if (latestMeta) {
       await openChatWindow(latestMeta.id)
       return
     }

@@ -127,7 +127,7 @@ describe("notification keyboard integration", () => {
       } else {
         tableRow().click().should("be.focused").then(focusNotification)
       }
-      cy.get("#sso-refresh-failed button").first().should("be.focused")
+      cy.get("#sso-refresh-failed .Toastify__close-button").should("be.focused")
     })
   }
 
@@ -153,6 +153,33 @@ describe("notification keyboard integration", () => {
       ).to.equal(true)
     })
     cy.focused().should("contain.text", "Columns")
+    for (const modifiers of [{ altKey: true }, { metaKey: true }]) {
+      tableRow()
+        .focus()
+        .then(($row) => {
+          for (const key of ["ArrowLeft", "ArrowRight"]) {
+            expect(
+              pressKey($row, { key, ...modifiers }).defaultPrevented,
+            ).to.equal(true)
+          }
+        })
+    }
+    for (const modifiers of [{ ctrlKey: true }, { metaKey: true }]) {
+      tableRow().then(($row) => {
+        expect(
+          pressKey($row, { key: "a", ...modifiers }).defaultPrevented,
+        ).to.equal(true)
+      })
+    }
+    tableRow().should("have.attr", "data-expanded", "true")
+    cy.getByDataHook("schema-folder-title").contains("Columns").dblclick()
+    cy.getByDataHook("schema-column-title")
+      .contains("value")
+      .closest("[tabindex]")
+      .focus()
+      .then(($row) => {
+        expect(pressKey($row, { key: " " }).defaultPrevented).to.equal(true)
+      })
   })
 
   it("pauses a real timed toast while shortcut-focused, then resumes without stealing focus", () => {
@@ -165,8 +192,9 @@ describe("notification keyboard integration", () => {
     cy.get(
       ".Toastify__toast--success .Toastify__progress-bar--animated",
     ).should("have.css", "animation-play-state", "paused")
-    // The copy toast's two-second auto-close must not remove keyboard focus.
-    cy.wait(2300)
+    // Timer progress is deterministic; CSS pause is asserted above.
+    cy.clock()
+    cy.tick(2300)
     cy.get(".Toastify__toast--success .Toastify__close-button").should(
       "be.focused",
     )
@@ -174,6 +202,10 @@ describe("notification keyboard integration", () => {
     cy.get(
       ".Toastify__toast--success .Toastify__progress-bar--animated",
     ).should("have.css", "animation-play-state", "running")
+    cy.get(
+      ".Toastify__toast--success .Toastify__progress-bar--animated",
+    ).trigger("animationend")
+    cy.clock().invoke("restore")
     cy.get(".Toastify__toast--success").should("not.exist")
     cy.getByDataHook("help-panel-button").should("be.focused")
   })

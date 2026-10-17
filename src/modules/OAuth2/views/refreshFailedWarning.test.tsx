@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { RefreshFailedWarning } from "./refreshFailedWarning"
 
 vi.mock("../../../components/Button", () => ({ Button: "button" }))
+vi.mock("../../../components/Text", () => ({ Text: "span" }))
+vi.mock("../../../components/Box", () => ({ Box: "div" }))
 vi.mock("../../../components/Toast", () => ({
-  NOTIFICATION_SHORTCUT: "Alt+N",
+  NOTIFICATION_SHORTCUT_LABEL: "Alt+N",
 }))
 
 let renderer: ReactTestRenderer | undefined
@@ -31,7 +33,7 @@ const mount = (expiresAt?: string) => {
   return onSignIn
 }
 
-const message = () => renderer!.root.findByType("p").children[0]
+const message = () => renderer!.root.findAllByType("span")[0].children[0]
 const advanceTime = (ms: number) => {
   act(() => {
     vi.advanceTimersByTime(ms)

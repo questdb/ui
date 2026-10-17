@@ -61,7 +61,7 @@ describe("OIDC", () => {
       cy.getEditor().should("not.exist")
     })
 
-    it("should login via OIDC with an unknown (zero) lifetime", () => {
+    it("refreshes an immediately expired zero-lifetime OIDC token before SQL", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       interceptTokenRequest({
         access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
@@ -72,7 +72,16 @@ describe("OIDC", () => {
       })
       cy.getByDataHook("button-sso-login").click()
       cy.wait("@authorizationCode")
-
+      cy.wait("@tokens").then(({ request }) => {
+        expect(new URLSearchParams(request.body).get("grant_type")).to.eq(
+          "authorization_code",
+        )
+      })
+      cy.wait("@tokens").then(({ request }) => {
+        expect(new URLSearchParams(request.body).get("grant_type")).to.eq(
+          "refresh_token",
+        )
+      })
       cy.getEditor().should("be.visible")
 
       cy.executeSQL("select current_user();")
@@ -117,9 +126,10 @@ describe("OIDC", () => {
       cy.getEditor().should("be.visible")
       cy.executeSQL("select current_user();")
       cy.getGridRow(0).should("contain", "john doe")
-      cy.window().then(({ localStorage }) => {
-        expect(localStorage.getItem("rest.token")).to.be.null
-        expect(localStorage.getItem("basic.auth.header")).to.be.null
+      cy.window().then(({ localStorage, sessionStorage }) => {
+        expect(localStorage.getItem("rest.token")).to.eq("expired-rest-token")
+        expect(localStorage.getItem("basic.auth.header")).to.eq("Basic expired")
+        expect(sessionStorage.getItem("auth.login.method")).to.eq("sso")
       })
     })
 

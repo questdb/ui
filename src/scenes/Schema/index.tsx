@@ -77,7 +77,7 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { fetchColumns } from "./fetchColumns"
 import { subscribeSchemaRecovery } from "./schemaRecovery"
 import { isSessionEnded } from "../../modules/OAuth2/session"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -149,6 +149,7 @@ const Schema = ({
   const { quest } = useContext(QuestContext)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
+  const loadingFailureVersion = useRef(0)
   const [tables, setTables] = useState<QuestDB.Table[]>()
   const [materializedViews, setMaterializedViews] =
     useState<QuestDB.MaterializedView[]>()
@@ -157,7 +158,6 @@ const Schema = ({
   const dispatch = useDispatch()
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const { autoRefreshTables, updateSettings } = useLocalStorage()
-  const [focusListenerActive, setFocusListenerActive] = useState(false)
   const listenerActiveRef = useRef(false)
   const latestFocusChangeTimestampRef = useRef<number>(0)
   const { addBuffer } = useEditor()
@@ -178,19 +178,24 @@ const Schema = ({
       position: failure?.position ?? -1,
       query: failure?.query ?? "",
     }
-    errorRef.current = loadingError
+    loadingFailureVersion.current++
+    // SQL compatibility failures are not connection outages: unrelated OKs
+    // must not retry a permanently unsupported catalog query on every poll.
+    const recoverable =
+      errorRef.current === error ||
+      (failure?.status !== undefined && failure.status >= 500) ||
+      failure?.requestNotSent
+    errorRef.current = recoverable ? loadingError : null
     setLoadingError(loadingError)
     dispatchState({ view: View.error })
   }
 
   const fetchTables = async () => {
-    const session = ssoAuthState.capture()
+    const session = authSessionState.capture()
     try {
       const response = await quest.showTables()
       if (!session.isCurrent()) return
       if (response && response.type === QuestDB.Type.DQL) {
-        errorRef.current = null
-        setLoadingError(null)
         const data = response.data.map((item) => ({
           ...item,
           table_type: item.table_type ?? (item.matView ? "M" : "T"),
@@ -206,7 +211,6 @@ const Schema = ({
         if (data.some((t) => t.table_type === "L")) {
           details.push(fetchLiveViews())
         }
-        dispatchState({ view: View.ready })
         await Promise.all(details)
       } else {
         recordLoadingError(response)
@@ -256,6 +260,20 @@ const Schema = ({
       recordLoadingError,
     )
 
+  const refreshSchema = async () => {
+    const session = authSessionState.capture()
+    const failureVersion = loadingFailureVersion.current
+    await Promise.all([fetchTables(), refreshColumns()])
+    if (
+      session.isCurrent() &&
+      loadingFailureVersion.current === failureVersion
+    ) {
+      errorRef.current = null
+      setLoadingError(null)
+      dispatchState({ view: View.ready })
+    }
+  }
+
   const copySchemasToClipboard = async () => {
     void trackEvent(ConsoleEvent.SCHEMA_COPY_MULTIPLE)
     if (!tables) return
@@ -304,8 +322,7 @@ const Schema = ({
   }, [addBuffer])
 
   useEffect(() => {
-    void fetchTables()
-    void refreshColumns()
+    void refreshSchema()
 
     const onConnectionError = (error?: ErrorResult) => {
       if (error) {
@@ -315,8 +332,7 @@ const Schema = ({
     }
     const unsubscribeRecovery = subscribeSchemaRecovery(() => {
       if (errorRef.current === null) return
-      errorRef.current = null
-      return Promise.all([fetchTables(), refreshColumns()])
+      return refreshSchema()
     })
     eventBus.subscribe(EventType.MSG_CONNECTION_ERROR, onConnectionError)
     return () => {
@@ -332,26 +348,21 @@ const Schema = ({
       now - latestFocusChangeTimestampRef.current > 10_000
     ) {
       latestFocusChangeTimestampRef.current = now
-      void fetchTables()
-      void refreshColumns()
+      void refreshSchema()
     }
   }, [])
 
   useEffect(() => {
-    if (autoRefreshTables) {
-      eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
-        void fetchTables()
-        void refreshColumns()
-      })
-
-      window.addEventListener("focus", focusListener)
-      setFocusListenerActive(true)
-      listenerActiveRef.current = true
-    } else if (focusListenerActive) {
-      eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA)
-
+    if (!autoRefreshTables) return
+    const onSchemaChange = () => {
+      void refreshSchema()
+    }
+    eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, onSchemaChange)
+    window.addEventListener("focus", focusListener)
+    listenerActiveRef.current = true
+    return () => {
+      eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA, onSchemaChange)
       window.removeEventListener("focus", focusListener)
-      setFocusListenerActive(false)
       listenerActiveRef.current = false
     }
   }, [autoRefreshTables])
@@ -526,8 +537,7 @@ const Schema = ({
                           StoreKey.AUTO_REFRESH_TABLES,
                           !autoRefreshTables,
                         )
-                        void fetchTables()
-                        void refreshColumns()
+                        void refreshSchema()
                       }}
                       selected={autoRefreshTables}
                     >

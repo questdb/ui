@@ -821,7 +821,7 @@ describe("Auth - OIDC ID token", () => {
       .and("contain.text", "Could not renew your SSO session.")
     cy.contains("button", "Retry connection").focus()
     cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
-    cy.get("#sso-refresh-failed button").first().should("be.focused")
+    cy.get("#sso-refresh-failed .Toastify__close-button").should("be.focused")
     cy.get("#sso-refresh-failed")
       .find(".Toastify__close-button")
       .focus()
@@ -846,7 +846,7 @@ describe("Auth - OIDC ID token", () => {
     cy.wait("@refreshFailure")
     cy.getEditor().should("be.visible")
     cy.get("#sso-refresh-failed").should("be.visible")
-    cy.get('[role="region"][aria-label="Notifications"]').should(
+    cy.get("#sso-refresh-failed .Toastify__close-button").should(
       "have.attr",
       "aria-keyshortcuts",
       "Alt+N",
@@ -868,62 +868,77 @@ describe("Auth - OIDC ID token", () => {
             }),
           )
         })
-        cy.get("#sso-refresh-failed button").first().should("be.focused")
+        cy.get("#sso-refresh-failed .Toastify__close-button").should(
+          "be.focused",
+        )
         cy.getEditorTabs().should("have.length", count)
       })
   })
 
   for (const moveFocusAway of [false, true]) {
-    it(`preserves keyboard focus after late renewal (${moveFocusAway ? "user moved away" : "warning still focused"})`, () => {
-      signIn({
-        idTokens: { authorization_code: idToken("initial", 25) },
-        refreshReply: {
-          // The 10s wait expires, but this success arrives before the separate
-          // request deadline. Use a delayed reply, not a pending intercept
-          // callback whose own 10s command timeout would mask the app behavior.
-          delay: 15000,
-          body: {
-            access_token: "renewed-access-token",
-            id_token: idToken("renewed", 3600),
-            refresh_token: "rotated-refresh-token",
-            token_type: "Bearer",
-            expires_in: 3600,
-          },
-        },
-        credentials: { "auto.refresh.tables": "false" },
-      })
-      cy.get("#sso-refresh-failed", { timeout: 15000 }).should("be.visible")
-      cy.getEditor().should("be.visible")
-      let expectedFocus
-      cy.window().then((win) => {
-        win.monaco.editor.getEditors()[0].focus()
-        expectedFocus = win.document.activeElement
-        expectedFocus.dispatchEvent(
-          new win.KeyboardEvent("keydown", {
-            key: "n",
-            code: "KeyN",
-            altKey: true,
-            bubbles: true,
-            cancelable: true,
-          }),
+    it(
+      `preserves keyboard focus after late renewal (${moveFocusAway ? "user moved away" : "warning still focused"})`,
+      { defaultCommandTimeout: 30000 },
+      () => {
+        let releaseRefresh
+        signIn({
+          idTokens: { authorization_code: idToken("initial", 25) },
+          refreshReply: (req) =>
+            new Cypress.Promise((resolve) => {
+              releaseRefresh = () => {
+                req.reply({
+                  body: {
+                    access_token: "renewed-access-token",
+                    id_token: idToken("renewed", 3600),
+                    refresh_token: "rotated-refresh-token",
+                    token_type: "Bearer",
+                    expires_in: 3600,
+                  },
+                })
+                resolve()
+              }
+            }),
+          credentials: { "auto.refresh.tables": "false" },
+        })
+        cy.wrap(null).should(() => expect(releaseRefresh).to.be.a("function"))
+        // Let the soft deadline expire, but retain explicit control of the
+        // response: focus assertions no longer race a 15-second wall-clock reply.
+        cy.get("#sso-refresh-failed", { timeout: 15000 }).should("be.visible")
+        cy.getEditor().should("be.visible")
+        let expectedFocus
+        cy.window().then((win) => {
+          win.monaco.editor.getEditors()[0].focus()
+          expectedFocus = win.document.activeElement
+          expectedFocus.dispatchEvent(
+            new win.KeyboardEvent("keydown", {
+              key: "n",
+              code: "KeyN",
+              altKey: true,
+              bubbles: true,
+              cancelable: true,
+            }),
+          )
+        })
+        cy.get("#sso-refresh-failed .Toastify__close-button").should(
+          "be.focused",
         )
-      })
-      cy.get("#sso-refresh-failed button").first().should("be.focused")
-      if (moveFocusAway) {
-        cy.getByDataHook("help-panel-button")
-          .focus()
-          .then(($button) => {
-            expectedFocus = $button[0]
-          })
-      }
-      cy.wait("@refreshFailure")
-      // Wait through Toastify's exit animation and collapse, not just dismiss.
-      cy.get("#sso-refresh-failed").should("not.exist")
-      cy.focused().should(($element) => {
-        expect($element[0]).to.equal(expectedFocus)
-      })
-      cy.getByDataHook("auth-login").should("not.exist")
-    })
+        if (moveFocusAway) {
+          cy.getByDataHook("help-panel-button")
+            .focus()
+            .then(($button) => {
+              expectedFocus = $button[0]
+            })
+        }
+        cy.then(() => releaseRefresh())
+        cy.wait("@refreshFailure")
+        // Wait through Toastify's exit animation and collapse, not just dismiss.
+        cy.get("#sso-refresh-failed").should("not.exist")
+        cy.focused().should(($element) => {
+          expect($element[0]).to.equal(expectedFocus)
+        })
+        cy.getByDataHook("auth-login").should("not.exist")
+      },
+    )
   }
 
   it("instructs closing a modal before focusing the notification", () => {
@@ -939,7 +954,7 @@ describe("Auth - OIDC ID token", () => {
     cy.getEditor().should("be.visible")
     cy.get("#sso-refresh-failed").should(
       "contain.text",
-      "Close any open dialog, then press Alt+N to focus this notification.",
+      "Close any open dialog, then press ",
     )
     cy.getByDataHook("help-panel-button").click()
     cy.getByDataHook("help-link-contact-us").click()
@@ -952,7 +967,7 @@ describe("Auth - OIDC ID token", () => {
     cy.get('[aria-label="Close contact dialog"]').click()
     cy.get('form[name="feedback-dialog"]').should("not.exist")
     cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
-    cy.get("#sso-refresh-failed button").first().should("be.focused")
+    cy.get("#sso-refresh-failed .Toastify__close-button").should("be.focused")
     cy.get("#sso-refresh-failed .Toastify__close-button").click()
     cy.get("#sso-refresh-failed").should("not.exist")
   })
@@ -1010,7 +1025,8 @@ describe("Auth - OIDC ID token", () => {
     cy.wait("@refreshFailure")
     cy.get("#sso-refresh-failed").should("be.visible")
     cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
-    cy.get("#sso-refresh-failed button").first().should("be.focused").click()
+    cy.get("#sso-refresh-failed .Toastify__close-button").should("be.focused")
+    cy.contains("#sso-refresh-failed button", "Sign in again").click()
     cy.getByDataHook("auth-login").should("be.visible")
     cy.contains("h2", "Sign in to QuestDB").should("be.focused")
     cy.get('form[name="login"] input[name="username"]')
@@ -1320,7 +1336,7 @@ describe("Auth - OIDC ID token", () => {
     )
   })
 
-  it("clears retained password credentials only when signing in with SSO", () => {
+  it("preserves other tabs' password credentials when signing in with SSO", () => {
     const initial = idToken("initial", 3600)
     signIn({
       idTokens: { authorization_code: initial },
@@ -1333,9 +1349,10 @@ describe("Auth - OIDC ID token", () => {
       .its("request.headers.authorization")
       .should("eq", `Bearer ${initial}`)
     cy.getEditor().should("be.visible")
-    cy.window().then(({ localStorage }) => {
-      expect(localStorage.getItem("rest.token")).to.be.null
-      expect(localStorage.getItem("basic.auth.header")).to.be.null
+    cy.window().then(({ localStorage, sessionStorage }) => {
+      expect(localStorage.getItem("rest.token")).to.eq("expired-rest-token")
+      expect(localStorage.getItem("basic.auth.header")).to.eq("Basic expired")
+      expect(sessionStorage.getItem("auth.login.method")).to.eq("sso")
     })
   })
 

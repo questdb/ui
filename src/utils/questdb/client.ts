@@ -4,7 +4,9 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import {
   AuthRefreshUnavailableError,
-  isSessionEnded,
+  CANCELLED_BY_USER,
+  endedFor,
+  sessionFailureOf,
   SessionEndedError,
 } from "../../modules/OAuth2/session"
 import { API_VERSION } from "../../consts"
@@ -36,7 +38,7 @@ import {
   ValidateQuerySuccessResult,
   ValidateQueryErrorResult,
 } from "./types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { getBearerAuthorization } from "../../modules/OAuth2/utils"
 import {
   awaitRefresh,
@@ -78,7 +80,7 @@ export class Client {
   }
 
   private currentAuthorization() {
-    const payload = ssoAuthState.getAuthPayload()
+    const payload = authSessionState.getAuthPayload()
     return payload
       ? getBearerAuthorization(payload)
       : this.commonHeaders.Authorization
@@ -246,6 +248,25 @@ export class Client {
     return promise
   }
 
+  private ensureFreshToken(signal: AbortSignal, lifecycle?: QueryLifecycle) {
+    const session = authSessionState.capture()
+    tokenRefresh.syncSession()
+    const payload = authSessionState.getAuthPayload()
+    if (isRefreshable(payload) && tokenRefresh.needsRefresh(payload)) {
+      this.startRefresh(payload)
+    }
+    const ensureCanSend = () => {
+      if (endedFor(session)) throw new SessionEndedError()
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+      tokenRefresh.ensureUsableToken()
+    }
+    if (tokenRefresh.softDeadline) {
+      lifecycle?.onRefreshWait?.(REFRESH_WAIT_TIMEOUT_MS)
+      return awaitRefresh(tokenRefresh.softDeadline, signal).then(ensureCanSend)
+    }
+    ensureCanSend()
+  }
+
   private async sendQuery(
     payload: Record<string, string | number | boolean | undefined>,
     signal: AbortSignal,
@@ -253,24 +274,16 @@ export class Client {
     execution: { requestNotSent: boolean },
     lifecycle?: QueryLifecycle,
   ) {
-    const originalPayload = ssoAuthState.getAuthPayload()
-    tokenRefresh.syncSession()
-    if (
-      isRefreshable(originalPayload) &&
-      tokenRefresh.needsRefresh(originalPayload)
-    ) {
-      this.startRefresh(originalPayload)
+    const originalPayload = authSessionState.getAuthPayload()
+    const refreshWait = this.ensureFreshToken(signal, lifecycle)
+    const waitedBeforeFetch = !!refreshWait
+    if (refreshWait) await refreshWait
+    const waitForHardDeadline = async () => {
+      const deadline = tokenRefresh.hardDeadline
+      if (!deadline) return
+      lifecycle?.onRefreshWait?.(REFRESH_REQUEST_TIMEOUT_MS)
+      await awaitRefresh(deadline, signal)
     }
-    const waitForRefresh = async (untilCompletion = false) => {
-      const wait = untilCompletion ? tokenRefresh.completion : tokenRefresh.wait
-      if (!wait) return
-      lifecycle?.onRefreshWait?.(
-        untilCompletion ? REFRESH_REQUEST_TIMEOUT_MS : REFRESH_WAIT_TIMEOUT_MS,
-      )
-      await awaitRefresh(wait, signal)
-    }
-    const waitedBeforeFetch = !!tokenRefresh.wait
-    if (waitedBeforeFetch) await waitForRefresh()
     const ensureCanSend = () => {
       ensureCurrentSession()
       if (signal.aborted) throw new DOMException("Aborted", "AbortError")
@@ -295,22 +308,22 @@ export class Client {
       if (response.status === 401) execution.requestNotSent = true
       return response
     }
-    const sessionAtFetch = ssoAuthState.getAuthPayload()
+    const sessionAtFetch = authSessionState.getAuthPayload()
     let response = await send()
     if (response.status === 401 && originalPayload) {
       ensureCurrentSession()
-      const currentPayload = ssoAuthState.getAuthPayload()
+      const currentPayload = authSessionState.getAuthPayload()
       const currentAuthorization = this.currentAuthorization()
-      if (tokenRefresh.completion) {
+      if (tokenRefresh.hardDeadline) {
         // A pre-fetch wait may have expired while its rotating request is
         // still running. A rejected old bearer must not cancel that request.
-        await waitForRefresh(true)
+        await waitForHardDeadline()
         ensureCurrentSession()
-        if (ssoAuthState.hasRefreshFailed())
+        if (authSessionState.hasRefreshFailed())
           throw new AuthRefreshUnavailableError()
         if (
           this.currentAuthorization() !== authorizationAtFetch ||
-          ssoAuthState.getAuthPayload() !== sessionAtFetch
+          authSessionState.getAuthPayload() !== sessionAtFetch
         )
           response = await send()
       } else if (
@@ -322,7 +335,8 @@ export class Client {
         response = await send()
       } else if (
         isRefreshable(currentPayload) &&
-        ssoAuthState.hasRefreshFailed()
+        authSessionState.hasRefreshFailed() &&
+        (tokenRefresh.inBackoff() || waitedBeforeFetch)
       ) {
         // A settled transient failure is just as recoverable as a pending
         // refresh. This 401 rejects the old bearer, not the refresh token.
@@ -338,11 +352,11 @@ export class Client {
         // server is authoritative; bypass success throttling for this 401.
         this.startRefresh(currentPayload)
         // A 401 executed no SQL. Retain rotating refreshes until their hard deadline.
-        await waitForRefresh(true)
+        await waitForHardDeadline()
         ensureCurrentSession()
-        if (ssoAuthState.hasRefreshFailed())
+        if (authSessionState.hasRefreshFailed())
           throw new AuthRefreshUnavailableError()
-        if (ssoAuthState.getAuthPayload() !== sessionAtFetch)
+        if (authSessionState.getAuthPayload() !== sessionAtFetch)
           response = await send()
       }
     }
@@ -369,7 +383,7 @@ export class Client {
     let response: Response
     let fetchStartedAt = 0
     let authorizationAtFetch: string | undefined
-    const session = ssoAuthState.capture()
+    const session = authSessionState.capture()
     const execution = { requestNotSent: true }
     const ensureCurrentSession = () => {
       if (!session.isCurrent()) throw new SessionEndedError()
@@ -380,18 +394,20 @@ export class Client {
       type: Type.ERROR,
       error: new SessionEndedError().message,
       sessionEnded: true,
-      ...(execution.requestNotSent ? { requestNotSent: true } : {}),
+      ...sessionFailureOf(execution),
     })
 
     try {
-      ;({ response, authorizationAtFetch, fetchStartedAt } =
-        await this.sendQuery(
-          payload,
-          controller.signal,
-          ensureCurrentSession,
-          execution,
-          lifecycle,
-        ))
+      const sent = await this.sendQuery(
+        payload,
+        controller.signal,
+        ensureCurrentSession,
+        execution,
+        lifecycle,
+      )
+      response = sent.response
+      authorizationAtFetch = sent.authorizationAtFetch
+      fetchStartedAt = sent.fetchStartedAt
     } catch (error) {
       this.removeController(queryId)
 
@@ -406,7 +422,7 @@ export class Client {
         error: "An error occurred, please try again",
       }
 
-      if (isSessionEnded(error) || !session.isCurrent()) {
+      if (endedFor(session, error)) {
         return Promise.reject(sessionEndedResult())
       }
 
@@ -423,9 +439,9 @@ export class Client {
           ...err,
           error:
             error.code === 20
-              ? "Cancelled by user"
+              ? CANCELLED_BY_USER
               : JSON.stringify(error).toString(),
-          ...(execution.requestNotSent ? { requestNotSent: true } : {}),
+          ...sessionFailureOf(execution),
         })
       }
 
@@ -453,7 +469,7 @@ export class Client {
               position: -1,
               query,
               type: Type.ERROR,
-              error: "Cancelled by user",
+              error: CANCELLED_BY_USER,
             })
           }
           return Promise.reject({
@@ -558,7 +574,7 @@ export class Client {
               position: -1,
               query,
               type: Type.ERROR,
-              error: "Cancelled by user",
+              error: CANCELLED_BY_USER,
             })
           }
           throw error
@@ -576,7 +592,7 @@ export class Client {
       ensureCurrentSession()
       return Promise.reject(errorPayload)
     } catch (error) {
-      if (isSessionEnded(error) || !session.isCurrent()) {
+      if (endedFor(session, error)) {
         return Promise.reject(sessionEndedResult())
       }
       throw error
@@ -589,6 +605,9 @@ export class Client {
     query: string,
     signal?: AbortSignal,
   ): Promise<ValidateQueryResult> {
+    const session = authSessionState.capture()
+    await this.ensureFreshToken(signal ?? new AbortController().signal)
+    if (endedFor(session)) throw new SessionEndedError()
     const response = await fetch(
       `api/v1/sql/validate?${Client.encodeParams({ query })}`,
       {
@@ -596,12 +615,13 @@ export class Client {
         signal,
       },
     )
-    if (response.ok) {
-      return (await response.json()) as ValidateQuerySuccessResult
-    }
-
-    if (response.status === 400 || response.status === 403) {
-      return (await response.json()) as ValidateQueryErrorResult
+    if (endedFor(session)) throw new SessionEndedError()
+    if (response.ok || response.status === 400 || response.status === 403) {
+      const result = (await response.json()) as
+        | ValidateQuerySuccessResult
+        | ValidateQueryErrorResult
+      if (endedFor(session)) throw new SessionEndedError()
+      return result
     }
 
     return Promise.reject({
@@ -699,6 +719,9 @@ export class Client {
   }
 
   async checkCSVFile(name: string): Promise<FileCheckResponse> {
+    const session = authSessionState.capture()
+    await this.ensureFreshToken(new AbortController().signal)
+    if (endedFor(session)) throw new SessionEndedError()
     const response = await fetch(
       `chk?${Client.encodeParams({
         f: "json",
@@ -707,7 +730,9 @@ export class Client {
       })}`,
       { headers: this.requestHeaders() },
     )
-    return (await response.json()) as FileCheckResponse
+    const result = (await response.json()) as FileCheckResponse
+    if (endedFor(session)) throw new SessionEndedError()
+    return result
   }
 
   async uploadCSVFile({
@@ -720,6 +745,9 @@ export class Client {
     timestamp,
     onProgress,
   }: UploadOptions): Promise<UploadResult> {
+    const session = authSessionState.capture()
+    await this.ensureFreshToken(new AbortController().signal)
+    if (endedFor(session)) throw new SessionEndedError()
     const formData = new FormData()
     if (schema) {
       formData.append("schema", JSON.stringify(schema))
@@ -755,6 +783,10 @@ export class Client {
         onProgress(percent_completed)
       })
       request.onload = (_e) => {
+        if (endedFor(session)) {
+          reject(new SessionEndedError())
+          return
+        }
         if (request.status === 200) {
           resolve(JSON.parse(request.response as string) as UploadResult)
         } else {
@@ -777,12 +809,16 @@ export class Client {
   async savePreferences(
     preferences: Preferences,
   ): Promise<{ status: number; message?: string; success: boolean }> {
+    const session = authSessionState.capture()
+    await this.ensureFreshToken(new AbortController().signal)
+    if (endedFor(session)) throw new SessionEndedError()
     const { version, ...prefs } = preferences
     const response: Response = await fetch(`settings?version=${version}`, {
       method: "PUT",
       headers: this.requestHeaders(),
       body: JSON.stringify(prefs),
     })
+    if (endedFor(session)) throw new SessionEndedError()
     if (!response.ok) {
       let errorMessage: string
       try {
@@ -790,6 +826,7 @@ export class Client {
       } catch (e) {
         errorMessage = response.statusText
       }
+      if (endedFor(session)) throw new SessionEndedError()
       return { status: response.status, message: errorMessage, success: false }
     }
     return { status: response.status, success: true }

@@ -11,21 +11,6 @@ const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 
 // Caps and serialization must happen before opening a multi-table write
 // transaction, so large result frames do not hold the editor buffers lock.
-// A nested write may resolve before its ROOT transaction commits. Headless
-// callers must catch root commit failures and retry metadata-only persistence.
-//
-// DELIBERATE — not a bug: a byte-capped save marks the
-// copy `truncated` and keeps `count` at the server value, so a release/
-// re-hydrate cycle serves the capped prefix behind the same "X of Y rows
-// (truncated)" indicator as the fetch row cap; draw mode rejects truncated
-// frames and refetches. Oversized rows can be afforded neither in memory
-// forever (releasing off-screen results is the point of virtualization) nor
-// in full on disk. The capped snapshot is the best-effort middle ground, and
-// a re-run recovers the full set.
-//
-// Deliberately save-only: the cross-notebook recency prune runs where a NEW
-// notebook can actually enter the table — notebook open, duplication, and the
-// headless run commit — not on every frame a live chart persists.
 export const prepareCellSnapshot = (
   snapshot: NotebookResultSnapshot,
 ): NotebookResultSnapshot => ({
@@ -47,6 +32,13 @@ export const persistPreparedCellSnapshot = (
 ): Promise<boolean> =>
   saveCellSnapshot(snapshot).then(() => true, reportSnapshotSaveFailure)
 
+// A byte-capped save keeps the server count and marks its copied prefix as
+// truncated; draw mode refetches truncated frames. Re-running restores the
+// full frame. Save-only: cross-notebook pruning belongs to notebook open,
+// duplication and headless commit, not to every chart frame.
+// Returns true when saved and false on storage failure (also reported once
+// via toast). A nested write can resolve before its ROOT transaction commits;
+// headless callers must catch root failures and retry metadata-only storage.
 export const persistCellSnapshot = (
   snapshot: NotebookResultSnapshot,
 ): Promise<boolean> =>

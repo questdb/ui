@@ -57,7 +57,7 @@ const mountNotifications = () => {
     }),
   }
   activeElement = origin
-  const notification = { id: "sso-refresh-failed" }
+  const notification = { id: "sso-refresh-failed", querySelector: vi.fn() }
   const focus = vi.fn(() => {
     activeElement = control
   })
@@ -67,7 +67,12 @@ const mountNotifications = () => {
     ),
     focus,
   }
-  const querySelector = vi.fn().mockReturnValue(control)
+  const querySelector = notification.querySelector.mockImplementation(
+    (selector: string) =>
+      selector === ".Toastify__close-button" ? control : {},
+  )
+  const notifications = [notification]
+  const querySelectorAll = vi.fn(() => notifications)
   const contains = (element: unknown) => element === control
   const addEventListener = vi.fn<
     [string, (event: KeyboardEvent) => void],
@@ -86,7 +91,7 @@ const mountNotifications = () => {
       <ThemeProvider theme={darkTheme}>
         <ToastContainer />
       </ThemeProvider>,
-      { createNodeMock: () => ({ querySelector, contains }) },
+      { createNodeMock: () => ({ querySelectorAll, contains }) },
     )
   })
   const onKeyDown = addEventListener.mock.calls[0][1]
@@ -115,6 +120,7 @@ const mountNotifications = () => {
     notification,
     origin,
     control,
+    notifications,
     moveFocus: (element: unknown) => {
       activeElement = element
     },
@@ -151,17 +157,20 @@ describe("toast theme styles", () => {
 })
 
 describe("notification keyboard access", () => {
-  it("advertises Alt+N and focuses the first notification control", () => {
+  it("advertises Alt+N on the safe close control, never the sign-in action", () => {
     const { press, focus } = mountNotifications()
-    expect(renderer!.root.findByProps({ role: "region" }).props).toMatchObject({
+    expect(
+      renderer!.root.findByProps({ "aria-label": "Close notification" }).props,
+    ).toMatchObject({
       "aria-keyshortcuts": NOTIFICATION_SHORTCUT,
     })
     expect(NOTIFICATION_SHORTCUT).toBe("Alt+N")
     expect(press().preventDefault).toHaveBeenCalledOnce()
-    // Option-modified characters vary by keyboard layout; the physical code
-    // must still identify the shortcut.
-    expect(press({ key: "˜" }).preventDefault).toHaveBeenCalledOnce()
-    expect(focus).toHaveBeenCalledTimes(2)
+    const editable = { closest: () => ({}) } as unknown as EventTarget
+    expect(
+      press({ key: "˜", target: editable }).preventDefault,
+    ).not.toHaveBeenCalled()
+    expect(focus).toHaveBeenCalledOnce()
   })
 
   it.each([
@@ -171,10 +180,42 @@ describe("notification keyboard access", () => {
     { metaKey: true },
     { shiftKey: true },
     { defaultPrevented: true },
+    { isComposing: true },
+    { keyCode: 229 },
+    { key: "Dead" },
   ])("does not consume unrelated or handled keys %j", (event) => {
     const { press, focus } = mountNotifications()
     expect(press(event).preventDefault).not.toHaveBeenCalled()
     expect(focus).not.toHaveBeenCalled()
+  })
+
+  it.each(["ń", "~", "˜"])(
+    "preserves Option-produced %s in editable controls",
+    (key) => {
+      const { press, focus } = mountNotifications()
+      const target = { closest: () => ({}) } as unknown as EventTarget
+      expect(press({ key, target }).preventDefault).not.toHaveBeenCalled()
+      expect(focus).not.toHaveBeenCalled()
+    },
+  )
+
+  it("prioritizes the renewal warning and skips closing notifications", () => {
+    const { press, focus, notifications } = mountNotifications()
+    const olderFocus = vi.fn()
+    notifications.unshift({
+      id: "older",
+      querySelector: vi.fn((selector: string) =>
+        selector === ".Toastify__close-button"
+          ? { focus: olderFocus, closest: () => null }
+          : {},
+      ),
+    })
+    press()
+    expect(focus).toHaveBeenCalledOnce()
+    expect(olderFocus).not.toHaveBeenCalled()
+    notifications[1].querySelector.mockReturnValue(null)
+    press()
+    expect(olderFocus).toHaveBeenCalledOnce()
   })
 
   it.each(["dialog", "alertdialog"])(

@@ -22,7 +22,7 @@ import { useTheme } from "styled-components"
 import { TelemetryTable } from "../../consts"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { sendServerInfoTelemetry } from "../../utils/telemetry"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { InstanceTypeIcon } from "./InstanceTypeIcon"
 
 const EnvIconWrapper = styled.div<{ $background?: string }>`
@@ -382,7 +382,7 @@ export const Toolbar = () => {
         const currentUser = response.data[0].current_user
         setCurrentUser(currentUser)
 
-        const ssoAuthenticated = ssoAuthState.isSSOAuthenticated()
+        const ssoAuthenticated = authSessionState.isSSOAuthenticated()
         if (ssoAuthenticated && currentUser && settings["acl.oidc.client.id"]) {
           // it is an SSO user, we should update the SSO username
           setSSOUserNameWithClientID(

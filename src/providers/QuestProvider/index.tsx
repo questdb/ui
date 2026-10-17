@@ -22,24 +22,14 @@
  *
  ******************************************************************************/
 
-import React, {
-  createContext,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import React, { createContext, useEffect, useMemo, useState } from "react"
 import styled from "styled-components"
 import * as QuestDB from "../../utils/questdb"
 import { useAuth } from "../AuthProvider"
 import { questClient } from "../../utils/questdb/queryClient"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { questExecution } from "../../utils/questdb/queryExecution"
-import { isSessionEnded } from "../../modules/OAuth2/session"
-import { CloseOutline } from "../../components/icons"
-import { Button, Text, CenteredLayout } from "../../components"
-import { Box } from "../../components/Box"
+import { AuthCheckRecovery, useAuthCheck } from "./AuthCheckRecovery"
 import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
 import {
@@ -60,6 +50,7 @@ const ConsoleMain = styled.main`
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  outline: none;
 `
 
 type ContextProps = {
@@ -90,69 +81,26 @@ export const QuestProvider: React.FC = ({ children }) => {
     getStoredCredentialAuthorization(),
   )
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [authCheckFinished, setAuthCheckFinished] = useState(
-    !hasUIAuth(settings),
-  )
+  const {
+    finished: authCheckFinished,
+    error: authCheckError,
+    pending: authCheckPending,
+    finish: finishAuthCheck,
+    retry,
+    consoleRef,
+  } = useAuthCheck(!!hasUIAuth(settings))
   const [buildVersion, setBuildVersion] = useState<Versions>(
     defaultValues.buildVersion,
   )
   const [commitHash, setCommitHash] = useState<string>("")
 
-  const [authCheckError, setAuthCheckError] = useState<string>()
-  const [authCheckPending, setAuthCheckPending] = useState(false)
-  const authCheckInFlight = useRef(false)
-  const mounted = useRef(false)
-  const recoveryHeading = useRef<HTMLHeadingElement>(null)
-  const consoleMain = useRef<HTMLElement>(null)
-  const focusConsoleAfterRetry = useRef(false)
-  useEffect(() => {
-    if (authCheckError && !authCheckFinished) recoveryHeading.current?.focus()
-    if (authCheckFinished && focusConsoleAfterRetry.current) {
-      focusConsoleAfterRetry.current = false
-      consoleMain.current?.focus()
-    }
-  }, [authCheckError, authCheckFinished])
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
+  useEffect(
+    () => () => {
       questClient.setCommonHeaders({})
       questClient.refreshTokenMethod = undefined
-    }
-  }, [])
-
-  const finishAuthCheck = useCallback(async () => {
-    // Token installation reruns the credentials effect while its probe is
-    // still waiting. Share that attempt; state alone cannot guard same-turn calls.
-    if (authCheckInFlight.current) return
-    authCheckInFlight.current = true
-    const session = ssoAuthState.capture()
-    setAuthCheckPending(true)
-    try {
-      await questClient.queryRaw("SELECT 1")
-      if (mounted.current && session.isCurrent()) {
-        setAuthCheckFinished(true)
-      }
-    } catch (error) {
-      const failure = error as Partial<QuestDB.ErrorResult>
-      // AuthProvider handles session-ended/protocol-denied errors. Connection
-      // listeners below this gate are not mounted yet, so report other failures
-      // here rather than leaving a permanently blank page.
-      if (
-        mounted.current &&
-        session.isCurrent() &&
-        !isSessionEnded(error) &&
-        String(failure.error) !== "Cancelled by user"
-      ) {
-        setAuthCheckError(failure.error || "Could not connect to QuestDB.")
-      }
-    } finally {
-      authCheckInFlight.current = false
-      if (mounted.current && session.isCurrent()) {
-        setAuthCheckPending(false)
-      }
-    }
-  }, [])
+    },
+    [],
+  )
 
   useEffect(() => {
     // SSO bearer headers are derived from the installed payload at fetch time.
@@ -164,7 +112,7 @@ export const QuestProvider: React.FC = ({ children }) => {
       ? (deadlineSignal, requestSignal) =>
           refreshAuthToken(
             settings,
-            ssoAuthState.getAuthPayload()?.refresh_token,
+            authSessionState.getAuthPayload()?.refresh_token,
             deadlineSignal,
             requestSignal,
           )
@@ -180,6 +128,7 @@ export const QuestProvider: React.FC = ({ children }) => {
   ])
 
   useEffect(() => {
+    if (!authCheckFinished) return
     // TODO: Remove this, use info from `/settings` (`type` and `version`) and run this hook on `settings` dep
     // Get the build version info
     void questClient
@@ -193,7 +142,7 @@ export const QuestProvider: React.FC = ({ children }) => {
       .catch(() => {
         // Authentication can end while the initial build query is waiting.
       })
-  }, [])
+  }, [authCheckFinished])
 
   // Telemetry queries use SQL, and therefore need to have auth header set if needed.
   // Defer starting until the authorization is properly set for all HTTP requests.
@@ -224,42 +173,16 @@ export const QuestProvider: React.FC = ({ children }) => {
 
   if (!authCheckFinished)
     return authCheckError ? (
-      <CenteredLayout>
-        <Box flexDirection="column" gap="2rem" align="center">
-          <h1 ref={recoveryHeading} tabIndex={-1}>
-            Could not connect to QuestDB
-          </h1>
-          <div role="alert">
-            <CloseOutline aria-hidden="true" />
-            <Text color="statusDanger">{authCheckError}</Text>
-          </div>
-          <div role="status">
-            <Text color="contentPrimary">
-              {authCheckPending
-                ? "Reconnecting…"
-                : "Connection failed. Retry connection."}
-            </Text>
-          </div>
-          {/* Keep the button focusable while busy; native disabled can drop focus. */}
-          <Button
-            aria-disabled={authCheckPending}
-            aria-busy={authCheckPending}
-            onClick={() => {
-              if (!authCheckPending) {
-                focusConsoleAfterRetry.current = true
-                void finishAuthCheck()
-              }
-            }}
-          >
-            Retry connection
-          </Button>
-        </Box>
-      </CenteredLayout>
+      <AuthCheckRecovery
+        error={authCheckError}
+        pending={authCheckPending}
+        onRetry={retry}
+      />
     ) : null
 
   return (
     <QuestContext.Provider value={contextValue}>
-      <ConsoleMain ref={consoleMain} tabIndex={-1} aria-label="QuestDB console">
+      <ConsoleMain ref={consoleRef} tabIndex={-1} aria-label="QuestDB console">
         {children}
         <QueryExecutionConfirmDialog />
       </ConsoleMain>

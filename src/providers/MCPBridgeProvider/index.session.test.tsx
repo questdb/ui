@@ -2,7 +2,7 @@ import "../../test/stubBrowserGlobals"
 import React from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { afterEach, expect, it, vi } from "vitest"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import {
   createModelToolsClient,
   type ModelToolsClient,
@@ -99,14 +99,14 @@ afterEach(() => {
   act(() => renderer?.unmount())
   renderer = undefined
   mocks.tools = undefined
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   clearStatementClassCache()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
 it("warns MCP that an INSERT outcome is unverified when its session ends before passive teardown", async () => {
-  ssoAuthState.setAuthPayload({ access_token: "old", token_type: "Bearer" })
+  authSessionState.setAuthPayload({ access_token: "old", token_type: "Bearer" })
   const quest = new Client()
   vi.spyOn(quest, "validateQuery").mockResolvedValue({ queryType: "INSERT" })
   mocks.tools = createModelToolsClient(quest)
@@ -166,7 +166,7 @@ it("warns MCP that an INSERT outcome is unverified when its session ends before 
   })
   await requestStarted
 
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   // AuthProvider replaces the ready subtree synchronously. Do not use act:
   // the bridge's passive abort/disconnect has not happened at this point.
   renderer!.update(<div>Sign in</div>)

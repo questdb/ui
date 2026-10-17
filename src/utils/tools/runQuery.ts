@@ -1,7 +1,7 @@
 import type { Client } from "../questdb/client"
 import { Type } from "../questdb/types"
 import {
-  isSessionEnded,
+  sessionFailureOf,
   type SessionFailure,
 } from "../../modules/OAuth2/session"
 
@@ -126,9 +126,6 @@ export const mapQueryRawToResult = async (
         durationMs,
       }
     }
-    if (res.type === Type.DDL || res.type === Type.DML) {
-      return { type: res.type, durationMs }
-    }
     if (res.type === Type.NOTICE) {
       if (res.columns && res.columns.length > 0) {
         return {
@@ -142,13 +139,7 @@ export const mapQueryRawToResult = async (
       }
       return { type: "notice", durationMs, message: res.notice }
     }
-    return {
-      type: "error",
-      error: res.error,
-      position: res.position,
-      ...(isSessionEnded(res) ? { sessionEnded: true } : {}),
-      ...(res.requestNotSent ? { requestNotSent: true } : {}),
-    }
+    return { type: res.type === Type.DDL ? "ddl" : "dml", durationMs }
   } catch (e) {
     if (e && typeof e === "object" && "error" in e) {
       const errLike = e as {
@@ -162,8 +153,7 @@ export const mapQueryRawToResult = async (
           error: errLike.error,
           position:
             typeof errLike.position === "number" ? errLike.position : -1,
-          ...(isSessionEnded(e) ? { sessionEnded: true } : {}),
-          ...(errLike.requestNotSent === true ? { requestNotSent: true } : {}),
+          ...sessionFailureOf(e),
         }
       }
     }
@@ -171,6 +161,7 @@ export const mapQueryRawToResult = async (
       type: "error",
       error: e instanceof Error ? e.message : "Unknown error",
       position: -1,
+      ...sessionFailureOf(e),
     }
   } finally {
     cleanup?.()

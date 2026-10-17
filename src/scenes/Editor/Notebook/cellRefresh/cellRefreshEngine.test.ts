@@ -8,7 +8,7 @@ import type {
 } from "../../../../store/notebook"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { ssoAuthState } from "../../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../../modules/OAuth2/ssoAuthState"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import {
   persistCellSnapshot,
@@ -222,6 +222,31 @@ describe("CellRefreshEngine", () => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
+  })
+
+  it("preserves a chart frame and its snapshot when every query was paused before send", async () => {
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    const previousFrame = cellResults.get("c1")
+    vi.mocked(persistCellSnapshot).mockClear()
+    vi.mocked(deleteCellSnapshot).mockClear()
+    deps.executeSingle.mockResolvedValue({
+      type: "error",
+      query: "select 1",
+      error: "Renewal paused",
+      requestNotSent: true,
+      columns: [],
+      dataset: [],
+      count: 0,
+    })
+    await engine.refresh("c1")
+    await flushAsync()
+    expect(cellResults.get("c1")).toBe(previousFrame)
+    expect(deleteCellSnapshot).not.toHaveBeenCalled()
+    expect(persistCellSnapshot).not.toHaveBeenCalled()
+    expect([...engine.getState("c1")!.slotErrors.values()]).toEqual([
+      "Renewal paused",
+    ])
   })
 
   it("fetches once for a draw cell with auto-refresh off", async () => {
@@ -566,10 +591,10 @@ describe("CellRefreshEngine", () => {
         expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
 
         const finalResults = cellResults.get("c1")?.results
-        const generation = ssoAuthState.getSessionId()
+        const generation = authSessionState.getSessionId()
         deps.onSnapshotPersisted.mockClear()
-        ssoAuthState.clearAuthPayload()
-        expect(ssoAuthState.getSessionId()).toBe(generation + 1)
+        authSessionState.endSession()
+        expect(authSessionState.getSessionId()).toBe(generation + 1)
         expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
         if (boundary === "timer") await vi.advanceTimersByTimeAsync(11_000)
         else if (boundary === "flush") await engine.flushPendingSnapshots()
@@ -597,7 +622,7 @@ describe("CellRefreshEngine", () => {
       await vi.advanceTimersByTimeAsync(1000)
       engine.setVisible("c1", false)
       const order: string[] = []
-      const unsubscribe = ssoAuthState.onEnd(() => {
+      const unsubscribe = authSessionState.onEnd(() => {
         order.push("invalidated")
       })
       vi.mocked(persistCellSnapshot).mockImplementationOnce((snapshot) => {
@@ -606,7 +631,7 @@ describe("CellRefreshEngine", () => {
         return Promise.resolve(true)
       })
       try {
-        ssoAuthState.endSession()
+        authSessionState.endSession()
         expect(order).toEqual(["invalidated"])
         await vi.advanceTimersByTimeAsync(0)
         expect(order).toEqual(["invalidated", "serialized"])
@@ -625,7 +650,7 @@ describe("CellRefreshEngine", () => {
       vi.mocked(persistCellSnapshot).mockImplementationOnce(() => {
         throw failure
       })
-      expect(() => ssoAuthState.endSession()).not.toThrow()
+      expect(() => authSessionState.endSession()).not.toThrow()
       await vi.advanceTimersByTimeAsync(0)
       expect(reportSnapshotSaveFailure).toHaveBeenCalledWith(failure)
     })
@@ -648,7 +673,7 @@ describe("CellRefreshEngine", () => {
         expect(deps.executeSingle).toHaveBeenCalledTimes(2)
         expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
 
-        if (logout) ssoAuthState.clearAuthPayload()
+        if (logout) authSessionState.endSession()
         engine.destroy()
         expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
         expect(vi.mocked(persistCellSnapshot).mock.calls[1][0].results).toBe(

@@ -1,5 +1,7 @@
 import { AuthPayload, LogoutOptions } from "./types"
 
+export type AuthSession = { isCurrent: () => boolean }
+
 // Tab-local authentication for ALL login methods. The SSO payload is only
 // present for OIDC; stored REST/basic credentials do not make another tab
 // authenticated. Keep these predicates distinct when handling a 401.
@@ -11,7 +13,7 @@ class AuthSessionState {
   private beforeEndListeners = new Set<() => void>()
   private endListeners = new Set<(options?: LogoutOptions) => void>()
 
-  capture() {
+  capture(): AuthSession {
     const sessionId = this.sessionId
     return { isCurrent: () => this.sessionId === sessionId }
   }
@@ -79,13 +81,6 @@ class AuthSessionState {
     this.refreshFailed = false
     this.endListeners.forEach((listener) => listener(options))
   }
-
-  // Compatibility for existing consumers. New lifecycle code uses endSession.
-  clearAuthPayload() {
-    this.endSession()
-  }
 }
 
 export const authSessionState = new AuthSessionState()
-// Compatibility alias: both names refer to the same tab-local session.
-export const ssoAuthState = authSessionState

@@ -7,7 +7,7 @@ import Schema, { View } from "."
 import VirtualTables from "./VirtualTables"
 import { QuestContext } from "../../providers"
 import { Client } from "../../utils/questdb/client"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { tokenRefresh } from "../../utils/questdb/tokenRefresh"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -86,11 +86,11 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] })
   vi.stubGlobal("addEventListener", vi.fn())
   vi.stubGlobal("removeEventListener", vi.fn())
-  ssoAuthState.setAuthPayload(payload())
+  authSessionState.setAuthPayload(payload())
 })
 afterEach(() => {
   act(() => renderer?.unmount())
-  ssoAuthState.endSession()
+  authSessionState.endSession()
   tokenRefresh.syncSession()
   vi.useRealTimers()
   vi.restoreAllMocks()
@@ -131,6 +131,44 @@ const mountSchema = async (client: Client, withSideMenu = false) => {
 }
 
 describe("Schema renewal recovery", () => {
+  it("cleans up only its own schema listeners on unmount and remount", async () => {
+    mocks.autoRefreshTables = true
+    const client = new Client()
+    const fetchMock = vi.fn((url: string) =>
+      Promise.resolve(
+        catalogResponse(
+          new URL(url, "http://test").searchParams.get("query") ?? "",
+        ),
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const peer = vi.fn()
+    eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, peer)
+    try {
+      for (let i = 0; i < 3; i++) {
+        await mountSchema(client)
+        act(() => renderer!.unmount())
+      }
+      await mountSchema(client)
+      const before = fetchMock.mock.calls.length
+      await act(async () => {
+        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+        await Promise.resolve()
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(before + 3)
+      expect(peer).toHaveBeenCalledOnce()
+      act(() => renderer!.unmount())
+      await act(async () => {
+        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+        await Promise.resolve()
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(before + 3)
+      expect(peer).toHaveBeenCalledTimes(2)
+    } finally {
+      eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA, peer)
+    }
+  })
+
   it("recovers both panels without retrying from a peer's delayed OK event", async () => {
     mocks.autoRefreshTables = false
     const client = new Client()
@@ -206,11 +244,18 @@ describe("Schema renewal recovery", () => {
       expect(props.loadingError?.error).toBe("Columns unavailable")
     }
 
-    // Suppression must end when the entire shared batch settles. Both panels,
-    // not just the first event subscriber, can recover on a later external OK.
+    // SQL-level catalog failures must not retry on unrelated polling OKs.
     recovering = false
     await act(async () => {
       await client.queryRaw("select 2")
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(before + 10)
+    await act(async () => {
+      for (const button of renderer!.root
+        .findAllByProps({ "data-hook": "schema-auto-refresh-button" })
+        .filter((button) => button.type === "button"))
+        button.props.onClick()
+      await Promise.resolve()
     })
     expect(fetchMock).toHaveBeenCalledTimes(before + 16)
     for (const panel of renderer!.root.findAllByType(VirtualTables)) {
@@ -266,11 +311,19 @@ describe("Schema renewal recovery", () => {
 
     columnsFail = false
     await act(async () => {
-      await client.queryRaw("select 1")
+      for (let i = 0; i < 5; i++) await client.queryRaw("select 1")
+    })
+    expect(tree().props.state.view).toBe(View.error)
+    expect(fetchMock).toHaveBeenCalledTimes(before + 10)
+    await act(async () => {
+      renderer!.root
+        .findByProps({ "data-hook": "schema-auto-refresh-button" })
+        .props.onClick()
+      await Promise.resolve()
     })
     expect(tree().props.state.view).toBe(View.ready)
     expect(tree().props.loadingError).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(before + 9)
+    expect(fetchMock).toHaveBeenCalledTimes(before + 13)
   })
 
   it.each([false, true])(
@@ -285,7 +338,7 @@ describe("Schema renewal recovery", () => {
             new Error("Identity provider unavailable (HTTP 503)"),
           )
         const renewed = payload()
-        ssoAuthState.setAuthPayload(renewed)
+        authSessionState.setAuthPayload(renewed)
         return Promise.resolve(renewed)
       }
       const fetchMock = vi.fn((url: string) => {

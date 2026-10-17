@@ -76,6 +76,7 @@ export type QueryStateShape = Readonly<{
 }>
 
 export enum QueryAT {
+  RESET_SESSION = "QUERY/RESET_SESSION",
   ADD_NOTIFICATION = "QUERY/ADD_NOTIFICATION",
   CLEANUP_NOTIFICATIONS = "QUERY/CLEANUP_NOTIFICATIONS",
   CLEANUP_BUFFER_NOTIFICATIONS = "QUERY/CLEANUP_BUFFER_NOTIFICATIONS",
@@ -118,7 +119,7 @@ type RemoveNotificationAction = Readonly<{
 
 type SettleLoadingNotificationAction = Readonly<{
   type: QueryAT.SETTLE_LOADING_NOTIFICATION
-  payload: { queryId: number }
+  payload: { queryId: number; discardPrevious?: boolean }
 }>
 
 type SettleActiveLoadingNotificationAction = Readonly<{
@@ -192,6 +193,7 @@ type SetQueriesToRunAction = Readonly<{
 }>
 
 export type QueryAction =
+  | Readonly<{ type: QueryAT.RESET_SESSION }>
   | AddNotificationAction
   | CleanupNotificationsAction
   | CleanupBufferNotificationsAction

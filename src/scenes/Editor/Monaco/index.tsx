@@ -100,8 +100,15 @@ import {
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 import { runScriptStatements } from "./runScriptStatements"
 import { createScriptLoading } from "./scriptLoading"
-import { isSessionEnded } from "../../../modules/OAuth2/session"
-import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
+import {
+  endedFor,
+  isSessionEnded,
+  isCancelledByUser,
+} from "../../../modules/OAuth2/session"
+import {
+  authSessionState,
+  type AuthSession,
+} from "../../../modules/OAuth2/ssoAuthState"
 
 type IndividualQueryResult = {
   success: boolean
@@ -1454,7 +1461,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const runIndividualQuery = async (
     query: Request,
     isLast: boolean,
-    session: ReturnType<typeof ssoAuthState.capture>,
+    session: AuthSession,
     onQueryStarted: (queryId: QuestDB.QueryId) => void,
   ): Promise<IndividualQueryResult> => {
     const editor = editorRef.current
@@ -1593,7 +1600,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     } catch (_error: unknown) {
       const error = _error as ErrorResult
-      if (isSessionEnded(error) || !session.isCurrent()) {
+      if (endedFor(session, error)) {
         return {
           success: false,
           sessionEnded: true,
@@ -1743,7 +1750,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
       return
     }
-    const session = ssoAuthState.capture()
+    const session = authSessionState.capture()
     const queriesToRun = runPlan.runAll ? undefined : runPlan.queries
     const runningAllQueries = !queriesToRun
     // Clear all notifications & execution refs for the buffer
@@ -2133,6 +2140,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             ? inflightQuery
             : null
 
+        let discardPreviousNotification = false
         const { promise: queryPromise, queryId } = quest.queryRaw(
           normalizeQueryText(queryToRun),
           {
@@ -2245,7 +2253,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             // The login view already communicates this failure. React 17 can
             // run this catch before passive unmount cleanup; never carry it
             // into a subsequent in-tab login via Redux notifications.
-            if (isSessionEnded(error)) return
+            if (isSessionEnded(error)) {
+              discardPreviousNotification = !error.requestNotSent
+              return
+            }
 
             if (editorRef?.current && monacoRef?.current) {
               const model = editorRef.current.getModel()
@@ -2306,12 +2317,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
                 const bufferUntouchedSinceRun =
                   model.getVersionId() === runModelVersionId
-                const isCancelledByUser =
-                  String(error.error) === "Cancelled by user"
                 if (
                   errorRange &&
                   bufferUntouchedSinceRun &&
-                  !isCancelledByUser
+                  !isCancelledByUser(error)
                 ) {
                   editorRef?.current.focus()
 
@@ -2345,7 +2354,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
           .finally(() => {
             if (loadingNotificationPublished) {
-              dispatch(actions.query.settleLoadingNotification(queryId))
+              dispatch(
+                actions.query.settleLoadingNotification(
+                  queryId,
+                  discardPreviousNotification,
+                ),
+              )
             }
             if (isCurrentRun()) {
               inflightQueryRef.current = null

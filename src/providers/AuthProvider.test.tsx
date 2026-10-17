@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthProvider, useAuth } from "./AuthProvider"
 import { QuestProvider } from "./QuestProvider"
 import { questClient } from "../utils/questdb/queryClient"
-import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../modules/OAuth2/ssoAuthState"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { StoreKey } from "../utils/localStorage/types"
@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
     void
   >(),
   toastDismiss: vi.fn(),
+  reload: vi.fn(),
   toastActive: vi.fn(() => false),
 }))
 vi.mock("./SettingsProvider", async (importOriginal) => {
@@ -41,7 +42,7 @@ vi.mock("./SettingsProvider", async (importOriginal) => {
   }
 })
 vi.mock("../components/Toast", () => ({
-  NOTIFICATION_SHORTCUT: "Alt+N",
+  NOTIFICATION_SHORTCUT_LABEL: "Alt+N",
   toast: {
     error: mocks.toastError,
     dismiss: mocks.toastDismiss,
@@ -49,6 +50,8 @@ vi.mock("../components/Toast", () => ({
   },
 }))
 vi.mock("../components/Button", () => ({ Button: "button" }))
+vi.mock("../components/Text", () => ({ Text: "span" }))
+vi.mock("../components/Box", () => ({ Box: "div" }))
 vi.mock("react-redux", () => ({
   useDispatch: () => vi.fn(),
   useSelector: () => undefined,
@@ -100,16 +103,18 @@ beforeEach(() => {
   signInToken = initialToken
   mocks.useRealSettings = false
   mocks.toastActive.mockReturnValue(false)
+  const tabStorage = new Map<string, string>()
   vi.stubGlobal("sessionStorage", {
-    getItem: () => null,
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
+    getItem: (key: string) => tabStorage.get(key) ?? null,
+    setItem: vi.fn((key: string, value: string) => tabStorage.set(key, value)),
+    removeItem: vi.fn((key: string) => tabStorage.delete(key)),
   })
   vi.stubGlobal("location", {
     origin: "http://localhost",
     pathname: "/",
     search: "?code=test",
     href: "http://localhost/?code=test",
+    reload: mocks.reload,
   })
   mocks.settings = {
     "acl.enabled": true,
@@ -130,7 +135,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => renderer?.unmount())
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   tokenRefresh.syncSession()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -184,8 +189,8 @@ describe("AuthProvider token installation", () => {
     expect(
       renderer!.root.findAllByProps({ "data-hook": "console-live" }),
     ).toHaveLength(1)
-    const session = ssoAuthState.getAuthPayload()!
-    const generation = ssoAuthState.getSessionId()
+    const session = authSessionState.getAuthPayload()!
+    const generation = authSessionState.getSessionId()
     vi.spyOn(Date, "now").mockReturnValue(
       Date.parse(session.expires_at!) - 20_000,
     )
@@ -205,7 +210,7 @@ describe("AuthProvider token installation", () => {
     await act(async () => {
       await Promise.resolve()
     })
-    expect(tokenRefresh.completion).toBeDefined()
+    expect(tokenRefresh.hardDeadline).toBeDefined()
     const requestSignal = vi.mocked(fetch).mock.lastCall?.[1]?.signal
 
     // Settings error/retry removes and replaces both providers without ending
@@ -216,8 +221,8 @@ describe("AuthProvider token installation", () => {
       renderer = create(tree())
       await Promise.resolve()
     })
-    expect(ssoAuthState.getAuthPayload()).toBe(session)
-    expect(ssoAuthState.getSessionId()).toBe(generation)
+    expect(authSessionState.getAuthPayload()).toBe(session)
+    expect(authSessionState.getSessionId()).toBe(generation)
     expect(requestSignal?.aborted).toBe(false)
     expect(fetch).toHaveBeenCalledTimes(1)
     return { finishRefresh, query }
@@ -237,7 +242,7 @@ describe("AuthProvider token installation", () => {
       )
       await query
     })
-    expect(ssoAuthState.isAuthenticated()).toBe(false)
+    expect(authSessionState.isAuthenticated()).toBe(false)
     expect(
       renderer!.root.findByProps({ "data-hook": "mock-login" }).props,
     ).toMatchObject({
@@ -261,7 +266,7 @@ describe("AuthProvider token installation", () => {
       )
       await query
     })
-    expect(ssoAuthState.getAuthPayload()).toMatchObject({
+    expect(authSessionState.getAuthPayload()).toMatchObject({
       access_token: "renewed",
       refresh_token: "rotated",
     })
@@ -281,7 +286,7 @@ describe("AuthProvider token installation", () => {
     async (credentialKey) => {
       await mount()
       const retained = auth.sessionData
-      const generation = ssoAuthState.getSessionId()
+      const generation = authSessionState.getSessionId()
       act(() => renderer?.unmount())
       localStorage.setItem(credentialKey, "another-tab")
       location.search = ""
@@ -307,7 +312,7 @@ describe("AuthProvider token installation", () => {
         await Promise.resolve()
       })
       expect(auth.sessionData).toBe(retained)
-      expect(ssoAuthState.getSessionId()).toBe(generation)
+      expect(authSessionState.getSessionId()).toBe(generation)
       expect(questClient.refreshTokenMethod).toBeTypeOf("function")
       expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toMatchObject({
         Authorization: "Bearer initial",
@@ -323,7 +328,7 @@ describe("AuthProvider token installation", () => {
         Authorization: "Bearer renewed",
       })
       expect(localStorage.getItem(credentialKey)).toBe("another-tab")
-      expect(ssoAuthState.getSessionId()).toBe(generation)
+      expect(authSessionState.getSessionId()).toBe(generation)
     },
   )
 
@@ -356,8 +361,8 @@ describe("AuthProvider token installation", () => {
     "ends retained SSO when settings recovery switches to $mode ($key)",
     async ({ mode, key, value, authorization }) => {
       await mount()
-      const generation = ssoAuthState.getSessionId()
-      const oldSession = ssoAuthState.capture()
+      const generation = authSessionState.getSessionId()
+      const oldSession = authSessionState.capture()
       act(() => renderer!.unmount())
       location.search = ""
       mocks.settings = {
@@ -379,8 +384,8 @@ describe("AuthProvider token installation", () => {
         )
         await Promise.resolve()
       })
-      expect(ssoAuthState.getAuthPayload()).toBeNull()
-      expect(ssoAuthState.getSessionId()).toBeGreaterThan(generation)
+      expect(authSessionState.getAuthPayload()).toBeNull()
+      expect(authSessionState.getSessionId()).toBeGreaterThan(generation)
       expect(oldSession.isCurrent()).toBe(false)
       expect(questClient.refreshTokenMethod).toBeUndefined()
       expect(
@@ -399,7 +404,7 @@ describe("AuthProvider token installation", () => {
   it("cancels a retained rotating refresh when recovered settings disable ACL", async () => {
     const { finishRefresh, query } = await recoverDuringRefresh()
     const requestSignal = vi.mocked(fetch).mock.lastCall?.[1]?.signal
-    ssoAuthState.markRefreshFailed()
+    authSessionState.markRefreshFailed()
     act(() => renderer!.unmount())
     mocks.settings = { "acl.enabled": false }
     await act(async () => {
@@ -413,8 +418,8 @@ describe("AuthProvider token installation", () => {
       await Promise.resolve()
     })
     expect(requestSignal?.aborted).toBe(true)
-    expect(tokenRefresh.completion).toBeUndefined()
-    expect(ssoAuthState.hasRefreshFailed()).toBe(false)
+    expect(tokenRefresh.hardDeadline).toBeUndefined()
+    expect(authSessionState.hasRefreshFailed()).toBe(false)
     await act(async () => {
       finishRefresh(
         tokenResponse({
@@ -425,7 +430,7 @@ describe("AuthProvider token installation", () => {
       )
       await query
     })
-    expect(ssoAuthState.getAuthPayload()).toBeNull()
+    expect(authSessionState.getAuthPayload()).toBeNull()
     await questClient.queryRaw("select 99")
     expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).not.toHaveProperty(
       "Authorization",
@@ -454,14 +459,14 @@ describe("AuthProvider token installation", () => {
 
   it("warns after expiry, avoids duplicates, and restores a dismissed warning", async () => {
     await mount()
-    ssoAuthState.setAuthPayload({
+    authSessionState.setAuthPayload({
       ...initialToken,
       expires_at: new Date(Date.now() - 1).toISOString(),
     })
     act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
     expect(mocks.toastError).toHaveBeenCalledOnce()
     const warning = create(mocks.toastError.mock.calls[0][0])
-    expect(warning.root.findByType("p").children).toEqual([
+    expect(warning.root.findAllByType("span")[0].children).toEqual([
       expect.stringContaining("Queries are paused"),
     ])
     mocks.toastActive.mockReturnValue(true)
@@ -475,16 +480,51 @@ describe("AuthProvider token installation", () => {
         warning.root.findByType("button").props as { onClick: () => void }
       ).onClick()
     })
-    expect(ssoAuthState.isAuthenticated()).toBe(false)
+    expect(authSessionState.isAuthenticated()).toBe(false)
     warning.unmount()
   })
 
-  it("clears password credentials on sign-in, but preserves another tab's credentials on refresh", async () => {
+  it.each(["sso", "password"])(
+    "retains this tab's %s login choice on reload with shared credentials",
+    async (method) => {
+      location.search = ""
+      localStorage.setItem(StoreKey.REST_TOKEN, "password-tab-token")
+      localStorage.setItem("sso.username.test-client", "sso-user")
+      localStorage.setItem(StoreKey.SSO_SESSION_ACTIVE, "true")
+      sessionStorage.setItem(StoreKey.LOGIN_METHOD, method)
+      mocks.settings["acl.oidc.authorization.endpoint"] =
+        "https://identity.example/authorize"
+      await act(async () => {
+        renderer = create(
+          <AuthProvider>
+            <span data-hook="live" />
+          </AuthProvider>,
+        )
+        await Promise.resolve()
+      })
+      expect(localStorage.getItem(StoreKey.REST_TOKEN)).toBe(
+        "password-tab-token",
+      )
+      if (method === "sso") {
+        expect(location.href).toContain("https://identity.example/authorize?")
+        expect(new URL(location.href).searchParams.get("prompt")).toBe("none")
+      } else {
+        expect(location.href).toBe("http://localhost/?code=test")
+        expect(
+          renderer!.root.findAllByProps({ "data-hook": "live" }),
+        ).toHaveLength(1)
+        expect(authSessionState.isSSOAuthenticated()).toBe(false)
+      }
+    },
+  )
+
+  it("preserves another tab's password credentials on both sign-in and refresh", async () => {
     localStorage.setItem(StoreKey.REST_TOKEN, "stale")
     localStorage.setItem(StoreKey.BASIC_AUTH_HEADER, "Basic stale")
     await mount()
-    expect(localStorage.getItem(StoreKey.REST_TOKEN)).toBeNull()
-    expect(localStorage.getItem(StoreKey.BASIC_AUTH_HEADER)).toBeNull()
+    expect(localStorage.getItem(StoreKey.REST_TOKEN)).toBe("stale")
+    expect(localStorage.getItem(StoreKey.BASIC_AUTH_HEADER)).toBe("Basic stale")
+    expect(sessionStorage.getItem(StoreKey.LOGIN_METHOD)).toBe("sso")
     localStorage.setItem(StoreKey.REST_TOKEN, "another-tab")
     localStorage.setItem(StoreKey.BASIC_AUTH_HEADER, "Basic another-tab")
     vi.mocked(fetch).mockResolvedValueOnce(
@@ -516,7 +556,7 @@ describe("AuthProvider token installation", () => {
         auth.refreshAuthToken(mocks.settings, "initial-refresh"),
       ).resolves.toBeUndefined()
     })
-    expect(ssoAuthState.getAuthPayload()).toBeNull()
+    expect(authSessionState.getAuthPayload()).toBeNull()
     expect(
       renderer?.root.findByProps({ "data-hook": "mock-login" }).props
         .errorTitle,
@@ -524,31 +564,36 @@ describe("AuthProvider token installation", () => {
     expect(body).not.toHaveProperty("groups_encoded_in_token")
   })
 
-  it("synchronizes the refresh coordinator immediately on non-reloading logout", async () => {
-    await mount()
-    const session = ssoAuthState.getAuthPayload()
-    if (!isRefreshable(session)) throw new Error("Expected refreshable session")
-    const request = new AbortController()
-    let requestSignal: AbortSignal | undefined
-    tokenRefresh.syncSession()
-    tokenRefresh.start(session, (_deadline, signal) => {
-      requestSignal = signal
-      return new Promise((resolve) =>
-        request.signal.addEventListener("abort", () => resolve(undefined)),
-      )
-    })
-    await Promise.resolve()
-    const wait = tokenRefresh.wait
-    expect(wait).toBeDefined()
-    const sync = vi.spyOn(tokenRefresh, "syncSession")
-    act(() => auth.logout())
-    expect(sync).toHaveBeenCalled()
-    expect(ssoAuthState.getAuthPayload()).toBeNull()
-    expect(tokenRefresh.wait).toBeUndefined()
-    expect(requestSignal?.aborted).toBe(true)
-    request.abort()
-    await wait
-  })
+  it.each([false, true])(
+    "synchronizes refresh teardown on logout (reload=%s)",
+    async (reload) => {
+      await mount()
+      const session = authSessionState.getAuthPayload()
+      if (!isRefreshable(session))
+        throw new Error("Expected refreshable session")
+      const request = new AbortController()
+      let requestSignal: AbortSignal | undefined
+      tokenRefresh.syncSession()
+      tokenRefresh.start(session, (_deadline, signal) => {
+        requestSignal = signal
+        return new Promise((resolve) =>
+          request.signal.addEventListener("abort", () => resolve(undefined)),
+        )
+      })
+      await Promise.resolve()
+      const wait = tokenRefresh.softDeadline
+      expect(wait).toBeDefined()
+      const sync = vi.spyOn(tokenRefresh, "syncSession")
+      act(() => auth.logout({ reload }))
+      expect(sync).toHaveBeenCalledOnce()
+      expect(mocks.reload).toHaveBeenCalledTimes(reload ? 1 : 0)
+      expect(authSessionState.getAuthPayload()).toBeNull()
+      expect(tokenRefresh.softDeadline).toBeUndefined()
+      expect(requestSignal?.aborted).toBe(true)
+      request.abort()
+      await wait
+    },
+  )
 
   it("ignores an initial code response after the mounted owner's session ends", async () => {
     let finish!: (response: Response) => void
@@ -567,12 +612,12 @@ describe("AuthProvider token installation", () => {
       await Promise.resolve()
     })
     expect(finish).toBeDefined()
-    act(() => ssoAuthState.endSession())
+    act(() => authSessionState.endSession())
     await act(async () => {
       finish(tokenResponse(initialToken))
       await Promise.resolve()
     })
-    expect(ssoAuthState.isAuthenticated()).toBe(false)
+    expect(authSessionState.isAuthenticated()).toBe(false)
     expect(
       renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
     ).toHaveLength(1)
@@ -594,7 +639,7 @@ describe("AuthProvider token installation", () => {
       resolve(tokenResponse({ ...initialToken, access_token: "late" }))
       await expect(refresh).resolves.toBeUndefined()
     })
-    expect(ssoAuthState.getAuthPayload()).toBeNull()
+    expect(authSessionState.getAuthPayload()).toBeNull()
   })
 
   it("keeps a late rotated token after the wait deadline without aborting fetch", async () => {
@@ -626,14 +671,14 @@ describe("AuthProvider token installation", () => {
           init.body.get("grant_type") === "refresh_token",
       )
     expect(refreshCall?.[1]?.signal?.aborted).toBe(false)
-    expect(ssoAuthState.getAuthPayload()?.refresh_token).toBe("rotated")
+    expect(authSessionState.getAuthPayload()?.refresh_token).toBe("rotated")
   })
 
   it.each([429, 500, 503])(
     "keeps the session on JSON HTTP %s refresh failure",
     async (status) => {
       await mount()
-      const session = ssoAuthState.getAuthPayload()
+      const session = authSessionState.getAuthPayload()
       vi.mocked(fetch).mockResolvedValueOnce(
         new Response(JSON.stringify({ error: "temporarily_unavailable" }), {
           status,
@@ -642,7 +687,7 @@ describe("AuthProvider token installation", () => {
       await expect(
         auth.refreshAuthToken(mocks.settings, "initial-refresh"),
       ).rejects.toThrow(`Identity provider unavailable (HTTP ${status})`)
-      expect(ssoAuthState.getAuthPayload()).toBe(session)
+      expect(authSessionState.getAuthPayload()).toBe(session)
       expect(
         renderer?.root.findAllByProps({ "data-hook": "mock-login" }),
       ).toHaveLength(0)
@@ -659,12 +704,12 @@ describe("AuthProvider token installation", () => {
         auth.refreshAuthToken(mocks.settings, "initial-refresh"),
       ).resolves.toBeUndefined()
     })
-    expect(ssoAuthState.getAuthPayload()).toBeNull()
+    expect(authSessionState.getAuthPayload()).toBeNull()
   })
 
   it("discards an aborted request's late body even before logout", async () => {
     await mount()
-    const session = ssoAuthState.getAuthPayload()
+    const session = authSessionState.getAuthPayload()
     const network = new AbortController()
     const deadline = new AbortController()
     let finishBody!: (body: TokenResponse) => void
@@ -689,7 +734,7 @@ describe("AuthProvider token installation", () => {
       refresh_token: "obsolete",
     })
     await expect(result).resolves.toBeUndefined()
-    expect(ssoAuthState.getAuthPayload()).toBe(session)
+    expect(authSessionState.getAuthPayload()).toBe(session)
     expect(vi.mocked(fetch).mock.lastCall?.[1]?.signal).toBe(network.signal)
   })
 
@@ -711,7 +756,7 @@ describe("AuthProvider token installation", () => {
 
   it("shows a persistent consequence-aware warning and dismisses it on success or logout", async () => {
     await mount()
-    ssoAuthState.markRefreshFailed()
+    authSessionState.markRefreshFailed()
     act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
     expect(mocks.toastError).toHaveBeenCalledWith(expect.any(Object), {
       autoClose: false,
@@ -719,13 +764,13 @@ describe("AuthProvider token installation", () => {
       toastId: "sso-refresh-failed",
     })
     const warning = create(mocks.toastError.mock.calls[0][0])
-    expect(warning.root.findByType("p").children).toEqual([
+    expect(warning.root.findAllByType("span")[0].children).toEqual([
       expect.stringContaining("expires at"),
     ])
     expect(warning.root.findByType("button").children).toEqual([
       "Sign in again",
     ])
-    expect(warning.root.findByType("small").children).toEqual([
+    expect(warning.root.findAllByType("span")[1].children).toEqual([
       "Close any open dialog, then press ",
       "Alt+N",
       " to focus this notification.",
@@ -739,7 +784,7 @@ describe("AuthProvider token installation", () => {
       await auth.refreshAuthToken(mocks.settings, "initial-refresh")
     })
     expect(mocks.toastDismiss).toHaveBeenCalledWith("sso-refresh-failed")
-    expect(ssoAuthState.hasRefreshFailed()).toBe(false)
+    expect(authSessionState.hasRefreshFailed()).toBe(false)
     mocks.toastDismiss.mockClear()
     act(() => auth.logout())
     expect(mocks.toastDismiss).toHaveBeenCalledWith("sso-refresh-failed")
@@ -853,7 +898,7 @@ describe.each([
           login.props.onBasicAuthSuccess()
           await Promise.resolve()
         })
-        const recoveredSession = ssoAuthState.capture()
+        const recoveredSession = authSessionState.capture()
         const callsBefore = vi.mocked(fetch).mock.calls.length
         await act(async () => {
           if (outcome === "network error") rejectCode(new Error("Offline"))
@@ -868,7 +913,7 @@ describe.each([
           await Promise.resolve()
         })
         expect(localStorage.getItem(key)).toBe(value)
-        expect(ssoAuthState.getAuthPayload()).toBeNull()
+        expect(authSessionState.getAuthPayload()).toBeNull()
         expect(recoveredSession.isCurrent()).toBe(true)
         expect(fetch).toHaveBeenCalledTimes(callsBefore)
         expect(
@@ -986,7 +1031,9 @@ describe("AuthProvider bearer expiry", () => {
         expires_at: new Date(refreshExpiry * 1000).toISOString(),
       })
     })
-    expect(ssoAuthState.getAuthPayload()?.id_token).toBe(idToken(refreshExpiry))
+    expect(authSessionState.getAuthPayload()?.id_token).toBe(
+      idToken(refreshExpiry),
+    )
   })
 
   it.each([
@@ -1007,7 +1054,7 @@ describe("AuthProvider bearer expiry", () => {
       signInToken = wireResponse
       await mount()
       expect(auth.sessionData?.expires_at).toBeUndefined()
-      expect(ssoAuthState.getAuthPayload()?.expires_at).toBeUndefined()
+      expect(authSessionState.getAuthPayload()?.expires_at).toBeUndefined()
     },
   )
 
@@ -1024,7 +1071,7 @@ describe("AuthProvider bearer expiry", () => {
         expires_at: undefined,
       })
     })
-    expect(ssoAuthState.getAuthPayload()?.access_token).toBe("renewed")
-    expect(ssoAuthState.getAuthPayload()?.expires_at).toBeUndefined()
+    expect(authSessionState.getAuthPayload()?.access_token).toBe("renewed")
+    expect(authSessionState.getAuthPayload()?.expires_at).toBeUndefined()
   })
 })

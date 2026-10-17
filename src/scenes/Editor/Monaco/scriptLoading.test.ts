@@ -1,17 +1,17 @@
 import "../../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
 import { questExecution } from "../../../utils/questdb/queryExecution"
 import query, { initialState } from "../../../store/Query/reducers"
 import actions from "../../../store/Query/actions"
 import { NotificationType } from "../../../store/Query/types"
 import { createScriptLoading } from "./scriptLoading"
 
-afterEach(() => ssoAuthState.endSession())
+afterEach(() => authSessionState.endSession())
 
 describe("script loading settlement", () => {
   it("settles progress after session reset clears the request's abort target", () => {
-    ssoAuthState.markNonSSOAuthenticated()
+    authSessionState.markNonSSOAuthenticated()
     let state = initialState
     const dispatch = (action: Parameters<typeof query>[1]) => {
       state = query(state, action)
@@ -34,7 +34,7 @@ describe("script loading settlement", () => {
       abortTarget = null
     })
 
-    ssoAuthState.endSession()
+    authSessionState.endSession()
     expect(abortTarget).toBeNull()
     dispatch(
       actions.addNotification(

@@ -7,7 +7,7 @@ import {
   REFRESH_REQUEST_TIMEOUT_MS,
   tokenRefresh,
 } from "./tokenRefresh"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { getTokenExpirationDate } from "../../modules/OAuth2/utils"
@@ -39,13 +39,86 @@ const listen = (type: EventType) => {
 }
 
 afterEach(() => {
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 
 describe("SSO refresh safety", () => {
+  it("retries a forced 401 refresh after backoff even outside the expiry window", async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    authSessionState.setAuthPayload(token())
+    const client = new Client()
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
+      Promise.resolve(
+        (init?.headers as Record<string, string>).Authorization ===
+          "Bearer recovered"
+          ? ok()
+          : unauthorized(),
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const refresh = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("IdP unavailable"))
+      .mockImplementationOnce(() => {
+        const payload = token({ access_token: "recovered" })
+        authSessionState.setAuthPayload(payload)
+        return Promise.resolve(payload)
+      })
+    client.refreshTokenMethod = refresh
+    await expect(client.queryRaw("select 1")).rejects.toMatchObject({
+      requestNotSent: true,
+    })
+    await expect(client.queryRaw("select 1")).rejects.toMatchObject({
+      requestNotSent: true,
+    })
+    expect(refresh).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(REFRESH_RETRY_DELAY_MS)
+    await expect(client.queryRaw("select 1")).resolves.toMatchObject({
+      type: "dml",
+    })
+    expect(refresh).toHaveBeenCalledTimes(2)
+    expect(authSessionState.hasRefreshFailed()).toBe(false)
+  })
+
+  it("retains a rotated token arriving after the query wait when the bearer was already expired", async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    authSessionState.setAuthPayload(
+      token({ expires_at: new Date(Date.now() - 1).toISOString() }),
+    )
+    const client = new Client()
+    const fetchMock = vi.fn().mockImplementation(ok)
+    vi.stubGlobal("fetch", fetchMock)
+    let requestSignal!: AbortSignal
+    client.refreshTokenMethod = (_softDeadline, signal) => {
+      requestSignal = signal
+      return new Promise((resolve) =>
+        setTimeout(() => {
+          const payload = token({ access_token: "rotated" })
+          if (!signal.aborted) authSessionState.setAuthPayload(payload)
+          resolve(payload)
+        }, 15_000),
+      )
+    }
+    const pending = client.queryRaw("select 1").catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(await pending).toMatchObject({ requestNotSent: true })
+    expect(requestSignal.aborted).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(5_000)
+    await expect(client.queryRaw("select 1")).resolves.toMatchObject({
+      type: "dml",
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ headers: { Authorization: "Bearer rotated" } }),
+    )
+  })
+
   it.each([0, 21_000])(
     "preserves the session after a settled transient refresh failure and a SQL 401 delayed %s ms",
     async (delay) => {
@@ -54,7 +127,7 @@ describe("SSO refresh safety", () => {
       const original = token({
         expires_at: new Date(Date.now() + 20_000).toISOString(),
       })
-      ssoAuthState.setAuthPayload(original)
+      authSessionState.setAuthPayload(original)
       const fetchMock = vi.fn(
         () =>
           new Promise<Response>((resolve) => {
@@ -68,7 +141,7 @@ describe("SSO refresh safety", () => {
         .mockRejectedValueOnce(new TypeError("offline"))
         .mockImplementationOnce(() => {
           const payload = token({ access_token: "recovered" })
-          ssoAuthState.setAuthPayload(payload)
+          authSessionState.setAuthPayload(payload)
           return Promise.resolve(payload)
         })
       client.refreshTokenMethod = refresh
@@ -92,10 +165,10 @@ describe("SSO refresh safety", () => {
       }
       try {
         await expectRenewalFailure()
-        expect(tokenRefresh.completion).toBeUndefined()
-        expect(ssoAuthState.getAuthPayload()).toBe(original)
-        expect(ssoAuthState.isAuthenticated()).toBe(true)
-        expect(ssoAuthState.hasRefreshFailed()).toBe(true)
+        expect(tokenRefresh.hardDeadline).toBeUndefined()
+        expect(authSessionState.getAuthPayload()).toBe(original)
+        expect(authSessionState.isAuthenticated()).toBe(true)
+        expect(authSessionState.hasRefreshFailed()).toBe(true)
         expect(refresh).toHaveBeenCalledOnce()
         expect(fetchMock).toHaveBeenCalledOnce()
 
@@ -119,7 +192,7 @@ describe("SSO refresh safety", () => {
             headers: { Authorization: "Bearer recovered" },
           }),
         )
-        expect(ssoAuthState.hasRefreshFailed()).toBe(false)
+        expect(authSessionState.hasRefreshFailed()).toBe(false)
         expect(unauthorizedEvent.listener).not.toHaveBeenCalled()
       } finally {
         unauthorizedEvent.cleanup()
@@ -130,7 +203,7 @@ describe("SSO refresh safety", () => {
 
   it("reports expired-token backoff as not-sent, never as a database outage or uncertain write", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
-    ssoAuthState.setAuthPayload(
+    authSessionState.setAuthPayload(
       token({ expires_at: new Date(Date.now() - 1).toISOString() }),
     )
     const fetchMock = vi.fn()
@@ -169,7 +242,7 @@ describe("SSO refresh safety", () => {
     async (lifetime) => {
       vi.useFakeTimers()
       vi.spyOn(console, "error").mockImplementation(() => {})
-      ssoAuthState.setAuthPayload(
+      authSessionState.setAuthPayload(
         token({ expires_at: new Date(Date.now() + lifetime).toISOString() }),
       )
       const client = new Client()
@@ -181,7 +254,7 @@ describe("SSO refresh safety", () => {
         new Promise((resolve) =>
           setTimeout(() => {
             const payload = token({ access_token: "rotated" })
-            ssoAuthState.setAuthPayload(payload)
+            authSessionState.setAuthPayload(payload)
             resolve(payload)
           }, 15_000),
         )
@@ -196,7 +269,7 @@ describe("SSO refresh safety", () => {
           })
         await vi.advanceTimersByTimeAsync(10_000)
         expect(settled).toBe(false)
-        expect(ssoAuthState.isAuthenticated()).toBe(true)
+        expect(authSessionState.isAuthenticated()).toBe(true)
         expect(unauthorizedEvent.listener).not.toHaveBeenCalled()
         await vi.advanceTimersByTimeAsync(5_000)
         expect((await query).type).toBe("dml")
@@ -225,13 +298,13 @@ describe("SSO refresh safety", () => {
       if (!expiresAt) throw new Error("The test ID token must have an exp")
       return { ...payload, expires_at: expiresAt.toISOString() }
     }
-    ssoAuthState.setAuthPayload(issue())
+    authSessionState.setAuthPayload(issue())
     const fetchMock = vi.fn().mockImplementation(ok)
     vi.stubGlobal("fetch", fetchMock)
     const client = new Client()
     const refresh = vi.fn(() => {
       const payload = issue()
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       // QuestProvider's sessionData effect schedules this after each success.
       void client.queryRaw("SELECT 1")
       return Promise.resolve(payload)
@@ -253,12 +326,12 @@ describe("SSO refresh safety", () => {
     vi.useFakeTimers()
     const issue = () =>
       token({ expires_at: new Date(Date.now() + 2_000).toISOString() })
-    ssoAuthState.setAuthPayload(issue())
+    authSessionState.setAuthPayload(issue())
     vi.stubGlobal("fetch", vi.fn().mockImplementation(ok))
     const client = new Client()
     client.refreshTokenMethod = vi.fn(() => {
       const payload = issue()
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       return Promise.resolve(payload)
     })
     await client.queryRaw("SELECT 1")
@@ -274,7 +347,7 @@ describe("SSO refresh safety", () => {
 
   it("does not throttle a short-lived token past its expiry", async () => {
     vi.useFakeTimers()
-    ssoAuthState.setAuthPayload(
+    authSessionState.setAuthPayload(
       token({ expires_at: new Date(Date.now() + 20_000).toISOString() }),
     )
     vi.stubGlobal("fetch", vi.fn().mockImplementation(ok))
@@ -283,7 +356,7 @@ describe("SSO refresh safety", () => {
       const payload = token({
         expires_at: new Date(Date.now() + 20_000).toISOString(),
       })
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       return Promise.resolve(payload)
     })
     await client.queryRaw("SELECT 1")
@@ -293,7 +366,7 @@ describe("SSO refresh safety", () => {
   })
 
   it("refreshes and retries a current-bearer 401 once when the browser clock is behind", async () => {
-    ssoAuthState.setAuthPayload(token()) // The browser thinks expiry is far away.
+    authSessionState.setAuthPayload(token()) // The browser thinks expiry is far away.
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(unauthorized)
@@ -303,7 +376,7 @@ describe("SSO refresh safety", () => {
     client.setCommonHeaders({ Authorization: "Bearer old" })
     client.refreshTokenMethod = vi.fn(() => {
       const payload = token({ access_token: "new" })
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       return Promise.resolve(payload)
     })
     const { listener, cleanup } = listen(EventType.MSG_CONNECTION_UNAUTHORIZED)
@@ -322,14 +395,14 @@ describe("SSO refresh safety", () => {
   })
 
   it("publishes one unauthorized event if the retried token is also rejected", async () => {
-    ssoAuthState.setAuthPayload(token())
+    authSessionState.setAuthPayload(token())
     const fetchMock = vi.fn().mockImplementation(unauthorized)
     vi.stubGlobal("fetch", fetchMock)
     const client = new Client()
     client.setCommonHeaders({ Authorization: "Bearer old" })
     client.refreshTokenMethod = vi.fn(() => {
       const payload = token({ access_token: "new" })
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       return Promise.resolve(payload)
     })
     const { listener, cleanup } = listen(EventType.MSG_CONNECTION_UNAUTHORIZED)
@@ -348,7 +421,7 @@ describe("SSO refresh safety", () => {
   it("never refreshes a token of unknown expiry, and reports its 401", async () => {
     // Given a provider that sent no lifetime, although it sent a refresh token
     const { expires_at: _, ...unknownExpiry } = token()
-    ssoAuthState.setAuthPayload(unknownExpiry)
+    authSessionState.setAuthPayload(unknownExpiry)
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(ok)
@@ -382,7 +455,7 @@ describe("SSO refresh safety", () => {
   ])(
     "keeps a write definitively not-sent when refresh ends the session after $requests SQL requests",
     async ({ lifetime, requests }) => {
-      ssoAuthState.setAuthPayload(
+      authSessionState.setAuthPayload(
         token({ expires_at: new Date(Date.now() + lifetime).toISOString() }),
       )
       const fetchMock = vi.fn().mockImplementation(unauthorized)
@@ -390,7 +463,7 @@ describe("SSO refresh safety", () => {
       const client = new Client()
       client.setCommonHeaders({ Authorization: "Bearer old" })
       client.refreshTokenMethod = () => {
-        ssoAuthState.clearAuthPayload()
+        authSessionState.endSession()
         return Promise.resolve(undefined)
       }
       const { listener, cleanup } = listen(EventType.MSG_CONNECTION_ERROR)
@@ -421,7 +494,7 @@ describe("SSO refresh safety", () => {
   ])(
     "keeps a cancelled write definitively not-sent while refreshing after $requests SQL requests",
     async ({ lifetime, requests }) => {
-      ssoAuthState.setAuthPayload(
+      authSessionState.setAuthPayload(
         token({ expires_at: new Date(Date.now() + lifetime).toISOString() }),
       )
       const fetchMock = vi.fn().mockImplementation(unauthorized)
@@ -449,7 +522,7 @@ describe("SSO refresh safety", () => {
         controller.signal,
       )
       await started
-      const completion = tokenRefresh.completion
+      const completion = tokenRefresh.hardDeadline
       controller.abort()
       const result = await pending
       expect(result).toMatchObject({
@@ -477,7 +550,7 @@ describe("SSO refresh safety", () => {
         access_token: "renewed",
         refresh_token: "rotated",
       })
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       finishRefresh(payload)
       await completion
       expect(fetchMock).toHaveBeenCalledTimes(requests)
@@ -488,7 +561,7 @@ describe("SSO refresh safety", () => {
   it.each([false, true])(
     "keeps cancellation of an unconfirmed SQL fetch uncertain (retry: %s)",
     async (retry) => {
-      ssoAuthState.setAuthPayload(token())
+      authSessionState.setAuthPayload(token())
       let startRequest!: () => void
       const started = new Promise<void>((resolve) => {
         startRequest = resolve
@@ -507,7 +580,7 @@ describe("SSO refresh safety", () => {
       const client = new Client()
       client.refreshTokenMethod = () => {
         const payload = token({ access_token: "renewed" })
-        ssoAuthState.setAuthPayload(payload)
+        authSessionState.setAuthPayload(payload)
         return Promise.resolve(payload)
       }
       const controller = new AbortController()
@@ -531,7 +604,7 @@ describe("SSO refresh safety", () => {
   )
 
   it("keeps an in-flight write uncertain when its session ends", async () => {
-    ssoAuthState.setAuthPayload(token())
+    authSessionState.setAuthPayload(token())
     let finish!: (response: Response) => void
     vi.stubGlobal(
       "fetch",
@@ -542,7 +615,7 @@ describe("SSO refresh safety", () => {
       "INSERT INTO trades VALUES (1)",
       100,
     )
-    ssoAuthState.clearAuthPayload()
+    authSessionState.endSession()
     finish(ok())
     const failure = await pending
     expect(failure).toMatchObject({ type: "error", sessionEnded: true })
@@ -552,7 +625,7 @@ describe("SSO refresh safety", () => {
   })
 
   it("does not let an old in-flight refresh block or overwrite a new login", async () => {
-    ssoAuthState.setAuthPayload(
+    authSessionState.setAuthPayload(
       token({ expires_at: new Date(Date.now() + 20_000).toISOString() }),
     )
     const fetchMock = vi.fn().mockImplementation(ok)
@@ -568,8 +641,8 @@ describe("SSO refresh safety", () => {
       error: "Your session has ended. Please sign in again.",
     })
     await Promise.resolve()
-    ssoAuthState.clearAuthPayload()
-    ssoAuthState.setAuthPayload(
+    authSessionState.endSession()
+    authSessionState.setAuthPayload(
       token({
         access_token: "new-login",
         expires_at: new Date(Date.now() + 20_000).toISOString(),
@@ -577,7 +650,7 @@ describe("SSO refresh safety", () => {
     )
     client.refreshTokenMethod = () => {
       const payload = token({ access_token: "new-refreshed" })
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       return Promise.resolve(payload)
     }
     await client.queryRaw("SELECT 1")
@@ -596,7 +669,7 @@ describe("SSO refresh safety", () => {
   it("caps failure backoff at expiry so a recovered provider gets another chance", async () => {
     vi.useFakeTimers()
     const expiry = Date.now() + 30_000
-    ssoAuthState.setAuthPayload(
+    authSessionState.setAuthPayload(
       token({ expires_at: new Date(expiry).toISOString() }),
     )
     vi.stubGlobal("fetch", vi.fn().mockImplementation(ok))
@@ -613,13 +686,13 @@ describe("SSO refresh safety", () => {
     expect(refresh).toHaveBeenCalledTimes(3)
     refresh.mockImplementationOnce(() => {
       const payload = token({ access_token: "recovered" })
-      ssoAuthState.setAuthPayload(payload)
+      authSessionState.setAuthPayload(payload)
       return Promise.resolve(payload)
     })
     await vi.advanceTimersByTimeAsync(14_000)
     await client.queryRaw("SELECT 4")
     expect(refresh).toHaveBeenCalledTimes(4)
-    expect(ssoAuthState.hasRefreshFailed()).toBe(false)
+    expect(authSessionState.hasRefreshFailed()).toBe(false)
   })
 })
 
@@ -627,7 +700,7 @@ describe("transient post-expiry refresh recovery", () => {
   it("does not send an expired bearer during backoff and recovers on retry", async () => {
     vi.useFakeTimers()
     vi.spyOn(console, "error").mockImplementation(() => {})
-    ssoAuthState.setAuthPayload(
+    authSessionState.setAuthPayload(
       token({ expires_at: new Date(Date.now() - 1_000).toISOString() }),
     )
     const fetchMock = vi
@@ -640,7 +713,7 @@ describe("transient post-expiry refresh recovery", () => {
       .mockRejectedValueOnce(new TypeError("offline"))
       .mockImplementationOnce(() => {
         const payload = token({ access_token: "recovered" })
-        ssoAuthState.setAuthPayload(payload)
+        authSessionState.setAuthPayload(payload)
         return Promise.resolve(payload)
       })
     client.refreshTokenMethod = refresh
@@ -670,7 +743,7 @@ describe("transient post-expiry refresh recovery", () => {
   it("keeps the session during repeated transient post-expiry failures", async () => {
     vi.useFakeTimers()
     vi.spyOn(console, "error").mockImplementation(() => {})
-    ssoAuthState.setAuthPayload(
+    authSessionState.setAuthPayload(
       token({ expires_at: new Date(Date.now() - 1_000).toISOString() }),
     )
     const fetchMock = vi.fn().mockImplementation(ok)
@@ -692,7 +765,7 @@ describe("transient post-expiry refresh recovery", () => {
         type: "error",
       })
       expect(listener).not.toHaveBeenCalled()
-      expect(ssoAuthState.isAuthenticated()).toBe(true)
+      expect(authSessionState.isAuthenticated()).toBe(true)
       expect(fetchMock).not.toHaveBeenCalled()
     } finally {
       cleanup()
@@ -700,11 +773,11 @@ describe("transient post-expiry refresh recovery", () => {
   })
 
   it.each([20_000, 300_000])(
-    "frees and aborts a hung slot by expiry or the hard cap (%s ms lifetime)",
+    "frees and aborts a hung slot at the fixed hard deadline (%s ms lifetime)",
     async (lifetime) => {
       vi.useFakeTimers()
       vi.spyOn(console, "error").mockImplementation(() => {})
-      ssoAuthState.setAuthPayload(
+      authSessionState.setAuthPayload(
         token({ expires_at: new Date(Date.now() + lifetime).toISOString() }),
       )
       vi.stubGlobal(
@@ -724,13 +797,13 @@ describe("transient post-expiry refresh recovery", () => {
       await vi.advanceTimersByTimeAsync(10_000)
       expect(requests).toHaveLength(1)
       expect(requests[0].aborted).toBe(false)
-      const duration = Math.min(lifetime, REFRESH_REQUEST_TIMEOUT_MS)
+      const duration = REFRESH_REQUEST_TIMEOUT_MS
       await vi.advanceTimersByTimeAsync(duration - 10_000)
       expect(requests[0].aborted).toBe(true)
       await first
       client.refreshTokenMethod = vi.fn(() => {
         const payload = token({ access_token: "recovered" })
-        ssoAuthState.setAuthPayload(payload)
+        authSessionState.setAuthPayload(payload)
         return Promise.resolve(payload)
       })
       // Move into the refresh window for the long-lifetime case.
@@ -754,7 +827,7 @@ describe("query completion session isolation", () => {
       "discards HTTP %s after refresh logout and password re-login",
       async (status) => {
         vi.useFakeTimers()
-        ssoAuthState.setAuthPayload(
+        authSessionState.setAuthPayload(
           token({
             expires_at: new Date(Date.now() + 60_000).toISOString(),
           }),
@@ -789,13 +862,13 @@ describe("query completion session isolation", () => {
         })
         await vi.advanceTimersByTimeAsync(31_000)
         client.refreshTokenMethod = () => {
-          ssoAuthState.clearAuthPayload()
+          authSessionState.endSession()
           return Promise.resolve(undefined)
         }
         await expect(client.queryRaw("SELECT 1")).rejects.toMatchObject({
           sessionEnded: true,
         })
-        ssoAuthState.markNonSSOAuthenticated()
+        authSessionState.markNonSSOAuthenticated()
         client.setCommonHeaders({ Authorization: "Bearer new-user" })
         publish.mockClear()
 
@@ -804,7 +877,7 @@ describe("query completion session isolation", () => {
 
         expect(commitCatalog).not.toHaveBeenCalled()
         expect(publish).not.toHaveBeenCalled()
-        expect(ssoAuthState.isAuthenticated()).toBe(true)
+        expect(authSessionState.isAuthenticated()).toBe(true)
       },
     )
   })
@@ -812,7 +885,7 @@ describe("query completion session isolation", () => {
   it.each(["network", "body"] as const)(
     "suppresses an old session's delayed %s failure",
     async (phase) => {
-      ssoAuthState.setAuthPayload(token())
+      authSessionState.setAuthPayload(token())
       let fail!: (error: Error) => void
       const pending = new Promise<never>((_, reject) => {
         fail = reject
@@ -836,8 +909,8 @@ describe("query completion session isolation", () => {
       })
       if (phase === "body")
         await vi.waitFor(() => expect(readBody).toHaveBeenCalled())
-      ssoAuthState.clearAuthPayload()
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.endSession()
+      authSessionState.markNonSSOAuthenticated()
       fail(new Error("Old request failed"))
       await rejected
       expect(publish).not.toHaveBeenCalled()
@@ -847,7 +920,7 @@ describe("query completion session isolation", () => {
   it.each([200, 403, 502])(
     "discards a password session's delayed HTTP %s result after re-login",
     async (status) => {
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
       let finish!: (response: Response) => void
       vi.stubGlobal(
         "fetch",
@@ -865,8 +938,8 @@ describe("query completion session isolation", () => {
       const rejected = expect(query).rejects.toMatchObject({
         sessionEnded: true,
       })
-      ssoAuthState.clearAuthPayload()
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.endSession()
+      authSessionState.markNonSSOAuthenticated()
       client.setCommonHeaders({ Authorization: "Bearer user-b" })
       finish(
         new Response(
@@ -876,12 +949,12 @@ describe("query completion session isolation", () => {
       )
       await rejected
       expect(publish).not.toHaveBeenCalled()
-      expect(ssoAuthState.isAuthenticated()).toBe(true)
+      expect(authSessionState.isAuthenticated()).toBe(true)
     },
   )
 
   it("allows a delayed result after token refresh in the same session", async () => {
-    ssoAuthState.setAuthPayload(token())
+    authSessionState.setAuthPayload(token())
     let finish!: (response: Response) => void
     vi.stubGlobal(
       "fetch",
@@ -894,7 +967,7 @@ describe("query completion session isolation", () => {
     )
     const client = new Client()
     const query = client.showTables()
-    ssoAuthState.setAuthPayload(token({ access_token: "refreshed" }))
+    authSessionState.setAuthPayload(token({ access_token: "refreshed" }))
     finish(new Response(resultBody))
     await expect(query).resolves.toMatchObject({
       type: "dql",

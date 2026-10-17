@@ -39,6 +39,7 @@ import { hasPendingResult, statementKeysFor } from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
 import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
+import { CANCELLED_BY_USER } from "../../../modules/OAuth2/session"
 
 export type DrawGateOutcome =
   | { granted: true }
@@ -114,7 +115,7 @@ const cancelledExecResult = (query: string): QueryExecResult => ({
   columns: [],
   dataset: [],
   count: 0,
-  error: "Cancelled by user",
+  error: CANCELLED_BY_USER,
 })
 
 type StatementLaunch =
@@ -905,7 +906,7 @@ export const useCellExecution = ({
             columns: [],
             dataset: [],
             count: 0,
-            error: "Cancelled by user",
+            error: CANCELLED_BY_USER,
           }
         }
         if (ac.signal.aborted || !isCurrentRun()) return notCommitted
@@ -1015,7 +1016,7 @@ export const useCellExecution = ({
         updateCellResult(
           cellId,
           index,
-          errorResult(target.query, "Cancelled by user"),
+          errorResult(target.query, CANCELLED_BY_USER),
         )
       }
     },

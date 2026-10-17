@@ -69,6 +69,8 @@ export const initialState: QueryStateShape = {
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
   switch (action.type) {
+    case QueryAT.RESET_SESSION:
+      return initialState
     case QueryAT.ADD_NOTIFICATION: {
       const {
         query: queryText,
@@ -253,6 +255,10 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         if (!matches(group?.latest)) continue
         if (updatedBufferNotifications === bufferNotifications) {
           updatedBufferNotifications = { ...bufferNotifications }
+        }
+        if (action.payload.discardPrevious) {
+          delete updatedBufferNotifications[key]
+          continue
         }
         const { regular, explain } = group
         const latest =

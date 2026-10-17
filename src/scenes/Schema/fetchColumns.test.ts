@@ -1,6 +1,6 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { Client } from "../../utils/questdb/client"
 import { Type } from "../../utils/questdb/types"
 import { fetchColumns } from "./fetchColumns"
@@ -29,7 +29,7 @@ const response = () =>
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] })
-  ssoAuthState.setAuthPayload({
+  authSessionState.setAuthPayload({
     access_token: "old",
     refresh_token: "refresh",
     token_type: "Bearer",
@@ -38,7 +38,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
@@ -130,13 +130,13 @@ describe("schema columns compatibility queries", () => {
 
       vi.setSystemTime(Date.now() + 31_000)
       client.refreshTokenMethod = () => {
-        ssoAuthState.clearAuthPayload()
+        authSessionState.endSession()
         return Promise.resolve(undefined)
       }
       await expect(client.queryRaw("select 2")).rejects.toMatchObject({
         sessionEnded: true,
       })
-      if (relogin) ssoAuthState.markNonSSOAuthenticated()
+      if (relogin) authSessionState.markNonSSOAuthenticated()
       finish(response())
       await loading
 
@@ -168,7 +168,7 @@ describe("schema columns compatibility queries", () => {
     const onError = vi.fn()
     const loading = fetchColumns(new Client(), onColumns, onError)
     await fallbackStarted
-    ssoAuthState.clearAuthPayload()
+    authSessionState.endSession()
     finish(response())
     await loading
 
@@ -195,7 +195,7 @@ describe("schema columns compatibility queries", () => {
   it("checks the operation generation even if its query implementation returns stale data", async () => {
     const client = new Client()
     const queryRaw = vi.spyOn(client, "queryRaw").mockImplementation(() => {
-      ssoAuthState.clearAuthPayload()
+      authSessionState.endSession()
       return Promise.resolve({
         type: Type.DQL,
         columns: [],

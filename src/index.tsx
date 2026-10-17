@@ -50,6 +50,8 @@ import {
 } from "./components"
 import { ScreenSizeProvider } from "./hooks"
 import { rootEpic, rootReducer } from "./store"
+import queryActions from "./store/Query/actions"
+import { authSessionState } from "./modules/OAuth2/ssoAuthState"
 import { StoreAction, StoreShape } from "./types"
 
 import Layout from "./scenes/Layout"
@@ -69,6 +71,12 @@ const epicMiddleware = createEpicMiddleware<
 >()
 
 const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
+
+// This listener belongs to the document, not AuthProvider: settings recovery
+// can temporarily unmount every auth owner while an old request settles.
+authSessionState.onEnd(({ reload } = {}) => {
+  if (!reload) store.dispatch(queryActions.resetSession())
+})
 
 epicMiddleware.run(rootEpic)
 

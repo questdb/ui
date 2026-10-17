@@ -9,6 +9,7 @@ import {
 } from "./sourceState"
 import type { SourceFetchOutcome, SourceState } from "./types"
 import { createCatalogRequestDeadline } from "./requestDeadline"
+import { isCancelledByUser } from "../../modules/OAuth2/session"
 
 type Params<T> = {
   sourceKey: string
@@ -27,12 +28,6 @@ type CatalogSource<T> = {
   fetchNow: () => Promise<SourceFetchOutcome>
   poll: () => Promise<SourceFetchOutcome>
 }
-
-const isCancelledRequest = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "error" in error &&
-  error.error === "Cancelled by user"
 
 export const useCatalogSource = <T>({
   sourceKey,
@@ -108,7 +103,7 @@ export const useCatalogSource = <T>({
       ) {
         return "skipped"
       }
-      if (isCancelledRequest(error) && !timedOut) return "skipped"
+      if (isCancelledByUser(error) && !timedOut) return "skipped"
 
       setMachine((previous) =>
         nextSourceState(

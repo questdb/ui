@@ -76,6 +76,7 @@ const Container = styled.div<{ $hasRedirectError: boolean }>`
   font-size: 16px;
 `
 const Title = styled.h2`
+  outline: none;
   width: 100%;
   color: ${({ theme }) => theme.color.contentPrimary};
   font-weight: 600;

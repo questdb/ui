@@ -41,8 +41,8 @@ import { createMacaronsTheme } from "./utils/macarons"
 import { arrayEquals } from "./array-equals"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { isSessionEnded } from "../../modules/OAuth2/session"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { isSessionEnded, isCancelledByUser } from "../../modules/OAuth2/session"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { escapeHtml } from "../../utils/escapeHtml"
 import * as QuestDB from "../../utils/questdb"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -257,7 +257,7 @@ export function quickVis(
 
   async function executeQueryAndDraw() {
     const token = ++executionToken
-    const session = ssoAuthState.capture()
+    const session = authSessionState.capture()
     const queryKey = createDetachedQueryKey(query)
     const releaseIfOwner = () => {
       if (token !== executionToken) return
@@ -330,7 +330,7 @@ export function quickVis(
           token === executionToken &&
           session.isCurrent() &&
           !isSessionEnded(error) &&
-          error?.error !== "Cancelled by user"
+          !isCancelledByUser(error)
         ) {
           handleServerError(error)
         }

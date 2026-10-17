@@ -4,6 +4,7 @@ import { QuestContext } from "../../../providers"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import * as QuestDB from "../../../utils/questdb"
 import type { Client, QueryId } from "../../../utils/questdb/client"
+import { isCancelledByUser } from "../../../modules/OAuth2/session"
 
 /**
  * The chart downsamples on render — line families with LTTB, scatter and bar
@@ -12,9 +13,6 @@ import type { Client, QueryId } from "../../../utils/questdb/client"
  * two-column result, and matches the cap notebook cells already fetch with.
  */
 export const CHART_ROW_LIMIT = 10_000
-
-// The client rejects an aborted request with this exact message.
-const CANCELLED_ERROR = "Cancelled by user"
 
 export type ChartQueryState =
   | { status: "idle" }
@@ -142,7 +140,7 @@ export const useChartQuery = ({ seed, enabled }: Params): ChartQuery => {
       .catch((error: { error?: string }) => {
         if (superseded) return
         activeQueryIdRef.current = null
-        if (error?.error === CANCELLED_ERROR) {
+        if (isCancelledByUser(error)) {
           setState(CANCELLED)
           return
         }

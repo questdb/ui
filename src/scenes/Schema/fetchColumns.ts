@@ -1,5 +1,5 @@
-import { isSessionEnded } from "../../modules/OAuth2/session"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { endedFor } from "../../modules/OAuth2/session"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { Type } from "../../utils/questdb/types"
 import type { InformationSchemaColumn } from "../../utils/questdb/types"
 import type { Client } from "../../utils/questdb/client"
@@ -11,7 +11,7 @@ export const fetchColumns = async (
   onColumns: (columns: InformationSchemaColumn[]) => void,
   onError: (error: unknown) => void,
 ): Promise<void> => {
-  const { isCurrent: isCurrentSession } = ssoAuthState.capture()
+  const session = authSessionState.capture()
   const queries = [
     "information_schema.questdb_columns()",
     "information_schema.columns()", // fallback for older servers
@@ -19,21 +19,20 @@ export const fetchColumns = async (
 
   let failure: unknown = new Error("Could not load schema columns.")
   for (const query of queries) {
-    if (!isCurrentSession()) return
+    if (endedFor(session)) return
     try {
       const response = await quest.query<InformationSchemaColumn>(query)
-      if (!isCurrentSession()) return
+      if (endedFor(session)) return
       if (response?.type === Type.DQL) {
         onColumns(response.data)
         return
       }
-      if (response?.type === Type.ERROR) failure = response
     } catch (error) {
-      if (!isCurrentSession() || isSessionEnded(error)) return
-      failure = error
       // Only ordinary query failures are eligible for the compatibility retry.
+      if (endedFor(session, error)) return
+      failure = error
     }
   }
 
-  if (isCurrentSession()) onError(failure)
+  if (!endedFor(session)) onError(failure)
 }

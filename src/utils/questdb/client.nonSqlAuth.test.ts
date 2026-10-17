@@ -1,6 +1,6 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
 import { Client } from "./client"
 
 const commonHeaders = {
@@ -8,7 +8,7 @@ const commonHeaders = {
   "X-Other": "keep",
 }
 const installToken = (generation: string, groupsEncoded: boolean) => {
-  ssoAuthState.setAuthPayload({
+  authSessionState.setAuthPayload({
     access_token: `${generation}-access`,
     id_token: `${generation}-id`,
     token_type: "Bearer",
@@ -91,7 +91,7 @@ const expectUploadHeaders = (
 }
 
 afterEach(() => {
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -152,9 +152,59 @@ describe.each([
   },
 )
 
+describe("non-SQL refresh coordination", () => {
+  it.each([...fetchRequests, { name: "uploadCSVFile", run: upload }])(
+    "$name waits for renewal and sends only the fresh bearer",
+    async ({ run }) => {
+      const requests = mockUploadRequests()
+      const fetchMock = vi.fn(() => Promise.resolve(new Response("{}")))
+      vi.stubGlobal("fetch", fetchMock)
+      authSessionState.setAuthPayload({
+        access_token: "expired",
+        refresh_token: "refresh",
+        token_type: "Bearer",
+        expires_at: new Date(Date.now() - 1).toISOString(),
+      })
+      const client = new Client()
+      let finish!: () => void
+      client.refreshTokenMethod = () =>
+        new Promise((resolve) => {
+          finish = () => {
+            const payload = {
+              access_token: "fresh",
+              token_type: "Bearer",
+              expires_at: new Date(Date.now() + 300_000).toISOString(),
+            }
+            authSessionState.setAuthPayload(payload)
+            resolve(payload)
+          }
+        })
+      const pending = run(client)
+      await Promise.resolve()
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(requests).toHaveLength(0)
+      finish()
+      await pending
+      if (requests.length) {
+        expect(requests[0].setRequestHeader).toHaveBeenCalledWith(
+          "Authorization",
+          "Bearer fresh",
+        )
+      } else {
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            headers: { Authorization: "Bearer fresh" },
+          }),
+        )
+      }
+    },
+  )
+})
+
 describe("non-SQL authorization outside SSO", () => {
   it.each(fetchRequests)("$name preserves common headers", async ({ run }) => {
-    ssoAuthState.markNonSSOAuthenticated()
+    authSessionState.markNonSSOAuthenticated()
     const fetchMock = vi.fn(() => Promise.resolve(new Response("{}")))
     vi.stubGlobal("fetch", fetchMock)
     const client = new Client()
@@ -169,7 +219,7 @@ describe("non-SQL authorization outside SSO", () => {
   })
 
   it("uploadCSVFile preserves common headers", async () => {
-    ssoAuthState.markNonSSOAuthenticated()
+    authSessionState.markNonSSOAuthenticated()
     const requests = mockUploadRequests()
     const client = new Client()
     client.setCommonHeaders(commonHeaders)

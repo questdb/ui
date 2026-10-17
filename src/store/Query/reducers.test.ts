@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import query, { initialState } from "./reducers"
 import actions from "./actions"
 import { NotificationType } from "./types"
+import { Type } from "../../utils/questdb/types"
 import type { QueryKey, QueryNotifications, QueryStateShape } from "./types"
 
 const BUFFER_ID = 1
@@ -24,6 +25,40 @@ const stateWithGroups = (
   ...initialState,
   notifications: Object.values(groups).map((group) => group.latest),
   queryNotifications: { [BUFFER_ID]: groups },
+})
+
+describe("query reducer — session cleanup", () => {
+  it("removes the previous user's result, catalog and query history", () => {
+    const state = query(
+      initialState,
+      actions.addNotification(
+        { query: "select secret@0-0", content: "private" },
+        BUFFER_ID,
+      ),
+    )
+    const withResult: QueryStateShape = {
+      ...state,
+      result: {
+        type: Type.DQL,
+        query: "select secret",
+        columns: [],
+        dataset: [["private"]],
+        count: 1,
+        notice: undefined,
+        error: undefined,
+        timings: {
+          compiler: 0,
+          authentication: 0,
+          count: 0,
+          execute: 0,
+          fetch: 0,
+        },
+      },
+      tables: [{ table_name: "private" } as never],
+      columns: { private: [] },
+    }
+    expect(query(withResult, actions.resetSession())).toEqual(initialState)
+  })
 })
 
 describe("query reducer — UPDATE_NOTIFICATION_KEY", () => {

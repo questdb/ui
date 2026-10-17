@@ -11,7 +11,7 @@ import {
   type QueryAction,
 } from "../store/Query/types"
 import { Client, Type } from "./questdb"
-import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../modules/OAuth2/ssoAuthState"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import reducer, { initialState } from "../store/Query/reducers"
@@ -53,7 +53,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -149,7 +149,7 @@ describe("runDetachedQuery", () => {
         token_type: "Bearer",
         expires_at: new Date(Date.now() + 60_000).toISOString(),
       })
-      ssoAuthState.setAuthPayload(issue())
+      authSessionState.setAuthPayload(issue())
       const client = new Client()
       client.setCommonHeaders({ Authorization: "Bearer old-user" })
       const result = {
@@ -175,13 +175,13 @@ describe("runDetachedQuery", () => {
       const execution = runDetachedQuery(config)
       await vi.advanceTimersByTimeAsync(31_000)
       client.refreshTokenMethod = vi.fn(() => {
-        ssoAuthState.clearAuthPayload()
+        authSessionState.endSession()
         return Promise.resolve(undefined)
       })
       await expect(client.queryRaw("query_activity()")).rejects.toMatchObject({
         sessionEnded: true,
       })
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
       client.setCommonHeaders({ Authorization: "Bearer new-user" })
       finish()
       await execution
@@ -199,6 +199,40 @@ describe("runDetachedQuery", () => {
       expectSettled()
     },
   )
+
+  it("does not resurrect an earlier AI query success after a sent run loses its session", async () => {
+    config.isLoadingNotificationPublished = () => true
+    let state = reducer(
+      initialState,
+      actions.addNotification(
+        { query: config.queryKey, content: "Old success" },
+        config.namespaceKey,
+      ),
+    )
+    state = reducer(
+      state,
+      actions.addNotification(
+        {
+          query: config.queryKey,
+          queryId: 1,
+          type: NotificationType.LOADING,
+          content: "Running",
+        },
+        config.namespaceKey,
+      ),
+    )
+    config.dispatch = (action) => {
+      state = reducer(state, action)
+      return action
+    }
+    queryRaw.mockReturnValue({
+      queryId: 1,
+      promise: Promise.reject({ sessionEnded: true }),
+    })
+    await runDetachedQuery(config)
+    expect(state.queryNotifications.chat[config.queryKey]).toBeUndefined()
+    expect(state.activeNotification).toBeNull()
+  })
 
   it("settles already-published loading state on session end", async () => {
     config.isLoadingNotificationPublished = () => true
@@ -258,8 +292,8 @@ describe("runDetachedQuery", () => {
       return action
     }
     const execution = runDetachedQuery(config)
-    ssoAuthState.clearAuthPayload()
-    ssoAuthState.markNonSSOAuthenticated()
+    authSessionState.endSession()
+    authSessionState.markNonSSOAuthenticated()
     reject({ error: "Old request failed" })
     await execution
 
@@ -287,11 +321,17 @@ describe("runDetachedQuery", () => {
   })
 
   it("still publishes after a background refresh in the same session", async () => {
-    ssoAuthState.setAuthPayload({ access_token: "old", token_type: "Bearer" })
+    authSessionState.setAuthPayload({
+      access_token: "old",
+      token_type: "Bearer",
+    })
     const result = { type: Type.DML as const, query: config.normalizedSQL }
     queryRaw.mockReturnValue({ queryId: 1, promise: Promise.resolve(result) })
     const execution = runDetachedQuery(config)
-    ssoAuthState.setAuthPayload({ access_token: "fresh", token_type: "Bearer" })
+    authSessionState.setAuthPayload({
+      access_token: "fresh",
+      token_type: "Bearer",
+    })
     await execution
 
     expect(dispatch).toHaveBeenCalledWith(actions.setResult(result))

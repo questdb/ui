@@ -16,8 +16,8 @@ import * as QuestDB from "./questdb"
 import type { ExecutionRefs } from "../scenes/Editor/index"
 import type { Dispatch } from "redux"
 import actions from "../store/Query/actions"
-import { isSessionEnded } from "../modules/OAuth2/session"
-import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
+import { endedFor } from "../modules/OAuth2/session"
+import { authSessionState } from "../modules/OAuth2/ssoAuthState"
 
 export type RunDetachedQueryConfig = {
   normalizedSQL: string
@@ -45,17 +45,21 @@ export async function runDetachedQuery(
     releaseExecution,
   } = config
 
-  const session = ssoAuthState.capture()
+  const session = authSessionState.capture()
   const { promise, queryId } = quest.queryRaw(normalizedSQL, {
     limit: "0,1000",
     explain: true,
     cancellable: true,
   })
   config.onQueryStarted?.(queryId)
+  let discardPrevious = false
 
   try {
     const result = await promise
-    if (!session.isCurrent()) return
+    if (!session.isCurrent()) {
+      discardPrevious = true
+      return
+    }
 
     if (!executionRefs.current[namespaceKey]) {
       executionRefs.current[namespaceKey] = {}
@@ -122,9 +126,12 @@ export async function runDetachedQuery(
     }
   } catch (_error: unknown) {
     const error = _error as Partial<QuestDB.ErrorResult> & { message?: string }
-    // Login already reports the ended session; do not carry this error into
-    // the next login. The finally block still settles and releases execution.
-    if (isSessionEnded(error) || !session.isCurrent()) return
+    if (endedFor(session, error)) {
+      // A sent statement has an unknown outcome. Do not restore an older
+      // success when the loading notification settles after in-tab re-login.
+      discardPrevious = !error.requestNotSent
+      return
+    }
 
     if (!executionRefs.current[namespaceKey]) {
       executionRefs.current[namespaceKey] = {}
@@ -153,7 +160,7 @@ export async function runDetachedQuery(
     )
   } finally {
     if (config.isLoadingNotificationPublished?.()) {
-      dispatch(actions.settleLoadingNotification(queryId))
+      dispatch(actions.settleLoadingNotification(queryId, discardPrevious))
     }
     config.onSettled?.()
     releaseExecution(queryKey)

@@ -1,25 +1,25 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { StoreKey } from "../../utils/localStorage/types"
-import { ssoAuthState } from "./ssoAuthState"
+import { authSessionState } from "./ssoAuthState"
 import { handleSSOUnauthorized } from "./handleUnauthorized"
 import type { AuthPayload } from "./types"
 
 afterEach(() => {
   localStorage.clear()
-  ssoAuthState.clearAuthPayload()
+  authSessionState.endSession()
 })
 
 const login = () => {
-  ssoAuthState.setAuthPayload({ access_token: "token" } as AuthPayload)
+  authSessionState.setAuthPayload({ access_token: "token" } as AuthPayload)
   localStorage.setItem(StoreKey.SSO_SESSION_ACTIVE, "true")
 }
 
 describe("SSO unauthorized responses", () => {
   it("ignores a burst of 401s after logout and preserves the refresh error", () => {
     login()
-    ssoAuthState.markRefreshFailed()
-    const logout = vi.fn(() => ssoAuthState.clearAuthPayload())
+    authSessionState.markRefreshFailed()
+    const logout = vi.fn(() => authSessionState.endSession())
 
     for (let i = 0; i < 6; i++) handleSSOUnauthorized(logout)
 
@@ -36,9 +36,9 @@ describe("SSO unauthorized responses", () => {
     "handles the current tab's 401 even after another tab removes %s",
     (key) => {
       localStorage.setItem(key, "credential")
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
       localStorage.removeItem(key)
-      const logout = vi.fn(() => ssoAuthState.clearAuthPayload())
+      const logout = vi.fn(() => authSessionState.endSession())
       handleSSOUnauthorized(logout)
       handleSSOUnauthorized(logout)
       expect(logout).toHaveBeenCalledTimes(1)
@@ -54,16 +54,16 @@ describe("SSO unauthorized responses", () => {
   })
 
   it("handles a new password login after the previous session logged out", () => {
-    const logout = vi.fn(() => ssoAuthState.clearAuthPayload())
+    const logout = vi.fn(() => authSessionState.endSession())
     for (let i = 0; i < 2; i++) {
-      ssoAuthState.markNonSSOAuthenticated()
+      authSessionState.markNonSSOAuthenticated()
       handleSSOUnauthorized(logout)
     }
     expect(logout).toHaveBeenCalledTimes(2)
   })
 
   it("still breaks a loop of six distinct failed logins", () => {
-    const logout = vi.fn(() => ssoAuthState.clearAuthPayload())
+    const logout = vi.fn(() => authSessionState.endSession())
 
     for (let i = 0; i < 6; i++) {
       login()
