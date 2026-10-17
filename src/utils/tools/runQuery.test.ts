@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import type { Client } from "../questdb/client"
 import { Type } from "../questdb/types"
 import {
   buildRunQueryPayload,
@@ -143,6 +144,24 @@ describe("buildRunQueryPayload", () => {
 })
 
 describe("mapQueryRawToResult", () => {
+  it("does not report a resolved ErrorResult as DML success", async () => {
+    const error = {
+      type: Type.ERROR,
+      query: "insert into t values (1)",
+      error: "not sent",
+      position: -1,
+      requestNotSent: true,
+    }
+    const quest = {
+      queryRaw: vi.fn(() => ({ promise: Promise.resolve(error), queryId: 1 })),
+      abort: vi.fn(),
+    } as unknown as Client
+    expect(await mapQueryRawToResult(quest, error.query, 100)).toMatchObject({
+      type: "error",
+      error: "not sent",
+      requestNotSent: true,
+    })
+  })
   const stubDqlReturn = () => ({
     promise: Promise.resolve({
       type: Type.DQL,

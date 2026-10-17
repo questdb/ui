@@ -8,9 +8,12 @@ The implementation lives in [`index.ts`](./index.ts). The palette is
 intentionally flat: every color is `theme.color.tokenName`, grouped by comments
 in the source. There are no nested color objects, and the only first-party CSS
 custom properties are the `--qdb-*` properties generated from this palette so
-legacy SCSS can read it. A small set of deliberately theme-invariant roles is
-defined once and composed independently into both palettes; light mode never
-inherits the dark palette.
+legacy SCSS can read it. Imperative libraries that retain style objects across
+theme switches (such as Toastify) use the typed `themeVar(token)` helper from
+`themeVar.ts` to read those live variables. Styled components continue to use
+`theme.color.tokenName` rather than raw variable strings. A small set of
+deliberately theme-invariant roles is defined once and composed independently
+into both palettes; light mode never inherits the dark palette.
 
 ## Palette shape
 

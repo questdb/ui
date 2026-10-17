@@ -6,7 +6,7 @@ import { QuestContext } from "../../providers"
 import { useCatalogSource } from "./useCatalogSource"
 import { MANUAL_RETRY_POLICY } from "./sourceState"
 import { Client } from "../../utils/questdb/client"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import type { Options, QueryLifecycle } from "../../utils/questdb"
 import type { AuthPayload } from "../../modules/OAuth2/types"
 

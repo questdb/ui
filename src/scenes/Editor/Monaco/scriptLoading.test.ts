@@ -1,6 +1,6 @@
 import "../../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 import { questExecution } from "../../../utils/questdb/queryExecution"
 import query, { initialState } from "../../../store/Query/reducers"
 import actions from "../../../store/Query/actions"
@@ -17,7 +17,7 @@ describe("script loading settlement", () => {
       state = query(state, action)
     }
     const loading = createScriptLoading((id) =>
-      dispatch(actions.settleActiveLoadingNotification(id)),
+      dispatch(actions.settleLoadingNotification(id)),
     )
     let abortTarget: number | null = 42
     loading.started(abortTarget)
@@ -77,7 +77,7 @@ describe("script loading settlement", () => {
       }),
     )
     const loading = createScriptLoading((id) => {
-      state = query(state, actions.settleActiveLoadingNotification(id))
+      state = query(state, actions.settleLoadingNotification(id))
     })
     loading.started(1)
     loading.finish()

@@ -1,11 +1,14 @@
 import "../../test/stubBrowserGlobals"
 import React, { useContext } from "react"
+import { ThemeProvider } from "styled-components"
+import { darkTheme } from "../../theme"
+import { AuthRefreshUnavailableError } from "../../modules/OAuth2/session"
 import { act, create, ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { StoreKey } from "../../utils/localStorage/types"
 import type { AuthPayload } from "../../modules/OAuth2/types"
 import type { Settings } from "../SettingsProvider/types"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { questClient } from "../../utils/questdb/queryClient"
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +19,10 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   headingFocus: vi.fn(),
   mainFocus: vi.fn(),
+  signInAgain: vi.fn(),
+  mainSetAttribute: vi.fn(),
+  mainRemoveAttribute: vi.fn(),
+  mainAddEventListener: vi.fn<[string, () => void, unknown?], void>(),
   settings: {
     "acl.enabled": true,
     "acl.basic.auth.realm.enabled": false,
@@ -25,6 +32,7 @@ vi.mock("../AuthProvider", () => ({
   useAuth: () => ({
     sessionData: mocks.sessionData,
     refreshAuthToken: mocks.refresh,
+    signInAgain: mocks.signInAgain,
   }),
 }))
 vi.mock("../SettingsProvider", () => ({
@@ -34,6 +42,10 @@ vi.mock("../../utils/questdb/queryClient", () => ({
   questClient: {
     queryRaw: mocks.queryRaw,
     setCommonHeaders: mocks.headers,
+    resetCredentials: () => {
+      mocks.headers({})
+      questClient.refreshTokenMethod = undefined
+    },
     refreshTokenMethod: undefined,
   },
 }))
@@ -60,6 +72,7 @@ vi.mock("../../components", () => ({
   Text: "span",
   Button: "button",
   CenteredLayout: "section",
+  Box: "div",
 }))
 vi.mock("../../utils/questdb/queryExecution", () => ({ questExecution: {} }))
 vi.mock("../../components/Box", () => ({
@@ -68,7 +81,12 @@ vi.mock("../../components/Box", () => ({
   ),
 }))
 
-import { QuestContext, QuestProvider } from "."
+import { QuestContext, QuestProvider as ActualQuestProvider } from "."
+const QuestProvider = ({ children }: React.PropsWithChildren<unknown>) => (
+  <ThemeProvider theme={darkTheme}>
+    <ActualQuestProvider>{children}</ActualQuestProvider>
+  </ThemeProvider>
+)
 
 let renderer: ReactTestRenderer | undefined
 beforeEach(() => {
@@ -85,12 +103,17 @@ beforeEach(() => {
 afterEach(() => {
   act(() => renderer?.unmount())
   vi.clearAllMocks()
+  vi.useRealTimers()
 })
 const mount = async (children = <div data-hook="ready" />) => {
   await act(async () => {
     renderer = create(<QuestProvider>{children}</QuestProvider>, {
       createNodeMock: (element) => ({
         focus: element.type === "h1" ? mocks.headingFocus : mocks.mainFocus,
+        setAttribute: mocks.mainSetAttribute,
+        removeAttribute: mocks.mainRemoveAttribute,
+        addEventListener: mocks.mainAddEventListener,
+        removeEventListener: vi.fn(),
       }),
     })
     await Promise.resolve()
@@ -98,6 +121,61 @@ const mount = async (children = <div data-hook="ready" />) => {
 }
 
 describe("QuestProvider authentication gate", () => {
+  it.each([
+    new AuthRefreshUnavailableError(),
+    {
+      error: "renewal unavailable",
+      authRefreshUnavailable: true,
+      requestNotSent: true,
+    },
+  ])(
+    "explains an IdP renewal failure and offers sign-in independently of the toast",
+    async (failure) => {
+      mocks.queryRaw.mockRejectedValue(failure)
+      await mount()
+      expect(renderer!.root.findByType("h1").children).toEqual([
+        "Could not renew your SSO session",
+      ])
+      const signIn = renderer!.root
+        .findAllByType("button")
+        .find((button) => button.children.includes("Sign in again"))!
+      const onSignIn = signIn.props.onClick as () => void
+      act(onSignIn)
+      expect(mocks.signInAgain).toHaveBeenCalledOnce()
+      expect(
+        renderer!.root.findByProps({ role: "status" }).findByType("span")
+          .children,
+      ).toEqual([expect.stringContaining("No request was sent")])
+    },
+  )
+
+  it("shows a delayed status while an auth check waits, then removes it on completion", async () => {
+    vi.useFakeTimers()
+    let finish!: (result: { type: string }) => void
+    mocks.queryRaw.mockImplementation((query: string) =>
+      query === "SELECT 1"
+        ? new Promise((resolve) => {
+            finish = resolve
+          })
+        : Promise.resolve({ type: "dml" }),
+    )
+    await mount()
+    expect(renderer!.root.findAllByProps({ role: "status" })).toHaveLength(0)
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+    expect(
+      renderer!.root.findByProps({ role: "status" }).findByType("span")
+        .children,
+    ).toEqual(["Checking your session…"])
+    await act(async () => {
+      finish({ type: "dml" })
+      await Promise.resolve()
+    })
+    expect(renderer!.root.findAllByProps({ role: "status" })).toHaveLength(0)
+    expect(renderer!.root.findByType("main").props.tabIndex).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
+  })
   it("reads a rotated refresh token when the installed refresh method runs", async () => {
     mocks.sessionData = {
       access_token: "old",
@@ -145,6 +223,13 @@ describe("QuestProvider authentication gate", () => {
       await Promise.resolve()
     })
     expect(mocks.mainFocus).toHaveBeenCalledOnce()
+    expect(mocks.mainSetAttribute).toHaveBeenCalledWith("tabindex", "-1")
+    expect(renderer!.root.findByType("main").props.tabIndex).toBeUndefined()
+    const release = mocks.mainAddEventListener.mock.calls.find(
+      ([event]) => event === "blur",
+    )![1]
+    release()
+    expect(mocks.mainRemoveAttribute).toHaveBeenCalledWith("tabindex")
   })
 
   it.each([StoreKey.REST_TOKEN, StoreKey.BASIC_AUTH_HEADER])(

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 import type { SessionFailure } from "../../../modules/OAuth2/session"
 import { runScriptStatements } from "./runScriptStatements"
 

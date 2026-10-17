@@ -4,11 +4,13 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import {
   AuthRefreshUnavailableError,
-  CANCELLED_BY_USER,
   endedFor,
   sessionFailureOf,
   SessionEndedError,
+  SESSION_ENDED_MESSAGE,
 } from "../../modules/OAuth2/session"
+import { CANCELLED_BY_USER } from "./cancellation"
+import type { AuthSession } from "../../modules/OAuth2/authSessionState"
 import { API_VERSION } from "../../consts"
 import {
   Type,
@@ -38,7 +40,7 @@ import {
   ValidateQuerySuccessResult,
   ValidateQueryErrorResult,
 } from "./types"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { getBearerAuthorization } from "../../modules/OAuth2/utils"
 import {
   awaitRefresh,
@@ -77,6 +79,11 @@ export class Client {
 
   setCommonHeaders(headers: Record<string, string>) {
     this.commonHeaders = headers
+  }
+
+  resetCredentials() {
+    this.setCommonHeaders({})
+    this.refreshTokenMethod = undefined
   }
 
   private currentAuthorization() {
@@ -127,6 +134,8 @@ export class Client {
     this._controllers.clear()
     this._activeQueryId = null
   }
+
+  hasActiveRequests = () => this._controllers.size > 0
 
   abortActive = () => {
     if (this._activeQueryId !== null) {
@@ -248,47 +257,57 @@ export class Client {
     return promise
   }
 
-  private ensureFreshToken(signal: AbortSignal, lifecycle?: QueryLifecycle) {
-    const session = authSessionState.capture()
+  private ensureRequestAllowed(session: AuthSession, signal: AbortSignal) {
+    if (!session.isCurrent()) throw new SessionEndedError()
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+    tokenRefresh.ensureUsableToken()
+  }
+
+  private refreshBeforeRequest(
+    signal: AbortSignal,
+    lifecycle?: QueryLifecycle,
+  ): { waited: false } | { waited: true; ready: Promise<void> } {
     tokenRefresh.syncSession()
     const payload = authSessionState.getAuthPayload()
     if (isRefreshable(payload) && tokenRefresh.needsRefresh(payload)) {
       this.startRefresh(payload)
     }
-    const ensureCanSend = () => {
-      if (endedFor(session)) throw new SessionEndedError()
-      if (signal.aborted) throw new DOMException("Aborted", "AbortError")
-      tokenRefresh.ensureUsableToken()
-    }
-    if (tokenRefresh.softDeadline) {
-      lifecycle?.onRefreshWait?.(REFRESH_WAIT_TIMEOUT_MS)
-      return awaitRefresh(tokenRefresh.softDeadline, signal).then(ensureCanSend)
-    }
-    ensureCanSend()
+    const deadline = tokenRefresh.softDeadline
+    if (!deadline) return { waited: false }
+    lifecycle?.onRefreshWait?.(REFRESH_WAIT_TIMEOUT_MS)
+    return { waited: true, ready: awaitRefresh(deadline, signal) }
+  }
+
+  private async prepareRequest(signal = new AbortController().signal) {
+    const session = authSessionState.capture()
+    const refresh = this.refreshBeforeRequest(signal)
+    if (refresh.waited) await refresh.ready
+    this.ensureRequestAllowed(session, signal)
+    return session
   }
 
   private async sendQuery(
     payload: Record<string, string | number | boolean | undefined>,
     signal: AbortSignal,
-    ensureCurrentSession: () => void,
+    session: AuthSession,
     execution: { requestNotSent: boolean },
     lifecycle?: QueryLifecycle,
+    refreshAuth = true,
   ) {
     const originalPayload = authSessionState.getAuthPayload()
-    const refreshWait = this.ensureFreshToken(signal, lifecycle)
-    const waitedBeforeFetch = !!refreshWait
-    if (refreshWait) await refreshWait
+    if (!refreshAuth && !tokenRefresh.canSendWithoutRefresh())
+      throw new AuthRefreshUnavailableError()
+    const refresh = refreshAuth
+      ? this.refreshBeforeRequest(signal, lifecycle)
+      : { waited: false as const }
+    if (refresh.waited) await refresh.ready
     const waitForHardDeadline = async () => {
       const deadline = tokenRefresh.hardDeadline
       if (!deadline) return
       lifecycle?.onRefreshWait?.(REFRESH_REQUEST_TIMEOUT_MS)
       await awaitRefresh(deadline, signal)
     }
-    const ensureCanSend = () => {
-      ensureCurrentSession()
-      if (signal.aborted) throw new DOMException("Aborted", "AbortError")
-      tokenRefresh.ensureUsableToken()
-    }
+    const ensureCanSend = () => this.ensureRequestAllowed(session, signal)
     let authorizationAtFetch: string | undefined
     let fetchStartedAt = 0
     const send = async () => {
@@ -308,55 +327,50 @@ export class Client {
       if (response.status === 401) execution.requestNotSent = true
       return response
     }
-    const sessionAtFetch = authSessionState.getAuthPayload()
+    const payloadAtFetch = authSessionState.getAuthPayload()
     let response = await send()
     if (response.status === 401 && originalPayload) {
-      ensureCurrentSession()
+      // Non-interactive work must neither refresh nor end the user's login.
+      if (!refreshAuth) throw new AuthRefreshUnavailableError()
+      if (!session.isCurrent()) throw new SessionEndedError()
       const currentPayload = authSessionState.getAuthPayload()
       const currentAuthorization = this.currentAuthorization()
-      if (tokenRefresh.hardDeadline) {
-        // A pre-fetch wait may have expired while its rotating request is
-        // still running. A rejected old bearer must not cancel that request.
+      let waitForRefresh = !!tokenRefresh.hardDeadline
+      if (!waitForRefresh) {
+        if (
+          currentAuthorization &&
+          currentAuthorization !== authorizationAtFetch
+        ) {
+          // A 401 executed no SQL. Resend at most once with an already-rotated bearer.
+          response = await send()
+        } else if (
+          isRefreshable(currentPayload) &&
+          authSessionState.hasRefreshFailed() &&
+          (tokenRefresh.inBackoff() || refresh.waited)
+        ) {
+          throw new AuthRefreshUnavailableError()
+        } else if (
+          !refresh.waited &&
+          isRefreshable(currentPayload) &&
+          payloadAtFetch === currentPayload &&
+          authorizationAtFetch === currentAuthorization &&
+          this.refreshTokenMethod
+        ) {
+          // Server-side 401s bypass clock-skew/success throttling. Never
+          // cancel an ongoing rotating refresh just because SQL rejected its bearer.
+          this.startRefresh(currentPayload)
+          waitForRefresh = true
+        }
+      }
+      if (waitForRefresh) {
         await waitForHardDeadline()
-        ensureCurrentSession()
+        ensureCanSend()
         if (authSessionState.hasRefreshFailed())
           throw new AuthRefreshUnavailableError()
         if (
           this.currentAuthorization() !== authorizationAtFetch ||
-          authSessionState.getAuthPayload() !== sessionAtFetch
+          authSessionState.getAuthPayload() !== payloadAtFetch
         )
-          response = await send()
-      } else if (
-        currentAuthorization &&
-        currentAuthorization !== authorizationAtFetch
-      ) {
-        // Another request already refreshed this session. A 401 executes no
-        // SQL, so even a write can be resent once with the new bearer.
-        response = await send()
-      } else if (
-        isRefreshable(currentPayload) &&
-        authSessionState.hasRefreshFailed() &&
-        (tokenRefresh.inBackoff() || waitedBeforeFetch)
-      ) {
-        // A settled transient failure is just as recoverable as a pending
-        // refresh. This 401 rejects the old bearer, not the refresh token.
-        throw new AuthRefreshUnavailableError()
-      } else if (
-        !waitedBeforeFetch &&
-        isRefreshable(currentPayload) &&
-        sessionAtFetch === currentPayload &&
-        authorizationAtFetch === currentAuthorization &&
-        this.refreshTokenMethod
-      ) {
-        // A slow browser clock may not have opened the refresh window. The
-        // server is authoritative; bypass success throttling for this 401.
-        this.startRefresh(currentPayload)
-        // A 401 executed no SQL. Retain rotating refreshes until their hard deadline.
-        await waitForHardDeadline()
-        ensureCurrentSession()
-        if (authSessionState.hasRefreshFailed())
-          throw new AuthRefreshUnavailableError()
-        if (authSessionState.getAuthPayload() !== sessionAtFetch)
           response = await send()
       }
     }
@@ -370,7 +384,11 @@ export class Client {
     queryId: QueryId,
     lifecycle?: QueryLifecycle,
   ): Promise<QueryRawResult> {
-    const { cancellable: _, ...queryOptions } = options ?? {}
+    const {
+      cancellable: _,
+      refreshAuth = true,
+      ...queryOptions
+    } = options ?? {}
     const payload = {
       count: true,
       src: "con",
@@ -392,7 +410,7 @@ export class Client {
       position: -1,
       query,
       type: Type.ERROR,
-      error: new SessionEndedError().message,
+      error: SESSION_ENDED_MESSAGE,
       sessionEnded: true,
       ...sessionFailureOf(execution),
     })
@@ -401,9 +419,10 @@ export class Client {
       const sent = await this.sendQuery(
         payload,
         controller.signal,
-        ensureCurrentSession,
+        session,
         execution,
         lifecycle,
+        refreshAuth,
       )
       response = sent.response
       authorizationAtFetch = sent.authorizationAtFetch
@@ -420,6 +439,7 @@ export class Client {
       const genericErrorPayload = {
         ...err,
         error: "An error occurred, please try again",
+        connectionError: true,
       }
 
       if (endedFor(session, error)) {
@@ -430,6 +450,7 @@ export class Client {
         return Promise.reject({
           ...err,
           error: error.message,
+          authRefreshUnavailable: true,
           requestNotSent: true,
         })
       }
@@ -537,7 +558,7 @@ export class Client {
         }
       }
 
-      const errorPayload: Record<string, string | number> = {
+      const errorPayload: Record<string, string | number | boolean> = {
         status: response.status,
         error: response.statusText,
       }
@@ -547,6 +568,7 @@ export class Client {
         errorPayload.position = -1
         errorPayload.query = query
         errorPayload.type = Type.ERROR
+        errorPayload.connectionError = true
         eventBus.publish(EventType.MSG_CONNECTION_ERROR, errorPayload)
       }
 
@@ -605,9 +627,8 @@ export class Client {
     query: string,
     signal?: AbortSignal,
   ): Promise<ValidateQueryResult> {
-    const session = authSessionState.capture()
-    await this.ensureFreshToken(signal ?? new AbortController().signal)
-    if (endedFor(session)) throw new SessionEndedError()
+    const session = await this.prepareRequest(signal)
+    this.ensureRequestAllowed(session, signal ?? new AbortController().signal)
     const response = await fetch(
       `api/v1/sql/validate?${Client.encodeParams({ query })}`,
       {
@@ -615,12 +636,12 @@ export class Client {
         signal,
       },
     )
-    if (endedFor(session)) throw new SessionEndedError()
+    if (!session.isCurrent()) throw new SessionEndedError()
     if (response.ok || response.status === 400 || response.status === 403) {
       const result = (await response.json()) as
         | ValidateQuerySuccessResult
         | ValidateQueryErrorResult
-      if (endedFor(session)) throw new SessionEndedError()
+      if (!session.isCurrent()) throw new SessionEndedError()
       return result
     }
 
@@ -719,9 +740,8 @@ export class Client {
   }
 
   async checkCSVFile(name: string): Promise<FileCheckResponse> {
-    const session = authSessionState.capture()
-    await this.ensureFreshToken(new AbortController().signal)
-    if (endedFor(session)) throw new SessionEndedError()
+    const session = await this.prepareRequest()
+    if (!session.isCurrent()) throw new SessionEndedError()
     const response = await fetch(
       `chk?${Client.encodeParams({
         f: "json",
@@ -731,7 +751,7 @@ export class Client {
       { headers: this.requestHeaders() },
     )
     const result = (await response.json()) as FileCheckResponse
-    if (endedFor(session)) throw new SessionEndedError()
+    if (!session.isCurrent()) throw new SessionEndedError()
     return result
   }
 
@@ -745,9 +765,8 @@ export class Client {
     timestamp,
     onProgress,
   }: UploadOptions): Promise<UploadResult> {
-    const session = authSessionState.capture()
-    await this.ensureFreshToken(new AbortController().signal)
-    if (endedFor(session)) throw new SessionEndedError()
+    const session = await this.prepareRequest()
+    if (!session.isCurrent()) throw new SessionEndedError()
     const formData = new FormData()
     if (schema) {
       formData.append("schema", JSON.stringify(schema))
@@ -783,7 +802,7 @@ export class Client {
         onProgress(percent_completed)
       })
       request.onload = (_e) => {
-        if (endedFor(session)) {
+        if (!session.isCurrent()) {
           reject(new SessionEndedError())
           return
         }
@@ -809,16 +828,15 @@ export class Client {
   async savePreferences(
     preferences: Preferences,
   ): Promise<{ status: number; message?: string; success: boolean }> {
-    const session = authSessionState.capture()
-    await this.ensureFreshToken(new AbortController().signal)
-    if (endedFor(session)) throw new SessionEndedError()
+    const session = await this.prepareRequest()
+    if (!session.isCurrent()) throw new SessionEndedError()
     const { version, ...prefs } = preferences
     const response: Response = await fetch(`settings?version=${version}`, {
       method: "PUT",
       headers: this.requestHeaders(),
       body: JSON.stringify(prefs),
     })
-    if (endedFor(session)) throw new SessionEndedError()
+    if (!session.isCurrent()) throw new SessionEndedError()
     if (!response.ok) {
       let errorMessage: string
       try {
@@ -826,7 +844,7 @@ export class Client {
       } catch (e) {
         errorMessage = response.statusText
       }
-      if (endedFor(session)) throw new SessionEndedError()
+      if (!session.isCurrent()) throw new SessionEndedError()
       return { status: response.status, message: errorMessage, success: false }
     }
     return { status: response.status, success: true }

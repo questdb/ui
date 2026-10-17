@@ -1,6 +1,6 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { isSessionEnded, SessionEndedError } from "../../modules/OAuth2/session"
 import { db } from "../../store/db"
 import type {
@@ -55,7 +55,10 @@ import {
   persistPreparedCellSnapshot,
   reportSnapshotSaveFailure,
 } from "../../scenes/Editor/Notebook/persistCellSnapshot"
-import { pruneToRecentNotebooks } from "../../store/notebookResults"
+import {
+  deleteCellSnapshot,
+  pruneToRecentNotebooks,
+} from "../../store/notebookResults"
 import {
   commitView,
   partsOf,
@@ -283,13 +286,21 @@ const emptySummary = (): RunCellSummary => ({
 const sessionEndedBeforeLaunchSummary = (): RunCellSummary =>
   cancelledBeforeLaunchSummary("session_ended")
 
-const sessionEndedSummary = (result: CellResult): RunCellSummary => {
-  const nothingExecuted = result.results.every(
+const nothingExecuted = (result: CellResult) =>
+  result.results.every(
     (statement) =>
       statement.type === "cancelled" ||
       (statement.type === "error" && statement.requestNotSent),
   )
-  if (nothingExecuted) return sessionEndedBeforeLaunchSummary()
+
+export const SESSION_INTERRUPTED_RUN_NOTE =
+  "Session ended during run; statements may have executed. Verify their outcomes before re-running."
+
+const sessionEndedSummary = (
+  result: CellResult,
+  saved: "run" | "marker" | "none" = "none",
+): RunCellSummary => {
+  if (nothingExecuted(result)) return sessionEndedBeforeLaunchSummary()
   return {
     success: false,
     queryCount: result.results.length,
@@ -309,7 +320,12 @@ const sessionEndedSummary = (result: CellResult): RunCellSummary => {
     }),
     cancelled: "session_ended",
     unverified: true,
-    note: midRunCancellationNote("session_ended"),
+    note:
+      saved === "run"
+        ? "Run history was recorded before the authentication session ended. Result details are withheld; verify before retrying writes."
+        : saved === "marker"
+          ? "The authentication session ended. An interruption marker was saved; result details were not retained. Statements already sent may have executed; verify before retrying writes."
+          : midRunCancellationNote("session_ended"),
   }
 }
 
@@ -518,6 +534,8 @@ export const runHeadlessCell = async (
     const view = await readNotebookView(bufferId)
     return {
       cell: requireCellIn(view.cells, cellId, bufferId),
+      snapshotSavedAt: (await db.notebook_results.get([bufferId, cellId]))
+        ?.savedAt,
       variables: view.settings?.variables,
       seqAtPrep: deps.getBufferSeq(),
       mountEpochAtPrep: getMountEpoch(bufferId),
@@ -601,7 +619,69 @@ export const runHeadlessCell = async (
             supersedeSignal: claim.signal,
           })
 
-    if (!isCurrentSession()) return sessionEndedSummary(ranResult)
+    // Keep an outcome marker, never old-session data, when a sent statement
+    // outlives logout. The fresh transaction still honors every ownership/edit
+    // guard, including a new run or snapshot saved by another browser tab.
+    const finishEndedSession = async (
+      committed = false,
+    ): Promise<RunCellSummary> => {
+      if (committed) return sessionEndedSummary(ranResult, "run")
+      if (nothingExecuted(ranResult)) return sessionEndedBeforeLaunchSummary()
+      const canMark = () =>
+        !deps.isBufferClaimed() &&
+        getMountEpoch(bufferId) === prep.mountEpochAtPrep &&
+        claim.isCurrent() &&
+        deps.getBufferSeq() === prep.seqAtPrep
+      let marked = false
+      try {
+        marked = await enqueueBufferTask(bufferId, () =>
+          db.transaction("rw", db.buffers, db.notebook_results, async () => {
+            if (!canMark()) return false
+            let view: NotebookViewState
+            try {
+              view = await readNotebookView(bufferId)
+            } catch {
+              return false
+            }
+            const cell = view.cells.find((item) => item.id === cellId)
+            const snapshot = await db.notebook_results.get([bufferId, cellId])
+            if (
+              !canMark() ||
+              !cell ||
+              JSON.stringify(cell) !== JSON.stringify(prep.cell) ||
+              snapshot?.savedAt !== prep.snapshotSavedAt
+            )
+              return false
+            const parts = partsOf(view)
+            const saved = await commitView(
+              bufferId,
+              {
+                ...parts,
+                cells: parts.cells.map((item) =>
+                  item.id === cellId
+                    ? {
+                        ...item,
+                        result: undefined,
+                        lastRunStatus: "error",
+                        lastRunError: SESSION_INTERRUPTED_RUN_NOTE,
+                      }
+                    : item,
+                ),
+              },
+              canMark,
+            )
+            if (saved !== "committed") return false
+            await deleteCellSnapshot(bufferId, cellId)
+            return true
+          }),
+        )
+      } catch (error) {
+        reportSnapshotSaveFailure(error)
+      }
+      return sessionEndedSummary(ranResult, marked ? "marker" : "none")
+    }
+
+    if (!isCurrentSession()) return await finishEndedSession()
 
     const outcome = await enqueueBufferTask(
       bufferId,
@@ -688,7 +768,7 @@ export const runHeadlessCell = async (
 
     // Even a successful transaction can notify logout from its completion
     // event. Redact every outcome, including archived/gone and committed runs.
-    if (!isCurrentSession()) return sessionEndedSummary(ranResult)
+    if (!isCurrentSession()) return await finishEndedSession(outcome.committed)
     const summary = summarizeCellResults({ ...prep.cell, result: ranResult })
     if (outcome.committed) {
       // Only prune after the encompassing transaction has committed.
@@ -701,7 +781,7 @@ export const runHeadlessCell = async (
     }
     switch (outcome.reason) {
       case "session_ended":
-        return sessionEndedSummary(ranResult)
+        return await finishEndedSession()
       case "mounted":
         return { ...summary, unverified: true, note: MOUNTED_MID_RUN_NOTE }
       case "user_changed":

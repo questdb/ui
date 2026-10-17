@@ -17,7 +17,7 @@ import type { ExecutionRefs } from "../scenes/Editor/index"
 import type { Dispatch } from "redux"
 import actions from "../store/Query/actions"
 import { endedFor } from "../modules/OAuth2/session"
-import { authSessionState } from "../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../modules/OAuth2/authSessionState"
 
 export type RunDetachedQueryConfig = {
   normalizedSQL: string

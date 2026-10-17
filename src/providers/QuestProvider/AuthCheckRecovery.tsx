@@ -1,34 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import styled from "styled-components"
-import { Button, CenteredLayout, Text } from "../../components"
-import { Box } from "../../components/Box"
-import { CloseOutline, Refresh } from "../../components/icons"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
-import { endedFor, isCancelledByUser } from "../../modules/OAuth2/session"
+import { ConnectionErrorView } from "../../components/ConnectionErrorView"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import {
+  endedFor,
+  isAuthRefreshUnavailable,
+} from "../../modules/OAuth2/session"
+import { isCancelledByUser } from "../../utils/questdb/cancellation"
 import { questClient } from "../../utils/questdb/queryClient"
 import type { ErrorResult } from "../../utils/questdb/types"
 
-const Heading = styled.h1`
-  margin: 0;
-  font-size: 2rem;
-  color: var(--qdb-color-contentPrimary);
-  outline: none;
-`
-
-const ErrorMessage = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.2rem;
-`
-
-const ErrorIcon = styled(CloseOutline)`
-  color: var(--qdb-color-statusDanger);
-  flex-shrink: 0;
-`
+export type AuthCheckFailure = { message: string; renewalUnavailable: boolean }
 
 export const useAuthCheck = (required: boolean) => {
   const [finished, setFinished] = useState(!required)
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<AuthCheckFailure>()
   const [pending, setPending] = useState(false)
   const inFlight = useRef(false)
   const mounted = useRef(false)
@@ -43,9 +28,18 @@ export const useAuthCheck = (required: boolean) => {
   }, [])
 
   useEffect(() => {
-    if (finished && focusAfterRetry.current) {
-      focusAfterRetry.current = false
-      consoleRef.current?.focus()
+    if (!finished || !focusAfterRetry.current || !consoleRef.current) return
+    focusAfterRetry.current = false
+    const main = consoleRef.current
+    // A permanent tabindex makes blank clicks anywhere in the console focus
+    // main, breaking native keyboard scrolling in nested, non-focusable panels.
+    main.setAttribute("tabindex", "-1")
+    const releaseFocusTarget = () => main.removeAttribute("tabindex")
+    main.addEventListener("blur", releaseFocusTarget, { once: true })
+    main.focus()
+    return () => {
+      main.removeEventListener("blur", releaseFocusTarget)
+      releaseFocusTarget()
     }
   }, [finished])
 
@@ -56,21 +50,25 @@ export const useAuthCheck = (required: boolean) => {
     setPending(true)
     try {
       await questClient.queryRaw("SELECT 1")
-      if (mounted.current && !endedFor(session)) setFinished(true)
+      if (mounted.current && session.isCurrent()) setFinished(true)
     } catch (failure) {
       if (
         mounted.current &&
         !endedFor(session, failure) &&
         !isCancelledByUser(failure)
       ) {
-        setError(
-          (failure as Partial<ErrorResult>)?.error ||
-            "Could not connect to QuestDB.",
-        )
+        const renewalUnavailable = isAuthRefreshUnavailable(failure)
+        setError({
+          renewalUnavailable,
+          message: renewalUnavailable
+            ? "The identity provider could not renew your SSO session. Retry to renew it, or sign in again."
+            : (failure as Partial<ErrorResult>)?.error ||
+              "Could not connect to QuestDB.",
+        })
       }
     } finally {
       inFlight.current = false
-      if (mounted.current && !endedFor(session)) setPending(false)
+      if (mounted.current && session.isCurrent()) setPending(false)
     }
   }, [])
 
@@ -87,42 +85,27 @@ export const AuthCheckRecovery = ({
   error,
   pending,
   onRetry,
+  onSignIn,
 }: {
-  error: string
+  error: AuthCheckFailure
   pending: boolean
   onRetry: () => void
-}) => {
-  const heading = useRef<HTMLHeadingElement>(null)
-  useEffect(() => heading.current?.focus(), [])
-  return (
-    <CenteredLayout>
-      <Box flexDirection="column" gap="2rem" align="center">
-        <Heading ref={heading} tabIndex={-1}>
-          Could not connect to QuestDB
-        </Heading>
-        <div role="alert">
-          <ErrorMessage>
-            <ErrorIcon size="18px" aria-hidden="true" />
-            <Text color="statusDanger" size="md">
-              {error}
-            </Text>
-          </ErrorMessage>
-        </div>
-        <div role="status">
-          <Text color="contentSecondary">
-            {pending ? "Reconnecting…" : "Connection failed. Retry connection."}
-          </Text>
-        </div>
-        {/* aria-disabled keeps focus on the retry control during the request. */}
-        <Button
-          aria-disabled={pending}
-          aria-busy={pending}
-          onClick={onRetry}
-          prefixIcon={<Refresh size="18px" />}
-        >
-          Retry connection
-        </Button>
-      </Box>
-    </CenteredLayout>
-  )
-}
+  onSignIn: () => void
+}) => (
+  <ConnectionErrorView
+    title={
+      error.renewalUnavailable ? "Could not renew your SSO session" : undefined
+    }
+    error={error.message}
+    status={
+      pending
+        ? "Reconnecting…"
+        : error.renewalUnavailable
+          ? "No request was sent. Retry after a short wait, or sign in again."
+          : "Connection failed. Retry connection."
+    }
+    pending={pending}
+    onRetry={onRetry}
+    onSignIn={error.renewalUnavailable ? onSignIn : undefined}
+  />
+)

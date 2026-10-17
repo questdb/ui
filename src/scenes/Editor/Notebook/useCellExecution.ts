@@ -38,8 +38,11 @@ import {
 import { hasPendingResult, statementKeysFor } from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
-import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
-import { CANCELLED_BY_USER } from "../../../modules/OAuth2/session"
+import {
+  authSessionState,
+  type AuthSession,
+} from "../../../modules/OAuth2/authSessionState"
+import { CANCELLED_BY_USER } from "../../../utils/questdb/cancellation"
 
 export type DrawGateOutcome =
   | { granted: true }
@@ -66,6 +69,20 @@ const cancellationOf = (
   const aborted = controllers.find((c) => c.signal.aborted)
   return aborted ? runCancellationOf(aborted.signal) : undefined
 }
+
+const supersededOutcome = (
+  ok: boolean,
+  mayHaveExecuted: boolean,
+  session: AuthSession,
+  controllers: readonly AbortController[],
+): CellRunOutcome => ({
+  ok,
+  superseded: true,
+  notStarted: !mayHaveExecuted,
+  cancelled: session.isCurrent()
+    ? cancellationOf(controllers)
+    : "session_ended",
+})
 
 const supersedeCellRun = (
   runGenerations: Map<string, number>,
@@ -325,14 +342,12 @@ export const useCellExecution = ({
           )
           mayHaveExecuted ||= statementMayHaveExecuted(launch)
           if (!isCurrentRun()) {
-            return {
-              ok: mayHaveExecuted && runSucceeded(),
-              superseded: true,
-              notStarted: !mayHaveExecuted,
-              cancelled: session.isCurrent()
-                ? cancellationOf(controllers)
-                : "session_ended",
-            }
+            return supersededOutcome(
+              mayHaveExecuted && runSucceeded(),
+              mayHaveExecuted,
+              session,
+              controllers,
+            )
           }
           if (!launch.launched) {
             cancelFrom(i)
@@ -574,14 +589,12 @@ export const useCellExecution = ({
         )
 
         if (!isCurrentRun()) {
-          return {
-            ok: mayHaveExecuted && runSucceeded(),
-            superseded: true,
-            notStarted: !mayHaveExecuted,
-            cancelled: session.isCurrent()
-              ? cancellationOf(controllers)
-              : "session_ended",
-          }
+          return supersededOutcome(
+            mayHaveExecuted && runSucceeded(),
+            mayHaveExecuted,
+            session,
+            controllers,
+          )
         }
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
         if (!liveCell) {
@@ -802,14 +815,12 @@ export const useCellExecution = ({
         const ok = launch.launched && launch.exec.type !== "error"
         // A newer run (or a cancel) superseded this one; don't write its result.
         if (!isCurrentRun()) {
-          return {
+          return supersededOutcome(
             ok,
-            superseded: true,
-            notStarted: !statementMayHaveExecuted(launch),
-            cancelled: session.isCurrent()
-              ? cancellationOf([ac])
-              : "session_ended",
-          }
+            statementMayHaveExecuted(launch),
+            session,
+            [ac],
+          )
         }
         if (launch.launched) publishSchemaIfMutating(launch.exec)
         const liveCell = cellsRef.current.find((c) => c.id === cellId)

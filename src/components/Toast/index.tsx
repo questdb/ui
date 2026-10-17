@@ -17,6 +17,7 @@ import { CheckmarkOutline } from "../icons"
 import { useTheme } from "styled-components"
 import { ButtonBase } from "../Button/ButtonBase"
 import { altOption } from "../../utils/platform"
+import { themeVar } from "../../theme/themeVar"
 
 import "react-toastify/dist/ReactToastify.css"
 import "../../styles/_toast.scss"
@@ -29,6 +30,7 @@ type StyledIconProps = {
 export type ToastOptions = RTToastOptions
 
 export const useNotificationCenter = RTNotificationCenter
+export const REFRESH_FAILED_TOAST_ID = "sso-refresh-failed"
 export const NOTIFICATION_SHORTCUT = "Alt+N"
 export const NOTIFICATION_SHORTCUT_LABEL = `${altOption === "Alt" ? "Alt+" : altOption}N`
 
@@ -99,7 +101,6 @@ const ToastCloseButton = ({
   <ButtonBase
     className={`Toastify__close-button Toastify__close-button--${theme}`}
     aria-label={ariaLabel}
-    aria-keyshortcuts={NOTIFICATION_SHORTCUT}
     onClick={(event) => {
       event.stopPropagation()
       const notification =
@@ -118,12 +119,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.INFO} />,
       className: "toast-info-container",
       progressStyle: {
-        background: "var(--qdb-color-statusInfo)",
+        background: themeVar("statusInfo"),
       },
       style: {
-        borderColor: "var(--qdb-color-statusInfo)",
-        background: "var(--qdb-color-surfaceRaised)",
-        color: "var(--qdb-color-contentPrimary)",
+        borderColor: themeVar("statusInfo"),
+        background: themeVar("surfaceRaised"),
+        color: themeVar("contentPrimary"),
       },
       ...options,
     })
@@ -133,12 +134,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.SUCCESS} />,
       className: "toast-success-container",
       progressStyle: {
-        background: "var(--qdb-color-statusSuccess)",
+        background: themeVar("statusSuccess"),
       },
       style: {
-        borderColor: "var(--qdb-color-statusSuccess)",
-        background: "var(--qdb-color-surfaceRaised)",
-        color: "var(--qdb-color-contentPrimary)",
+        borderColor: themeVar("statusSuccess"),
+        background: themeVar("surfaceRaised"),
+        color: themeVar("contentPrimary"),
       },
       ...options,
     })
@@ -148,12 +149,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.WARNING} />,
       className: "toast-warning-container",
       progressStyle: {
-        background: "var(--qdb-color-statusWarning)",
+        background: themeVar("statusWarning"),
       },
       style: {
-        borderColor: "var(--qdb-color-statusWarning)",
-        background: "var(--qdb-color-surfaceRaised)",
-        color: "var(--qdb-color-contentPrimary)",
+        borderColor: themeVar("statusWarning"),
+        background: themeVar("surfaceRaised"),
+        color: themeVar("contentPrimary"),
       },
       ...options,
     })
@@ -162,13 +163,13 @@ const toast = {
     return rtToast.error(content, {
       icon: <ToastIcon type={BadgeType.ERROR} />,
       progressStyle: {
-        background: "var(--qdb-color-statusDanger)",
+        background: themeVar("statusDanger"),
       },
       className: "toast-error-container",
       style: {
-        borderColor: "var(--qdb-color-statusDanger)",
-        background: "var(--qdb-color-surfaceRaised)",
-        color: "var(--qdb-color-contentPrimary)",
+        borderColor: themeVar("statusDanger"),
+        background: themeVar("surfaceRaised"),
+        color: themeVar("contentPrimary"),
       },
       ...options,
     })
@@ -186,25 +187,31 @@ export const ToastContainer = (props?: ToastContainerProps) => {
   const theme = useTheme()
   const region = useRef<HTMLDivElement>(null)
   useEffect(() => {
+    let shortcutTarget: HTMLElement | undefined
     const focusNotification = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        region.current?.contains(document.activeElement)
+      ) {
+        const notification =
+          document.activeElement?.closest<HTMLElement>(".Toastify__toast")
+        const origin =
+          notification && notificationFocusOrigins.get(notification)
+        if (origin?.isConnected) {
+          event.preventDefault()
+          event.stopPropagation()
+          origin.focus()
+        }
+        return
+      }
       if (
         event.defaultPrevented ||
         event.isComposing ||
-        event.keyCode === 229 ||
-        event.key === "Dead" ||
         !event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
         event.shiftKey ||
         (event.code !== "KeyN" && event.key.toLowerCase() !== "n")
-      )
-        return
-      const target = event.target as HTMLElement | null
-      if (
-        event.key.toLowerCase() !== "n" &&
-        target?.closest(
-          'input, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
-        )
       )
         return
       // Follow the warning's close-dialog-first instruction rather than
@@ -221,13 +228,13 @@ export const ToastContainer = (props?: ToastContainerProps) => {
         notification.querySelector('[role="alert"], [role="status"]'),
       )
       const notification =
-        notifications.find((item) => item.id === "sso-refresh-failed") ??
+        notifications.find((item) => item.id === REFRESH_FAILED_TOAST_ID) ??
         notifications[notifications.length - 1]
-      const control = notification?.querySelector<HTMLButtonElement>(
-        ".Toastify__close-button",
+      // Focus the message, not an unexplained destructive Close/Sign-in action.
+      const control = notification?.querySelector<HTMLElement>(
+        ".Toastify__toast-body",
       )
-      if (control) {
-        const notification = control.closest<HTMLElement>(".Toastify__toast")
+      if (notification && control) {
         const origin = document.activeElement as HTMLElement | null
         if (
           notification &&
@@ -237,12 +244,23 @@ export const ToastContainer = (props?: ToastContainerProps) => {
         ) {
           notificationFocusOrigins.set(notification, origin)
         }
+        if (shortcutTarget !== control)
+          shortcutTarget?.removeAttribute("aria-keyshortcuts")
+        shortcutTarget = control
+        control.setAttribute("tabindex", "-1")
+        control.setAttribute("aria-keyshortcuts", NOTIFICATION_SHORTCUT)
         event.preventDefault()
+        event.stopPropagation()
         control.focus()
       }
     }
-    document.addEventListener("keydown", focusNotification)
-    return () => document.removeEventListener("keydown", focusNotification)
+    // Capture before Monaco consumes Option+N's Dead/229 event on macOS.
+    // IME composition is still ignored, and no key is consumed without a toast.
+    document.addEventListener("keydown", focusNotification, true)
+    return () => {
+      document.removeEventListener("keydown", focusNotification, true)
+      shortcutTarget?.removeAttribute("aria-keyshortcuts")
+    }
   }, [])
   const mergedProps: ToastContainerProps = {
     autoClose: 3000,
@@ -259,15 +277,15 @@ export const ToastContainer = (props?: ToastContainerProps) => {
   }
 
   // Modal dialogs hide the rest of the page from assistive technology, except
-  // live regions. This region, the container markup of later react-toastify
-  // versions, keeps warnings such as an SSO refresh failure announced while a
-  // dialog is open. It must exist before the dialog opens.
+  // elements with aria-live. Keep that exemption, but let the inner Toastify
+  // role="alert" bodies do the announcing (not two nested live regions).
+  // This wrapper must exist before a dialog opens.
   return (
     <div
       ref={region}
       role="region"
       aria-label="Notifications"
-      aria-live="polite"
+      aria-live="off"
       aria-atomic="false"
       aria-relevant="additions text"
     >

@@ -9,8 +9,9 @@ import { capResultBytes, NOTEBOOK_BYTE_CAP } from "./notebookUtils"
 // quota is exhausted) collapses into a single toast instead of flooding.
 const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 
-// Caps and serialization must happen before opening a multi-table write
-// transaction, so large result frames do not hold the editor buffers lock.
+// Cap and serialize before opening a multi-table write transaction. This keeps
+// CPU work outside the buffers lock; atomic headless commits still hold that
+// lock during the IndexedDB snapshot write, so metadata and snapshot agree.
 export const prepareCellSnapshot = (
   snapshot: NotebookResultSnapshot,
 ): NotebookResultSnapshot => ({

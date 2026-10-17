@@ -22,7 +22,8 @@ import { useTheme } from "styled-components"
 import { TelemetryTable } from "../../consts"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { sendServerInfoTelemetry } from "../../utils/telemetry"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import { isSessionEnded } from "../../modules/OAuth2/session"
 import { InstanceTypeIcon } from "./InstanceTypeIcon"
 
 const EnvIconWrapper = styled.div<{ $background?: string }>`
@@ -436,24 +437,37 @@ export const Toolbar = () => {
   }, [result])
 
   const handleSaveSettings = async (values: Preferences) => {
+    const session = authSessionState.capture()
     try {
       const result = await quest.savePreferences(values)
+      if (!session.isCurrent()) return
       if (result.success) {
         await handleToggle(false)
+        if (!session.isCurrent()) return
         toast.success("Instance information updated successfully.")
 
-        const response = await quest.query<TelemetryConfigShape>(
-          `${TelemetryTable.CONFIG} limit -1`,
-        )
-        if (response.type === QuestDB.Type.DQL && response.count === 1) {
-          const serverInfo = response.data[0]
-          void sendServerInfoTelemetry(serverInfo)
-        }
+        // Telemetry is best-effort and cannot turn an accepted save into a
+        // failure notification (or renew an otherwise idle SSO session).
+        void quest
+          .query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`, {
+            refreshAuth: false,
+          })
+          .then((response) => {
+            if (
+              session.isCurrent() &&
+              response.type === QuestDB.Type.DQL &&
+              response.count === 1
+            ) {
+              void sendServerInfoTelemetry(response.data[0])
+            }
+          })
+          .catch(() => {})
         return
       }
 
       const { preferences: newPreferences } =
         await refreshSettingsAndPreferences()
+      if (!session.isCurrent()) return
       setPreviewValues(newPreferences)
       if (result.status === 409) {
         toast.error(
@@ -465,9 +479,13 @@ export const Toolbar = () => {
 
       throw new Error(result.message)
     } catch (e) {
-      toast.error(`Failed to update instance information: ${e}`, {
-        autoClose: 5000,
-      })
+      if (!session.isCurrent() || isSessionEnded(e)) return
+      toast.error(
+        `Failed to update instance information: ${e instanceof Error ? e.message : String(e)}`,
+        {
+          autoClose: 5000,
+        },
+      )
     }
   }
 

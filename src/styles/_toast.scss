@@ -18,6 +18,11 @@
   padding: 1rem 0 !important;
 }
 
+.Toastify__toast-body:focus-visible {
+  outline: 2px solid var(--qdb-color-statusInfo);
+  outline-offset: 2px;
+}
+
 .Toastify__toast-icon {
   margin-right: 1rem;
   width: 1.8rem;
@@ -35,7 +40,6 @@
 }
 
 .Toastify__close-button {
-  color: var(--qdb-color-contentPrimary);
   opacity: 0.7;
   align-self: center;
   transition: none;

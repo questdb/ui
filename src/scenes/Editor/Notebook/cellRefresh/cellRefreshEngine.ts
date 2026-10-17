@@ -19,7 +19,7 @@ import {
 } from "../../../../utils/questdb/requestLimiter"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { authSessionState } from "../../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../../modules/OAuth2/authSessionState"
 import { sessionFailureOf } from "../../../../modules/OAuth2/session"
 import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
 import {

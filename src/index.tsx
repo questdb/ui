@@ -51,7 +51,7 @@ import {
 import { ScreenSizeProvider } from "./hooks"
 import { rootEpic, rootReducer } from "./store"
 import queryActions from "./store/Query/actions"
-import { authSessionState } from "./modules/OAuth2/ssoAuthState"
+import { authSessionState } from "./modules/OAuth2/authSessionState"
 import { StoreAction, StoreShape } from "./types"
 
 import Layout from "./scenes/Layout"

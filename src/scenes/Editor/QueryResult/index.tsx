@@ -31,6 +31,8 @@ import {
   TransitionDuration,
 } from "../../../components"
 import { color, Timings } from "../../../utils"
+import { formatTiming } from "../../../utils/formatTiming"
+export { formatTiming } from "../../../utils/formatTiming"
 
 type Props = Timings &
   Readonly<{
@@ -67,35 +69,12 @@ const TruncatedTag = styled.span`
   color: ${color("statusWarning")};
 `
 
-const roundTiming = (time: number): number =>
-  Math.round((time + Number.EPSILON) * 100) / 100
-
 const addColor = (timing: string) => {
   if (timing === "0") {
     return <Text color="contentSecondary">0</Text>
   }
 
   return <Text color="statusWarning">{timing}</Text>
-}
-
-export const formatTiming = (nanos: number) => {
-  if (nanos === 0) {
-    return "0"
-  }
-
-  if (nanos > 1e9) {
-    return `${roundTiming(nanos / 1e9)}s`
-  }
-
-  if (nanos > 1e6) {
-    return `${roundTiming(nanos / 1e6)}ms`
-  }
-
-  if (nanos > 1e3) {
-    return `${roundTiming(nanos / 1e3)}μs`
-  }
-
-  return `${nanos}ns`
 }
 
 const QueryResult = ({

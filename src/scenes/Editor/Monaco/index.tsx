@@ -20,7 +20,7 @@ import {
   PaneContent,
   Text,
 } from "../../../components"
-import { formatTiming } from "../QueryResult"
+import { formatScriptSummary } from "./formatScriptSummary"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { withAlpha } from "../../../theme"
@@ -100,25 +100,31 @@ import {
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 import { runScriptStatements } from "./runScriptStatements"
 import { createScriptLoading } from "./scriptLoading"
-import {
-  endedFor,
-  isSessionEnded,
-  isCancelledByUser,
-} from "../../../modules/OAuth2/session"
+import { endedFor, isSessionEnded } from "../../../modules/OAuth2/session"
+import { isCancelledByUser } from "../../../utils/questdb/cancellation"
 import {
   authSessionState,
   type AuthSession,
-} from "../../../modules/OAuth2/ssoAuthState"
+} from "../../../modules/OAuth2/authSessionState"
 
 type IndividualQueryResult = {
-  success: boolean
-  sessionEnded?: boolean
-  requestNotSent?: boolean
-  result?: QuestDB.QueryRawResult
   notification:
     | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
     | null
-}
+} & (
+  | {
+      success: true
+      result: Exclude<QuestDB.QueryRawResult, { type: QuestDB.Type.ERROR }>
+      sessionEnded?: never
+      requestNotSent?: never
+    }
+  | {
+      success: false
+      result?: never
+      sessionEnded?: boolean
+      requestNotSent?: boolean
+    }
+)
 
 type ScriptRunPlan = Readonly<{
   runAll: boolean
@@ -338,6 +344,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number),
   )
   const isRunningScriptRef = useRef(false)
+  const scriptSessionRef = useRef<AuthSession | null>(null)
   const queryOffsetsRef = useRef<
     { startOffset: number; endOffset: number }[] | null
   >([])
@@ -1524,7 +1531,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }),
       )
 
-      const result = await scriptQueryPromise
+      const result = await scriptQueryPromise.then((result) =>
+        result.type === QuestDB.Type.ERROR ? Promise.reject(result) : result,
+      )
       if (!session.isCurrent()) {
         return { success: false, sessionEnded: true, notification: null }
       }
@@ -1761,6 +1770,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     }
 
     isRunningScriptRef.current = true
+    scriptSessionRef.current = session
     setTabsDisabled(true)
     const queries = queriesToRun ?? getAllQueries(editor)
     editor.updateOptions({ readOnly: true })
@@ -1771,10 +1781,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
     const loading = createScriptLoading((queryId) =>
-      dispatch(actions.query.settleActiveLoadingNotification(queryId)),
+      dispatch(actions.query.settleLoadingNotification(queryId)),
     )
     const finishScriptRun = () => {
       isRunningScriptRef.current = false
+      scriptSessionRef.current = null
       scriptStopRef.current = false
       stopAfterFailureRef.current = true
       loading.finish()
@@ -1899,28 +1910,20 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     const completedGracefully =
       !sessionEnded && queries.length === individualQueryResults.length
-    const notificationPrefix = completedGracefully
-      ? `Running completed in ${formatTiming(duration)} with `
-      : "Stopped after running "
-
     dispatch(
       actions.query.addNotification(
         {
           query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
           content: (
             <Text color="contentPrimary">
-              {notificationPrefix}
-              {successfulQueries + failedQueries === 0 && "0"}
-              {successfulQueries > 0 ? `${successfulQueries} successful` : ""}
-              {successfulQueries > 0 && failedQueries > 0 ? " and " : ""}
-              {failedQueries > 0 ? `${failedQueries} failed` : ""}{" "}
-              {failedQueries + successfulQueries !== 1 ? " queries" : " query"}
-              {sessionEnded &&
-                (outcomeUnknown
-                  ? "; session ended. The last statement's outcome is unknown; verify before running again."
-                  : individualQueryResults.length === 0
-                    ? "; session ended. No statements were sent."
-                    : "; session ended. No further statements were sent.")}
+              {formatScriptSummary({
+                successful: successfulQueries,
+                failed: failedQueries,
+                total: queries.length,
+                duration,
+                sessionEnded,
+                outcomeUnknown,
+              })}
             </Text>
           ),
           type: completedGracefully
@@ -2065,6 +2068,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           queryToRun = `EXPLAIN ${originalQueryText}`
         }
 
+        let discardPreviousNotification = false
+        const session = authSessionState.capture()
+        const { promise: queryPromise, queryId } = quest.queryRaw(
+          normalizeQueryText(queryToRun),
+          { limit: "0,1000", explain: true, cancellable: true },
+        )
+        editorQueryIdRef.current = queryId
         let loadingNotificationPublished = false
         // give the notification a slight delay to prevent flashing for fast queries
         notificationTimeoutRef.current = window.setTimeout(() => {
@@ -2140,19 +2150,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             ? inflightQuery
             : null
 
-        let discardPreviousNotification = false
-        const { promise: queryPromise, queryId } = quest.queryRaw(
-          normalizeQueryText(queryToRun),
-          {
-            limit: "0,1000",
-            explain: true,
-            cancellable: true,
-          },
-        )
-        editorQueryIdRef.current = queryId
-
         void queryPromise
           .then((result) => {
+            if (!session.isCurrent()) return
+            if (result.type === QuestDB.Type.ERROR)
+              return Promise.reject(result)
             const { inflightQuery, currentQueryKey } = settleExecution()
             if (!editorRef.current) return
 
@@ -2250,10 +2252,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
           .catch((error: ErrorResult) => {
             const { inflightQuery, currentQueryKey } = settleExecution()
-            // The login view already communicates this failure. React 17 can
-            // run this catch before passive unmount cleanup; never carry it
-            // into a subsequent in-tab login via Redux notifications.
-            if (isSessionEnded(error)) {
+            // Session failures belong to the login recovery UI, never to a
+            // subsequent in-tab login's Redux notifications.
+            if (endedFor(session, error)) {
               discardPreviousNotification = !error.requestNotSent
               return
             }
@@ -2337,20 +2338,23 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                   })
                 }
               }
-
-              dispatch(
-                actions.query.addNotification(
-                  {
-                    query: currentQueryKey,
-                    isExplain: isRunningExplain,
-                    content: <Text color="statusDanger">{error.error}</Text>,
-                    sideContent: <QueryInNotification query={queryToRun} />,
-                    type: NotificationType.ERROR,
-                  },
-                  targetBufferId,
-                ),
-              )
             }
+            // A tab switch may unmount Monaco, but it must not erase a sent
+            // query's cancellation or restore an older success as current.
+            dispatch(
+              actions.query.addNotification(
+                {
+                  query: currentQueryKey,
+                  isExplain: isRunningExplain,
+                  content: <Text color="statusDanger">{error.error}</Text>,
+                  sideContent: <QueryInNotification query={queryToRun} />,
+                  type: NotificationType.ERROR,
+                  updateActiveNotification:
+                    !!editorRef.current && isCurrentRun(),
+                },
+                targetBufferId,
+              ),
+            )
           })
           .finally(() => {
             if (loadingNotificationPublished) {
@@ -2402,7 +2406,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         scriptQueryKeyRef.current = null
       }
       scriptStopRef.current = true
-      eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+      if (scriptSessionRef.current?.isCurrent()) {
+        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+      }
     }
   }, [running])
 

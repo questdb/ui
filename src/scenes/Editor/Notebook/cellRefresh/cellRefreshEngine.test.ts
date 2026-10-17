@@ -8,7 +8,7 @@ import type {
 } from "../../../../store/notebook"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { authSessionState } from "../../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../../modules/OAuth2/authSessionState"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import {
   persistCellSnapshot,

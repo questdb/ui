@@ -1,6 +1,6 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { Client } from "../../utils/questdb/client"
 import { Type } from "../../utils/questdb/types"
 import { fetchColumns } from "./fetchColumns"

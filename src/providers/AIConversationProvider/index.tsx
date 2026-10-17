@@ -806,7 +806,7 @@ export const AIConversationProvider: React.FC<{
     // updates. Wait for that write and read fresh metadata before reopening.
     await pendingChatDeletionRef.current
     if (chatWindowState.activeConversationId) {
-      const existingMeta = await db.ai_conversations.get(
+      const existingMeta = await aiConversationStore.getMeta(
         chatWindowState.activeConversationId,
       )
       if (existingMeta) {
@@ -815,7 +815,7 @@ export const AIConversationProvider: React.FC<{
       }
     }
 
-    const latestMeta = await db.ai_conversations.orderBy("updatedAt").last()
+    const latestMeta = await aiConversationStore.getLatestMeta()
     if (latestMeta) {
       await openChatWindow(latestMeta.id)
       return

@@ -1,5 +1,5 @@
 import { endedFor } from "../../modules/OAuth2/session"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { Type } from "../../utils/questdb/types"
 import type { InformationSchemaColumn } from "../../utils/questdb/types"
 import type { Client } from "../../utils/questdb/client"
@@ -19,10 +19,10 @@ export const fetchColumns = async (
 
   let failure: unknown = new Error("Could not load schema columns.")
   for (const query of queries) {
-    if (endedFor(session)) return
+    if (!session.isCurrent()) return
     try {
       const response = await quest.query<InformationSchemaColumn>(query)
-      if (endedFor(session)) return
+      if (!session.isCurrent()) return
       if (response?.type === Type.DQL) {
         onColumns(response.data)
         return
@@ -34,5 +34,5 @@ export const fetchColumns = async (
     }
   }
 
-  if (!endedFor(session)) onError(failure)
+  if (session.isCurrent()) onError(failure)
 }

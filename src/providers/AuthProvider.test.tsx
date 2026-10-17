@@ -6,14 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthProvider, useAuth } from "./AuthProvider"
 import { QuestProvider } from "./QuestProvider"
 import { questClient } from "../utils/questdb/queryClient"
-import { authSessionState } from "../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../modules/OAuth2/authSessionState"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { StoreKey } from "../utils/localStorage/types"
 import type { Settings } from "./SettingsProvider/types"
 import type { TokenResponse } from "../modules/OAuth2/types"
 import { isRefreshable, tokenRefresh } from "../utils/questdb/tokenRefresh"
-import { SettingsProvider } from "./SettingsProvider"
+import { SettingsProvider, useSettings } from "./SettingsProvider"
 import { ThemeProvider } from "styled-components"
 import { darkTheme } from "../theme"
 
@@ -43,6 +43,7 @@ vi.mock("./SettingsProvider", async (importOriginal) => {
 })
 vi.mock("../components/Toast", () => ({
   NOTIFICATION_SHORTCUT_LABEL: "Alt+N",
+  REFRESH_FAILED_TOAST_ID: "sso-refresh-failed",
   toast: {
     error: mocks.toastError,
     dismiss: mocks.toastDismiss,
@@ -91,6 +92,10 @@ const initialToken = {
   expires_in: 3600,
   token_type: "Bearer",
 }
+const refreshToken = (
+  deadline = new AbortController().signal,
+  request = new AbortController().signal,
+) => auth.refreshAuthToken(mocks.settings, "initial-refresh", deadline, request)
 let signInToken: TokenResponse = initialToken
 const tokenResponse = (body: TokenResponse) =>
   new Response(JSON.stringify(body), { status: 200 })
@@ -227,6 +232,44 @@ describe("AuthProvider token installation", () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     return { finishRefresh, query }
   }
+
+  it.each(["failure while unmounted", "warning removed on unmount"])(
+    "restores the retained refresh warning after %s",
+    async (phase) => {
+      await mount()
+      if (phase === "warning removed on unmount") {
+        authSessionState.markRefreshFailed()
+        act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
+      }
+      act(() => renderer!.unmount())
+      authSessionState.markRefreshFailed()
+      eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED)
+      mocks.toastError.mockClear()
+      location.search = ""
+      await mount()
+      expect(mocks.toastError).toHaveBeenCalledOnce()
+      expect(mocks.toastError.mock.calls[0][1].toastId).toBe(
+        "sso-refresh-failed",
+      )
+    },
+  )
+
+  it("confirms interruption before signing in again and explains the ended work on Login", async () => {
+    await mount()
+    vi.spyOn(questClient, "hasActiveRequests").mockReturnValue(true)
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal("confirm", confirm)
+    act(() => auth.signInAgain())
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("Statements may already have executed"),
+    )
+    expect(authSessionState.isAuthenticated()).toBe(true)
+    confirm.mockReturnValue(true)
+    act(() => auth.signInAgain())
+    const login = renderer!.root.findByProps({ "data-hook": "mock-login" })
+    expect(login.props.errorMessage).toContain("Verify their outcomes")
+    expect(authSessionState.isAuthenticated()).toBe(false)
+  })
 
   it("shows the mounted login when a refresh started before recovery ends the session", async () => {
     const { finishRefresh, query } = await recoverDuringRefresh()
@@ -467,7 +510,7 @@ describe("AuthProvider token installation", () => {
     expect(mocks.toastError).toHaveBeenCalledOnce()
     const warning = create(mocks.toastError.mock.calls[0][0])
     expect(warning.root.findAllByType("span")[0].children).toEqual([
-      expect.stringContaining("Queries are paused"),
+      expect.stringContaining("Queries are not being sent"),
     ])
     mocks.toastActive.mockReturnValue(true)
     act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
@@ -531,10 +574,7 @@ describe("AuthProvider token installation", () => {
       tokenResponse({ access_token: "renewed", expires_in: 3600 }),
     )
     await act(async () => {
-      const result = await auth.refreshAuthToken(
-        mocks.settings,
-        "initial-refresh",
-      )
+      const result = await refreshToken()
       expect(result?.access_token).toBe("renewed")
       // A refresh reply that doesn't rotate the token keeps the original.
       expect(result?.refresh_token).toBe("initial-refresh")
@@ -552,9 +592,7 @@ describe("AuthProvider token installation", () => {
     const body = { access_token: "rejected", expires_in: 3600 }
     vi.mocked(fetch).mockResolvedValueOnce(tokenResponse(body))
     await act(async () => {
-      await expect(
-        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
-      ).resolves.toBeUndefined()
+      await expect(refreshToken()).resolves.toBeUndefined()
     })
     expect(authSessionState.getAuthPayload()).toBeNull()
     expect(
@@ -633,7 +671,7 @@ describe("AuthProvider token installation", () => {
           resolve = done
         }),
     )
-    const refresh = auth.refreshAuthToken(mocks.settings, "initial-refresh")
+    const refresh = refreshToken()
     act(() => auth.logout())
     await act(async () => {
       resolve(tokenResponse({ ...initialToken, access_token: "late" }))
@@ -654,13 +692,9 @@ describe("AuthProvider token installation", () => {
       }),
     )
     await act(async () => {
-      await expect(
-        auth.refreshAuthToken(
-          mocks.settings,
-          "initial-refresh",
-          deadline.signal,
-        ),
-      ).resolves.toMatchObject({ refresh_token: "rotated" })
+      await expect(refreshToken(deadline.signal)).resolves.toMatchObject({
+        refresh_token: "rotated",
+      })
     })
     const refreshCall = vi
       .mocked(fetch)
@@ -684,9 +718,9 @@ describe("AuthProvider token installation", () => {
           status,
         }),
       )
-      await expect(
-        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
-      ).rejects.toThrow(`Identity provider unavailable (HTTP ${status})`)
+      await expect(refreshToken()).rejects.toThrow(
+        `Identity provider unavailable (HTTP ${status})`,
+      )
       expect(authSessionState.getAuthPayload()).toBe(session)
       expect(
         renderer?.root.findAllByProps({ "data-hook": "mock-login" }),
@@ -700,9 +734,7 @@ describe("AuthProvider token installation", () => {
       new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }),
     )
     await act(async () => {
-      await expect(
-        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
-      ).resolves.toBeUndefined()
+      await expect(refreshToken()).resolves.toBeUndefined()
     })
     expect(authSessionState.getAuthPayload()).toBeNull()
   })
@@ -745,7 +777,7 @@ describe("AuthProvider token installation", () => {
       tokenResponse({ ...initialToken, access_token: "renewed" }),
     )
     await act(async () => {
-      await auth.refreshAuthToken(mocks.settings, "initial-refresh")
+      await refreshToken()
     })
     expect(auth.refreshAuthToken).toBe(before.refreshAuthToken)
     expect(auth.logout).toBe(before.logout)
@@ -771,17 +803,18 @@ describe("AuthProvider token installation", () => {
       "Sign in again",
     ])
     expect(warning.root.findAllByType("span")[1].children).toEqual([
-      "Close any open dialog, then press ",
-      "Alt+N",
-      " to focus this notification.",
+      expect.stringContaining("interrupts running requests"),
     ])
+    expect(warning.root.findAllByType("span")[2].children).toEqual(
+      expect.arrayContaining([expect.stringContaining("Escape to return")]),
+    )
     warning.unmount()
     mocks.toastDismiss.mockClear()
     vi.mocked(fetch).mockResolvedValueOnce(
       tokenResponse({ ...initialToken, access_token: "renewed" }),
     )
     await act(async () => {
-      await auth.refreshAuthToken(mocks.settings, "initial-refresh")
+      await refreshToken()
     })
     expect(mocks.toastDismiss).toHaveBeenCalledWith("sso-refresh-failed")
     expect(authSessionState.hasRefreshFailed()).toBe(false)
@@ -852,10 +885,18 @@ describe.each([
           auth = useAuth()
           return <span data-hook="console-live" />
         }
+        let reloadSettings!: ReturnType<
+          typeof useSettings
+        >["refreshSettingsAndPreferences"]
+        const SettingsDriver = () => {
+          reloadSettings = useSettings().refreshSettingsAndPreferences
+          return null
+        }
         await act(async () => {
           renderer = create(
             <ThemeProvider theme={darkTheme}>
               <SettingsProvider>
+                <SettingsDriver />
                 <AuthProvider>
                   <QuestProvider>
                     <Consumer />
@@ -870,22 +911,28 @@ describe.each([
           renderer!.root
             .findAllByType("button")
             .find((button) => button.children.includes("Retry"))!
-        // Both real Retry requests survive the transition to ready. The delayed
-        // failure removes the Auth owner whose initial code exchange is pending.
+        // Retry re-entry is guarded. A later settings refresh can still remove
+        // the Auth owner while its initial code exchange is pending.
         await act(async () => {
           retry().props.onClick()
           retry().props.onClick()
           await Promise.resolve()
         })
-        expect(settingsGates).toHaveLength(2)
+        expect(settingsGates).toHaveLength(1)
         await act(async () => {
           settingsGates.shift()!(config())
           await Promise.resolve()
         })
         expect(finishCode).toBeDefined()
         expect(location.search).toBe("")
+        let settingsRefresh!: Promise<unknown>
+        await act(async () => {
+          settingsRefresh = reloadSettings()
+          await Promise.resolve()
+        })
         await act(async () => {
           settingsGates.shift()!(new Response("", { status: 503 }))
+          await settingsRefresh
           await Promise.resolve()
         })
         await act(async () => {
@@ -1024,9 +1071,7 @@ describe("AuthProvider bearer expiry", () => {
       }),
     )
     await act(async () => {
-      await expect(
-        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
-      ).resolves.toMatchObject({
+      await expect(refreshToken()).resolves.toMatchObject({
         id_token: idToken(refreshExpiry),
         expires_at: new Date(refreshExpiry * 1000).toISOString(),
       })
@@ -1064,9 +1109,7 @@ describe("AuthProvider bearer expiry", () => {
       tokenResponse({ access_token: "renewed", token_type: "Bearer" }),
     )
     await act(async () => {
-      await expect(
-        auth.refreshAuthToken(mocks.settings, "initial-refresh"),
-      ).resolves.toMatchObject({
+      await expect(refreshToken()).resolves.toMatchObject({
         access_token: "renewed",
         expires_at: undefined,
       })

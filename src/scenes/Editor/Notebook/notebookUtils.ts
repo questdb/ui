@@ -2,9 +2,9 @@ import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
   sessionFailureOf,
-  CANCELLED_BY_USER,
   type SessionFailure,
 } from "../../../modules/OAuth2/session"
+import { CANCELLED_BY_USER } from "../../../utils/questdb/cancellation"
 import type {
   AgentCellView,
   AutoRefresh,
@@ -360,7 +360,6 @@ const UNVERIFIABLE_ERROR_MARKERS = [
   "Failed to read response",
   "Invalid JSON response from the server",
   "QuestDB is not reachable",
-  "Your session has ended. Please sign in again.",
 ]
 
 export const isUnverifiableExecError = (

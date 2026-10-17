@@ -53,6 +53,33 @@ describe("settling loading notifications", () => {
     expect(next.activeNotification).toBeNull()
   })
 
+  it("keeps an unmounted run's cancellation instead of restoring older success", () => {
+    const completed = query(
+      initialState,
+      actions.addNotification({ query: key, content: "Old success" }, 1),
+    )
+    const running = query(completed, loading(3))
+    const cancelled = query(
+      running,
+      actions.addNotification(
+        {
+          query: key,
+          type: NotificationType.ERROR,
+          content: "Cancelled by user",
+          updateActiveNotification: false,
+        },
+        1,
+      ),
+    )
+    const next = query(cancelled, actions.settleLoadingNotification(3))
+    expect(next.queryNotifications[1][key].latest).toMatchObject({
+      type: NotificationType.ERROR,
+      content: "Cancelled by user",
+    })
+    expect(next.activeNotification).toBeNull()
+    expect(next.notifications).toHaveLength(2)
+  })
+
   it("does not remove a newer execution of the same SQL", () => {
     const state = query(query(initialState, loading(1)), loading(2))
     const next = query(state, actions.settleLoadingNotification(1))
@@ -229,7 +256,7 @@ describe("settling loading notifications", () => {
     state.queryNotifications[1] = new Proxy<
       (typeof state.queryNotifications)[1]
     >(state.queryNotifications[1], { ownKeys: scanGroups })
-    const next = query(state, actions.settleActiveLoadingNotification(2))
+    const next = query(state, actions.settleLoadingNotification(2))
 
     expect(scanHistory).not.toHaveBeenCalled()
     expect(scanGroups).not.toHaveBeenCalled()
@@ -237,7 +264,7 @@ describe("settling loading notifications", () => {
     expect(next.notifications).toBe(completed.notifications)
     expect(next.queryNotifications).toBe(completed.queryNotifications)
     expect(next.activeNotification).toBeNull()
-    expect(query(next, actions.settleActiveLoadingNotification(2))).toBe(next)
+    expect(query(next, actions.settleLoadingNotification(2))).toBe(next)
   })
 
   it("preserves a newer script or a completed active notification", () => {
@@ -249,7 +276,7 @@ describe("settling loading notifications", () => {
       createdAt: new Date(),
     }
     const state = query(initialState, actions.setActiveNotification(active))
-    expect(query(state, actions.settleActiveLoadingNotification(2))).toBe(state)
+    expect(query(state, actions.settleLoadingNotification(2))).toBe(state)
     const completed = query(
       state,
       actions.setActiveNotification({
@@ -257,7 +284,7 @@ describe("settling loading notifications", () => {
         type: NotificationType.SUCCESS,
       }),
     )
-    expect(query(completed, actions.settleActiveLoadingNotification(3))).toBe(
+    expect(query(completed, actions.settleLoadingNotification(3))).toBe(
       completed,
     )
   })

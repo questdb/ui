@@ -27,7 +27,7 @@ import styled from "styled-components"
 import * as QuestDB from "../../utils/questdb"
 import { useAuth } from "../AuthProvider"
 import { questClient } from "../../utils/questdb/queryClient"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { questExecution } from "../../utils/questdb/queryExecution"
 import { AuthCheckRecovery, useAuthCheck } from "./AuthCheckRecovery"
 import { formatCommitHash, formatVersion } from "./services"
@@ -44,6 +44,7 @@ import {
   stop as stopConsoleEvents,
 } from "../../modules/ConsoleEventTracker"
 import { QueryExecutionConfirmDialog } from "../../components/QueryExecutionConfirmDialog"
+import { CenteredLayout, Text } from "../../components"
 
 const ConsoleMain = styled.main`
   display: flex;
@@ -75,7 +76,7 @@ export const QuestContext = createContext<ContextProps>(defaultValues)
 export const QuestProvider: React.FC = ({ children }) => {
   const dispatch = useDispatch()
   const { settings } = useSettings()
-  const { sessionData, refreshAuthToken } = useAuth()
+  const { sessionData, refreshAuthToken, signInAgain } = useAuth()
   // Password credentials are shared across browser tabs; retain this tab's login.
   const [nonSSOAuthorization] = useState(() =>
     getStoredCredentialAuthorization(),
@@ -89,6 +90,13 @@ export const QuestProvider: React.FC = ({ children }) => {
     retry,
     consoleRef,
   } = useAuthCheck(!!hasUIAuth(settings))
+  const [showAuthCheckStatus, setShowAuthCheckStatus] = useState(false)
+  useEffect(() => {
+    setShowAuthCheckStatus(false)
+    if (!authCheckPending) return
+    const timer = setTimeout(() => setShowAuthCheckStatus(true), 500)
+    return () => clearTimeout(timer)
+  }, [authCheckPending])
   const [buildVersion, setBuildVersion] = useState<Versions>(
     defaultValues.buildVersion,
   )
@@ -96,8 +104,7 @@ export const QuestProvider: React.FC = ({ children }) => {
 
   useEffect(
     () => () => {
-      questClient.setCommonHeaders({})
-      questClient.refreshTokenMethod = undefined
+      questClient.resetCredentials()
     },
     [],
   )
@@ -177,12 +184,19 @@ export const QuestProvider: React.FC = ({ children }) => {
         error={authCheckError}
         pending={authCheckPending}
         onRetry={retry}
+        onSignIn={signInAgain}
       />
+    ) : showAuthCheckStatus ? (
+      <CenteredLayout>
+        <div role="status">
+          <Text color="contentPrimary">Checking your session…</Text>
+        </div>
+      </CenteredLayout>
     ) : null
 
   return (
     <QuestContext.Provider value={contextValue}>
-      <ConsoleMain ref={consoleRef} tabIndex={-1} aria-label="QuestDB console">
+      <ConsoleMain ref={consoleRef} aria-label="QuestDB console">
         {children}
         <QueryExecutionConfirmDialog />
       </ConsoleMain>

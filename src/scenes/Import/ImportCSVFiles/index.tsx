@@ -22,9 +22,11 @@ import {
 import { Upload } from "./upload"
 import { getValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
-import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import { isSessionEnded } from "../../../modules/OAuth2/session"
+import { toast } from "../../../components/Toast"
 
 type State = "upload" | "list"
 
@@ -41,6 +43,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
+  const uploading = useRef(new Set<string>())
   const tables = useSelector(selectors.query.getTables)
   const rootRef = useRef<HTMLDivElement>(null)
   const isVisible = useIsVisible(rootRef)
@@ -194,23 +197,50 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     )
   }
 
+  const reportError = (error: unknown) => {
+    if (!isSessionEnded(error))
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not check CSV file. Please retry.",
+      )
+  }
+
   const handleDrop = async (files: File[]) => {
-    const fileConfigs = await getFileConfigs(files)
-    setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
-    setState("list")
+    const session = authSessionState.capture()
+    try {
+      const fileConfigs = await getFileConfigs(files)
+      if (!session.isCurrent()) return
+      setFilesDropped((current) => [...current, ...fileConfigs])
+      setState("list")
+    } catch (error) {
+      if (session.isCurrent()) reportError(error)
+    }
+  }
+
+  const refreshFileStatus = async (id: string, name: string) => {
+    const session = authSessionState.capture()
+    try {
+      const result = await quest.checkCSVFile(name)
+      if (!session.isCurrent()) return
+      // Only this status belongs to the request. Never restore a list captured
+      // before an upload, rename, settings edit, removal or another drop.
+      setFilesDropped((current) =>
+        current.map((file) =>
+          file.id === id && file.table_name === name
+            ? { ...file, status: result.status }
+            : file,
+        ),
+      )
+    } catch (error) {
+      if (session.isCurrent()) reportError(error)
+    }
   }
 
   const handleVisible = async () => {
-    const fileStatusList = await Promise.all(
-      filesDropped.map(async (file) => {
-        const result = await quest.checkCSVFile(file.table_name)
-        return {
-          ...file,
-          status: result.status,
-        }
-      }),
+    await Promise.all(
+      filesDropped.map((file) => refreshFileStatus(file.id, file.table_name)),
     )
-    setFilesDropped(fileStatusList)
   }
 
   useEffect(() => {
@@ -238,11 +268,11 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           onDialogToggle={setDialogOpen}
           ownedByList={ownedByList}
           onFileUpload={async (id) => {
-            const file = filesDropped.find((f) => f.id === id) as ProcessedFile
-
-            if (file.isUploading) {
-              return
-            }
+            const file = filesDropped.find((f) => f.id === id)
+            if (!file || file.isUploading || uploading.current.has(id)) return
+            // Ref guard covers repeated invocations before React commits.
+            uploading.current.add(id)
+            const session = authSessionState.capture()
             void trackEvent(ConsoleEvent.IMPORT_FILE_UPLOAD, {
               fileSize: file.fileObject.size,
             })
@@ -262,6 +292,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
                   })
                 },
               })
+              if (!session.isCurrent()) return
               setFileProperties(file.id, {
                 uploaded: response.status === "OK",
                 uploadResult: response.status === "OK" ? response : undefined,
@@ -292,43 +323,44 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
               setIsUploading(file, false)
               onUpload(response)
             } catch (err) {
+              if (!session.isCurrent() || isSessionEnded(err)) return
               setIsUploading(file, false)
               setFileProperties(file.id, {
                 uploaded: false,
                 uploadResult: undefined,
                 uploadProgress: 0,
-                error: "Upload error",
+                error: err instanceof Error ? err.message : "Upload error",
               })
+            } finally {
+              uploading.current.delete(id)
             }
           }}
           onFileRemove={(id) => {
-            const file = filesDropped.find((f) => f.id === id) as ProcessedFile
-            setFilesDropped(
-              filesDropped.filter(
-                (f) => f.fileObject.name !== file.fileObject.name,
-              ),
+            setFilesDropped((current) =>
+              current.filter((file) => file.id !== id),
             )
           }}
           onFilePropertyChange={async (id, partialFile) => {
-            const processedFiles = await Promise.all(
-              filesDropped.map(async (file) => {
-                if (file.id === id) {
-                  // Only check for file existence if table name is changed
-                  const result = partialFile.table_name
-                    ? await quest.checkCSVFile(partialFile.table_name)
-                    : await Promise.resolve({ status: file.status })
-                  return {
-                    ...file,
-                    ...partialFile,
-                    status: result.status,
-                    error: partialFile.table_name ? undefined : file.error, // reset prior error if table name is changed
-                  }
-                } else {
-                  return file
-                }
-              }),
+            if (uploading.current.has(id)) return
+            // Apply the user's edit immediately. Its async check may only merge
+            // status if this is still the selected table when it completes.
+            setFilesDropped((current) =>
+              current.map((file) =>
+                file.id === id
+                  ? {
+                      ...file,
+                      ...partialFile,
+                      error:
+                        partialFile.table_name !== undefined
+                          ? undefined
+                          : file.error,
+                    }
+                  : file,
+              ),
             )
-            setFilesDropped(processedFiles)
+            if (partialFile.table_name !== undefined) {
+              await refreshFileStatus(id, partialFile.table_name)
+            }
           }}
         />
       )}

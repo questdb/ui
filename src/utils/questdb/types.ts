@@ -119,6 +119,8 @@ export type ErrorResult = Omit<RawErrorResult, "ddl" | "dml"> & {
   type: Type.ERROR
   // Local failures and aborted/session-ended requests have no HTTP response.
   status?: number
+  connectionError?: boolean
+  authRefreshUnavailable?: boolean
 } & SessionFailure
 
 export type NoticeResult = RawNoticeResult & {
@@ -371,6 +373,8 @@ export type Options = {
   cols?: string
   src?: string
   cancellable?: boolean
+  /** Background work must not extend an idle login; never sent on the wire. */
+  refreshAuth?: boolean
 }
 
 // In-process lifecycle hooks are not SQL wire parameters.

@@ -38,19 +38,21 @@ import { ErrorResult } from "../utils"
 import { Login } from "../modules/OAuth2/views/login"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
-import { authSessionState } from "../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../modules/OAuth2/authSessionState"
 import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
-import { toast } from "../components/Toast"
+import { toast, REFRESH_FAILED_TOAST_ID } from "../components/Toast"
+import { questClient } from "../utils/questdb/queryClient"
 import { RefreshFailedWarning } from "../modules/OAuth2/views/refreshFailedWarning"
 
 type ContextProps = {
   sessionData?: AuthPayload
   logout: (options?: LogoutOptions) => void
+  signInAgain: () => void
   refreshAuthToken: (
     settings: Settings,
     refreshToken: string | undefined,
-    deadlineSignal?: AbortSignal,
-    requestSignal?: AbortSignal,
+    deadlineSignal: AbortSignal,
+    requestSignal: AbortSignal,
   ) => Promise<AuthPayload | undefined>
   redirectToAuthorizationUrl: (options?: { prompt?: "login" | "none" }) => void
 }
@@ -80,6 +82,7 @@ const initialState: {
 const defaultValues: ContextProps = {
   sessionData: undefined,
   logout: () => {},
+  signInAgain: () => {},
   refreshAuthToken: () => Promise.resolve(undefined),
   redirectToAuthorizationUrl: () => {},
 }
@@ -93,8 +96,6 @@ class OAuth2Error {
     this.error_description = error_description
   }
 }
-
-const REFRESH_FAILED_TOAST_ID = "sso-refresh-failed"
 
 const OAUTH_CALLBACK_PARAMS = [
   "code",
@@ -194,10 +195,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const refreshAuthToken = async (
     settings: Settings,
     refreshToken: string | undefined,
-    deadlineSignal: AbortSignal = new AbortController().signal,
-    requestSignal: AbortSignal = new AbortController().signal,
+    deadlineSignal: AbortSignal,
+    requestSignal: AbortSignal,
   ) => {
-    const originalSession = authSessionState.getAuthPayload()
+    const payloadAtStart = authSessionState.getAuthPayload()
     const response = await getAuthToken(
       settings,
       {
@@ -217,12 +218,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const tokenResponse = await readAuthTokenResponse(response, deadlineSignal)
     if (
       requestSignal.aborted ||
-      !originalSession ||
-      authSessionState.getAuthPayload() !== originalSession
+      !payloadAtStart ||
+      authSessionState.getAuthPayload() !== payloadAtStart
     ) {
       return undefined
     }
     return setAuthToken(tokenResponse, settings, "refresh_token")
+  }
+
+  const showRefreshFailedWarning = () => {
+    const payload = authSessionState.getAuthPayload()
+    if (!payload || toast.isActive(REFRESH_FAILED_TOAST_ID)) return
+    toast.error(
+      <RefreshFailedWarning
+        expiresAt={payload.expires_at}
+        onSignIn={() => callbacks.current.signInAgain()}
+      />,
+      {
+        autoClose: false,
+        closeOnClick: false,
+        toastId: REFRESH_FAILED_TOAST_ID,
+      },
+    )
   }
 
   const setupOAuth2 = async (
@@ -236,21 +253,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Proceed with the OAuth2 flow only if it is enabled on the server
     if (settings["acl.oidc.enabled"]) {
-      subscribe(EventType.MSG_AUTH_REFRESH_FAILED, () => {
-        const authPayload = authSessionState.getAuthPayload()
-        if (!authPayload || toast.isActive(REFRESH_FAILED_TOAST_ID)) return
-        toast.error(
-          <RefreshFailedWarning
-            expiresAt={authPayload.expires_at}
-            onSignIn={() => callbacks.current.logout({ clearSSOSession: true })}
-          />,
-          {
-            autoClose: false,
-            closeOnClick: false,
-            toastId: REFRESH_FAILED_TOAST_ID,
-          },
-        )
-      })
+      subscribe(EventType.MSG_AUTH_REFRESH_FAILED, showRefreshFailedWarning)
 
       subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
         handleSSOUnauthorized((options) => callbacks.current.logout(options))
@@ -266,7 +269,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         : ""
       const urlParams = new URLSearchParams(window.location.search)
       const code = urlParams.get("code")
-      const retainedSession = authSessionState.getAuthPayload()
+      const retainedPayload = authSessionState.getAuthPayload()
       const oauth2Error = new OAuth2Error(
         urlParams.get("error"),
         urlParams.get("error_description"),
@@ -332,13 +335,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               oauth2Error.error + ": " + oauth2Error.error_description,
           })
         }
-      } else if (retainedSession) {
+      } else if (retainedPayload) {
         // Settings recovery can remount the providers without ending this
         // tab's SSO session. Resume its refresh capability as well as its bearer.
         unstable_batchedUpdates(() => {
-          setSessionData(retainedSession)
+          setSessionData(retainedPayload)
           dispatch({ view: View.ready })
         })
+        if (authSessionState.hasRefreshFailed()) showRefreshFailedWarning()
       } else if (
         sessionStorage.getItem(StoreKey.LOGIN_METHOD) !== "password" &&
         ssoUsername &&
@@ -347,8 +351,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           (!getValue(StoreKey.REST_TOKEN) &&
             !getValue(StoreKey.BASIC_AUTH_HEADER)))
       ) {
-        // No REST token, so it is a page reload for an SSO user
-        // who didn't explicitly log out — try to request a token silently
+        // Resume this tab's SSO choice even if another tab stored password
+        // credentials. Otherwise only try silent SSO when none are stored.
         callbacks.current.redirectToAuthorizationUrl({ prompt: "none" })
       } else {
         // Stop loading and display the login state
@@ -457,7 +461,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     // Session-end listeners clear client credentials, pending confirmations,
     // refresh work and telemetry timers even when this document does not reload.
-    authSessionState.endSession(options)
+    // React 17 does not batch promise continuations. Resetting the store and
+    // showing Login must be one commit, before console effects can run again.
+    unstable_batchedUpdates(() => authSessionState.endSession(options))
     destroyServerSession()
     if (reload) {
       window.location.reload()
@@ -473,7 +479,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       authSessionState.isSSOAuthenticated() &&
       (!settings["acl.enabled"] || !settings["acl.oidc.enabled"])
     ) {
-      authSessionState.endSession()
+      unstable_batchedUpdates(() => authSessionState.endSession())
     }
     // A rotating refresh can outlive Settings recovery and its original auth
     // owner. Shared teardown must notify the mounted owner, not only the
@@ -522,11 +528,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [])
 
+  const signInAgain = () => {
+    const active = questClient.hasActiveRequests()
+    if (
+      active &&
+      !window.confirm(
+        "Signing in again interrupts running requests. Statements may already have executed. End this session?",
+      )
+    )
+      return
+    callbacks.current.logout({
+      clearSSOSession: true,
+      errorTitle: "Sign in again",
+      errorMessage: active
+        ? "Your previous session has ended. Running requests were interrupted; statements may have executed. Verify their outcomes before running them again."
+        : "Your previous session has ended. Please sign in again.",
+    })
+  }
+
   // Stable public callbacks delegate to this render's implementation.
-  callbacks.current = { logout, refreshAuthToken, redirectToAuthorizationUrl }
+  callbacks.current = {
+    logout,
+    signInAgain,
+    refreshAuthToken,
+    redirectToAuthorizationUrl,
+  }
   const stableCallbacks = useMemo<Omit<ContextProps, "sessionData">>(
     () => ({
       logout: (options) => callbacks.current.logout(options),
+      signInAgain: () => callbacks.current.signInAgain(),
       refreshAuthToken: (...args) =>
         callbacks.current.refreshAuthToken(...args),
       redirectToAuthorizationUrl: (options) =>

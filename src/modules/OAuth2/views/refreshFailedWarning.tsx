@@ -34,17 +34,21 @@ export const RefreshFailedWarning = ({
 
   return (
     <Box flexDirection="column" gap="1rem" align="flex-start">
-      <Text>
+      <Text color="contentPrimary">
         {expired
-          ? "Could not renew your SSO session. Queries are paused until renewal succeeds."
+          ? "Could not renew your SSO session. Queries are not being sent. Retry them to renew, or sign in again."
           : `Could not renew your SSO session. Your current token expires at ${new Date(expiry).toLocaleTimeString()}.`}
+      </Text>
+      <Text size="sm" color="contentSecondary">
+        Signing in again ends this session and interrupts running requests.
+        Statements may have executed; verify their outcomes before retrying.
       </Text>
       <Button size="sm" onClick={onSignIn}>
         Sign in again
       </Button>
       <Text size="sm" color="contentSecondary">
         Close any open dialog, then press {NOTIFICATION_SHORTCUT_LABEL} to focus
-        this notification.
+        this notification. Press Escape to return without dismissing it.
       </Text>
     </Box>
   )

@@ -56,7 +56,11 @@ export const executeSingleRaw = async (
       signal.addEventListener("abort", onAbort, { once: true })
       cleanup = () => signal.removeEventListener("abort", onAbort)
     }
-    const result = await promise
+    // Normalize adapters/test doubles that resolve errors to the client's
+    // usual rejection contract, so one catch formats every failure.
+    const result = await promise.then((result) =>
+      result.type === QuestDB.Type.ERROR ? Promise.reject(result) : result,
+    )
 
     if (result.type === QuestDB.Type.DQL) {
       return {

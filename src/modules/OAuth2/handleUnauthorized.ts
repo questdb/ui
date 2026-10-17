@@ -1,6 +1,6 @@
 import { getValue, removeValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
-import { authSessionState } from "./ssoAuthState"
+import { authSessionState } from "./authSessionState"
 
 import type { LogoutOptions } from "./types"
 import { sessionRenewalError } from "./utils"

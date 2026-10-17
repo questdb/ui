@@ -7,7 +7,7 @@ import Schema, { View } from "."
 import VirtualTables from "./VirtualTables"
 import { QuestContext } from "../../providers"
 import { Client } from "../../utils/questdb/client"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { tokenRefresh } from "../../utils/questdb/tokenRefresh"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -131,6 +131,62 @@ const mountSchema = async (client: Client, withSideMenu = false) => {
 }
 
 describe("Schema renewal recovery", () => {
+  it("shows tables before slow details and columns have settled on first load", async () => {
+    mocks.autoRefreshTables = false
+    const pending: Array<() => void> = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        const query =
+          new URL(url, "http://test").searchParams.get("query") ?? ""
+        if (query.includes("tables()"))
+          return Promise.resolve(catalogResponse(query))
+        return new Promise<Response>((resolve) =>
+          pending.push(() => resolve(catalogResponse(query))),
+        )
+      }),
+    )
+    await mountSchema(new Client())
+    expect(pending).toHaveLength(2)
+    expect(tree().props.state.view).toBe(View.ready)
+    expect(tree().props.tables).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ table_name: "my_table" }),
+      ]),
+    )
+    await act(async () => {
+      pending.forEach((finish) => finish())
+      await Promise.resolve()
+    })
+  })
+
+  it("recovers a copied connection failure without relying on event/rejection object identity", async () => {
+    mocks.autoRefreshTables = false
+    const client = new Client()
+    const tableRequests = vi
+      .spyOn(client, "showTables")
+      .mockImplementation(() =>
+        Promise.reject({ error: "Offline", connectionError: true }),
+      )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        Promise.resolve(
+          catalogResponse(
+            new URL(url, "http://test").searchParams.get("query") ?? "",
+          ),
+        ),
+      ),
+    )
+    await mountSchema(client)
+    expect(tree().props.state.view).toBe(View.error)
+    tableRequests.mockRestore()
+    await act(async () => {
+      await client.queryRaw("select 1")
+    })
+    expect(tree().props.state.view).toBe(View.ready)
+    expect(tree().props.loadingError).toBeNull()
+  })
   it("cleans up only its own schema listeners on unmount and remount", async () => {
     mocks.autoRefreshTables = true
     const client = new Client()

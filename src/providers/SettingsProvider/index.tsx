@@ -7,11 +7,9 @@ import React, {
   useState,
 } from "react"
 import isEqual from "lodash.isequal"
-import styled from "styled-components"
 import { ConsoleConfig, Settings, Warning } from "./types"
-import { CenteredLayout, Box, Text, Button } from "../../components"
-import { Refresh } from "../../components/icons"
-import { CloseOutline } from "../../components/icons"
+import { Box, Text } from "../../components"
+import { ConnectionErrorView } from "../../components/ConnectionErrorView"
 import { setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { Preferences } from "../../utils"
@@ -55,40 +53,6 @@ const SettingContext = createContext<{
     }),
 })
 
-const TextContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  padding: 2.4rem;
-  gap: 2.8rem;
-`
-const RefreshButton = styled(Button)`
-  padding: 1.2rem;
-  height: unset !important;
-`
-
-const Whoops = styled.img`
-  width: auto;
-  height: auto;
-
-  @media (max-width: 1000px) {
-    width: 600px;
-    height: auto;
-  }
-`
-
-const ErrorMessage = styled(Text).attrs({ color: "statusDanger", size: "md" })`
-  height: 3rem;
-  align-self: center;
-  display: flex;
-  align-items: center;
-  gap: 0.2rem;
-`
-
-const CloseOutlineIcon = styled(CloseOutline)`
-  color: ${({ theme }) => theme.color.statusDanger};
-  flex-shrink: 0;
-`
-
 const connectionError = (
   <Box flexDirection="column" gap="0">
     <Text align="center" size="lg" color="contentSecondary" weight={600}>
@@ -125,7 +89,8 @@ export const SettingsProvider = ({
     Record<string, string>
   >({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const errorTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  const [retryPending, setRetryPending] = useState(false)
+  const retryInFlight = React.useRef(false)
 
   useEffect(() => {
     const preloadImages = async () => {
@@ -175,70 +140,26 @@ export const SettingsProvider = ({
       </SettingContext.Provider>
     ),
     [View.error]: () => (
-      <CenteredLayout preloadedImages={preloadedImages}>
-        <Box flexDirection="column" gap="6.4rem">
-          <a href="https://questdb.com">
-            <img
-              src={
-                preloadedImages["assets/questdb-logo-3d.png"] ||
-                "assets/questdb-logo-3d.png"
-              }
-              alt="QuestDB logo"
-              width="163"
-              height="144"
-            />
-          </a>
-          <Whoops
-            src={preloadedImages["assets/whoops.svg"] || "assets/whoops.svg"}
-            alt="Whoops"
-          />
-          <TextContainer>
-            {state.errorMessage ?? (
-              <Box flexDirection="column" gap="0">
-                <Text
-                  align="center"
-                  size="lg"
-                  color="contentSecondary"
-                  weight={600}
-                >
-                  It appears we can&apos;t connect to the database.
-                </Text>
-                <Text align="center" size="lg" color="contentSecondary">
-                  Please, check if the server is running correctly.
-                </Text>
-              </Box>
-            )}
-            <RefreshButton
-              variant="primary"
-              prefixIcon={<Refresh size="18px" />}
-              onClick={() => {
-                void fetchAll(false)
-                  .then(() => dispatch({ view: View.ready }))
-                  .catch(() => {
-                    if (errorTimeoutRef.current) {
-                      clearTimeout(errorTimeoutRef.current)
-                    }
-                    setErrorMessage("Retry failed")
-                    errorTimeoutRef.current = setTimeout(
-                      () => setErrorMessage(null),
-                      3000,
-                    )
-                  })
-              }}
-            >
-              Retry
-            </RefreshButton>
-            <ErrorMessage>
-              {errorMessage && (
-                <>
-                  <CloseOutlineIcon size="18px" />
-                  {errorMessage}
-                </>
-              )}
-            </ErrorMessage>
-          </TextContainer>
-        </Box>
-      </CenteredLayout>
+      <ConnectionErrorView
+        preloadedImages={preloadedImages}
+        error={state.errorMessage ?? connectionError}
+        status={retryPending ? "Reconnecting…" : (errorMessage ?? undefined)}
+        pending={retryPending}
+        retryLabel="Retry"
+        onRetry={() => {
+          if (retryInFlight.current) return
+          retryInFlight.current = true
+          setRetryPending(true)
+          setErrorMessage(null)
+          void fetchAll(false)
+            .then(() => dispatch({ view: View.ready }))
+            .catch(() => setErrorMessage("Retry failed"))
+            .finally(() => {
+              retryInFlight.current = false
+              setRetryPending(false)
+            })
+        }}
+      />
     ),
   }
 

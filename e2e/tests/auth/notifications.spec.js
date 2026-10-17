@@ -7,8 +7,10 @@ const baseUrl = `http://localhost:9999${contextPath}`
 const tokenUrl = "https://oauth.example.com/token"
 
 // Keep the real Schema, React event delegation, Toastify, and CSS. Only the
-// HTTP server/IdP are stubbed, so these regressions need no licensed database.
-const visitConsole = (refreshWarning = false) => {
+// HTTP server/IdP and OS clipboard permission are stubbed, so these regressions
+// need no licensed database or interactive clipboard access.
+const visitConsole = (refreshWarning = false, theme = "dark") => {
+  if (refreshWarning) cy.clock(Date.now(), ["Date"])
   cy.intercept("GET", `${baseUrl}/settings`, {
     config: {
       "release.type": refreshWarning ? "EE" : "OSS",
@@ -65,8 +67,10 @@ const visitConsole = (refreshWarning = false) => {
   cy.visit(`${baseUrl}${refreshWarning ? "?code=notifications" : ""}`, {
     onBeforeLoad(win) {
       win.localStorage.clear()
+      cy.stub(win.navigator.clipboard, "writeText").resolves()
       seedNotebookOnboarding(win)
       win.localStorage.setItem("auto.refresh.tables", "false")
+      win.localStorage.setItem("appearance.themePreference", theme)
     },
   })
   cy.wait("@settings")
@@ -106,6 +110,50 @@ const showCopyToast = () => {
 }
 
 describe("notification keyboard integration", () => {
+  for (const [theme, color] of [
+    ["dark", "rgb(248, 248, 242)"],
+    ["light", "rgb(28, 32, 41)"],
+  ]) {
+    it(`keeps the renewal message readable in ${theme} mode`, () => {
+      visitConsole(true, theme)
+      cy.get("#sso-refresh-failed .Toastify__toast-body span")
+        .first()
+        .should("have.css", "color", color)
+    })
+  }
+
+  it("returns focus with Escape without dismissing the message", () => {
+    visitConsole(true)
+    tableRow().click().then(focusNotification)
+    cy.get("#sso-refresh-failed .Toastify__toast-body")
+      .should("be.focused")
+      .then(($message) => pressKey($message, { key: "Escape" }))
+    tableRow().should("be.focused")
+    cy.get("#sso-refresh-failed").should("be.visible")
+  })
+
+  it("keeps native PageDown scrolling in a nested non-focusable panel", () => {
+    visitConsole()
+    // Model the notebook's plain scroll container under the real console main.
+    // No notebook/editor worker or persisted tab is needed to exercise the
+    // browser's focus/scroll contract. The click and key below are real events.
+    cy.document().then((doc) => {
+      const panel = doc.createElement("div")
+      panel.id = "keyboard-scroll-probe"
+      panel.style.cssText =
+        "position:fixed;top:150px;left:450px;width:400px;height:200px;overflow:auto;z-index:10"
+      const content = doc.createElement("div")
+      content.style.height = "3000px"
+      panel.appendChild(content)
+      doc.querySelector("main").appendChild(panel)
+    })
+    cy.get("#keyboard-scroll-probe").realClick({ x: 20, y: 20 })
+    cy.window().its("document.activeElement.tagName").should("not.eq", "MAIN")
+    cy.realPress("PageDown")
+    cy.get("#keyboard-scroll-probe").should(($panel) => {
+      expect($panel[0].scrollTop).to.be.greaterThan(0)
+    })
+  })
   for (const kind of ["table", "folder", "column"]) {
     it(`focuses the renewal warning from a schema ${kind} row`, () => {
       visitConsole(true)
@@ -127,7 +175,7 @@ describe("notification keyboard integration", () => {
       } else {
         tableRow().click().should("be.focused").then(focusNotification)
       }
-      cy.get("#sso-refresh-failed .Toastify__close-button").should("be.focused")
+      cy.get("#sso-refresh-failed .Toastify__toast-body").should("be.focused")
     })
   }
 
@@ -186,7 +234,7 @@ describe("notification keyboard integration", () => {
     visitConsole()
     showCopyToast()
     cy.getByDataHook("help-panel-button").focus().then(focusNotification)
-    cy.get(".Toastify__toast--success .Toastify__close-button").should(
+    cy.get(".Toastify__toast--success .Toastify__toast-body").should(
       "be.focused",
     )
     cy.get(
@@ -195,7 +243,7 @@ describe("notification keyboard integration", () => {
     // Timer progress is deterministic; CSS pause is asserted above.
     cy.clock()
     cy.tick(2300)
-    cy.get(".Toastify__toast--success .Toastify__close-button").should(
+    cy.get(".Toastify__toast--success .Toastify__toast-body").should(
       "be.focused",
     )
     cy.getByDataHook("help-panel-button").focus()
@@ -214,9 +262,10 @@ describe("notification keyboard integration", () => {
     visitConsole()
     showCopyToast()
     cy.getByDataHook("help-panel-button").focus().then(focusNotification)
-    cy.get(".Toastify__toast--success .Toastify__close-button")
-      .should("be.focused")
-      .click()
+    cy.get(".Toastify__toast--success .Toastify__toast-body").should(
+      "be.focused",
+    )
+    cy.get(".Toastify__toast--success .Toastify__close-button").click()
     cy.get(".Toastify__toast--success").should("not.exist")
     cy.getByDataHook("help-panel-button").should("be.focused")
   })

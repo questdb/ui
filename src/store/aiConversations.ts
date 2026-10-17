@@ -12,6 +12,8 @@ export const aiConversationStore = {
   getMeta: (conversationId: ConversationId) =>
     db.ai_conversations.get(conversationId),
 
+  getLatestMeta: () => db.ai_conversations.orderBy("updatedAt").last(),
+
   async getMessages(
     conversationId: ConversationId,
   ): Promise<ConversationMessage[]> {

@@ -77,7 +77,7 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { fetchColumns } from "./fetchColumns"
 import { subscribeSchemaRecovery } from "./schemaRecovery"
 import { isSessionEnded } from "../../modules/OAuth2/session"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -182,7 +182,7 @@ const Schema = ({
     // SQL compatibility failures are not connection outages: unrelated OKs
     // must not retry a permanently unsupported catalog query on every poll.
     const recoverable =
-      errorRef.current === error ||
+      failure?.connectionError === true ||
       (failure?.status !== undefined && failure.status >= 500) ||
       failure?.requestNotSent
     errorRef.current = recoverable ? loadingError : null
@@ -202,6 +202,10 @@ const Schema = ({
         }))
         setTables(data)
         dispatch(actions.query.setTables(data))
+        // First paint needs only the table list. Recovery after a catalog
+        // failure still waits for every query to succeed in refreshSchema.
+        if (loadingFailureVersion.current === 0)
+          dispatchState({ view: View.ready })
         const details = [fetchMaterializedViews()]
         // we only need views() to get view state: invalid/valid + invalidation reason
         // so only fetch if there are views present - this avoids unnecessary errors on older servers

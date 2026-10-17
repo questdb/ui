@@ -1,7 +1,11 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { Client } from "./client"
+import {
+  AuthRefreshUnavailableError,
+  SessionEndedError,
+} from "../../modules/OAuth2/session"
 
 const commonHeaders = {
   Authorization: "Bearer retained-credentials",
@@ -38,7 +42,7 @@ const fetchRequests = [
   },
 ]
 
-const mockUploadRequests = () => {
+const mockUploadRequests = (autoComplete = true) => {
   const requests: UploadRequest[] = []
   class UploadRequest {
     status = 200
@@ -54,7 +58,9 @@ const mockUploadRequests = () => {
     open = vi.fn()
     setRequestHeader = vi.fn()
     onload?: () => void
-    send = vi.fn(() => this.onload?.())
+    send = vi.fn(() => {
+      if (autoComplete) this.onload?.()
+    })
 
     constructor() {
       requests.push(this)
@@ -200,6 +206,105 @@ describe("non-SQL refresh coordination", () => {
       }
     },
   )
+})
+
+const operations = [...fetchRequests, { name: "uploadCSVFile", run: upload }]
+const installExpired = () =>
+  authSessionState.setAuthPayload({
+    access_token: "expired",
+    refresh_token: "refresh",
+    token_type: "Bearer",
+    expires_at: new Date(Date.now() - 1).toISOString(),
+  })
+
+describe("non-SQL auth rejection branches", () => {
+  it.each(operations)(
+    "$name rejects unavailable renewal without sending a request",
+    async ({ run }) => {
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const requests = mockUploadRequests()
+      const fetchMock = vi.fn()
+      vi.stubGlobal("fetch", fetchMock)
+      installExpired()
+      const client = new Client()
+      client.refreshTokenMethod = vi.fn(() =>
+        Promise.reject(new Error("IdP unavailable")),
+      )
+      await expect(run(client)).rejects.toBeInstanceOf(
+        AuthRefreshUnavailableError,
+      )
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(requests).toHaveLength(0)
+      expect(authSessionState.isAuthenticated()).toBe(true)
+    },
+  )
+
+  it.each(operations)(
+    "$name rejects a session end while waiting and never sends under the new login",
+    async ({ run }) => {
+      const requests = mockUploadRequests()
+      const fetchMock = vi.fn()
+      vi.stubGlobal("fetch", fetchMock)
+      installExpired()
+      const client = new Client()
+      client.refreshTokenMethod = () => new Promise(() => {})
+      const rejected = expect(run(client)).rejects.toBeInstanceOf(
+        SessionEndedError,
+      )
+      await Promise.resolve()
+      authSessionState.endSession()
+      authSessionState.markNonSSOAuthenticated()
+      await rejected
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(requests).toHaveLength(0)
+    },
+  )
+
+  it.each(operations)(
+    "$name rejects a response from the previous login",
+    async ({ name, run }) => {
+      const requests = mockUploadRequests(false)
+      let finish!: (response: Response) => void
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          () =>
+            new Promise<Response>((resolve) => {
+              finish = resolve
+            }),
+        ),
+      )
+      installToken("initial", false)
+      const rejected = expect(run(new Client())).rejects.toBeInstanceOf(
+        SessionEndedError,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+      authSessionState.endSession()
+      authSessionState.markNonSSOAuthenticated()
+      if (name === "uploadCSVFile") requests[0].onload!()
+      else finish(new Response("{}"))
+      await rejected
+    },
+  )
+
+  it("validateQuery respects cancellation before and during a refresh wait", async () => {
+    installExpired()
+    const client = new Client()
+    client.refreshTokenMethod = () => new Promise(() => {})
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const signal = new AbortController()
+    const rejected = expect(
+      client.validateQuery("select 1", signal.signal),
+    ).rejects.toMatchObject({ name: "AbortError" })
+    signal.abort()
+    await rejected
+    await expect(
+      client.validateQuery("select 1", signal.signal),
+    ).rejects.toMatchObject({ name: "AbortError" })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })
 
 describe("non-SQL authorization outside SSO", () => {

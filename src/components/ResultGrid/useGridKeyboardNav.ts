@@ -82,14 +82,9 @@ export const useGridKeyboardNav = (
 
   const onBlur = useCallback((e: React.FocusEvent<HTMLElement>) => {
     const next = e.relatedTarget as Node | null
-    // ConsoleMain is a programmatic recovery focus target, not another
-    // interactive control. Blank toolbar/status clicks must retain the cell.
-    if (
-      next === null ||
-      e.currentTarget.contains(next) ||
-      (next as HTMLElement).tagName === "MAIN"
-    )
-      return
+    // Blank chrome clicks leave no focus target; keep the current cell.
+    // Explicit focus moves outside the grid should clear it.
+    if (next === null || e.currentTarget.contains(next)) return
     setFocusedCell(null)
   }, [])
 

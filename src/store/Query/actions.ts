@@ -101,11 +101,6 @@ const settleLoadingNotification = (
   payload: { queryId, ...(discardPrevious ? { discardPrevious: true } : {}) },
 })
 
-const settleActiveLoadingNotification = (queryId: number): QueryAction => ({
-  type: QueryAT.SETTLE_ACTIVE_LOADING_NOTIFICATION,
-  payload: { queryId },
-})
-
 const setResult = (payload: QueryRawResult | undefined): QueryAction => ({
   payload,
   type: QueryAT.SET_RESULT,
@@ -178,7 +173,6 @@ export default {
   removeNotification,
   resetSession,
   settleLoadingNotification,
-  settleActiveLoadingNotification,
   updateNotificationKey,
   updateNotificationKeys,
   moveNotificationNamespace,

@@ -11,7 +11,7 @@ import {
   type QueryAction,
 } from "../store/Query/types"
 import { Client, Type } from "./questdb"
-import { authSessionState } from "../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../modules/OAuth2/authSessionState"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import reducer, { initialState } from "../store/Query/reducers"

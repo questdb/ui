@@ -45,7 +45,7 @@ import {
   throwError,
   Observable,
 } from "rxjs"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { isSessionEnded } from "../../modules/OAuth2/session"
 
 const sessionEnded$ = new Observable<void>((subscriber) =>
@@ -84,7 +84,9 @@ export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
     ofType<StoreAction, TelemetryAction>(TelemetryAT.START),
     switchMap(() =>
       from(
-        quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`),
+        quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`, {
+          refreshAuth: false,
+        }),
       ).pipe(
         // Keep the root epic alive so a later login/START can retry.
         catchError(() => EMPTY),
@@ -175,6 +177,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
            `
             .replace(/\s+/g, " ")
             .trim(),
+          { refreshAuth: false },
         ),
       ).pipe(
         map((result) => ({ type: "data" as const, result, remoteConfig })),

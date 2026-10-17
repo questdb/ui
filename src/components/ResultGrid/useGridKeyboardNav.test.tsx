@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 describe("grid focus retention", () => {
-  it.each([null, { tagName: "MAIN" }])(
+  it.each([null])(
     "retains its active cell when focus moves to %j",
     (relatedTarget) => {
       act(() => {
@@ -47,17 +47,20 @@ describe("grid focus retention", () => {
     },
   )
 
-  it("clears the active cell when moving to another interactive control", () => {
-    act(() => {
-      renderer = create(<Mount />)
-    })
-    act(() => nav.onCellClick(2, 1))
-    act(() =>
-      nav.onBlur({
-        relatedTarget: { tagName: "BUTTON" },
-        currentTarget: { contains: () => false },
-      } as unknown as React.FocusEvent<HTMLElement>),
-    )
-    expect(nav.focusedCell).toBeNull()
-  })
+  it.each(["BUTTON", "MAIN"])(
+    "clears the active cell when focus explicitly moves to %s",
+    (tagName) => {
+      act(() => {
+        renderer = create(<Mount />)
+      })
+      act(() => nav.onCellClick(2, 1))
+      act(() =>
+        nav.onBlur({
+          relatedTarget: { tagName },
+          currentTarget: { contains: () => false },
+        } as unknown as React.FocusEvent<HTMLElement>),
+      )
+      expect(nav.focusedCell).toBeNull()
+    },
+  )
 })

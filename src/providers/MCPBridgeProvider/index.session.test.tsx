@@ -2,7 +2,7 @@ import "../../test/stubBrowserGlobals"
 import React from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { afterEach, expect, it, vi } from "vitest"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import {
   createModelToolsClient,
   type ModelToolsClient,

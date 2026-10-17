@@ -7,7 +7,7 @@ import {
   REFRESH_REQUEST_TIMEOUT_MS,
   tokenRefresh,
 } from "./tokenRefresh"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { getTokenExpirationDate } from "../../modules/OAuth2/utils"
@@ -159,7 +159,7 @@ describe("SSO refresh safety", () => {
         })
         if (failure.type !== "error")
           throw new Error("Expected a renewal error")
-        expect(failure.error).toContain("the query was not sent")
+        expect(failure.error).toContain("the request was not sent")
         expect(failure).not.toHaveProperty("sessionEnded")
         expect(isUnverifiableExecError(failure)).toBe(false)
       }
@@ -225,7 +225,7 @@ describe("SSO refresh safety", () => {
         })
         if (failure.type !== "error")
           throw new Error("Expected a renewal error")
-        expect(failure.error).toContain("query was not sent")
+        expect(failure.error).toContain("request was not sent")
         expect(isUnverifiableExecError(failure)).toBe(false)
       }
       expect(fetchMock).not.toHaveBeenCalled()

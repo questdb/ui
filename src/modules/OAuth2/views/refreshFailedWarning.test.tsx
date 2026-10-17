@@ -1,10 +1,13 @@
+import "../../../test/stubBrowserGlobals"
 import React from "react"
+import { ThemeProvider } from "styled-components"
+import { darkTheme, lightTheme } from "../../../theme"
+import { Text } from "../../../components/Text"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { RefreshFailedWarning } from "./refreshFailedWarning"
 
 vi.mock("../../../components/Button", () => ({ Button: "button" }))
-vi.mock("../../../components/Text", () => ({ Text: "span" }))
 vi.mock("../../../components/Box", () => ({ Box: "div" }))
 vi.mock("../../../components/Toast", () => ({
   NOTIFICATION_SHORTCUT_LABEL: "Alt+N",
@@ -27,7 +30,9 @@ const mount = (expiresAt?: string) => {
   const onSignIn = vi.fn()
   act(() => {
     renderer = create(
-      <RefreshFailedWarning expiresAt={expiresAt} onSignIn={onSignIn} />,
+      <ThemeProvider theme={darkTheme}>
+        <RefreshFailedWarning expiresAt={expiresAt} onSignIn={onSignIn} />
+      </ThemeProvider>,
     )
   })
   return onSignIn
@@ -41,13 +46,29 @@ const advanceTime = (ms: number) => {
 }
 
 describe("refresh failure warning", () => {
+  it.each([darkTheme, lightTheme])(
+    "uses primary content color in $mode mode",
+    (theme) => {
+      act(() => {
+        renderer = create(
+          <ThemeProvider theme={theme}>
+            <RefreshFailedWarning onSignIn={vi.fn()} />
+          </ThemeProvider>,
+        )
+      })
+      expect(renderer!.root.findAllByType(Text)[0].props.color).toBe(
+        "contentPrimary",
+      )
+      expect(message()).not.toContain("paused")
+    },
+  )
   it("updates an open warning at expiry without another refresh event", () => {
     const onSignIn = mount(new Date(Date.now() + 20_000).toISOString())
     expect(message()).toContain("Your current token expires at")
     advanceTime(19_999)
     expect(message()).toContain("Your current token expires at")
     advanceTime(1)
-    expect(message()).toContain("Queries are paused until renewal succeeds")
+    expect(message()).toContain("Queries are not being sent. Retry them")
     expect(message()).not.toContain("Your current token expires at")
     act(() => {
       const { onClick } = renderer!.root.findByType("button").props as {
@@ -59,10 +80,10 @@ describe("refresh failure warning", () => {
   })
 
   it.each([undefined, "invalid", "2025-12-31T23:59:59Z"])(
-    "reports paused queries immediately for expiry %s",
+    "reports unsent queries immediately for expiry %s",
     (expiresAt) => {
       mount(expiresAt)
-      expect(message()).toContain("Queries are paused")
+      expect(message()).toContain("Queries are not being sent")
       expect(vi.getTimerCount()).toBe(0)
     },
   )
@@ -79,16 +100,18 @@ describe("refresh failure warning", () => {
     mount(new Date(Date.now() + 20_000).toISOString())
     act(() => {
       renderer!.update(
-        <RefreshFailedWarning
-          expiresAt={new Date(Date.now() + 40_000).toISOString()}
-          onSignIn={vi.fn()}
-        />,
+        <ThemeProvider theme={darkTheme}>
+          <RefreshFailedWarning
+            expiresAt={new Date(Date.now() + 40_000).toISOString()}
+            onSignIn={vi.fn()}
+          />
+        </ThemeProvider>,
       )
     })
     advanceTime(20_000)
     expect(message()).toContain("Your current token expires at")
     advanceTime(20_000)
-    expect(message()).toContain("Queries are paused")
+    expect(message()).toContain("Queries are not being sent")
   })
 
   it("does not overflow the timer for distant expiry dates", () => {
@@ -96,6 +119,6 @@ describe("refresh failure warning", () => {
     advanceTime(2_147_483_647)
     expect(message()).toContain("Your current token expires at")
     advanceTime(1)
-    expect(message()).toContain("Queries are paused")
+    expect(message()).toContain("Queries are not being sent")
   })
 })

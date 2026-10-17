@@ -9,7 +9,7 @@ import {
   type QueryExecResult,
 } from "../../../utils/executeSingleRaw"
 import { Client } from "../../../utils/questdb/client"
-import { authSessionState } from "../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import {
   createNotebookController,

@@ -1,7 +1,7 @@
 import "../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { StoreKey } from "../../utils/localStorage/types"
-import { authSessionState } from "./ssoAuthState"
+import { authSessionState } from "./authSessionState"
 import { handleSSOUnauthorized } from "./handleUnauthorized"
 import type { AuthPayload } from "./types"
 

@@ -66,10 +66,11 @@ const mountNotifications = () => {
       selector === ".Toastify__toast" ? notification : null,
     ),
     focus,
+    setAttribute: vi.fn(),
+    removeAttribute: vi.fn(),
   }
   const querySelector = notification.querySelector.mockImplementation(
-    (selector: string) =>
-      selector === ".Toastify__close-button" ? control : {},
+    (selector: string) => (selector === ".Toastify__toast-body" ? control : {}),
   )
   const notifications = [notification]
   const querySelectorAll = vi.fn(() => notifications)
@@ -105,6 +106,7 @@ const mountNotifications = () => {
       shiftKey: false,
       defaultPrevented: false,
       preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
       ...overrides,
     }
     onKeyDown(event as KeyboardEvent)
@@ -157,20 +159,54 @@ describe("toast theme styles", () => {
 })
 
 describe("notification keyboard access", () => {
-  it("advertises Alt+N on the safe close control, never the sign-in action", () => {
-    const { press, focus } = mountNotifications()
+  it("focuses and advertises Alt+N on the message, never a destructive action", () => {
+    const { press, focus, control } = mountNotifications()
     expect(
-      renderer!.root.findByProps({ "aria-label": "Close notification" }).props,
-    ).toMatchObject({
-      "aria-keyshortcuts": NOTIFICATION_SHORTCUT,
-    })
+      renderer!.root.findByProps({ "aria-label": "Close notification" }).props[
+        "aria-keyshortcuts"
+      ],
+    ).toBeUndefined()
     expect(NOTIFICATION_SHORTCUT).toBe("Alt+N")
-    expect(press().preventDefault).toHaveBeenCalledOnce()
-    const editable = { closest: () => ({}) } as unknown as EventTarget
-    expect(
-      press({ key: "˜", target: editable }).preventDefault,
-    ).not.toHaveBeenCalled()
+    const event = press()
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(event.stopPropagation).toHaveBeenCalledOnce()
+    expect(control.setAttribute).toHaveBeenCalledWith("tabindex", "-1")
+    expect(control.setAttribute).toHaveBeenCalledWith(
+      "aria-keyshortcuts",
+      NOTIFICATION_SHORTCUT,
+    )
     expect(focus).toHaveBeenCalledOnce()
+  })
+
+  it.each([{ key: "Dead", keyCode: 229 }, { key: "˜" }, { key: "т" }])(
+    "handles physical Option/Alt+N before Monaco for %j",
+    (shape) => {
+      const { press, focus } = mountNotifications()
+      const event = press({
+        ...shape,
+        target: { closest: () => ({}) } as unknown as EventTarget,
+      })
+      expect(event.preventDefault).toHaveBeenCalledOnce()
+      expect(event.stopPropagation).toHaveBeenCalledOnce()
+      expect(focus).toHaveBeenCalledOnce()
+    },
+  )
+
+  it("Escape returns to the origin without dismissing the message", () => {
+    const { press, origin } = mountNotifications()
+    press()
+    expect(
+      press({ key: "Escape", code: "Escape", altKey: false }).preventDefault,
+    ).toHaveBeenCalledOnce()
+    expect(origin.focus).toHaveBeenCalledOnce()
+    expect(messages.dismiss).not.toHaveBeenCalled()
+  })
+
+  it("leaves only the Toastify body as a live region", () => {
+    mountNotifications()
+    expect(
+      renderer!.root.findByProps({ role: "region" }).props["aria-live"],
+    ).toBe("off")
   })
 
   it.each([
@@ -181,8 +217,6 @@ describe("notification keyboard access", () => {
     { shiftKey: true },
     { defaultPrevented: true },
     { isComposing: true },
-    { keyCode: 229 },
-    { key: "Dead" },
   ])("does not consume unrelated or handled keys %j", (event) => {
     const { press, focus } = mountNotifications()
     expect(press(event).preventDefault).not.toHaveBeenCalled()
@@ -190,11 +224,13 @@ describe("notification keyboard access", () => {
   })
 
   it.each(["ń", "~", "˜"])(
-    "preserves Option-produced %s in editable controls",
+    "preserves composing %s in editable controls",
     (key) => {
       const { press, focus } = mountNotifications()
       const target = { closest: () => ({}) } as unknown as EventTarget
-      expect(press({ key, target }).preventDefault).not.toHaveBeenCalled()
+      expect(
+        press({ key, target, isComposing: true }).preventDefault,
+      ).not.toHaveBeenCalled()
       expect(focus).not.toHaveBeenCalled()
     },
   )
@@ -205,8 +241,13 @@ describe("notification keyboard access", () => {
     notifications.unshift({
       id: "older",
       querySelector: vi.fn((selector: string) =>
-        selector === ".Toastify__close-button"
-          ? { focus: olderFocus, closest: () => null }
+        selector === ".Toastify__toast-body"
+          ? {
+              focus: olderFocus,
+              closest: () => null,
+              setAttribute: vi.fn(),
+              removeAttribute: vi.fn(),
+            }
           : {},
       ),
     })
@@ -330,7 +371,7 @@ describe("notification keyboard access", () => {
   it("removes the keyboard listener on unmount", () => {
     const { removeEventListener, onKeyDown } = mountNotifications()
     act(() => renderer!.unmount())
-    expect(removeEventListener).toHaveBeenCalledWith("keydown", onKeyDown)
+    expect(removeEventListener).toHaveBeenCalledWith("keydown", onKeyDown, true)
     renderer = undefined
   })
 })

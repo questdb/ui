@@ -115,7 +115,9 @@ export const mapQueryRawToResult = async (
       signal.addEventListener("abort", onAbort, { once: true })
       cleanup = () => signal.removeEventListener("abort", onAbort)
     }
-    const res = await promise
+    const res = await promise.then((result) =>
+      result.type === Type.ERROR ? Promise.reject(result) : result,
+    )
     const durationMs = Math.round(performance.now() - startedAt)
     if (res.type === Type.DQL) {
       return {
@@ -145,7 +147,6 @@ export const mapQueryRawToResult = async (
       const errLike = e as {
         error?: unknown
         position?: unknown
-        requestNotSent?: unknown
       }
       if (typeof errLike.error === "string") {
         return {

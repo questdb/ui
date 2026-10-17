@@ -1,6 +1,6 @@
 import { AuthPayload } from "../../modules/OAuth2/types"
 import { AuthRefreshUnavailableError } from "../../modules/OAuth2/session"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { TOKEN_REQUEST_TIMEOUT_MS } from "../../modules/OAuth2/utils"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -85,6 +85,18 @@ class TokenRefreshCoordinator {
     )
   }
 
+  canSendWithoutRefresh() {
+    const payload = authSessionState.getAuthPayload()
+    return (
+      !payload ||
+      (!this.pending &&
+        !authSessionState.hasRefreshFailed() &&
+        (!isRefreshable(payload) ||
+          new Date(payload.expires_at).getTime() - Date.now() >=
+            REFRESH_WINDOW_MS))
+    )
+  }
+
   // Never send a known-expired bearer after a transient refresh failure.
   // Keep the login intact: transport/5xx failures do not prove revocation.
   // Authoritative OAuth rejections are handled by AuthProvider.
@@ -100,19 +112,19 @@ class TokenRefreshCoordinator {
   }
 
   start(
-    originalSession: RefreshableAuthPayload,
+    originalPayload: RefreshableAuthPayload,
     refresh: RefreshTokenMethod | undefined,
   ) {
     if (this.pending || !refresh) return
     const sessionId = authSessionState.getSessionId()
     const deadline = new AbortController()
     const requestController = new AbortController()
-    const expiry = new Date(originalSession.expires_at).getTime()
+    const expiry = new Date(originalPayload.expires_at).getTime()
     let failureReported = false
     const reportFailure = (error: unknown) => {
       if (
         failureReported ||
-        authSessionState.getAuthPayload() !== originalSession ||
+        authSessionState.getAuthPayload() !== originalPayload ||
         authSessionState.getSessionId() !== sessionId
       )
         return

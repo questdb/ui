@@ -11,7 +11,7 @@ import {
 } from "vitest"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { questClient } from "../../utils/questdb/queryClient"
 import { questExecution } from "../../utils/questdb/queryExecution"
 import { quickVis } from "./quick-vis"

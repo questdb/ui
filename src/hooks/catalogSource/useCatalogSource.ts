@@ -9,7 +9,7 @@ import {
 } from "./sourceState"
 import type { SourceFetchOutcome, SourceState } from "./types"
 import { createCatalogRequestDeadline } from "./requestDeadline"
-import { isCancelledByUser } from "../../modules/OAuth2/session"
+import { isCancelledByUser } from "../../utils/questdb/cancellation"
 
 type Params<T> = {
   sourceKey: string

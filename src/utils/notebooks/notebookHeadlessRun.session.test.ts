@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import Dexie, { type Transaction } from "dexie"
 import { toast } from "../../components/Toast"
 import { Client } from "../questdb/client"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { db } from "../../store/db"
@@ -13,6 +13,7 @@ import {
   runHeadlessCell,
   cancelHeadlessCellRuns,
   __resetNotebookHeadlessRunsForTests,
+  SESSION_INTERRUPTED_RUN_NOTE,
 } from "./notebookHeadlessRun"
 import {
   enqueueBufferTask,
@@ -120,9 +121,20 @@ const expectPreviousResult = async () => {
   })
 }
 
+const expectInterruptedResult = async () => {
+  const cell = (await db.buffers.get(BUFFER_ID))?.notebookViewState?.cells[0]
+  expect(cell).toMatchObject({
+    lastRunStatus: "error",
+    lastRunError: SESSION_INTERRUPTED_RUN_NOTE,
+  })
+  expect(cell?.result).toBeUndefined()
+  expect(await loadCellSnapshot(BUFFER_ID, "cell")).toBeUndefined()
+  expect(JSON.stringify(cell)).not.toContain("private_value")
+}
+
 describe("headless notebook authentication sessions", () => {
   it.each(["response", "body"])(
-    "preserves saved results when a delayed %s settles after refresh logout and re-login",
+    "replaces stale success with an interruption marker when a delayed %s settles after refresh logout and re-login",
     async (phase) => {
       const client = new Client()
       client.setCommonHeaders({ Authorization: "Bearer old" })
@@ -176,7 +188,8 @@ describe("headless notebook authentication sessions", () => {
         cancelled: "session_ended",
       })
       expect(summary.note).toMatch(/session.*ended/i)
-      await expectPreviousResult()
+      await expectInterruptedResult()
+      expect(summary.note).toContain("interruption marker was saved")
       expect(fetch).toHaveBeenCalledTimes(1)
     },
   )
@@ -265,7 +278,8 @@ describe("headless notebook authentication sessions", () => {
       })
       expect(note).toMatch(/session.*ended/i)
       expect(JSON.stringify(summary)).not.toContain("private")
-      await expectPreviousResult()
+      await expectInterruptedResult()
+      expect(summary.note).toContain("interruption marker was saved")
     },
   )
 
@@ -312,11 +326,94 @@ describe("headless notebook authentication sessions", () => {
       )
       expect(sqlCalls).toHaveLength(1)
       expect(decodeURIComponent(sqlCalls[0][0])).toContain("values (1)")
-      await expectPreviousResult()
+      await expectInterruptedResult()
     } finally {
       eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA, logout)
     }
   })
+
+  it.each([
+    "edit",
+    "mount",
+    "user action",
+    "new snapshot",
+    "delete",
+    "archive",
+  ])(
+    "does not overwrite %s with a late interruption marker",
+    async (change) => {
+      let finish!: (response: Response) => void
+      const request = new Promise<Response>((resolve) => {
+        finish = resolve
+      })
+      // The fetch closure is called only after this setup has completed.
+      let started!: () => void
+      const began = new Promise<void>((resolve) => {
+        started = resolve
+      })
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => {
+          started()
+          return request
+        }),
+      )
+      let claimed = false
+      let seq = 0
+      const run = runHeadlessCell(
+        BUFFER_ID,
+        {
+          isBufferClaimed: () => claimed,
+          getQuest: () => new Client(),
+          getBufferSeq: () => seq,
+        },
+        "cell",
+      )
+      await began
+      let release!: () => void
+      let entered!: () => void
+      const queued = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      const blocker = enqueueBufferTask(BUFFER_ID, () => {
+        entered()
+        return new Promise<void>((resolve) => {
+          release = resolve
+        })
+      })
+      await queued
+      finish(response())
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      if (change === "mount") claimed = true
+      if (change === "user action") seq++
+      if (change === "edit")
+        await bufferStore.update(BUFFER_ID, {
+          notebookViewState: {
+            cells: [{ id: "cell", position: 0, value: "select 777" }],
+          },
+        })
+      if (change === "delete") await db.buffers.delete(BUFFER_ID)
+      if (change === "archive")
+        await bufferStore.update(BUFFER_ID, { archived: true })
+      if (change === "new snapshot")
+        await saveCellSnapshot({
+          bufferId: BUFFER_ID,
+          cellId: "cell",
+          results: previous,
+          savedAt: 2,
+        })
+      const before = await db.buffers.get(BUFFER_ID)
+      const snapshotBefore = await loadCellSnapshot(BUFFER_ID, "cell")
+      authSessionState.endSession()
+      authSessionState.markNonSSOAuthenticated()
+      release()
+      await blocker
+      const summary = await run
+      expect(summary.note).not.toContain("interruption marker was saved")
+      expect(await db.buffers.get(BUFFER_ID)).toEqual(before)
+      expect(await loadCellSnapshot(BUFFER_ID, "cell")).toEqual(snapshotBefore)
+    },
+  )
 
   it("rechecks the session after the write transaction reads the notebook", async () => {
     const getById = bufferStore.getById.bind(bufferStore)
@@ -339,8 +436,8 @@ describe("headless notebook authentication sessions", () => {
       unverified: true,
       cancelled: "session_ended",
     })
-    expect(reads).toBe(3)
-    await expectPreviousResult()
+    expect(reads).toBe(5) // Includes the fresh marker transaction's read and commit.
+    await expectInterruptedResult()
   })
 
   it.each(["pending update", "completed update", "snapshot"])(
@@ -368,7 +465,6 @@ describe("headless notebook authentication sessions", () => {
         results: previousError,
         savedAt: 1,
       })
-      const before = await db.buffers.get(BUFFER_ID)
       const update = bufferStore.update.bind(bufferStore)
       const put = db.notebook_results.put.bind(db.notebook_results)
       if (phase === "snapshot") {
@@ -403,11 +499,9 @@ describe("headless notebook authentication sessions", () => {
         unverified: true,
       })
       expect(summary.note).toMatch(/session.*ended/i)
-      expect(await db.buffers.get(BUFFER_ID)).toEqual(before)
-      expect(await loadCellSnapshot(BUFFER_ID, "cell")).toMatchObject({
-        results: previousError,
-        savedAt: 1,
-      })
+      // The data-bearing pair rolls back; only a generic interruption marker
+      // is subsequently accepted, atomically deleting the previous snapshot.
+      await expectInterruptedResult()
     },
   )
 
@@ -549,8 +643,9 @@ describe("headless notebook authentication sessions", () => {
     }
     db.buffers.hook("updating", updating)
     try {
-      await makeRun(new Client())
-
+      const summary = await makeRun(new Client())
+      expect(summary.note).toContain("Run history was recorded")
+      expect(summary.note).not.toContain("not saved")
       expect(authSessionState.isAuthenticated()).toBe(false)
       expect(
         (await db.buffers.get(BUFFER_ID))?.notebookViewState?.cells[0]

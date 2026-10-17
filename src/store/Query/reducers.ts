@@ -222,18 +222,6 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       }
     }
 
-    case QueryAT.SETTLE_ACTIVE_LOADING_NOTIFICATION: {
-      // Script progress lives only here. Never scan retained history/groups
-      // for every statement, and never clear a newer execution's progress.
-      if (
-        state.activeNotification?.type !== NotificationType.LOADING ||
-        state.activeNotification.queryId !== action.payload.queryId
-      ) {
-        return state
-      }
-      return { ...state, activeNotification: null }
-    }
-
     case QueryAT.SETTLE_LOADING_NOTIFICATION: {
       const { queryId } = action.payload
       const matches = (notification?: NotificationShape | null) =>
@@ -243,14 +231,16 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       const activeNotification = matches(state.activeNotification)
         ? null
         : state.activeNotification
-      if (!pending && activeNotification === state.activeNotification) {
-        return state
-      }
-      const bufferNotifications = pending
-        ? state.queryNotifications[pending.bufferId] || {}
-        : {}
+      // Script progress has no indexed history: settle it in O(1), and never
+      // touch newer progress or scan retained notification groups.
+      if (!pending)
+        return activeNotification === state.activeNotification
+          ? state
+          : { ...state, activeNotification }
+      const bufferNotifications =
+        state.queryNotifications[pending.bufferId] || {}
       let updatedBufferNotifications = bufferNotifications
-      for (const key of pending?.queryKeys ?? []) {
+      for (const key of pending.queryKeys) {
         const group = bufferNotifications[key]
         if (!matches(group?.latest)) continue
         if (updatedBufferNotifications === bufferNotifications) {
@@ -273,16 +263,16 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
           delete updatedBufferNotifications[key]
         }
       }
-      const pendingLoadingNotifications = pending
-        ? { ...state.pendingLoadingNotifications }
-        : state.pendingLoadingNotifications
-      if (pending) delete pendingLoadingNotifications[queryId]
+      const pendingLoadingNotifications = {
+        ...state.pendingLoadingNotifications,
+      }
+      delete pendingLoadingNotifications[queryId]
       return {
         ...state,
         activeNotification,
         pendingLoadingNotifications,
         queryNotifications:
-          updatedBufferNotifications === bufferNotifications || !pending
+          updatedBufferNotifications === bufferNotifications
             ? state.queryNotifications
             : {
                 ...state.queryNotifications,

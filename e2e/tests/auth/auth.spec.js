@@ -695,7 +695,7 @@ describe("Auth - OIDC ID token", () => {
       cy.typeQuery("select current_user()")
       cy.runLine()
       cy.wait("@expiredBearerQuery")
-      cy.contains("the query was not sent").should("be.visible")
+      cy.contains("the request was not sent").should("be.visible")
       cy.getEditor().should("be.visible")
       cy.getByDataHook("auth-login").should("not.exist")
       cy.get("#sso-refresh-failed").should("be.visible")
@@ -821,7 +821,7 @@ describe("Auth - OIDC ID token", () => {
       .and("contain.text", "Could not renew your SSO session.")
     cy.contains("button", "Retry connection").focus()
     cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
-    cy.get("#sso-refresh-failed .Toastify__close-button").should("be.focused")
+    cy.get("#sso-refresh-failed .Toastify__toast-body").should("be.focused")
     cy.get("#sso-refresh-failed")
       .find(".Toastify__close-button")
       .focus()
@@ -847,9 +847,8 @@ describe("Auth - OIDC ID token", () => {
     cy.getEditor().should("be.visible")
     cy.get("#sso-refresh-failed").should("be.visible")
     cy.get("#sso-refresh-failed .Toastify__close-button").should(
-      "have.attr",
+      "not.have.attr",
       "aria-keyshortcuts",
-      "Alt+N",
     )
     cy.getEditorTabs()
       .its("length")
@@ -858,19 +857,19 @@ describe("Auth - OIDC ID token", () => {
           win.monaco.editor.getEditors()[0].focus()
           win.document.activeElement.dispatchEvent(
             new win.KeyboardEvent("keydown", {
-              key: "n",
+              key: "Dead",
               code: "KeyN",
-              keyCode: 78,
-              which: 78,
+              keyCode: 229,
+              which: 229,
               altKey: true,
               bubbles: true,
               cancelable: true,
             }),
           )
         })
-        cy.get("#sso-refresh-failed .Toastify__close-button").should(
-          "be.focused",
-        )
+        cy.get("#sso-refresh-failed .Toastify__toast-body")
+          .should("be.focused")
+          .and("have.attr", "aria-keyshortcuts", "Alt+N")
         cy.getEditorTabs().should("have.length", count)
       })
   })
@@ -919,9 +918,7 @@ describe("Auth - OIDC ID token", () => {
             }),
           )
         })
-        cy.get("#sso-refresh-failed .Toastify__close-button").should(
-          "be.focused",
-        )
+        cy.get("#sso-refresh-failed .Toastify__toast-body").should("be.focused")
         if (moveFocusAway) {
           cy.getByDataHook("help-panel-button")
             .focus()
@@ -956,8 +953,8 @@ describe("Auth - OIDC ID token", () => {
       "contain.text",
       "Close any open dialog, then press ",
     )
-    cy.getByDataHook("help-panel-button").click()
-    cy.getByDataHook("help-link-contact-us").click()
+    cy.getByDataHook("help-panel-button").focus().realPress("Enter")
+    cy.getByDataHook("help-link-contact-us").focus().realPress("Enter")
     cy.get('form[name="feedback-dialog"] input[name="email"]').focus()
     cy.focused().trigger("keydown", { key: "n", code: "KeyN", altKey: true })
     cy.get('form[name="feedback-dialog"] input[name="email"]').should(
@@ -967,12 +964,13 @@ describe("Auth - OIDC ID token", () => {
     cy.get('[aria-label="Close contact dialog"]').click()
     cy.get('form[name="feedback-dialog"]').should("not.exist")
     cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
-    cy.get("#sso-refresh-failed .Toastify__close-button").should("be.focused")
+    cy.get("#sso-refresh-failed .Toastify__toast-body").should("be.focused")
     cy.get("#sso-refresh-failed .Toastify__close-button").click()
     cy.get("#sso-refresh-failed").should("not.exist")
   })
 
   it("preserves the rename input selection when Alt+N is pressed inside a Radix dialog", () => {
+    cy.clock(Date.now(), ["Date"])
     signIn({
       idTokens: { authorization_code: idToken("initial", 20) },
       refreshReply: {
@@ -1025,9 +1023,13 @@ describe("Auth - OIDC ID token", () => {
     cy.wait("@refreshFailure")
     cy.get("#sso-refresh-failed").should("be.visible")
     cy.get("body").trigger("keydown", { key: "n", code: "KeyN", altKey: true })
-    cy.get("#sso-refresh-failed .Toastify__close-button").should("be.focused")
+    cy.get("#sso-refresh-failed .Toastify__toast-body").should("be.focused")
     cy.contains("#sso-refresh-failed button", "Sign in again").click()
     cy.getByDataHook("auth-login").should("be.visible")
+    cy.getByDataHook("sign-in-error")
+      .should("be.focused")
+      .and("contain.text", "Your previous session has ended")
+    cy.get('[aria-label="Dismiss sign-in error"]').click()
     cy.contains("h2", "Sign in to QuestDB").should("be.focused")
     cy.get('form[name="login"] input[name="username"]')
       .type("admin")

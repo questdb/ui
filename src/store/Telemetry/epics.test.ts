@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { of, Subject } from "rxjs"
-import { authSessionState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { ActionsObservable, StateObservable } from "redux-observable"
 import {
   TelemetryAT,

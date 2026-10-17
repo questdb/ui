@@ -4,7 +4,7 @@ import { QuestContext } from "../../../providers"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import * as QuestDB from "../../../utils/questdb"
 import type { Client, QueryId } from "../../../utils/questdb/client"
-import { isCancelledByUser } from "../../../modules/OAuth2/session"
+import { isCancelledByUser } from "../../../utils/questdb/cancellation"
 
 /**
  * The chart downsamples on render — line families with LTTB, scatter and bar
