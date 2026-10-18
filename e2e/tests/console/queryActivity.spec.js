@@ -145,7 +145,6 @@ const LARGE_LISTING_USERS = ["alice", "bob", "carol"]
 const LARGE_LISTING_NEEDLE_USER = "zed"
 const LARGE_LISTING_NEEDLE_INDEX = 4321
 const LARGE_LISTING_MAX_AGE_SECONDS = 600
-const SETTLE_MS = 500
 
 const largeListing = () =>
   Array.from({ length: LARGE_LISTING_SIZE }, (_, index) =>
@@ -162,15 +161,14 @@ const largeListing = () =>
     }),
   )
 
-const settledRows = () => {
-  cy.wait(SETTLE_MS)
-  return cy.getByDataHook("query-activity-row", { timeout: 0 })
-}
+// A completed HTTP request does not mean the virtualizer has measured and
+// painted its rows. Retry observable UI states, not a fixed rendering delay.
+const renderedRows = () => cy.getByDataHook("query-activity-row")
 
-const settledFirstRowId = (queryId) =>
-  settledRows().then(($rows) =>
-    expect($rows.first().attr("data-query-id")).to.equal(String(queryId)),
-  )
+const firstRowId = (queryId) =>
+  renderedRows().should(($rows) => {
+    expect($rows.first().attr("data-query-id")).to.equal(String(queryId))
+  })
 
 const pickOrder = (key) => {
   cy.getByDataHook("query-activity-sort-trigger").click()
@@ -582,33 +580,40 @@ describe("Query Activity drawer", () => {
     cy.wait("@queryActivity")
 
     // Then the listing renders through the virtual list
-    cy.wait(SETTLE_MS)
-    cy.getByDataHook("query-activity-count-badge", { timeout: 0 }).then(
-      ($badge) =>
-        expect($badge.text()).to.contain(`${LARGE_LISTING_SIZE} running`),
+    cy.getByDataHook("query-activity-count-badge").should(
+      "contain",
+      `${LARGE_LISTING_SIZE} running`,
     )
-    cy.getByDataHook("query-activity-row", { timeout: 0 }).then(($rows) =>
-      expect($rows.length, "rendered rows").to.be.within(1, 199),
-    )
+    renderedRows().should(($rows) => {
+      expect($rows.length, "rendered rows").to.be.within(1, 199)
+    })
 
     // When the list is scrolled to the end
-    cy.getByDataHook("query-activity-scroller").scrollTo("bottom")
+    cy.getByDataHook("query-activity-scroller")
+      .should(($scroller) => {
+        // The initial probe row can exist before Virtuoso has measured it and
+        // allocated the full scroll range. Do not scroll that provisional list.
+        const scroller = $scroller[0]
+        expect(
+          scroller.scrollHeight,
+          "measured scroll range",
+        ).to.be.greaterThan(scroller.clientHeight)
+      })
+      .scrollTo("bottom")
 
     // Then the lightest query is rendered
-    settledRows()
-      .last()
-      .within(() =>
-        cy
-          .getByDataHook("query-activity-row-memory", { timeout: 0 })
-          .then(($memory) => expect($memory.text()).to.match(/^0 B \//)),
-      )
+    renderedRows().should(($rows) => {
+      expect(
+        $rows.last().find('[data-hook="query-activity-row-memory"]').text(),
+      ).to.match(/^0 B \//)
+    })
 
     // When a filter matches a single user
     cy.getByDataHook("query-activity-search").type(LARGE_LISTING_NEEDLE_USER)
 
     // Then only that query remains
-    settledRows().then(($rows) => {
-      expect($rows.length).to.equal(1)
+    renderedRows().should(($rows) => {
+      expect($rows).to.have.length(1)
       expect($rows.first().attr("data-query-id")).to.equal(
         String(LARGE_LISTING_FIRST_ID + LARGE_LISTING_NEEDLE_INDEX),
       )
@@ -618,26 +623,24 @@ describe("Query Activity drawer", () => {
     cy.getByDataHook("query-activity-search-clear").click()
 
     // Then the list is back
-    settledRows().then(($rows) => expect($rows.length).to.be.greaterThan(1))
+    renderedRows().should("have.length.greaterThan", 1)
 
     // When the list is sorted by lowest id
     pickOrder("id-asc")
 
     // Then
-    settledFirstRowId(LARGE_LISTING_FIRST_ID)
+    firstRowId(LARGE_LISTING_FIRST_ID)
 
     // When the list is sorted by highest id
     pickOrder("id-desc")
 
     // Then
-    settledFirstRowId(LARGE_LISTING_FIRST_ID + LARGE_LISTING_SIZE - 1)
+    firstRowId(LARGE_LISTING_FIRST_ID + LARGE_LISTING_SIZE - 1)
 
     // When the list is sorted by oldest start
     pickOrder("started-asc")
 
     // Then
-    settledFirstRowId(
-      LARGE_LISTING_FIRST_ID + LARGE_LISTING_MAX_AGE_SECONDS - 1,
-    )
+    firstRowId(LARGE_LISTING_FIRST_ID + LARGE_LISTING_MAX_AGE_SECONDS - 1)
   })
 })
