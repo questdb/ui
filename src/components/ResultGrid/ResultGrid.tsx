@@ -550,6 +550,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onCellClick,
       onKeyDown,
       onBlur,
+      onFocus,
     } = useGridKeyboardNav(
       virtualRowCount,
       columns.length,
@@ -864,6 +865,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         tabIndex={0}
         onKeyDown={handleGridKeyDown}
         onBlur={onBlur}
+        onFocus={onFocus}
         role="grid"
         aria-rowcount={rowCount + 1}
         aria-colcount={columns.length}

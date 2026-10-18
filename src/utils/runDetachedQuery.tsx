@@ -78,6 +78,7 @@ export async function runDetachedQuery(
         actions.addNotification(
           {
             query: queryKey,
+            queryId,
             content: <QueryInNotification query={normalizedSQL} />,
           },
           namespaceKey,
@@ -92,6 +93,7 @@ export async function runDetachedQuery(
         actions.addNotification(
           {
             query: queryKey,
+            queryId,
             content: (
               <Text color="contentPrimary" ellipsis title={normalizedSQL}>
                 {result.notice}
@@ -113,6 +115,7 @@ export async function runDetachedQuery(
         actions.addNotification(
           {
             query: queryKey,
+            queryId,
             jitCompiled: result.explain?.jitCompiled ?? false,
             content: (
               <QueryResult {...result.timings} rowCount={result.count} />
@@ -147,6 +150,7 @@ export async function runDetachedQuery(
       actions.addNotification(
         {
           query: queryKey,
+          queryId,
           content: (
             <Text color="statusDanger">
               {error.error || error.message || "Query execution failed"}

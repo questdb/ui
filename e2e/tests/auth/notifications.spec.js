@@ -49,6 +49,12 @@ const visitConsole = (refreshWarning = false, theme = "dark") => {
         dataset: [["focus_probe", "NONE", false]],
         count: 1,
       }
+    } else if (query.toLowerCase().includes("select value from focus_probe")) {
+      body = {
+        columns: [{ name: "value", type: "INT" }],
+        dataset: [[1], [2], [3]],
+        count: 3,
+      }
     } else if (query.includes("information_schema.")) {
       body = {
         columns: [
@@ -61,7 +67,13 @@ const visitConsole = (refreshWarning = false, theme = "dark") => {
         count: 1,
       }
     }
-    req.reply({ body })
+    req.reply({
+      body: {
+        ...body,
+        query,
+        timings: { compiler: 0, execute: 0, count: 0, authentication: 0 },
+      },
+    })
   })
   cy.intercept("GET", `${baseUrl}/warnings*`, [])
   cy.visit(`${baseUrl}${refreshWarning ? "?code=notifications" : ""}`, {
@@ -70,6 +82,7 @@ const visitConsole = (refreshWarning = false, theme = "dark") => {
       cy.stub(win.navigator.clipboard, "writeText").resolves()
       seedNotebookOnboarding(win)
       win.localStorage.setItem("auto.refresh.tables", "false")
+      win.localStorage.setItem("feature.new.grid", "true")
       win.localStorage.setItem("appearance.themePreference", theme)
     },
   })
@@ -256,6 +269,64 @@ describe("notification keyboard integration", () => {
     cy.clock().invoke("restore")
     cy.get(".Toastify__toast--success").should("not.exist")
     cy.getByDataHook("help-panel-button").should("be.focused")
+  })
+
+  it("restores the shortcut origin when a notification message is clicked", () => {
+    visitConsole()
+    showCopyToast()
+    cy.getByDataHook("help-panel-button").focus().then(focusNotification)
+    cy.get(".Toastify__toast--success .Toastify__toast-body")
+      .should("be.focused")
+      .realClick()
+    cy.get(".Toastify__toast--success").should("not.exist")
+    cy.getByDataHook("help-panel-button").should("be.focused")
+  })
+
+  it("keeps the renewal message when click dismissal is disabled", () => {
+    visitConsole(true)
+    tableRow().click().then(focusNotification)
+    cy.get("#sso-refresh-failed .Toastify__toast-body")
+      .should("be.focused")
+      .find("span")
+      .first()
+      .realClick()
+    cy.get("#sso-refresh-failed").should("be.visible")
+  })
+
+  it("restores result-grid navigation and copy after Alt+N and Escape", () => {
+    visitConsole()
+    cy.typeQuery("select value from focus_probe;")
+    cy.getByDataHook("button-run-query").click()
+    cy.get("#cell-0-0").realClick()
+    cy.get('[role="grid"]').should("be.focused")
+    cy.realPress("ArrowDown")
+    cy.get('[role="grid"]').should(
+      "have.attr",
+      "aria-activedescendant",
+      "cell-1-0",
+    )
+    cy.realPress(["Control", "c"])
+    cy.contains(".Toastify__toast--success", "Copied to clipboard").should(
+      "be.visible",
+    )
+    cy.realPress(["Alt", "n"])
+    cy.get(".Toastify__toast--success .Toastify__toast-body").should(
+      "be.focused",
+    )
+    cy.realPress("Escape")
+    cy.get('[role="grid"]')
+      .should("be.focused")
+      .and("have.attr", "aria-activedescendant", "cell-1-0")
+    cy.realPress("ArrowDown")
+    cy.get('[role="grid"]').should(
+      "have.attr",
+      "aria-activedescendant",
+      "cell-2-0",
+    )
+    cy.realPress(["Control", "c"])
+    cy.window()
+      .its("navigator.clipboard.writeText")
+      .should("have.been.calledWith", "3")
   })
 
   it("restores the shortcut origin when a paused toast is manually closed", () => {

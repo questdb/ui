@@ -72,6 +72,7 @@ export const buildDDLQuery = (name: string, kind: TableKind): string => {
 
 export class Client {
   private _controllers = new Map<QueryId, AbortController>()
+  private _activeUploads = 0
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
@@ -135,7 +136,8 @@ export class Client {
     this._activeQueryId = null
   }
 
-  hasActiveRequests = () => this._controllers.size > 0
+  hasActiveRequests = () =>
+    this._controllers.size > 0 || this._activeUploads > 0
 
   abortActive = () => {
     if (this._activeQueryId !== null) {
@@ -790,39 +792,51 @@ export class Client {
       ...serializedSettings,
     }
 
-    return new Promise((resolve, reject) => {
-      const request = new XMLHttpRequest()
-      request.open("POST", `imp?${new URLSearchParams(params)}`)
-      const headers = this.requestHeaders()
-      Object.keys(headers).forEach((key) => {
-        request.setRequestHeader(key, headers[key])
-      })
-      request.upload.addEventListener("progress", (e) => {
-        const percent_completed = (e.loaded / e.total) * 100
-        onProgress(percent_completed)
-      })
-      request.onload = (_e) => {
-        if (!session.isCurrent()) {
-          reject(new SessionEndedError())
-          return
-        }
-        if (request.status === 200) {
-          resolve(JSON.parse(request.response as string) as UploadResult)
-        } else {
+    // Uploads use XHR rather than SQL controllers, but are still outstanding
+    // writes for the sign-in-again confirmation. Keep tracking through every
+    // terminal path, including session loss and synchronous send failures.
+    this._activeUploads++
+    try {
+      return await new Promise<UploadResult>((resolve, reject) => {
+        const request = new XMLHttpRequest()
+        request.open("POST", `imp?${new URLSearchParams(params)}`)
+        const headers = this.requestHeaders()
+        Object.keys(headers).forEach((key) => {
+          request.setRequestHeader(key, headers[key])
+        })
+        request.upload.addEventListener("progress", (e) => {
+          const percent_completed = (e.loaded / e.total) * 100
+          onProgress(percent_completed)
+        })
+        const rejectRequest = () => {
           reject({
             status: request.status,
             statusText: request.statusText,
           })
         }
-      }
-      request.onerror = () => {
-        reject({
-          status: request.status,
-          statusText: request.statusText,
-        })
-      }
-      request.send(formData)
-    })
+        request.onload = () => {
+          if (!session.isCurrent()) {
+            reject(new SessionEndedError())
+            return
+          }
+          if (request.status === 200) {
+            try {
+              resolve(JSON.parse(request.response as string) as UploadResult)
+            } catch (error) {
+              reject(error)
+            }
+          } else {
+            rejectRequest()
+          }
+        }
+        request.onerror = rejectRequest
+        request.onabort = rejectRequest
+        request.ontimeout = rejectRequest
+        request.send(formData)
+      })
+    } finally {
+      this._activeUploads--
+    }
   }
 
   async savePreferences(

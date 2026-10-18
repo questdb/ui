@@ -2,15 +2,22 @@ import React from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { useGridKeyboardNav } from "./useGridKeyboardNav"
+import { notificationFocusOrigins } from "../Toast/notificationFocus"
 
 vi.mock("../Toast", () => ({ toast: { success: vi.fn() } }))
 
 let renderer: ReactTestRenderer
 let nav: ReturnType<typeof useGridKeyboardNav>
-const Mount = () => {
+const Mount = ({
+  rowCount = 10,
+  colCount = 3,
+}: {
+  rowCount?: number
+  colCount?: number
+}) => {
   nav = useGridKeyboardNav(
-    10,
-    3,
+    rowCount,
+    colCount,
     () => 1,
     () => undefined,
     { current: null },
@@ -23,6 +30,94 @@ afterEach(() => {
 })
 
 describe("grid focus retention", () => {
+  const leaveForNotification = () => {
+    const grid = { contains: () => false } as unknown as HTMLElement
+    const notification = {} as HTMLElement
+    const message = { closest: () => notification } as unknown as HTMLElement
+    notificationFocusOrigins.set(notification, grid)
+    act(() => nav.onCellClick(2, 1))
+    act(() =>
+      nav.onBlur({
+        currentTarget: grid,
+        relatedTarget: message,
+      } as unknown as React.FocusEvent<HTMLElement>),
+    )
+    expect(nav.focusedCell).toBeNull()
+    return { grid, message }
+  }
+
+  it("restores the selected coordinate and navigation when returning from its notification", () => {
+    act(() => {
+      renderer = create(<Mount />)
+    })
+    const { grid, message } = leaveForNotification()
+    act(() =>
+      nav.onFocus({
+        target: grid,
+        currentTarget: grid,
+        relatedTarget: message,
+      } as unknown as React.FocusEvent<HTMLElement>),
+    )
+    expect(nav.focusedCell).toEqual({ row: 2, col: 1 })
+    act(() =>
+      nav.onKeyDown({
+        key: "ArrowDown",
+        preventDefault: vi.fn(),
+      } as unknown as React.KeyboardEvent),
+    )
+    expect(nav.focusedCell).toEqual({ row: 3, col: 1 })
+  })
+
+  it.each<[number, number, { row: number; col: number } | null]>([
+    [2, 1, { row: 1, col: 0 }],
+    [0, 3, null],
+    [10, 0, null],
+  ])(
+    "clamps notification-return focus to a changed %s by %s dataset",
+    (rowCount, colCount, expected) => {
+      act(() => {
+        renderer = create(<Mount />)
+      })
+      const { grid, message } = leaveForNotification()
+      act(() =>
+        renderer.update(<Mount rowCount={rowCount} colCount={colCount} />),
+      )
+      act(() =>
+        nav.onFocus({
+          target: grid,
+          currentTarget: grid,
+          relatedTarget: message,
+        } as unknown as React.FocusEvent<HTMLElement>),
+      )
+      expect(nav.focusedCell).toEqual(expected)
+    },
+  )
+
+  it("does not restore the saved coordinate after focus leaves the notification elsewhere", () => {
+    act(() => {
+      renderer = create(<Mount />)
+    })
+    const { grid, message } = leaveForNotification()
+    act(() =>
+      nav.onFocus({
+        target: grid,
+        currentTarget: grid,
+        relatedTarget: null,
+      } as unknown as React.FocusEvent<HTMLElement>),
+    )
+    expect(nav.focusedCell).toBeNull()
+    // The excursion snapshot was consumed, so later notification focus cannot
+    // unexpectedly resurrect a selection that the user already left behind.
+    act(() =>
+      nav.onFocus({
+        target: grid,
+        currentTarget: grid,
+        relatedTarget: message,
+      } as unknown as React.FocusEvent<HTMLElement>),
+    )
+    expect(nav.focusedCell).toBeNull()
+  })
+
   it.each([null])(
     "retains its active cell when focus moves to %j",
     (relatedTarget) => {

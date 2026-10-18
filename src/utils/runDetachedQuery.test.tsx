@@ -17,6 +17,7 @@ import { EventType } from "../modules/EventBus/types"
 import reducer, { initialState } from "../store/Query/reducers"
 import actions from "../store/Query/actions"
 import type { AuthPayload } from "../modules/OAuth2/types"
+import { createDetachedQueryKey } from "../scenes/Editor/Monaco/utils"
 
 vi.mock("../components", () => ({ Text: "span" }))
 vi.mock("../scenes/Editor/Monaco/query-in-notification", () => ({
@@ -101,6 +102,7 @@ describe("runDetachedQuery", () => {
         query: config.queryKey,
         bufferId: config.namespaceKey,
         type: NotificationType.ERROR,
+        queryId: 1,
         content: <span color="statusDanger">{message}</span>,
       },
     })
@@ -131,7 +133,7 @@ describe("runDetachedQuery", () => {
     })
     expect(dispatch.mock.calls[1][0]).toMatchObject({
       type: QueryAT.ADD_NOTIFICATION,
-      payload: { type: NotificationType.SUCCESS },
+      payload: { type: NotificationType.SUCCESS, queryId: 1 },
     })
     expect(config.executionRefs.current.chat[config.queryKey].success).toBe(
       true,
@@ -233,6 +235,71 @@ describe("runDetachedQuery", () => {
     expect(state.queryNotifications.chat[config.queryKey]).toBeUndefined()
     expect(state.activeNotification).toBeNull()
   })
+
+  it.each(["alias", "namespace move"])(
+    "publishes a failed in-flight rerun after acceptance via %s",
+    async (acceptance) => {
+      config.queryKey = createDetachedQueryKey(config.normalizedSQL)
+      const alias = "select 42@0-9" as const
+      config.isLoadingNotificationPublished = () => true
+      let state = reducer(
+        initialState,
+        actions.addNotification(
+          { query: config.queryKey, content: "Old success" },
+          config.namespaceKey,
+        ),
+      )
+      config.dispatch = (action) => {
+        state = reducer(state, action)
+        return action
+      }
+      config.onQueryStarted = (queryId) => {
+        state = reducer(
+          state,
+          actions.addNotification(
+            {
+              query: config.queryKey,
+              queryId,
+              type: NotificationType.LOADING,
+              content: "Running",
+            },
+            config.namespaceKey,
+          ),
+        )
+      }
+      let fail!: (reason: unknown) => void
+      queryRaw.mockReturnValue({
+        queryId: 1,
+        promise: new Promise((_, reject) => {
+          fail = reject
+        }),
+      })
+      const execution = runDetachedQuery(config)
+      state = reducer(
+        state,
+        acceptance === "alias"
+          ? actions.updateNotificationKey(
+              config.queryKey,
+              alias,
+              config.namespaceKey,
+              true,
+            )
+          : actions.moveNotificationNamespace(config.namespaceKey, 1, alias),
+      )
+      fail({ error: "Cancelled by user" })
+      await execution
+      const destination = acceptance === "alias" ? config.namespaceKey : 1
+      expect(state.queryNotifications[destination][alias].latest).toMatchObject(
+        {
+          type: NotificationType.ERROR,
+          queryId: 1,
+        },
+      )
+      if (acceptance === "namespace move")
+        expect(state.queryNotifications.chat).toBeUndefined()
+      expect(state.pendingLoadingNotifications).toEqual({})
+    },
+  )
 
   it("settles already-published loading state on session end", async () => {
     config.isLoadingNotificationPublished = () => true

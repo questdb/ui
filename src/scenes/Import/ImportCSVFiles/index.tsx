@@ -218,30 +218,52 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     }
   }
 
-  const refreshFileStatus = async (id: string, name: string) => {
+  const refreshFileStatuses = async (
+    files: Pick<ProcessedFile, "id" | "table_name">[],
+  ) => {
     const session = authSessionState.capture()
-    try {
-      const result = await quest.checkCSVFile(name)
-      if (!session.isCurrent()) return
-      // Only this status belongs to the request. Never restore a list captured
-      // before an upload, rename, settings edit, removal or another drop.
-      setFilesDropped((current) =>
-        current.map((file) =>
-          file.id === id && file.table_name === name
-            ? { ...file, status: result.status }
-            : file,
-        ),
-      )
-    } catch (error) {
-      if (session.isCurrent()) reportError(error)
-    }
+    const results = await Promise.all(
+      files.map(async ({ id, table_name }) => {
+        try {
+          const { status } = await quest.checkCSVFile(table_name)
+          return { id, table_name, status }
+        } catch (error) {
+          if (session.isCurrent()) reportError(error)
+          return undefined
+        }
+      }),
+    )
+    if (!session.isCurrent()) return
+    const updates = new Map(
+      results.flatMap((result) =>
+        result ? [[result.id, result] as const] : [],
+      ),
+    )
+    if (updates.size === 0) return
+    // Publish the whole refresh once, in linear time. Merge only statuses whose
+    // names still match; never restore captured uploads, edits or removed rows.
+    setFilesDropped((current) => {
+      if (!session.isCurrent()) return current
+      let changed = false
+      const next = current.map((file) => {
+        const result = updates.get(file.id)
+        if (
+          !result ||
+          file.table_name !== result.table_name ||
+          file.status === result.status
+        )
+          return file
+        changed = true
+        return { ...file, status: result.status }
+      })
+      return changed ? next : current
+    })
   }
 
-  const handleVisible = async () => {
-    await Promise.all(
-      filesDropped.map((file) => refreshFileStatus(file.id, file.table_name)),
-    )
-  }
+  const refreshFileStatus = (id: string, name: string) =>
+    refreshFileStatuses([{ id, table_name: name }])
+
+  const handleVisible = () => refreshFileStatuses(filesDropped)
 
   useEffect(() => {
     if (isVisible) {

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     showColumns: vi.fn(),
   },
   toastError: vi.fn(),
+  renderFiles: vi.fn(),
 }))
 vi.mock("../../../providers", async () => {
   const { createContext } = await import("react")
@@ -29,7 +30,12 @@ vi.mock("../../../components/Toast", () => ({
   toast: { error: mocks.toastError },
 }))
 vi.mock("../../../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
-vi.mock("./files-to-upload", () => ({ FilesToUpload: () => null }))
+vi.mock("./files-to-upload", () => ({
+  FilesToUpload: ({ files }: { files: ProcessedFile[] }) => {
+    mocks.renderFiles(files)
+    return null
+  },
+}))
 vi.mock("./upload", () => ({ Upload: () => null }))
 import { ImportCSVFiles } from "."
 import { FilesToUpload } from "./files-to-upload"
@@ -89,6 +95,107 @@ const uploadResult = {
 }
 
 describe("CSV async status merging", () => {
+  it.each([false, true])(
+    "publishes a multi-file visibility refresh once, or not at all when unchanged=%s",
+    async (unchanged) => {
+      await act(async () => {
+        await rows().onFilesDropped([
+          new File(["x\n1"], "second.csv"),
+          new File(["x\n2"], "third.csv"),
+        ])
+      })
+      const checks = rows().files.map(() => deferred<typeof check>())
+      checks.forEach(({ promise }) =>
+        mocks.quest.checkCSVFile.mockReturnValueOnce(promise),
+      )
+      act(() => {
+        mocks.visible = true
+        renderer.update(tree())
+      })
+      mocks.renderFiles.mockClear()
+      for (const [index, status] of checks.entries()) {
+        await act(async () => {
+          status.resolve({
+            status: unchanged
+              ? FileCheckStatus.DOES_NOT_EXIST
+              : FileCheckStatus.EXISTS,
+          })
+          await status.promise
+        })
+        expect(mocks.renderFiles).toHaveBeenCalledTimes(
+          !unchanged && index === checks.length - 1 ? 1 : 0,
+        )
+      }
+      expect(
+        rows().files.every(
+          (file) =>
+            file.status ===
+            (unchanged
+              ? FileCheckStatus.DOES_NOT_EXIST
+              : FileCheckStatus.EXISTS),
+        ),
+      ).toBe(true)
+    },
+  )
+
+  it("merges bulk refreshes without restoring renamed or removed rows or overwriting new drops", async () => {
+    await act(async () => {
+      await rows().onFilesDropped([new File(["x"], "second.csv")])
+    })
+    const [first, second] = rows().files
+    const checks = [deferred<typeof check>(), deferred<typeof check>()]
+    checks.forEach(({ promise }) =>
+      mocks.quest.checkCSVFile.mockReturnValueOnce(promise),
+    )
+    act(() => {
+      mocks.visible = true
+      renderer.update(tree())
+    })
+    const settings = { ...first.settings, overwrite: true }
+    await act(async () => {
+      await rows().onFilePropertyChange(first.id, {
+        table_name: "renamed",
+        settings,
+      })
+    })
+    act(() => rows().onFileRemove(second.id))
+    await act(async () => {
+      await rows().onFilesDropped([new File(["x"], "new.csv")])
+    })
+    for (const status of checks) {
+      await act(async () => {
+        status.resolve({ status: FileCheckStatus.EXISTS })
+        await status.promise
+      })
+    }
+    expect(rows().files).toHaveLength(2)
+    expect(rows().files[0]).toMatchObject({
+      table_name: "renamed",
+      settings,
+      status: FileCheckStatus.DOES_NOT_EXIST,
+    })
+    expect(rows().files[1]).toMatchObject({
+      table_name: "new.csv",
+      status: FileCheckStatus.DOES_NOT_EXIST,
+    })
+  })
+
+  it("does not publish accumulated refresh outcomes after the session ends", async () => {
+    const status = deferred<typeof check>()
+    mocks.quest.checkCSVFile.mockReturnValueOnce(status.promise)
+    act(() => {
+      mocks.visible = true
+      renderer.update(tree())
+    })
+    authSessionState.endSession()
+    authSessionState.markNonSSOAuthenticated()
+    await act(async () => {
+      status.resolve({ status: FileCheckStatus.EXISTS })
+      await status.promise
+    })
+    expect(rows().files[0].status).toBe(FileCheckStatus.DOES_NOT_EXIST)
+  })
+
   it("cannot restore isUploading from a visibility check or launch a duplicate upload", async () => {
     const status = deferred<typeof check>()
     const upload = deferred<typeof uploadResult>()

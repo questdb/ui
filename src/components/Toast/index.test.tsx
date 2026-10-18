@@ -3,13 +3,19 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { ThemeProvider } from "styled-components"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../theme"
-import type { ToastContainerProps } from "react-toastify"
+import {
+  ToastContainer as RTToastContainer,
+  type ToastContainerProps,
+  type ToastContent,
+  type ToastOptions,
+  type Id,
+} from "react-toastify"
 
 const messages = vi.hoisted(() => ({
-  info: vi.fn(),
-  success: vi.fn(),
-  warning: vi.fn(),
-  error: vi.fn(),
+  info: vi.fn<[ToastContent, ToastOptions?], Id>(),
+  success: vi.fn<[ToastContent, ToastOptions?], Id>(),
+  warning: vi.fn<[ToastContent, ToastOptions?], Id>(),
+  error: vi.fn<[ToastContent, ToastOptions?], Id>(),
   dismiss: vi.fn(),
   closeToast: vi.fn(),
 }))
@@ -46,7 +52,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const mountNotifications = () => {
+const mountNotifications = (props?: ToastContainerProps) => {
   let activeElement: unknown
   const closest = vi.fn().mockReturnValue(null)
   const origin = {
@@ -90,7 +96,7 @@ const mountNotifications = () => {
   act(() => {
     renderer = create(
       <ThemeProvider theme={darkTheme}>
-        <ToastContainer />
+        <ToastContainer {...props} />
       </ThemeProvider>,
       { createNodeMock: () => ({ querySelectorAll, contains }) },
     )
@@ -297,6 +303,42 @@ describe("notification keyboard access", () => {
       expect(messages.dismiss).toHaveBeenCalledWith(id)
     },
   )
+
+  it("restores shortcut focus on the ordinary message-click dismissal path", () => {
+    const onClick = vi.fn()
+    const { press, origin, notification } = mountNotifications({ onClick })
+    press()
+    const event = { currentTarget: notification }
+    renderer!.root.findByType(RTToastContainer).props.onClick(event)
+    expect(onClick).toHaveBeenCalledWith(event)
+    expect(origin.focus).toHaveBeenCalledOnce()
+  })
+
+  it.each(["info", "success", "warning", "error"] as const)(
+    "composes a per-%s click handler with pre-dismiss focus restoration",
+    (type) => {
+      const { press, origin, notification } = mountNotifications()
+      press()
+      const onClick = vi.fn()
+      toast[type]("Message", { onClick })
+      const event = { currentTarget: notification }
+      messages[type].mock.lastCall![1]!.onClick!(
+        event as unknown as React.MouseEvent,
+      )
+      expect(onClick).toHaveBeenCalledWith(event)
+      expect(origin.focus).toHaveBeenCalledOnce()
+    },
+  )
+
+  it("retains the container click handler when toast options do not override it", () => {
+    const onClick = vi.fn()
+    mountNotifications({ onClick })
+    toast.success("Message", { autoClose: false })
+    expect(messages.success.mock.lastCall![1]).not.toHaveProperty("onClick")
+    expect(renderer!.root.findByType(RTToastContainer).props.onClick).toEqual(
+      expect.any(Function),
+    )
+  })
 
   it("restores shortcut focus before the built-in close path removes the toast", () => {
     const { press, origin, control } = mountNotifications()

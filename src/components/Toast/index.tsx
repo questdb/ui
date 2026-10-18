@@ -18,6 +18,10 @@ import { useTheme } from "styled-components"
 import { ButtonBase } from "../Button/ButtonBase"
 import { altOption } from "../../utils/platform"
 import { themeVar } from "../../theme/themeVar"
+import {
+  notificationFocusOrigins,
+  restoreNotificationFocus,
+} from "./notificationFocus"
 
 import "react-toastify/dist/ReactToastify.css"
 import "../../styles/_toast.scss"
@@ -72,26 +76,18 @@ export const ToastIcon = ({
   }
 }
 
-// Weak keys let removed toast DOM (and its saved origin) be collected. Only
-// shortcut-driven focus moves establish an origin; ordinary tabbing does not.
-const notificationFocusOrigins = new WeakMap<HTMLElement, HTMLElement>()
-
-const restoreNotificationFocus = (id?: Id) => {
-  const notification =
-    typeof document === "undefined"
-      ? null
-      : document.activeElement?.closest<HTMLElement>(".Toastify__toast")
-  const origin = notification && notificationFocusOrigins.get(notification)
-  if (
-    notification &&
-    (id === undefined || notification.id === String(id)) &&
-    origin?.isConnected
-  ) {
-    // Toastify's onClose runs after removal, when focus has already fallen
-    // to body. Restore before dismissal, but only while this toast owns focus.
-    origin.focus()
+// Toastify only invokes onClick when effective closeOnClick is enabled, and
+// invokes it before its private closeToast. Cover that dismissal path too.
+const restoreFocusOnClick =
+  (onClick?: ToastOptions["onClick"]) => (event: React.MouseEvent) => {
+    onClick?.(event)
+    restoreNotificationFocus(event.currentTarget.id)
   }
-}
+
+const withNotificationFocus = (options?: ToastOptions) =>
+  options?.onClick
+    ? { ...options, onClick: restoreFocusOnClick(options.onClick) }
+    : options
 
 const ToastCloseButton = ({
   closeToast,
@@ -126,7 +122,7 @@ const toast = {
         background: themeVar("surfaceRaised"),
         color: themeVar("contentPrimary"),
       },
-      ...options,
+      ...withNotificationFocus(options),
     })
   },
   success: (content: ToastContent, options?: ToastOptions) => {
@@ -141,7 +137,7 @@ const toast = {
         background: themeVar("surfaceRaised"),
         color: themeVar("contentPrimary"),
       },
-      ...options,
+      ...withNotificationFocus(options),
     })
   },
   warning: (content: ToastContent, options?: ToastOptions) => {
@@ -156,7 +152,7 @@ const toast = {
         background: themeVar("surfaceRaised"),
         color: themeVar("contentPrimary"),
       },
-      ...options,
+      ...withNotificationFocus(options),
     })
   },
   error: (content: ToastContent, options?: ToastOptions) => {
@@ -171,7 +167,7 @@ const toast = {
         background: themeVar("surfaceRaised"),
         color: themeVar("contentPrimary"),
       },
-      ...options,
+      ...withNotificationFocus(options),
     })
   },
   dismiss: (id?: Id) => {
@@ -274,6 +270,7 @@ export const ToastContainer = (props?: ToastContainerProps) => {
     pauseOnHover: true,
     pauseOnFocusLoss: false,
     ...props,
+    onClick: restoreFocusOnClick(props?.onClick),
   }
 
   // Modal dialogs hide the rest of the page from assistive technology, except

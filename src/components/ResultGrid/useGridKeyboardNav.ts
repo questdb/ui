@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { ColumnDefinition } from "../../utils/questdb/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { toast } from "../Toast"
+import { isNotificationFocusTransfer } from "../Toast/notificationFocus"
 import { formatCellValueForCopy } from "./inlineGridUtils"
 import type { CellValue } from "./types"
 
@@ -64,6 +65,7 @@ export const useGridKeyboardNav = (
   const [focusedCell, setFocusedCell] = useState<CellCoord | null>(null)
   const [copyPulse, setCopyPulse] = useState<CellCoord | null>(null)
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notificationCellRef = useRef<CellCoord | null>(null)
 
   const moveTo = useCallback(
     (row: number, col: number) => {
@@ -80,13 +82,45 @@ export const useGridKeyboardNav = (
     setFocusedCell({ row, col })
   }, [])
 
-  const onBlur = useCallback((e: React.FocusEvent<HTMLElement>) => {
-    const next = e.relatedTarget as Node | null
-    // Blank chrome clicks leave no focus target; keep the current cell.
-    // Explicit focus moves outside the grid should clear it.
-    if (next === null || e.currentTarget.contains(next)) return
-    setFocusedCell(null)
-  }, [])
+  const onBlur = useCallback(
+    (e: React.FocusEvent<HTMLElement>) => {
+      const next = e.relatedTarget as HTMLElement | null
+      // Blank chrome clicks leave no focus target; keep the current cell.
+      // Explicit focus moves outside the grid should clear it.
+      if (next === null || e.currentTarget.contains(next)) return
+      notificationCellRef.current = isNotificationFocusTransfer(
+        e.currentTarget,
+        next,
+      )
+        ? focusedCell
+        : null
+      setFocusedCell(null)
+    },
+    [focusedCell],
+  )
+
+  const onFocus = useCallback(
+    (e: React.FocusEvent<HTMLElement>) => {
+      const cell = notificationCellRef.current
+      notificationCellRef.current = null
+      if (
+        e.target === e.currentTarget &&
+        cell &&
+        rowCount > 0 &&
+        colCount > 0 &&
+        isNotificationFocusTransfer(
+          e.currentTarget,
+          e.relatedTarget as HTMLElement | null,
+        )
+      ) {
+        moveTo(
+          Math.min(cell.row, rowCount - 1),
+          Math.min(cell.col, colCount - 1),
+        )
+      }
+    },
+    [rowCount, colCount, moveTo],
+  )
 
   const copyCell = useCallback(
     (row: number, col: number) => {
@@ -220,5 +254,6 @@ export const useGridKeyboardNav = (
     onCellClick,
     onKeyDown,
     onBlur,
+    onFocus,
   }
 }

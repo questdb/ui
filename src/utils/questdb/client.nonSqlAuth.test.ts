@@ -42,10 +42,11 @@ const fetchRequests = [
   },
 ]
 
-const mockUploadRequests = (autoComplete = true) => {
+const mockUploadRequests = (autoComplete = true, sendError?: Error) => {
   const requests: UploadRequest[] = []
   class UploadRequest {
     status = 200
+    statusText = "Upload failed"
     response = JSON.stringify({
       columns: [],
       header: true,
@@ -58,7 +59,11 @@ const mockUploadRequests = (autoComplete = true) => {
     open = vi.fn()
     setRequestHeader = vi.fn()
     onload?: () => void
+    onerror?: () => void
+    onabort?: () => void
+    ontimeout?: () => void
     send = vi.fn(() => {
+      if (sendError) throw sendError
       if (autoComplete) this.onload?.()
     })
 
@@ -304,6 +309,66 @@ describe("non-SQL auth rejection branches", () => {
       client.validateQuery("select 1", signal.signal),
     ).rejects.toMatchObject({ name: "AbortError" })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("upload activity tracking", () => {
+  it.each([
+    "success",
+    "HTTP error",
+    "network error",
+    "abort",
+    "timeout",
+    "invalid JSON",
+    "old session",
+  ])("tracks a pending upload and clears it after %s", async (outcome) => {
+    authSessionState.markNonSSOAuthenticated()
+    const requests = mockUploadRequests(false)
+    const client = new Client()
+    const finished = upload(client).catch((error: unknown) => error)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(requests).toHaveLength(1)
+    expect(client.hasActiveRequests()).toBe(true)
+    const request = requests[0]
+    if (outcome === "HTTP error") request.status = 500
+    if (outcome === "invalid JSON") request.response = "not JSON"
+    if (outcome === "old session") authSessionState.endSession()
+    if (outcome === "network error") request.onerror!()
+    else if (outcome === "abort") request.onabort!()
+    else if (outcome === "timeout") request.ontimeout!()
+    else request.onload!()
+    const result = await finished
+    if (outcome === "old session")
+      expect(result).toBeInstanceOf(SessionEndedError)
+    if (outcome === "invalid JSON") expect(result).toBeInstanceOf(SyntaxError)
+    expect(client.hasActiveRequests()).toBe(false)
+  })
+
+  it("clears activity when sending throws synchronously", async () => {
+    authSessionState.markNonSSOAuthenticated()
+    const error = new Error("Could not send")
+    mockUploadRequests(false, error)
+    const client = new Client()
+    await expect(upload(client)).rejects.toBe(error)
+    expect(client.hasActiveRequests()).toBe(false)
+  })
+
+  it("keeps concurrent uploads active until all have settled", async () => {
+    authSessionState.markNonSSOAuthenticated()
+    const requests = mockUploadRequests(false)
+    const client = new Client()
+    const first = upload(client)
+    const second = upload(client)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(client.hasActiveRequests()).toBe(true)
+    requests[0].onload!()
+    await first
+    expect(client.hasActiveRequests()).toBe(true)
+    requests[1].onload!()
+    await second
+    expect(client.hasActiveRequests()).toBe(false)
   })
 })
 

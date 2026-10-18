@@ -271,6 +271,50 @@ describe("AuthProvider token installation", () => {
     expect(authSessionState.isAuthenticated()).toBe(false)
   })
 
+  it("confirms a real pending CSV upload with no SQL activity before signing in again", async () => {
+    await mount()
+    expect(questClient.hasActiveRequests()).toBe(false)
+    let finishUpload!: () => void
+    class UploadRequest {
+      status = 200
+      response = "{}"
+      upload = { addEventListener: vi.fn() }
+      open = vi.fn()
+      setRequestHeader = vi.fn()
+      send = vi.fn(() => {
+        finishUpload = () => this.onload?.()
+      })
+      onload?: () => void
+    }
+    vi.stubGlobal("XMLHttpRequest", UploadRequest)
+    const upload = questClient.uploadCSVFile({
+      file: new File(["x\n1"], "probe.csv"),
+      name: "probe",
+      owner: "admin",
+      onProgress: vi.fn(),
+    })
+    const rejected = expect(upload).rejects.toMatchObject({
+      name: "SessionEndedError",
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(questClient.hasActiveRequests()).toBe(true)
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal("confirm", confirm)
+    act(() => auth.signInAgain())
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(authSessionState.isAuthenticated()).toBe(true)
+    confirm.mockReturnValue(true)
+    act(() => auth.signInAgain())
+    expect(
+      renderer!.root.findByProps({ "data-hook": "mock-login" }).props
+        .errorMessage,
+    ).toContain("Verify their outcomes")
+    finishUpload()
+    await rejected
+    expect(questClient.hasActiveRequests()).toBe(false)
+  })
+
   it("shows the mounted login when a refresh started before recovery ends the session", async () => {
     const { finishRefresh, query } = await recoverDuringRefresh()
     await act(async () => {

@@ -151,6 +151,144 @@ describe("settling loading notifications", () => {
     expect(next.pendingLoadingNotifications).toEqual({})
   })
 
+  it.each([
+    NotificationType.ERROR,
+    NotificationType.SUCCESS,
+    NotificationType.NOTICE,
+  ])("publishes a rerun's %s outcome to its accepted editor alias", (type) => {
+    let state = query(
+      initialState,
+      actions.addNotification({ query: key, content: "Old success" }, 1),
+    )
+    state = query(state, loading(3))
+    const alias: QueryKey = "select 42@10-19"
+    state = query(state, actions.updateNotificationKey(key, alias, 1, true))
+    state = query(
+      state,
+      actions.addNotification(
+        { query: key, queryId: 3, type, content: "Current outcome" },
+        1,
+      ),
+    )
+    state = query(state, actions.settleLoadingNotification(3))
+
+    for (const queryKey of [key, alias]) {
+      expect(state.queryNotifications[1][queryKey].latest).toMatchObject({
+        query: queryKey,
+        type,
+        content: "Current outcome",
+      })
+    }
+    expect(state.notifications).toHaveLength(2)
+    expect(state.pendingLoadingNotifications).toEqual({})
+  })
+
+  it("routes a terminal outcome through a moved namespace without recreating the old one", () => {
+    const detachedKey = createDetachedQueryKey("select 42")
+    let state = query(
+      initialState,
+      actions.addNotification(
+        { query: detachedKey, content: "Old success" },
+        "chat",
+      ),
+    )
+    state = query(
+      state,
+      actions.addNotification(
+        {
+          query: detachedKey,
+          queryId: 3,
+          type: NotificationType.LOADING,
+          content: "Running",
+        },
+        "chat",
+      ),
+    )
+    state = query(state, actions.moveNotificationNamespace("chat", 1, key))
+    state = query(
+      state,
+      actions.addNotification(
+        {
+          query: detachedKey,
+          queryId: 3,
+          type: NotificationType.ERROR,
+          content: "Failed",
+        },
+        "chat",
+      ),
+    )
+    state = query(state, actions.settleLoadingNotification(3))
+
+    expect(state.queryNotifications.chat).toBeUndefined()
+    for (const queryKey of [key, detachedKey]) {
+      expect(state.queryNotifications[1][queryKey].latest).toMatchObject({
+        type: NotificationType.ERROR,
+        content: "Failed",
+      })
+    }
+    expect(state.pendingLoadingNotifications).toEqual({})
+  })
+
+  it("does not publish an older outcome over a newer execution of an alias", () => {
+    const alias: QueryKey = "select 42@10-19"
+    let state = query(initialState, loading(3))
+    state = query(state, actions.updateNotificationKey(key, alias, 1, true))
+    state = query(
+      state,
+      actions.addNotification(
+        {
+          query: alias,
+          queryId: 4,
+          type: NotificationType.LOADING,
+          content: "Newer run",
+        },
+        1,
+      ),
+    )
+    const newer = state.queryNotifications[1][alias]
+    state = query(
+      state,
+      actions.addNotification(
+        {
+          query: key,
+          queryId: 3,
+          type: NotificationType.ERROR,
+          content: "Failed",
+        },
+        1,
+      ),
+    )
+    state = query(state, actions.settleLoadingNotification(3))
+    expect(state.queryNotifications[1][alias]).toBe(newer)
+    expect(state.queryNotifications[1][key].latest.type).toBe(
+      NotificationType.ERROR,
+    )
+    expect(state.pendingLoadingNotifications[4]).toBeDefined()
+  })
+
+  it("publishes to a rekeyed destination without resurrecting its original key", () => {
+    const alias: QueryKey = "select 42@10-19"
+    let state = query(initialState, loading(3))
+    state = query(state, actions.updateNotificationKey(key, alias, 1))
+    state = query(
+      state,
+      actions.addNotification(
+        {
+          query: key,
+          queryId: 3,
+          type: NotificationType.ERROR,
+          content: "Failed",
+        },
+        1,
+      ),
+    )
+    state = query(state, actions.settleLoadingNotification(3))
+    expect(state.queryNotifications[1][key]).toBeUndefined()
+    expect(state.queryNotifications[1][alias].latest.type).toBe(
+      NotificationType.ERROR,
+    )
+  })
+
   it("retains the original loading index when a newer destination blocks rekeying", () => {
     const movedKey: QueryKey = "select 42@10-19"
     const state = query(

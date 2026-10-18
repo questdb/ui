@@ -91,15 +91,38 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         : [...state.notifications, cleanNotification]
 
       if (bufferId !== undefined) {
-        const bufferNotifications = state.queryNotifications[bufferId] || {}
-        const existingQueryNotifications = bufferNotifications[queryText] || {}
-        const updatedQueryNotifications = {
-          ...existingQueryNotifications,
-          latest: cleanNotification,
-          // Transient loading state must not replace the last completed run.
-          ...(cleanNotification.type === NotificationType.LOADING
-            ? {}
-            : { [isExplain ? "explain" : "regular"]: cleanNotification }),
+        // A running query may have been rekeyed, accepted into the editor, or
+        // moved to another buffer. Publish its outcome to those destinations,
+        // not just the namespace/key captured when execution began.
+        const pending =
+          !isLoading && cleanNotification.queryId !== undefined
+            ? state.pendingLoadingNotifications[cleanNotification.queryId]
+            : undefined
+        const destination = pending?.bufferId ?? bufferId
+        const bufferNotifications = state.queryNotifications[destination] || {}
+        const updatedBufferNotifications = { ...bufferNotifications }
+        for (const key of pending?.queryKeys ?? [queryText]) {
+          const group = bufferNotifications[key]
+          if (
+            pending &&
+            (group?.latest.type !== NotificationType.LOADING ||
+              group.latest.queryId !== cleanNotification.queryId)
+          ) {
+            // Never overwrite a newer execution or resurrect a removed key.
+            continue
+          }
+          const notification =
+            key === queryText
+              ? cleanNotification
+              : { ...cleanNotification, query: key }
+          updatedBufferNotifications[key] = {
+            ...group,
+            latest: notification,
+            // Loading must not replace the last completed run.
+            ...(!isLoading
+              ? { [isExplain ? "explain" : "regular"]: notification }
+              : {}),
+          }
         }
 
         return {
@@ -117,10 +140,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
               : state.pendingLoadingNotifications,
           queryNotifications: {
             ...state.queryNotifications,
-            [bufferId]: {
-              ...bufferNotifications,
-              [queryText]: updatedQueryNotifications,
-            },
+            [destination]: updatedBufferNotifications,
           },
           ...(updateActiveNotification
             ? { activeNotification: cleanNotification }
