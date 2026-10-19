@@ -375,6 +375,14 @@ export type Options = {
   cancellable?: boolean
   /** Background work must not extend an idle login; never sent on the wire. */
   refreshAuth?: boolean
+  /**
+   * A console-issued catalog, monitoring or display read (schema, catalog
+   * sources, metrics, telemetry, result pages and charts), not a statement the
+   * user ran. It is still aborted when the session ends, but never makes the
+   * session busy or raises the "statements may have executed" warning.
+   * Never sent on the wire.
+   */
+  background?: boolean
 }
 
 // In-process lifecycle hooks are not SQL wire parameters.

@@ -541,18 +541,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [])
 
   const signInAgain = () => {
-    const active = questClient.hasActiveRequests()
+    // Requests still waiting for renewal were never sent, so cancelling them
+    // cannot leave a statement half-done. Only a sent request is uncertain.
+    const sent = questClient.hasSentRequests()
     if (
-      active &&
+      questClient.hasActiveRequests() &&
       !window.confirm(
-        "Signing in again interrupts running requests. Statements may already have executed. End this session?",
+        sent
+          ? "Signing in again interrupts running requests. Statements may already have executed. End this session?"
+          : "Signing in again cancels requests that have not been sent yet. End this session?",
       )
     )
       return
+    // logout() explains interrupted sent requests itself.
     callbacks.current.logout({
       clearSSOSession: true,
       errorTitle: "Sign in again",
-      errorMessage: active
+      errorMessage: sent
         ? "Your previous session has ended."
         : "Your previous session has ended. Please sign in again.",
     })

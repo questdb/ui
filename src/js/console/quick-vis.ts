@@ -315,6 +315,7 @@ export function quickVis(
         cols: urlColumns,
         src: "vis",
         cancellable: true,
+        background: true,
       })
       activeQueryId = queryId
       try {

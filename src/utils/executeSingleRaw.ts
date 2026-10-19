@@ -33,6 +33,7 @@ export const executeSingleRaw = async (
   globals: NotebookVariable[] | undefined,
   signal?: AbortSignal,
   limit: number = RESULT_DISPLAY_LIMIT,
+  options: { background?: boolean } = {},
 ): Promise<QueryExecResult> => {
   let cleanup: (() => void) | undefined
   try {
@@ -50,6 +51,7 @@ export const executeSingleRaw = async (
     const { promise, queryId } = quest.queryRaw(expanded, {
       limit: `0,${limit}`,
       cancellable: true,
+      ...(options.background ? { background: true } : {}),
     })
     if (signal) {
       const onAbort = () => quest.abort(queryId)

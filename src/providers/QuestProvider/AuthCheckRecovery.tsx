@@ -49,7 +49,7 @@ export const useAuthCheck = (required: boolean) => {
     const session = authSessionState.capture()
     setPending(true)
     try {
-      await questClient.queryRaw("SELECT 1")
+      await questClient.queryRaw("SELECT 1", { background: true })
       if (mounted.current && session.isCurrent()) setFinished(true)
     } catch (failure) {
       if (

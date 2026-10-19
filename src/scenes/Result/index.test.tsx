@@ -183,6 +183,7 @@ describe.each([true, false])("pagination (new: %s)", (useNewGrid) => {
     expect(mocks.queryRaw).toHaveBeenCalledWith("select x", {
       limit: "1000,2000",
       nm: true,
+      background: true,
     })
     expect(renderPage).toHaveBeenCalledWith(result)
     expect(mocks.dispatch).not.toHaveBeenCalled()

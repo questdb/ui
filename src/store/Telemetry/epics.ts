@@ -86,6 +86,7 @@ export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
       from(
         quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`, {
           refreshAuth: false,
+          background: true,
         }),
       ).pipe(
         // Keep the root epic alive so a later login/START can retry.
@@ -177,7 +178,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
            `
             .replace(/\s+/g, " ")
             .trim(),
-          { refreshAuth: false },
+          { refreshAuth: false, background: true },
         ),
       ).pipe(
         map((result) => ({ type: "data" as const, result, remoteConfig })),

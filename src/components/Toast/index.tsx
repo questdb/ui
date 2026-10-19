@@ -18,7 +18,7 @@ import { CloseCircle, ErrorWarning, Information } from "../icons"
 import { CheckmarkOutline } from "../icons"
 import { useTheme } from "styled-components"
 import { ButtonBase } from "../Button/ButtonBase"
-import { altOption } from "../../utils/platform"
+import { altOption, platform } from "../../utils/platform"
 import { themeVar } from "../../theme/themeVar"
 import {
   notificationFocusOrigins,
@@ -39,6 +39,35 @@ export const useNotificationCenter = RTNotificationCenter
 export const REFRESH_FAILED_TOAST_ID = "sso-refresh-failed"
 export const NOTIFICATION_SHORTCUT = "Alt+N"
 export const NOTIFICATION_SHORTCUT_LABEL = `${altOption === "Alt" ? "Alt+" : altOption}N`
+
+// Option is a text modifier on Apple keyboards: Option+N is the dead key for
+// ñ/ã/õ on US/ABC layouts and types ń on Polish Pro. Windows and Linux Alt+N
+// types nothing, so there the physical N key works on every layout.
+const optionTypesText = () => platform.isMacintosh || platform.isIOS
+
+// Where the shortcut works, for instructions that follow the shortcut label.
+export const NOTIFICATION_SHORTCUT_SCOPE = optionTypesText()
+  ? " outside a text field"
+  : ""
+
+const TEXT_ENTRY_SELECTOR = [
+  "textarea",
+  "input:not([type])",
+  ...["text", "search", "email", "url", "tel", "password", "number"].map(
+    (type) => `input[type="${type}"]`,
+  ),
+  '[contenteditable]:not([contenteditable="false"])',
+  // Monaco's input element differs between versions (textarea, EditContext).
+  ".monaco-editor",
+].join(", ")
+
+const isTextEntry = (target: unknown) => {
+  const element = target as Partial<HTMLElement> | null | undefined
+  return (
+    element?.isContentEditable === true ||
+    !!element?.closest?.(TEXT_ENTRY_SELECTOR)
+  )
+}
 
 export const ToastIcon = ({
   type,
@@ -221,6 +250,13 @@ export const ToastContainer = (props?: ToastContainerProps) => {
         (event.code !== "KeyN" && event.key.toLowerCase() !== "n")
       )
         return
+      // Never take a typed character: on Apple platforms Option+N in a text
+      // field must reach the field. Outside text fields it types nothing.
+      if (
+        optionTypesText() &&
+        (isTextEntry(event.target) || isTextEntry(document.activeElement))
+      )
+        return
       // Follow the warning's close-dialog-first instruction rather than
       // attempting to move focus outside the active modal's focus scope.
       if (
@@ -264,8 +300,9 @@ export const ToastContainer = (props?: ToastContainerProps) => {
         control.focus()
       }
     }
-    // Capture before Monaco consumes Option+N's Dead/229 event on macOS.
-    // IME composition is still ignored, and no key is consumed without a toast.
+    // Capture so the shortcut runs before focused widgets handle Alt+N. Apple
+    // text fields keep Option+N for typing, IME composition is ignored, and no
+    // key is consumed without a toast.
     document.addEventListener("keydown", focusNotification, true)
     return () => {
       document.removeEventListener("keydown", focusNotification, true)

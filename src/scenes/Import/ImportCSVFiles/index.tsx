@@ -59,7 +59,9 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
     try {
       let ownedByNames: string[] = []
-      const userResult = await quest.query<Parameter>(`select current_user()`)
+      const userResult = await quest.query<Parameter>(`select current_user()`, {
+        background: true,
+      })
       if (userResult.type === "dql" && userResult.count > 0) {
         const username = Object.values(userResult.data[0])[0] as string
         if (username) {
@@ -71,6 +73,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
           const result = await quest.query<Parameter>(
             `show groups '${username}'`,
+            { background: true },
           )
           if (result.type === "dql" && result.count > 0) {
             const groups = result.data.map(

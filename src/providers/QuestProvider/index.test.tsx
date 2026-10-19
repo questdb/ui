@@ -380,6 +380,7 @@ describe("QuestProvider authentication gate", () => {
     })
     expect(mocks.queryRaw).toHaveBeenCalledWith("select build", {
       limit: "0,1000",
+      background: true,
     })
     expect(versions.some((version) => version.length > 0)).toBe(true)
   })

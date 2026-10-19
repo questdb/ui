@@ -139,7 +139,7 @@ export const QuestProvider: React.FC = ({ children }) => {
     // TODO: Remove this, use info from `/settings` (`type` and `version`) and run this hook on `settings` dep
     // Get the build version info
     void questClient
-      .queryRaw("select build", { limit: "0,1000" })
+      .queryRaw("select build", { limit: "0,1000", background: true })
       .then((result) => {
         if (result.type === QuestDB.Type.DQL && result.count === 1) {
           setBuildVersion(formatVersion(result.dataset[0][0] as string))

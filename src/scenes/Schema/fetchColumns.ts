@@ -21,7 +21,9 @@ export const fetchColumns = async (
   for (const query of queries) {
     if (!session.isCurrent()) return
     try {
-      const response = await quest.query<InformationSchemaColumn>(query)
+      const response = await quest.query<InformationSchemaColumn>(query, {
+        background: true,
+      })
       if (!session.isCurrent()) return
       if (response?.type === Type.DQL) {
         onColumns(response.data)

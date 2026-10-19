@@ -846,3 +846,50 @@ describe("Client showDDL kind routing", () => {
     expect(sentQueries[3]).toContain("SHOW CREATE LIVE VIEW 'my_target';")
   })
 })
+
+describe("Client interruption tracking", () => {
+  const pendingFetch = () =>
+    vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          )
+        }),
+    )
+
+  it("never counts sent background reads as interrupted statements", async () => {
+    const fetchMock = pendingFetch()
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    const reads: Array<Promise<unknown>> = [
+      client.queryRaw("tables();", { background: true }),
+      client.query("wal_tables()", { background: true }),
+      client.showTables(),
+      client.showColumns("trades"),
+      client.getTableDetails("trades"),
+      client.showMaterializedViews(),
+      client.showViews(),
+      client.showLiveViews(),
+      client.showDDL("trades", "table"),
+    ].map((request) => request.catch((error: unknown) => error))
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(9))
+    for (const [url] of fetchMock.mock.calls) {
+      expect(url).not.toContain("background")
+    }
+    expect(client.hasActiveRequests()).toBe(false)
+    expect(client.hasSentRequests()).toBe(false)
+
+    // CANCEL QUERY has a side effect, so it remains an uncertain statement.
+    const cancel = client
+      .cancelQuery(BigInt(42))
+      .catch((error: unknown) => error)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(10))
+    expect(client.hasActiveRequests()).toBe(true)
+    expect(client.hasSentRequests()).toBe(true)
+
+    client.abort()
+    await Promise.all([...reads, cancel])
+    expect(client.hasActiveRequests()).toBe(false)
+  })
+})

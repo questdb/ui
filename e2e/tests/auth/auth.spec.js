@@ -37,9 +37,22 @@ const stubConsoleRequests = () => {
   cy.intercept({ method: "GET", url: `${baseUrl}/chk*` }, { status: "Exists" })
 }
 
-const visitCallback = (query, flow, credentials = {}) =>
+const MAC_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+// Alt+N types nothing on Windows and Linux keyboards, but Option+N types on
+// Apple keyboards. Tests that press Alt+N in a text field pin the platform so
+// they match CI on macOS hosts. Keyboard commands such as ctrlOrCmd follow the
+// host, so the remaining tests keep the browser's own platform.
+const LINUX_USER_AGENT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+const visitCallback = (query, flow, credentials = {}, userAgent) =>
   cy.visit(`${baseUrl}${query}`, {
     onBeforeLoad(win) {
+      // Platform detection reads the user agent when the console loads.
+      if (userAgent) {
+        Object.defineProperty(win.navigator, "userAgent", { value: userAgent })
+      }
       win.localStorage.clear()
       seedNotebookOnboarding(win)
       Object.entries(credentials).forEach(([key, value]) => {
@@ -567,6 +580,7 @@ describe("Auth - OIDC ID token", () => {
     refreshReply,
     credentials,
     authCheckReply,
+    userAgent,
   }) => {
     const grants = []
 
@@ -616,7 +630,12 @@ describe("Auth - OIDC ID token", () => {
       { statusCode: 200, body: queryResult },
     ).as("sessionStart")
 
-    visitCallback("?code=code-from-the-provider", undefined, credentials)
+    visitCallback(
+      "?code=code-from-the-provider",
+      undefined,
+      credentials,
+      userAgent,
+    )
     cy.wait("@settings")
     return grants
   }
@@ -834,7 +853,7 @@ describe("Auth - OIDC ID token", () => {
       .and("be.focused")
   })
 
-  it("focuses the notification from Monaco without opening a new tab", () => {
+  it("focuses the notification from Monaco with Alt+N without opening a new tab", () => {
     signIn({
       idTokens: { authorization_code: idToken("initial", 20) },
       refreshReply: {
@@ -842,6 +861,7 @@ describe("Auth - OIDC ID token", () => {
         body: { error: "temporarily_unavailable" },
       },
       credentials: { "auto.refresh.tables": "false" },
+      userAgent: LINUX_USER_AGENT,
     })
     cy.wait("@refreshFailure")
     cy.getEditor().should("be.visible")
@@ -855,12 +875,13 @@ describe("Auth - OIDC ID token", () => {
       .then((count) => {
         cy.window().then((win) => {
           win.monaco.editor.getEditors()[0].focus()
+          // Windows and Linux Alt+N types nothing, so it works from editors.
           win.document.activeElement.dispatchEvent(
             new win.KeyboardEvent("keydown", {
-              key: "Dead",
+              key: "n",
               code: "KeyN",
-              keyCode: 229,
-              which: 229,
+              keyCode: 78,
+              which: 78,
               altKey: true,
               bubbles: true,
               cancelable: true,
@@ -872,6 +893,57 @@ describe("Auth - OIDC ID token", () => {
           .and("have.attr", "aria-keyshortcuts", "Alt+N")
         cy.getEditorTabs().should("have.length", count)
       })
+  })
+
+  it("leaves macOS Option+N to the editor and reaches the notification from elsewhere", () => {
+    signIn({
+      idTokens: { authorization_code: idToken("initial", 20) },
+      refreshReply: {
+        statusCode: 503,
+        body: { error: "temporarily_unavailable" },
+      },
+      credentials: { "auto.refresh.tables": "false" },
+      userAgent: MAC_USER_AGENT,
+    })
+    cy.wait("@refreshFailure")
+    cy.getEditor().should("be.visible")
+    cy.get("#sso-refresh-failed")
+      .should("be.visible")
+      .and("contain.text", "press ⌥N outside a text field to focus")
+    cy.window().then((win) => {
+      win.monaco.editor.getEditors()[0].focus()
+      // Option+N is the dead key for ñ/ã/õ: it must stay in the editor.
+      win.document.activeElement.dispatchEvent(
+        new win.KeyboardEvent("keydown", {
+          key: "Dead",
+          code: "KeyN",
+          keyCode: 229,
+          which: 229,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      )
+      expect(win.document.activeElement.closest(".monaco-editor")).to.exist
+    })
+    cy.get("#sso-refresh-failed .Toastify__toast-body").should("not.be.focused")
+    // Outside text fields, Option+N types nothing and reaches the warning.
+    cy.getByDataHook("help-panel-button")
+      .focus()
+      .then(([button]) => {
+        button.dispatchEvent(
+          new button.ownerDocument.defaultView.KeyboardEvent("keydown", {
+            key: "Dead",
+            code: "KeyN",
+            keyCode: 229,
+            which: 229,
+            altKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      })
+    cy.get("#sso-refresh-failed .Toastify__toast-body").should("be.focused")
   })
 
   for (const moveFocusAway of [false, true]) {
@@ -898,6 +970,7 @@ describe("Auth - OIDC ID token", () => {
               }
             }),
           credentials: { "auto.refresh.tables": "false" },
+          userAgent: LINUX_USER_AGENT,
         })
         cy.wrap(null).should(() => expect(releaseRefresh).to.be.a("function"))
         // Let the soft deadline expire, but retain explicit control of the
@@ -946,6 +1019,7 @@ describe("Auth - OIDC ID token", () => {
         body: { error: "temporarily_unavailable" },
       },
       credentials: { "auto.refresh.tables": "false" },
+      userAgent: LINUX_USER_AGENT,
     })
     cy.wait("@refreshFailure")
     cy.getEditor().should("be.visible")
@@ -1019,6 +1093,8 @@ describe("Auth - OIDC ID token", () => {
         body: { error: "temporarily_unavailable" },
       },
       credentials: { "auto.refresh.tables": "false" },
+      // The editor may already own focus when the body receives Alt+N.
+      userAgent: LINUX_USER_AGENT,
     })
     cy.wait("@refreshFailure")
     cy.get("#sso-refresh-failed").should("be.visible")

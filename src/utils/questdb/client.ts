@@ -56,6 +56,9 @@ export type QueryId = number
 
 type RequestExecution = { requestNotSent: boolean }
 
+// Catalog lookups read metadata only. Interrupting them needs no outcome check.
+const BACKGROUND_READ: Options = { background: true }
+
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
 export const buildDDLQuery = (name: string, kind: TableKind): string => {
@@ -75,7 +78,11 @@ export const buildDDLQuery = (name: string, kind: TableKind): string => {
 export class Client {
   private _controllers = new Map<
     QueryId,
-    { controller: AbortController; execution: RequestExecution }
+    {
+      controller: AbortController
+      execution: RequestExecution
+      background: boolean
+    }
   >()
   // The value distinguishes a sent write from one still waiting for renewal.
   private _writeControllers = new Map<AbortController, boolean>()
@@ -144,14 +151,21 @@ export class Client {
     this._activeQueryId = null
   }
 
-  hasActiveRequests = () =>
-    this._controllers.size > 0 || this._writeControllers.size > 0
+  // Background reads are cancelled with the session without asking: only
+  // statements the user ran and writes make ending the session disruptive.
+  hasActiveRequests = () => {
+    for (const { background } of this._controllers.values()) {
+      if (!background) return true
+    }
+    return this._writeControllers.size > 0
+  }
 
-  // Refresh waiters and SQL rejected with 401 have definitively not executed.
-  // Only warn about uncertainty if an outstanding request was actually sent.
+  // Refresh waiters and SQL rejected with 401 have definitively not executed,
+  // and background reads change nothing. Only warn about uncertainty if a user
+  // statement or write was actually sent.
   hasSentRequests = () => {
-    for (const { execution } of this._controllers.values()) {
-      if (!execution.requestNotSent) return true
+    for (const { execution, background } of this._controllers.values()) {
+      if (!background && !execution.requestNotSent) return true
     }
     for (const sent of this._writeControllers.values()) {
       if (sent) return true
@@ -262,7 +276,11 @@ export class Client {
     const queryId = this._nextQueryId++
     const controller = new AbortController()
     const execution = { requestNotSent: true }
-    this._controllers.set(queryId, { controller, execution })
+    this._controllers.set(queryId, {
+      controller,
+      execution,
+      background: options?.background === true,
+    })
 
     const promise = this._executeQueryRaw(
       query,
@@ -411,6 +429,7 @@ export class Client {
   ): Promise<QueryRawResult> {
     const {
       cancellable: _,
+      background: _background,
       refreshAuth = true,
       ...queryOptions
     } = options ?? {}
@@ -676,7 +695,10 @@ export class Client {
   }
 
   async showTables(): Promise<QueryResult<Table>> {
-    const response = await this.queryCatalog<Table>("tables();")
+    const response = await this.queryCatalog<Table>(
+      "tables();",
+      BACKGROUND_READ,
+    )
 
     if (response.type === Type.DQL) {
       return {
@@ -701,11 +723,17 @@ export class Client {
   }
 
   async showPermissions(user: string): Promise<QueryResult<Permission>> {
-    return await this.query<Permission>(`SHOW PERMISSIONS '${user}';`)
+    return await this.query<Permission>(
+      `SHOW PERMISSIONS '${user}';`,
+      BACKGROUND_READ,
+    )
   }
 
   async showColumns(table: string): Promise<QueryResult<Column>> {
-    return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
+    return await this.query<Column>(
+      `SHOW COLUMNS FROM '${table}';`,
+      BACKGROUND_READ,
+    )
   }
 
   async showSymbolColumnDetails(
@@ -720,25 +748,30 @@ export class Client {
   > {
     return await this.query<SymbolColumnDetails>(
       `WITH cols as (SHOW COLUMNS FROM '${table}') SELECT symbolCached, symbolCapacity, indexed FROM cols WHERE column = '${column}';`,
+      BACKGROUND_READ,
     )
   }
 
   async getTableDetails(table: string): Promise<QueryResult<Table>> {
     return await this.queryCatalog<Table>(
       `tables() where table_name = '${escapeSqlLiteral(table)}';`,
+      BACKGROUND_READ,
     )
   }
 
   async showMaterializedViews(): Promise<QueryResult<MaterializedView>> {
-    return await this.queryCatalog<MaterializedView>("materialized_views()")
+    return await this.queryCatalog<MaterializedView>(
+      "materialized_views()",
+      BACKGROUND_READ,
+    )
   }
 
   async showViews(): Promise<QueryResult<View>> {
-    return await this.query<View>("views();")
+    return await this.query<View>("views();", BACKGROUND_READ)
   }
 
   async showLiveViews(): Promise<QueryResult<LiveView>> {
-    return await this.queryCatalog<LiveView>("live_views();")
+    return await this.queryCatalog<LiveView>("live_views();", BACKGROUND_READ)
   }
 
   async cancelQuery(queryId: bigint): Promise<QueryResult<never>> {
@@ -753,7 +786,7 @@ export class Client {
   }
 
   private async queryDDL(sql: string): Promise<QueryResult<{ ddl: string }>> {
-    const result = await this.query<{ ddl: string }>(sql)
+    const result = await this.query<{ ddl: string }>(sql, BACKGROUND_READ)
     if (result.type === Type.DQL) {
       result.data = result.data.map((row) => ({
         ...row,

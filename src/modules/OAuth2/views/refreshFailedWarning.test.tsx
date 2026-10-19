@@ -9,8 +9,14 @@ import { RefreshFailedWarning } from "./refreshFailedWarning"
 
 vi.mock("../../../components/Button", () => ({ Button: "button" }))
 vi.mock("../../../components/Box", () => ({ Box: "div" }))
+const shortcut = vi.hoisted(() => ({ label: "Alt+N", scope: "" }))
 vi.mock("../../../components/Toast", () => ({
-  NOTIFICATION_SHORTCUT_LABEL: "Alt+N",
+  get NOTIFICATION_SHORTCUT_LABEL() {
+    return shortcut.label
+  },
+  get NOTIFICATION_SHORTCUT_SCOPE() {
+    return shortcut.scope
+  },
 }))
 
 let renderer: ReactTestRenderer | undefined
@@ -24,6 +30,8 @@ afterEach(() => {
   act(() => renderer?.unmount())
   renderer = undefined
   vi.useRealTimers()
+  shortcut.label = "Alt+N"
+  shortcut.scope = ""
 })
 
 const mount = (expiresAt?: string) => {
@@ -39,6 +47,12 @@ const mount = (expiresAt?: string) => {
 }
 
 const message = () => renderer!.root.findAllByType("span")[0].children[0]
+const instructions = () =>
+  renderer!.root
+    .findAllByType("span")
+    .slice(-1)[0]
+    .children.filter((child): child is string => typeof child === "string")
+    .join("")
 const advanceTime = (ms: number) => {
   act(() => {
     vi.advanceTimersByTime(ms)
@@ -112,6 +126,23 @@ describe("refresh failure warning", () => {
     expect(message()).toContain("Your current token expires at")
     advanceTime(20_000)
     expect(message()).toContain("Queries are not being sent")
+  })
+
+  it.each([
+    ["Alt+N", "", "Alt+N to focus"],
+    // Apple text fields type with Option+N, so the shortcut works outside them.
+    [
+      "\u2325N",
+      " outside a text field",
+      "\u2325N outside a text field to focus",
+    ],
+  ])("explains how to reach the warning with %s", (label, scope, expected) => {
+    shortcut.label = label
+    shortcut.scope = scope
+    mount()
+    expect(instructions()).toBe(
+      `Close any open dialog, then press ${expected} this notification. Press Escape to return without dismissing it.`,
+    )
   })
 
   it("does not overflow the timer for distant expiry dates", () => {

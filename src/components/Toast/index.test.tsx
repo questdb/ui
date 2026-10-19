@@ -1,7 +1,7 @@
 import React from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { ThemeProvider } from "styled-components"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../theme"
 import {
   ToastContainer as RTToastContainer,
@@ -60,6 +60,17 @@ vi.mock("../icons", () => ({
   Information: () => null,
   CheckmarkOutline: () => null,
 }))
+const platformState = vi.hoisted(() => ({
+  isMacintosh: false,
+  isWindows: false,
+  isIOS: false,
+  isLinux: false,
+}))
+vi.mock("../../utils/platform", () => ({
+  platform: platformState,
+  altOption: "Alt",
+  ctrlCmd: "Ctrl",
+}))
 import { NOTIFICATION_SHORTCUT, ToastContainer, toast } from "."
 
 let renderer: ReactTestRenderer | undefined
@@ -71,7 +82,12 @@ afterEach(() => {
   vi.clearAllMocks()
   messages.isIn = true
   messages.nodeRef.current = null
+  platformState.isMacintosh = false
+  platformState.isIOS = false
 })
+
+// Looks like a focused text field, editor or other text-entry element.
+const textEntry = { closest: () => ({}) } as unknown as EventTarget
 
 const mountNotifications = (props?: ToastContainerProps) => {
   let activeElement: unknown
@@ -235,19 +251,74 @@ describe("notification keyboard access", () => {
     expect(focus).toHaveBeenCalledOnce()
   })
 
+  // Windows and Linux Alt+N types nothing, whatever the layout's letter is.
   it.each([{ key: "Dead", keyCode: 229 }, { key: "˜" }, { key: "т" }])(
-    "handles physical Option/Alt+N before Monaco for %j",
+    "handles the physical Alt+N key in text fields off Apple platforms for %j",
     (shape) => {
       const { press, focus } = mountNotifications()
-      const event = press({
-        ...shape,
-        target: { closest: () => ({}) } as unknown as EventTarget,
-      })
+      const event = press({ ...shape, target: textEntry })
       expect(event.preventDefault).toHaveBeenCalledOnce()
       expect(event.stopPropagation).toHaveBeenCalledOnce()
       expect(focus).toHaveBeenCalledOnce()
     },
   )
+
+  describe.each(["isMacintosh", "isIOS"] as const)("when %s", (flag) => {
+    beforeEach(() => {
+      platformState[flag] = true
+    })
+
+    // Option+N is the US/ABC dead key for ñ/ã/õ and types ń on Polish Pro.
+    it.each([
+      { key: "Dead", keyCode: 229 },
+      { key: "ń" },
+      { key: "˜" },
+      { key: "n" },
+    ])("leaves Option+N to a text field for %j", (shape) => {
+      const { press, focus } = mountNotifications()
+      const event = press({ ...shape, target: textEntry })
+      expect(event.preventDefault).not.toHaveBeenCalled()
+      expect(event.stopPropagation).not.toHaveBeenCalled()
+      expect(focus).not.toHaveBeenCalled()
+    })
+
+    it("leaves Option+N to a focused contenteditable element", () => {
+      const { press, focus, moveFocus } = mountNotifications()
+      moveFocus({ isContentEditable: true, closest: () => null })
+      expect(
+        press({ key: "Dead", keyCode: 229 }).preventDefault,
+      ).not.toHaveBeenCalled()
+      expect(focus).not.toHaveBeenCalled()
+    })
+
+    it("recognizes text inputs, text areas and editors, not other controls", () => {
+      const { press } = mountNotifications()
+      const closest = vi.fn<[string], null>().mockReturnValue(null)
+      press({ key: "Dead", target: { closest } as unknown as EventTarget })
+      const selector = closest.mock.calls[0][0]
+      expect(selector.split(", ")).toEqual(
+        expect.arrayContaining([
+          "textarea",
+          'input[type="text"]',
+          '[contenteditable]:not([contenteditable="false"])',
+          ".monaco-editor",
+        ]),
+      )
+      expect(selector).not.toContain("checkbox")
+    })
+
+    it("still focuses the notification from outside text fields", () => {
+      const { press, focus, control } = mountNotifications()
+      const event = press({ key: "Dead", keyCode: 229 })
+      expect(event.preventDefault).toHaveBeenCalledOnce()
+      expect(event.stopPropagation).toHaveBeenCalledOnce()
+      expect(focus).toHaveBeenCalledOnce()
+      expect(control.setAttribute).toHaveBeenCalledWith(
+        "aria-keyshortcuts",
+        NOTIFICATION_SHORTCUT,
+      )
+    })
+  })
 
   it("Escape returns to the origin without dismissing the message", () => {
     const { press, origin } = mountNotifications()
@@ -562,5 +633,17 @@ describe("notification keyboard access", () => {
     act(() => renderer!.unmount())
     expect(removeEventListener).toHaveBeenCalledWith("keydown", onKeyDown, true)
     renderer = undefined
+  })
+})
+
+describe("notification shortcut instructions", () => {
+  it.each([
+    [false, ""],
+    [true, " outside a text field"],
+  ])("scope the shortcut when Apple platform is %s", async (apple, scope) => {
+    platformState.isMacintosh = apple
+    vi.resetModules()
+    const { NOTIFICATION_SHORTCUT_SCOPE } = await import(".")
+    expect(NOTIFICATION_SHORTCUT_SCOPE).toBe(scope)
   })
 })

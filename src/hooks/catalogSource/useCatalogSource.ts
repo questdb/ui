@@ -68,7 +68,7 @@ export const useCatalogSource = <T>({
     try {
       const request = quest.queryRaw(
         query,
-        { cancellable: true },
+        { cancellable: true, background: true },
         {
           onRefreshWait: deadline.onRefreshWait,
           onRequestStart: deadline.onRequestStart,

@@ -200,6 +200,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         const result = await quest.queryRaw(sql, {
           limit: `${lo},${hi}`,
           nm: true,
+          background: true,
         })
         if (result.type === QuestDB.Type.DQL) {
           rendererFn(result)

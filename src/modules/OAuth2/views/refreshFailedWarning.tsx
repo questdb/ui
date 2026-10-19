@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react"
 import { Button } from "../../../components/Button"
-import { NOTIFICATION_SHORTCUT_LABEL } from "../../../components/Toast"
+import {
+  NOTIFICATION_SHORTCUT_LABEL,
+  NOTIFICATION_SHORTCUT_SCOPE,
+} from "../../../components/Toast"
 import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
 
@@ -47,8 +50,9 @@ export const RefreshFailedWarning = ({
         Sign in again
       </Button>
       <Text size="sm" color="contentSecondary">
-        Close any open dialog, then press {NOTIFICATION_SHORTCUT_LABEL} to focus
-        this notification. Press Escape to return without dismissing it.
+        Close any open dialog, then press {NOTIFICATION_SHORTCUT_LABEL}
+        {NOTIFICATION_SHORTCUT_SCOPE} to focus this notification. Press Escape
+        to return without dismissing it.
       </Text>
     </Box>
   )

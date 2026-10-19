@@ -44,6 +44,7 @@ vi.mock("./SettingsProvider", async (importOriginal) => {
 })
 vi.mock("../components/Toast", () => ({
   NOTIFICATION_SHORTCUT_LABEL: "Alt+N",
+  NOTIFICATION_SHORTCUT_SCOPE: "",
   REFRESH_FAILED_TOAST_ID: "sso-refresh-failed",
   toast: {
     error: mocks.toastError,
@@ -271,6 +272,53 @@ describe("AuthProvider token installation", () => {
     const login = renderer!.root.findByProps({ "data-hook": "mock-login" })
     expect(login.props.errorMessage).toContain("Verify their outcomes")
     expect(authSessionState.isAuthenticated()).toBe(false)
+  })
+
+  it("does not claim execution when signing in again cancels only unsent requests", async () => {
+    await mount()
+    // A refresh waiter is active work, but it never reached the server.
+    vi.spyOn(questClient, "hasActiveRequests").mockReturnValue(true)
+    vi.spyOn(questClient, "hasSentRequests").mockReturnValue(false)
+    const confirm = vi.fn(() => true)
+    vi.stubGlobal("confirm", confirm)
+    act(() => auth.signInAgain())
+    expect(confirm).toHaveBeenCalledWith(
+      "Signing in again cancels requests that have not been sent yet. End this session?",
+    )
+    expect(
+      renderer!.root.findByProps({ "data-hook": "mock-login" }).props
+        .errorMessage,
+    ).toBe("Your previous session has ended. Please sign in again.")
+    expect(authSessionState.isAuthenticated()).toBe(false)
+  })
+
+  it("signs in again without a confirmation or warning while only background reads run", async () => {
+    await mount()
+    const fetchMock = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          )
+        }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const reads = [
+      questClient.showTables(),
+      questClient.queryRaw("query_activity()", { background: true }),
+    ].map((read) => read.catch((error: unknown) => error))
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal("confirm", confirm)
+    act(() => auth.signInAgain())
+    expect(confirm).not.toHaveBeenCalled()
+    const message = renderer!.root.findByProps({ "data-hook": "mock-login" })
+      .props.errorMessage as string
+    expect(message).toBe(
+      "Your previous session has ended. Please sign in again.",
+    )
+    expect(message).not.toContain("statements may have executed")
+    await Promise.all(reads)
   })
 
   it("confirms a real pending CSV upload with no SQL activity before signing in again", async () => {

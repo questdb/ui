@@ -377,6 +377,7 @@ export const Toolbar = () => {
         "SELECT current_user",
         {
           limit: "0,1",
+          background: true,
         },
       )
       if (response.type === QuestDB.Type.DQL && response.count === 1) {
@@ -451,6 +452,7 @@ export const Toolbar = () => {
         void quest
           .query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`, {
             refreshAuth: false,
+            background: true,
           })
           .then((response) => {
             if (
