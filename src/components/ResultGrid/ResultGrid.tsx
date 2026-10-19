@@ -546,6 +546,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     const {
       focusedCell,
       setFocusedCell,
+      resetSelection,
       copyPulse,
       onCellClick,
       onKeyDown,
@@ -597,7 +598,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       (e: React.KeyboardEvent) => {
         if (e.key === "F2") {
           e.preventDefault()
-          setFocusedCell(null)
+          resetSelection()
           gridRef.current?.blur()
           onYieldFocus?.()
           return
@@ -623,7 +624,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         focusedCell,
         shuffleFocusedColumnToFront,
         onYieldFocus,
-        setFocusedCell,
+        resetSelection,
         resetLayout,
       ],
     )
@@ -678,13 +679,13 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     useEffect(() => {
       if (prevRunTokenRef.current === runToken) return
       prevRunTokenRef.current = runToken
-      setFocusedCell(null)
+      resetSelection()
       gridRef.current?.blur()
       if (scrollRef.current) {
         scrollRef.current.scrollTop = 0
         scrollRef.current.scrollLeft = 0
       }
-    }, [runToken])
+    }, [runToken, resetSelection])
 
     const totalWidth = columnVirtualizer.getTotalSize()
     const totalHeight = rowVirtualizer.getTotalSize()

@@ -438,6 +438,68 @@ describe("notification keyboard integration", () => {
       .should("have.been.calledWith", "3")
   })
 
+  it("does not restore a previous result's selection after returning from a notification", () => {
+    visitConsole()
+    cy.typeQuery("select value from focus_probe;")
+    cy.getByDataHook("button-run-query").click()
+    cy.get("#cell-0-0").should("contain", "1")
+
+    let finishQuery
+    cy.intercept("GET", `${baseUrl}/exec*`, (req) => {
+      const query = new URL(req.url).searchParams.get("query") ?? ""
+      if (!query.includes("replacement_result")) return
+      return new Promise((resolve) => {
+        finishQuery = () => {
+          req.reply({
+            body: {
+              query,
+              columns: [{ name: "value", type: "INT" }],
+              dataset: [[10], [20], [30]],
+              count: 3,
+              timings: { compiler: 0, execute: 0, count: 0, authentication: 0 },
+            },
+          })
+          resolve()
+        }
+      })
+    }).as("replacement")
+    cy.typeQuery("select 123 as replacement_result;")
+    cy.getByDataHook("button-run-query").click()
+    cy.wrap(null).should(() => expect(finishQuery).to.be.a("function"))
+    cy.get("#cell-0-0").realClick()
+    cy.realPress("ArrowDown")
+    cy.get('[role="grid"]').should(
+      "have.attr",
+      "aria-activedescendant",
+      "cell-1-0",
+    )
+    cy.realPress(["Control", "c"])
+    cy.window()
+      .its("navigator.clipboard.writeText")
+      .should("have.been.calledOnce")
+      .and("have.been.calledWith", "2")
+    cy.realPress(["Alt", "n"])
+    cy.get(".Toastify__toast--success .Toastify__toast-body").should(
+      "be.focused",
+    )
+
+    cy.then(() => finishQuery())
+    cy.wait("@replacement")
+    cy.get("#cell-0-0").should("contain", "10")
+    cy.get('[role="grid"]').should("not.have.attr", "aria-activedescendant")
+    cy.get(".Toastify__toast--success .Toastify__toast-body").should(
+      "be.focused",
+    )
+    cy.realPress("Escape")
+    cy.get('[role="grid"]')
+      .should("be.focused")
+      .and("not.have.attr", "aria-activedescendant")
+    cy.realPress(["Control", "c"])
+    cy.window()
+      .its("navigator.clipboard.writeText")
+      .should("have.been.calledOnce")
+  })
+
   it("restores the shortcut origin when a paused toast is manually closed", () => {
     visitConsole()
     showCopyToast()

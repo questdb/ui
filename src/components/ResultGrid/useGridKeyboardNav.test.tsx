@@ -68,6 +68,35 @@ describe("grid focus retention", () => {
     expect(nav.focusedCell).toEqual({ row: 3, col: 1 })
   })
 
+  it("clears both the active selection and the saved notification coordinate on reset", () => {
+    act(() => {
+      renderer = create(<Mount />)
+    })
+    const { grid, message } = leaveForNotification()
+    act(() => nav.resetSelection())
+    act(() =>
+      nav.onFocus({
+        target: grid,
+        currentTarget: grid,
+        relatedTarget: message,
+      } as unknown as React.FocusEvent<HTMLElement>),
+    )
+    expect(nav.focusedCell).toBeNull()
+    const preventDefault = vi.fn()
+    act(() =>
+      nav.onKeyDown({
+        key: "c",
+        ctrlKey: true,
+        preventDefault,
+      } as unknown as React.KeyboardEvent),
+    )
+    expect(preventDefault).not.toHaveBeenCalled()
+
+    act(() => nav.onCellClick(2, 1))
+    act(() => nav.resetSelection())
+    expect(nav.focusedCell).toBeNull()
+  })
+
   it.each<[number, number, { row: number; col: number } | null]>([
     [2, 1, { row: 1, col: 0 }],
     [0, 3, null],

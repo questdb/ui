@@ -67,6 +67,11 @@ export const useGridKeyboardNav = (
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const notificationCellRef = useRef<CellCoord | null>(null)
 
+  const resetSelection = useCallback(() => {
+    notificationCellRef.current = null
+    setFocusedCell(null)
+  }, [])
+
   const moveTo = useCallback(
     (row: number, col: number) => {
       const next = { row, col }
@@ -250,6 +255,7 @@ export const useGridKeyboardNav = (
   return {
     focusedCell,
     setFocusedCell,
+    resetSelection,
     copyPulse,
     onCellClick,
     onKeyDown,

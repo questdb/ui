@@ -129,30 +129,62 @@ const commitRunAtomically = (
 
 const retryMetadataOnly = async (
   bufferId: number,
-  resultParts: ReturnType<typeof partsOf>,
+  cellId: string,
+  queryText: string,
+  result: CellResult,
   invalidationReason: () => CommitFailureReason | undefined,
 ): Promise<RunCommitOutcome> => {
   const reason = invalidationReason()
   if (reason) return { committed: false, reason }
   try {
-    const commit = await commitView(
-      bufferId,
-      resultParts,
-      () => !invalidationReason(),
-    )
-    switch (commit) {
-      case "committed":
-        return { committed: true, snapshotSaved: false }
-      case "archived":
-        return { committed: false, reason: "notebook_archived" }
-      case "deleted":
-        return { committed: false, reason: "notebook_gone" }
-      case "discarded":
-        return {
-          committed: false,
-          reason: invalidationReason() ?? "user_changed",
+    return await db.transaction(
+      "rw",
+      db.buffers,
+      async (): Promise<RunCommitOutcome> => {
+        // Aborting the original transaction releases its lock. Another
+        // connection may have saved edits before this retry acquires it.
+        let view: NotebookViewState
+        try {
+          view = await readNotebookView(bufferId)
+        } catch (error) {
+          return {
+            committed: false,
+            reason:
+              error instanceof NotebookToolError && error.code === "archived"
+                ? "notebook_archived"
+                : "notebook_gone",
+          }
         }
-    }
+        const reason = invalidationReason()
+        if (reason) return { committed: false, reason }
+        const cell = view.cells.find((item) => item.id === cellId)
+        if (!cell) return { committed: false, reason: "cell_gone" }
+        if (cell.value !== queryText)
+          return { committed: false, reason: "cell_changed" }
+        const parts = partsOf(view)
+        const commit = await commitView(
+          bufferId,
+          {
+            ...parts,
+            cells: patchCellRunResult(parts.cells, cellId, result),
+          },
+          () => !invalidationReason(),
+        )
+        switch (commit) {
+          case "committed":
+            return { committed: true, snapshotSaved: false }
+          case "archived":
+            return { committed: false, reason: "notebook_archived" }
+          case "deleted":
+            return { committed: false, reason: "notebook_gone" }
+          case "discarded":
+            return {
+              committed: false,
+              reason: invalidationReason() ?? "user_changed",
+            }
+        }
+      },
+    )
   } catch {
     return { committed: false, reason: invalidationReason() ?? "storage_full" }
   }
@@ -756,15 +788,21 @@ export const runHeadlessCell = async (
           reportSnapshotSaveFailure(error)
           // Check the same causes, in the same order, as before the commit.
           // Root commit failure can arrive after mount or cancellation changes.
-          return retryMetadataOnly(bufferId, resultParts, () => {
-            if (deps.isBufferClaimed()) return "mounted"
-            if (!isCurrentSession()) return "session_ended"
-            if (getMountEpoch(bufferId) !== prep.mountEpochAtPrep)
-              return "mounted"
-            if (!claim.isCurrent()) return runCancellationOf(claim.signal)
-            if (deps.getBufferSeq() !== prep.seqAtPrep) return "user_changed"
-            return undefined
-          })
+          return retryMetadataOnly(
+            bufferId,
+            cellId,
+            queryText,
+            ranResult,
+            () => {
+              if (deps.isBufferClaimed()) return "mounted"
+              if (!isCurrentSession()) return "session_ended"
+              if (getMountEpoch(bufferId) !== prep.mountEpochAtPrep)
+                return "mounted"
+              if (!claim.isCurrent()) return runCancellationOf(claim.signal)
+              if (deps.getBufferSeq() !== prep.seqAtPrep) return "user_changed"
+              return undefined
+            },
+          )
         }
       },
     )

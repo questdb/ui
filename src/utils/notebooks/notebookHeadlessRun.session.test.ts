@@ -6,7 +6,7 @@ import { Client } from "../questdb/client"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { db } from "../../store/db"
+import { db, Storage } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import {
   loadCellSnapshot,
@@ -611,6 +611,103 @@ describe("headless notebook authentication sessions", () => {
     )
     expect(warning).toHaveBeenCalled()
   })
+
+  it.each(["target edit", "target delete", "unrelated edit"] as const)(
+    "preserves a peer connection's %s before the metadata-only retry",
+    async (change) => {
+      await db.buffers.update(BUFFER_ID, {
+        notebookViewState: {
+          cells: [
+            { id: "cell", position: 0, value: "select 1" },
+            { id: "other", position: 1, value: "select 2" },
+          ],
+        },
+      })
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.resolve(response())),
+      )
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const peer = new Storage()
+      await peer.open()
+      let peerWrite: Promise<unknown> | undefined
+      let peerCommitted = false
+      const put = db.notebook_results.put.bind(db.notebook_results)
+      vi.spyOn(db.notebook_results, "put").mockImplementationOnce(
+        (snapshot, key) => {
+          const transaction = Dexie.currentTransaction
+          // Queue an independent writer while the root transaction owns the
+          // stores. It commits after the abort but before the retry can read.
+          peerWrite = Dexie.ignoreTransaction(() =>
+            peer.transaction("rw", peer.buffers, async () => {
+              const buffer = await peer.buffers.get(BUFFER_ID)
+              const view = buffer!.notebookViewState!
+              await peer.buffers.update(BUFFER_ID, {
+                notebookViewState: {
+                  ...view,
+                  cells:
+                    change === "target delete"
+                      ? view.cells.filter((cell) => cell.id !== "cell")
+                      : view.cells.map((cell) =>
+                          cell.id ===
+                          (change === "target edit" ? "cell" : "other")
+                            ? { ...cell, value: "select 777" }
+                            : cell,
+                        ),
+                  focusedCellId: "other",
+                  maximizedCellId: "other",
+                  settings: { layoutMode: "grid" },
+                },
+              })
+              peerCommitted = true
+            }),
+          )
+          return put(snapshot, key).then((result) => {
+            transaction.abort()
+            return result
+          })
+        },
+      )
+      try {
+        const summary = await makeRun(new Client())
+        await peerWrite
+        expect(peerCommitted).toBe(true)
+        const view = (await db.buffers.get(BUFFER_ID))?.notebookViewState
+        expect(view).toMatchObject({
+          focusedCellId: "other",
+          maximizedCellId: "other",
+          settings: { layoutMode: "grid" },
+        })
+        const cell = view?.cells.find((item) => item.id === "cell")
+        if (change === "target edit") {
+          expect(cell?.value).toBe("select 777")
+          expect(cell?.lastRunStatus).toBeUndefined()
+          expect(summary).toMatchObject({ unverified: true })
+          expect(summary.note).toContain("SQL was changed")
+        } else if (change === "target delete") {
+          expect(cell).toBeUndefined()
+          expect(summary).toMatchObject({ unverified: true })
+          expect(summary.note).toContain("deleted")
+        } else {
+          expect(view?.cells.find((item) => item.id === "other")?.value).toBe(
+            "select 777",
+          )
+          expect(cell?.lastRunStatus).toBe("success")
+          expect(typeof cell?.bottomHeight).toBe("number")
+          expect(summary.success).toBe(true)
+          expect(summary.unverified).toBeFalsy()
+          expect(summary.note).toMatch(/No re-run is needed/)
+        }
+        expect(await loadCellSnapshot(BUFFER_ID, "cell")).toMatchObject({
+          results: previous,
+          savedAt: 1,
+        })
+      } finally {
+        await peerWrite
+        peer.close()
+      }
+    },
+  )
 
   it.each(["mounted", "superseded"] as const)(
     "reports %s instead of user_changed after a root commit failure",
