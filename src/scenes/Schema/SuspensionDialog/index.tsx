@@ -112,6 +112,7 @@ export const SuspensionDialog = ({
       const escapedName = QuestDB.escapeSqlLiteral(tableName)
       const response = await quest.query<QuestDB.WalTable>(
         `wal_tables() WHERE name = '${escapedName}'`,
+        { background: true },
       )
       if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
         setWalTableData(response.data[0])

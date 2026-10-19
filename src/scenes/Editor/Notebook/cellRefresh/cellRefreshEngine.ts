@@ -97,11 +97,15 @@ export type CellFetchState = {
   fetchCancelled: boolean
 }
 
+// Refreshes only run statements the write gate classified as reads.
+const REFRESH_READ = { background: true }
+
 export type CellRefreshDeps = {
   executeSingle: (
     sql: string,
     signal?: AbortSignal,
     limit?: number,
+    options?: { background?: boolean },
   ) => Promise<QueryExecResult>
   validateWithGlobals: (
     sql: string,
@@ -1264,7 +1268,8 @@ export class CellRefreshEngine {
           const previous = carriedResults[index]
           if (previous) return Promise.resolve(toExecResult(previous))
           return this.limitRequest(
-            () => deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP),
+            () =>
+              deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP, REFRESH_READ),
             ac.signal,
           ).catch((e) => errorExecResult(q, e))
         }),
@@ -1404,6 +1409,7 @@ export class CellRefreshEngine {
                   queries[index],
                   slotAbort.signal,
                   NOTEBOOK_ROW_CAP,
+                  REFRESH_READ,
                 ),
               slotAbort.signal,
             )

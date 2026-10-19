@@ -230,6 +230,7 @@ describe("CellRefreshEngine", () => {
       "select 1",
       expect.any(AbortSignal),
       10_000,
+      { background: true },
     )
     const state = engine.getState("c1")
     expect(state?.settledKey).toBe(state?.queriesKey)
@@ -694,6 +695,7 @@ describe("CellRefreshEngine", () => {
         "select 2",
         expect.anything(),
         expect.anything(),
+        { background: true },
       )
       expect(engine.getState("c1")?.fetchCancelled).toBe(false)
     })
@@ -1247,6 +1249,7 @@ describe("CellRefreshEngine", () => {
       "select 2",
       expect.any(AbortSignal),
       10_000,
+      { background: true },
     )
   })
 
@@ -1745,6 +1748,7 @@ describe("CellRefreshEngine", () => {
       "select 2",
       expect.any(AbortSignal),
       10_000,
+      { background: true },
     )
   })
 
@@ -2566,6 +2570,7 @@ describe("CellRefreshEngine", () => {
         "select 2",
         expect.any(AbortSignal),
         10_000,
+        { background: true },
       )
     })
 
@@ -2610,6 +2615,7 @@ describe("CellRefreshEngine", () => {
         "select 2",
         expect.any(AbortSignal),
         10_000,
+        { background: true },
       )
 
       // And the debounce expiry does not fetch a second time

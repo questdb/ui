@@ -232,8 +232,10 @@ const Schema = ({
 
     for (const query of queries) {
       try {
-        const response =
-          await quest.query<QuestDB.InformationSchemaColumn>(query)
+        const response = await quest.query<QuestDB.InformationSchemaColumn>(
+          query,
+          { background: true },
+        )
 
         if (response?.type === QuestDB.Type.DQL) {
           dispatch(actions.query.setColumns(response.data))

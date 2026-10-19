@@ -2,7 +2,15 @@ import { isServerError } from "../../utils"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { AuthPayload } from "../../modules/OAuth2/types"
+import {
+  AuthRefreshUnavailableError,
+  endedFor,
+  sessionFailureOf,
+  SessionEndedError,
+  SESSION_ENDED_MESSAGE,
+} from "../../modules/OAuth2/session"
+import { CANCELLED_BY_USER } from "./cancellation"
+import type { AuthSession } from "../../modules/OAuth2/authSessionState"
 import { API_VERSION } from "../../consts"
 import {
   Type,
@@ -12,6 +20,7 @@ import {
   Table,
   Column,
   Options,
+  QueryLifecycle,
   RawResult,
   Release,
   NewsItem,
@@ -31,9 +40,24 @@ import {
   ValidateQuerySuccessResult,
   ValidateQueryErrorResult,
 } from "./types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import { getBearerAuthorization } from "../../modules/OAuth2/utils"
+import {
+  awaitRefresh,
+  isRefreshable,
+  RefreshTokenMethod,
+  RefreshableAuthPayload,
+  REFRESH_REQUEST_TIMEOUT_MS,
+  REFRESH_WAIT_TIMEOUT_MS,
+  tokenRefresh,
+} from "./tokenRefresh"
 
 export type QueryId = number
+
+type RequestExecution = { requestNotSent: boolean }
+
+// Catalog lookups read metadata only. Interrupting them needs no outcome check.
+const BACKGROUND_READ: Options = { background: true }
 
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
@@ -52,53 +76,47 @@ export const buildDDLQuery = (name: string, kind: TableKind): string => {
 }
 
 export class Client {
-  private _controllers = new Map<QueryId, AbortController>()
+  private _controllers = new Map<
+    QueryId,
+    {
+      controller: AbortController
+      execution: RequestExecution
+      background: boolean
+    }
+  >()
+  // The value distinguishes a sent write from one still waiting for renewal.
+  private _writeControllers = new Map<AbortController, boolean>()
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
-  private static refreshTokenPending = false
-  private static numOfPendingQueries = 0
-  refreshTokenMethod: () => Promise<Partial<AuthPayload>> = async (): Promise<
-    Partial<AuthPayload>
-  > => {
-    return Promise.resolve({})
-  }
-
-  private tokenNeedsRefresh() {
-    const authPayload = ssoAuthState.getAuthPayload()
-    return (
-      authPayload &&
-      authPayload.refresh_token &&
-      new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
-    )
-  }
+  refreshTokenMethod?: RefreshTokenMethod
 
   setCommonHeaders(headers: Record<string, string>) {
     this.commonHeaders = headers
   }
 
-  private refreshAuthToken = async () => {
-    Client.refreshTokenPending = true
-    await new Promise((resolve) => {
-      const interval = setInterval(async () => {
-        if (Client.numOfPendingQueries === 0) {
-          clearInterval(interval)
-          const newToken = await this.refreshTokenMethod()
-          if (newToken.access_token) {
-            this.setCommonHeaders({
-              ...this.commonHeaders,
-              Authorization: `Bearer ${
-                newToken.groups_encoded_in_token
-                  ? newToken.id_token
-                  : newToken.access_token
-              }`,
-            })
-          }
-          Client.refreshTokenPending = false
-          return resolve(true)
-        }
-      }, 50)
-    })
+  resetCredentials() {
+    this.setCommonHeaders({})
+    this.refreshTokenMethod = undefined
+  }
+
+  private currentAuthorization() {
+    const payload = authSessionState.getAuthPayload()
+    return payload
+      ? getBearerAuthorization(payload)
+      : this.commonHeaders.Authorization
+  }
+
+  private requestHeaders() {
+    const { Authorization: _, ...headers } = this.commonHeaders
+    const authorization = this.currentAuthorization()
+    return authorization
+      ? { ...headers, Authorization: authorization }
+      : headers
+  }
+
+  private startRefresh(payload: RefreshableAuthPayload) {
+    tokenRefresh.start(payload, this.refreshTokenMethod)
   }
 
   static encodeParams = (
@@ -116,9 +134,9 @@ export class Client {
 
   abort = (queryId?: QueryId) => {
     if (queryId !== undefined) {
-      const controller = this._controllers.get(queryId)
-      if (controller) {
-        controller.abort()
+      const request = this._controllers.get(queryId)
+      if (request) {
+        request.controller.abort()
         this._controllers.delete(queryId)
       }
       if (this._activeQueryId === queryId) {
@@ -126,9 +144,33 @@ export class Client {
       }
       return
     }
-    this._controllers.forEach((controller) => controller.abort())
+    this._controllers.forEach(({ controller }) => controller.abort())
     this._controllers.clear()
+    this._writeControllers.forEach((_, controller) => controller.abort())
+    this._writeControllers.clear()
     this._activeQueryId = null
+  }
+
+  // Background reads are cancelled with the session without asking: only
+  // statements the user ran and writes make ending the session disruptive.
+  hasActiveRequests = () => {
+    for (const { background } of this._controllers.values()) {
+      if (!background) return true
+    }
+    return this._writeControllers.size > 0
+  }
+
+  // Refresh waiters and SQL rejected with 401 have definitively not executed,
+  // and background reads change nothing. Only warn about uncertainty if a user
+  // statement or write was actually sent.
+  hasSentRequests = () => {
+    for (const { execution, background } of this._controllers.values()) {
+      if (!background && !execution.requestNotSent) return true
+    }
+    for (const sent of this._writeControllers.values()) {
+      if (sent) return true
+    }
+    return false
   }
 
   abortActive = () => {
@@ -217,19 +259,37 @@ export class Client {
   queryRaw(
     query: string,
     options: Options & { cancellable: true },
+    lifecycle?: QueryLifecycle,
   ): { promise: Promise<QueryRawResult>; queryId: QueryId }
-  queryRaw(query: string, options?: Options): Promise<QueryRawResult>
   queryRaw(
     query: string,
     options?: Options,
+    lifecycle?: QueryLifecycle,
+  ): Promise<QueryRawResult>
+  queryRaw(
+    query: string,
+    options?: Options,
+    lifecycle?: QueryLifecycle,
   ):
     | Promise<QueryRawResult>
     | { promise: Promise<QueryRawResult>; queryId: QueryId } {
     const queryId = this._nextQueryId++
     const controller = new AbortController()
-    this._controllers.set(queryId, controller)
+    const execution = { requestNotSent: true }
+    this._controllers.set(queryId, {
+      controller,
+      execution,
+      background: options?.background === true,
+    })
 
-    const promise = this._executeQueryRaw(query, options, controller, queryId)
+    const promise = this._executeQueryRaw(
+      query,
+      options,
+      controller,
+      queryId,
+      execution,
+      lifecycle,
+    )
 
     if (options?.cancellable) {
       this._activeQueryId = queryId
@@ -239,13 +299,142 @@ export class Client {
     return promise
   }
 
+  private ensureRequestAllowed(session: AuthSession, signal: AbortSignal) {
+    if (!session.isCurrent()) throw new SessionEndedError()
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+    tokenRefresh.ensureUsableToken()
+  }
+
+  private refreshBeforeRequest(
+    signal: AbortSignal,
+    lifecycle?: QueryLifecycle,
+  ): { waited: false } | { waited: true; ready: Promise<void> } {
+    tokenRefresh.syncSession()
+    const payload = authSessionState.getAuthPayload()
+    if (isRefreshable(payload) && tokenRefresh.needsRefresh(payload)) {
+      this.startRefresh(payload)
+    }
+    const deadline = tokenRefresh.softDeadline
+    if (!deadline) return { waited: false }
+    lifecycle?.onRefreshWait?.(REFRESH_WAIT_TIMEOUT_MS)
+    return { waited: true, ready: awaitRefresh(deadline, signal) }
+  }
+
+  private async prepareRequest(signal = new AbortController().signal) {
+    const session = authSessionState.capture()
+    const refresh = this.refreshBeforeRequest(signal)
+    if (refresh.waited) await refresh.ready
+    this.ensureRequestAllowed(session, signal)
+    return session
+  }
+
+  private async sendQuery(
+    payload: Record<string, string | number | boolean | undefined>,
+    signal: AbortSignal,
+    session: AuthSession,
+    execution: RequestExecution,
+    lifecycle?: QueryLifecycle,
+    refreshAuth = true,
+  ) {
+    const originalPayload = authSessionState.getAuthPayload()
+    if (!refreshAuth && !tokenRefresh.canSendWithoutRefresh())
+      throw new AuthRefreshUnavailableError()
+    const refresh = refreshAuth
+      ? this.refreshBeforeRequest(signal, lifecycle)
+      : { waited: false as const }
+    if (refresh.waited) await refresh.ready
+    const waitForHardDeadline = async () => {
+      const deadline = tokenRefresh.hardDeadline
+      if (!deadline) return
+      lifecycle?.onRefreshWait?.(REFRESH_REQUEST_TIMEOUT_MS)
+      await awaitRefresh(deadline, signal)
+    }
+    const ensureCanSend = () => this.ensureRequestAllowed(session, signal)
+    let authorizationAtFetch: string | undefined
+    let fetchStartedAt = 0
+    const send = async () => {
+      ensureCanSend()
+      lifecycle?.onRequestStart?.()
+      // Read the installed bearer immediately before every authenticated fetch.
+      const headers = this.requestHeaders()
+      authorizationAtFetch = headers.Authorization
+      fetchStartedAt = Date.now()
+      execution.requestNotSent = false
+      const response = await fetch(`exec?${Client.encodeParams(payload)}`, {
+        signal,
+        headers,
+      })
+      // Authentication/authorization rejection executed no SQL. Record that
+      // before publishing connection events, which may synchronously log out.
+      // Preserve it until another SQL attempt is sent.
+      if (response.status === 401 || response.status === 403)
+        execution.requestNotSent = true
+      return response
+    }
+    const payloadAtFetch = authSessionState.getAuthPayload()
+    let response = await send()
+    if (response.status === 401 && originalPayload) {
+      // Non-interactive work must neither refresh nor end the user's login.
+      if (!refreshAuth) throw new AuthRefreshUnavailableError()
+      if (!session.isCurrent()) throw new SessionEndedError()
+      const currentPayload = authSessionState.getAuthPayload()
+      const currentAuthorization = this.currentAuthorization()
+      let waitForRefresh = !!tokenRefresh.hardDeadline
+      if (!waitForRefresh) {
+        if (
+          currentAuthorization &&
+          currentAuthorization !== authorizationAtFetch
+        ) {
+          // A 401 executed no SQL. Resend at most once with an already-rotated bearer.
+          response = await send()
+        } else if (
+          isRefreshable(currentPayload) &&
+          authSessionState.hasRefreshFailed() &&
+          (tokenRefresh.inBackoff() || refresh.waited)
+        ) {
+          throw new AuthRefreshUnavailableError()
+        } else if (
+          !refresh.waited &&
+          isRefreshable(currentPayload) &&
+          payloadAtFetch === currentPayload &&
+          authorizationAtFetch === currentAuthorization &&
+          this.refreshTokenMethod
+        ) {
+          // Server-side 401s bypass clock-skew/success throttling. Never
+          // cancel an ongoing rotating refresh just because SQL rejected its bearer.
+          this.startRefresh(currentPayload)
+          waitForRefresh = true
+        }
+      }
+      if (waitForRefresh) {
+        await waitForHardDeadline()
+        ensureCanSend()
+        if (authSessionState.hasRefreshFailed())
+          throw new AuthRefreshUnavailableError()
+        if (
+          this.currentAuthorization() !== authorizationAtFetch ||
+          authSessionState.getAuthPayload() !== payloadAtFetch
+        )
+          response = await send()
+      }
+    }
+    return { response, authorizationAtFetch, fetchStartedAt }
+  }
+
   private async _executeQueryRaw(
     query: string,
     options: Options | undefined,
     controller: AbortController,
     queryId: QueryId,
+    execution: RequestExecution,
+    lifecycle?: QueryLifecycle,
   ): Promise<QueryRawResult> {
-    const { cancellable: _, ...queryOptions } = options ?? {}
+    const {
+      cancellable: _,
+      background: _background,
+      refreshAuth = true,
+      ...queryOptions
+    } = options ?? {}
     const payload = {
       count: true,
       src: "con",
@@ -256,33 +445,35 @@ export class Client {
     }
 
     let response: Response
-
-    if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
-      await this.refreshAuthToken()
+    let fetchStartedAt = 0
+    let authorizationAtFetch: string | undefined
+    const session = authSessionState.capture()
+    const ensureCurrentSession = () => {
+      if (!session.isCurrent()) throw new SessionEndedError()
     }
+    const sessionEndedResult = (): ErrorResult => ({
+      position: -1,
+      query,
+      type: Type.ERROR,
+      error: SESSION_ENDED_MESSAGE,
+      sessionEnded: true,
+      ...sessionFailureOf(execution),
+    })
 
-    if (Client.refreshTokenPending) {
-      await new Promise((resolve) => {
-        const interval = setInterval(() => {
-          if (!Client.refreshTokenPending) {
-            clearInterval(interval)
-            return resolve(true)
-          }
-        }, 50)
-      })
-    }
-
-    Client.numOfPendingQueries++
-
-    const start = new Date()
     try {
-      response = await fetch(`exec?${Client.encodeParams(payload)}`, {
-        signal: controller.signal,
-        headers: this.commonHeaders,
-      })
+      const sent = await this.sendQuery(
+        payload,
+        controller.signal,
+        session,
+        execution,
+        lifecycle,
+        refreshAuth,
+      )
+      response = sent.response
+      authorizationAtFetch = sent.authorizationAtFetch
+      fetchStartedAt = sent.fetchStartedAt
     } catch (error) {
       this.removeController(queryId)
-      Client.numOfPendingQueries--
 
       const err = {
         position: -1,
@@ -293,6 +484,20 @@ export class Client {
       const genericErrorPayload = {
         ...err,
         error: "An error occurred, please try again",
+        connectionError: true,
+      }
+
+      if (endedFor(session, error)) {
+        return Promise.reject(sessionEndedResult())
+      }
+
+      if (error instanceof AuthRefreshUnavailableError) {
+        return Promise.reject({
+          ...err,
+          error: error.message,
+          authRefreshUnavailable: true,
+          requestNotSent: true,
+        })
       }
 
       if (error instanceof DOMException) {
@@ -300,8 +505,9 @@ export class Client {
           ...err,
           error:
             error.code === 20
-              ? "Cancelled by user"
+              ? CANCELLED_BY_USER
               : JSON.stringify(error).toString(),
+          ...sessionFailureOf(execution),
         })
       }
 
@@ -311,6 +517,9 @@ export class Client {
     }
 
     try {
+      // Fence all completions, body reads and failures against the login that
+      // launched the request before publishing or returning anything.
+      ensureCurrentSession()
       if (
         response.ok ||
         response.status === 400 ||
@@ -320,12 +529,13 @@ export class Client {
         try {
           responseText = await response.text()
         } catch (error) {
+          ensureCurrentSession()
           if (error instanceof DOMException && error.name === "AbortError") {
             return Promise.reject({
               position: -1,
               query,
               type: Type.ERROR,
-              error: "Cancelled by user",
+              error: CANCELLED_BY_USER,
             })
           }
           return Promise.reject({
@@ -333,7 +543,8 @@ export class Client {
             type: Type.ERROR,
           })
         }
-        const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
+        ensureCurrentSession()
+        const fetchTime = (Date.now() - fetchStartedAt) * 1e6
         let data
         try {
           data = JSON.parse(responseText) as RawResult
@@ -345,6 +556,7 @@ export class Client {
         }
 
         eventBus.publish(EventType.MSG_CONNECTION_OK)
+        ensureCurrentSession()
 
         if (response.status === 403) {
           eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, data)
@@ -364,14 +576,14 @@ export class Client {
           }
         }
 
-        if (data.error) {
+        if (data.error !== undefined) {
           return Promise.reject({
             ...data,
             type: Type.ERROR,
           })
         }
 
-        if (data.notice) {
+        if (data.notice !== undefined) {
           return {
             ...data,
             ...(data.timings
@@ -391,7 +603,7 @@ export class Client {
         }
       }
 
-      const errorPayload: Record<string, string | number> = {
+      const errorPayload: Record<string, string | number | boolean> = {
         status: response.status,
         error: response.statusText,
       }
@@ -401,12 +613,21 @@ export class Client {
         errorPayload.position = -1
         errorPayload.query = query
         errorPayload.type = Type.ERROR
+        errorPayload.connectionError = true
         eventBus.publish(EventType.MSG_CONNECTION_ERROR, errorPayload)
       }
 
       if (response.status === 401) {
         errorPayload.error = `Unauthorized`
-        eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
+        const currentAuthorization = this.currentAuthorization()
+        // Reject an older request without logging out a session using a
+        // different bearer. A refresh can also return the same bearer value.
+        if (
+          session.isCurrent() &&
+          authorizationAtFetch === currentAuthorization
+        ) {
+          eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
+        }
       }
 
       if (response.status === 403) {
@@ -414,16 +635,18 @@ export class Client {
         try {
           errorText = (await response.text()).trim()
         } catch (error) {
+          ensureCurrentSession()
           if (error instanceof DOMException && error.name === "AbortError") {
             return Promise.reject({
               position: -1,
               query,
               type: Type.ERROR,
-              error: "Cancelled by user",
+              error: CANCELLED_BY_USER,
             })
           }
           throw error
         }
+        ensureCurrentSession()
         if (errorText.startsWith("{")) {
           const data = JSON.parse(errorText) as ErrorResult
           errorPayload.error = data.error
@@ -433,10 +656,15 @@ export class Client {
         eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, errorPayload)
       }
 
+      ensureCurrentSession()
       return Promise.reject(errorPayload)
+    } catch (error) {
+      if (endedFor(session, error)) {
+        return Promise.reject(sessionEndedResult())
+      }
+      throw error
     } finally {
       this.removeController(queryId)
-      Client.numOfPendingQueries--
     }
   }
 
@@ -444,19 +672,22 @@ export class Client {
     query: string,
     signal?: AbortSignal,
   ): Promise<ValidateQueryResult> {
+    const session = await this.prepareRequest(signal)
+    this.ensureRequestAllowed(session, signal ?? new AbortController().signal)
     const response = await fetch(
       `api/v1/sql/validate?${Client.encodeParams({ query })}`,
       {
-        headers: this.commonHeaders,
+        headers: this.requestHeaders(),
         signal,
       },
     )
-    if (response.ok) {
-      return (await response.json()) as ValidateQuerySuccessResult
-    }
-
-    if (response.status === 400 || response.status === 403) {
-      return (await response.json()) as ValidateQueryErrorResult
+    if (!session.isCurrent()) throw new SessionEndedError()
+    if (response.ok || response.status === 400 || response.status === 403) {
+      const result = (await response.json()) as
+        | ValidateQuerySuccessResult
+        | ValidateQueryErrorResult
+      if (!session.isCurrent()) throw new SessionEndedError()
+      return result
     }
 
     return Promise.reject({
@@ -466,7 +697,10 @@ export class Client {
   }
 
   async showTables(): Promise<QueryResult<Table>> {
-    const response = await this.queryCatalog<Table>("tables();")
+    const response = await this.queryCatalog<Table>(
+      "tables();",
+      BACKGROUND_READ,
+    )
 
     if (response.type === Type.DQL) {
       return {
@@ -491,11 +725,17 @@ export class Client {
   }
 
   async showPermissions(user: string): Promise<QueryResult<Permission>> {
-    return await this.query<Permission>(`SHOW PERMISSIONS '${user}';`)
+    return await this.query<Permission>(
+      `SHOW PERMISSIONS '${user}';`,
+      BACKGROUND_READ,
+    )
   }
 
   async showColumns(table: string): Promise<QueryResult<Column>> {
-    return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
+    return await this.query<Column>(
+      `SHOW COLUMNS FROM '${table}';`,
+      BACKGROUND_READ,
+    )
   }
 
   async showSymbolColumnDetails(
@@ -510,25 +750,30 @@ export class Client {
   > {
     return await this.query<SymbolColumnDetails>(
       `WITH cols as (SHOW COLUMNS FROM '${table}') SELECT symbolCached, symbolCapacity, indexed FROM cols WHERE column = '${column}';`,
+      BACKGROUND_READ,
     )
   }
 
   async getTableDetails(table: string): Promise<QueryResult<Table>> {
     return await this.queryCatalog<Table>(
       `tables() where table_name = '${escapeSqlLiteral(table)}';`,
+      BACKGROUND_READ,
     )
   }
 
   async showMaterializedViews(): Promise<QueryResult<MaterializedView>> {
-    return await this.queryCatalog<MaterializedView>("materialized_views()")
+    return await this.queryCatalog<MaterializedView>(
+      "materialized_views()",
+      BACKGROUND_READ,
+    )
   }
 
   async showViews(): Promise<QueryResult<View>> {
-    return await this.query<View>("views();")
+    return await this.query<View>("views();", BACKGROUND_READ)
   }
 
   async showLiveViews(): Promise<QueryResult<LiveView>> {
-    return await this.queryCatalog<LiveView>("live_views();")
+    return await this.queryCatalog<LiveView>("live_views();", BACKGROUND_READ)
   }
 
   async cancelQuery(queryId: bigint): Promise<QueryResult<never>> {
@@ -543,7 +788,7 @@ export class Client {
   }
 
   private async queryDDL(sql: string): Promise<QueryResult<{ ddl: string }>> {
-    const result = await this.query<{ ddl: string }>(sql)
+    const result = await this.query<{ ddl: string }>(sql, BACKGROUND_READ)
     if (result.type === Type.DQL) {
       result.data = result.data.map((row) => ({
         ...row,
@@ -554,15 +799,19 @@ export class Client {
   }
 
   async checkCSVFile(name: string): Promise<FileCheckResponse> {
+    const session = await this.prepareRequest()
+    if (!session.isCurrent()) throw new SessionEndedError()
     const response = await fetch(
       `chk?${Client.encodeParams({
         f: "json",
         j: name,
         version: API_VERSION,
       })}`,
-      { headers: this.commonHeaders },
+      { headers: this.requestHeaders() },
     )
-    return (await response.json()) as FileCheckResponse
+    const result = (await response.json()) as FileCheckResponse
+    if (!session.isCurrent()) throw new SessionEndedError()
+    return result
   }
 
   async uploadCSVFile({
@@ -575,78 +824,136 @@ export class Client {
     timestamp,
     onProgress,
   }: UploadOptions): Promise<UploadResult> {
-    const formData = new FormData()
-    if (schema) {
-      formData.append("schema", JSON.stringify(schema))
-    }
-    formData.append("data", file)
-    const serializedSettings = settings
-      ? Object.keys(settings).reduce(
-          (acc, key) => ({
-            ...acc,
-            [key]: settings[key as keyof UploadModeSettings].toString(),
-          }),
-          {},
-        )
-      : {}
-    const params = {
-      fmt: "json",
-      name,
-      owner,
-      ...(partitionBy ? { partitionBy } : {}),
-      ...(timestamp ? { timestamp } : {}),
-      ...serializedSettings,
-    }
+    const controller = new AbortController()
+    this._writeControllers.set(controller, false)
+    let removeAbortListener: (() => void) | undefined
+    const session = authSessionState.capture()
+    try {
+      await this.prepareRequest(controller.signal)
+      this.ensureRequestAllowed(session, controller.signal)
+      const formData = new FormData()
+      if (schema) {
+        formData.append("schema", JSON.stringify(schema))
+      }
+      formData.append("data", file)
+      const serializedSettings = settings
+        ? Object.keys(settings).reduce(
+            (acc, key) => ({
+              ...acc,
+              [key]: settings[key as keyof UploadModeSettings].toString(),
+            }),
+            {},
+          )
+        : {}
+      const params = {
+        fmt: "json",
+        name,
+        owner,
+        ...(partitionBy ? { partitionBy } : {}),
+        ...(timestamp ? { timestamp } : {}),
+        ...serializedSettings,
+      }
 
-    return new Promise((resolve, reject) => {
-      const request = new XMLHttpRequest()
-      request.open("POST", `imp?${new URLSearchParams(params)}`)
-      Object.keys(this.commonHeaders).forEach((key) => {
-        request.setRequestHeader(key, this.commonHeaders[key])
-      })
-      request.upload.addEventListener("progress", (e) => {
-        const percent_completed = (e.loaded / e.total) * 100
-        onProgress(percent_completed)
-      })
-      request.onload = (_e) => {
-        if (request.status === 200) {
-          resolve(JSON.parse(request.response as string) as UploadResult)
-        } else {
-          reject({
-            status: request.status,
-            statusText: request.statusText,
-          })
-        }
-      }
-      request.onerror = () => {
-        reject({
-          status: request.status,
-          statusText: request.statusText,
+      return await new Promise<UploadResult>((resolve, reject) => {
+        const request = new XMLHttpRequest()
+        request.open("POST", `imp?${new URLSearchParams(params)}`)
+        const headers = this.requestHeaders()
+        Object.keys(headers).forEach((key) => {
+          request.setRequestHeader(key, headers[key])
         })
-      }
-      request.send(formData)
-    })
+        request.upload.addEventListener("progress", (e) => {
+          if (!session.isCurrent() || controller.signal.aborted) return
+          const percent_completed = (e.loaded / e.total) * 100
+          onProgress(percent_completed)
+        })
+        const rejectRequest = () => {
+          reject(
+            session.isCurrent()
+              ? { status: request.status, statusText: request.statusText }
+              : new SessionEndedError(),
+          )
+        }
+        request.onload = () => {
+          if (!session.isCurrent() || controller.signal.aborted) {
+            rejectRequest()
+            return
+          }
+          if (request.status === 200) {
+            try {
+              resolve(JSON.parse(request.response as string) as UploadResult)
+            } catch (error) {
+              reject(error)
+            }
+          } else {
+            rejectRequest()
+          }
+        }
+        request.onerror = rejectRequest
+        request.onabort = rejectRequest
+        request.ontimeout = rejectRequest
+        const abort = () => {
+          request.abort()
+          rejectRequest()
+        }
+        controller.signal.addEventListener("abort", abort, { once: true })
+        removeAbortListener = () =>
+          controller.signal.removeEventListener("abort", abort)
+        this._writeControllers.set(controller, true)
+        request.send(formData)
+      })
+    } catch (error) {
+      if (endedFor(session, error)) throw new SessionEndedError()
+      throw error
+    } finally {
+      removeAbortListener?.()
+      this._writeControllers.delete(controller)
+    }
   }
 
   async savePreferences(
     preferences: Preferences,
   ): Promise<{ status: number; message?: string; success: boolean }> {
-    const { version, ...prefs } = preferences
-    const response: Response = await fetch(`settings?version=${version}`, {
-      method: "PUT",
-      headers: this.commonHeaders,
-      body: JSON.stringify(prefs),
-    })
-    if (!response.ok) {
-      let errorMessage: string
-      try {
-        errorMessage = await extractErrorMessage(response)
-      } catch (e) {
-        errorMessage = response.statusText
+    const controller = new AbortController()
+    this._writeControllers.set(controller, false)
+    const session = authSessionState.capture()
+    try {
+      await this.prepareRequest(controller.signal)
+      this.ensureRequestAllowed(session, controller.signal)
+      const { version, ...prefs } = preferences
+      this._writeControllers.set(controller, true)
+      const response: Response = await fetch(`settings?version=${version}`, {
+        method: "PUT",
+        signal: controller.signal,
+        headers: this.requestHeaders(),
+        body: JSON.stringify(prefs),
+      })
+      if (!session.isCurrent()) throw new SessionEndedError()
+      if (controller.signal.aborted)
+        throw new DOMException("Aborted", "AbortError")
+      if (!response.ok) {
+        let errorMessage: string
+        try {
+          errorMessage = await extractErrorMessage(response)
+        } catch (error) {
+          if (controller.signal.aborted) throw error
+          errorMessage = response.statusText
+        }
+        if (!session.isCurrent()) throw new SessionEndedError()
+        if (controller.signal.aborted)
+          throw new DOMException("Aborted", "AbortError")
+        return {
+          status: response.status,
+          message: errorMessage,
+          success: false,
+        }
       }
-      return { status: response.status, message: errorMessage, success: false }
+      return { status: response.status, success: true }
+    } catch (error) {
+      if (endedFor(session, error)) throw new SessionEndedError()
+      throw error
+    } finally {
+      this._writeControllers.delete(controller)
     }
-    return { status: response.status, success: true }
   }
 
   async getLatestRelease() {

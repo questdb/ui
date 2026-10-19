@@ -21,8 +21,9 @@ export const useQueryExecution = (globals?: NotebookVariable[]) => {
       sql: string,
       signal?: AbortSignal,
       limit: number = RESULT_DISPLAY_LIMIT,
+      options?: { background?: boolean },
     ): Promise<QueryExecResult> =>
-      executeSingleRaw(quest, sql, globals, signal, limit),
+      executeSingleRaw(quest, sql, globals, signal, limit, options),
     [quest, globals],
   )
 

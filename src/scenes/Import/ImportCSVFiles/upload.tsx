@@ -58,6 +58,7 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
     try {
       const result = await quest.query<Parameter>(
         `(show parameters) where property_path ilike 'cairo.sql.copy.root'`,
+        { background: true },
       )
       if (result.type === "dql" && result.count > 0) {
         setCopyEnabled(

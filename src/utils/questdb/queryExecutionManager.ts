@@ -44,6 +44,20 @@ export class QueryExecutionManager {
   }
 
   private _idleWaiters = new Map<ScopeKey, Array<() => void>>()
+  private generation = 0
+
+  reset = (): void => {
+    this.generation++
+    const active = [...this._activeByScope.values()]
+    const pending = [...this._pendingByScope.values()]
+    this._activeByScope.clear()
+    this._pendingByScope.clear()
+    this._dialogScopeKey = null
+    active.forEach((execution) => execution.abort())
+    pending.forEach((execution) => execution.onDismiss?.())
+    for (const scope of this._idleWaiters.keys()) this.flushIdleWaiters(scope)
+    this.refreshSnapshot()
+  }
 
   private waitForIdle(scopeKey: ScopeKey): Promise<void> {
     if (!this._activeByScope.has(scopeKey)) return Promise.resolve()
@@ -178,9 +192,14 @@ export class QueryExecutionManager {
     // (which also dispatches stopRunning in its handler) before starting the
     // pending query. Otherwise execute() can fire toggleRunning(QUERY) while
     // running is still QUERY, producing a no-op useEffect.
+    const generation = this.generation
     const idle = this.waitForIdle(scopeKey)
     this.abortActive(scopeKey)
     await idle
+    if (this.generation !== generation) {
+      pending.onDismiss?.()
+      return
+    }
 
     this._activeByScope.set(scopeKey, {
       scopeKey,

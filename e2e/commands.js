@@ -581,13 +581,18 @@ Cypress.Commands.add("selectQueries", (selection) => {
 })
 
 Cypress.Commands.add("execQuery", (query) => {
-  const authHeader = localStorage.getItem("basic.auth.header")
-  cy.request({
-    method: "GET",
-    url: `${baseUrl}/exec?query=${encodeURIComponent(query)};`,
-    headers: {
-      Authorization: authHeader,
-    },
+  return cy.window().then(({ localStorage }) => {
+    // EE password login stores a REST token, OSS stores a Basic header.
+    // Read the application's storage at request time, not the runner window.
+    const restToken = localStorage.getItem("rest.token")
+    const authorization = restToken
+      ? `Bearer ${restToken}`
+      : localStorage.getItem("basic.auth.header")
+    return cy.request({
+      method: "GET",
+      url: `${baseUrl}/exec?query=${encodeURIComponent(query)};`,
+      headers: authorization ? { Authorization: authorization } : {},
+    })
   })
 })
 

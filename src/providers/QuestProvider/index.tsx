@@ -22,15 +22,20 @@
  *
  ******************************************************************************/
 
-import React, { createContext, useEffect, useState } from "react"
+import React, { createContext, useEffect, useMemo, useState } from "react"
+import styled from "styled-components"
 import * as QuestDB from "../../utils/questdb"
 import { useAuth } from "../AuthProvider"
-import { AuthPayload } from "../../modules/OAuth2/types"
-import { getValue } from "../../utils/localStorage"
-import { StoreKey } from "../../utils/localStorage/types"
+import { questClient } from "../../utils/questdb/queryClient"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import { questExecution } from "../../utils/questdb/queryExecution"
+import { AuthCheckRecovery, useAuthCheck } from "./AuthCheckRecovery"
 import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
-import { hasUIAuth } from "../../modules/OAuth2/utils"
+import {
+  getStoredCredentialAuthorization,
+  hasUIAuth,
+} from "../../modules/OAuth2/utils"
 import { useSettings } from "../SettingsProvider"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
@@ -39,9 +44,15 @@ import {
   stop as stopConsoleEvents,
 } from "../../modules/ConsoleEventTracker"
 import { QueryExecutionConfirmDialog } from "../../components/QueryExecutionConfirmDialog"
+import { CenteredLayout, Text } from "../../components"
 
-const questClient = new QuestDB.Client()
-const questExecution = new QuestDB.QueryExecutionManager()
+const ConsoleMain = styled.main`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  outline: none;
+`
 
 type ContextProps = {
   quest: QuestDB.Client
@@ -65,72 +76,80 @@ export const QuestContext = createContext<ContextProps>(defaultValues)
 export const QuestProvider: React.FC = ({ children }) => {
   const dispatch = useDispatch()
   const { settings } = useSettings()
-  const { sessionData, refreshAuthToken } = useAuth()
-  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [authCheckFinished, setAuthCheckFinished] = useState(
-    !hasUIAuth(settings),
+  const { sessionData, refreshAuthToken, signInAgain } = useAuth()
+  // Password credentials are shared across browser tabs; retain this tab's login.
+  const [nonSSOAuthorization] = useState(() =>
+    getStoredCredentialAuthorization(),
   )
+  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
+  const {
+    finished: authCheckFinished,
+    error: authCheckError,
+    pending: authCheckPending,
+    finish: finishAuthCheck,
+    retry,
+    consoleRef,
+  } = useAuthCheck(!!hasUIAuth(settings))
+  const [showAuthCheckStatus, setShowAuthCheckStatus] = useState(false)
+  useEffect(() => {
+    setShowAuthCheckStatus(false)
+    if (!authCheckPending) return
+    const timer = setTimeout(() => setShowAuthCheckStatus(true), 500)
+    return () => clearTimeout(timer)
+  }, [authCheckPending])
   const [buildVersion, setBuildVersion] = useState<Versions>(
     defaultValues.buildVersion,
   )
   const [commitHash, setCommitHash] = useState<string>("")
 
-  const finishAuthCheck = async () => {
-    // The initial check tells us if the user has permission to use the HTTP protocol.
-    // If not, this will trigger a full-screen error page, preventing the subsequent requests to be made.
-    await questClient.queryRaw("SELECT 1")
-
-    setAuthCheckFinished(true)
-  }
-
-  const setupClient = (sessionData: Partial<AuthPayload>) => {
-    questClient.setCommonHeaders({
-      Authorization: `Bearer ${sessionData.groups_encoded_in_token ? sessionData.id_token : sessionData.access_token}`,
-    })
-
-    questClient.refreshTokenMethod = () => {
-      return refreshAuthToken(settings, sessionData.refresh_token)
-    }
-
-    void finishAuthCheck()
-  }
-
-  // User has been logged in with OAuth2
-  useEffect(() => {
-    if (sessionData) {
-      setupClient(sessionData)
-    }
-  }, [sessionData])
+  useEffect(
+    () => () => {
+      questClient.resetCredentials()
+    },
+    [],
+  )
 
   useEffect(() => {
-    const restToken = getValue(StoreKey.REST_TOKEN)
-    // User has provided the basic auth credentials
-    if (restToken) {
-      questClient.setCommonHeaders({
-        Authorization: `Bearer ${restToken}`,
-      })
-      void finishAuthCheck()
-    } else {
-      const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-      if (basicAuth) {
-        questClient.setCommonHeaders({
-          Authorization: basicAuth,
-        })
-        void finishAuthCheck()
-      }
-    }
+    // SSO bearer headers are derived from the installed payload at fetch time.
+    const authorization = sessionData ? undefined : nonSSOAuthorization
+    questClient.setCommonHeaders(
+      authorization ? { Authorization: authorization } : {},
+    )
+    questClient.refreshTokenMethod = sessionData
+      ? (deadlineSignal, requestSignal) =>
+          refreshAuthToken(
+            settings,
+            authSessionState.getAuthPayload()?.refresh_token,
+            deadlineSignal,
+            requestSignal,
+          )
+      : undefined
+    if (!authCheckFinished) void finishAuthCheck()
+  }, [
+    sessionData,
+    nonSSOAuthorization,
+    settings,
+    refreshAuthToken,
+    authCheckFinished,
+    finishAuthCheck,
+  ])
 
+  useEffect(() => {
+    if (!authCheckFinished) return
     // TODO: Remove this, use info from `/settings` (`type` and `version`) and run this hook on `settings` dep
     // Get the build version info
     void questClient
-      .queryRaw("select build", { limit: "0,1000" })
+      .queryRaw("select build", { limit: "0,1000", background: true })
       .then((result) => {
         if (result.type === QuestDB.Type.DQL && result.count === 1) {
           setBuildVersion(formatVersion(result.dataset[0][0] as string))
           setCommitHash(formatCommitHash(result.dataset[0][0] as string))
         }
       })
-  }, [])
+      .catch(() => {
+        // Authentication can end while the initial build query is waiting.
+      })
+  }, [authCheckFinished])
 
   // Telemetry queries use SQL, and therefore need to have auth header set if needed.
   // Defer starting until the authorization is properly set for all HTTP requests.
@@ -149,19 +168,38 @@ export const QuestProvider: React.FC = ({ children }) => {
     }
   }, [telemetryConfig?.enabled, telemetryConfig?.id])
 
-  if (!authCheckFinished) return null
+  const contextValue = useMemo(
+    () => ({
+      quest: questClient,
+      questExecution,
+      buildVersion,
+      commitHash,
+    }),
+    [buildVersion, commitHash],
+  )
+
+  if (!authCheckFinished)
+    return authCheckError ? (
+      <AuthCheckRecovery
+        error={authCheckError}
+        pending={authCheckPending}
+        onRetry={retry}
+        onSignIn={signInAgain}
+      />
+    ) : showAuthCheckStatus ? (
+      <CenteredLayout>
+        <div role="status">
+          <Text color="contentPrimary">Checking your session…</Text>
+        </div>
+      </CenteredLayout>
+    ) : null
 
   return (
-    <QuestContext.Provider
-      value={{
-        quest: questClient,
-        questExecution,
-        buildVersion,
-        commitHash,
-      }}
-    >
-      {children}
-      <QueryExecutionConfirmDialog />
+    <QuestContext.Provider value={contextValue}>
+      <ConsoleMain ref={consoleRef} aria-label="QuestDB console">
+        {children}
+        <QueryExecutionConfirmDialog />
+      </ConsoleMain>
     </QuestContext.Provider>
   )
 }

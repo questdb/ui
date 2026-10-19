@@ -90,8 +90,8 @@ ReactDOM.render(
           <SettingsProvider>
             <PosthogProviderWrapper>
               <AuthProvider>
+                {ReactDOM.createPortal(<ToastContainer />, document.body)}
                 <QuestProvider>
-                  {ReactDOM.createPortal(<ToastContainer />, document.body)}
                   <LocalStorageProvider>
                     <FadeSlow />
                     <FadeReg />

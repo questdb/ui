@@ -25,6 +25,7 @@ type StyledIconProps = {
 export type ToastOptions = RTToastOptions
 
 export const useNotificationCenter = RTNotificationCenter
+export const REFRESH_FAILED_TOAST_ID = "sso-refresh-failed"
 
 export const ToastIcon = ({
   type,
