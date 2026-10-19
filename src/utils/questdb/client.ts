@@ -54,6 +54,8 @@ import {
 
 export type QueryId = number
 
+type RequestExecution = { requestNotSent: boolean }
+
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
 export const buildDDLQuery = (name: string, kind: TableKind): string => {
@@ -71,9 +73,12 @@ export const buildDDLQuery = (name: string, kind: TableKind): string => {
 }
 
 export class Client {
-  private _controllers = new Map<QueryId, AbortController>()
-  private _activeUploads = 0
-  private _activePreferencesWrites = 0
+  private _controllers = new Map<
+    QueryId,
+    { controller: AbortController; execution: RequestExecution }
+  >()
+  // The value distinguishes a sent write from one still waiting for renewal.
+  private _writeControllers = new Map<AbortController, boolean>()
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
@@ -122,9 +127,9 @@ export class Client {
 
   abort = (queryId?: QueryId) => {
     if (queryId !== undefined) {
-      const controller = this._controllers.get(queryId)
-      if (controller) {
-        controller.abort()
+      const request = this._controllers.get(queryId)
+      if (request) {
+        request.controller.abort()
         this._controllers.delete(queryId)
       }
       if (this._activeQueryId === queryId) {
@@ -132,15 +137,27 @@ export class Client {
       }
       return
     }
-    this._controllers.forEach((controller) => controller.abort())
+    this._controllers.forEach(({ controller }) => controller.abort())
     this._controllers.clear()
+    this._writeControllers.forEach((_, controller) => controller.abort())
+    this._writeControllers.clear()
     this._activeQueryId = null
   }
 
   hasActiveRequests = () =>
-    this._controllers.size > 0 ||
-    this._activeUploads > 0 ||
-    this._activePreferencesWrites > 0
+    this._controllers.size > 0 || this._writeControllers.size > 0
+
+  // Refresh waiters and SQL rejected with 401 have definitively not executed.
+  // Only warn about uncertainty if an outstanding request was actually sent.
+  hasSentRequests = () => {
+    for (const { execution } of this._controllers.values()) {
+      if (!execution.requestNotSent) return true
+    }
+    for (const sent of this._writeControllers.values()) {
+      if (sent) return true
+    }
+    return false
+  }
 
   abortActive = () => {
     if (this._activeQueryId !== null) {
@@ -244,13 +261,15 @@ export class Client {
     | { promise: Promise<QueryRawResult>; queryId: QueryId } {
     const queryId = this._nextQueryId++
     const controller = new AbortController()
-    this._controllers.set(queryId, controller)
+    const execution = { requestNotSent: true }
+    this._controllers.set(queryId, { controller, execution })
 
     const promise = this._executeQueryRaw(
       query,
       options,
       controller,
       queryId,
+      execution,
       lifecycle,
     )
 
@@ -295,7 +314,7 @@ export class Client {
     payload: Record<string, string | number | boolean | undefined>,
     signal: AbortSignal,
     session: AuthSession,
-    execution: { requestNotSent: boolean },
+    execution: RequestExecution,
     lifecycle?: QueryLifecycle,
     refreshAuth = true,
   ) {
@@ -387,6 +406,7 @@ export class Client {
     options: Options | undefined,
     controller: AbortController,
     queryId: QueryId,
+    execution: RequestExecution,
     lifecycle?: QueryLifecycle,
   ): Promise<QueryRawResult> {
     const {
@@ -407,7 +427,6 @@ export class Client {
     let fetchStartedAt = 0
     let authorizationAtFetch: string | undefined
     const session = authSessionState.capture()
-    const execution = { requestNotSent: true }
     const ensureCurrentSession = () => {
       if (!session.isCurrent()) throw new SessionEndedError()
     }
@@ -770,36 +789,36 @@ export class Client {
     timestamp,
     onProgress,
   }: UploadOptions): Promise<UploadResult> {
-    const session = await this.prepareRequest()
-    if (!session.isCurrent()) throw new SessionEndedError()
-    const formData = new FormData()
-    if (schema) {
-      formData.append("schema", JSON.stringify(schema))
-    }
-    formData.append("data", file)
-    const serializedSettings = settings
-      ? Object.keys(settings).reduce(
-          (acc, key) => ({
-            ...acc,
-            [key]: settings[key as keyof UploadModeSettings].toString(),
-          }),
-          {},
-        )
-      : {}
-    const params = {
-      fmt: "json",
-      name,
-      owner,
-      ...(partitionBy ? { partitionBy } : {}),
-      ...(timestamp ? { timestamp } : {}),
-      ...serializedSettings,
-    }
-
-    // Uploads use XHR rather than SQL controllers, but are still outstanding
-    // writes for the sign-in-again confirmation. Keep tracking through every
-    // terminal path, including session loss and synchronous send failures.
-    this._activeUploads++
+    const controller = new AbortController()
+    this._writeControllers.set(controller, false)
+    let removeAbortListener: (() => void) | undefined
+    const session = authSessionState.capture()
     try {
+      await this.prepareRequest(controller.signal)
+      this.ensureRequestAllowed(session, controller.signal)
+      const formData = new FormData()
+      if (schema) {
+        formData.append("schema", JSON.stringify(schema))
+      }
+      formData.append("data", file)
+      const serializedSettings = settings
+        ? Object.keys(settings).reduce(
+            (acc, key) => ({
+              ...acc,
+              [key]: settings[key as keyof UploadModeSettings].toString(),
+            }),
+            {},
+          )
+        : {}
+      const params = {
+        fmt: "json",
+        name,
+        owner,
+        ...(partitionBy ? { partitionBy } : {}),
+        ...(timestamp ? { timestamp } : {}),
+        ...serializedSettings,
+      }
+
       return await new Promise<UploadResult>((resolve, reject) => {
         const request = new XMLHttpRequest()
         request.open("POST", `imp?${new URLSearchParams(params)}`)
@@ -808,18 +827,20 @@ export class Client {
           request.setRequestHeader(key, headers[key])
         })
         request.upload.addEventListener("progress", (e) => {
+          if (!session.isCurrent() || controller.signal.aborted) return
           const percent_completed = (e.loaded / e.total) * 100
           onProgress(percent_completed)
         })
         const rejectRequest = () => {
-          reject({
-            status: request.status,
-            statusText: request.statusText,
-          })
+          reject(
+            session.isCurrent()
+              ? { status: request.status, statusText: request.statusText }
+              : new SessionEndedError(),
+          )
         }
         request.onload = () => {
-          if (!session.isCurrent()) {
-            reject(new SessionEndedError())
+          if (!session.isCurrent() || controller.signal.aborted) {
+            rejectRequest()
             return
           }
           if (request.status === 200) {
@@ -835,35 +856,56 @@ export class Client {
         request.onerror = rejectRequest
         request.onabort = rejectRequest
         request.ontimeout = rejectRequest
+        const abort = () => {
+          request.abort()
+          rejectRequest()
+        }
+        controller.signal.addEventListener("abort", abort, { once: true })
+        removeAbortListener = () =>
+          controller.signal.removeEventListener("abort", abort)
+        this._writeControllers.set(controller, true)
         request.send(formData)
       })
+    } catch (error) {
+      if (endedFor(session, error)) throw new SessionEndedError()
+      throw error
     } finally {
-      this._activeUploads--
+      removeAbortListener?.()
+      this._writeControllers.delete(controller)
     }
   }
 
   async savePreferences(
     preferences: Preferences,
   ): Promise<{ status: number; message?: string; success: boolean }> {
-    this._activePreferencesWrites++
+    const controller = new AbortController()
+    this._writeControllers.set(controller, false)
+    const session = authSessionState.capture()
     try {
-      const session = await this.prepareRequest()
-      if (!session.isCurrent()) throw new SessionEndedError()
+      await this.prepareRequest(controller.signal)
+      this.ensureRequestAllowed(session, controller.signal)
       const { version, ...prefs } = preferences
+      this._writeControllers.set(controller, true)
       const response: Response = await fetch(`settings?version=${version}`, {
         method: "PUT",
+        signal: controller.signal,
         headers: this.requestHeaders(),
         body: JSON.stringify(prefs),
       })
       if (!session.isCurrent()) throw new SessionEndedError()
+      if (controller.signal.aborted)
+        throw new DOMException("Aborted", "AbortError")
       if (!response.ok) {
         let errorMessage: string
         try {
           errorMessage = await extractErrorMessage(response)
-        } catch (e) {
+        } catch (error) {
+          if (controller.signal.aborted) throw error
           errorMessage = response.statusText
         }
         if (!session.isCurrent()) throw new SessionEndedError()
+        if (controller.signal.aborted)
+          throw new DOMException("Aborted", "AbortError")
         return {
           status: response.status,
           message: errorMessage,
@@ -871,8 +913,11 @@ export class Client {
         }
       }
       return { status: response.status, success: true }
+    } catch (error) {
+      if (endedFor(session, error)) throw new SessionEndedError()
+      throw error
     } finally {
-      this._activePreferencesWrites--
+      this._writeControllers.delete(controller)
     }
   }
 

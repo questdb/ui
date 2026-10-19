@@ -2,6 +2,7 @@ import "../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { Client } from "./client"
+import { tokenRefresh } from "./tokenRefresh"
 import {
   AuthRefreshUnavailableError,
   SessionEndedError,
@@ -55,13 +56,19 @@ const mockUploadRequests = (autoComplete = true, sendError?: Error) => {
       rowsRejected: 0,
       status: "OK",
     })
-    upload = { addEventListener: vi.fn() }
+    upload = {
+      addEventListener: vi.fn<
+        [string, (event: { loaded: number; total: number }) => void],
+        void
+      >(),
+    }
     open = vi.fn()
     setRequestHeader = vi.fn()
     onload?: () => void
     onerror?: () => void
     onabort?: () => void
     ontimeout?: () => void
+    abort = vi.fn(() => this.onabort?.())
     send = vi.fn(() => {
       if (sendError) throw sendError
       if (autoComplete) this.onload?.()
@@ -481,6 +488,170 @@ describe("upload activity tracking", () => {
     expect(client.hasActiveRequests()).toBe(true)
     requests[1].onload!()
     await second
+    expect(client.hasActiveRequests()).toBe(false)
+  })
+})
+
+describe("non-SQL write cancellation", () => {
+  const writes = [
+    { name: "uploadCSVFile", run: upload },
+    {
+      name: "savePreferences",
+      run: (client: Client) => client.savePreferences({ version: 1 }),
+    },
+  ]
+
+  it.each(writes)(
+    "cancels $name during renewal without sending or cancelling the shared refresh",
+    async ({ run }) => {
+      installExpired()
+      const requests = mockUploadRequests()
+      const fetchMock = vi.fn()
+      vi.stubGlobal("fetch", fetchMock)
+      const client = new Client()
+      let finishRefresh!: () => void
+      let refreshSignal: AbortSignal | undefined
+      client.refreshTokenMethod = (_deadline, signal) => {
+        refreshSignal = signal
+        return new Promise((resolve) => {
+          finishRefresh = () => {
+            installToken("fresh", false)
+            resolve(authSessionState.getAuthPayload()!)
+          }
+        })
+      }
+      const rejected = expect(run(client)).rejects.toMatchObject({
+        name: "AbortError",
+      })
+      await vi.waitFor(() => expect(finishRefresh).toBeDefined())
+      expect(client.hasActiveRequests()).toBe(true)
+      expect(client.hasSentRequests()).toBe(false)
+      client.abort()
+      await rejected
+      expect(client.hasActiveRequests()).toBe(false)
+      expect(refreshSignal?.aborted).toBe(false)
+      finishRefresh()
+      await tokenRefresh.hardDeadline
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(requests).toHaveLength(0)
+    },
+  )
+
+  it("aborts every upload, suppresses late progress and leaves a new upload active", async () => {
+    installToken("initial", false)
+    const requests = mockUploadRequests(false)
+    const client = new Client()
+    const progress = vi.fn()
+    const first = client
+      .uploadCSVFile({
+        file: new File(["x"], "probe.csv"),
+        name: "probe",
+        owner: "admin",
+        onProgress: progress,
+      })
+      .catch((error: unknown) => error)
+    const second = upload(client).catch((error: unknown) => error)
+    await vi.waitFor(() => expect(requests).toHaveLength(2))
+    expect(client.hasSentRequests()).toBe(true)
+    const onProgress = requests[0].upload.addEventListener.mock.calls[0][1]
+    client.abort()
+    client.abort()
+    expect(requests[0].abort).toHaveBeenCalledOnce()
+    expect(requests[1].abort).toHaveBeenCalledOnce()
+    onProgress({ loaded: 1, total: 1 })
+    expect(progress).not.toHaveBeenCalled()
+    const next = upload(client)
+    await Promise.all([first, second])
+    await vi.waitFor(() => expect(requests).toHaveLength(3))
+    requests[0].onload!()
+    expect(client.hasActiveRequests()).toBe(true)
+    expect(client.hasSentRequests()).toBe(true)
+    requests[2].onload!()
+    await next
+    expect(client.hasActiveRequests()).toBe(false)
+    expect(client.hasSentRequests()).toBe(false)
+    client.abort()
+    expect(requests[2].abort).not.toHaveBeenCalled()
+  })
+
+  it("cancels settings PUTs and their response bodies but not completed writes", async () => {
+    installToken("initial", false)
+    let signal: AbortSignal | null | undefined
+    const readBody = vi.fn()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init?: RequestInit) => {
+        signal = init?.signal
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          text: () => {
+            readBody()
+            return new Promise<string>((_resolve, reject) => {
+              signal?.addEventListener("abort", () =>
+                reject(new DOMException("Aborted", "AbortError")),
+              )
+            })
+          },
+        })
+      }),
+    )
+    const client = new Client()
+    const rejected = expect(
+      client.savePreferences({ version: 1 }),
+    ).rejects.toMatchObject({ name: "AbortError" })
+    await vi.waitFor(() => expect(readBody).toHaveBeenCalledOnce())
+    expect(client.hasSentRequests()).toBe(true)
+    client.abort()
+    expect(signal?.aborted).toBe(true)
+    await rejected
+    expect(client.hasActiveRequests()).toBe(false)
+    expect(client.hasSentRequests()).toBe(false)
+
+    vi.mocked(fetch).mockImplementation((_url, init) => {
+      signal = init?.signal
+      return Promise.resolve(new Response("{}"))
+    })
+    await client.savePreferences({ version: 1 })
+    client.abort()
+    expect(signal?.aborted).toBe(false)
+  })
+
+  it("keeps independent writes running when cancelling one SQL query", async () => {
+    installToken("initial", false)
+    const requests = mockUploadRequests(false)
+    let writeSignal: AbortSignal | null | undefined
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url.startsWith("settings?")) writeSignal = init?.signal
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          )
+        })
+      }),
+    )
+    const client = new Client()
+    const uploadResult = upload(client).catch((error: unknown) => error)
+    const preferencesResult = client
+      .savePreferences({ version: 1 })
+      .catch((error: unknown) => error)
+    const { promise, queryId } = client.queryRaw("SELECT 1", {
+      cancellable: true,
+    })
+    const queryResult = promise.catch((error: unknown) => error)
+    await vi.waitFor(() => expect(requests).toHaveLength(1))
+    client.abort(queryId)
+    await queryResult
+    expect(requests[0].abort).not.toHaveBeenCalled()
+    expect(writeSignal?.aborted).toBe(false)
+    expect(client.hasActiveRequests()).toBe(true)
+    client.abort()
+    await Promise.all([uploadResult, preferencesResult])
+    expect(requests[0].abort).toHaveBeenCalledOnce()
+    expect(writeSignal?.aborted).toBe(true)
     expect(client.hasActiveRequests()).toBe(false)
   })
 })

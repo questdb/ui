@@ -446,6 +446,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = (options: LogoutOptions = {}) => {
     const { promptForLogin, reload, clearSSOSession } = options
+    // Capture uncertainty before session-end listeners abort and forget work.
+    const logoutOptions = questClient.hasSentRequests()
+      ? {
+          ...options,
+          errorMessage: [
+            options.errorMessage,
+            "Running requests were interrupted; statements may have executed. Verify their outcomes before running them again.",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        }
+      : options
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
     // Finish storage cleanup before session-end listeners can render Login.
     removeValue(StoreKey.OAUTH_PROMPT)
@@ -463,7 +475,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // refresh work and telemetry timers even when this document does not reload.
     // React 17 does not batch promise continuations. Resetting the store and
     // showing Login must be one commit, before console effects can run again.
-    unstable_batchedUpdates(() => authSessionState.endSession(options))
+    unstable_batchedUpdates(() => authSessionState.endSession(logoutOptions))
     destroyServerSession()
     if (reload) {
       window.location.reload()
@@ -541,7 +553,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       clearSSOSession: true,
       errorTitle: "Sign in again",
       errorMessage: active
-        ? "Your previous session has ended. Running requests were interrupted; statements may have executed. Verify their outcomes before running them again."
+        ? "Your previous session has ended."
         : "Your previous session has ended. Please sign in again.",
     })
   }

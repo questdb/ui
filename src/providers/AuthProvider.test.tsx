@@ -258,6 +258,7 @@ describe("AuthProvider token installation", () => {
   it("confirms interruption before signing in again and explains the ended work on Login", async () => {
     await mount()
     vi.spyOn(questClient, "hasActiveRequests").mockReturnValue(true)
+    vi.spyOn(questClient, "hasSentRequests").mockReturnValue(true)
     const confirm = vi.fn(() => false)
     vi.stubGlobal("confirm", confirm)
     act(() => auth.signInAgain())
@@ -276,9 +277,11 @@ describe("AuthProvider token installation", () => {
     await mount()
     expect(questClient.hasActiveRequests()).toBe(false)
     let finishUpload!: () => void
+    const abortUpload = vi.fn()
     class UploadRequest {
       status = 200
       response = "{}"
+      abort = abortUpload
       upload = { addEventListener: vi.fn() }
       open = vi.fn()
       setRequestHeader = vi.fn()
@@ -305,14 +308,16 @@ describe("AuthProvider token installation", () => {
     act(() => auth.signInAgain())
     expect(confirm).toHaveBeenCalledOnce()
     expect(authSessionState.isAuthenticated()).toBe(true)
+    expect(abortUpload).not.toHaveBeenCalled()
     confirm.mockReturnValue(true)
     act(() => auth.signInAgain())
     expect(
       renderer!.root.findByProps({ "data-hook": "mock-login" }).props
         .errorMessage,
     ).toContain("Verify their outcomes")
-    finishUpload()
+    expect(abortUpload).toHaveBeenCalledOnce()
     await rejected
+    finishUpload()
     expect(questClient.hasActiveRequests()).toBe(false)
   })
 
@@ -323,11 +328,14 @@ describe("AuthProvider token installation", () => {
     const response = new Promise<Response>((resolve) => {
       finish = resolve
     })
-    const fetchMock = vi.fn((url: string) =>
-      url.startsWith("settings?")
-        ? response
-        : Promise.resolve(new Response("{}")),
-    )
+    let writeSignal: AbortSignal | null | undefined
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.startsWith("settings?")) {
+        writeSignal = init?.signal
+        return response
+      }
+      return Promise.resolve(new Response("{}"))
+    })
     vi.stubGlobal("fetch", fetchMock)
     const write = questClient.savePreferences({
       version: 1,
@@ -345,8 +353,10 @@ describe("AuthProvider token installation", () => {
     expect(confirm).toHaveBeenCalledOnce()
     expect(authSessionState.isAuthenticated()).toBe(true)
     expect(questClient.hasActiveRequests()).toBe(true)
+    expect(writeSignal?.aborted).toBe(false)
     confirm.mockReturnValue(true)
     act(() => auth.signInAgain())
+    expect(writeSignal?.aborted).toBe(true)
     expect(confirm).toHaveBeenCalledTimes(2)
     expect(
       renderer!.root.findByProps({ "data-hook": "mock-login" }).props
@@ -812,6 +822,147 @@ describe("AuthProvider token installation", () => {
       expect(
         renderer?.root.findAllByProps({ "data-hook": "mock-login" }),
       ).toHaveLength(0)
+    },
+  )
+
+  it.each(["response", "body"])(
+    "preserves write uncertainty when automatic renewal logs out during the SQL %s",
+    async (phase) => {
+      await mount()
+      vi.mocked(fetch).mockClear()
+      let writeSignal: AbortSignal | null | undefined
+      const readBody = vi.fn()
+      vi.mocked(fetch).mockImplementation((url, init) => {
+        if (init?.keepalive) return Promise.resolve(new Response("{}"))
+        if (url === "/token") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: "invalid_grant",
+                error_description: "Revoked",
+              }),
+              { status: 400 },
+            ),
+          )
+        }
+        writeSignal = init?.signal
+        const pending = new Promise<string>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          )
+        })
+        if (phase === "body") {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            text: () => {
+              readBody()
+              return pending
+            },
+          } as Response)
+        }
+        return pending.then(() => new Response("{}"))
+      })
+      questClient.refreshTokenMethod = (deadline, request) =>
+        auth.refreshAuthToken(
+          mocks.settings,
+          "initial-refresh",
+          deadline,
+          request,
+        )
+      const write = questClient
+        .queryRaw("INSERT INTO trades VALUES (1)")
+        .catch((error: unknown) => error)
+      await vi.waitFor(() => {
+        expect(questClient.hasSentRequests()).toBe(true)
+        if (phase === "body") expect(readBody).toHaveBeenCalledOnce()
+      })
+      vi.spyOn(Date, "now").mockReturnValue(
+        Date.parse(authSessionState.getAuthPayload()!.expires_at!) - 20_000,
+      )
+      await act(async () => {
+        await expect(questClient.queryRaw("tables()")).rejects.toMatchObject({
+          sessionEnded: true,
+          requestNotSent: true,
+        })
+        expect(await write).toMatchObject({ sessionEnded: true })
+      })
+      expect(writeSignal?.aborted).toBe(true)
+      expect(questClient.hasSentRequests()).toBe(false)
+      expect(
+        renderer!.root.findByProps({ "data-hook": "mock-login" }).props,
+      ).toMatchObject({
+        errorTitle: "Your SSO session has expired",
+      })
+      expect(
+        renderer!.root.findByProps({ "data-hook": "mock-login" }).props
+          .errorMessage,
+      ).toBe(
+        "Revoked Please sign in again. Running requests were interrupted; statements may have executed. Verify their outcomes before running them again.",
+      )
+      expect(
+        vi
+          .mocked(fetch)
+          .mock.calls.filter(
+            ([url, init]) =>
+              typeof url === "string" &&
+              url.startsWith("exec?") &&
+              !init?.keepalive,
+          ),
+      ).toHaveLength(1)
+    },
+  )
+
+  it.each([0, 1])(
+    "does not warn about execution when renewal fails after %s definitively unexecuted SQL requests",
+    async (requests) => {
+      await mount()
+      if (!requests) {
+        vi.spyOn(Date, "now").mockReturnValue(
+          Date.parse(authSessionState.getAuthPayload()!.expires_at!) - 20_000,
+        )
+      }
+      vi.mocked(fetch).mockClear()
+      vi.mocked(fetch).mockImplementation((url) =>
+        Promise.resolve(
+          url === "/token"
+            ? new Response(
+                JSON.stringify({
+                  error: "invalid_grant",
+                  error_description: "Revoked",
+                }),
+                { status: 400 },
+              )
+            : new Response("", { status: 401 }),
+        ),
+      )
+      questClient.refreshTokenMethod = (deadline, request) =>
+        auth.refreshAuthToken(
+          mocks.settings,
+          "initial-refresh",
+          deadline,
+          request,
+        )
+      await act(async () => {
+        await expect(
+          questClient.queryRaw("INSERT INTO trades VALUES (1)"),
+        ).rejects.toMatchObject({ sessionEnded: true, requestNotSent: true })
+      })
+      expect(
+        renderer!.root.findByProps({ "data-hook": "mock-login" }).props
+          .errorMessage,
+      ).toBe("Revoked Please sign in again.")
+      expect(
+        vi
+          .mocked(fetch)
+          .mock.calls.filter(
+            ([url, init]) =>
+              typeof url === "string" &&
+              url.startsWith("exec?") &&
+              !init?.keepalive,
+          ),
+      ).toHaveLength(requests)
+      expect(questClient.hasSentRequests()).toBe(false)
     },
   )
 

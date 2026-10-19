@@ -302,8 +302,9 @@ describe("notification keyboard integration", () => {
     cy.get("#sso-refresh-failed .Toastify__toast-body").should("be.focused")
   })
 
-  it("confirms a pending settings write and keeps warning focus when sign-in is cancelled", () => {
+  it("confirms and aborts a settings write while keeping warning focus when sign-in is cancelled", () => {
     let finishWrite
+    let writeSignal
     cy.intercept(
       "PUT",
       `${baseUrl}/settings*`,
@@ -316,9 +317,14 @@ describe("notification keyboard integration", () => {
         }),
     ).as("saveSettings")
     visitConsole(true)
-    cy.window().then((win) =>
-      cy.stub(win, "confirm").returns(false).as("interruptionConfirm"),
-    )
+    cy.window().then((win) => {
+      const fetch = win.fetch.bind(win)
+      cy.stub(win, "fetch").callsFake((url, options) => {
+        if (options?.method === "PUT") writeSignal = options.signal
+        return fetch(url, options)
+      })
+      cy.stub(win, "confirm").returns(false).as("interruptionConfirm")
+    })
     cy.getByDataHook("topbar-instance-edit-icon").click()
     cy.getByDataHook("topbar-instance-name-input").clear().type("changed")
     cy.getByDataHook("topbar-instance-save-button").click()
@@ -329,6 +335,7 @@ describe("notification keyboard integration", () => {
       .realClick()
       .should("be.focused")
     cy.get("@interruptionConfirm").should("have.been.calledOnce")
+    cy.then(() => expect(writeSignal.aborted).to.equal(false))
     cy.getByDataHook("auth-login").should("not.exist")
     cy.get("#sso-refresh-failed").should("be.visible")
     cy.get("@interruptionConfirm").invoke("returns", true)
@@ -336,8 +343,10 @@ describe("notification keyboard integration", () => {
     cy.get("@interruptionConfirm").should("have.been.calledTwice")
     cy.getByDataHook("auth-login").should("be.visible")
     cy.getByDataHook("sign-in-error").should("contain", "Verify their outcomes")
-    cy.then(() => finishWrite())
-    cy.wait("@saveSettings")
+    cy.then(() => {
+      expect(writeSignal.aborted).to.equal(true)
+      finishWrite()
+    })
   })
 
   for (const action of ["Escape", "Close"]) {
