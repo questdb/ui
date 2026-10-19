@@ -364,9 +364,11 @@ export class Client {
         signal,
         headers,
       })
-      // A rejected bearer executed no SQL. A subsequent refresh failure must
-      // retain that definitive outcome until another SQL attempt is sent.
-      if (response.status === 401) execution.requestNotSent = true
+      // Authentication/authorization rejection executed no SQL. Record that
+      // before publishing connection events, which may synchronously log out.
+      // Preserve it until another SQL attempt is sent.
+      if (response.status === 401 || response.status === 403)
+        execution.requestNotSent = true
       return response
     }
     const payloadAtFetch = authSessionState.getAuthPayload()

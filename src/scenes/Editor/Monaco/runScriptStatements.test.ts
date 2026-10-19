@@ -7,7 +7,7 @@ type Outcome = SessionFailure & { success: boolean; notification?: string }
 afterEach(() => authSessionState.endSession())
 
 describe("script session boundaries", () => {
-  it("retains two confirmed writes when the third statement ends the session", async () => {
+  it("discards confirmed notifications when a later statement ends the session", async () => {
     authSessionState.markNonSSOAuthenticated()
     const execute = vi.fn((sql: string): Promise<Outcome> => {
       if (sql === "third") {
@@ -23,12 +23,8 @@ describe("script session boundaries", () => {
       () => false,
     )
     expect(result).toEqual({
-      results: [
-        { success: true, notification: "first insert" },
-        { success: true, notification: "second insert" },
-      ],
+      results: [],
       sessionEnded: true,
-      outcomeUnknown: true,
     })
     expect(execute).toHaveBeenCalledTimes(3)
   })
@@ -40,12 +36,12 @@ describe("script session boundaries", () => {
     const execute = vi.fn<[], Promise<Outcome>>()
     expect(
       await runScriptStatements(["insert"], session, execute, () => false),
-    ).toEqual({ results: [], sessionEnded: true, outcomeUnknown: false })
+    ).toEqual({ results: [], sessionEnded: true })
     expect(execute).not.toHaveBeenCalled()
   })
 
   it.each([0, 2])(
-    "does not mark a never-sent statement uncertain after %s confirmed statements",
+    "discards %s completed outcomes when the next statement was never sent",
     async (confirmed) => {
       const queries = Array.from({ length: confirmed + 2 }, (_, i) => i)
       const execute = vi.fn((query: number): Promise<Outcome> => {
@@ -66,15 +62,14 @@ describe("script session boundaries", () => {
         () => false,
       )
       expect(result).toEqual({
-        results: Array.from({ length: confirmed }, () => ({ success: true })),
+        results: [],
         sessionEnded: true,
-        outcomeUnknown: false,
       })
       expect(execute).toHaveBeenCalledTimes(confirmed + 1)
     },
   )
 
-  it("keeps a first statement uncertain when it was already in flight", async () => {
+  it("discards a session-ended failure from a statement already in flight", async () => {
     const execute = vi.fn((): Promise<Outcome> => {
       authSessionState.endSession()
       return Promise.resolve({ success: false, sessionEnded: true })
@@ -86,7 +81,25 @@ describe("script session boundaries", () => {
         execute,
         () => false,
       ),
-    ).toEqual({ results: [], sessionEnded: true, outcomeUnknown: true })
+    ).toEqual({ results: [], sessionEnded: true })
+    expect(execute).toHaveBeenCalledOnce()
+  })
+
+  it("discards a completed response after logout and in-tab re-login", async () => {
+    authSessionState.markNonSSOAuthenticated()
+    const session = authSessionState.capture()
+    let finish!: (result: Outcome) => void
+    const execute = vi.fn(
+      () =>
+        new Promise<Outcome>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const run = runScriptStatements([1, 2], session, execute, () => false)
+    authSessionState.endSession()
+    authSessionState.markNonSSOAuthenticated()
+    finish({ success: true, notification: "old user's result" })
+    expect(await run).toEqual({ results: [], sessionEnded: true })
     expect(execute).toHaveBeenCalledOnce()
   })
 
@@ -104,7 +117,6 @@ describe("script session boundaries", () => {
     expect(result).toEqual({
       results: [{ success: false, notification: "error" }],
       sessionEnded: false,
-      outcomeUnknown: false,
     })
     expect(execute).toHaveBeenCalledTimes(1)
   })

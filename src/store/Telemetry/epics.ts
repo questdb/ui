@@ -66,7 +66,6 @@ import {
   StoreShape,
   TelemetryAction,
   TelemetryAT,
-  TelemetryConfigShape,
 } from "../../types"
 
 import { fromFetch } from "../../utils"
@@ -77,18 +76,18 @@ import {
   getTelemetryTimestamp,
 } from "../../utils/telemetry"
 
+import {
+  queryTelemetryConfig,
+  TELEMETRY_QUERY_OPTIONS,
+} from "../../utils/telemetryQueries"
+
 export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
   action$,
 ) =>
   action$.pipe(
     ofType<StoreAction, TelemetryAction>(TelemetryAT.START),
     switchMap(() =>
-      from(
-        quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`, {
-          refreshAuth: false,
-          background: true,
-        }),
-      ).pipe(
+      from(queryTelemetryConfig(quest)).pipe(
         // Keep the root epic alive so a later login/START can retry.
         catchError(() => EMPTY),
         takeUntil(sessionEnded$),
@@ -178,7 +177,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
            `
             .replace(/\s+/g, " ")
             .trim(),
-          { refreshAuth: false, background: true },
+          TELEMETRY_QUERY_OPTIONS,
         ),
       ).pipe(
         map((result) => ({ type: "data" as const, result, remoteConfig })),

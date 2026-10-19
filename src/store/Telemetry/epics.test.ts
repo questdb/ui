@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { of, Subject } from "rxjs"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import { AuthRefreshUnavailableError } from "../../modules/OAuth2/session"
 import { ActionsObservable, StateObservable } from "redux-observable"
 import {
   TelemetryAT,
@@ -122,34 +123,55 @@ describe("startTelemetry epic", () => {
     vi.clearAllMocks()
   })
 
-  it("preserves its cursor and schedules another check after SQL rejection", async () => {
-    vi.useFakeTimers()
-    try {
-      const remoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
-      mockGetRemoteConfig.mockReturnValue(remoteConfig)
-      mockQueryRaw.mockRejectedValueOnce(new Error("connection lost"))
-      const action$ = of({
-        type: TelemetryAT.SET_REMOTE_CONFIG,
-        payload: remoteConfig,
-      })
-      const state$ = new StateObservable(new Subject(), {})
-      const next = vi.fn()
-      const error = vi.fn()
-      const sub = startTelemetry(
-        action$ as ActionsObservable<StoreAction>,
-        state$ as StateObservable<StoreShape>,
-        undefined,
-      ).subscribe({ next, error })
-      await vi.advanceTimersByTimeAsync(3_600_000)
-      expect(error).not.toHaveBeenCalled()
-      expect(next).toHaveBeenCalledWith(
-        expect.objectContaining({ payload: remoteConfig }),
-      )
-      sub.unsubscribe()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
+  it.each([
+    new Error("connection lost"),
+    new AuthRefreshUnavailableError(),
+    {
+      type: "error",
+      error: new AuthRefreshUnavailableError().message,
+      authRefreshUnavailable: true,
+      requestNotSent: true,
+      query: "telemetry",
+      position: -1,
+    },
+  ])(
+    "preserves its cursor and schedules another check after SQL rejection: %j",
+    async (failure) => {
+      vi.useFakeTimers()
+      try {
+        const remoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
+        mockGetRemoteConfig.mockReturnValue(remoteConfig)
+        mockQueryRaw.mockRejectedValueOnce(failure)
+        const action$ = of({
+          type: TelemetryAT.SET_REMOTE_CONFIG,
+          payload: remoteConfig,
+        })
+        const state$ = new StateObservable(new Subject(), {})
+        const next = vi.fn()
+        const error = vi.fn()
+        const sub = startTelemetry(
+          action$ as ActionsObservable<StoreAction>,
+          state$ as StateObservable<StoreShape>,
+          undefined,
+        ).subscribe({ next, error })
+        await vi.advanceTimersByTimeAsync(3_600_000)
+        expect(mockQueryRaw).toHaveBeenCalledWith(
+          expect.stringContaining("FROM telemetry"),
+          {
+            refreshAuth: false,
+            background: true,
+          },
+        )
+        expect(error).not.toHaveBeenCalled()
+        expect(next).toHaveBeenCalledWith(
+          expect.objectContaining({ payload: remoteConfig }),
+        )
+        sub.unsubscribe()
+      } finally {
+        vi.useRealTimers()
+      }
+    },
+  )
 
   it.each([
     { status: 401, error: "Unauthorized" },
@@ -236,33 +258,50 @@ describe("startTelemetry epic", () => {
     }
   })
 
-  it("keeps getServerInfo alive for the next START after a rejected query", async () => {
-    const actions$ = new Subject<StoreAction>()
-    const state$ = new StateObservable(new Subject(), {})
-    mockQuery
-      .mockRejectedValueOnce(new Error("session ended"))
-      .mockResolvedValueOnce({
+  it.each([new Error("session ended"), new AuthRefreshUnavailableError()])(
+    "keeps getServerInfo alive for the next START after a rejected query: %j",
+    async (failure) => {
+      const actions$ = new Subject<StoreAction>()
+      const state$ = new StateObservable(new Subject(), {})
+      mockQuery.mockRejectedValueOnce(failure).mockResolvedValueOnce({
         type: QuestDB.Type.DQL,
         data: [{ id: "recovered" }],
       })
-    const next = vi.fn()
-    const error = vi.fn()
-    const sub = getServerInfo(
-      new ActionsObservable(actions$),
-      state$ as StateObservable<StoreShape>,
-      undefined,
-    ).subscribe({ next, error })
-    actions$.next({ type: TelemetryAT.START })
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    actions$.next({ type: TelemetryAT.START })
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(mockQuery).toHaveBeenCalledTimes(2)
-    expect(error).not.toHaveBeenCalled()
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: { id: "recovered" } }),
-    )
-    sub.unsubscribe()
-  })
+      const next = vi.fn()
+      const error = vi.fn()
+      const sub = getServerInfo(
+        new ActionsObservable(actions$),
+        state$ as StateObservable<StoreShape>,
+        undefined,
+      ).subscribe({ next, error })
+      actions$.next({ type: TelemetryAT.START })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      actions$.next({ type: TelemetryAT.START })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(mockQuery).toHaveBeenCalledTimes(2)
+      expect(mockQuery).toHaveBeenNthCalledWith(
+        1,
+        "telemetry_config limit -1",
+        {
+          refreshAuth: false,
+          background: true,
+        },
+      )
+      expect(mockQuery).toHaveBeenNthCalledWith(
+        2,
+        "telemetry_config limit -1",
+        {
+          refreshAuth: false,
+          background: true,
+        },
+      )
+      expect(error).not.toHaveBeenCalled()
+      expect(next).toHaveBeenCalledWith(
+        expect.objectContaining({ payload: { id: "recovered" } }),
+      )
+      sub.unsubscribe()
+    },
+  )
 
   it("should schedule next check when lastUpdated is missing (skip path)", async () => {
     mockGetRemoteConfig.mockReturnValue(undefined)

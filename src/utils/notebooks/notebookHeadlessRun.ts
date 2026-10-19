@@ -329,9 +329,13 @@ const nothingExecuted = (result: CellResult) =>
 export const SESSION_INTERRUPTED_RUN_NOTE =
   "Session ended during run; statements may have executed. Verify their outcomes before re-running."
 
+export const SESSION_ENDED_READ_ONLY_RUN_NOTE =
+  "The authentication session ended during a read-only run. New results were not saved; the cell's previous result was preserved. Sign in again before re-running."
+
 const sessionEndedSummary = (
   result: CellResult,
   saved: "run" | "marker" | "none" = "none",
+  readOnly = false,
 ): RunCellSummary => {
   if (nothingExecuted(result)) return sessionEndedBeforeLaunchSummary()
   return {
@@ -346,15 +350,20 @@ const sessionEndedSummary = (
       if (statement.type === "error") {
         if (statement.requestNotSent) return "ERROR: query not sent"
         return isUnverifiableExecError(statement)
-          ? "ERROR: execution outcome unverified"
+          ? readOnly
+            ? "ERROR: query interrupted"
+            : "ERROR: execution outcome unverified"
           : "ERROR: query failed"
       }
       return "success"
     }),
     cancelled: "session_ended",
-    unverified: true,
-    note:
-      saved === "run"
+    ...(!readOnly ? { unverified: true } : {}),
+    note: readOnly
+      ? saved === "run"
+        ? "Read-only run history was recorded before the authentication session ended. Result details are withheld."
+        : SESSION_ENDED_READ_ONLY_RUN_NOTE
+      : saved === "run"
         ? "Run history was recorded before the authentication session ended. Result details are withheld; verify before retrying writes."
         : saved === "marker"
           ? "The authentication session ended. An interruption marker was saved; result details were not retained. Statements already sent may have executed; verify before retrying writes."
@@ -651,14 +660,17 @@ export const runHeadlessCell = async (
             supersedeSignal: claim.signal,
           })
 
-    // Keep an outcome marker, never old-session data, when a sent statement
-    // outlives logout. The fresh transaction still honors every ownership/edit
-    // guard, including a new run or snapshot saved by another browser tab.
+    // Proven read-only runs cannot leave writes to verify. Preserve their
+    // previous result; only writes or unclassified runs need an outcome marker.
+    const readOnly = classified?.every((stmt) => stmt.klass === "DQL") ?? false
+    // The fresh marker transaction still honors every ownership/edit guard,
+    // including a new run or snapshot saved by another browser tab.
     const finishEndedSession = async (
       committed = false,
     ): Promise<RunCellSummary> => {
-      if (committed) return sessionEndedSummary(ranResult, "run")
+      if (committed) return sessionEndedSummary(ranResult, "run", readOnly)
       if (nothingExecuted(ranResult)) return sessionEndedBeforeLaunchSummary()
+      if (readOnly) return sessionEndedSummary(ranResult, "none", true)
       const canMark = () =>
         !deps.isBufferClaimed() &&
         getMountEpoch(bufferId) === prep.mountEpochAtPrep &&

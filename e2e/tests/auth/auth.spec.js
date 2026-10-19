@@ -1112,7 +1112,7 @@ describe("Auth - OIDC ID token", () => {
       .should("be.focused")
   })
 
-  it("reports no statements sent when refresh ends a script before execution", () => {
+  it("keeps a script stopped before execution out of the next login's log", () => {
     const statements = []
     cy.clock(Date.now(), ["Date"])
     signIn({
@@ -1137,12 +1137,13 @@ describe("Auth - OIDC ID token", () => {
     cy.tick(3601000)
     cy.clickRunScript()
     cy.getByDataHook("auth-login").should("be.visible")
+    cy.getByDataHook("sign-in-error").should(
+      "not.contain.text",
+      "statements may have executed",
+    )
     passwordRelogin()
-    cy.getByDataHook("expand-notifications").click()
-    cy.getByDataHook("notifications-wrapper")
-      .should("contain.text", "Stopped after running 0")
-      .and("contain.text", "No statements were sent.")
-      .and("not.contain.text", "outcome is unknown")
+    cy.getByDataHook("loading-notification").should("not.exist")
+    cy.getByDataHook("expand-notifications").should("not.exist")
     cy.then(() => expect(statements).to.deep.equal([]))
   })
 
@@ -1351,12 +1352,8 @@ describe("Auth - OIDC ID token", () => {
     cy.then(() => expect(statements).to.deep.equal([111, 222]))
     passwordRelogin()
     cy.getByDataHook("loading-notification").should("not.exist")
-    cy.getByDataHook("expand-notifications").click()
-    cy.getByDataHook("notifications-wrapper")
-      .should("contain.text", "select 111")
-      .and("contain.text", "Stopped after running 1 successful")
-      .and("contain.text", "session ended")
-      .and("not.contain.text", "Running completed")
+    // Neither the confirmed prefix nor a summary belongs to the new login.
+    cy.getByDataHook("expand-notifications").should("not.exist")
     cy.clearEditor()
     cy.typeQuery("select 444;\nselect 555;")
     cy.clickRunScript()

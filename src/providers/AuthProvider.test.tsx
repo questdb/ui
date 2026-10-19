@@ -1014,6 +1014,48 @@ describe("AuthProvider token installation", () => {
     },
   )
 
+  it.each([false, true])(
+    "warns after an HTTP permission rejection only if another write is in flight: %s",
+    async (otherWrite) => {
+      await mount()
+      vi.mocked(fetch).mockImplementation((url, init) => {
+        if (init?.keepalive) return Promise.resolve(new Response("{}"))
+        if (typeof url === "string" && url.includes("pending_write")) {
+          return new Promise<Response>((_, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError")),
+            )
+          })
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ error: "Access denied to protocol [HTTP]" }),
+            { status: 403 },
+          ),
+        )
+      })
+      const pending = otherWrite
+        ? questClient
+            .queryRaw("insert into pending_write values (1)")
+            .catch((error: unknown) => error)
+        : undefined
+      if (otherWrite) {
+        await vi.waitFor(() => expect(questClient.hasSentRequests()).toBe(true))
+      }
+      await act(async () => {
+        await expect(
+          questClient.queryRaw("insert into trades values (1)"),
+        ).rejects.toMatchObject({ sessionEnded: true, requestNotSent: true })
+        if (pending) expect(await pending).toMatchObject({ sessionEnded: true })
+      })
+      const message = renderer!.root.findByProps({ "data-hook": "mock-login" })
+        .props.errorMessage as string
+      expect(message).toContain("You are not authorized to use the Web Console")
+      expect(message.includes("statements may have executed")).toBe(otherWrite)
+      expect(questClient.hasSentRequests()).toBe(false)
+    },
+  )
+
   it("ends the session for an explicit invalid_grant refresh error", async () => {
     await mount()
     vi.mocked(fetch).mockResolvedValueOnce(

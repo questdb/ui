@@ -19,6 +19,7 @@ import {
   cancelHeadlessCellRuns,
   __resetNotebookHeadlessRunsForTests,
   SESSION_INTERRUPTED_RUN_NOTE,
+  SESSION_ENDED_READ_ONLY_RUN_NOTE,
 } from "./notebookHeadlessRun"
 import {
   enqueueBufferTask,
@@ -174,6 +175,94 @@ describe("headless notebook authentication sessions", () => {
       } finally {
         db.notebook_results.hook("reading").unsubscribe(reading)
       }
+    },
+  )
+
+  it.each(["response", "body", "persistence"])(
+    "preserves the previous result when a classified read loses its session during %s",
+    async (phase) => {
+      const client = new Client()
+      vi.spyOn(client, "validateQuery").mockResolvedValue({
+        query: "select 1",
+        columns: [{ name: "value", type: "INT" }],
+        timestamp: 0,
+      })
+      let finish!: () => void
+      let started!: () => void
+      const requestStarted = new Promise<void>((resolve) => {
+        started = resolve
+      })
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => {
+          if (phase === "body") {
+            const body = new Promise<string>((resolve) => {
+              finish = () =>
+                resolve(
+                  JSON.stringify({ columns: [], dataset: [[99]], count: 1 }),
+                )
+            })
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              text: () => {
+                started()
+                return body
+              },
+            } as Response)
+          }
+          started()
+          return new Promise<Response>((resolve) => {
+            finish = () => resolve(response())
+          })
+        }),
+      )
+      const run = runHeadlessCell(
+        BUFFER_ID,
+        {
+          isBufferClaimed: () => false,
+          getQuest: () => client,
+          getBufferSeq: () => 0,
+        },
+        "cell",
+        undefined,
+        undefined,
+        { kind: "autoRun" },
+      )
+      await requestStarted
+      let release!: () => void
+      const blocker =
+        phase === "persistence"
+          ? enqueueBufferTask(
+              BUFFER_ID,
+              () =>
+                new Promise<void>((resolve) => {
+                  release = resolve
+                }),
+            )
+          : undefined
+      if (blocker) {
+        finish()
+        // Allow the accepted result to queue its commit behind the blocker.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      }
+      authSessionState.endSession()
+      authSessionState.markNonSSOAuthenticated()
+      if (blocker) {
+        release()
+        await blocker
+      } else finish()
+      expect(await run).toEqual({
+        success: false,
+        queryCount: 1,
+        results: [
+          phase === "persistence" ? "success" : "ERROR: query interrupted",
+        ],
+        cancelled: "session_ended",
+        note: SESSION_ENDED_READ_ONLY_RUN_NOTE,
+      })
+      await expectPreviousResult()
+      expect(fetch).toHaveBeenCalledOnce()
     },
   )
 

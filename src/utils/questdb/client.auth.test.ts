@@ -46,6 +46,42 @@ afterEach(() => {
 })
 
 describe("SSO refresh safety", () => {
+  it.each(["SSO", "password"])(
+    "records a forbidden statement as unexecuted before %s logout",
+    async (login) => {
+      if (login === "SSO") authSessionState.setAuthPayload(token())
+      else authSessionState.markNonSSOAuthenticated()
+      const client = new Client()
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({ error: "Access denied to protocol [HTTP]" }),
+              { status: 403 },
+            ),
+          ),
+        ),
+      )
+      const forbidden = vi.fn(() => {
+        expect(client.hasSentRequests()).toBe(false)
+        authSessionState.endSession()
+      })
+      eventBus.subscribe(EventType.MSG_CONNECTION_FORBIDDEN, forbidden)
+      try {
+        await expect(
+          client.queryRaw("insert into trades values (1)"),
+        ).rejects.toMatchObject({
+          sessionEnded: true,
+          requestNotSent: true,
+        })
+        expect(forbidden).toHaveBeenCalledOnce()
+      } finally {
+        eventBus.unsubscribe(EventType.MSG_CONNECTION_FORBIDDEN, forbidden)
+      }
+    },
+  )
+
   it("retries a forced 401 refresh after backoff even outside the expiry window", async () => {
     vi.useFakeTimers()
     vi.spyOn(console, "error").mockImplementation(() => {})

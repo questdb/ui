@@ -1780,9 +1780,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     // setActiveNotification / toggleGlyphWidgetLoading aren't clobbered.
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-    const loading = createScriptLoading((queryId) =>
-      dispatch(actions.query.settleLoadingNotification(queryId)),
-    )
+    const loading = createScriptLoading((queryId) => {
+      if (session.isCurrent()) {
+        dispatch(actions.query.settleLoadingNotification(queryId))
+      }
+    })
     const finishScriptRun = () => {
       isRunningScriptRef.current = false
       scriptSessionRef.current = null
@@ -1790,11 +1792,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       stopAfterFailureRef.current = true
       loading.finish()
       editorQueryIdRef.current = null
-      dispatch(actions.query.stopRunning())
-      if (scriptQueryKeyRef.current !== null) {
-        questExecution.releaseExecution(scriptQueryKeyRef.current)
-        scriptQueryKeyRef.current = null
+      // Session teardown already reset shared execution state. Late cleanup
+      // must not stop a new login's query or release its same-key execution.
+      if (session.isCurrent()) {
+        dispatch(actions.query.stopRunning())
+        if (scriptQueryKeyRef.current !== null) {
+          questExecution.releaseExecution(scriptQueryKeyRef.current)
+        }
       }
+      scriptQueryKeyRef.current = null
       setTabsDisabled(false)
       if (editorRef.current === editor) {
         if (loadingGlyphLineNumberRef.current !== null) {
@@ -1805,41 +1811,44 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     }
     const startTime = Date.now()
-    const {
-      results: individualQueryResults,
-      sessionEnded,
-      outcomeUnknown,
-    } = await runScriptStatements(
-      queries,
-      session,
-      async (query, i) => {
-        const lineNumber = query.row + 1
-        editor.revealPositionInCenterIfOutsideViewport({
-          lineNumber,
-          column: query.column,
-        })
-        loadingGlyphLineNumberRef.current = lineNumber
-        toggleGlyphWidgetLoading(lineNumber, true)
-        const result = await runIndividualQuery(
-          query,
-          i === queries.length - 1,
-          session,
-          loading.started,
-        )
-        if (
-          session.isCurrent() &&
-          !isSessionEnded(result) &&
-          editorRef.current === editor
-        ) {
-          toggleGlyphWidgetLoading(lineNumber, false)
-          loadingGlyphLineNumberRef.current = null
-        }
-        return result
-      },
-      (result) =>
-        scriptStopRef.current ||
-        (!result.success && stopAfterFailureRef.current && runningAllQueries),
-    )
+    const { results: individualQueryResults, sessionEnded } =
+      await runScriptStatements(
+        queries,
+        session,
+        async (query, i) => {
+          const lineNumber = query.row + 1
+          editor.revealPositionInCenterIfOutsideViewport({
+            lineNumber,
+            column: query.column,
+          })
+          loadingGlyphLineNumberRef.current = lineNumber
+          toggleGlyphWidgetLoading(lineNumber, true)
+          const result = await runIndividualQuery(
+            query,
+            i === queries.length - 1,
+            session,
+            loading.started,
+          )
+          if (
+            session.isCurrent() &&
+            !isSessionEnded(result) &&
+            editorRef.current === editor
+          ) {
+            toggleGlyphWidgetLoading(lineNumber, false)
+            loadingGlyphLineNumberRef.current = null
+          }
+          return result
+        },
+        (result) =>
+          scriptStopRef.current ||
+          (!result.success && stopAfterFailureRef.current && runningAllQueries),
+      )
+    // Logout resets query history. Do not repopulate it (or the next login's
+    // store) with notifications from this script's ended session.
+    if (sessionEnded || !session.isCurrent()) {
+      finishScriptRun()
+      return
+    }
     successfulQueries = individualQueryResults.filter(
       (result) => result.success,
     ).length
@@ -1848,11 +1857,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const duration = (Date.now() - startTime) * 1e6
 
     const lastResult = individualQueryResults[individualQueryResults.length - 1]
-    if (
-      !sessionEnded &&
-      lastResult &&
-      lastResult.result?.type === QuestDB.Type.DQL
-    ) {
+    if (lastResult && lastResult.result?.type === QuestDB.Type.DQL) {
       dispatch(actions.query.setResult(lastResult.result))
       eventBus.publish(EventType.MSG_QUERY_DATASET, lastResult.result)
     }
@@ -1870,8 +1875,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           querySchemaMessageTypes.includes(result.result.type),
       )
 
-    if (!sessionEnded && querySchemaMessage) {
+    if (querySchemaMessage && session.isCurrent()) {
       eventBus.publish(EventType.MSG_QUERY_SCHEMA, querySchemaMessage.result)
+    }
+    if (!session.isCurrent()) {
+      finishScriptRun()
+      return
     }
 
     individualQueryResults
@@ -1890,11 +1899,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       (acc, result, index) => (result.success ? acc : index),
       -1,
     )
-    if (
-      !sessionEnded &&
-      editorRef.current === editor &&
-      lastFailureIndex !== -1
-    ) {
+    if (editorRef.current === editor && lastFailureIndex !== -1) {
       editor.setPosition(
         {
           lineNumber: queries[lastFailureIndex].row + 1,
@@ -1903,13 +1908,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         "script",
       )
     }
-    if (!sessionEnded && editorRef.current === editor) {
+    if (editorRef.current === editor) {
       editor.focus()
       editor.revealPositionInCenterIfOutsideViewport(editor.getPosition()!)
     }
 
-    const completedGracefully =
-      !sessionEnded && queries.length === individualQueryResults.length
+    const completedGracefully = queries.length === individualQueryResults.length
     dispatch(
       actions.query.addNotification(
         {
@@ -1921,23 +1925,19 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                 failed: failedQueries,
                 total: queries.length,
                 duration,
-                sessionEnded,
-                outcomeUnknown,
               })}
             </Text>
           ),
           type: completedGracefully
             ? NotificationType.SUCCESS
             : NotificationType.ERROR,
-          updateActiveNotification: !sessionEnded,
+          updateActiveNotification: true,
         },
         activeBufferRef.current.id,
       ),
     )
     const shouldRunPending =
-      !sessionEnded &&
-      scriptStopRef.current &&
-      !scriptConfirmationOpenRef.current
+      scriptStopRef.current && !scriptConfirmationOpenRef.current
     finishScriptRun()
     if (shouldRunPending) executePendingScriptRun()
   }

@@ -19,8 +19,7 @@ import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
 import { pickReadableTextColor, Preferences } from "../../utils"
 import { PopperHover, Placement } from "../"
 import { useTheme } from "styled-components"
-import { TelemetryTable } from "../../consts"
-import { TelemetryConfigShape } from "../../store/Telemetry/types"
+import { queryTelemetryConfig } from "../../utils/telemetryQueries"
 import { sendServerInfoTelemetry } from "../../utils/telemetry"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { isSessionEnded } from "../../modules/OAuth2/session"
@@ -449,11 +448,7 @@ export const Toolbar = () => {
 
         // Telemetry is best-effort and cannot turn an accepted save into a
         // failure notification (or renew an otherwise idle SSO session).
-        void quest
-          .query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`, {
-            refreshAuth: false,
-            background: true,
-          })
+        void queryTelemetryConfig(quest)
           .then((response) => {
             if (
               session.isCurrent() &&
