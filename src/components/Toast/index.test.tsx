@@ -8,6 +8,7 @@ import {
   type ToastContainerProps,
   type ToastContent,
   type ToastOptions,
+  type ToastTransitionProps,
   type Id,
 } from "react-toastify"
 
@@ -18,17 +19,35 @@ const messages = vi.hoisted(() => ({
   error: vi.fn<[ToastContent, ToastOptions?], Id>(),
   dismiss: vi.fn(),
   closeToast: vi.fn(),
+  isIn: true,
+  nodeRef: { current: null as HTMLElement | null },
 }))
 vi.mock("react-toastify", () => ({
   toast: { ...messages, isActive: vi.fn() },
-  ToastContainer: ({ closeButton, theme }: ToastContainerProps) =>
-    typeof closeButton === "function"
-      ? closeButton({
-          closeToast: messages.closeToast,
-          type: "error",
-          theme: theme ?? "light",
-        })
-      : null,
+  ToastContainer: ({
+    closeButton,
+    theme,
+    transition: Transition,
+  }: ToastContainerProps) => (
+    <>
+      {typeof closeButton === "function"
+        ? closeButton({
+            closeToast: messages.closeToast,
+            type: "error",
+            theme: theme ?? "light",
+          })
+        : null}
+      {Transition && (
+        <Transition
+          isIn={messages.isIn}
+          nodeRef={messages.nodeRef}
+          done={vi.fn()}
+          position="top-right"
+          preventExitTransition={false}
+        />
+      )}
+    </>
+  ),
   Slide: () => null,
 }))
 vi.mock("react-toastify/addons/use-notification-center", () => ({
@@ -50,6 +69,8 @@ afterEach(() => {
   renderer = undefined
   vi.unstubAllGlobals()
   vi.clearAllMocks()
+  messages.isIn = true
+  messages.nodeRef.current = null
 })
 
 const mountNotifications = (props?: ToastContainerProps) => {
@@ -80,7 +101,10 @@ const mountNotifications = (props?: ToastContainerProps) => {
   )
   const notifications = [notification]
   const querySelectorAll = vi.fn(() => notifications)
-  const contains = (element: unknown) => element === control
+  const contains = (element: unknown) =>
+    notifications.some(
+      (item) => item.querySelector(".Toastify__toast-body") === element,
+    )
   const addEventListener = vi.fn<
     [string, (event: KeyboardEvent) => void],
     void
@@ -93,13 +117,16 @@ const mountNotifications = (props?: ToastContainerProps) => {
     addEventListener,
     removeEventListener,
   })
+  const tree = () => (
+    <ThemeProvider theme={darkTheme}>
+      <ToastContainer {...props} />
+    </ThemeProvider>
+  )
+  messages.nodeRef.current = notification as unknown as HTMLElement
   act(() => {
-    renderer = create(
-      <ThemeProvider theme={darkTheme}>
-        <ToastContainer {...props} />
-      </ThemeProvider>,
-      { createNodeMock: () => ({ querySelectorAll, contains }) },
-    )
+    renderer = create(tree(), {
+      createNodeMock: () => ({ querySelectorAll, contains }),
+    })
   })
   const onKeyDown = addEventListener.mock.calls[0][1]
   const press = (overrides: Partial<KeyboardEvent> = {}) => {
@@ -129,6 +156,30 @@ const mountNotifications = (props?: ToastContainerProps) => {
     origin,
     control,
     notifications,
+    exitNotification: () => {
+      act(() => {
+        messages.isIn = false
+        renderer!.update(tree())
+      })
+    },
+    addNotification: (id: string) => {
+      const next = { id, querySelector: vi.fn() }
+      const nextControl = {
+        closest: vi.fn((selector: string) =>
+          selector === ".Toastify__toast" ? next : null,
+        ),
+        focus: vi.fn(() => {
+          activeElement = nextControl
+        }),
+        setAttribute: vi.fn(),
+        removeAttribute: vi.fn(),
+      }
+      next.querySelector.mockImplementation((selector: string) =>
+        selector === ".Toastify__toast-body" ? nextControl : {},
+      )
+      notifications.push(next)
+      return nextControl
+    },
     moveFocus: (element: unknown) => {
       activeElement = element
     },
@@ -304,41 +355,137 @@ describe("notification keyboard access", () => {
     },
   )
 
-  it("restores shortcut focus on the ordinary message-click dismissal path", () => {
-    const onClick = vi.fn()
-    const { press, origin, notification } = mountNotifications({ onClick })
-    press()
-    const event = { currentTarget: notification }
-    renderer!.root.findByType(RTToastContainer).props.onClick(event)
-    expect(onClick).toHaveBeenCalledWith(event)
-    expect(origin.focus).toHaveBeenCalledOnce()
-  })
+  it.each([true, false])(
+    "does not restore focus just because onClick fires (container closeOnClick=%s)",
+    (closeOnClick) => {
+      const onClick = vi.fn()
+      const { press, origin, notification, exitNotification } =
+        mountNotifications({ onClick, closeOnClick })
+      press()
+      const event = { currentTarget: notification }
+      renderer!.root.findByType(RTToastContainer).props.onClick(event)
+      expect(onClick).toHaveBeenCalledWith(event)
+      expect(origin.focus).not.toHaveBeenCalled()
+      // Toastify starts an exit only when its effective options dismiss it.
+      if (closeOnClick) {
+        exitNotification()
+        expect(origin.focus).toHaveBeenCalledOnce()
+      }
+    },
+  )
 
   it.each(["info", "success", "warning", "error"] as const)(
-    "composes a per-%s click handler with pre-dismiss focus restoration",
+    "preserves per-%s handlers without restoring focus on non-dismissible clicks",
     (type) => {
       const { press, origin, notification } = mountNotifications()
       press()
       const onClick = vi.fn()
-      toast[type]("Message", { onClick })
+      toast[type]("Message", { onClick, closeOnClick: false })
       const event = { currentTarget: notification }
       messages[type].mock.lastCall![1]!.onClick!(
         event as unknown as React.MouseEvent,
       )
       expect(onClick).toHaveBeenCalledWith(event)
-      expect(origin.focus).toHaveBeenCalledOnce()
+      expect(origin.focus).not.toHaveBeenCalled()
     },
   )
+
+  it("preserves a custom container transition and its identity on re-render", () => {
+    const transition = vi.fn<[ToastTransitionProps], null>(() => null)
+    const { press, origin, exitNotification } = mountNotifications({
+      transition,
+    })
+    const wrapped = renderer!.root.findByType(RTToastContainer).props
+      .transition as ToastContainerProps["transition"]
+    expect(transition.mock.lastCall![0].isIn).toBe(true)
+    press()
+    exitNotification()
+    expect(origin.focus).toHaveBeenCalledOnce()
+    expect(transition.mock.lastCall![0].isIn).toBe(false)
+    expect(renderer!.root.findByType(RTToastContainer).props.transition).toBe(
+      wrapped,
+    )
+  })
+
+  it.each(["info", "success", "warning", "error"] as const)(
+    "restores focus on exit with a custom per-%s transition",
+    (type) => {
+      const { press, origin } = mountNotifications()
+      const transition = vi.fn<[ToastTransitionProps], null>(() => null)
+      toast[type]("Message", { transition })
+      const Transition = messages[type].mock.lastCall![1]!.transition!
+      const props: ToastTransitionProps = {
+        isIn: true,
+        nodeRef: messages.nodeRef,
+        done: vi.fn(),
+        position: "top-right",
+        preventExitTransition: false,
+      }
+      let customRenderer!: ReactTestRenderer
+      act(() => {
+        customRenderer = create(<Transition {...props} />)
+      })
+      try {
+        press()
+        expect(origin.focus).not.toHaveBeenCalled()
+        act(() => customRenderer.update(<Transition {...props} isIn={false} />))
+        expect(origin.focus).toHaveBeenCalledOnce()
+        expect(transition.mock.lastCall![0]).toMatchObject({
+          ...props,
+          isIn: false,
+        })
+      } finally {
+        act(() => customRenderer.unmount())
+      }
+    },
+  )
+
+  it("does not restore focus on exit after the user leaves the notification", () => {
+    const { press, origin, moveFocus, exitNotification } = mountNotifications()
+    press()
+    moveFocus({ closest: () => null })
+    exitNotification()
+    expect(origin.focus).not.toHaveBeenCalled()
+  })
 
   it("retains the container click handler when toast options do not override it", () => {
     const onClick = vi.fn()
     mountNotifications({ onClick })
     toast.success("Message", { autoClose: false })
     expect(messages.success.mock.lastCall![1]).not.toHaveProperty("onClick")
-    expect(renderer!.root.findByType(RTToastContainer).props.onClick).toEqual(
-      expect.any(Function),
+    expect(renderer!.root.findByType(RTToastContainer).props.onClick).toBe(
+      onClick,
     )
   })
+
+  it.each(["Escape", "Close", "dismiss"])(
+    "carries the external origin across notifications for %s",
+    (action) => {
+      const { press, origin, notification, addNotification } =
+        mountNotifications()
+      notification.id = "first"
+      press()
+      const nextControl = addNotification("second")
+      press()
+      expect(nextControl.focus).toHaveBeenCalledOnce()
+      if (action === "Escape") {
+        press({ key: "Escape", code: "Escape", altKey: false })
+      } else if (action === "Close") {
+        act(() => {
+          renderer!.root
+            .findByProps({ "aria-label": "Close notification" })
+            .props.onClick({
+              currentTarget: nextControl,
+              stopPropagation: vi.fn(),
+            })
+        })
+      } else {
+        toast.dismiss("second")
+      }
+      expect(origin.focus).toHaveBeenCalledOnce()
+      expect(document.activeElement).toBe(origin)
+    },
+  )
 
   it("restores shortcut focus before the built-in close path removes the toast", () => {
     const { press, origin, control } = mountNotifications()

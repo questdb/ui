@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./AuthProvider"
 import { QuestProvider } from "./QuestProvider"
 import { questClient } from "../utils/questdb/queryClient"
 import { authSessionState } from "../modules/OAuth2/authSessionState"
+import { SessionEndedError } from "../modules/OAuth2/session"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { StoreKey } from "../utils/localStorage/types"
@@ -311,6 +312,48 @@ describe("AuthProvider token installation", () => {
         .errorMessage,
     ).toContain("Verify their outcomes")
     finishUpload()
+    await rejected
+    expect(questClient.hasActiveRequests()).toBe(false)
+  })
+
+  it("confirms a real pending preferences write and explains its uncertainty on Login", async () => {
+    await mount()
+    expect(questClient.hasActiveRequests()).toBe(false)
+    let finish!: (response: Response) => void
+    const response = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    const fetchMock = vi.fn((url: string) =>
+      url.startsWith("settings?")
+        ? response
+        : Promise.resolve(new Response("{}")),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const write = questClient.savePreferences({
+      version: 1,
+      instance_name: "Changed",
+    })
+    const rejected = expect(write).rejects.toBeInstanceOf(
+      // The PUT may commit, but its old-session response must not be accepted.
+      SessionEndedError,
+    )
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    expect(questClient.hasActiveRequests()).toBe(true)
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal("confirm", confirm)
+    act(() => auth.signInAgain())
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(authSessionState.isAuthenticated()).toBe(true)
+    expect(questClient.hasActiveRequests()).toBe(true)
+    confirm.mockReturnValue(true)
+    act(() => auth.signInAgain())
+    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(
+      renderer!.root.findByProps({ "data-hook": "mock-login" }).props
+        .errorMessage,
+    ).toContain("Verify their outcomes")
+    expect(authSessionState.isAuthenticated()).toBe(false)
+    finish(new Response("{}"))
     await rejected
     expect(questClient.hasActiveRequests()).toBe(false)
   })

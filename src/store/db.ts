@@ -119,6 +119,12 @@ export class Storage extends Dexie {
     this.version(9).stores({
       notebook_results: "[bufferId+cellId], bufferId, savedAt",
     })
+    // Key-only revision reads for headless runs. IndexedDB builds this index
+    // for existing snapshots on upgrade without rewriting their payloads.
+    this.version(10).stores({
+      notebook_results:
+        "[bufferId+cellId], bufferId, savedAt, [bufferId+cellId+savedAt]",
+    })
     // ──────────────────────────────────────────────────────────────────
     // ⚠️ IMPORTANT — Import/Export compatibility (https://github.com/dexie/Dexie.js/issues/1337)
     // If you add a new version here that changes the "buffers" table:

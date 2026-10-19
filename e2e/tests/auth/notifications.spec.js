@@ -23,6 +23,8 @@ const visitConsole = (refreshWarning = false, theme = "dark") => {
       "acl.oidc.state.required": false,
       "acl.oidc.groups.encoded.in.token": false,
     },
+    preferences: { instance_name: "before", instance_type: "development" },
+    "preferences.version": 1,
   }).as("settings")
   cy.intercept("POST", tokenUrl, (req) => {
     if (new URLSearchParams(req.body).get("grant_type") === "refresh_token") {
@@ -54,6 +56,12 @@ const visitConsole = (refreshWarning = false, theme = "dark") => {
         columns: [{ name: "value", type: "INT" }],
         dataset: [[1], [2], [3]],
         count: 3,
+      }
+    } else if (query.toLowerCase().includes("select current_user")) {
+      body = {
+        columns: [{ name: "current_user", type: "STRING" }],
+        dataset: [["admin"]],
+        count: 1,
       }
     } else if (query.includes("information_schema.")) {
       body = {
@@ -282,7 +290,7 @@ describe("notification keyboard integration", () => {
     cy.getByDataHook("help-panel-button").should("be.focused")
   })
 
-  it("keeps the renewal message when click dismissal is disabled", () => {
+  it("keeps the renewal message and its focus when click dismissal is disabled", () => {
     visitConsole(true)
     tableRow().click().then(focusNotification)
     cy.get("#sso-refresh-failed .Toastify__toast-body")
@@ -291,7 +299,108 @@ describe("notification keyboard integration", () => {
       .first()
       .realClick()
     cy.get("#sso-refresh-failed").should("be.visible")
+    cy.get("#sso-refresh-failed .Toastify__toast-body").should("be.focused")
   })
+
+  it("confirms a pending settings write and keeps warning focus when sign-in is cancelled", () => {
+    let finishWrite
+    cy.intercept(
+      "PUT",
+      `${baseUrl}/settings*`,
+      (req) =>
+        new Promise((resolve) => {
+          finishWrite = () => {
+            req.reply({ statusCode: 200, body: {} })
+            resolve()
+          }
+        }),
+    ).as("saveSettings")
+    visitConsole(true)
+    cy.window().then((win) =>
+      cy.stub(win, "confirm").returns(false).as("interruptionConfirm"),
+    )
+    cy.getByDataHook("topbar-instance-edit-icon").click()
+    cy.getByDataHook("topbar-instance-name-input").clear().type("changed")
+    cy.getByDataHook("topbar-instance-save-button").click()
+    cy.wrap(null).should(() => expect(finishWrite).to.be.a("function"))
+    cy.getByDataHook("topbar-instance-cancel-button").click()
+    tableRow().click().then(focusNotification)
+    cy.contains("#sso-refresh-failed button", "Sign in again")
+      .realClick()
+      .should("be.focused")
+    cy.get("@interruptionConfirm").should("have.been.calledOnce")
+    cy.getByDataHook("auth-login").should("not.exist")
+    cy.get("#sso-refresh-failed").should("be.visible")
+    cy.get("@interruptionConfirm").invoke("returns", true)
+    cy.contains("#sso-refresh-failed button", "Sign in again").realClick()
+    cy.get("@interruptionConfirm").should("have.been.calledTwice")
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.getByDataHook("sign-in-error").should("contain", "Verify their outcomes")
+    cy.then(() => finishWrite())
+    cy.wait("@saveSettings")
+  })
+
+  for (const action of ["Escape", "Close"]) {
+    it(`returns to the selected grid cell after switching notifications and ${action}`, () => {
+      visitConsole()
+      let finishCopy
+      cy.window().then((win) => {
+        win.navigator.clipboard.writeText.onSecondCall().callsFake(
+          () =>
+            new win.Promise((resolve) => {
+              finishCopy = resolve
+            }),
+        )
+      })
+      cy.typeQuery("select value from focus_probe;")
+      cy.getByDataHook("button-run-query").click()
+      cy.get("#cell-0-0").realClick()
+      cy.realPress("ArrowDown")
+      cy.get('[role="grid"]').should(
+        "have.attr",
+        "aria-activedescendant",
+        "cell-1-0",
+      )
+      cy.realPress(["Control", "c"])
+      cy.get(".Toastify__toast--success").should("have.length", 1)
+      // Complete another clipboard operation only after focus has moved to A.
+      cy.realPress(["Control", "c"])
+      cy.wrap(null).should(() => expect(finishCopy).to.be.a("function"))
+      cy.realPress(["Alt", "n"])
+      cy.get(".Toastify__toast--success .Toastify__toast-body").should(
+        "be.focused",
+      )
+      cy.then(() => finishCopy())
+      cy.get(".Toastify__toast--success")
+        .should("have.length", 2)
+        .last()
+        .should("not.have.class", "Toastify__slide-enter--top-right")
+      cy.realPress(["Alt", "n"])
+      cy.get(".Toastify__toast--success .Toastify__toast-body")
+        .last()
+        .should("be.focused")
+      if (action === "Escape") {
+        cy.realPress("Escape")
+      } else {
+        cy.get(".Toastify__toast--success .Toastify__close-button")
+          .last()
+          .realClick()
+      }
+      cy.get('[role="grid"]')
+        .should("be.focused")
+        .and("have.attr", "aria-activedescendant", "cell-1-0")
+      cy.realPress("ArrowDown")
+      cy.get('[role="grid"]').should(
+        "have.attr",
+        "aria-activedescendant",
+        "cell-2-0",
+      )
+      cy.realPress(["Control", "c"])
+      cy.window()
+        .its("navigator.clipboard.writeText")
+        .should("have.been.calledWith", "3")
+    })
+  }
 
   it("restores result-grid navigation and copy after Alt+N and Escape", () => {
     visitConsole()

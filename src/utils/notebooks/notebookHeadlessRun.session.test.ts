@@ -8,7 +8,12 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
-import { loadCellSnapshot, saveCellSnapshot } from "../../store/notebookResults"
+import {
+  loadCellSnapshot,
+  saveCellSnapshot,
+  type NotebookResultSnapshot,
+} from "../../store/notebookResults"
+import * as notebookResults from "../../store/notebookResults"
 import {
   runHeadlessCell,
   cancelHeadlessCellRuns,
@@ -133,6 +138,45 @@ const expectInterruptedResult = async () => {
 }
 
 describe("headless notebook authentication sessions", () => {
+  it.each(["success", "session ended", "skipped"])(
+    "does not hydrate old snapshot payloads for a headless run: %s",
+    async (outcome) => {
+      if (outcome === "skipped") {
+        await db.buffers.update(BUFFER_ID, {
+          notebookViewState: {
+            cells: [{ id: "cell", position: 0, value: "", type: "markdown" }],
+          },
+        })
+      }
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => {
+          if (outcome === "session ended") authSessionState.endSession()
+          return Promise.resolve(response())
+        }),
+      )
+      const reading = vi.fn((snapshot: NotebookResultSnapshot) => snapshot)
+      const revisionRead = vi.spyOn(notebookResults, "loadCellSnapshotSavedAt")
+      db.notebook_results.hook("reading", reading)
+      try {
+        const summary = await makeRun(new Client())
+        if (outcome === "session ended") {
+          expect(summary.note).toContain("interruption marker was saved")
+        } else if (outcome === "success") {
+          expect(summary.success).toBe(true)
+        } else {
+          expect(fetch).not.toHaveBeenCalled()
+        }
+        expect(revisionRead).toHaveBeenCalledTimes(
+          outcome === "session ended" ? 2 : 1,
+        )
+        expect(reading).not.toHaveBeenCalled()
+      } finally {
+        db.notebook_results.hook("reading").unsubscribe(reading)
+      }
+    },
+  )
+
   it.each(["response", "body"])(
     "replaces stale success with an interruption marker when a delayed %s settles after refresh logout and re-login",
     async (phase) => {
@@ -337,11 +381,16 @@ describe("headless notebook authentication sessions", () => {
     "mount",
     "user action",
     "new snapshot",
+    "created snapshot",
+    "deleted snapshot",
     "delete",
     "archive",
   ])(
     "does not overwrite %s with a late interruption marker",
     async (change) => {
+      if (change === "created snapshot") {
+        await db.notebook_results.delete([BUFFER_ID, "cell"])
+      }
       let finish!: (response: Response) => void
       const request = new Promise<Response>((resolve) => {
         finish = resolve
@@ -395,7 +444,9 @@ describe("headless notebook authentication sessions", () => {
       if (change === "delete") await db.buffers.delete(BUFFER_ID)
       if (change === "archive")
         await bufferStore.update(BUFFER_ID, { archived: true })
-      if (change === "new snapshot")
+      if (change === "deleted snapshot")
+        await db.notebook_results.delete([BUFFER_ID, "cell"])
+      if (change === "new snapshot" || change === "created snapshot")
         await saveCellSnapshot({
           bufferId: BUFFER_ID,
           cellId: "cell",

@@ -73,6 +73,7 @@ export const buildDDLQuery = (name: string, kind: TableKind): string => {
 export class Client {
   private _controllers = new Map<QueryId, AbortController>()
   private _activeUploads = 0
+  private _activePreferencesWrites = 0
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
@@ -137,7 +138,9 @@ export class Client {
   }
 
   hasActiveRequests = () =>
-    this._controllers.size > 0 || this._activeUploads > 0
+    this._controllers.size > 0 ||
+    this._activeUploads > 0 ||
+    this._activePreferencesWrites > 0
 
   abortActive = () => {
     if (this._activeQueryId !== null) {
@@ -842,26 +845,35 @@ export class Client {
   async savePreferences(
     preferences: Preferences,
   ): Promise<{ status: number; message?: string; success: boolean }> {
-    const session = await this.prepareRequest()
-    if (!session.isCurrent()) throw new SessionEndedError()
-    const { version, ...prefs } = preferences
-    const response: Response = await fetch(`settings?version=${version}`, {
-      method: "PUT",
-      headers: this.requestHeaders(),
-      body: JSON.stringify(prefs),
-    })
-    if (!session.isCurrent()) throw new SessionEndedError()
-    if (!response.ok) {
-      let errorMessage: string
-      try {
-        errorMessage = await extractErrorMessage(response)
-      } catch (e) {
-        errorMessage = response.statusText
-      }
+    this._activePreferencesWrites++
+    try {
+      const session = await this.prepareRequest()
       if (!session.isCurrent()) throw new SessionEndedError()
-      return { status: response.status, message: errorMessage, success: false }
+      const { version, ...prefs } = preferences
+      const response: Response = await fetch(`settings?version=${version}`, {
+        method: "PUT",
+        headers: this.requestHeaders(),
+        body: JSON.stringify(prefs),
+      })
+      if (!session.isCurrent()) throw new SessionEndedError()
+      if (!response.ok) {
+        let errorMessage: string
+        try {
+          errorMessage = await extractErrorMessage(response)
+        } catch (e) {
+          errorMessage = response.statusText
+        }
+        if (!session.isCurrent()) throw new SessionEndedError()
+        return {
+          status: response.status,
+          message: errorMessage,
+          success: false,
+        }
+      }
+      return { status: response.status, success: true }
+    } finally {
+      this._activePreferencesWrites--
     }
-    return { status: response.status, success: true }
   }
 
   async getLatestRelease() {

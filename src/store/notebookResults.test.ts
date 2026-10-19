@@ -1,5 +1,6 @@
 import "fake-indexeddb/auto"
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
+import Dexie from "dexie"
 
 // Stub browser globals before the db.ts singleton is constructed at import.
 vi.hoisted(() => {
@@ -34,6 +35,7 @@ import {
   copyNotebookSnapshots,
   saveCellSnapshot,
   loadCellSnapshot,
+  loadCellSnapshotSavedAt,
   loadSnapshotCellIds,
   updateCellSnapshotActiveIndex,
   deleteCellSnapshot,
@@ -68,7 +70,79 @@ beforeEach(async () => {
   await db.notebook_results.clear()
 })
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 describe("notebookResults", () => {
+  it("reads only revision keys, scoped to the exact buffer and cell", async () => {
+    await saveCellSnapshot(snap(1, "cell", 0))
+    await saveCellSnapshot(snap(1, "cell-more", 200))
+    await saveCellSnapshot(snap(2, "cell", 300))
+    const get = vi.spyOn(IDBObjectStore.prototype, "get")
+    const getAll = vi.spyOn(IDBObjectStore.prototype, "getAll")
+    const cursor = vi.spyOn(IDBIndex.prototype, "openKeyCursor")
+    const reading = vi.fn((value: NotebookResultSnapshot) => value)
+    db.notebook_results.hook("reading", reading)
+    try {
+      expect(await loadCellSnapshotSavedAt(1, "cell")).toBe(0)
+      expect(await loadCellSnapshotSavedAt(1, "cell-more")).toBe(200)
+      expect(await loadCellSnapshotSavedAt(2, "cell")).toBe(300)
+      expect(await loadCellSnapshotSavedAt(3, "cell")).toBeUndefined()
+      expect(await loadCellSnapshotSavedAt(1, "missing")).toBeUndefined()
+      expect(cursor).toHaveBeenCalled()
+      expect(get).not.toHaveBeenCalled()
+      expect(getAll).not.toHaveBeenCalled()
+      expect(reading).not.toHaveBeenCalled()
+    } finally {
+      db.notebook_results.hook("reading").unsubscribe(reading)
+    }
+  })
+
+  it("maintains revision keys atomically through replacement, updates, and deletion", async () => {
+    await saveCellSnapshot(snap(1, "cell", 100))
+    expect(await loadCellSnapshotSavedAt(1, "cell")).toBe(100)
+    await saveCellSnapshot(snap(1, "cell", 200))
+    await updateCellSnapshotActiveIndex(1, "cell", 1, "select 2")
+    await db.transaction("rw", db.notebook_results, async () => {
+      expect(await loadCellSnapshotSavedAt(1, "cell")).toBe(200)
+      await deleteCellSnapshot(1, "cell")
+      expect(await loadCellSnapshotSavedAt(1, "cell")).toBeUndefined()
+    })
+    await saveCellSnapshot(snap(1, "cell", 300))
+    await deleteNotebookSnapshots(1)
+    expect(await loadCellSnapshotSavedAt(1, "cell")).toBeUndefined()
+  })
+
+  it("indexes existing version-9 snapshots on upgrade without changing their payload", async () => {
+    // Recreate the previous schema, retaining all unrelated stores/indexes.
+    const stores = Object.fromEntries(
+      db.tables.map(({ name, schema }) => [
+        name,
+        [
+          schema.primKey.src,
+          ...schema.indexes
+            .filter((index) => index.name !== "[bufferId+cellId+savedAt]")
+            .map((index) => index.src),
+        ].join(", "),
+      ]),
+    )
+    await db.delete()
+    const legacy = new Dexie(db.name)
+    legacy.version(9).stores(stores)
+    const snapshot = { ...snap(1, "old-cell", 123), activeResultIndex: 2 }
+    try {
+      await legacy.open()
+      await legacy.table("notebook_results").put(snapshot)
+    } finally {
+      legacy.close()
+    }
+    await db.open()
+    expect(db.verno).toBe(10)
+    expect(await loadCellSnapshotSavedAt(1, "old-cell")).toBe(123)
+    expect(await loadCellSnapshot(1, "old-cell")).toEqual(snapshot)
+  })
+
   it("round-trips a snapshot faithfully (dql + ddl + error)", async () => {
     const results: SingleQueryResult[] = [
       dqlResult,

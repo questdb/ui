@@ -241,6 +241,7 @@ describe("non-SQL auth rejection branches", () => {
       expect(fetchMock).not.toHaveBeenCalled()
       expect(requests).toHaveLength(0)
       expect(authSessionState.isAuthenticated()).toBe(true)
+      expect(client.hasActiveRequests()).toBe(false)
     },
   )
 
@@ -262,6 +263,7 @@ describe("non-SQL auth rejection branches", () => {
       await rejected
       expect(fetchMock).not.toHaveBeenCalled()
       expect(requests).toHaveLength(0)
+      expect(client.hasActiveRequests()).toBe(false)
     },
   )
 
@@ -309,6 +311,117 @@ describe("non-SQL auth rejection branches", () => {
       client.validateQuery("select 1", signal.signal),
     ).rejects.toMatchObject({ name: "AbortError" })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("preferences write activity tracking", () => {
+  it.each(["success", "HTTP error", "invalid error body", "old session"])(
+    "tracks a pending write and clears it after %s",
+    async (outcome) => {
+      authSessionState.markNonSSOAuthenticated()
+      let finish!: (response: Response) => void
+      const fetchMock = vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve
+          }),
+      )
+      vi.stubGlobal("fetch", fetchMock)
+      const client = new Client()
+      const pending = client
+        .savePreferences({ version: 1, instance_name: "Test" })
+        .catch((error: unknown) => error)
+      expect(client.hasActiveRequests()).toBe(true)
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+      if (outcome === "old session") authSessionState.endSession()
+      finish(
+        outcome === "HTTP error"
+          ? new Response("Write failed", { status: 500 })
+          : outcome === "invalid error body"
+            ? new Response("not JSON", {
+                status: 500,
+                statusText: "Server error",
+                headers: { "Content-Type": "application/json" },
+              })
+            : new Response("{}"),
+      )
+      const result = await pending
+      expect(client.hasActiveRequests()).toBe(false)
+      if (outcome === "old session") {
+        expect(result).toBeInstanceOf(SessionEndedError)
+      } else {
+        expect(result).toMatchObject({ success: outcome === "success" })
+      }
+    },
+  )
+
+  it.each(["synchronous throw", "network rejection"])(
+    "clears activity after a %s",
+    async (outcome) => {
+      authSessionState.markNonSSOAuthenticated()
+      const error = new Error("Network failure")
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => {
+          if (outcome === "synchronous throw") throw error
+          return Promise.reject(error)
+        }),
+      )
+      const client = new Client()
+      await expect(client.savePreferences({ version: 1 })).rejects.toBe(error)
+      expect(client.hasActiveRequests()).toBe(false)
+    },
+  )
+
+  it("counts overlapping writes independently", async () => {
+    authSessionState.markNonSSOAuthenticated()
+    const finish: ((response: Response) => void)[] = []
+    const fetchMock = vi.fn(
+      () => new Promise<Response>((resolve) => finish.push(resolve)),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    const first = client.savePreferences({ version: 1 })
+    const second = client.savePreferences({ version: 1 })
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    finish[0](new Response("{}"))
+    await first
+    expect(client.hasActiveRequests()).toBe(true)
+    finish[1](new Response("{}"))
+    await second
+    expect(client.hasActiveRequests()).toBe(false)
+  })
+
+  it("keeps activity while reading an error response, including after logout", async () => {
+    authSessionState.markNonSSOAuthenticated()
+    let finish!: (body: string) => void
+    const text = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve
+        }),
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          text,
+        }),
+      ),
+    )
+    const client = new Client()
+    const pending = client.savePreferences({ version: 1 })
+    const rejected = expect(pending).rejects.toBeInstanceOf(SessionEndedError)
+    await vi.waitFor(() => expect(text).toHaveBeenCalledOnce())
+    expect(client.hasActiveRequests()).toBe(true)
+    authSessionState.endSession()
+    expect(client.hasActiveRequests()).toBe(true)
+    finish("Write failed")
+    await rejected
+    expect(client.hasActiveRequests()).toBe(false)
   })
 })
 

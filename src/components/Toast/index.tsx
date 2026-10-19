@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react"
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import {
   ToastContainer as RTToastContainer,
   ToastContainerProps,
@@ -8,6 +8,8 @@ import {
   ToastContent,
   Id,
   type CloseButtonProps,
+  type ToastTransition,
+  type ToastTransitionProps,
 } from "react-toastify"
 import { XIcon } from "@phosphor-icons/react"
 import { useNotificationCenter as RTNotificationCenter } from "react-toastify/addons/use-notification-center"
@@ -76,17 +78,22 @@ export const ToastIcon = ({
   }
 }
 
-// Toastify only invokes onClick when effective closeOnClick is enabled, and
-// invokes it before its private closeToast. Cover that dismissal path too.
-const restoreFocusOnClick =
-  (onClick?: ToastOptions["onClick"]) => (event: React.MouseEvent) => {
-    onClick?.(event)
-    restoreNotificationFocus(event.currentTarget.id)
+// Toastify invokes onClick even when closeOnClick is false. Restore only
+// when an actual exit starts, while the focused notification is still mounted.
+const focusRestoringTransition = (Transition: ToastTransition) => {
+  const NotificationTransition = (props: ToastTransitionProps) => {
+    const { isIn, nodeRef } = props
+    useLayoutEffect(() => {
+      if (!isIn && nodeRef.current) restoreNotificationFocus(nodeRef.current.id)
+    }, [isIn, nodeRef])
+    return <Transition {...props} />
   }
+  return NotificationTransition
+}
 
 const withNotificationFocus = (options?: ToastOptions) =>
-  options?.onClick
-    ? { ...options, onClick: restoreFocusOnClick(options.onClick) }
+  options?.transition
+    ? { ...options, transition: focusRestoringTransition(options.transition) }
     : options
 
 const ToastCloseButton = ({
@@ -182,6 +189,10 @@ export { toast }
 export const ToastContainer = (props?: ToastContainerProps) => {
   const theme = useTheme()
   const region = useRef<HTMLDivElement>(null)
+  const transition = useMemo(
+    () => focusRestoringTransition(props?.transition ?? Slide),
+    [props?.transition],
+  )
   useEffect(() => {
     let shortcutTarget: HTMLElement | undefined
     const focusNotification = (event: KeyboardEvent) => {
@@ -231,13 +242,16 @@ export const ToastContainer = (props?: ToastContainerProps) => {
         ".Toastify__toast-body",
       )
       if (notification && control) {
-        const origin = document.activeElement as HTMLElement | null
-        if (
-          notification &&
-          origin &&
-          typeof origin.focus === "function" &&
-          !region.current?.contains(origin)
-        ) {
+        const activeElement = document.activeElement as HTMLElement | null
+        const previousNotification =
+          activeElement?.closest<HTMLElement>(".Toastify__toast")
+        // When moving between notifications, carry the original external
+        // control forward rather than losing it or returning to another toast.
+        const origin = region.current?.contains(activeElement)
+          ? previousNotification &&
+            notificationFocusOrigins.get(previousNotification)
+          : activeElement
+        if (origin && typeof origin.focus === "function") {
           notificationFocusOrigins.set(notification, origin)
         }
         if (shortcutTarget !== control)
@@ -263,14 +277,13 @@ export const ToastContainer = (props?: ToastContainerProps) => {
     draggable: false,
     position: "top-right",
     theme: theme.mode,
-    transition: Slide,
     hideProgressBar: false,
     closeButton: ToastCloseButton,
     closeOnClick: true,
     pauseOnHover: true,
     pauseOnFocusLoss: false,
     ...props,
-    onClick: restoreFocusOnClick(props?.onClick),
+    transition,
   }
 
   // Modal dialogs hide the rest of the page from assistive technology, except

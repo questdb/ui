@@ -71,6 +71,25 @@ export const loadSnapshotCellIds = (bufferId: number): Promise<string[]> =>
     .primaryKeys()
     .then((keys) => keys.map(([, cellId]) => cellId))
 
+// Read the revision from the compound index, not the potentially large result
+// payload. The index is maintained atomically with every snapshot write/delete.
+export const loadCellSnapshotSavedAt = async (
+  bufferId: number,
+  cellId: string,
+): Promise<number | undefined> => {
+  const [key] = await db.notebook_results
+    .where("[bufferId+cellId+savedAt]")
+    .between(
+      [bufferId, cellId, -Infinity],
+      [bufferId, cellId, Infinity],
+      true,
+      true,
+    )
+    .limit(1)
+    .keys()
+  return Array.isArray(key) && typeof key[2] === "number" ? key[2] : undefined
+}
+
 export const loadCellSnapshot = (
   bufferId: number,
   cellId: string,

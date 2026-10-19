@@ -57,6 +57,7 @@ import {
 } from "../../scenes/Editor/Notebook/persistCellSnapshot"
 import {
   deleteCellSnapshot,
+  loadCellSnapshotSavedAt,
   pruneToRecentNotebooks,
 } from "../../store/notebookResults"
 import {
@@ -534,8 +535,7 @@ export const runHeadlessCell = async (
     const view = await readNotebookView(bufferId)
     return {
       cell: requireCellIn(view.cells, cellId, bufferId),
-      snapshotSavedAt: (await db.notebook_results.get([bufferId, cellId]))
-        ?.savedAt,
+      snapshotSavedAt: await loadCellSnapshotSavedAt(bufferId, cellId),
       variables: view.settings?.variables,
       seqAtPrep: deps.getBufferSeq(),
       mountEpochAtPrep: getMountEpoch(bufferId),
@@ -644,12 +644,15 @@ export const runHeadlessCell = async (
               return false
             }
             const cell = view.cells.find((item) => item.id === cellId)
-            const snapshot = await db.notebook_results.get([bufferId, cellId])
+            const snapshotSavedAt = await loadCellSnapshotSavedAt(
+              bufferId,
+              cellId,
+            )
             if (
               !canMark() ||
               !cell ||
               JSON.stringify(cell) !== JSON.stringify(prep.cell) ||
-              snapshot?.savedAt !== prep.snapshotSavedAt
+              snapshotSavedAt !== prep.snapshotSavedAt
             )
               return false
             const parts = partsOf(view)
