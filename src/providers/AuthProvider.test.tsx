@@ -447,7 +447,7 @@ describe("AuthProvider token installation", () => {
       renderer!.root.findByProps({ "data-hook": "mock-login" }).props,
     ).toMatchObject({
       errorTitle: "Your SSO session has expired",
-      errorMessage: "Revoked Please sign in again.",
+      errorMessage: "Revoked. Please sign in again.",
     })
     expect(
       renderer!.root.findAllByProps({ "data-hook": "console-live" }),
@@ -958,7 +958,7 @@ describe("AuthProvider token installation", () => {
         renderer!.root.findByProps({ "data-hook": "mock-login" }).props
           .errorMessage,
       ).toBe(
-        "Revoked Please sign in again. Running requests were interrupted or may still be finishing; statements may have executed. Verify their outcomes before running them again.",
+        "Revoked. Please sign in again. Running requests were interrupted or may still be finishing; statements may have executed. Verify their outcomes before running them again.",
       )
       expect(
         vi
@@ -1011,7 +1011,7 @@ describe("AuthProvider token installation", () => {
       expect(
         renderer!.root.findByProps({ "data-hook": "mock-login" }).props
           .errorMessage,
-      ).toBe("Revoked Please sign in again.")
+      ).toBe("Revoked. Please sign in again.")
       expect(
         vi
           .mocked(fetch)

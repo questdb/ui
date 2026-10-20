@@ -908,7 +908,7 @@ describe("Auth - OIDC ID token", () => {
     cy.getByDataHook("sign-in-error")
       .should("be.focused")
       .and("contain.text", "Your SSO session has expired")
-      .and("contain.text", "Revoked Please sign in again.")
+      .and("contain.text", "Revoked. Please sign in again.")
     cy.getEditor().should("not.exist")
   })
 

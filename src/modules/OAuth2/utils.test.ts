@@ -11,6 +11,7 @@ import {
   readAuthTokenResponse,
   buildInstalledPayload,
   getStoredCredentialAuthorization,
+  sessionRenewalError,
 } from "./utils"
 import "../../test/stubBrowserGlobals"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -78,6 +79,21 @@ describe("installed payload normalization", () => {
       },
     })
   })
+  it.each([
+    ["Token is not active", "Token is not active. Please sign in again."],
+    ["Session not active ", "Session not active. Please sign in again."],
+    ["Revoked!", "Revoked! Please sign in again."],
+    [undefined, "Could not renew your SSO session. Please sign in again."],
+    [" ", "Could not renew your SSO session. Please sign in again."],
+  ])(
+    "ends the renewal reason %j as a sentence before the instruction",
+    (description, errorMessage) => {
+      expect(sessionRenewalError(description)).toEqual({
+        errorTitle: "Your SSO session has expired",
+        errorMessage,
+      })
+    },
+  )
 })
 
 describe("token expiration", () => {

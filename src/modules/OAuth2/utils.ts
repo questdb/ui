@@ -7,10 +7,19 @@ import { getValue } from "../../utils/localStorage"
 
 export const SIGN_IN_ERROR_TITLE = "Something went wrong."
 export const SESSION_EXPIRED_TITLE = "Your SSO session has expired"
-export const sessionRenewalError = (description?: string): SignInError => ({
-  errorTitle: SESSION_EXPIRED_TITLE,
-  errorMessage: `${description || "Could not renew your SSO session."} Please sign in again.`,
-})
+const SENTENCE_ENDINGS = [".", "!", "?"]
+
+export const sessionRenewalError = (description?: string): SignInError => {
+  const reason = description?.trim() || "Could not renew your SSO session."
+  // Identity providers often omit the full stop, e.g. "Token is not active".
+  const sentence = SENTENCE_ENDINGS.some((ending) => reason.endsWith(ending))
+    ? reason
+    : `${reason}.`
+  return {
+    errorTitle: SESSION_EXPIRED_TITLE,
+    errorMessage: `${sentence} Please sign in again.`,
+  }
+}
 
 type TokenPayload = Partial<{
   grant_type: string
