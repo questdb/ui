@@ -89,6 +89,10 @@ import { LiteEditor } from "../../../components/LiteEditor"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import {
+  isSessionEnded,
+  sessionEndedQueryMessage,
+} from "../../../modules/OAuth2/session"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
 import {
@@ -1596,7 +1600,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       notification = {
         query: queryKey,
-        content: <Text color="statusDanger">{error.error}</Text>,
+        content: (
+          <Text color="statusDanger">
+            {isSessionEnded(error)
+              ? sessionEndedQueryMessage(error)
+              : error.error}
+          </Text>
+        ),
         sideContent: <QueryInNotification query={query.query} />,
         type: NotificationType.ERROR,
       }
@@ -2174,6 +2184,29 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
           .catch((error: ErrorResult) => {
             const { inflightQuery, currentQueryKey } = settleExecution()
+
+            if (isSessionEnded(error)) {
+              // Replace the "Running..." notification even though the editor
+              // is unmounting: the next login reads it, and must not be asked
+              // to sign in again. A session end has no position to mark.
+              dispatch(
+                actions.query.addNotification(
+                  {
+                    query: currentQueryKey,
+                    isExplain: isRunningExplain,
+                    content: (
+                      <Text color="statusDanger">
+                        {sessionEndedQueryMessage(error)}
+                      </Text>
+                    ),
+                    sideContent: <QueryInNotification query={queryToRun} />,
+                    type: NotificationType.ERROR,
+                  },
+                  targetBufferId,
+                ),
+              )
+              return
+            }
 
             if (editorRef?.current && monacoRef?.current) {
               const model = editorRef.current.getModel()
