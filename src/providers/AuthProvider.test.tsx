@@ -264,7 +264,7 @@ describe("AuthProvider token installation", () => {
     vi.stubGlobal("confirm", confirm)
     act(() => auth.signInAgain())
     expect(confirm).toHaveBeenCalledWith(
-      expect.stringContaining("Statements may already have executed"),
+      expect.stringContaining("statements may already have executed"),
     )
     expect(authSessionState.isAuthenticated()).toBe(true)
     confirm.mockReturnValue(true)
@@ -321,7 +321,7 @@ describe("AuthProvider token installation", () => {
     await Promise.all(reads)
   })
 
-  it("confirms a real pending CSV upload with no SQL activity before signing in again", async () => {
+  it("confirms a real pending CSV upload with no SQL activity before signing in again, then lets it finish", async () => {
     await mount()
     expect(questClient.hasActiveRequests()).toBe(false)
     let finishUpload!: () => void
@@ -363,13 +363,15 @@ describe("AuthProvider token installation", () => {
       renderer!.root.findByProps({ "data-hook": "mock-login" }).props
         .errorMessage,
     ).toContain("Verify their outcomes")
-    expect(abortUpload).toHaveBeenCalledOnce()
-    await rejected
-    finishUpload()
+    // Aborting mid-stream could leave a partially imported table.
+    expect(abortUpload).not.toHaveBeenCalled()
+    // The upload no longer counts as the next login's activity.
     expect(questClient.hasActiveRequests()).toBe(false)
+    finishUpload()
+    await rejected
   })
 
-  it("confirms a real pending preferences write and explains its uncertainty on Login", async () => {
+  it("confirms a real pending preferences write, lets it finish and explains its uncertainty on Login", async () => {
     await mount()
     expect(questClient.hasActiveRequests()).toBe(false)
     let finish!: (response: Response) => void
@@ -404,16 +406,16 @@ describe("AuthProvider token installation", () => {
     expect(writeSignal?.aborted).toBe(false)
     confirm.mockReturnValue(true)
     act(() => auth.signInAgain())
-    expect(writeSignal?.aborted).toBe(true)
+    expect(writeSignal?.aborted).toBe(false)
     expect(confirm).toHaveBeenCalledTimes(2)
     expect(
       renderer!.root.findByProps({ "data-hook": "mock-login" }).props
         .errorMessage,
     ).toContain("Verify their outcomes")
     expect(authSessionState.isAuthenticated()).toBe(false)
+    expect(questClient.hasActiveRequests()).toBe(false)
     finish(new Response("{}"))
     await rejected
-    expect(questClient.hasActiveRequests()).toBe(false)
   })
 
   it("shows the mounted login when a refresh started before recovery ends the session", async () => {
@@ -946,7 +948,7 @@ describe("AuthProvider token installation", () => {
         renderer!.root.findByProps({ "data-hook": "mock-login" }).props
           .errorMessage,
       ).toBe(
-        "Revoked Please sign in again. Running requests were interrupted; statements may have executed. Verify their outcomes before running them again.",
+        "Revoked Please sign in again. Running requests were interrupted or may still be finishing; statements may have executed. Verify their outcomes before running them again.",
       )
       expect(
         vi
@@ -1131,7 +1133,7 @@ describe("AuthProvider token installation", () => {
       "Sign in again",
     ])
     expect(warning.root.findAllByType("span")[1].children).toEqual([
-      expect.stringContaining("interrupts running requests"),
+      expect.stringContaining("interrupts running queries"),
     ])
     warning.unmount()
     mocks.toastDismiss.mockClear()

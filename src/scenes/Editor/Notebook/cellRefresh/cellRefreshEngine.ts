@@ -19,6 +19,7 @@ import {
 } from "../../../../utils/questdb/requestLimiter"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { authSessionState } from "../../../../modules/OAuth2/authSessionState"
 import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
 import {
   autoRefreshIntervalMs,
@@ -350,6 +351,7 @@ export class CellRefreshEngine {
   // replacement still runs. Keyed outside the entries so a run on a cell whose
   // entry appears mid-run (first run of an editor-only cell) is still covered.
   private pendingRunCounts = new Map<string, number>()
+  private stopOnSessionEnd: (() => void) | null = null
 
   private refreshHandler = (payload?: { cellId?: string }) => {
     if (payload?.cellId) void this.refresh(payload.cellId)
@@ -381,6 +383,11 @@ export class CellRefreshEngine {
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
     )
+    // Session end aborts every request before React unmounts this engine.
+    // Rounds settling with those aborts would be recorded as refresh errors
+    // or delete chart snapshots, so tear down first and drop them.
+    this.stopOnSessionEnd?.()
+    this.stopOnSessionEnd = authSessionState.beforeEnd(() => this.destroy())
     if (typeof document !== "undefined") {
       this.documentHidden = document.hidden
       document.addEventListener(
@@ -391,6 +398,8 @@ export class CellRefreshEngine {
   }
 
   destroy() {
+    this.stopOnSessionEnd?.()
+    this.stopOnSessionEnd = null
     eventBus.unsubscribe(
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,

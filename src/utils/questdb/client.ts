@@ -151,6 +151,21 @@ export class Client {
     this._activeQueryId = null
   }
 
+  // Ending the session cancels queries and writes still waiting for renewal,
+  // but lets writes that are being sent finish: aborting a CSV upload
+  // mid-stream can leave a partially imported table. Their results are
+  // rejected as session-ended, and they no longer count as the next login's
+  // activity.
+  abortForSessionEnd = () => {
+    this._controllers.forEach(({ controller }) => controller.abort())
+    this._controllers.clear()
+    this._writeControllers.forEach((sent, controller) => {
+      if (!sent) controller.abort()
+    })
+    this._writeControllers.clear()
+    this._activeQueryId = null
+  }
+
   // Background reads are cancelled with the session without asking: only
   // statements the user ran and writes make ending the session disruptive.
   hasActiveRequests = () => {

@@ -74,6 +74,7 @@ import { SchemaProvider, useSchema, type SelectedTable } from "./SchemaContext"
 import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { isAuthRefreshUnavailable } from "../../modules/OAuth2/session"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -160,6 +161,17 @@ const Schema = ({
   const { selectOpen, setSelectOpen, selectedTables, setSelectedTables } =
     useSchema()
 
+  // A failed SSO renewal publishes no MSG_CONNECTION_ERROR, because the
+  // connection is fine. Record it like one, so the panel explains why it is
+  // empty and MSG_CONNECTION_OK reloads it once a request succeeds again.
+  // Other errors stay unrecorded: a 400 response publishes MSG_CONNECTION_OK
+  // before rejecting, so recording it would reload in a loop.
+  const recordRenewalFailure = (error: unknown) => {
+    if (!isAuthRefreshUnavailable(error)) return
+    errorRef.current = error as ErrorResult
+    setLoadingError(error as ErrorResult)
+  }
+
   const fetchTables = async () => {
     try {
       const response = await quest.showTables()
@@ -185,6 +197,7 @@ const Schema = ({
         dispatchState({ view: View.error })
       }
     } catch (error) {
+      recordRenewalFailure(error)
       dispatchState({
         view: View.error,
       })
@@ -230,6 +243,7 @@ const Schema = ({
       "information_schema.columns()", // fallback for older servers
     ]
 
+    let lastError: unknown
     for (const query of queries) {
       try {
         const response = await quest.query<QuestDB.InformationSchemaColumn>(
@@ -241,11 +255,13 @@ const Schema = ({
           dispatch(actions.query.setColumns(response.data))
           return
         }
-      } catch {
+      } catch (error) {
         // let's try another query
+        lastError = error
       }
     }
 
+    recordRenewalFailure(lastError)
     dispatchState({ view: View.error })
   }
 

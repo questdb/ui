@@ -1,5 +1,6 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import type {
   CellResult,
   NotebookVariable,
@@ -209,6 +210,18 @@ export const cancelHeadlessCellRuns = (
     for (const claim of state.claims) claim.controller.abort(reason)
   }
 }
+
+// Session end aborts every request, so an in-flight statement would settle
+// with the abort and be committed as a failed run that later agents read as
+// authoritative. Cancel the claims first: nothing is committed, and the
+// statement's outcome stays unverified.
+authSessionState.beforeEnd(() => {
+  for (const perBuffer of headlessClaims.values()) {
+    for (const state of perBuffer.values()) {
+      for (const claim of state.claims) claim.controller.abort()
+    }
+  }
+})
 
 const emptySummary = (): RunCellSummary => ({
   success: false,

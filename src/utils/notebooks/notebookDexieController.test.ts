@@ -40,6 +40,8 @@ import {
   enqueueBufferTask,
 } from "./notebookBufferQueue"
 import { __resetAgentActivityForTests, onAgentEdit } from "./agentActivity"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import { SESSION_ENDED_MESSAGE } from "../../modules/OAuth2/session"
 import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/cellSizing"
 import type { AgentEdit } from "./agentActivity"
 import { NotebookToolError } from "./notebookToolError"
@@ -1086,6 +1088,33 @@ describe("createDexieNotebookController — runCell", () => {
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/changed this notebook/)
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
+  it("records nothing when the session ends while the statement runs", async () => {
+    // Given a write in flight on a background notebook with a recorded run
+    await seedNotebook({
+      cells: [
+        cell("a", "INSERT INTO t VALUES (1)", { lastRunStatus: "success" }),
+      ],
+    })
+    const { quest, pending: inFlight, respondNext } = makeQuest()
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length === 0) throw new Error("not in flight")
+    })
+    // When logout ends the session and the aborted request settles
+    authSessionState.endSession()
+    respondNext({
+      type: "error",
+      error: SESSION_ENDED_MESSAGE,
+      sessionEnded: true,
+    })
+    const summary = await run
+    // Then the outcome is unverified and the last recorded run is kept
+    expect(summary.unverified).toBe(true)
+    expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 

@@ -656,6 +656,127 @@ describe("non-SQL write cancellation", () => {
   })
 })
 
+describe("session end", () => {
+  const endSession = (client: Client) => {
+    // Mirrors the shared client's session-end listener (queryClient.ts).
+    authSessionState.endSession()
+    client.abortForSessionEnd()
+  }
+
+  it("lets an upload that is being sent finish and rejects its result", async () => {
+    installToken("initial", false)
+    const requests = mockUploadRequests(false)
+    const client = new Client()
+    const progress = vi.fn()
+    const finished = client
+      .uploadCSVFile({
+        file: new File(["x"], "probe.csv"),
+        name: "probe",
+        owner: "admin",
+        onProgress: progress,
+      })
+      .catch((error: unknown) => error)
+    await vi.waitFor(() => expect(requests).toHaveLength(1))
+    expect(client.hasSentRequests()).toBe(true)
+    const onProgress = requests[0].upload.addEventListener.mock.calls[0][1]
+
+    endSession(client)
+
+    // Aborting mid-stream could leave a partially imported table.
+    expect(requests[0].abort).not.toHaveBeenCalled()
+    // The old login's upload is not the next login's activity.
+    expect(client.hasActiveRequests()).toBe(false)
+    expect(client.hasSentRequests()).toBe(false)
+    onProgress({ loaded: 1, total: 1 })
+    expect(progress).not.toHaveBeenCalled()
+    requests[0].onload!()
+    expect(await finished).toBeInstanceOf(SessionEndedError)
+    expect(requests[0].abort).not.toHaveBeenCalled()
+  })
+
+  it("lets a settings PUT that is being sent finish and rejects its result", async () => {
+    installToken("initial", false)
+    let finish!: (response: Response) => void
+    let signal: AbortSignal | null | undefined
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      signal = init?.signal
+      return new Promise<Response>((resolve) => {
+        finish = resolve
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    const pending = client
+      .savePreferences({ version: 1 })
+      .catch((error: unknown) => error)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+
+    endSession(client)
+
+    expect(signal?.aborted).toBe(false)
+    expect(client.hasActiveRequests()).toBe(false)
+    finish(new Response("{}"))
+    expect(await pending).toBeInstanceOf(SessionEndedError)
+  })
+
+  it.each([
+    { name: "uploadCSVFile", run: upload },
+    {
+      name: "savePreferences",
+      run: (client: Client) => client.savePreferences({ version: 1 }),
+    },
+  ])("cancels $name while it still waits for renewal", async ({ run }) => {
+    installExpired()
+    const requests = mockUploadRequests()
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    let refreshing = false
+    client.refreshTokenMethod = () => {
+      refreshing = true
+      return new Promise(() => {})
+    }
+    const rejected = expect(run(client)).rejects.toBeInstanceOf(
+      SessionEndedError,
+    )
+    await vi.waitFor(() => expect(refreshing).toBe(true))
+    expect(client.hasActiveRequests()).toBe(true)
+
+    endSession(client)
+
+    await rejected
+    expect(client.hasActiveRequests()).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(requests).toHaveLength(0)
+  })
+
+  it("still aborts SQL that was sent", async () => {
+    installToken("initial", false)
+    let signal: AbortSignal | null | undefined
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init?: RequestInit) => {
+        signal = init?.signal
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          )
+        })
+      }),
+    )
+    const client = new Client()
+    const result = client
+      .queryRaw("INSERT INTO trades VALUES (1)")
+      .catch((error: unknown) => error)
+    await vi.waitFor(() => expect(client.hasSentRequests()).toBe(true))
+
+    endSession(client)
+
+    expect(signal?.aborted).toBe(true)
+    expect(await result).toMatchObject({ sessionEnded: true })
+  })
+})
+
 describe("non-SQL authorization outside SSO", () => {
   it.each(fetchRequests)("$name preserves common headers", async ({ run }) => {
     authSessionState.markNonSSOAuthenticated()

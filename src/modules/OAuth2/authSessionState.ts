@@ -18,7 +18,9 @@ class AuthSessionState {
     return { isCurrent: () => this.sessionId === sessionId }
   }
 
-  // Only already-accepted data may be flushed here, never new network work.
+  // Runs before onEnd listeners abort this session's requests. Supersede
+  // in-flight work here so its aborted results are not recorded, or flush
+  // already-accepted data. Never start new network work.
   beforeEnd(listener: () => void) {
     this.beforeEndListeners.add(listener)
     return () => {

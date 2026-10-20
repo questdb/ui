@@ -39,7 +39,7 @@ export const RefreshFailedWarning = ({
           : `Could not renew your SSO session. Your current token expires at ${new Date(expiry).toLocaleTimeString()}.`}
       </Text>
       <Text size="sm" color="contentSecondary">
-        Signing in again ends this session and interrupts running requests.
+        Signing in again ends this session and interrupts running queries.
         Statements may have executed; verify their outcomes before retrying.
       </Text>
       <Button size="sm" onClick={onSignIn}>

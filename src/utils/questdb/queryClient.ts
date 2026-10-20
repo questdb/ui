@@ -5,6 +5,6 @@ import { authSessionState } from "../../modules/OAuth2/authSessionState"
 // this instance in QuestProvider before starting any store telemetry epics.
 export const questClient = new Client()
 authSessionState.onEnd(() => {
-  questClient.abort()
+  questClient.abortForSessionEnd()
   questClient.resetCredentials()
 })

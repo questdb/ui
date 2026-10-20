@@ -743,6 +743,47 @@ describe("Auth - OIDC ID token", () => {
     })
   }
 
+  it("renews and resends an editor statement exactly once after the server rejects its bearer", () => {
+    // The server rejects a bearer the console still considers valid (revoked,
+    // or the browser clock is behind). A 401 executed no SQL, so the console
+    // renews and resends the statement once, without signing out.
+    const initial = idToken("initial", 3600)
+    const renewed = idToken("renewed", 3600)
+    signIn({
+      idTokens: { authorization_code: initial, refresh_token: renewed },
+      credentials: { "auto.refresh.tables": "false" },
+    })
+    cy.wait("@authCheck")
+    cy.getEditor().should("be.visible")
+    const sentWith = []
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: "select current_user()" },
+      },
+      (req) => {
+        sentWith.push(req.headers.authorization)
+        req.reply(
+          req.headers.authorization === `Bearer ${initial}`
+            ? { statusCode: 401, body: "Unauthorized" }
+            : { statusCode: 200, body: queryResult },
+        )
+      },
+    ).as("statement")
+    cy.clearEditor()
+    cy.typeQuery("select current_user()")
+    cy.runLine()
+    cy.wait("@statement")
+    cy.wait("@statement")
+    cy.getByDataHook("success-notification").should("be.visible")
+    cy.getByDataHook("auth-login").should("not.exist")
+    cy.wrap(sentWith).should("deep.equal", [
+      `Bearer ${initial}`,
+      `Bearer ${renewed}`,
+    ])
+  })
+
   it("clears the remembered identity before the redirect guard forces sign-in", () => {
     // Unknown expiry avoids a renewal on 401: this test targets the redirect
     // guard's forced-login path, not refresh recovery or its connection events.

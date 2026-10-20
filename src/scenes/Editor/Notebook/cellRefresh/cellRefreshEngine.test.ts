@@ -8,6 +8,8 @@ import type {
 } from "../../../../store/notebook"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { authSessionState } from "../../../../modules/OAuth2/authSessionState"
+import { SESSION_ENDED_MESSAGE } from "../../../../modules/OAuth2/session"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 import type { CellResultStatus } from "../resultHydration/cellResultHydration"
@@ -2642,6 +2644,90 @@ describe("CellRefreshEngine", () => {
       // And the debounce expiry adds nothing
       await vi.advanceTimersByTimeAsync(1000)
       expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe("session end", () => {
+    // What an aborted request settles with once logout ended the session.
+    const sessionEnded = (query: string): QueryExecResult => ({
+      type: "error",
+      query,
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: SESSION_ENDED_MESSAGE,
+      sessionEnded: true,
+    })
+    const settleWithSessionEnd = () => {
+      const settles: (() => void)[] = []
+      deps.executeSingle = vi.fn(
+        (sql: string) =>
+          new Promise<QueryExecResult>((resolve) => {
+            settles.push(() => resolve(sessionEnded(sql)))
+          }),
+      )
+      return () => settles.forEach((settle) => settle())
+    }
+
+    it("drops a chart round in flight instead of writing or deleting its frame", async () => {
+      // Given a draw cell whose fetch is in flight
+      const settle = settleWithSessionEnd()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledOnce()
+
+      // When logout ends the session before React unmounts the notebook, and
+      // the aborted request settles
+      authSessionState.endSession()
+      settle()
+      await flushAsync()
+
+      // Then the round is dropped: no frame is written and no snapshot deleted
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+    })
+
+    it("drops a grid round in flight instead of saving its error", async () => {
+      // Given a run cell with rows whose refresh is in flight
+      const frame: CellResult = {
+        results: [
+          {
+            type: "dql",
+            query: "select 1",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [[1]],
+            count: 1,
+            timestamp: 0,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }
+      cellResults.set("g1", frame)
+      const settle = settleWithSessionEnd()
+      syncOnScreen([
+        {
+          id: "g1",
+          position: 0,
+          value: "select 1",
+          autoRefresh: false,
+          result: frame,
+        },
+      ])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledOnce()
+
+      // When logout ends the session and the aborted request settles
+      authSessionState.endSession()
+      settle()
+      await flushAsync()
+
+      // Then the rows stay and no refresh error is saved for the next login
+      expect(cellResults.get("g1")).toBe(frame)
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
     })
   })
 
