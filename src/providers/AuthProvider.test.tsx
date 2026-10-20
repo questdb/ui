@@ -357,18 +357,28 @@ describe("AuthProvider token installation", () => {
     expect(confirm).toHaveBeenCalledOnce()
     expect(authSessionState.isAuthenticated()).toBe(true)
     expect(abortUpload).not.toHaveBeenCalled()
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Uploads already being sent continue, but only while this tab stays open.",
+      ),
+    )
     confirm.mockReturnValue(true)
     act(() => auth.signInAgain())
-    expect(
-      renderer!.root.findByProps({ "data-hook": "mock-login" }).props
-        .errorMessage,
-    ).toContain("Verify their outcomes")
+    const login = () =>
+      renderer!.root.findByProps({ "data-hook": "mock-login" })
+    expect(login().props.errorMessage).toContain("Verify their outcomes")
     // Aborting mid-stream could leave a partially imported table.
     expect(abortUpload).not.toHaveBeenCalled()
-    // The upload no longer counts as the next login's activity.
+    // The upload no longer counts as the next login's activity, but Login
+    // still reports it: leaving the page, even to sign in, would cancel it.
     expect(questClient.hasActiveRequests()).toBe(false)
-    finishUpload()
-    await rejected
+    expect(login().props.unfinishedWrites).toBe(1)
+    await act(async () => {
+      finishUpload()
+      await rejected
+    })
+    expect(login().props.unfinishedWrites).toBe(0)
+    expect(abortUpload).not.toHaveBeenCalled()
   })
 
   it("confirms a real pending preferences write, lets it finish and explains its uncertainty on Login", async () => {

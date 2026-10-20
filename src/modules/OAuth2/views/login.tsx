@@ -177,6 +177,18 @@ const RedirectErrorContainer = styled(ErrorContainer)`
     0 1.2rem 3.2rem ${({ theme }) => theme.color.shadowSoft};
 `
 
+const UnfinishedWritesNotice = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 2.4rem 4.8rem 0;
+  padding: 1.2rem 1.6rem;
+  border-radius: 0.8rem;
+  border: 1px solid ${({ theme }) => theme.color.statusWarning};
+  border-left-width: 6px;
+  background: ${({ theme }) => theme.color.statusWarningSurface};
+`
+
 const StyledButton = styled(Button)`
   margin: 0 !important;
 `
@@ -279,6 +291,7 @@ export const Login = ({
   errorMessage: redirectErrorMessage,
   isDisconnection,
   resetErrors,
+  unfinishedWrites,
 }: {
   onOAuthLogin: (loginWithDifferentAccount?: boolean) => void
   onBasicAuthSuccess: () => void
@@ -286,6 +299,8 @@ export const Login = ({
   errorMessage?: string
   isDisconnection?: boolean
   resetErrors: () => void
+  // Uploads and settings saves of the previous session still being sent.
+  unfinishedWrites: number
 }) => {
   const { settings } = useSettings()
   const theme = useTheme()
@@ -311,6 +326,20 @@ export const Login = ({
     // from the form. Explicit dismissal restores heading focus separately.
     hasFocusedInitialView.current = true
   }, [redirectErrorTitle, redirectErrorMessage])
+
+  const hasUnfinishedWrites = unfinishedWrites > 0
+  useEffect(() => {
+    if (!hasUnfinishedWrites) return
+    // Leaving the page, including the SSO redirect, cancels the previous
+    // session's uploads, which can leave a partially imported table.
+    const confirmLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      // Browsers without preventDefault() support only prompt for this.
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", confirmLeave)
+    return () => window.removeEventListener("beforeunload", confirmLeave)
+  }, [hasUnfinishedWrites])
 
   const httpBasicAuthStrategy = isEE
     ? {
@@ -438,6 +467,20 @@ export const Login = ({
           <Title ref={titleRef} tabIndex={-1}>
             Sign in to QuestDB
           </Title>
+          {hasUnfinishedWrites && (
+            <UnfinishedWritesNotice role="status" data-hook="unfinished-writes">
+              <Text size="lg" weight={600} color="contentPrimary">
+                {unfinishedWrites === 1
+                  ? "Your previous session is still sending 1 request"
+                  : `Your previous session is still sending ${unfinishedWrites} requests`}
+              </Text>
+              <Text color="contentSecondary">
+                {unfinishedWrites === 1
+                  ? "Keep this tab open until it finishes. Leaving the page, including to sign in with SSO, cancels it, and a cancelled CSV upload can leave a partially imported table."
+                  : "Keep this tab open until they finish. Leaving the page, including to sign in with SSO, cancels them, and a cancelled CSV upload can leave a partially imported table."}
+              </Text>
+            </UnfinishedWritesNotice>
+          )}
           <Card>
             {settings["acl.oidc.enabled"] && (
               <SSOCard>

@@ -86,6 +86,10 @@ export class Client {
   >()
   // The value distinguishes a sent write from one still waiting for renewal.
   private _writeControllers = new Map<AbortController, boolean>()
+  // Sent writes that outlived the session that started them. They no longer
+  // belong to any login, but leaving the page would still cancel them.
+  private _endedSessionWrites = new Set<AbortController>()
+  private _endedSessionWriteListeners = new Set<(count: number) => void>()
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
@@ -155,15 +159,42 @@ export class Client {
   // but lets writes that are being sent finish: aborting a CSV upload
   // mid-stream can leave a partially imported table. Their results are
   // rejected as session-ended, and they no longer count as the next login's
-  // activity.
+  // activity. Until they settle, they are reported as ended-session writes.
   abortForSessionEnd = () => {
     this._controllers.forEach(({ controller }) => controller.abort())
     this._controllers.clear()
+    const endedSessionWrites = this._endedSessionWrites.size
     this._writeControllers.forEach((sent, controller) => {
-      if (!sent) controller.abort()
+      if (sent) this._endedSessionWrites.add(controller)
+      else controller.abort()
     })
     this._writeControllers.clear()
     this._activeQueryId = null
+    if (this._endedSessionWrites.size !== endedSessionWrites) {
+      this.notifyEndedSessionWrites()
+    }
+  }
+
+  // Uploads and settings saves of ended sessions that are still being sent.
+  endedSessionWriteCount = () => this._endedSessionWrites.size
+
+  onEndedSessionWritesChange = (listener: (count: number) => void) => {
+    this._endedSessionWriteListeners.add(listener)
+    return () => {
+      this._endedSessionWriteListeners.delete(listener)
+    }
+  }
+
+  private notifyEndedSessionWrites() {
+    const count = this._endedSessionWrites.size
+    this._endedSessionWriteListeners.forEach((listener) => listener(count))
+  }
+
+  private settleWrite(controller: AbortController) {
+    this._writeControllers.delete(controller)
+    if (this._endedSessionWrites.delete(controller)) {
+      this.notifyEndedSessionWrites()
+    }
   }
 
   // Background reads are cancelled with the session without asking: only
@@ -921,7 +952,7 @@ export class Client {
       throw error
     } finally {
       removeAbortListener?.()
-      this._writeControllers.delete(controller)
+      this.settleWrite(controller)
     }
   }
 
@@ -967,7 +998,7 @@ export class Client {
       if (endedFor(session, error)) throw new SessionEndedError()
       throw error
     } finally {
-      this._writeControllers.delete(controller)
+      this.settleWrite(controller)
     }
   }
 

@@ -678,20 +678,43 @@ describe("session end", () => {
       .catch((error: unknown) => error)
     await vi.waitFor(() => expect(requests).toHaveLength(1))
     expect(client.hasSentRequests()).toBe(true)
+    expect(client.endedSessionWriteCount()).toBe(0)
     const onProgress = requests[0].upload.addEventListener.mock.calls[0][1]
+    const counts: number[] = []
+    client.onEndedSessionWritesChange((count) => counts.push(count))
 
     endSession(client)
 
     // Aborting mid-stream could leave a partially imported table.
     expect(requests[0].abort).not.toHaveBeenCalled()
-    // The old login's upload is not the next login's activity.
+    // The old login's upload is not the next login's activity, but it is
+    // still being sent: leaving the page now would cancel it.
     expect(client.hasActiveRequests()).toBe(false)
     expect(client.hasSentRequests()).toBe(false)
+    expect(client.endedSessionWriteCount()).toBe(1)
+    expect(counts).toEqual([1])
     onProgress({ loaded: 1, total: 1 })
     expect(progress).not.toHaveBeenCalled()
     requests[0].onload!()
     expect(await finished).toBeInstanceOf(SessionEndedError)
     expect(requests[0].abort).not.toHaveBeenCalled()
+    expect(client.endedSessionWriteCount()).toBe(0)
+    expect(counts).toEqual([1, 0])
+  })
+
+  it("reports an upload that fails after its session ended as settled", async () => {
+    installToken("initial", false)
+    const requests = mockUploadRequests(false)
+    const client = new Client()
+    const finished = upload(client).catch((error: unknown) => error)
+    await vi.waitFor(() => expect(requests).toHaveLength(1))
+
+    endSession(client)
+    expect(client.endedSessionWriteCount()).toBe(1)
+    requests[0].onerror!()
+
+    expect(await finished).toBeInstanceOf(SessionEndedError)
+    expect(client.endedSessionWriteCount()).toBe(0)
   })
 
   it("lets a settings PUT that is being sent finish and rejects its result", async () => {
@@ -710,13 +733,18 @@ describe("session end", () => {
       .savePreferences({ version: 1 })
       .catch((error: unknown) => error)
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    const unsubscribed = vi.fn()
+    client.onEndedSessionWritesChange(unsubscribed)()
 
     endSession(client)
 
     expect(signal?.aborted).toBe(false)
     expect(client.hasActiveRequests()).toBe(false)
+    expect(client.endedSessionWriteCount()).toBe(1)
     finish(new Response("{}"))
     expect(await pending).toBeInstanceOf(SessionEndedError)
+    expect(client.endedSessionWriteCount()).toBe(0)
+    expect(unsubscribed).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -741,6 +769,8 @@ describe("session end", () => {
     )
     await vi.waitFor(() => expect(refreshing).toBe(true))
     expect(client.hasActiveRequests()).toBe(true)
+    const counts = vi.fn()
+    client.onEndedSessionWritesChange(counts)
 
     endSession(client)
 
@@ -748,6 +778,9 @@ describe("session end", () => {
     expect(client.hasActiveRequests()).toBe(false)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(requests).toHaveLength(0)
+    // Nothing was sent, so leaving the page cannot cancel anything.
+    expect(client.endedSessionWriteCount()).toBe(0)
+    expect(counts).not.toHaveBeenCalled()
   })
 
   it("still aborts SQL that was sent", async () => {

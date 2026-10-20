@@ -156,6 +156,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
   const [state, dispatch] = useReducer(reducer, initialState)
+  // Uploads and settings saves keep running after their session ends, until
+  // they settle. Login explains them, because leaving the page cancels them.
+  const [unfinishedWrites, setUnfinishedWrites] = useState(() =>
+    questClient.endedSessionWriteCount(),
+  )
+  useEffect(() => {
+    setUnfinishedWrites(questClient.endedSessionWriteCount())
+    return questClient.onEndedSessionWritesChange(setUnfinishedWrites)
+  }, [])
   const unsubscribeRef = useRef<Array<() => void>>([])
   const subscribe = <T,>(type: EventType, handler: (payload?: T) => void) => {
     eventBus.subscribe(type, handler)
@@ -549,7 +558,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       questClient.hasActiveRequests() &&
       !window.confirm(
         sent
-          ? "Signing in again interrupts running queries. Uploads already being sent may still finish, and statements may already have executed. End this session?"
+          ? "Signing in again interrupts running queries, and statements may already have executed. Uploads already being sent continue, but only while this tab stays open. End this session?"
           : "Signing in again cancels requests that have not been sent yet. End this session?",
       )
     )
@@ -616,6 +625,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         errorTitle={state.errorTitle}
         errorMessage={state.errorMessage}
         isDisconnection={state.isDisconnection ?? false}
+        unfinishedWrites={unfinishedWrites}
       />
     ),
   }
