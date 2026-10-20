@@ -47,7 +47,6 @@ import {
   isRefreshable,
   RefreshTokenMethod,
   RefreshableAuthPayload,
-  REFRESH_REQUEST_TIMEOUT_MS,
   REFRESH_WAIT_TIMEOUT_MS,
   tokenRefresh,
 } from "./tokenRefresh"
@@ -389,10 +388,13 @@ export class Client {
       ? this.refreshBeforeRequest(signal, lifecycle)
       : { waited: false as const }
     if (refresh.waited) await refresh.ready
-    const waitForHardDeadline = async () => {
-      const deadline = tokenRefresh.hardDeadline
+    // After a 401, wait for the renewal no longer than before the first fetch.
+    // The refresh itself still runs to its network deadline, so a late rotated
+    // token is installed for later requests.
+    const waitForRenewal = async () => {
+      const deadline = tokenRefresh.softDeadline
       if (!deadline) return
-      lifecycle?.onRefreshWait?.(REFRESH_REQUEST_TIMEOUT_MS)
+      lifecycle?.onRefreshWait?.(REFRESH_WAIT_TIMEOUT_MS)
       await awaitRefresh(deadline, signal)
     }
     const ensureCanSend = () => this.ensureRequestAllowed(session, signal)
@@ -425,7 +427,7 @@ export class Client {
       if (!session.isCurrent()) throw new SessionEndedError()
       const currentPayload = authSessionState.getAuthPayload()
       const currentAuthorization = this.currentAuthorization()
-      let waitForRefresh = !!tokenRefresh.hardDeadline
+      let waitForRefresh = !!tokenRefresh.softDeadline
       if (!waitForRefresh) {
         if (
           currentAuthorization &&
@@ -453,7 +455,7 @@ export class Client {
         }
       }
       if (waitForRefresh) {
-        await waitForHardDeadline()
+        await waitForRenewal()
         ensureCanSend()
         if (authSessionState.hasRefreshFailed())
           throw new AuthRefreshUnavailableError()

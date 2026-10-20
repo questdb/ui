@@ -274,7 +274,7 @@ describe("SSO refresh safety", () => {
   })
 
   it.each([20_000, 300_000])(
-    "waits through the hard deadline after a 401 (token lifetime %s)",
+    "waits no longer than the query wait after a 401, and keeps a late rotated token (token lifetime %s)",
     async (lifetime) => {
       vi.useFakeTimers()
       vi.spyOn(console, "error").mockImplementation(() => {})
@@ -282,10 +282,11 @@ describe("SSO refresh safety", () => {
         token({ expires_at: new Date(Date.now() + lifetime).toISOString() }),
       )
       const client = new Client()
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementationOnce(unauthorized).mockImplementation(ok),
-      )
+      const fetchMock = vi
+        .fn()
+        .mockImplementationOnce(unauthorized)
+        .mockImplementation(ok)
+      vi.stubGlobal("fetch", fetchMock)
       client.refreshTokenMethod = () =>
         new Promise((resolve) =>
           setTimeout(() => {
@@ -296,19 +297,40 @@ describe("SSO refresh safety", () => {
         )
       const unauthorizedEvent = listen(EventType.MSG_CONNECTION_UNAUTHORIZED)
       try {
-        let settled = false
+        let failure: unknown
         const query = client
           .queryRaw("insert into trades values (1)")
-          .then((result) => {
-            settled = true
-            return result
+          .catch((error: unknown) => {
+            failure = error
           })
-        await vi.advanceTimersByTimeAsync(10_000)
-        expect(settled).toBe(false)
+        await vi.advanceTimersByTimeAsync(9_999)
+        expect(failure).toBeUndefined()
+        // The renewal is reported as failed at the query wait, so the 401'd
+        // statement fails with it instead of waiting for the network deadline.
+        await vi.advanceTimersByTimeAsync(1)
+        await query
+        expect(failure).toMatchObject({
+          type: "error",
+          authRefreshUnavailable: true,
+          requestNotSent: true,
+        })
+        expect(fetchMock).toHaveBeenCalledOnce()
         expect(authSessionState.isAuthenticated()).toBe(true)
         expect(unauthorizedEvent.listener).not.toHaveBeenCalled()
+
+        // The refresh still runs to its own deadline and installs its token.
         await vi.advanceTimersByTimeAsync(5_000)
-        expect((await query).type).toBe("dml")
+        expect(authSessionState.getAuthPayload()?.access_token).toBe("rotated")
+        expect(authSessionState.hasRefreshFailed()).toBe(false)
+        await expect(client.queryRaw("select 1")).resolves.toMatchObject({
+          type: "dml",
+        })
+        expect(fetchMock).toHaveBeenLastCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            headers: { Authorization: "Bearer rotated" },
+          }),
+        )
         expect(unauthorizedEvent.listener).not.toHaveBeenCalled()
       } finally {
         unauthorizedEvent.cleanup()
