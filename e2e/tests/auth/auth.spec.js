@@ -1044,6 +1044,120 @@ describe("Auth - OIDC ID token", () => {
   })
 })
 
+describe("Auth - OIDC bearer rejected at startup", () => {
+  // questdb#7799 answers a rejected bearer with 401 even when the browser also
+  // sends a valid qdb_session cookie, and closes that session. The Enterprise
+  // lane checks this against a real server (enterprise/oidc.spec.js). This
+  // replays its startup sequence with stubs, for both bearer kinds, so that
+  // the required auth lane covers the console's side of it.
+  const tokenUrl = "https://oauth.example.com/token"
+  const rejected = "bearer-the-server-rejects"
+  const accepted = "bearer-the-server-accepts"
+
+  for (const { bearer, groupsEncodedInToken } of [
+    { bearer: "access token", groupsEncodedInToken: false },
+    { bearer: "ID token", groupsEncodedInToken: true },
+  ]) {
+    it(`renews once and resends its startup check once when the server rejects a new ${bearer} bearer`, () => {
+      const grants = []
+      const sessionStarts = []
+      const authChecks = []
+      // The token endpoint issues both bearers; the server accepts only one.
+      const answer = (requests) => (req) => {
+        const statusCode =
+          req.headers.authorization === `Bearer ${accepted}` ? 200 : 401
+        requests.push(`${req.headers.authorization} -> ${statusCode}`)
+        req.reply(
+          statusCode === 200
+            ? { statusCode, body: queryResult }
+            : { statusCode, body: "Unauthorized" },
+        )
+      }
+      interceptSettings({
+        config: {
+          "release.type": "EE",
+          "release.version": "1.2.3",
+          "acl.enabled": true,
+          "acl.basic.auth.realm.enabled": false,
+          "acl.oidc.enabled": true,
+          "acl.oidc.client.id": "test-client",
+          "acl.oidc.authorization.endpoint": "https://oauth.example.com/auth",
+          "acl.oidc.token.endpoint": tokenUrl,
+          "acl.oidc.state.required": false,
+          "acl.oidc.groups.encoded.in.token": groupsEncodedInToken,
+        },
+      })
+      cy.intercept({ method: "POST", url: tokenUrl }, (req) => {
+        const grant = new URLSearchParams(req.body).get("grant_type")
+        grants.push(grant)
+        const token = grant === "refresh_token" ? accepted : rejected
+        // Either token may be the bearer, depending on the server's setting.
+        req.reply({
+          access_token: token,
+          id_token: token,
+          refresh_token: `${grant}-refresh-token`,
+          token_type: "Bearer",
+          expires_in: 3600,
+        })
+      })
+      stubConsoleRequests()
+      cy.intercept(
+        { method: "GET", url: `${baseUrl}/exec*`, query: { session: "true" } },
+        answer(sessionStarts),
+      )
+      cy.intercept(
+        {
+          method: "GET",
+          url: `${baseUrl}/exec*`,
+          query: { query: /^SELECT 1$/ },
+        },
+        answer(authChecks),
+      )
+
+      visitCallback("?code=code-from-the-provider", undefined, {
+        "auto.refresh.tables": "false",
+      })
+      cy.wait("@settings")
+
+      // A 401 executed no SQL: the console renews its token once, resends its
+      // startup check once with the renewed bearer, and keeps the session.
+      cy.getEditor().should("be.visible")
+      cy.getByDataHook("auth-login").should("not.exist")
+      cy.wrap(authChecks).should("deep.equal", [
+        `Bearer ${rejected} -> 401`,
+        `Bearer ${accepted} -> 200`,
+      ])
+      cy.wrap(sessionStarts).should("deep.equal", [`Bearer ${rejected} -> 401`])
+      cy.wrap(grants).should("deep.equal", [
+        "authorization_code",
+        "refresh_token",
+      ])
+
+      // Statements then use the renewed bearer, without another renewal.
+      const statements = []
+      cy.intercept(
+        {
+          method: "GET",
+          url: `${baseUrl}/exec*`,
+          query: { query: "select current_user()" },
+        },
+        answer(statements),
+      ).as("statement")
+      cy.clearEditor()
+      cy.typeQuery("select current_user()")
+      cy.runLine()
+      cy.wait("@statement")
+      cy.getByDataHook("success-notification").should("be.visible")
+      cy.then(() => {
+        expect(statements).to.deep.equal([`Bearer ${accepted} -> 200`])
+        expect(authChecks).to.have.length(2)
+        expect(sessionStarts).to.have.length(1)
+        expect(grants).to.have.length(2)
+      })
+    })
+  }
+})
+
 describe("Auth - OIDC token without a lifetime", () => {
   const tokenUrl = "https://oauth.example.com/token"
 

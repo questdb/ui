@@ -66,7 +66,9 @@ fixture rejects, the server answers 401 even though the browser still sends a
 valid `qdb_session` cookie, and the console renews its token once and resends
 once. ID-token bearers (`acl.oidc.groups.encoded.in.token=true`) are tested only
 by unit and stubbed browser tests: the lane would need a fixture that signs ID
-tokens.
+tokens. `auth/auth.spec.js` replays that startup sequence with stubbed 401s, for
+both bearer kinds, so the required auth lane covers the console side of it. It
+cannot replace this lane: only a real server shows how the server responds.
 
 For local runs, follow the Enterprise e2e README and set
 `QDB_WEB_CONSOLE_DIR=/absolute/path/to/built/ui`, then run
