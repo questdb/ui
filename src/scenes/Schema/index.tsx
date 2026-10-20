@@ -176,7 +176,9 @@ const Schema = ({
     try {
       const response = await quest.showTables()
       if (response && response.type === QuestDB.Type.DQL) {
+        // A later, unrelated failure must not show a recovered error.
         errorRef.current = null
+        setLoadingError(null)
         const data = response.data.map((item) => ({
           ...item,
           table_type: item.table_type ?? (item.matView ? "M" : "T"),

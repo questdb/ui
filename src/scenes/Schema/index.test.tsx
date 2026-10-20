@@ -219,4 +219,29 @@ describe("Schema loading after a failed SSO renewal", () => {
 
     expect(mocks.quest.showTables).toHaveBeenCalledOnce()
   })
+
+  it("does not show a recovered renewal failure for a later, unrelated error", async () => {
+    const serverError = {
+      position: 0,
+      query: "information_schema.questdb_columns()",
+      type: "error",
+      error: "permission denied",
+    }
+    mocks.quest.showTables
+      .mockRejectedValueOnce(renewalFailure)
+      .mockResolvedValue(tablesLoaded)
+    mocks.quest.query
+      .mockResolvedValueOnce(columnsLoaded)
+      .mockRejectedValue(serverError)
+    await mount()
+    expect(panel().loadingError).toBe(renewalFailure)
+
+    // The reload's tables load, but its columns fail for another reason
+    await connectionOk()
+
+    expect(mocks.quest.showTables).toHaveBeenCalledTimes(2)
+    expect(panel().state.view).toBe(View.error)
+    // Not the stale "Could not renew your SSO session" message
+    expect(panel().loadingError).toBeNull()
+  })
 })
