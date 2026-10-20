@@ -204,16 +204,24 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   }
 
   const handleVisible = async () => {
-    const fileStatusList = await Promise.all(
-      filesDropped.map(async (file) => {
-        const result = await quest.checkCSVFile(file.table_name)
-        return {
-          ...file,
-          status: result.status,
-        }
+    const checks = await Promise.all(
+      filesDropped.map(async ({ id, table_name }) => {
+        const { status } = await quest.checkCSVFile(table_name)
+        return [id, { table_name, status }] as const
       }),
     )
-    setFilesDropped(fileStatusList)
+    const checked = new Map(checks)
+    // The checks can wait for a token refresh. Merge only their statuses into
+    // the current list: files may have been uploaded, edited, added or removed
+    // meanwhile, and a status is outdated once its file has been renamed.
+    setFilesDropped((files) =>
+      files.map((file) => {
+        const check = checked.get(file.id)
+        return check && check.table_name === file.table_name
+          ? { ...file, status: check.status }
+          : file
+      }),
+    )
   }
 
   useEffect(() => {
@@ -313,25 +321,25 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             )
           }}
           onFilePropertyChange={async (id, partialFile) => {
-            const processedFiles = await Promise.all(
-              filesDropped.map(async (file) => {
-                if (file.id === id) {
-                  // Only check for file existence if table name is changed
-                  const result = partialFile.table_name
-                    ? await quest.checkCSVFile(partialFile.table_name)
-                    : await Promise.resolve({ status: file.status })
-                  return {
-                    ...file,
-                    ...partialFile,
-                    status: result.status,
-                    error: partialFile.table_name ? undefined : file.error, // reset prior error if table name is changed
-                  }
-                } else {
-                  return file
-                }
-              }),
+            const tableName = partialFile.table_name
+            // Apply the edit at once: the name check below can wait for a
+            // token refresh, and an upload started meanwhile must use the new
+            // name. A new name also resets the prior error.
+            setFileProperties(
+              id,
+              tableName ? { ...partialFile, error: undefined } : partialFile,
             )
-            setFilesDropped(processedFiles)
+            // Only check for file existence if table name is changed
+            if (!tableName) return
+            const { status } = await quest.checkCSVFile(tableName)
+            setFilesDropped((files) =>
+              files.map((file) =>
+                // Ignore the result if the file has been renamed again.
+                file.id === id && file.table_name === tableName
+                  ? { ...file, status }
+                  : file,
+              ),
+            )
           }}
         />
       )}
