@@ -60,6 +60,14 @@ The result is posted to the tested SHA as `enterprise-e2e-web-console`, even if
 the PR head moves while tests run. A successful dispatch is **not** a passed
 integration run: check that separate status.
 
+One `oidc.spec.js` test leaves `/exec` unstubbed to check the tandem server
+change (questdb#7799). After a reload installs a bearer that the userinfo
+fixture rejects, the server answers 401 even though the browser still sends a
+valid `qdb_session` cookie, and the console renews its token once and resends
+once. ID-token bearers (`acl.oidc.groups.encoded.in.token=true`) are tested only
+by unit and stubbed browser tests: the lane would need a fixture that signs ID
+tokens.
+
 For local runs, follow the Enterprise e2e README and set
 `QDB_WEB_CONSOLE_DIR=/absolute/path/to/built/ui`, then run
 `pytest -m web_console` in `questdb-ent/e2e`. The UI checkout needs

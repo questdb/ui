@@ -269,6 +269,121 @@ describe("OIDC", () => {
       cy.getByDataHook("auth-login").should("not.exist")
     })
 
+    it("renews and resends once when the server rejects the bearer of a cookie session", () => {
+      // No /exec request is stubbed: the EE server answers them all. Its
+      // userinfo fixture accepts acceptedBearer and rejects rejectedBearer.
+      const acceptedBearer = "gslpJtzmmi6RwaPSx0dYGD4tEkom" // gitleaks:allow
+      const rejectedBearer = "access-token-unknown-to-userinfo" // gitleaks:allow
+      const grants = []
+      const sessionStarts = []
+      const authChecks = []
+      const recordTo = (requests) => (req) => {
+        const request = {
+          authorization: req.headers.authorization,
+          cookie: req.headers.cookie ?? "",
+        }
+        requests.push(request)
+        req.continue((res) => {
+          request.statusCode = res.statusCode
+        })
+      }
+      const outcomes = (requests) =>
+        requests.map(
+          ({ authorization, statusCode }) =>
+            `${authorization} -> ${statusCode}`,
+        )
+      cy.intercept(
+        { method: "GET", url: `${baseUrl}/exec*`, query: { session: "true" } },
+        recordTo(sessionStarts),
+      ).as("sessionStart")
+      cy.intercept(
+        {
+          method: "GET",
+          url: `${baseUrl}/exec*`,
+          query: { query: /^SELECT 1$/ },
+        },
+        recordTo(authChecks),
+      )
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      cy.intercept("POST", oidcTokenUrl, (req) => {
+        const body = new URLSearchParams(req.body)
+        const grant = {
+          type: body.get("grant_type"),
+          refreshToken: body.get("refresh_token"),
+        }
+        grants.push(grant)
+        const tokens = (accessToken, refreshToken) => ({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          token_type: "Bearer",
+          expires_in: 3600,
+        })
+        const codeExchanges = grants.filter(
+          ({ type }) => type === "authorization_code",
+        ).length
+        if (grant.type === "refresh_token") {
+          req.reply(tokens(acceptedBearer, "refresh-token-after-recovery"))
+        } else if (codeExchanges === 1) {
+          req.reply(tokens(acceptedBearer, "refresh-token-of-first-sign-in"))
+        } else {
+          req.reply(tokens(rejectedBearer, "refresh-token-of-rejected-bearer"))
+        }
+      })
+
+      // Signing in with the accepted bearer opens a qdb_session cookie session.
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.wait("@sessionStart").then(({ response }) => {
+        expect(response.statusCode).to.eq(200)
+        expect(String(response.headers["set-cookie"])).to.contain(
+          "qdb_session=",
+        )
+      })
+      cy.getEditor().should("be.visible")
+      // The silent re-auth on reload needs the username the toolbar stores.
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.username.client1")
+        .should("not.be.empty")
+
+      // Silent re-auth installs a bearer the server rejects, while the browser
+      // still sends the cookie of the session opened above.
+      cy.reload()
+      cy.wait("@authorizationCode")
+      cy.getEditor().should("be.visible")
+      cy.getByDataHook("auth-login").should("not.exist")
+
+      // questdb#7799: the server no longer serves a rejected bearer from the
+      // cookie. Before it, this session start was answered with 200.
+      cy.wrap(sessionStarts).should((requests) => {
+        expect(outcomes(requests)).to.deep.equal([
+          `Bearer ${acceptedBearer} -> 200`,
+          `Bearer ${rejectedBearer} -> 401`,
+        ])
+        expect(requests[1].cookie).to.contain("qdb_session=")
+      })
+      // A 401 executed no SQL: the console renews the token once and resends
+      // its startup check once, with the renewed bearer.
+      cy.wrap(authChecks).should((requests) => {
+        expect(outcomes(requests)).to.deep.equal([
+          `Bearer ${acceptedBearer} -> 200`,
+          `Bearer ${rejectedBearer} -> 401`,
+          `Bearer ${acceptedBearer} -> 200`,
+        ])
+      })
+      cy.executeSQL("select current_user();")
+      cy.getGridRow(0).should("contain", "john doe")
+      cy.getByDataHook("auth-login").should("not.exist")
+      cy.wrap(grants).should("deep.equal", [
+        { type: "authorization_code", refreshToken: null },
+        { type: "authorization_code", refreshToken: null },
+        {
+          type: "refresh_token",
+          refreshToken: "refresh-token-of-rejected-bearer",
+        },
+      ])
+    })
+
     it("shows the expired-session error when refresh is authoritatively rejected", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       cy.intercept("POST", oidcTokenUrl, (req) => {
