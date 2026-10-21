@@ -109,35 +109,52 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     setFileProperties(file.id, { isUploading })
   }
 
+  // The checks below can wait for a token refresh, and then fail. A failed
+  // check must not lose the dropped file: list it with the failure shown, as
+  // for a renamed file, and let the user still upload it.
+  const checkTableName = async (name: string) => {
+    try {
+      return (await quest.checkCSVFile(name)).status
+    } catch {
+      return TableNameCheck.FAILED
+    }
+  }
+
+  // The schema of an existing table only pre-fills the schema dialog.
+  // Without it, QuestDB infers the schema from the file, as for a new table.
+  const getExistingTableSchema = async (
+    name: string,
+  ): Promise<SchemaColumn[]> => {
+    try {
+      const columnResponse = await quest.showColumns(name)
+      if (columnResponse && columnResponse.type === QuestDB.Type.DQL) {
+        return columnResponse.data.map((column) => ({
+          name: column.column,
+          type: mapColumnTypeToUI(column.type),
+          pattern: getTimestampFormat(column.type),
+          precision: isGeoHash(column.type)
+            ? extractPrecionFromGeohash(column.type)
+            : "",
+        }))
+      }
+    } catch {
+      // Keep the file, without a pre-filled schema.
+    }
+    return []
+  }
+
   const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
     return await Promise.all(
       files.map(async (file) => {
-        const result = await quest.checkCSVFile(file.name)
+        const status = await checkTableName(file.name)
 
         const schema =
-          result.status === FileCheckStatus.EXISTS
-            ? await (async () => {
-                const columnResponse = await quest.showColumns(file.name)
-                if (
-                  columnResponse &&
-                  columnResponse.type === QuestDB.Type.DQL
-                ) {
-                  // Find a table schema
-                  return columnResponse.data.map((column) => ({
-                    name: column.column,
-                    type: mapColumnTypeToUI(column.type),
-                    pattern: getTimestampFormat(column.type),
-                    precision: isGeoHash(column.type)
-                      ? extractPrecionFromGeohash(column.type)
-                      : "",
-                  }))
-                }
-                return []
-              })()
+          status === FileCheckStatus.EXISTS
+            ? await getExistingTableSchema(file.name)
             : []
 
         const partitionBy =
-          result.status === FileCheckStatus.EXISTS && tables
+          status === FileCheckStatus.EXISTS && tables
             ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.partitionBy ?? "NONE"
@@ -145,7 +162,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             : "NONE"
 
         const ttlValue =
-          result.status === FileCheckStatus.EXISTS && tables
+          status === FileCheckStatus.EXISTS && tables
             ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.ttlValue ?? 0
@@ -153,7 +170,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             : 0
 
         const ttlUnit =
-          result.status === FileCheckStatus.EXISTS && tables
+          status === FileCheckStatus.EXISTS && tables
             ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.ttlUnit ?? "HOURS"
@@ -161,7 +178,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             : "HOURS"
 
         const timestamp =
-          result.status === FileCheckStatus.EXISTS && tables
+          status === FileCheckStatus.EXISTS && tables
             ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.designatedTimestamp ?? ""
@@ -173,8 +190,8 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           fileObject: file,
           table_name: file.name,
           table_owner: ownedByList[0],
-          status: result.status,
-          exists: result.status === FileCheckStatus.EXISTS,
+          status,
+          exists: status === FileCheckStatus.EXISTS,
           schema,
           partitionBy,
           ttlValue,
@@ -206,11 +223,16 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const handleVisible = async () => {
     const checks = await Promise.all(
       filesDropped.map(async ({ id, table_name }) => {
-        const { status } = await quest.checkCSVFile(table_name)
-        return [id, { table_name, status }] as const
+        try {
+          const { status } = await quest.checkCSVFile(table_name)
+          return [[id, { table_name, status }] as const]
+        } catch {
+          // A failed recheck says nothing new: keep the file's status.
+          return []
+        }
       }),
     )
-    const checked = new Map(checks)
+    const checked = new Map(checks.flat())
     // The checks can wait for a token refresh. Merge only their statuses into
     // the current list: files may have been uploaded, edited, added or removed
     // meanwhile, and a status is outdated once its file has been renamed.

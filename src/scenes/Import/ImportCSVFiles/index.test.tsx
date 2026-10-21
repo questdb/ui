@@ -6,6 +6,7 @@ import {
   type UploadResult,
 } from "../../../utils/questdb/types"
 import { TableNameCheck, type ProcessedFile } from "./types"
+import { AuthRefreshUnavailableError } from "../../../modules/OAuth2/session"
 
 type Queue = {
   files: ProcessedFile[]
@@ -119,6 +120,79 @@ afterEach(() => {
   renderer = undefined
   mocks.visible = false
   vi.resetAllMocks()
+})
+
+// E.g. after a failed SSO renewal, while the user is still signed in.
+describe("Import file checks that fail", () => {
+  const drop = (name: string) => {
+    const { onFilesDropped } = mocks.upload.mock.lastCall![0]
+    return act(() => onFilesDropped([csv(name)]))
+  }
+
+  it("lists a dropped file whose table name check fails, and lets it be uploaded", async () => {
+    act(() => {
+      renderer = create(element())
+    })
+    mocks.quest.checkCSVFile.mockRejectedValueOnce(
+      new AuthRefreshUnavailableError(),
+    )
+
+    await drop("trades.csv")
+
+    expect(file()).toMatchObject({
+      table_name: "trades.csv",
+      status: TableNameCheck.FAILED,
+      exists: false,
+    })
+    startUpload()
+    expect(mocks.quest.uploadCSVFile).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "trades.csv" }),
+    )
+  })
+
+  it("lists a file dropped for an existing table whose schema cannot be read", async () => {
+    act(() => {
+      renderer = create(element())
+    })
+    mocks.quest.checkCSVFile.mockResolvedValueOnce({
+      status: FileCheckStatus.EXISTS,
+    })
+    mocks.quest.showColumns.mockRejectedValueOnce(
+      new AuthRefreshUnavailableError(),
+    )
+
+    await drop("trades.csv")
+
+    expect(file()).toMatchObject({
+      table_name: "trades.csv",
+      status: FileCheckStatus.EXISTS,
+      schema: [],
+    })
+  })
+
+  it("keeps the status of a file whose visibility check fails, and merges the others", async () => {
+    await mountWithFile()
+    mocks.quest.checkCSVFile.mockResolvedValueOnce({
+      status: FileCheckStatus.DOES_NOT_EXIST,
+    })
+    await act(() => queue().onFilesDropped([csv("quotes.csv")]))
+    mocks.quest.checkCSVFile
+      .mockRejectedValueOnce(new AuthRefreshUnavailableError())
+      .mockResolvedValueOnce({ status: FileCheckStatus.EXISTS })
+
+    mocks.visible = true
+    await act(async () => {
+      renderer!.update(element())
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(
+      queue().files.map(({ table_name, status }) => [table_name, status]),
+    ).toEqual([
+      ["trades.csv", FileCheckStatus.DOES_NOT_EXIST],
+      ["quotes.csv", FileCheckStatus.EXISTS],
+    ])
+  })
 })
 
 // A status check can wait up to ten seconds for a token refresh.

@@ -65,9 +65,14 @@ export const DropBox = ({
   const addToQueue = (inputFiles: FileList) => {
     const duplicates = getFileDuplicates(inputFiles, filenames.current)
     setDuplicates(duplicates)
-    onFilesDropped(
-      Array.from(inputFiles).filter((f) => !duplicates.includes(f)),
+    const accepted = Array.from(inputFiles).filter(
+      (f) => !duplicates.includes(f),
     )
+    // Dropped files are listed once their table names are checked, which can
+    // wait for a token refresh. Count them now, so that dropping one again
+    // meanwhile is reported as a duplicate instead of queued twice.
+    filenames.current = [...filenames.current, ...accepted.map((f) => f.name)]
+    if (accepted.length > 0) onFilesDropped(accepted)
     uploadInputRef.current?.setAttribute("value", "")
   }
 
