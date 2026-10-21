@@ -195,7 +195,7 @@ describe("SSO refresh safety", () => {
         })
         if (failure.type !== "error")
           throw new Error("Expected a renewal error")
-        expect(failure.error).toContain("the request was not sent")
+        expect(failure.error).toContain("the request was not executed")
         expect(failure).not.toHaveProperty("sessionEnded")
         expect(isUnverifiableExecError(failure)).toBe(false)
       }
@@ -261,7 +261,7 @@ describe("SSO refresh safety", () => {
         })
         if (failure.type !== "error")
           throw new Error("Expected a renewal error")
-        expect(failure.error).toContain("request was not sent")
+        expect(failure.error).toContain("request was not executed")
         expect(isUnverifiableExecError(failure)).toBe(false)
       }
       expect(fetchMock).not.toHaveBeenCalled()

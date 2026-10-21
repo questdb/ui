@@ -101,7 +101,7 @@ export const AuthCheckRecovery = ({
       pending
         ? "Reconnecting…"
         : error.renewalUnavailable
-          ? "No request was sent. Retry after a short wait, or sign in again."
+          ? "Retry after a short wait, or sign in again."
           : "Connection failed. Retry connection."
     }
     pending={pending}

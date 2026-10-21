@@ -57,9 +57,9 @@ describe("runDetachedQuery failure notification", () => {
     )
   })
 
-  it("reports a query the session end stopped before it was sent", async () => {
+  it("reports a query the session end stopped before it was executed", async () => {
     expect(await run({ ...sessionEnded, requestNotSent: true })).toBe(
-      "Not run: your previous session ended before this query was sent.",
+      "Not executed: your previous session ended without running this query.",
     )
   })
 

@@ -682,7 +682,7 @@ describe("Auth - OIDC ID token", () => {
       cy.typeQuery("select current_user()")
       cy.runLine()
       cy.wait("@expiredBearerQuery")
-      cy.contains("the request was not sent").should("be.visible")
+      cy.contains("the request was not executed").should("be.visible")
       cy.getEditor().should("be.visible")
       cy.getByDataHook("auth-login").should("not.exist")
       cy.get("#sso-refresh-failed").should("be.visible")
@@ -973,7 +973,7 @@ describe("Auth - OIDC ID token", () => {
 
       signInWithPassword()
       expectStoppedAfterStatement1(
-        "Not run: your previous session ended before this query was sent.",
+        "Not executed: your previous session ended without running this query.",
       )
     })
   })

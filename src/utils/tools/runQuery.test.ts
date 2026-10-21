@@ -244,7 +244,8 @@ describe("mapQueryRawToResult", () => {
   it("preserves not-sent metadata for the agent's outcome classifier", async () => {
     const error = {
       type: Type.ERROR,
-      error: "Could not renew your SSO session; the query was not sent.",
+      error:
+        "Could not renew your SSO session; the request was not executed. Please retry or sign in again.",
       position: -1,
       requestNotSent: true,
     }

@@ -90,6 +90,7 @@ import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import {
+  isAuthFailure,
   isSessionEnded,
   sessionEndedQueryMessage,
 } from "../../../modules/OAuth2/session"
@@ -1584,18 +1585,22 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     } catch (_error: unknown) {
       const error = _error as ErrorResult
 
-      const bufferIdStr = activeBufferId.toString()
-      if (!executionRefs.current[bufferIdStr]) {
-        executionRefs.current[bufferIdStr] = {}
-      }
+      // A session end or failed renewal is no SQL error: it has no position
+      // to mark in the query.
+      if (!isAuthFailure(error)) {
+        const bufferIdStr = activeBufferId.toString()
+        if (!executionRefs.current[bufferIdStr]) {
+          executionRefs.current[bufferIdStr] = {}
+        }
 
-      const startOffset = getQueryStartOffset(editor, query)
-      executionRefs.current[bufferIdStr][queryKey] = {
-        error,
-        queryText: query.query,
-        startOffset,
-        endOffset: startOffset + normalizeQueryText(query.query).length,
-        selection: query.selection,
+        const startOffset = getQueryStartOffset(editor, query)
+        executionRefs.current[bufferIdStr][queryKey] = {
+          error,
+          queryText: query.query,
+          startOffset,
+          endOffset: startOffset + normalizeQueryText(query.query).length,
+          selection: query.selection,
+        }
       }
 
       notification = {
@@ -2201,10 +2206,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           .catch((error: ErrorResult) => {
             const { inflightQuery, currentQueryKey } = settleExecution()
 
-            if (isSessionEnded(error)) {
-              // Replace the "Running..." notification even though the editor
-              // is unmounting: the next login reads it, and must not be asked
-              // to sign in again. A session end has no position to mark.
+            if (isAuthFailure(error)) {
+              // A session end or failed renewal is no SQL error, and has no
+              // position to mark: only replace the "Running..." notification.
+              // Do so even if a session end is unmounting the editor: the next
+              // login reads it, and must not be asked to sign in again.
               dispatch(
                 actions.query.addNotification(
                   {
@@ -2212,7 +2218,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                     isExplain: isRunningExplain,
                     content: (
                       <Text color="statusDanger">
-                        {sessionEndedQueryMessage(error)}
+                        {isSessionEnded(error)
+                          ? sessionEndedQueryMessage(error)
+                          : error.error}
                       </Text>
                     ),
                     sideContent: <QueryInNotification query={queryToRun} />,

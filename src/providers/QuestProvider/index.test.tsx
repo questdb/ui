@@ -145,7 +145,7 @@ describe("QuestProvider authentication gate", () => {
       expect(
         renderer!.root.findByProps({ role: "status" }).findByType("span")
           .children,
-      ).toEqual([expect.stringContaining("No request was sent")])
+      ).toEqual(["Retry after a short wait, or sign in again."])
     },
   )
 

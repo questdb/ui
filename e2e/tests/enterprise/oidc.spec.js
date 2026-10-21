@@ -212,7 +212,7 @@ describe("OIDC", () => {
       cy.typeQuery("select current_user()")
       cy.runLine()
       cy.wait("@rejectedBearerQuery")
-      cy.contains("the request was not sent").should("be.visible")
+      cy.contains("the request was not executed").should("be.visible")
       cy.getEditor().should("be.visible")
       cy.getByDataHook("auth-login").should("not.exist")
       cy.get("#sso-refresh-failed").should("be.visible")
