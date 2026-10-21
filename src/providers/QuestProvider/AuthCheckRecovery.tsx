@@ -43,12 +43,18 @@ export const useAuthCheck = (required: boolean) => {
     }
   }, [finished])
 
-  const finish = useCallback(async () => {
+  const finish = useCallback(async (userRetry = false) => {
     if (inFlight.current) return
     inFlight.current = true
     const session = authSessionState.capture()
     setPending(true)
     try {
+      // Retry renews the session at once, or waits for a renewal still in
+      // flight, instead of failing with the same error during the backoff.
+      if (userRetry) {
+        await questClient.prepareRenewalRetry()
+        if (!mounted.current || !session.isCurrent()) return
+      }
       await questClient.queryRaw("SELECT 1", { background: true })
       if (mounted.current && session.isCurrent()) setFinished(true)
     } catch (failure) {
@@ -75,7 +81,7 @@ export const useAuthCheck = (required: boolean) => {
   const retry = () => {
     if (pending) return
     focusAfterRetry.current = true
-    void finish()
+    void finish(true)
   }
 
   return { finished, error, pending, finish, retry, consoleRef }
@@ -101,7 +107,7 @@ export const AuthCheckRecovery = ({
       pending
         ? "Reconnecting…"
         : error.renewalUnavailable
-          ? "Retry after a short wait, or sign in again."
+          ? "Renewal failed. Retry connection, or sign in again."
           : "Connection failed. Retry connection."
     }
     pending={pending}

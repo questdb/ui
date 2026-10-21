@@ -77,6 +77,13 @@ class TokenRefreshCoordinator {
     return Date.now() < this.retryAfter
   }
 
+  // A person pressing Retry skips the wait between failed renewals: it
+  // protects the identity provider from background requests. The throttle
+  // after a successful renewal still applies.
+  allowRetry() {
+    if (authSessionState.hasRefreshFailed()) this.retryAfter = 0
+  }
+
   needsRefresh(payload: AuthPayload | null) {
     return (
       isRefreshable(payload) &&

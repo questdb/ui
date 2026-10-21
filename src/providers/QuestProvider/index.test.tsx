@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   sessionData: undefined as AuthPayload | undefined,
   refresh: vi.fn(),
   queryRaw: vi.fn(),
+  prepareRenewalRetry: vi.fn(),
   headers: vi.fn<[Record<string, string>], void>(),
   dispatch: vi.fn(),
   headingFocus: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("../SettingsProvider", () => ({
 vi.mock("../../utils/questdb/queryClient", () => ({
   questClient: {
     queryRaw: mocks.queryRaw,
+    prepareRenewalRetry: mocks.prepareRenewalRetry,
     setCommonHeaders: mocks.headers,
     resetCredentials: () => {
       mocks.headers({})
@@ -96,6 +98,7 @@ beforeEach(() => {
     "acl.basic.auth.realm.enabled": false,
   }
   mocks.queryRaw.mockReset().mockResolvedValue({ type: "dml" })
+  mocks.prepareRenewalRetry.mockReset().mockResolvedValue(undefined)
   mocks.headers.mockClear()
   localStorage.clear()
   authSessionState.endSession()
@@ -145,9 +148,50 @@ describe("QuestProvider authentication gate", () => {
       expect(
         renderer!.root.findByProps({ role: "status" }).findByType("span")
           .children,
-      ).toEqual(["Retry after a short wait, or sign in again."])
+      ).toEqual(["Renewal failed. Retry connection, or sign in again."])
     },
   )
+
+  it("renews before a Retry, but not before the automatic check", async () => {
+    // Given a startup check that failed because renewal failed
+    mocks.queryRaw.mockRejectedValue(new AuthRefreshUnavailableError())
+    await mount()
+    expect(mocks.prepareRenewalRetry).not.toHaveBeenCalled()
+    const checks = () =>
+      mocks.queryRaw.mock.calls.filter(([query]) => query === "SELECT 1").length
+    const failedChecks = checks()
+    let renewed!: () => void
+    mocks.prepareRenewalRetry.mockImplementation(
+      () => new Promise<void>((resolve) => (renewed = resolve)),
+    )
+
+    // When the user retries, while a renewal is still being answered
+    const retry = renderer!.root
+      .findAllByType("button")
+      .find((button) => button.children.includes("Retry connection"))!
+    await act(async () => {
+      retry.props.onClick()
+      await Promise.resolve()
+    })
+
+    // Then it shows that it is reconnecting, and checks only once renewed
+    expect(mocks.prepareRenewalRetry).toHaveBeenCalledOnce()
+    expect(checks()).toBe(failedChecks)
+    expect(retry.props["aria-busy"]).toBe(true)
+    expect(
+      renderer!.root.findByProps({ role: "status" }).findByType("span")
+        .children,
+    ).toEqual(["Reconnecting…"])
+    mocks.queryRaw.mockResolvedValue({ type: "dml" })
+    await act(async () => {
+      renewed()
+      await Promise.resolve()
+    })
+    expect(checks()).toBe(failedChecks + 1)
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "ready" }),
+    ).toHaveLength(1)
+  })
 
   it("shows a delayed status while an auth check waits, then removes it on completion", async () => {
     vi.useFakeTimers()

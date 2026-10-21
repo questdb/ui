@@ -35,7 +35,7 @@ export const RefreshFailedWarning = ({
     <Box flexDirection="column" gap="1rem" align="flex-start">
       <Text color="contentPrimary">
         {expired
-          ? "Could not renew your SSO session. Queries are not being sent. Retry them to renew, or sign in again."
+          ? "Could not renew your SSO session. Queries are not being sent. Run them again after a short wait to retry the renewal, or sign in again."
           : `Could not renew your SSO session. Your current token expires at ${new Date(expiry).toLocaleTimeString()}.`}
       </Text>
       <Text size="sm" color="contentSecondary">

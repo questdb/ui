@@ -65,7 +65,9 @@ describe("refresh failure warning", () => {
     advanceTime(19_999)
     expect(message()).toContain("Your current token expires at")
     advanceTime(1)
-    expect(message()).toContain("Queries are not being sent. Retry them")
+    expect(message()).toContain(
+      "Queries are not being sent. Run them again after a short wait",
+    )
     expect(message()).not.toContain("Your current token expires at")
     act(() => {
       const { onClick } = renderer!.root.findByType("button").props as {

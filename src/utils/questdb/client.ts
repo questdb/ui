@@ -130,6 +130,17 @@ export class Client {
     tokenRefresh.start(payload, this.refreshTokenMethod)
   }
 
+  // Before a request a person retries, such as the startup check behind the
+  // recovery view's Retry: it renews the session instead of failing at once
+  // during the backoff. A renewal still in flight is waited for, not repeated:
+  // a second one could spend a refresh token that the first has rotated.
+  async prepareRenewalRetry() {
+    tokenRefresh.syncSession()
+    const inFlight = tokenRefresh.hardDeadline
+    if (inFlight) await inFlight
+    tokenRefresh.allowRetry()
+  }
+
   static encodeParams = (
     params: Record<string, string | number | boolean | undefined>,
   ) =>
