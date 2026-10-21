@@ -94,9 +94,10 @@ export class Client {
   // The server closes the session of a request whose bearer it rejects, and
   // the Enterprise server deletes the qdb_session cookie with every 401.
   // Downloads authenticate only with that cookie (an iframe GET to `exp`), so
-  // after a 401 the next SQL request of the same SSO login asks the server to
-  // open a new session. One request asks at a time, so queries sent together
-  // don't open sessions that immediately replace each other.
+  // after a 401 from any endpoint, the next SQL request of the same SSO login
+  // asks the server to open a new session. One request asks at a time, so
+  // queries sent together don't open sessions that immediately replace each
+  // other.
   private _lostCookieSession?: { sessionId: number; reopening: boolean }
   private commonHeaders: Record<string, string> = {}
   refreshTokenMethod?: RefreshTokenMethod
@@ -380,6 +381,18 @@ export class Client {
     return session
   }
 
+  // Validation, CSV checks, uploads and settings saves send the cookie too, so
+  // their 401 closes the session as well. The bearer may be renewed before any
+  // SQL request is rejected, so record the loss whichever request saw it.
+  private noteCookieSessionLost(session: AuthSession) {
+    if (session.isCurrent() && authSessionState.isSSOAuthenticated()) {
+      this._lostCookieSession = {
+        sessionId: authSessionState.getSessionId(),
+        reopening: false,
+      }
+    }
+  }
+
   private claimCookieSessionReopen() {
     const lost = this._lostCookieSession
     if (
@@ -408,12 +421,7 @@ export class Client {
       throw error
     }
     if (response.status === 401) {
-      if (session.isCurrent() && authSessionState.isSSOAuthenticated()) {
-        this._lostCookieSession = {
-          sessionId: authSessionState.getSessionId(),
-          reopening: false,
-        }
-      }
+      this.noteCookieSessionLost(session)
     } else if (reopen) {
       // The server opens the session once it has authorized the request,
       // even if the SQL then fails. Other answers leave it for a later request.
@@ -781,6 +789,7 @@ export class Client {
         signal,
       },
     )
+    if (response.status === 401) this.noteCookieSessionLost(session)
     if (!session.isCurrent()) throw new SessionEndedError()
     if (response.ok || response.status === 400 || response.status === 403) {
       const result = (await response.json()) as
@@ -909,6 +918,7 @@ export class Client {
       })}`,
       { headers: this.requestHeaders() },
     )
+    if (response.status === 401) this.noteCookieSessionLost(session)
     const result = (await response.json()) as FileCheckResponse
     if (!session.isCurrent()) throw new SessionEndedError()
     return result
@@ -974,6 +984,7 @@ export class Client {
           )
         }
         request.onload = () => {
+          if (request.status === 401) this.noteCookieSessionLost(session)
           if (!session.isCurrent() || controller.signal.aborted) {
             rejectRequest()
             return
@@ -1027,6 +1038,7 @@ export class Client {
         headers: this.requestHeaders(),
         body: JSON.stringify(prefs),
       })
+      if (response.status === 401) this.noteCookieSessionLost(session)
       if (!session.isCurrent()) throw new SessionEndedError()
       if (controller.signal.aborted)
         throw new DOMException("Aborted", "AbortError")

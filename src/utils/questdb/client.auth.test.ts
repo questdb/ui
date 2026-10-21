@@ -1146,6 +1146,74 @@ describe("cookie session after a rejected bearer", () => {
     ])
   })
 
+  // The bearer can be renewed before any SQL request is rejected, so the 401
+  // of another endpoint must be remembered too.
+  const nonSqlRequests: Array<[string, (client: Client) => Promise<unknown>]> =
+    [
+      ["validation", (client) => client.validateQuery("select 1")],
+      ["a CSV check", (client) => client.checkCSVFile("probe.csv")],
+      [
+        "a settings save",
+        (client) =>
+          client.savePreferences({ version: 1, instance_name: "Test" }),
+      ],
+    ]
+
+  it.each(nonSqlRequests)(
+    "asks after %s is rejected, even if no SQL request is",
+    async (_, request) => {
+      authSessionState.setAuthPayload(token())
+      const fetchMock = vi
+        .fn()
+        .mockImplementationOnce(unauthorized)
+        .mockImplementation(ok)
+      vi.stubGlobal("fetch", fetchMock)
+      const client = new Client()
+      await request(client).catch(() => {})
+
+      authSessionState.setAuthPayload(token({ access_token: "renewed" }))
+      await client.queryRaw("select 2")
+      await client.queryRaw("select 3")
+
+      expect(fetchMock.mock.calls.slice(1).map(asksForSession)).toEqual([
+        true,
+        false,
+      ])
+    },
+  )
+
+  it("asks after an upload is rejected, even if no SQL request is", async () => {
+    authSessionState.setAuthPayload(token())
+    class RejectedUpload {
+      status = 401
+      statusText = "Unauthorized"
+      response = ""
+      upload = { addEventListener: vi.fn() }
+      open = vi.fn()
+      setRequestHeader = vi.fn()
+      onload?: () => void
+      send = vi.fn(() => this.onload?.())
+    }
+    vi.stubGlobal("XMLHttpRequest", RejectedUpload)
+    const fetchMock = vi.fn().mockImplementation(ok)
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    await expect(
+      client.uploadCSVFile({
+        file: new File(["value\n1\n"], "probe.csv", { type: "text/csv" }),
+        name: "probe",
+        owner: "admin",
+        onProgress: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ status: 401 })
+
+    authSessionState.setAuthPayload(token({ access_token: "renewed" }))
+    await client.queryRaw("select 2")
+    await client.queryRaw("select 3")
+
+    expect(fetchMock.mock.calls.map(asksForSession)).toEqual([true, false])
+  })
+
   it("asks with one request at a time", async () => {
     authSessionState.setAuthPayload(token())
     const responses: Array<(response: Response) => void> = []
