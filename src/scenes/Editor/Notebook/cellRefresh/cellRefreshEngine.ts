@@ -1290,19 +1290,22 @@ export class CellRefreshEngine {
       )
       const fetchDurationMs = Date.now() - fetchStartedAt
       if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
-      // A round with a statement that was never executed keeps the frame on
-      // screen and the saved snapshot until a round reaches the server. With no
-      // frame on screen for these statements (none yet, or one left from edited
-      // SQL), it shows the failure, but still leaves the snapshot.
+      // A round with a statement that was never executed keeps the chart drawn
+      // on screen and the saved snapshot until a round reaches the server. With
+      // no chart drawn for these statements (no frame yet, one left from edited
+      // SQL, or one without rows), it shows the failure, but still leaves the
+      // snapshot.
       const notExecuted = out.some(isNotExecuted)
       // Compare against the CURRENT cell.result, not a retained copy — the
       // hydration engine may have released or replaced it since the last tick,
       // and an unchanged frame must still be re-written in that case.
       const currentSqlHash = sqlHash(entry.sql)
       const current = this.getDeps().getCellResult(entry.cellId)
-      // The same test as DrawCanvas: only a settled frame for these statements
-      // is on screen. Keeping any other would leave the cell on "Drawing…".
-      if (notExecuted && toChartResult(current, queries).kind === "settled")
+      // Only a settled frame with rows for these statements is drawn, as in
+      // deriveChartLoading. Keeping any other would leave the cell on
+      // "Drawing…", e.g. a run's error kept when the cell became a chart.
+      const kept = toChartResult(current, queries)
+      if (notExecuted && kept.kind === "settled" && kept.results.length > 0)
         return
       if (
         current != null &&

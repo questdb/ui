@@ -343,6 +343,37 @@ describe("AuthProvider token installation", () => {
     await Promise.all(reads)
   })
 
+  it("keeps the SSO session that other tabs resume silently when signing in again", async () => {
+    // Given an SSO login, whose user the toolbar has stored
+    await mount()
+    localStorage.setItem("sso.username.test-client", "sso-user")
+    expect(localStorage.getItem(StoreKey.SSO_SESSION_ACTIVE)).toBe("true")
+
+    // When this tab signs in again
+    act(() => auth.signInAgain())
+
+    // Then only this tab's session ends
+    expect(authSessionState.isAuthenticated()).toBe(false)
+    expect(localStorage.getItem(StoreKey.SSO_SESSION_ACTIVE)).toBe("true")
+
+    // And another SSO tab that reloads still signs in silently
+    act(() => renderer!.unmount())
+    sessionStorage.setItem(StoreKey.LOGIN_METHOD, "sso")
+    location.search = ""
+    mocks.settings["acl.oidc.authorization.endpoint"] =
+      "https://identity.example/authorize"
+    await act(async () => {
+      renderer = create(
+        <AuthProvider>
+          <span />
+        </AuthProvider>,
+      )
+      await Promise.resolve()
+    })
+    expect(location.href).toContain("https://identity.example/authorize?")
+    expect(new URL(location.href).searchParams.get("prompt")).toBe("none")
+  })
+
   it("confirms a real pending CSV upload with no SQL activity before signing in again, then lets it finish", async () => {
     await mount()
     expect(questClient.hasActiveRequests()).toBe(false)

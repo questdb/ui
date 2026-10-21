@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { FilesToUpload } from "./files-to-upload"
 import { ProcessedFile, TableNameCheck } from "./types"
@@ -46,6 +46,15 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const isVisible = useIsVisible(rootRef)
   const [state, setState] = useState<State>("upload")
   const [ownedByList, setOwnedByList] = useState<string[]>([])
+  // Dropped files are listed once their table names are checked, which can
+  // wait for a token refresh. Until then their names count as queued, so that
+  // dropping one again is reported as a duplicate instead of importing it
+  // twice. Kept here: the drop box is replaced when the list is first shown.
+  const unlistedDrops = useRef(new Set<string[]>())
+  const unlistedNames = useCallback(
+    () => Array.from(unlistedDrops.current).flat(),
+    [],
+  )
 
   const getOwnedByList = async () => {
     const isEE = getValue(StoreKey.RELEASE_TYPE) === "EE"
@@ -215,9 +224,17 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   }
 
   const handleDrop = async (files: File[]) => {
-    const fileConfigs = await getFileConfigs(files)
-    setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
-    setState("list")
+    const names = files.map((file) => file.name)
+    unlistedDrops.current.add(names)
+    try {
+      const fileConfigs = await getFileConfigs(files)
+      setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
+      setState("list")
+    } finally {
+      // React 17 has rendered the list already, as it renders updates outside
+      // event handlers at once: the drop box counts the files as listed.
+      unlistedDrops.current.delete(names)
+    }
   }
 
   const handleVisible = async () => {
@@ -257,6 +274,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
       {state === "upload" && (
         <Upload
           files={filesDropped}
+          unlistedNames={unlistedNames}
           onFilesDropped={handleDrop}
           dialogOpen={dialogOpen}
         />
@@ -266,6 +284,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
         <FilesToUpload
           dialogOpen={dialogOpen}
           files={filesDropped}
+          unlistedNames={unlistedNames}
           onViewData={onViewData}
           onFilesDropped={handleDrop}
           onDialogToggle={setDialogOpen}

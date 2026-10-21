@@ -74,7 +74,12 @@ import { SchemaProvider, useSchema, type SelectedTable } from "./SchemaContext"
 import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import { isAuthRefreshUnavailable } from "../../modules/OAuth2/session"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import {
+  endedFor,
+  isAuthFailure,
+  isAuthRefreshUnavailable,
+} from "../../modules/OAuth2/session"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -173,8 +178,12 @@ const Schema = ({
   }
 
   const fetchTables = async () => {
+    const session = authSessionState.capture()
     try {
       const response = await quest.showTables()
+      // The catalog belongs to the login that read it. The next one reads its
+      // own: ending the session cleared this one from the store.
+      if (!session.isCurrent()) return
       if (response && response.type === QuestDB.Type.DQL) {
         // A later, unrelated failure must not show a recovered error.
         errorRef.current = null
@@ -199,6 +208,8 @@ const Schema = ({
         dispatchState({ view: View.error })
       }
     } catch (error) {
+      // Ending the session interrupted the request, and unmounts the panel.
+      if (endedFor(session, error)) return
       recordRenewalFailure(error)
       dispatchState({
         view: View.error,
@@ -245,6 +256,7 @@ const Schema = ({
       "information_schema.columns()", // fallback for older servers
     ]
 
+    const session = authSessionState.capture()
     let lastError: unknown
     for (const query of queries) {
       try {
@@ -252,14 +264,20 @@ const Schema = ({
           query,
           { background: true },
         )
+        if (!session.isCurrent()) return
 
         if (response?.type === QuestDB.Type.DQL) {
           dispatch(actions.query.setColumns(response.data))
           return
         }
       } catch (error) {
-        // let's try another query
+        // Ending the session interrupted the request: no fallback is sent
+        // without the login's credentials.
+        if (endedFor(session, error)) return
         lastError = error
+        // The server ran no query, so it may well support this one. Otherwise,
+        // let's try another query.
+        if (isAuthFailure(error)) break
       }
     }
 

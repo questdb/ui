@@ -605,9 +605,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       )
     )
       return
-    // logout() explains interrupted sent requests itself.
+    // logout() explains interrupted sent requests itself. It keeps the SSO
+    // session flag: other tabs share it to sign in silently when they reload,
+    // and this tab still signs in again through the identity provider.
     callbacks.current.logout({
-      clearSSOSession: true,
       errorTitle: "Sign in again",
       errorMessage: sent
         ? "Your previous session has ended."

@@ -21,7 +21,11 @@ import {
   updateCellTransition,
   type ApplyNotebookStateRequest,
 } from "./notebookController"
-import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
+import {
+  generateId,
+  UNVERIFIED_RUN_NOTE,
+} from "../../scenes/Editor/Notebook/notebookUtils"
+import { MAX_ACTIVE_STATEMENT_REQUESTS } from "../questdb/requestLimiter"
 import { cancelHeadlessBufferRuns } from "./notebookHeadlessRun"
 import type { DexieControllerDeps } from "./notebookHeadlessRun"
 import {
@@ -1091,7 +1095,18 @@ describe("createDexieNotebookController — runCell", () => {
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
-  it("records nothing when the session ends while the statement runs", async () => {
+  // What a statement in flight settles with once logout ended the session.
+  const sessionEnded = {
+    type: "error",
+    error: SESSION_ENDED_MESSAGE,
+    sessionEnded: true,
+  }
+  const INTERRUPTED =
+    "Interrupted when your previous session ended. The query may have executed; verify its outcome before running it again."
+  const NOT_EXECUTED =
+    "Not executed: your previous session ended without running this query."
+
+  it("records a statement that the end of the session interrupted as unverified", async () => {
     // Given a write in flight on a background notebook with a recorded run
     await seedNotebook({
       cells: [
@@ -1104,18 +1119,211 @@ describe("createDexieNotebookController — runCell", () => {
     await vi.waitFor(() => {
       if (inFlight.length === 0) throw new Error("not in flight")
     })
+
     // When logout ends the session and the aborted request settles
     authSessionState.endSession()
-    respondNext({
-      type: "error",
-      error: SESSION_ENDED_MESSAGE,
-      sessionEnded: true,
-    })
+    respondNext(sessionEnded)
     const summary = await run
-    // Then the outcome is unverified and the last recorded run is kept
-    expect(summary.unverified).toBe(true)
+
+    // Then the run replaces the previous one on record, and its outcome is
+    // unverified: the write may have committed
+    expect(summary).toMatchObject({
+      success: false,
+      results: [`ERROR: ${INTERRUPTED}`],
+      unverified: true,
+      note: UNVERIFIED_RUN_NOTE,
+    })
+    expect((await persistedView()).cells[0]).toMatchObject({
+      lastRunStatus: "error",
+      lastRunError: INTERRUPTED,
+    })
+    expect((await loadCellSnapshot(BUFFER_ID, "a"))?.results).toEqual([
+      expect.objectContaining({
+        type: "error",
+        error: INTERRUPTED,
+        sessionEnded: true,
+      }),
+    ])
+  })
+
+  it("records the statements that committed before the session ended", async () => {
+    // Given a write script on a background notebook with a recorded run,
+    // whose first write commits
+    await seedNotebook({
+      cells: [
+        cell("a", "INSERT INTO t VALUES (1); INSERT INTO t VALUES (2)", {
+          lastRunStatus: "success",
+        }),
+      ],
+    })
+    const { quest, pending: inFlight, respondNext } = makeQuest()
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+    await vi.waitFor(() => respondNext({ type: "dml" }))
+    await vi.waitFor(() => {
+      if (inFlight.length === 0) throw new Error("second not in flight")
+    })
+
+    // When logout ends the session while the second write runs
+    authSessionState.endSession()
+    respondNext(sessionEnded)
+    const summary = await run
+
+    // Then the committed write is on record, so it isn't repeated, and the
+    // interrupted one is unverified
+    expect(summary).toMatchObject({
+      results: ["success", `ERROR: ${INTERRUPTED}`],
+      unverified: true,
+    })
+    expect((await persistedView()).cells[0].lastRunStatus).toBe("error")
+    expect((await loadCellSnapshot(BUFFER_ID, "a"))?.results).toEqual([
+      expect.objectContaining({
+        type: "dml",
+        query: "INSERT INTO t VALUES (1)",
+      }),
+      expect.objectContaining({
+        type: "error",
+        query: "INSERT INTO t VALUES (2)",
+        sessionEnded: true,
+      }),
+    ])
+  })
+
+  it("sends no statement of a run after its session ended", async () => {
+    // Given a write script whose first write is in flight
+    await seedNotebook({
+      cells: [
+        cell(
+          "a",
+          "INSERT INTO t VALUES (1); INSERT INTO t VALUES (2); INSERT INTO t VALUES (3)",
+        ),
+      ],
+    })
+    const { quest, pending: inFlight, respondNext } = makeQuest()
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length === 0) throw new Error("not in flight")
+    })
+
+    // When the first write commits, but the session ends before the next one
+    // is sent
+    respondNext({ type: "dml" })
+    authSessionState.endSession()
+    const summary = await run
+
+    // Then the next one is never sent, and is recorded as not executed
+    expect(inFlight).toHaveLength(0)
+    expect(summary.results).toEqual([
+      "success",
+      `ERROR: ${NOT_EXECUTED}`,
+      "cancelled",
+    ])
+    expect(summary.unverified).toBeUndefined()
+    expect((await persistedView()).cells[0]).toMatchObject({
+      lastRunStatus: "error",
+      lastRunError: NOT_EXECUTED,
+    })
+  })
+
+  it("sends no queued statement of a read-only run after its session ended", async () => {
+    // Given a read-only script with more statements than can run at once
+    const statements = Array.from(
+      { length: MAX_ACTIVE_STATEMENT_REQUESTS + 1 },
+      (_, index) => `SELECT ${index}`,
+    )
+    await seedNotebook({ cells: [cell("a", statements.join("; "))] })
+    const { quest, pending: inFlight } = makeQuest({
+      validate: () => dqlValidation,
+    })
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length < MAX_ACTIVE_STATEMENT_REQUESTS)
+        throw new Error("not all running")
+    })
+
+    // When logout ends the session, and the requests it aborted settle
+    authSessionState.endSession()
+    inFlight.splice(0).forEach(({ resolve }) => resolve(sessionEnded))
+    const summary = await run
+
+    // Then the statement waiting for a request slot is never sent
+    expect(inFlight).toHaveLength(0)
+    expect(summary.results).toEqual([
+      ...Array.from(
+        { length: MAX_ACTIVE_STATEMENT_REQUESTS },
+        () => `ERROR: ${INTERRUPTED}`,
+      ),
+      `ERROR: ${NOT_EXECUTED}`,
+    ])
+  })
+
+  it("cancels a run that has not launched when the session ends", async () => {
+    // Given an auto-run held at validation, on a cell with a recorded run
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1", { lastRunStatus: "success" })],
+    })
+    let resolveValidation!: (value: unknown) => void
+    const validation = new Promise((resolve) => {
+      resolveValidation = resolve
+    })
+    let validationStarted = false
+    const { quest, pending: inFlight } = makeQuest({
+      validate: () => {
+        validationStarted = true
+        return validation
+      },
+    })
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    await vi.waitFor(() => {
+      if (!validationStarted) throw new Error("validation not in flight")
+    })
+
+    // When logout ends the session, and validation then settles
+    authSessionState.endSession()
+    resolveValidation(dqlValidation)
+    const summary = await run
+
+    // Then the run never launches, and the previous run stays on record
+    expect(summary).toMatchObject({
+      success: false,
+      queryCount: 0,
+      results: [],
+      cancelled: "cancelled",
+    })
+    expect(summary.note).toMatch(/Run NOT started/)
+    expect(inFlight).toHaveLength(0)
     expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
-    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
+  it("executes nothing of a run whose session ended before it was claimed", async () => {
+    // Given a run waiting behind another task for the same notebook
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1", { lastRunStatus: "success" })],
+    })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const blocker = enqueueBufferTask(BUFFER_ID, () => gate)
+    const { quest, pending: inFlight } = makeQuest()
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+
+    // When logout ends the session before the run reads the cell
+    authSessionState.endSession()
+    release()
+    await blocker
+    const summary = await run
+
+    // Then the run is cancelled before it sends anything
+    expect(summary).toMatchObject({ cancelled: "cancelled", results: [] })
+    expect(inFlight).toHaveLength(0)
+    expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
   })
 
   it("a superseded run never records its stale result over the newer run's", async () => {

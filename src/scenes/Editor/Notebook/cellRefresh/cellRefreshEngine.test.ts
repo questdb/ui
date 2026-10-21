@@ -2824,6 +2824,36 @@ describe("CellRefreshEngine", () => {
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
     })
 
+    it("shows the failure of a chart whose frame for its SQL has nothing to draw", async () => {
+      // Given a chart that kept the error of its last run when it became one
+      cellResults.set("c1", {
+        results: [
+          { type: "error", query: "select 1", error: "table does not exist" },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      })
+
+      // When its fetch is not executed
+      failToExecute()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledOnce()
+
+      // Then it settles on the failure instead of "Drawing" forever
+      const state = engine.getState("c1")!
+      const result = cellResults.get("c1")
+      expect(state.settledKey).toBe(state.queriesKey)
+      expect(result?.results).toEqual([
+        expect.objectContaining({ type: "error", requestNotSent: true }),
+      ])
+      expect(
+        deriveChartLoading(state, toChartResult(result, state.queries), false),
+      ).toBe(false)
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+    })
+
     it("keeps a grid's rows without showing or saving an error, until a refresh is executed", async () => {
       // Given a run cell with rows
       const frame: CellResult = {

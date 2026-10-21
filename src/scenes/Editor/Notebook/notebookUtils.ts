@@ -1,6 +1,7 @@
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
+  sessionEndedQueryMessage,
   sessionFailureOf,
   type SessionFailure,
 } from "../../../modules/OAuth2/session"
@@ -293,7 +294,14 @@ export const singleResultFromExec = (
       }
     case "error":
       return {
-        ...errorResult(query, exec.error ?? "Unknown error"),
+        // A cell keeps its result after the session ends, so it is read after
+        // signing in again: say what the end of the session did to the query.
+        ...errorResult(
+          query,
+          isSessionEnded(exec)
+            ? sessionEndedQueryMessage(exec)
+            : (exec.error ?? "Unknown error"),
+        ),
         ...sessionFailureOf(exec),
       }
     default:

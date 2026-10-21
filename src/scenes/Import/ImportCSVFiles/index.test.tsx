@@ -10,6 +10,7 @@ import { AuthRefreshUnavailableError } from "../../../modules/OAuth2/session"
 
 type Queue = {
   files: ProcessedFile[]
+  unlistedNames: () => string[]
   onFilesDropped: (files: File[]) => Promise<void>
   onFileUpload: (id: string) => Promise<void>
   onFilePropertyChange: (
@@ -26,12 +27,12 @@ const mocks = vi.hoisted(() => ({
     query: vi.fn(),
     showColumns: vi.fn(),
   },
-  upload: vi.fn<[Pick<Queue, "onFilesDropped">], void>(),
+  upload: vi.fn<[Pick<Queue, "onFilesDropped" | "unlistedNames">], void>(),
   queue: vi.fn<[Queue], void>(),
 }))
 
 vi.mock("./upload", () => ({
-  Upload: (props: Pick<Queue, "onFilesDropped">) => {
+  Upload: (props: Pick<Queue, "onFilesDropped" | "unlistedNames">) => {
     mocks.upload(props)
     return null
   },
@@ -310,6 +311,44 @@ describe("Import file checks that finish after other changes", () => {
       table_name: "renamed",
       status: FileCheckStatus.EXISTS,
     })
+  })
+
+  it("counts dropped files as queued until they are listed, also once the list is shown", async () => {
+    // Given two drops on the upload view whose table name checks are pending
+    act(() => {
+      renderer = create(element())
+    })
+    const tradesCheck = deferred<{ status: string }>()
+    const quotesCheck = deferred<{ status: string }>()
+    mocks.quest.checkCSVFile
+      .mockReturnValueOnce(tradesCheck.promise)
+      .mockReturnValueOnce(quotesCheck.promise)
+    const { onFilesDropped, unlistedNames } = mocks.upload.mock.lastCall![0]
+    let quotesDrop!: Promise<void>
+    act(() => {
+      void onFilesDropped([csv("trades.csv")])
+      quotesDrop = onFilesDropped([csv("quotes.csv")])
+    })
+    expect(unlistedNames()).toEqual(["trades.csv", "quotes.csv"])
+
+    // When the first check answers, and the list replaces the upload view
+    tradesCheck.resolve({ status: FileCheckStatus.DOES_NOT_EXIST })
+    await settle(tradesCheck)
+
+    // Then the file still being checked counts as queued in the list's drop box
+    expect(queue().files.map(({ table_name }) => table_name)).toEqual([
+      "trades.csv",
+    ])
+    expect(queue().unlistedNames()).toEqual(["quotes.csv"])
+
+    // And no longer once it is listed
+    quotesCheck.resolve({ status: FileCheckStatus.DOES_NOT_EXIST })
+    await act(() => quotesDrop)
+    expect(queue().files.map(({ table_name }) => table_name)).toEqual([
+      "trades.csv",
+      "quotes.csv",
+    ])
+    expect(queue().unlistedNames()).toEqual([])
   })
 
   it("ignores the check of a name that was changed again", async () => {

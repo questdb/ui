@@ -1,6 +1,10 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import {
+  authSessionState,
+  type AuthSession,
+} from "../../modules/OAuth2/authSessionState"
+import { SESSION_ENDED_MESSAGE } from "../../modules/OAuth2/session"
 import type {
   CellResult,
   NotebookVariable,
@@ -94,6 +98,7 @@ type RunCommitOutcome =
 type HeadlessClaim = {
   controller: AbortController
   generation: number
+  launched: boolean
 }
 
 type HeadlessCellClaims = {
@@ -121,6 +126,7 @@ const headlessClaims = new Map<number, Map<string, HeadlessCellClaims>>()
 const claimHeadlessRun = (
   bufferId: number,
   cellId: string,
+  session: AuthSession,
   externalSignal?: AbortSignal,
 ): HeadlessRunClaim => {
   const perBuffer =
@@ -134,11 +140,15 @@ const claimHeadlessRun = (
   const claim: HeadlessClaim = {
     controller: new AbortController(),
     generation,
+    launched: false,
   }
   state.nextGeneration = generation
   state.claims.add(claim)
   perBuffer.set(cellId, state)
   headlessClaims.set(bufferId, perBuffer)
+  // Ending the session cancels the claims that have not launched, but not one
+  // taken after the session of its run had already ended.
+  if (!session.isCurrent()) claim.controller.abort()
 
   const abortFromExternal = () => claim.controller.abort(externalSignal?.reason)
   if (externalSignal?.aborted) abortFromExternal()
@@ -162,6 +172,7 @@ const claimHeadlessRun = (
       }
 
       state.latestLaunchedGeneration = claim.generation
+      claim.launched = true
       for (const older of state.claims) {
         if (older.generation < claim.generation) {
           older.controller.abort("superseded" satisfies RunCancelReason)
@@ -211,17 +222,44 @@ export const cancelHeadlessCellRuns = (
   }
 }
 
-// Session end aborts every request, so an in-flight statement would settle
-// with the abort and be committed as a failed run that later agents read as
-// authoritative. Cancel the claims first: nothing is committed, and the
-// statement's outcome stays unverified.
+// Ending the session aborts every request. A run that has not launched is
+// cancelled before it executes anything. A launched run still records its
+// outcome: the statements that completed did run, and dropping them would
+// leave the previous run on record, so that an agent could repeat writes that
+// already committed. The statement in flight records that the session ended
+// around it, which leaves its outcome unverified, and the rest are not sent.
 authSessionState.beforeEnd(() => {
   for (const perBuffer of headlessClaims.values()) {
     for (const state of perBuffer.values()) {
-      for (const claim of state.claims) claim.controller.abort()
+      for (const claim of state.claims) {
+        if (!claim.launched) claim.controller.abort()
+      }
     }
   }
 })
+
+// A run's statements belong to the login that started it. Once its session
+// has ended, a statement is not sent, as it would run without that login's
+// credentials, and is recorded as not executed.
+const executeInSession = (
+  session: AuthSession,
+  quest: Client,
+  query: string,
+  variables: NotebookVariable[] | undefined,
+  signal: AbortSignal,
+): Promise<QueryExecResult> =>
+  session.isCurrent()
+    ? executeSingleRaw(quest, query, variables, signal, NOTEBOOK_ROW_CAP)
+    : Promise.resolve({
+        type: "error",
+        query,
+        columns: [],
+        dataset: [],
+        count: 0,
+        error: SESSION_ENDED_MESSAGE,
+        sessionEnded: true,
+        requestNotSent: true,
+      })
 
 const emptySummary = (): RunCellSummary => ({
   success: false,
@@ -234,10 +272,19 @@ const executeCellQueries = async (args: {
   queryText: string
   variables: NotebookVariable[] | undefined
   quest: Client
+  session: AuthSession
   signal?: AbortSignal
   supersedeSignal: AbortSignal
 }): Promise<CellResult> => {
-  const { queries, queryText, variables, quest, signal, supersedeSignal } = args
+  const {
+    queries,
+    queryText,
+    variables,
+    quest,
+    session,
+    signal,
+    supersedeSignal,
+  } = args
   const runAbort = new AbortController()
   let aborted = false
   const onAbort = () => {
@@ -271,12 +318,12 @@ const executeCellQueries = async (args: {
         }
         break
       }
-      const exec = await executeSingleRaw(
+      const exec = await executeInSession(
+        session,
         quest,
         queries[i],
         variables,
         runAbort.signal,
-        NOTEBOOK_ROW_CAP,
       )
       if (exec.type === "ddl" || exec.type === "dml") {
         eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -321,11 +368,19 @@ const executeCellQueriesParallel = async (args: {
   classified: ClassifiedStatement[]
   variables: NotebookVariable[] | undefined
   quest: Client
+  session: AuthSession
   signal?: AbortSignal
   supersedeSignal: AbortSignal
 }): Promise<CellResult> => {
-  const { queries, classified, variables, quest, signal, supersedeSignal } =
-    args
+  const {
+    queries,
+    classified,
+    variables,
+    quest,
+    session,
+    signal,
+    supersedeSignal,
+  } = args
   const runAbort = new AbortController()
   let aborted = false
   const onAbort = () => {
@@ -360,12 +415,12 @@ const executeCellQueriesParallel = async (args: {
         try {
           exec = await statementRequestLimiter(
             () =>
-              executeSingleRaw(
+              executeInSession(
+                session,
                 quest,
                 query,
                 variables,
                 runAbort.signal,
-                NOTEBOOK_ROW_CAP,
               ),
             runAbort.signal,
           )
@@ -407,6 +462,7 @@ export const runHeadlessCell = async (
   sql?: string,
   gate?: RunCellGate,
 ): Promise<RunCellSummary> => {
+  const session = authSessionState.capture()
   const prep = await enqueueBufferTask(bufferId, async () => {
     const view = await readNotebookView(bufferId)
     return {
@@ -441,7 +497,7 @@ export const runHeadlessCell = async (
   // enforcement, auto-run eligibility, and strategy — dispatch never
   // classifies separately (live-path parity). The claim opens the run's
   // phase here, so a concurrent transition can stop it before it launches.
-  const claim = claimHeadlessRun(bufferId, cellId, signal)
+  const claim = claimHeadlessRun(bufferId, cellId, session, signal)
   try {
     const validate = createValidateWithGlobals(quest, () => prep.variables)
     const barrier = await resolveRunBarrier(
@@ -478,6 +534,7 @@ export const runHeadlessCell = async (
             classified,
             variables: prep.variables,
             quest,
+            session,
             signal,
             supersedeSignal: claim.signal,
           })
@@ -486,6 +543,7 @@ export const runHeadlessCell = async (
             queryText,
             variables: prep.variables,
             quest,
+            session,
             signal,
             supersedeSignal: claim.signal,
           })

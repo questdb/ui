@@ -4,7 +4,11 @@ import { act, create, ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../theme"
 import { EventType } from "../../modules/EventBus/types"
-import { AuthRefreshUnavailableError } from "../../modules/OAuth2/session"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import {
+  AuthRefreshUnavailableError,
+  SESSION_ENDED_MESSAGE,
+} from "../../modules/OAuth2/session"
 
 type VirtualTablesProps = {
   tables: unknown[]
@@ -169,7 +173,6 @@ describe("Schema loading after a failed SSO renewal", () => {
       .mockResolvedValue(tablesLoaded)
     mocks.quest.query
       .mockRejectedValueOnce(renewalFailure)
-      .mockRejectedValueOnce(renewalFailure)
       .mockResolvedValue(columnsLoaded)
     await mount()
 
@@ -188,16 +191,21 @@ describe("Schema loading after a failed SSO renewal", () => {
     mocks.quest.showTables.mockResolvedValue(tablesLoaded)
     mocks.quest.query
       .mockRejectedValueOnce(renewalFailure)
-      .mockRejectedValueOnce(renewalFailure)
       .mockResolvedValue(columnsLoaded)
     await mount()
 
     expect(panel().state.view).toBe(View.error)
     expect(panel().loadingError).toBe(renewalFailure)
+    // The server ran no query, so the fallback for older servers is not tried
+    expect(mocks.quest.query).toHaveBeenCalledOnce()
+    expect(mocks.quest.query).toHaveBeenCalledWith(
+      "information_schema.questdb_columns()",
+      { background: true },
+    )
 
     await connectionOk()
 
-    expect(mocks.quest.query).toHaveBeenCalledTimes(3)
+    expect(mocks.quest.query).toHaveBeenCalledTimes(2)
     expect(panel().state.view).toBe(View.ready)
   })
 
@@ -243,5 +251,70 @@ describe("Schema loading after a failed SSO renewal", () => {
     expect(panel().state.view).toBe(View.error)
     // Not the stale "Could not renew your SSO session" message
     expect(panel().loadingError).toBeNull()
+  })
+})
+
+describe("Schema loading when the session ends", () => {
+  // A request that ending the session aborted rejects with this.
+  const sessionEnded = (query: string) => ({
+    position: -1,
+    query,
+    type: "error",
+    error: SESSION_ENDED_MESSAGE,
+    sessionEnded: true,
+  })
+  const pending = () => {
+    let resolve!: (value: unknown) => void
+    let reject!: (reason: unknown) => void
+    const promise = new Promise((settle, fail) => {
+      resolve = settle
+      reject = fail
+    })
+    return { promise, resolve, reject }
+  }
+
+  beforeEach(() => authSessionState.markNonSSOAuthenticated())
+  afterEach(() => authSessionState.endSession())
+
+  it("sends no fallback query and shows no error when ending the session interrupts loading", async () => {
+    // Given a schema load in flight
+    const tables = pending()
+    const columns = pending()
+    mocks.quest.showTables.mockReturnValue(tables.promise)
+    mocks.quest.query.mockReturnValue(columns.promise)
+    await mount()
+
+    // When logout ends the session, which aborts both requests
+    authSessionState.endSession()
+    tables.reject(sessionEnded("tables();"))
+    columns.reject(sessionEnded("information_schema.questdb_columns()"))
+    await settle()
+
+    // Then nothing is sent without the login's credentials, and the panel
+    // reports no failure
+    expect(mocks.quest.query).toHaveBeenCalledOnce()
+    expect(mocks.quest.showTables).toHaveBeenCalledOnce()
+    expect(panel().state.view).toBe(View.loading)
+    expect(mocks.dispatch).not.toHaveBeenCalled()
+  })
+
+  it("does not store the catalog of a login whose session has ended", async () => {
+    // Given a schema load in flight
+    const tables = pending()
+    const columns = pending()
+    mocks.quest.showTables.mockReturnValue(tables.promise)
+    mocks.quest.query.mockReturnValue(columns.promise)
+    await mount()
+
+    // When the session ends before its answers are handled
+    authSessionState.endSession()
+    tables.resolve(tablesLoaded)
+    columns.resolve(columnsLoaded)
+    await settle()
+
+    // Then the next login does not get them
+    expect(mocks.dispatch).not.toHaveBeenCalled()
+    expect(mocks.quest.showMaterializedViews).not.toHaveBeenCalled()
+    expect(panel().tables).toEqual([])
   })
 })

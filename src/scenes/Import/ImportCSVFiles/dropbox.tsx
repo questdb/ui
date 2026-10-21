@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react"
+import React, { useRef, useState, useEffect, useLayoutEffect } from "react"
 import styled from "styled-components"
 import { Box } from "../../../components"
 import { ProcessedFile } from "./types"
@@ -30,6 +30,9 @@ const Root = styled(Box).attrs({ flexDirection: "column" })<{
 
 type Props = {
   files: ProcessedFile[]
+  // Names of dropped files that are not listed yet, which count as queued.
+  // onFilesDropped adds the files it is given at once, until it lists them.
+  unlistedNames: () => string[]
   onFilesDropped: (files: File[]) => void
   dialogOpen: boolean
   render: (props: {
@@ -40,6 +43,7 @@ type Props = {
 
 export const DropBox = ({
   files,
+  unlistedNames,
   onFilesDropped,
   dialogOpen,
   render,
@@ -63,15 +67,14 @@ export const DropBox = ({
   }
 
   const addToQueue = (inputFiles: FileList) => {
-    const duplicates = getFileDuplicates(inputFiles, filenames.current)
+    const duplicates = getFileDuplicates(inputFiles, [
+      ...filenames.current,
+      ...unlistedNames(),
+    ])
     setDuplicates(duplicates)
     const accepted = Array.from(inputFiles).filter(
       (f) => !duplicates.includes(f),
     )
-    // Dropped files are listed once their table names are checked, which can
-    // wait for a token refresh. Count them now, so that dropping one again
-    // meanwhile is reported as a duplicate instead of queued twice.
-    filenames.current = [...filenames.current, ...accepted.map((f) => f.name)]
     if (accepted.length > 0) onFilesDropped(accepted)
     uploadInputRef.current?.setAttribute("value", "")
   }
@@ -98,7 +101,9 @@ export const DropBox = ({
     }
   }, [dialogOpen])
 
-  useEffect(() => {
+  // Updated as the list is rendered, before another drop can be handled: a
+  // dropped file stops counting as unlisted once it is listed.
+  useLayoutEffect(() => {
     filenames.current = files.map((f) => f.table_name)
   }, [files])
 

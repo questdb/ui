@@ -35,6 +35,7 @@ const InfoText = styled(Text)`
 
 type Props = {
   files: ProcessedFile[]
+  unlistedNames: () => string[]
   onFilesDropped: (files: File[]) => void
   dialogOpen: boolean
 }
@@ -49,7 +50,12 @@ const CopySQLLink = () => (
   </a>
 )
 
-export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
+export const Upload = ({
+  files,
+  unlistedNames,
+  onFilesDropped,
+  dialogOpen,
+}: Props) => {
   const { quest } = useContext(QuestContext)
   const [copyEnabled, setCopyEnabled] = useState(false)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
@@ -76,6 +82,7 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
   return (
     <DropBox
       files={files}
+      unlistedNames={unlistedNames}
       onFilesDropped={onFilesDropped}
       dialogOpen={dialogOpen}
       render={({ duplicates, addToQueue }) => (
