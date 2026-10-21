@@ -507,9 +507,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
     // Session-end listeners clear client credentials, pending confirmations,
-    // refresh work and telemetry timers even when this document does not reload.
-    // React 17 does not batch promise continuations. Resetting the store and
-    // showing Login must be one commit, before console effects can run again.
+    // refresh work, telemetry timers and the last query result, even when this
+    // document does not reload. React 17 does not batch promise continuations:
+    // their updates and showing Login must be one commit, before console
+    // effects can run again.
     unstable_batchedUpdates(() => authSessionState.endSession(logoutOptions))
     destroyServerSession()
     if (reload) {
