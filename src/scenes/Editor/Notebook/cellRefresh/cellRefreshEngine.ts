@@ -215,6 +215,11 @@ const errorMessage = (cause: unknown): string => {
   return "Query failed"
 }
 
+// The server never executed the statement, e.g. because the SSO session could
+// not be renewed. Like an aborted request, it says nothing about the data.
+const isNotExecuted = (result: QueryExecResult): boolean =>
+  result.type === "error" && result.requestNotSent === true
+
 const errorExecResult = (query: string, cause: unknown): QueryExecResult => ({
   type: "error",
   query,
@@ -1285,11 +1290,16 @@ export class CellRefreshEngine {
       )
       const fetchDurationMs = Date.now() - fetchStartedAt
       if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
+      // A round with a statement that was never executed keeps the frame on
+      // screen and the saved snapshot until a round reaches the server. With no
+      // frame to keep, it shows the failure, but still leaves the snapshot.
+      const notExecuted = out.some(isNotExecuted)
       // Compare against the CURRENT cell.result, not a retained copy — the
       // hydration engine may have released or replaced it since the last tick,
       // and an unchanged frame must still be re-written in that case.
       const currentSqlHash = sqlHash(entry.sql)
       const current = this.getDeps().getCellResult(entry.cellId)
+      if (notExecuted && current != null) return
       if (
         current != null &&
         resultsEquivalent(current.results.map(toExecResult), out)
@@ -1327,6 +1337,7 @@ export class CellRefreshEngine {
       })
       this.setState(entry, { settledKey: queriesKey })
       this.deriveChartSlotErrors(entry)
+      if (notExecuted) return
       // The disk copy follows the frame on screen, carried rows included.
       if (written.some(isChartableResult)) {
         this.queueSnapshot(entry, written, fetchDurationMs)
@@ -1406,6 +1417,7 @@ export class CellRefreshEngine {
         launchPatch.slotFetching = slotFetching
       }
       this.setState(entry, launchPatch)
+      const notExecutedSlots = new Set<StatementKey>()
       await Promise.all(
         launchSlots.map(async ({ key, index }) => {
           if (round.signal.aborted) return
@@ -1423,6 +1435,12 @@ export class CellRefreshEngine {
               slotAbort.signal,
             )
             if (slotAbort.signal.aborted || round.signal.aborted) return
+            // Like a cancelled slot, it keeps its rows, and no error is shown
+            // or saved for it.
+            if (isNotExecuted(exec)) {
+              notExecutedSlots.add(key)
+              return
+            }
             this.batchUpdates(() => {
               if (exec.type === "error") {
                 this.setSlotError(entry, key, exec.error ?? "Query failed")
@@ -1457,7 +1475,8 @@ export class CellRefreshEngine {
       )
       if (round.signal.aborted) return
       this.setState(entry, { settledKey: queriesKey })
-      this.persistGridFrame(entry, manual)
+      // A round that could not execute a statement changes nothing on disk.
+      if (notExecutedSlots.size === 0) this.persistGridFrame(entry, manual)
     } finally {
       this.finishRound(entry, round)
     }

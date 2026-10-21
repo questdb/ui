@@ -9,7 +9,10 @@ import type {
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { authSessionState } from "../../../../modules/OAuth2/authSessionState"
-import { SESSION_ENDED_MESSAGE } from "../../../../modules/OAuth2/session"
+import {
+  AuthRefreshUnavailableError,
+  SESSION_ENDED_MESSAGE,
+} from "../../../../modules/OAuth2/session"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 import type { CellResultStatus } from "../resultHydration/cellResultHydration"
@@ -2728,6 +2731,109 @@ describe("CellRefreshEngine", () => {
       // Then the rows stay and no refresh error is saved for the next login
       expect(cellResults.get("g1")).toBe(frame)
       expect(persistCellSnapshot).not.toHaveBeenCalled()
+    })
+  })
+
+  // E.g. after a failed SSO renewal, while the user is still signed in.
+  describe("statements the server never executed", () => {
+    const notExecuted = (query: string): QueryExecResult => ({
+      type: "error",
+      query,
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: new AuthRefreshUnavailableError().message,
+      requestNotSent: true,
+    })
+    const failToExecute = () =>
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve(notExecuted(sql)),
+      )
+
+    it("keeps a chart's frame and saved snapshot while its refreshes cannot be executed", async () => {
+      // Given a polling chart that settled and saved a frame
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      const frame = cellResults.get("c1")
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When its next polls are not executed
+      failToExecute()
+      await vi.advanceTimersByTimeAsync(3000)
+
+      // Then the frame on screen and the snapshot on disk stay
+      expect(deps.executeSingle.mock.calls.length).toBeGreaterThan(1)
+      expect(cellResults.get("c1")).toBe(frame)
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows the failure of a chart with no frame, without deleting its saved snapshot", async () => {
+      // Given a chart whose first fetch is not executed
+      failToExecute()
+
+      // When it fetches
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then it shows why, and a snapshot from an earlier session survives
+      expect(cellResults.get("c1")?.results[0]).toMatchObject({
+        type: "error",
+        requestNotSent: true,
+      })
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+    })
+
+    it("keeps a grid's rows without showing or saving an error, until a refresh is executed", async () => {
+      // Given a run cell with rows
+      const frame: CellResult = {
+        results: [
+          {
+            type: "dql",
+            query: "select 1",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [[1]],
+            count: 1,
+            timestamp: 0,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }
+      cellResults.set("g1", frame)
+      syncOnScreen([
+        {
+          id: "g1",
+          position: 0,
+          value: "select 1",
+          autoRefresh: false,
+          result: frame,
+        },
+      ])
+      await flushAsync()
+
+      // When a refresh is not executed
+      failToExecute()
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then the rows stay, and no error is shown or saved for the next login
+      expect(deps.executeSingle).toHaveBeenCalledOnce()
+      expect(cellResults.get("g1")).toBe(frame)
+      expect(engine.getState("g1")?.slotErrors.size).toBe(0)
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+
+      // And a refresh that is executed saves the frame as usual
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve(dqlResult(sql)),
+      )
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledOnce()
+      expect(
+        vi.mocked(persistCellSnapshot).mock.calls[0][0].refreshErrors,
+      ).toBeUndefined()
     })
   })
 
