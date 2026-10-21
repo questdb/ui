@@ -2785,6 +2785,45 @@ describe("CellRefreshEngine", () => {
       expect(persistCellSnapshot).not.toHaveBeenCalled()
     })
 
+    it("shows the failure of an edited chart instead of keeping the frame of its old SQL", async () => {
+      // Given a chart that settled and saved a frame
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When its SQL is edited, and the edited statement is not executed
+      failToExecute()
+      engine.sync([drawCell("c1", "select 2", false)])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenLastCalledWith(
+        "select 2",
+        expect.any(AbortSignal),
+        10_000,
+        { background: true },
+      )
+
+      // Then it settles on the failure instead of "Drawing" forever: the old
+      // frame was never on screen for the new SQL
+      const state = engine.getState("c1")
+      expect(state?.settledKey).toBe(state?.queriesKey)
+      expect(cellResults.get("c1")?.results).toEqual([
+        expect.objectContaining({
+          type: "error",
+          query: "select 2",
+          requestNotSent: true,
+        }),
+      ])
+      expect(
+        toChartResult(cellResults.get("c1"), state!.queries),
+      ).toMatchObject({ kind: "settled", hadError: true })
+
+      // And the saved snapshot stays until a round reaches the server
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
     it("keeps a grid's rows without showing or saving an error, until a refresh is executed", async () => {
       // Given a run cell with rows
       const frame: CellResult = {
