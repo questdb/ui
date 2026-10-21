@@ -281,10 +281,12 @@ describe("OIDC", () => {
         const request = {
           authorization: req.headers.authorization,
           cookie: req.headers.cookie ?? "",
+          session: req.query.session,
         }
         requests.push(request)
         req.continue((res) => {
           request.statusCode = res.statusCode
+          request.setCookie = String(res.headers["set-cookie"] ?? "")
         })
       }
       const outcomes = (requests) =>
@@ -371,6 +373,19 @@ describe("OIDC", () => {
           `Bearer ${acceptedBearer} -> 200`,
         ])
       })
+      // The 401 also deleted the qdb_session cookie, which downloads use. The
+      // resent check asks for a new session, so exports keep working.
+      cy.wrap(authChecks).should((requests) => {
+        expect(requests[2].session).to.eq("true")
+        expect(requests[2].setCookie).to.contain("qdb_session=")
+      })
+      // Like a download, this request authenticates with the cookie alone.
+      cy.request({
+        url: `${baseUrl}/exp?query=${encodeURIComponent("select 1")}`,
+        failOnStatusCode: false,
+      })
+        .its("status")
+        .should("eq", 200)
       cy.executeSQL("select current_user();")
       cy.getGridRow(0).should("contain", "john doe")
       cy.getByDataHook("auth-login").should("not.exist")

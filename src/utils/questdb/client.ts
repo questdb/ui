@@ -91,6 +91,13 @@ export class Client {
   private _endedSessionWriteListeners = new Set<(count: number) => void>()
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
+  // The server closes the session of a request whose bearer it rejects, and
+  // the Enterprise server deletes the qdb_session cookie with every 401.
+  // Downloads authenticate only with that cookie (an iframe GET to `exp`), so
+  // after a 401 the next SQL request of the same SSO login asks the server to
+  // open a new session. One request asks at a time, so queries sent together
+  // don't open sessions that immediately replace each other.
+  private _lostCookieSession?: { sessionId: number; reopening: boolean }
   private commonHeaders: Record<string, string> = {}
   refreshTokenMethod?: RefreshTokenMethod
 
@@ -373,6 +380,50 @@ export class Client {
     return session
   }
 
+  private claimCookieSessionReopen() {
+    const lost = this._lostCookieSession
+    if (
+      !lost ||
+      lost.reopening ||
+      lost.sessionId !== authSessionState.getSessionId() ||
+      !authSessionState.isSSOAuthenticated()
+    )
+      return undefined
+    lost.reopening = true
+    return lost
+  }
+
+  private async fetchExec(
+    payload: Record<string, string | number | boolean | undefined>,
+    init: RequestInit,
+    session: AuthSession,
+  ) {
+    const reopen = this.claimCookieSessionReopen()
+    const params = reopen ? { ...payload, session: true } : payload
+    let response: Response
+    try {
+      response = await fetch(`exec?${Client.encodeParams(params)}`, init)
+    } catch (error) {
+      if (reopen) reopen.reopening = false
+      throw error
+    }
+    if (response.status === 401) {
+      if (session.isCurrent() && authSessionState.isSSOAuthenticated()) {
+        this._lostCookieSession = {
+          sessionId: authSessionState.getSessionId(),
+          reopening: false,
+        }
+      }
+    } else if (reopen) {
+      // The server opens the session once it has authorized the request,
+      // even if the SQL then fails. Other answers leave it for a later request.
+      if (!response.ok && response.status !== 400) reopen.reopening = false
+      else if (this._lostCookieSession === reopen)
+        this._lostCookieSession = undefined
+    }
+    return response
+  }
+
   private async sendQuery(
     payload: Record<string, string | number | boolean | undefined>,
     signal: AbortSignal,
@@ -408,10 +459,11 @@ export class Client {
       authorizationAtFetch = headers.Authorization
       fetchStartedAt = Date.now()
       execution.requestNotSent = false
-      const response = await fetch(`exec?${Client.encodeParams(payload)}`, {
-        signal,
-        headers,
-      })
+      const response = await this.fetchExec(
+        payload,
+        { signal, headers },
+        session,
+      )
       // Authentication/authorization rejection executed no SQL. Record that
       // before publishing connection events, which may synchronously log out.
       // Preserve it until another SQL attempt is sent.

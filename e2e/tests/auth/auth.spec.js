@@ -1066,7 +1066,9 @@ describe("Auth - OIDC bearer rejected at startup", () => {
       const answer = (requests) => (req) => {
         const statusCode =
           req.headers.authorization === `Bearer ${accepted}` ? 200 : 401
-        requests.push(`${req.headers.authorization} -> ${statusCode}`)
+        // session=true asks the server to open a qdb_session cookie session.
+        const session = req.query.session === "true" ? " session=true" : ""
+        requests.push(`${req.headers.authorization}${session} -> ${statusCode}`)
         req.reply(
           statusCode === 200
             ? { statusCode, body: queryResult }
@@ -1121,19 +1123,24 @@ describe("Auth - OIDC bearer rejected at startup", () => {
 
       // A 401 executed no SQL: the console renews its token once, resends its
       // startup check once with the renewed bearer, and keeps the session.
+      // The 401 also closed the cookie session that downloads use, so the
+      // resent check asks for a new one.
       cy.getEditor().should("be.visible")
       cy.getByDataHook("auth-login").should("not.exist")
       cy.wrap(authChecks).should("deep.equal", [
         `Bearer ${rejected} -> 401`,
-        `Bearer ${accepted} -> 200`,
+        `Bearer ${accepted} session=true -> 200`,
       ])
-      cy.wrap(sessionStarts).should("deep.equal", [`Bearer ${rejected} -> 401`])
+      cy.wrap(sessionStarts).should("deep.equal", [
+        `Bearer ${rejected} session=true -> 401`,
+      ])
       cy.wrap(grants).should("deep.equal", [
         "authorization_code",
         "refresh_token",
       ])
 
-      // Statements then use the renewed bearer, without another renewal.
+      // Statements then use the renewed bearer, without another renewal, and
+      // don't ask for another session.
       const statements = []
       cy.intercept(
         {

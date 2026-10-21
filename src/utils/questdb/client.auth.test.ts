@@ -1085,3 +1085,178 @@ describe("REST/basic 401 comparison", () => {
     },
   )
 })
+
+// A 401 deletes the qdb_session cookie, which downloads authenticate with.
+describe("cookie session after a rejected bearer", () => {
+  const asksForSession = ([url]: unknown[]) =>
+    new URLSearchParams(String(url).split("?")[1]).get("session") === "true"
+  const unavailable = () => new Response("", { status: 503 })
+  const renewTo = (accessToken: string) =>
+    vi.fn(() => {
+      const payload = token({ access_token: accessToken })
+      authSessionState.setAuthPayload(payload)
+      return Promise.resolve(payload)
+    })
+
+  it("asks for a new session with the request it resends after a 401", async () => {
+    authSessionState.setAuthPayload(token())
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(unauthorized)
+      .mockImplementation(ok)
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    client.refreshTokenMethod = renewTo("new")
+
+    await client.queryRaw("select 1")
+    await client.queryRaw("select 2")
+
+    expect(fetchMock.mock.calls.map(asksForSession)).toEqual([
+      false,
+      true,
+      false,
+    ])
+  })
+
+  it("asks with the next request the server accepts after a failed renewal", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    authSessionState.setAuthPayload(token())
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(unauthorized)
+      .mockImplementation(ok)
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    client.refreshTokenMethod = vi.fn(() =>
+      Promise.reject(new Error("IdP unavailable")),
+    )
+    await expect(client.queryRaw("select 1")).rejects.toMatchObject({
+      authRefreshUnavailable: true,
+    })
+
+    // A later renewal installs a bearer the server accepts.
+    authSessionState.setAuthPayload(token({ access_token: "recovered" }))
+    await client.queryRaw("select 2")
+    await client.queryRaw("select 3")
+
+    expect(fetchMock.mock.calls.map(asksForSession)).toEqual([
+      false,
+      true,
+      false,
+    ])
+  })
+
+  it("asks with one request at a time", async () => {
+    authSessionState.setAuthPayload(token())
+    const responses: Array<(response: Response) => void> = []
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(unauthorized)
+      .mockImplementation(
+        () => new Promise<Response>((resolve) => responses.push(resolve)),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    // Housekeeping neither renews nor resends, but its 401 closes the session.
+    await expect(
+      client.queryRaw("select 1", { refreshAuth: false }),
+    ).rejects.toMatchObject({ authRefreshUnavailable: true })
+
+    const first = client.queryRaw("select 2")
+    const second = client.queryRaw("select 3")
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+    expect(fetchMock.mock.calls.map(asksForSession)).toEqual([
+      false,
+      true,
+      false,
+    ])
+    responses[0](ok())
+    responses[1](ok())
+    await Promise.all([first, second])
+
+    const third = client.queryRaw("select 4")
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4))
+    expect(fetchMock.mock.calls.map(asksForSession)).toEqual([
+      false,
+      true,
+      false,
+      false,
+    ])
+    responses[2](ok())
+    await third
+  })
+
+  it("asks again when the request that asked could not open the session", async () => {
+    authSessionState.setAuthPayload(token())
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(unauthorized)
+      .mockImplementationOnce(unavailable)
+      .mockImplementationOnce(() =>
+        Promise.reject(new TypeError("Failed to fetch")),
+      )
+      .mockImplementation(ok)
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    await expect(
+      client.queryRaw("select 1", { refreshAuth: false }),
+    ).rejects.toMatchObject({ authRefreshUnavailable: true })
+
+    await expect(client.queryRaw("select 2")).rejects.toMatchObject({
+      status: 503,
+    })
+    await expect(client.queryRaw("select 3")).rejects.toMatchObject({
+      connectionError: true,
+    })
+    await client.queryRaw("select 4")
+    await client.queryRaw("select 5")
+
+    expect(fetchMock.mock.calls.map(asksForSession)).toEqual([
+      false,
+      true,
+      true,
+      true,
+      false,
+    ])
+  })
+
+  it.each(["Bearer rest-token", "Basic dXNlcjpwYXNz"])(
+    "never asks with %s credentials",
+    async (authorization) => {
+      authSessionState.markNonSSOAuthenticated()
+      const fetchMock = vi
+        .fn()
+        .mockImplementationOnce(unauthorized)
+        .mockImplementation(ok)
+      vi.stubGlobal("fetch", fetchMock)
+      const client = new Client()
+      client.setCommonHeaders({ Authorization: authorization })
+
+      await expect(client.queryRaw("select 1")).rejects.toMatchObject({
+        status: 401,
+      })
+      await client.queryRaw("select 2")
+
+      expect(fetchMock.mock.calls.map(asksForSession)).toEqual([false, false])
+    },
+  )
+
+  it("leaves the next login's session to its sign-in", async () => {
+    authSessionState.setAuthPayload(token())
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(unauthorized)
+      .mockImplementation(ok)
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    await expect(
+      client.queryRaw("select 1", { refreshAuth: false }),
+    ).rejects.toMatchObject({ authRefreshUnavailable: true })
+
+    authSessionState.endSession()
+    authSessionState.setAuthPayload(token({ access_token: "next-login" }))
+    await client.queryRaw("select 2")
+
+    expect(fetchMock.mock.calls.map(asksForSession)).toEqual([false, false])
+  })
+})
