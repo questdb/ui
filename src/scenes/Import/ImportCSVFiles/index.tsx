@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { FilesToUpload } from "./files-to-upload"
-import { ProcessedFile } from "./types"
+import { ProcessedFile, TableNameCheck } from "./types"
 import { SchemaColumn } from "../../../components/TableSchemaDialog/types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
@@ -251,7 +251,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           onFileUpload={async (id) => {
             const file = filesDropped.find((f) => f.id === id) as ProcessedFile
 
-            if (file.isUploading) {
+            if (file.isUploading || file.status === TableNameCheck.PENDING) {
               return
             }
             void trackEvent(ConsoleEvent.IMPORT_FILE_UPLOAD, {
@@ -323,19 +323,35 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           onFilePropertyChange={async (id, partialFile) => {
             const tableName = partialFile.table_name
             // Apply the edit at once: the name check below can wait for a
-            // token refresh, and an upload started meanwhile must use the new
-            // name. A new name also resets the prior error.
+            // token refresh. The previous status described another table, so
+            // the new name has no status, and can't be uploaded to, until its
+            // check answers. A new name also resets the prior error.
             setFileProperties(
               id,
-              tableName ? { ...partialFile, error: undefined } : partialFile,
+              tableName
+                ? {
+                    ...partialFile,
+                    error: undefined,
+                    status: TableNameCheck.PENDING,
+                  }
+                : partialFile,
             )
             // Only check for file existence if table name is changed
             if (!tableName) return
-            const { status } = await quest.checkCSVFile(tableName)
+            let status: string
+            try {
+              status = (await quest.checkCSVFile(tableName)).status
+            } catch {
+              status = TableNameCheck.FAILED
+            }
             setFilesDropped((files) =>
               files.map((file) =>
-                // Ignore the result if the file has been renamed again.
-                file.id === id && file.table_name === tableName
+                // Ignore the result if the file has been renamed again. A
+                // failure doesn't replace a status found by another check.
+                file.id === id &&
+                file.table_name === tableName &&
+                (status !== TableNameCheck.FAILED ||
+                  file.status === TableNameCheck.PENDING)
                   ? { ...file, status }
                   : file,
               ),

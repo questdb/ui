@@ -5,7 +5,7 @@ import {
   FileCheckStatus,
   type UploadResult,
 } from "../../../utils/questdb/types"
-import type { ProcessedFile } from "./types"
+import { TableNameCheck, type ProcessedFile } from "./types"
 
 type Queue = {
   files: ProcessedFile[]
@@ -60,10 +60,12 @@ import { ImportCSVFiles } from "."
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((settle) => {
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((settle, fail) => {
     resolve = settle
+    reject = fail
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 const csv = (name: string) => ({ name, size: 7 }) as unknown as File
@@ -160,26 +162,78 @@ describe("Import file checks that finish after other changes", () => {
     expect(file().status).toBe(FileCheckStatus.EXISTS)
   })
 
-  it("uploads under a new name at once and keeps the upload when its check returns", async () => {
+  it("shows no status for a new name until its check returns, and uploads under it after", async () => {
     await mountWithFile()
     const check = deferred<{ status: string }>()
     mocks.quest.checkCSVFile.mockReturnValueOnce(check.promise)
     act(() => {
       void queue().onFilePropertyChange(file().id, { table_name: "renamed" })
     })
-    expect(file().table_name).toBe("renamed")
+    // trades.csv did not exist, which says nothing about "renamed"
+    expect(file()).toMatchObject({
+      table_name: "renamed",
+      status: TableNameCheck.PENDING,
+    })
+
+    // An upload cannot skip the warning the check may still show
+    startUpload()
+    expect(mocks.quest.uploadCSVFile).not.toHaveBeenCalled()
+
+    check.resolve({ status: FileCheckStatus.EXISTS })
+    await settle(check)
+    expect(file()).toMatchObject({
+      table_name: "renamed",
+      status: FileCheckStatus.EXISTS,
+    })
 
     startUpload()
     expect(mocks.quest.uploadCSVFile).toHaveBeenCalledWith(
       expect.objectContaining({ name: "renamed" }),
     )
+  })
 
-    check.resolve({ status: FileCheckStatus.EXISTS })
-    await settle(check)
+  it("reports a failed check of a new name instead of keeping the old status", async () => {
+    await mountWithFile()
+    mocks.quest.checkCSVFile.mockRejectedValueOnce(
+      new TypeError("Failed to fetch"),
+    )
+
+    await act(() =>
+      queue().onFilePropertyChange(file().id, { table_name: "renamed" }),
+    )
 
     expect(file()).toMatchObject({
       table_name: "renamed",
-      isUploading: true,
+      status: TableNameCheck.FAILED,
+    })
+    // The user is warned, and may still upload
+    startUpload()
+    expect(mocks.quest.uploadCSVFile).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "renamed" }),
+    )
+  })
+
+  it("keeps the status another check found when the rename's own check fails", async () => {
+    await mountWithFile()
+    const renameCheck = deferred<{ status: string }>()
+    mocks.quest.checkCSVFile.mockReturnValueOnce(renameCheck.promise)
+    let renamed!: Promise<void>
+    act(() => {
+      renamed = queue().onFilePropertyChange(file().id, {
+        table_name: "renamed",
+      })
+    })
+    // The Import view becomes visible and checks the new name, too
+    const visibilityCheck = showWithPendingCheck()
+    visibilityCheck.resolve({ status: FileCheckStatus.EXISTS })
+    await settle(visibilityCheck)
+    expect(file().status).toBe(FileCheckStatus.EXISTS)
+
+    renameCheck.reject(new TypeError("Failed to fetch"))
+    await act(() => renamed)
+
+    expect(file()).toMatchObject({
+      table_name: "renamed",
       status: FileCheckStatus.EXISTS,
     })
   })

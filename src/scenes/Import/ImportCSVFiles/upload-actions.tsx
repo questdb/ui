@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { ProcessedFile } from "./types"
+import { ProcessedFile, TableNameCheck } from "./types"
 import { Box, Button, Tooltip } from "../../../components"
 import { Close, Upload2 } from "../../../components/icons"
 import { UploadSettingsDialog } from "./upload-settings-dialog"
@@ -28,7 +28,8 @@ export const UploadActions = ({
         file={file}
       />
       <Button
-        disabled={file.isUploading}
+        // Wait until the status of a new table name is known.
+        disabled={file.isUploading || file.status === TableNameCheck.PENDING}
         data-hook="import-upload-button"
         variant="primary"
         prefixIcon={<Upload2 size="18px" />}
