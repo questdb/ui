@@ -17,6 +17,14 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 2.0.5 - 2026.10.21
+### Changed
+- bump @questdb/sql-parser to 0.1.20 [#618](https://github.com/questdb/ui/pull/618)
+
+### Fixed
+- Web Console hanging or signing out when SSO tokens expire [#617](https://github.com/questdb/ui/pull/617)
+
+
 ## 2.0.4 - 2026.09.30
 ### Added
 - full query text support to run with selection option [#604](https://github.com/questdb/ui/pull/604)
