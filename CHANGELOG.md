@@ -18,6 +18,9 @@ and this project adheres to
 
 
 ## 2.0.5 - 2026.10.21
+### Changed
+- bump @questdb/sql-parser to 0.1.20 [#618](https://github.com/questdb/ui/pull/618)
+
 ### Fixed
 - Web Console hanging or signing out when SSO tokens expire [#617](https://github.com/questdb/ui/pull/617)
 
