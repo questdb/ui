@@ -1,7 +1,12 @@
 import "../test/stubBrowserGlobals"
 import React from "react"
 import { Base64 } from "js-base64"
-import { act, create, ReactTestRenderer } from "react-test-renderer"
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  ReactTestRenderer,
+} from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthProvider, useAuth } from "./AuthProvider"
 import { QuestProvider } from "./QuestProvider"
@@ -17,11 +22,19 @@ import { isRefreshable, tokenRefresh } from "../utils/questdb/tokenRefresh"
 import { SettingsProvider, useSettings } from "./SettingsProvider"
 import { ThemeProvider } from "styled-components"
 import { darkTheme } from "../theme"
+import { UNFINISHED_WRITES_TOAST_ID } from "../modules/OAuth2/views/unfinishedWritesWarning"
 
 const mocks = vi.hoisted(() => ({
   settings: {} as Settings,
   useRealSettings: false,
   toastError: vi.fn<
+    [
+      React.ReactElement,
+      { autoClose: boolean; closeOnClick: boolean; toastId: string },
+    ],
+    void
+  >(),
+  toastWarning: vi.fn<
     [
       React.ReactElement,
       { autoClose: boolean; closeOnClick: boolean; toastId: string },
@@ -48,6 +61,7 @@ vi.mock("../components/Toast", () => ({
   REFRESH_FAILED_TOAST_ID: "sso-refresh-failed",
   toast: {
     error: mocks.toastError,
+    warning: mocks.toastWarning,
     dismiss: mocks.toastDismiss,
     isActive: mocks.toastActive,
   },
@@ -94,6 +108,10 @@ const initialToken = {
   expires_in: 3600,
   token_type: "Bearer",
 }
+const textOf = (node: ReactTestInstance): string =>
+  node.children
+    .map((child) => (typeof child === "string" ? child : textOf(child)))
+    .join("")
 const refreshToken = (
   deadline = new AbortController().signal,
   request = new AbortController().signal,
@@ -110,6 +128,10 @@ beforeEach(() => {
   signInToken = initialToken
   mocks.useRealSettings = false
   mocks.toastActive.mockReturnValue(false)
+  // `window` is the global object here. AuthProvider asks before leaving the
+  // page while an ended session's writes are still being sent.
+  vi.stubGlobal("addEventListener", vi.fn())
+  vi.stubGlobal("removeEventListener", vi.fn())
   const tabStorage = new Map<string, string>()
   vi.stubGlobal("sessionStorage", {
     getItem: (key: string) => tabStorage.get(key) ?? null,
@@ -379,6 +401,129 @@ describe("AuthProvider token installation", () => {
     })
     expect(login().props.unfinishedWrites).toBe(0)
     expect(abortUpload).not.toHaveBeenCalled()
+  })
+
+  // Ends the session while a CSV upload is being sent, then signs in again
+  // with a password, which replaces Login without leaving the page.
+  const signInAgainWithPasswordDuringUpload = async () => {
+    const leaveListeners = new Set<(event: Event) => void>()
+    vi.stubGlobal(
+      "addEventListener",
+      vi.fn((type: string, listener: (event: Event) => void) => {
+        if (type === "beforeunload") leaveListeners.add(listener)
+      }),
+    )
+    vi.stubGlobal(
+      "removeEventListener",
+      vi.fn((type: string, listener: (event: Event) => void) => {
+        if (type === "beforeunload") leaveListeners.delete(listener)
+      }),
+    )
+    const leavePage = () => {
+      const event = { preventDefault: vi.fn(), returnValue: undefined }
+      leaveListeners.forEach((listener) => listener(event as unknown as Event))
+      return event
+    }
+    await mount()
+    let finishUpload: (() => void) | undefined
+    class UploadRequest {
+      status = 200
+      response = "{}"
+      abort = vi.fn()
+      upload = { addEventListener: vi.fn() }
+      open = vi.fn()
+      setRequestHeader = vi.fn()
+      send = vi.fn(() => {
+        finishUpload = () => this.onload?.()
+      })
+      onload?: () => void
+    }
+    vi.stubGlobal("XMLHttpRequest", UploadRequest)
+    const upload = questClient.uploadCSVFile({
+      file: new File(["x\n1"], "probe.csv"),
+      name: "probe",
+      owner: "admin",
+      onProgress: vi.fn(),
+    })
+    const rejected = expect(upload).rejects.toMatchObject({
+      name: "SessionEndedError",
+    })
+    await vi.waitFor(() => expect(finishUpload).toBeDefined())
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    )
+    act(() => auth.signInAgain())
+    const login = () =>
+      renderer!.root.findByProps({ "data-hook": "mock-login" })
+    expect(login().props.unfinishedWrites).toBe(1)
+    expect(leavePage().preventDefault).toHaveBeenCalledOnce()
+    // Login explains the upload itself.
+    expect(mocks.toastWarning).not.toHaveBeenCalled()
+
+    const { onBasicAuthSuccess } = login().props as {
+      onBasicAuthSuccess: () => void
+    }
+    act(() => {
+      onBasicAuthSuccess()
+    })
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
+    ).toHaveLength(0)
+    return {
+      leavePage,
+      leaveListeners,
+      settleUpload: async () => {
+        await act(async () => {
+          finishUpload?.()
+          await rejected
+        })
+      },
+    }
+  }
+
+  it("keeps asking before leaving, and warns in the console, after a password sign-in until a sent upload settles", async () => {
+    const { leavePage, leaveListeners, settleUpload } =
+      await signInAgainWithPasswordDuringUpload()
+    // Reloading or closing the tab would still cancel the upload.
+    const unload = leavePage()
+    expect(unload.preventDefault).toHaveBeenCalledOnce()
+    expect(unload.returnValue).toBe("")
+    expect(mocks.toastWarning).toHaveBeenCalledOnce()
+    const [content, options] = mocks.toastWarning.mock.calls[0]
+    expect(options).toEqual({
+      autoClose: false,
+      closeOnClick: false,
+      toastId: UNFINISHED_WRITES_TOAST_ID,
+    })
+    let warning!: ReactTestRenderer
+    act(() => {
+      warning = create(content)
+    })
+    expect(textOf(warning.root)).toContain(
+      "Your previous session is still sending 1 request",
+    )
+    expect(textOf(warning.root)).toContain(
+      "Importing the same file again meanwhile can import its rows twice.",
+    )
+
+    await settleUpload()
+    expect(leaveListeners.size).toBe(0)
+    expect(mocks.toastDismiss).toHaveBeenCalledWith(UNFINISHED_WRITES_TOAST_ID)
+    expect(textOf(warning.root)).toBe(
+      "Your previous session finished sending its requests.",
+    )
+    act(() => warning.unmount())
+  })
+
+  it("still reloads at once when logging out from the toolbar while an ended session's upload is sent", async () => {
+    const { leavePage, settleUpload } =
+      await signInAgainWithPasswordDuringUpload()
+    act(() => auth.logout({ reload: true, clearSSOSession: true }))
+    expect(mocks.reload).toHaveBeenCalledOnce()
+    // Asking could keep a console without a session: Login is not shown.
+    expect(leavePage().preventDefault).not.toHaveBeenCalled()
+    await settleUpload()
   })
 
   it("confirms a real pending preferences write, lets it finish and explains its uncertainty on Login", async () => {

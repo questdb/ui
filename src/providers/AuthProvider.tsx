@@ -43,6 +43,11 @@ import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
 import { toast, REFRESH_FAILED_TOAST_ID } from "../components/Toast"
 import { questClient } from "../utils/questdb/queryClient"
 import { RefreshFailedWarning } from "../modules/OAuth2/views/refreshFailedWarning"
+import {
+  UNFINISHED_WRITES_TOAST_ID,
+  UnfinishedWritesWarning,
+} from "../modules/OAuth2/views/unfinishedWritesWarning"
+import { useEndedSessionWriteCount } from "../hooks/useEndedSessionWriteCount"
 
 type ContextProps = {
   sessionData?: AuthPayload
@@ -157,14 +162,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useState<ContextProps["sessionData"]>(undefined)
   const [state, dispatch] = useReducer(reducer, initialState)
   // Uploads and settings saves keep running after their session ends, until
-  // they settle. Login explains them, because leaving the page cancels them.
-  const [unfinishedWrites, setUnfinishedWrites] = useState(() =>
-    questClient.endedSessionWriteCount(),
-  )
+  // they settle. Leaving the page cancels them, so ask before leaving in every
+  // view: signing in again with a password replaces Login without leaving it.
+  const unfinishedWrites = useEndedSessionWriteCount()
+  const hasUnfinishedWrites = unfinishedWrites > 0
+  // Logging out from the toolbar still reloads at once.
+  const reloadingRef = useRef(false)
   useEffect(() => {
-    setUnfinishedWrites(questClient.endedSessionWriteCount())
-    return questClient.onEndedSessionWritesChange(setUnfinishedWrites)
-  }, [])
+    if (!hasUnfinishedWrites) return
+    const confirmLeave = (event: BeforeUnloadEvent) => {
+      if (reloadingRef.current) return
+      event.preventDefault()
+      // Browsers without preventDefault() support only prompt for this.
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", confirmLeave)
+    return () => window.removeEventListener("beforeunload", confirmLeave)
+  }, [hasUnfinishedWrites])
+  // Login explains them itself. After signing in again, the console does.
+  const isReady = state.view === View.ready
+  useEffect(() => {
+    if (!isReady || !hasUnfinishedWrites) return
+    toast.warning(<UnfinishedWritesWarning />, {
+      autoClose: false,
+      closeOnClick: false,
+      toastId: UNFINISHED_WRITES_TOAST_ID,
+    })
+    return () => toast.dismiss(UNFINISHED_WRITES_TOAST_ID)
+  }, [isReady, hasUnfinishedWrites])
   const unsubscribeRef = useRef<Array<() => void>>([])
   const subscribe = <T,>(type: EventType, handler: (payload?: T) => void) => {
     eventBus.subscribe(type, handler)
@@ -488,6 +513,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     unstable_batchedUpdates(() => authSessionState.endSession(logoutOptions))
     destroyServerSession()
     if (reload) {
+      // Don't ask about an ended session's writes, as the console warns that
+      // logging out cancels them. Staying would keep a console without a
+      // session, because Login is not shown before the reload.
+      reloadingRef.current = true
       window.location.reload()
     }
   }

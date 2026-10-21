@@ -300,6 +300,7 @@ export const Login = ({
   isDisconnection?: boolean
   resetErrors: () => void
   // Uploads and settings saves of the previous session still being sent.
+  // AuthProvider asks before leaving the page until they finish.
   unfinishedWrites: number
 }) => {
   const { settings } = useSettings()
@@ -328,18 +329,6 @@ export const Login = ({
   }, [redirectErrorTitle, redirectErrorMessage])
 
   const hasUnfinishedWrites = unfinishedWrites > 0
-  useEffect(() => {
-    if (!hasUnfinishedWrites) return
-    // Leaving the page, including the SSO redirect, cancels the previous
-    // session's uploads, which can leave a partially imported table.
-    const confirmLeave = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      // Browsers without preventDefault() support only prompt for this.
-      event.returnValue = ""
-    }
-    window.addEventListener("beforeunload", confirmLeave)
-    return () => window.removeEventListener("beforeunload", confirmLeave)
-  }, [hasUnfinishedWrites])
 
   const httpBasicAuthStrategy = isEE
     ? {

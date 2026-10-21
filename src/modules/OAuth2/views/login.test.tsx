@@ -112,30 +112,15 @@ const textOf = (node: ReactTestInstance): string =>
     .map((child) => (typeof child === "string" ? child : textOf(child)))
     .join("")
 
+// AuthProvider asks before leaving the page, as signing in replaces Login.
 describe("unfinished writes of the previous session", () => {
-  const stubWindow = () => {
-    const listeners = new Map<string, (event: Event) => void>()
-    const addEventListener = vi.fn(
-      (type: string, listener: (event: Event) => void) => {
-        listeners.set(type, listener)
-      },
-    )
-    const removeEventListener = vi.fn(
-      (type: string, listener: (event: Event) => void) => {
-        if (listeners.get(type) === listener) listeners.delete(type)
-      },
-    )
-    vi.stubGlobal("window", { addEventListener, removeEventListener })
-    return { listeners, addEventListener, removeEventListener }
-  }
   const notices = () =>
     renderer!.root.findAll(
       (node) =>
         node.type === "div" && node.props["data-hook"] === "unfinished-writes",
     )
 
-  it("explains them and asks before leaving the page until they finish", () => {
-    const { listeners, addEventListener, removeEventListener } = stubWindow()
+  it("explains them until they finish", () => {
     const { updateUnfinishedWrites } = mount({}, 2)
     expect(notices()).toHaveLength(1)
     expect(notices()[0].props.role).toBe("status")
@@ -145,41 +130,20 @@ describe("unfinished writes of the previous session", () => {
     expect(textOf(notices()[0])).toContain(
       "Leaving the page, including to sign in with SSO, cancels them",
     )
-    expect(addEventListener).toHaveBeenCalledOnce()
-    const unload = { preventDefault: vi.fn(), returnValue: undefined }
-    listeners.get("beforeunload")!(unload as unknown as Event)
-    expect(unload.preventDefault).toHaveBeenCalledOnce()
-    expect(unload.returnValue).toBe("")
 
     updateUnfinishedWrites(1)
     expect(textOf(notices()[0])).toContain(
       "Your previous session is still sending 1 request",
     )
     expect(textOf(notices()[0])).toContain("Keep this tab open until it")
-    // The guard stays installed while any write remains.
-    expect(addEventListener).toHaveBeenCalledOnce()
-    expect(removeEventListener).not.toHaveBeenCalled()
 
     updateUnfinishedWrites(0)
     expect(notices()).toHaveLength(0)
-    expect(listeners.has("beforeunload")).toBe(false)
   })
 
-  it("stops guarding the page when Login is replaced", () => {
-    // A password sign-in replaces Login without leaving the page.
-    const { listeners } = stubWindow()
-    mount({}, 1)
-    expect(listeners.has("beforeunload")).toBe(true)
-    act(() => renderer!.unmount())
-    renderer = undefined
-    expect(listeners.has("beforeunload")).toBe(false)
-  })
-
-  it("lets the page unload when no write is unfinished", () => {
-    const { addEventListener } = stubWindow()
+  it("shows no notice when no write is unfinished", () => {
     mount()
     expect(notices()).toHaveLength(0)
-    expect(addEventListener).not.toHaveBeenCalled()
   })
 })
 
