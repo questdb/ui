@@ -1148,16 +1148,10 @@ export class Client {
     return (await response.json()) as { status: string }
   }
 
-  async getNews({
-    category,
-    telemetryConfig,
-  }: {
-    category: string
-    telemetryConfig?: TelemetryConfigShape
-  }) {
+  async getNews({ category }: { category: string }) {
     try {
       const response: Response = await fetch(
-        `https://cloud.questdb.com/api/news?category=${category}&telemetryUserId=${telemetryConfig?.id}`,
+        `https://cloud.questdb.com/api/news?category=${category}`,
       )
       return (await response.json()) as NewsItem[]
     } catch (error) {
