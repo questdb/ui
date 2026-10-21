@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-const { seedNotebookOnboarding } = require("../../utils")
+const { ctrlOrCmd, seedNotebookOnboarding } = require("../../utils")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`
@@ -852,6 +852,130 @@ describe("Auth - OIDC ID token", () => {
     cy.get('form[name="login"] input[name="username"]')
       .type("admin")
       .should("be.focused")
+  })
+
+  describe("an editor script when the session ends", () => {
+    const statements = ["select 1001", "select 1002", "select 1003"]
+
+    // Statement 1 gets the given reply, the others would succeed.
+    const interceptStatements = (firstStatement) => {
+      statements.forEach((statement, index) => {
+        cy.intercept(
+          {
+            method: "GET",
+            url: `${baseUrl}/exec*`,
+            query: { query: new RegExp(`^${statement}$`) },
+          },
+          index === 0 ? firstStatement : { statusCode: 200, body: queryResult },
+        ).as(`statement${index + 1}`)
+      })
+    }
+
+    const runScriptDespiteFailures = () => {
+      cy.clearEditor()
+      cy.typeQuery(statements.map((statement) => `${statement};`).join("\n"))
+      cy.typeQuery(`${ctrlOrCmd}{shift}{enter}`)
+      cy.getByRole("dialog").should("contain", "Run all queries")
+      // Then only the end of the session can stop the script after statement 1
+      cy.getByDataHook("stop-after-failure-checkbox").uncheck()
+      cy.getByDataHook("run-all-queries-confirm").click()
+    }
+
+    // Signing in with a password does not leave the page, so the console
+    // still shows what the previous session left in the query log.
+    const signInWithPassword = () => {
+      cy.intercept(
+        {
+          method: "GET",
+          url: `${baseUrl}/exec*`,
+          query: { session: "true", query: /alter user .* create token/ },
+        },
+        {
+          statusCode: 200,
+          body: {
+            query: "alter user",
+            columns: [
+              { name: "username", type: "STRING" },
+              { name: "token", type: "STRING" },
+            ],
+            dataset: [["admin", "password-rest-token"]],
+            count: 1,
+          },
+        },
+      ).as("passwordSignIn")
+      cy.get('form[name="login"] input[name="username"]').type("admin")
+      cy.get('form[name="login"] input[name="password"]').type("quest{enter}")
+      cy.wait("@passwordSignIn")
+      cy.getEditor().should("be.visible")
+    }
+
+    const expectStoppedAfterStatement1 = (statement1Outcome) => {
+      cy.get("@statement2.all").should("have.length", 0)
+      cy.get("@statement3.all").should("have.length", 0)
+      cy.expandNotifications()
+      cy.getExpandedNotifications()
+        .should("contain", statement1Outcome)
+        .invoke("text")
+        .should("match", /Stopped after running\s+1 failed\s+query/)
+    }
+
+    it("stops before the next statement when signing in again, and says the interrupted one may have executed", () => {
+      // Freeze only Date, so the token stays valid while renewal fails.
+      cy.clock(Date.now(), ["Date"])
+      signIn({
+        idTokens: { authorization_code: idToken("initial", 20) },
+        refreshReply: {
+          statusCode: 503,
+          body: { error: "temporarily_unavailable" },
+        },
+        credentials: { "auto.refresh.tables": "false" },
+      })
+      cy.wait("@refreshFailure")
+      cy.getEditor().should("be.visible")
+      cy.get("#sso-refresh-failed").should("be.visible")
+      // Statement 1 reaches the server, which does not answer it yet
+      let statement1Sent = false
+      interceptStatements((req) => {
+        statement1Sent = true
+        req.reply({ statusCode: 200, body: queryResult, delay: 60000 })
+      })
+      runScriptDespiteFailures()
+      cy.wrap(null).should(() => expect(statement1Sent).to.equal(true))
+
+      cy.on("window:confirm", (text) => {
+        expect(text).to.contain("statements may already have executed")
+        return true
+      })
+      cy.contains("#sso-refresh-failed button", "Sign in again").click()
+      cy.getByDataHook("auth-login").should("be.visible")
+      cy.getByDataHook("sign-in-error")
+        .should("contain.text", "Your previous session has ended.")
+        .and("contain.text", "statements may have executed")
+
+      signInWithPassword()
+      expectStoppedAfterStatement1(
+        "Interrupted when your previous session ended. The query may have executed; verify its outcome before running it again.",
+      )
+    })
+
+    it("stops before the next statement when the server signs the session out, and says the rejected one was not run", () => {
+      // Unknown expiry: the console signs out on 401 instead of renewing.
+      signIn({
+        idTokens: { authorization_code: "opaque-id-token" },
+        accessTokenLifetime: null,
+        credentials: { "auto.refresh.tables": "false" },
+      })
+      cy.getEditor().should("be.visible")
+      interceptStatements({ statusCode: 401, body: "Unauthorized" })
+      runScriptDespiteFailures()
+      cy.wait("@statement1")
+      cy.getByDataHook("auth-login").should("be.visible")
+
+      signInWithPassword()
+      expectStoppedAfterStatement1(
+        "Not run: your previous session ended before this query was sent.",
+      )
+    })
   })
 
   it("shows Login when a pending refresh fails after Settings recovery replaces the providers", () => {

@@ -1754,6 +1754,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     const startTime = Date.now()
     for (let i = 0; i < queries.length; i++) {
+      // The run can also be stopped while it waits to start, e.g. by the end
+      // of the session. No statement may be sent after that.
+      if (scriptStopRef.current) break
       const query = queries[i]
       const lineNumber = query.row + 1
       editor.revealPositionInCenterIfOutsideViewport({
@@ -1834,7 +1837,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       )
     }
     editor.focus()
-    editor.revealPositionInCenterIfOutsideViewport(editor.getPosition()!)
+    // Ending the session unmounts the editor while the script settles, and an
+    // editor without a model has no position. The run must still be settled.
+    const position = editor.getPosition()
+    if (position) editor.revealPositionInCenterIfOutsideViewport(position)
 
     const completedGracefully = queries.length === individualQueryResults.length
     if (
@@ -1860,11 +1866,21 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
           content: (
             <Text color="contentPrimary">
-              {notificationPrefix}
-              {successfulQueries > 0 ? `${successfulQueries} successful` : ""}
-              {successfulQueries > 0 && failedQueries > 0 ? " and " : ""}
-              {failedQueries > 0 ? `${failedQueries} failed` : ""}{" "}
-              {failedQueries + successfulQueries > 1 ? " queries" : " query"}
+              {!completedGracefully && individualQueryResults.length === 0 ? (
+                "Stopped before running any query"
+              ) : (
+                <>
+                  {notificationPrefix}
+                  {successfulQueries > 0
+                    ? `${successfulQueries} successful`
+                    : ""}
+                  {successfulQueries > 0 && failedQueries > 0 ? " and " : ""}
+                  {failedQueries > 0 ? `${failedQueries} failed` : ""}{" "}
+                  {failedQueries + successfulQueries > 1
+                    ? " queries"
+                    : " query"}
+                </>
+              )}
             </Text>
           ),
           type: completedGracefully
