@@ -372,8 +372,26 @@ export class Client {
   private refreshBeforeRequest(
     signal: AbortSignal,
     lifecycle?: QueryLifecycle,
+    waitForStalledRenewal = false,
   ): { waited: false } | { waited: true; ready: Promise<void> } {
     tokenRefresh.syncSession()
+    // A statement run again after the backoff retries a failed renewal, as
+    // the renewal warning says. While the failed renewal's request is still
+    // in flight, it waits for that request to settle or be given up, and then
+    // renews, instead of failing at once without a renewal.
+    const stalled = waitForStalledRenewal
+      ? tokenRefresh.stalledRenewal()
+      : undefined
+    if (stalled) {
+      lifecycle?.onRefreshWait?.(stalled.remainingMs)
+      return {
+        waited: true,
+        ready: awaitRefresh(stalled.settled, signal).then(() => {
+          const renewal = this.refreshBeforeRequest(signal, lifecycle)
+          return renewal.waited ? renewal.ready : undefined
+        }),
+      }
+    }
     const payload = authSessionState.getAuthPayload()
     if (isRefreshable(payload) && tokenRefresh.needsRefresh(payload)) {
       this.startRefresh(payload)
@@ -402,6 +420,14 @@ export class Client {
         reopening: false,
       }
     }
+  }
+
+  // AuthProvider opens the cookie session of an SSO sign-in with a request of
+  // its own. If the server did not authorize it, no session was opened, and
+  // the console may renew its bearer before any SQL request is rejected: the
+  // next SQL request of this login asks for one, as after any other 401.
+  noteCookieSessionNotOpened(session: AuthSession) {
+    this.noteCookieSessionLost(session)
   }
 
   private claimCookieSessionReopen() {
@@ -448,14 +474,19 @@ export class Client {
     signal: AbortSignal,
     session: AuthSession,
     execution: RequestExecution,
-    lifecycle?: QueryLifecycle,
-    refreshAuth = true,
+    lifecycle: QueryLifecycle | undefined,
+    {
+      refreshAuth = true,
+      background = false,
+    }: Pick<Options, "refreshAuth" | "background">,
   ) {
     const originalPayload = authSessionState.getAuthPayload()
     if (!refreshAuth && !tokenRefresh.canSendWithoutRefresh())
       throw new AuthRefreshUnavailableError()
+    // Only statements the user runs wait for a stalled renewal: background
+    // reads fail at once, and are read again later.
     const refresh = refreshAuth
-      ? this.refreshBeforeRequest(signal, lifecycle)
+      ? this.refreshBeforeRequest(signal, lifecycle, !background)
       : { waited: false as const }
     if (refresh.waited) await refresh.ready
     // After a 401, wait for the renewal no longer than before the first fetch.
@@ -550,7 +581,7 @@ export class Client {
   ): Promise<QueryRawResult> {
     const {
       cancellable: _,
-      background: _background,
+      background = false,
       refreshAuth = true,
       ...queryOptions
     } = options ?? {}
@@ -586,7 +617,7 @@ export class Client {
         session,
         execution,
         lifecycle,
-        refreshAuth,
+        { refreshAuth, background },
       )
       response = sent.response
       authorizationAtFetch = sent.authorizationAtFetch

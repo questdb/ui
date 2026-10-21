@@ -1226,38 +1226,67 @@ describe("createDexieNotebookController — runCell", () => {
     })
   })
 
-  it("sends no queued statement of a read-only run after its session ended", async () => {
-    // Given a read-only script with more statements than can run at once
-    const statements = Array.from(
-      { length: MAX_ACTIVE_STATEMENT_REQUESTS + 1 },
-      (_, index) => `SELECT ${index}`,
-    )
-    await seedNotebook({ cells: [cell("a", statements.join("; "))] })
-    const { quest, pending: inFlight } = makeQuest({
-      validate: () => dqlValidation,
-    })
-    const controller = makeController({}, quest)
-    const run = controller.runCell("a")
-    await vi.waitFor(() => {
-      if (inFlight.length < MAX_ACTIVE_STATEMENT_REQUESTS)
-        throw new Error("not all running")
-    })
-
-    // When logout ends the session, and the requests it aborted settle
-    authSessionState.endSession()
-    inFlight.splice(0).forEach(({ resolve }) => resolve(sessionEnded))
-    const summary = await run
-
-    // Then the statement waiting for a request slot is never sent
-    expect(inFlight).toHaveLength(0)
-    expect(summary.results).toEqual([
-      ...Array.from(
-        { length: MAX_ACTIVE_STATEMENT_REQUESTS },
-        () => `ERROR: ${INTERRUPTED}`,
+  it.each([
+    {
+      run: "an agent's gated read",
+      statements: ["SELECT 1"],
+      gate: {
+        kind: "explicit" as const,
+        permissions: { grantSchemaAccess: true, read: true, write: false },
+      },
+    },
+    {
+      run: "a read-only script with more statements than can run at once",
+      statements: Array.from(
+        { length: MAX_ACTIVE_STATEMENT_REQUESTS + 1 },
+        (_, index) => `SELECT ${index}`,
       ),
-      `ERROR: ${NOT_EXECUTED}`,
-    ])
-  })
+      gate: undefined,
+    },
+  ])(
+    "keeps the previous run and its rows when the session ends during $run",
+    async ({ statements, gate }) => {
+      // Given a read-only run on a cell whose previous run is on record
+      await seedNotebook({
+        cells: [cell("a", statements.join("; "), { lastRunStatus: "success" })],
+      })
+      const previousRows = [{ ...dqlResult, query: "SELECT 0" }]
+      await saveCellSnapshot({
+        bufferId: BUFFER_ID,
+        cellId: "a",
+        results: previousRows,
+        savedAt: 1,
+      })
+      const { quest, pending: inFlight } = makeQuest({
+        validate: () => dqlValidation,
+      })
+      const controller = makeController({}, quest)
+      const run = controller.runCell("a", undefined, undefined, gate)
+      const running = Math.min(statements.length, MAX_ACTIVE_STATEMENT_REQUESTS)
+      await vi.waitFor(() => {
+        if (inFlight.length < running) throw new Error("not all running")
+      })
+
+      // When logout ends the session, and the reads it aborted settle
+      authSessionState.endSession()
+      inFlight.splice(0).forEach(({ resolve }) => resolve(sessionEnded))
+      const summary = await run
+
+      // Then a statement waiting for a request slot is never sent, and the
+      // interrupted reads don't replace the previous run or its rows
+      expect(inFlight).toHaveLength(0)
+      expect(summary).toMatchObject({
+        success: false,
+        unverified: true,
+        cancelled: "cancelled",
+      })
+      expect(summary.note).toMatch(/not recorded/)
+      expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
+      expect((await loadCellSnapshot(BUFFER_ID, "a"))?.results).toEqual(
+        previousRows,
+      )
+    },
+  )
 
   it("cancels a run that has not launched when the session ends", async () => {
     // Given an auto-run held at validation, on a cell with a recorded run

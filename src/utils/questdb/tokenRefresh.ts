@@ -40,8 +40,12 @@ class TokenRefreshCoordinator {
   private pending: {
     softDeadline: Promise<void>
     hardDeadline: Promise<void>
+    hardDeadlineAt: number
     sessionId: number
     cancel: () => void
+    // Past the soft deadline: waiters were released and the failure reported,
+    // but the request may still return a rotated refresh token.
+    stalled: boolean
   } | null = null
   private retryPayload: AuthPayload | null = null
   private failures = 0
@@ -104,17 +108,33 @@ class TokenRefreshCoordinator {
     )
   }
 
+  private hasUnusableToken() {
+    const payload = authSessionState.getAuthPayload()
+    return (
+      isRefreshable(payload) &&
+      authSessionState.hasRefreshFailed() &&
+      new Date(payload.expires_at).getTime() <= Date.now()
+    )
+  }
+
   // Never send a known-expired bearer after a transient refresh failure.
   // Keep the login intact: transport/5xx failures do not prove revocation.
   // Authoritative OAuth rejections are handled by AuthProvider.
   ensureUsableToken() {
-    const payload = authSessionState.getAuthPayload()
-    if (
-      isRefreshable(payload) &&
-      authSessionState.hasRefreshFailed() &&
-      new Date(payload.expires_at).getTime() <= Date.now()
-    ) {
-      throw new AuthRefreshUnavailableError()
+    if (this.hasUnusableToken()) throw new AuthRefreshUnavailableError()
+  }
+
+  // A renewal that failed at its soft deadline holds the slot until its hard
+  // deadline, so a request past the backoff cannot start another one, and
+  // without a usable token it would fail at once. Returns that renewal for
+  // such a request to wait for, and how long it may still take.
+  stalledRenewal() {
+    const slot = this.pending
+    if (!slot?.stalled || this.inBackoff() || !this.hasUnusableToken())
+      return undefined
+    return {
+      settled: slot.hardDeadline,
+      remainingMs: Math.max(0, slot.hardDeadlineAt - Date.now()),
     }
   }
 
@@ -178,6 +198,7 @@ class TokenRefreshCoordinator {
 
     let hardTimer: ReturnType<typeof setTimeout>
     let cancel!: () => void
+    const hardDeadlineAt = Date.now() + REFRESH_REQUEST_TIMEOUT_MS
     const hardLimit = new Promise<void>((resolve) => {
       cancel = () => {
         clearTimeout(hardTimer)
@@ -198,9 +219,20 @@ class TokenRefreshCoordinator {
     const softDeadline = withDeadline(
       hardDeadline,
       REFRESH_WAIT_TIMEOUT_MS,
-      () => deadline.abort(),
+      () => {
+        deadline.abort()
+        const slot = this.pending
+        if (slot?.hardDeadline === hardDeadline) slot.stalled = true
+      },
     ).catch(reportFailure)
-    this.pending = { softDeadline, hardDeadline, sessionId, cancel }
+    this.pending = {
+      softDeadline,
+      hardDeadline,
+      hardDeadlineAt,
+      sessionId,
+      cancel,
+      stalled: false,
+    }
     void request.finally(() => {
       clearTimeout(hardTimer)
       if (this.pending?.softDeadline === softDeadline) this.pending = null

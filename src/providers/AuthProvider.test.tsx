@@ -554,7 +554,82 @@ describe("AuthProvider token installation", () => {
     expect(mocks.reload).toHaveBeenCalledOnce()
     // Asking could keep a console without a session: Login is not shown.
     expect(leavePage().preventDefault).not.toHaveBeenCalled()
+    // Only signing in again asked: the console warns about the earlier
+    // session's upload, which this session's confirmation leaves out.
+    expect(vi.mocked(confirm)).toHaveBeenCalledOnce()
     await settleUpload()
+  })
+
+  it("asks before logging out from the toolbar cancels this session's upload, and keeps the session if declined", async () => {
+    // Given a CSV upload of this session being sent
+    await mount()
+    let finishUpload!: () => void
+    const abortUpload = vi.fn()
+    class UploadRequest {
+      status = 200
+      response = "{}"
+      abort = abortUpload
+      upload = { addEventListener: vi.fn() }
+      open = vi.fn()
+      setRequestHeader = vi.fn()
+      send = vi.fn(() => {
+        finishUpload = () => this.onload?.()
+      })
+      onload?: () => void
+    }
+    vi.stubGlobal("XMLHttpRequest", UploadRequest)
+    const upload = questClient.uploadCSVFile({
+      file: new File(["x\n1"], "probe.csv"),
+      name: "probe",
+      owner: "admin",
+      onProgress: vi.fn(),
+    })
+    await vi.waitFor(() => expect(finishUpload).toBeDefined())
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal("confirm", confirm)
+
+    // When the user declines logging out, which would reload the page
+    act(() => auth.logout({ reload: true, clearSSOSession: true }))
+
+    // Then they were told the reload cancels the upload, and nothing changed
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("can leave a partially imported table"),
+    )
+    expect(mocks.reload).not.toHaveBeenCalled()
+    expect(authSessionState.isAuthenticated()).toBe(true)
+    expect(questClient.hasActiveRequests()).toBe(true)
+    expect(abortUpload).not.toHaveBeenCalled()
+
+    // When they confirm
+    confirm.mockReturnValue(true)
+    act(() => auth.logout({ reload: true, clearSSOSession: true }))
+
+    // Then the page reloads at once
+    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(mocks.reload).toHaveBeenCalledOnce()
+    expect(authSessionState.isAuthenticated()).toBe(false)
+    await act(async () => {
+      finishUpload()
+      await expect(upload).rejects.toMatchObject({
+        name: "SessionEndedError",
+      })
+    })
+  })
+
+  it("says that logging out cancels only unsent requests when nothing was sent", async () => {
+    await mount()
+    vi.spyOn(questClient, "hasActiveRequests").mockReturnValue(true)
+    vi.spyOn(questClient, "hasSentRequests").mockReturnValue(false)
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal("confirm", confirm)
+
+    act(() => auth.logout({ reload: true, clearSSOSession: true }))
+
+    expect(confirm).toHaveBeenCalledWith(
+      "Logging out cancels requests that have not been sent yet. Log out?",
+    )
+    expect(mocks.reload).not.toHaveBeenCalled()
+    expect(authSessionState.isAuthenticated()).toBe(true)
   })
 
   it("confirms a real pending preferences write, lets it finish and explains its uncertainty on Login", async () => {
@@ -1567,6 +1642,113 @@ describe("AuthProvider password login after settings recovery", () => {
   )
 })
 
+describe("AuthProvider logout and the password credentials tabs share", () => {
+  const storePasswordLogin = () => {
+    localStorage.setItem(StoreKey.REST_TOKEN, "password-tab")
+    localStorage.setItem(StoreKey.BASIC_AUTH_HEADER, "Basic password-tab")
+  }
+  const consoleShown = () =>
+    renderer!.root.findAllByProps({ "data-hook": "console-live" }).length > 0
+  const reload = async () => {
+    act(() => renderer!.unmount())
+    location.search = ""
+    await act(async () => {
+      renderer = create(
+        <AuthProvider>
+          <span data-hook="console-live" />
+        </AuthProvider>,
+      )
+      await Promise.resolve()
+    })
+  }
+
+  it.each([
+    {
+      exit: "signs in again",
+      end: () => auth.signInAgain(),
+      resumesSSO: true,
+    },
+    {
+      exit: "is signed out by a 401",
+      end: () => eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED),
+      resumesSSO: true,
+    },
+    {
+      exit: "logs out from the toolbar",
+      end: () => auth.logout({ reload: true, clearSSOSession: true }),
+      resumesSSO: false,
+    },
+  ])(
+    "keeps another tab's password login when an SSO tab $exit, and does not take it over on reload",
+    async ({ end, resumesSSO }) => {
+      // Given an SSO login in this tab, and a password login in another
+      await mount()
+      localStorage.setItem("sso.username.test-client", "sso-user")
+      storePasswordLogin()
+
+      // When this tab's session ends
+      act(() => end())
+
+      // Then the other tab stays signed in
+      expect(authSessionState.isAuthenticated()).toBe(false)
+      expect(localStorage.getItem(StoreKey.REST_TOKEN)).toBe("password-tab")
+      expect(localStorage.getItem(StoreKey.BASIC_AUTH_HEADER)).toBe(
+        "Basic password-tab",
+      )
+
+      // And reloading this tab resumes its SSO session if it can, or shows
+      // Login, without signing in with the other tab's credentials
+      mocks.settings["acl.oidc.authorization.endpoint"] =
+        "https://identity.example/authorize"
+      await reload()
+      expect(consoleShown()).toBe(false)
+      expect(authSessionState.isAuthenticated()).toBe(false)
+      if (resumesSSO) {
+        expect(location.href).toContain("https://identity.example/authorize?")
+        expect(new URL(location.href).searchParams.get("prompt")).toBe("none")
+      } else {
+        expect(location.href).toBe("http://localhost/?code=test")
+        expect(
+          renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
+        ).toHaveLength(1)
+      }
+    },
+  )
+
+  it("removes the password credentials when a password login logs out", async () => {
+    // Given a password login in this tab
+    location.search = ""
+    storePasswordLogin()
+    const Consumer = () => {
+      auth = useAuth()
+      return <span data-hook="console-live" />
+    }
+    await act(async () => {
+      renderer = create(
+        <AuthProvider>
+          <Consumer />
+        </AuthProvider>,
+      )
+      await Promise.resolve()
+    })
+    expect(consoleShown()).toBe(true)
+    expect(sessionStorage.getItem(StoreKey.LOGIN_METHOD)).toBe("password")
+
+    // When it logs out
+    act(() => auth.logout())
+
+    // Then they are removed with the login, and reloading shows Login
+    expect(localStorage.getItem(StoreKey.REST_TOKEN)).toBeNull()
+    expect(localStorage.getItem(StoreKey.BASIC_AUTH_HEADER)).toBeNull()
+    expect(sessionStorage.getItem(StoreKey.LOGIN_METHOD)).toBeNull()
+    await reload()
+    expect(consoleShown()).toBe(false)
+    expect(
+      renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
+    ).toHaveLength(1)
+  })
+})
+
 describe("AuthProvider bearer expiry", () => {
   it.each([0, "0"])(
     "renews a zero-lifetime response (%j) before sending SQL",
@@ -1709,4 +1891,49 @@ describe("AuthProvider bearer expiry", () => {
     expect(authSessionState.getAuthPayload()?.access_token).toBe("renewed")
     expect(authSessionState.getAuthPayload()?.expires_at).toBeUndefined()
   })
+})
+
+describe("AuthProvider cookie session at sign-in", () => {
+  const startSession = "exec?query=select 2&session=true"
+  const asksForSession = ([url]: unknown[]) =>
+    url !== startSession &&
+    String(url).startsWith("exec?") &&
+    new URLSearchParams(String(url).split("?")[1]).get("session") === "true"
+
+  it.each([
+    ["is rejected", () => Promise.resolve(new Response("", { status: 401 }))],
+    ["cannot be sent", () => Promise.reject(new TypeError("Failed to fetch"))],
+    [
+      "opens it",
+      () => Promise.resolve(new Response(JSON.stringify({ ddl: "OK" }))),
+    ],
+  ] as const)(
+    "asks the next SQL request for a session only if the sign-in request %s",
+    async (outcome, answer) => {
+      // Given a sign-in whose own session request gets this answer
+      vi.mocked(fetch).mockImplementation((url) =>
+        url === "/token"
+          ? Promise.resolve(tokenResponse(initialToken))
+          : url === startSession
+            ? answer()
+            : Promise.resolve(new Response(JSON.stringify({ ddl: "OK" }))),
+      )
+      await mount()
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      expect(fetch).toHaveBeenCalledWith(startSession, expect.anything())
+
+      // When the console sends its next SQL request
+      await act(async () => {
+        await questClient.queryRaw("SELECT 99")
+      })
+
+      // Then it asks for the session that downloads need, unless one was opened
+      expect(vi.mocked(fetch).mock.calls.filter(asksForSession)).toHaveLength(
+        outcome === "opens it" ? 0 : 1,
+      )
+      expect(authSessionState.isSSOAuthenticated()).toBe(true)
+    },
+  )
 })

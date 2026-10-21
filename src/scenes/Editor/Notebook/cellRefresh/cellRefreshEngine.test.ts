@@ -2785,6 +2785,43 @@ describe("CellRefreshEngine", () => {
       expect(persistCellSnapshot).not.toHaveBeenCalled()
     })
 
+    it.each(["polls", "is refreshed again"])(
+      "keeps the saved snapshot of a chart with no frame while it %s without being executed",
+      async (trigger) => {
+        // Given a chart that shows the failure of a round not executed
+        failToExecute()
+        syncOnScreen([
+          drawCell("c1", "select 1", trigger === "polls" ? "1s" : false),
+        ])
+        await flushAsync()
+        expect(cellResults.get("c1")?.results[0]).toMatchObject({
+          type: "error",
+          requestNotSent: true,
+        })
+
+        // When its next rounds are not executed either, and so match the
+        // failure on screen
+        if (trigger === "polls") {
+          await vi.advanceTimersByTimeAsync(3000)
+        } else {
+          await engine.refresh("c1")
+          await flushAsync()
+        }
+
+        // Then it stays settled on the failure, and the snapshot on disk stays
+        // until a round reaches the server
+        expect(deps.executeSingle.mock.calls.length).toBeGreaterThan(1)
+        const state = engine.getState("c1")!
+        expect(state.settledKey).toBe(state.queriesKey)
+        expect(cellResults.get("c1")?.results[0]).toMatchObject({
+          type: "error",
+          requestNotSent: true,
+        })
+        expect(deleteCellSnapshot).not.toHaveBeenCalled()
+        expect(persistCellSnapshot).not.toHaveBeenCalled()
+      },
+    )
+
     it("shows the failure of an edited chart instead of keeping the frame of its old SQL", async () => {
       // Given a chart that settled and saved a frame
       syncOnScreen([drawCell("c1", "select 1", false)])

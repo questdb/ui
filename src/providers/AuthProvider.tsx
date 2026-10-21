@@ -156,6 +156,17 @@ const explainInterruptedRequests = (options: LogoutOptions): LogoutOptions =>
       }
     : options
 
+// Logging out from the toolbar reloads the page at once, which cancels this
+// session's running work, including, unlike signing in again, uploads already
+// being sent. Ask before the session ends, so that declining keeps it.
+const confirmReloadingLogout = () =>
+  !questClient.hasActiveRequests() ||
+  window.confirm(
+    questClient.hasSentRequests()
+      ? "Logging out reloads the page and cancels everything still running: statements may already have executed, and a cancelled CSV upload can leave a partially imported table. Log out?"
+      : "Logging out cancels requests that have not been sent yet. Log out?",
+  )
+
 export const AuthContext = createContext<ContextProps>(defaultValues)
 
 const reducer = (s: State, n: Partial<State>) =>
@@ -404,8 +415,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // credentials. Otherwise only try silent SSO when none are stored.
         callbacks.current.redirectToAuthorizationUrl({ prompt: "none" })
       } else {
-        // Stop loading and display the login state
-        uiAuthLogin()
+        // Stop loading and display the login state. A tab that signs in with
+        // SSO but has no SSO session to resume, e.g. after logging out, shows
+        // Login rather than another tab's password login.
+        uiAuthLogin(sessionStorage.getItem(StoreKey.LOGIN_METHOD) !== "sso")
       }
     } else if (settings["acl.basic.auth.realm.enabled"]) {
       await basicAuthLogin()
@@ -435,9 +448,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // execute a simple query with session=true
     const authorization = getBearerAuthorization(tokenResponse)
     if (!authorization) return
-    await fetch(`exec?query=select 2&session=true`, {
+    const session = authSessionState.capture()
+    // Downloads authenticate only with this cookie session. The server opens
+    // it once it has authorized the request, even if the SQL then fails.
+    const opened = await fetch(`exec?query=select 2&session=true`, {
       headers: { Authorization: authorization },
-    })
+    }).then(
+      (response) => response.ok || response.status === 400,
+      () => false,
+    )
+    if (!opened) questClient.noteCookieSessionNotOpened(session)
   }
 
   const destroyServerSession = () => {
@@ -448,19 +468,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     )
   }
 
-  const uiAuthLogin = () => {
+  const uiAuthLogin = (useStoredCredentials = true) => {
     // Check if user is authenticated already with basic auth
     const token = getValue(StoreKey.REST_TOKEN)
     const basicAuthHeader = getValue(StoreKey.BASIC_AUTH_HEADER)
-    if (token || basicAuthHeader) {
+    if (useStoredCredentials && (token || basicAuthHeader)) {
       authSessionState.markNonSSOAuthenticated()
       sessionStorage.setItem(StoreKey.LOGIN_METHOD, "password")
       dispatch({ view: View.ready })
     } else {
       // Settings recovery remounts this provider without ending the tab's
-      // login. If another tab has removed the shared password credentials since,
-      // end that login first: whoever signs in next must start a new session,
-      // without the previous login's requests or last result.
+      // login. If it cannot go on, e.g. another tab has removed the shared
+      // password credentials since, end that login first: whoever signs in
+      // next must start a new session, without the previous login's requests
+      // or last result.
       if (authSessionState.isAuthenticated()) {
         unstable_batchedUpdates(() =>
           authSessionState.endSession(explainInterruptedRequests({})),
@@ -504,14 +525,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = (options: LogoutOptions = {}) => {
     const { promptForLogin, reload, clearSSOSession } = options
+    if (reload && !confirmReloadingLogout()) return
     const logoutOptions = explainInterruptedRequests(options)
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
     // Finish storage cleanup before session-end listeners can render Login.
     removeValue(StoreKey.OAUTH_PROMPT)
     sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
-    sessionStorage.removeItem(StoreKey.LOGIN_METHOD)
-    removeValue(StoreKey.REST_TOKEN)
-    removeValue(StoreKey.BASIC_AUTH_HEADER)
+    // The login method is tab-local, but password credentials are shared.
+    // Only a tab signed in with a password removes them. An SSO tab leaves
+    // them to the tabs that signed in with them, and keeps its method, so
+    // that reloading it does not sign in with them either.
+    if (sessionStorage.getItem(StoreKey.LOGIN_METHOD) === "password") {
+      sessionStorage.removeItem(StoreKey.LOGIN_METHOD)
+      removeValue(StoreKey.REST_TOKEN)
+      removeValue(StoreKey.BASIC_AUTH_HEADER)
+    }
     if (clearSSOSession) {
       removeValue(StoreKey.SSO_SESSION_ACTIVE)
     }
@@ -519,16 +547,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
     // Session-end listeners clear client credentials, pending confirmations,
-    // refresh work, telemetry timers and the last query result, even when this
-    // document does not reload. React 17 does not batch promise continuations:
+    // refresh work and telemetry timers, and, unless this document reloads,
+    // the last query result. React 17 does not batch promise continuations:
     // their updates and showing Login must be one commit, before console
     // effects can run again.
     unstable_batchedUpdates(() => authSessionState.endSession(logoutOptions))
     destroyServerSession()
     if (reload) {
-      // Don't ask about an ended session's writes, as the console warns that
-      // logging out cancels them. Staying would keep a console without a
-      // session, because Login is not shown before the reload.
+      // This session's running work was confirmed above. An earlier session's
+      // writes are not asked about again: the console's warning says that
+      // logging out cancels them, and staying would now keep a console without
+      // a session, because Login is not shown before the reload.
       reloadingRef.current = true
       window.location.reload()
     }

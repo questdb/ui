@@ -65,6 +65,28 @@ describe("clearLoginDataOnSessionEnd", () => {
     expect(state.notifications).toHaveLength(1)
   })
 
+  it("leaves the store to the reload when logging out reloads the page", () => {
+    // Given what a login read, on screen in the console
+    let state = [
+      queryActions.setResult(lastResult),
+      queryActions.setTables([payroll]),
+      queryActions.setColumns([salary]),
+    ].reduce(queryReducer, initialState)
+    const dispatch = vi.fn((action: Parameters<typeof queryReducer>[1]) => {
+      state = queryReducer(state, action)
+    })
+    stop = clearLoginDataOnSessionEnd(dispatch)
+    authSessionState.markNonSSOAuthenticated()
+
+    // When logging out from the toolbar reloads the page
+    authSessionState.endSession({ reload: true })
+
+    // Then the console keeps showing it until the new document replaces it
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(state.result).toBe(lastResult)
+    expect(state.tables).toEqual([payroll])
+  })
+
   it("stops when unsubscribed", () => {
     const dispatch = vi.fn()
     clearLoginDataOnSessionEnd(dispatch)()

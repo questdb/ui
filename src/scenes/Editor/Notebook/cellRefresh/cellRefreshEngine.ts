@@ -1316,6 +1316,10 @@ export class CellRefreshEngine {
           slotVerifiedAt: verifiedSlots(entry, out, carriedResults),
         })
         this.deriveChartSlotErrors(entry)
+        // This round repeats the failure an earlier unexecuted round put on
+        // screen. Like that round, it leaves the snapshot until a round
+        // reaches the server.
+        if (notExecuted) return
         if (successResults(out).length === 0) {
           this.clearSnapshot(entry)
           return

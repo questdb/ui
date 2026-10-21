@@ -935,6 +935,134 @@ describe("transient post-expiry refresh recovery", () => {
       // keeps a fast browser clock from renewing again and again
       expect(tokenRefresh.inBackoff()).toBe(true)
     })
+
+    describe("running a statement again while the failed renewal is in flight", () => {
+      // A renewal that the identity provider never answers fails at the wait
+      // deadline, but holds the slot until its network deadline. The next one
+      // succeeds.
+      const renewalFailedAtWaitDeadline = async () => {
+        const { client, fetchMock } = expiredLogin()
+        const refresh = vi
+          .fn()
+          .mockImplementationOnce(() => new Promise<AuthPayload>(() => {}))
+          .mockImplementationOnce(renewed("recovered"))
+        client.refreshTokenMethod = refresh
+        const query = client
+          .queryRaw("SELECT 1")
+          .catch((error: unknown) => error)
+        await vi.advanceTimersByTimeAsync(REFRESH_WAIT_TIMEOUT_MS)
+        expect(await query).toMatchObject({ authRefreshUnavailable: true })
+        return { client, fetchMock, refresh }
+      }
+      const untilGivenUp =
+        REFRESH_REQUEST_TIMEOUT_MS -
+        REFRESH_WAIT_TIMEOUT_MS -
+        REFRESH_RETRY_DELAY_MS
+
+      it("waits for that renewal to be given up after the backoff, then renews", async () => {
+        // Given a renewal that failed at its wait deadline
+        const { client, fetchMock, refresh } =
+          await renewalFailedAtWaitDeadline()
+
+        // When the statement runs again during the backoff, it fails at once,
+        // as after any failed renewal
+        await expect(client.queryRaw("SELECT 1")).rejects.toMatchObject({
+          authRefreshUnavailable: true,
+          requestNotSent: true,
+        })
+
+        // When it runs again after the backoff
+        await vi.advanceTimersByTimeAsync(REFRESH_RETRY_DELAY_MS)
+        const onRefreshWait = vi.fn()
+        let settled = false
+        const rerun = client
+          .queryRaw("SELECT 1", undefined, { onRefreshWait })
+          .finally(() => {
+            settled = true
+          })
+
+        // Then it waits for that renewal, which may still rotate the only
+        // usable refresh token, until it is given up
+        expect(onRefreshWait).toHaveBeenCalledWith(untilGivenUp)
+        await vi.advanceTimersByTimeAsync(untilGivenUp - 1)
+        expect(settled).toBe(false)
+        expect(refresh).toHaveBeenCalledOnce()
+
+        // And then renews the session, and is sent with the new bearer
+        await vi.advanceTimersByTimeAsync(1)
+        await expect(rerun).resolves.toMatchObject({ type: "dml" })
+        expect(refresh).toHaveBeenCalledTimes(2)
+        expect(onRefreshWait).toHaveBeenLastCalledWith(REFRESH_WAIT_TIMEOUT_MS)
+        expect(fetchMock).toHaveBeenCalledOnce()
+        expect(fetchMock.mock.lastCall?.[1]?.headers).toEqual({
+          Authorization: "Bearer recovered",
+        })
+      })
+
+      it("sends it with the token that renewal returns late", async () => {
+        // Given a renewal that failed at its wait deadline, but whose request
+        // is still in flight
+        const { client, fetchMock } = expiredLogin()
+        let answer!: () => void
+        const refresh = vi.fn(
+          () =>
+            new Promise<AuthPayload>((resolve) => {
+              answer = () => void renewed("late")().then(resolve)
+            }),
+        )
+        client.refreshTokenMethod = refresh
+        const query = client
+          .queryRaw("SELECT 1")
+          .catch((error: unknown) => error)
+        await vi.advanceTimersByTimeAsync(REFRESH_WAIT_TIMEOUT_MS)
+        expect(await query).toMatchObject({ authRefreshUnavailable: true })
+
+        // When the statement runs again after the backoff, and the identity
+        // provider then answers
+        await vi.advanceTimersByTimeAsync(REFRESH_RETRY_DELAY_MS)
+        const rerun = client.queryRaw("SELECT 1")
+        await vi.advanceTimersByTimeAsync(5_000)
+        answer()
+
+        // Then it is sent with that token, without another renewal
+        await expect(rerun).resolves.toMatchObject({ type: "dml" })
+        expect(refresh).toHaveBeenCalledOnce()
+        expect(fetchMock.mock.lastCall?.[1]?.headers).toEqual({
+          Authorization: "Bearer late",
+        })
+      })
+
+      it("does not hold a background read", async () => {
+        const { client, fetchMock, refresh } =
+          await renewalFailedAtWaitDeadline()
+        await vi.advanceTimersByTimeAsync(REFRESH_RETRY_DELAY_MS)
+
+        await expect(
+          client.queryRaw("tables()", { background: true }),
+        ).rejects.toMatchObject({ authRefreshUnavailable: true })
+        expect(refresh).toHaveBeenCalledOnce()
+        expect(fetchMock).not.toHaveBeenCalled()
+      })
+
+      it("stops waiting when the statement is cancelled", async () => {
+        const { client, fetchMock, refresh } =
+          await renewalFailedAtWaitDeadline()
+        await vi.advanceTimersByTimeAsync(REFRESH_RETRY_DELAY_MS)
+
+        const { promise, queryId } = client.queryRaw("SELECT 1", {
+          cancellable: true,
+        })
+        client.abort(queryId)
+
+        await expect(promise).rejects.toMatchObject({
+          error: "Cancelled by user",
+          requestNotSent: true,
+        })
+        await vi.advanceTimersByTimeAsync(untilGivenUp)
+        expect(refresh).toHaveBeenCalledOnce()
+        expect(fetchMock).not.toHaveBeenCalled()
+      })
+    })
   })
 
   it("keeps the session during repeated transient post-expiry failures", async () => {
@@ -1447,6 +1575,29 @@ describe("cookie session after a rejected bearer", () => {
       expect(fetchMock.mock.calls.map(asksForSession)).toEqual([false, false])
     },
   )
+
+  it("asks when the sign-in request opened no session, only in that login", async () => {
+    authSessionState.setAuthPayload(token())
+    const signIn = authSessionState.capture()
+    const fetchMock = vi.fn().mockImplementation(ok)
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+
+    client.noteCookieSessionNotOpened(signIn)
+    await client.queryRaw("select 1")
+    await client.queryRaw("select 2")
+    // A sign-in answer that arrives after its login ended changes nothing.
+    authSessionState.endSession()
+    authSessionState.setAuthPayload(token({ access_token: "next-login" }))
+    client.noteCookieSessionNotOpened(signIn)
+    await client.queryRaw("select 3")
+
+    expect(fetchMock.mock.calls.map(asksForSession)).toEqual([
+      true,
+      false,
+      false,
+    ])
+  })
 
   it("leaves the next login's session to its sign-in", async () => {
     authSessionState.setAuthPayload(token())

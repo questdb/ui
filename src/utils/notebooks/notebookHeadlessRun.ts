@@ -99,6 +99,8 @@ type HeadlessClaim = {
   controller: AbortController
   generation: number
   launched: boolean
+  // Set at launch: classification found no write among the run's statements.
+  readOnly: boolean
 }
 
 type HeadlessCellClaims = {
@@ -109,7 +111,7 @@ type HeadlessCellClaims = {
 
 type HeadlessRunClaim = {
   signal: AbortSignal
-  launch: () => boolean
+  launch: (readOnly: boolean) => boolean
   isCurrent: () => boolean
   release: () => void
 }
@@ -141,6 +143,7 @@ const claimHeadlessRun = (
     controller: new AbortController(),
     generation,
     launched: false,
+    readOnly: false,
   }
   state.nextGeneration = generation
   state.claims.add(claim)
@@ -159,7 +162,7 @@ const claimHeadlessRun = (
 
   return {
     signal: claim.controller.signal,
-    launch: () => {
+    launch: (readOnly) => {
       stopExternal()
       if (
         claim.controller.signal.aborted ||
@@ -173,6 +176,7 @@ const claimHeadlessRun = (
 
       state.latestLaunchedGeneration = claim.generation
       claim.launched = true
+      claim.readOnly = readOnly
       for (const older of state.claims) {
         if (older.generation < claim.generation) {
           older.controller.abort("superseded" satisfies RunCancelReason)
@@ -223,16 +227,19 @@ export const cancelHeadlessCellRuns = (
 }
 
 // Ending the session aborts every request. A run that has not launched is
-// cancelled before it executes anything. A launched run still records its
-// outcome: the statements that completed did run, and dropping them would
-// leave the previous run on record, so that an agent could repeat writes that
-// already committed. The statement in flight records that the session ended
-// around it, which leaves its outcome unverified, and the rest are not sent.
+// cancelled before it executes anything. So is a read-only run: its reads in
+// flight could only come back as interrupted, and the rest as not executed,
+// which would replace the previous run on record and its rows. A launched
+// run that writes still records its outcome: the statements that completed
+// did run, and dropping them would leave the previous run on record, so that
+// an agent could repeat writes that already committed. The statement in
+// flight records that the session ended around it, which leaves its outcome
+// unverified, and the rest are not sent.
 authSessionState.beforeEnd(() => {
   for (const perBuffer of headlessClaims.values()) {
     for (const state of perBuffer.values()) {
       for (const claim of state.claims) {
-        if (!claim.launched) claim.controller.abort()
+        if (!claim.launched || claim.readOnly) claim.controller.abort()
       }
     }
   }
@@ -520,18 +527,21 @@ export const runHeadlessCell = async (
       return { ...emptySummary(), skipped: barrier.reason }
     }
     const classified = barrier.classified
+    // Without a classification, the run may write.
+    const readOnlyStatements =
+      classified && !hasWriteStatement(classified) ? classified : null
 
-    if (!claim.launch()) {
+    if (!claim.launch(readOnlyStatements !== null)) {
       return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
     }
     // The queue is NOT held during execution, so runs on other cells of the
     // same notebook proceed in parallel; the commit re-reads and patches only
     // this cell.
     const ranResult =
-      classified && !hasWriteStatement(classified)
+      readOnlyStatements !== null
         ? await executeCellQueriesParallel({
             queries,
-            classified,
+            classified: readOnlyStatements,
             variables: prep.variables,
             quest,
             session,

@@ -279,21 +279,16 @@ describe("startTelemetry epic", () => {
       actions$.next({ type: TelemetryAT.START })
       await new Promise((resolve) => setTimeout(resolve, 0))
       expect(mockQuery).toHaveBeenCalledTimes(2)
+      // The one-shot startup read may renew the session: nothing retries it.
       expect(mockQuery).toHaveBeenNthCalledWith(
         1,
         "telemetry_config limit -1",
-        {
-          refreshAuth: false,
-          background: true,
-        },
+        { background: true },
       )
       expect(mockQuery).toHaveBeenNthCalledWith(
         2,
         "telemetry_config limit -1",
-        {
-          refreshAuth: false,
-          background: true,
-        },
+        { background: true },
       )
       expect(error).not.toHaveBeenCalled()
       expect(next).toHaveBeenCalledWith(
