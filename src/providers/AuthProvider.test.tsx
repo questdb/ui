@@ -1456,6 +1456,86 @@ describe.each([
   },
 )
 
+describe("AuthProvider password login after settings recovery", () => {
+  it.each([
+    { server: "a password-only", oidc: false },
+    { server: "an OIDC", oidc: true },
+  ])(
+    "ends the login before showing Login when another tab removed its credentials, on $server server",
+    async ({ oidc }) => {
+      // Given a password login in this tab, with a statement still running
+      location.search = ""
+      mocks.settings["acl.oidc.enabled"] = oidc
+      localStorage.setItem(StoreKey.REST_TOKEN, "first-user")
+      vi.mocked(fetch).mockImplementation(
+        (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError")),
+            )
+          }),
+      )
+      const providers = () => (
+        <AuthProvider>
+          <span data-hook="console-live" />
+        </AuthProvider>
+      )
+      await act(async () => {
+        renderer = create(providers())
+        await Promise.resolve()
+      })
+      expect(
+        renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+      ).toHaveLength(1)
+      const firstLogin = authSessionState.capture()
+      const statement = questClient
+        .queryRaw("INSERT INTO trades VALUES (1)")
+        .catch((error: unknown) => error)
+      await vi.waitFor(() => expect(questClient.hasSentRequests()).toBe(true))
+      const ended = vi.fn()
+      const stopListening = authSessionState.onEnd(ended)
+      try {
+        // When a failed settings refresh unmounts the console, another tab
+        // logs out, and Settings Retry mounts the providers again
+        act(() => renderer!.unmount())
+        localStorage.removeItem(StoreKey.REST_TOKEN)
+        await act(async () => {
+          renderer = create(providers())
+          await Promise.resolve()
+        })
+
+        // Then Login replaces the console only after the login has ended, so
+        // the statement can no longer complete into the next login
+        const login = renderer!.root.findByProps({ "data-hook": "mock-login" })
+        expect(ended).toHaveBeenCalledOnce()
+        expect(firstLogin.isCurrent()).toBe(false)
+        expect(authSessionState.isAuthenticated()).toBe(false)
+        expect(await statement).toMatchObject({ sessionEnded: true })
+        expect(login.props.errorMessage).toContain(
+          "Running requests were interrupted",
+        )
+
+        // And the next password sign-in starts a session of its own
+        const atLogin = authSessionState.capture()
+        await act(async () => {
+          localStorage.setItem(StoreKey.REST_TOKEN, "second-user")
+          ;(
+            login.props as { onBasicAuthSuccess: () => void }
+          ).onBasicAuthSuccess()
+          await Promise.resolve()
+        })
+        expect(authSessionState.isAuthenticated()).toBe(true)
+        expect(atLogin.isCurrent()).toBe(false)
+        expect(
+          renderer!.root.findAllByProps({ "data-hook": "console-live" }),
+        ).toHaveLength(1)
+      } finally {
+        stopListening()
+      }
+    },
+  )
+})
+
 describe("AuthProvider bearer expiry", () => {
   it.each([0, "0"])(
     "renews a zero-lifetime response (%j) before sending SQL",

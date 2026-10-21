@@ -141,6 +141,21 @@ const restoreUrlAfterOAuthCallback = () => {
 const getDefaultRedirectUri = () =>
   window.location.origin + window.location.pathname
 
+const INTERRUPTED_REQUESTS_MESSAGE =
+  "Running requests were interrupted or may still be finishing; statements may have executed. Verify their outcomes before running them again."
+
+// Capture uncertainty before session-end listeners abort and forget work.
+// Sent queries are aborted, but uploads already being sent still finish.
+const explainInterruptedRequests = (options: LogoutOptions): LogoutOptions =>
+  questClient.hasSentRequests()
+    ? {
+        ...options,
+        errorMessage: [options.errorMessage, INTERRUPTED_REQUESTS_MESSAGE]
+          .filter(Boolean)
+          .join(" "),
+      }
+    : options
+
 export const AuthContext = createContext<ContextProps>(defaultValues)
 
 const reducer = (s: State, n: Partial<State>) =>
@@ -442,6 +457,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       sessionStorage.setItem(StoreKey.LOGIN_METHOD, "password")
       dispatch({ view: View.ready })
     } else {
+      // Settings recovery remounts this provider without ending the tab's
+      // login. If another tab has removed the shared password credentials since,
+      // end that login first: whoever signs in next must start a new session,
+      // without the previous login's requests or last result.
+      if (authSessionState.isAuthenticated()) {
+        unstable_batchedUpdates(() =>
+          authSessionState.endSession(explainInterruptedRequests({})),
+        )
+      }
       // Stop loading and display the login state
       dispatch({ view: View.login })
     }
@@ -480,19 +504,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = (options: LogoutOptions = {}) => {
     const { promptForLogin, reload, clearSSOSession } = options
-    // Capture uncertainty before session-end listeners abort and forget work.
-    // Sent queries are aborted, but uploads already being sent still finish.
-    const logoutOptions = questClient.hasSentRequests()
-      ? {
-          ...options,
-          errorMessage: [
-            options.errorMessage,
-            "Running requests were interrupted or may still be finishing; statements may have executed. Verify their outcomes before running them again.",
-          ]
-            .filter(Boolean)
-            .join(" "),
-        }
-      : options
+    const logoutOptions = explainInterruptedRequests(options)
     toast.dismiss(REFRESH_FAILED_TOAST_ID)
     // Finish storage cleanup before session-end listeners can render Login.
     removeValue(StoreKey.OAUTH_PROMPT)
