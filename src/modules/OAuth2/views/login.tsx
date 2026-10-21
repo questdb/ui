@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled, { useTheme } from "styled-components"
 import { User, Building } from "../../../components/icons"
 import { ErrorWarning } from "../../../components/icons"
@@ -9,7 +9,7 @@ import { Badge, Text, Form, Button, IconButton } from "../../../components"
 import { setValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { useSettings } from "../../../providers"
-import { getSSOUserNameWithClientID } from "../utils"
+import { getSSOUserNameWithClientID, SIGN_IN_ERROR_TITLE } from "../utils"
 import { RawDqlResult } from "utils/questdb/types"
 import { LoadingSpinner } from "../../../components/LoadingSpinner"
 import { Box } from "../../../components/Box"
@@ -76,6 +76,7 @@ const Container = styled.div<{ $hasRedirectError: boolean }>`
   font-size: 16px;
 `
 const Title = styled.h2`
+  outline: none;
   width: 100%;
   color: ${({ theme }) => theme.color.contentPrimary};
   font-weight: 600;
@@ -174,6 +175,18 @@ const RedirectErrorContainer = styled(ErrorContainer)`
   box-shadow:
     0 1px 2px ${({ theme }) => theme.color.shadowMedium},
     0 1.2rem 3.2rem ${({ theme }) => theme.color.shadowSoft};
+`
+
+const UnfinishedWritesNotice = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 2.4rem 4.8rem 0;
+  padding: 1.2rem 1.6rem;
+  border-radius: 0.8rem;
+  border: 1px solid ${({ theme }) => theme.color.statusWarning};
+  border-left-width: 6px;
+  background: ${({ theme }) => theme.color.statusWarningSurface};
 `
 
 const StyledButton = styled(Button)`
@@ -278,6 +291,7 @@ export const Login = ({
   errorMessage: redirectErrorMessage,
   isDisconnection,
   resetErrors,
+  unfinishedWrites,
 }: {
   onOAuthLogin: (loginWithDifferentAccount?: boolean) => void
   onBasicAuthSuccess: () => void
@@ -285,6 +299,9 @@ export const Login = ({
   errorMessage?: string
   isDisconnection?: boolean
   resetErrors: () => void
+  // Uploads and settings saves of the previous session still being sent.
+  // AuthProvider asks before leaving the page until they finish.
+  unfinishedWrites: number
 }) => {
   const { settings } = useSettings()
   const theme = useTheme()
@@ -296,6 +313,22 @@ export const Login = ({
       : ""
   const version = settings["release.version"]
   const [loading, setLoading] = useState(false)
+  const redirectErrorRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const hasFocusedInitialView = useRef(false)
+
+  useEffect(() => {
+    if (redirectErrorTitle || redirectErrorMessage) {
+      redirectErrorRef.current?.focus()
+    } else if (!hasFocusedInitialView.current) {
+      titleRef.current?.focus()
+    }
+    // Clearing an SSO error during password submission must not steal focus
+    // from the form. Explicit dismissal restores heading focus separately.
+    hasFocusedInitialView.current = true
+  }, [redirectErrorTitle, redirectErrorMessage])
+
+  const hasUnfinishedWrites = unfinishedWrites > 0
 
   const httpBasicAuthStrategy = isEE
     ? {
@@ -358,14 +391,21 @@ export const Login = ({
       <LoginContainer data-hook="auth-login">
         <LoginBackground />
         {(redirectErrorTitle || redirectErrorMessage) && (
-          <RedirectErrorContainer>
-            <PlugsContainer>
+          <RedirectErrorContainer
+            ref={redirectErrorRef}
+            data-hook="sign-in-error"
+            role="group"
+            aria-labelledby="sign-in-error-title"
+            aria-describedby="sign-in-error-message"
+            tabIndex={-1}
+          >
+            <PlugsContainer aria-hidden="true">
               {isDisconnection ? (
                 <img
                   src="assets/plugs.svg"
                   width="24"
                   height="24"
-                  alt="Plug"
+                  alt=""
                   style={{ flexShrink: "0" }}
                 />
               ) : (
@@ -377,18 +417,26 @@ export const Login = ({
               )}
             </PlugsContainer>
             <Box flexDirection="column" gap="0" align="flex-start">
-              <Text size="lg" weight={600} color="statusDanger">
-                {redirectErrorTitle ?? "Something went wrong."}
-              </Text>
-              <Text size="lg" color="statusDanger">
-                {redirectErrorMessage ?? "Error logging in. Please try again."}
-              </Text>
+              <span id="sign-in-error-title">
+                <Text size="lg" weight={600} color="statusDanger">
+                  {redirectErrorTitle ?? SIGN_IN_ERROR_TITLE}
+                </Text>
+              </span>
+              <span id="sign-in-error-message">
+                <Text size="lg" color="statusDanger">
+                  {redirectErrorMessage ??
+                    "Error logging in. Please try again."}
+                </Text>
+              </span>
             </Box>
             <ErrorCloseButton
               label="Dismiss sign-in error"
               size="lg"
               variant="secondary"
-              onClick={resetErrors}
+              onClick={() => {
+                resetErrors()
+                titleRef.current?.focus()
+              }}
             >
               <XIcon size={24} />
             </ErrorCloseButton>
@@ -405,7 +453,23 @@ export const Login = ({
               height="48"
             />
           </LogoContainer>
-          <Title>Sign in to QuestDB</Title>
+          <Title ref={titleRef} tabIndex={-1}>
+            Sign in to QuestDB
+          </Title>
+          {hasUnfinishedWrites && (
+            <UnfinishedWritesNotice role="status" data-hook="unfinished-writes">
+              <Text size="lg" weight={600} color="contentPrimary">
+                {unfinishedWrites === 1
+                  ? "Your previous session is still sending 1 request"
+                  : `Your previous session is still sending ${unfinishedWrites} requests`}
+              </Text>
+              <Text color="contentSecondary">
+                {unfinishedWrites === 1
+                  ? "Keep this tab open until it finishes. Leaving the page, including to sign in with SSO, cancels it, and a cancelled CSV upload can leave a partially imported table."
+                  : "Keep this tab open until they finish. Leaving the page, including to sign in with SSO, cancels them, and a cancelled CSV upload can leave a partially imported table."}
+              </Text>
+            </UnfinishedWritesNotice>
+          )}
           <Card>
             {settings["acl.oidc.enabled"] && (
               <SSOCard>

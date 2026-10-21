@@ -17,5 +17,8 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Check OSS branch
+        # pygit2 1.14.1 ships wheels only up to CPython 3.12. On runner images
+        # with a newer default Python (ubuntu-26.04 has 3.14), uv would build it
+        # from source and fail, because the libgit2 headers are not installed.
         run: |
-          uv run --with "pygit2==1.14.1" submodule_is_mergeable.py
+          uv run --python 3.12 --with "pygit2==1.14.1" submodule_is_mergeable.py

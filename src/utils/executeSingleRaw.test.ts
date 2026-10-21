@@ -18,6 +18,22 @@ const questReturningOneRow = () =>
   }) as unknown as Client
 
 describe("executeSingleRaw", () => {
+  it("treats a resolved ErrorResult as failure rather than a successful write", async () => {
+    const error = {
+      type: QuestDB.Type.ERROR,
+      error: "not sent",
+      position: -1,
+      query: "insert into t values (1)",
+      requestNotSent: true,
+    }
+    const quest = {
+      queryRaw: vi.fn(() => ({ promise: Promise.resolve(error), queryId: 1 })),
+      abort: vi.fn(),
+    } as unknown as Client
+    expect(await executeSingleRaw(quest, error.query, undefined)).toMatchObject(
+      { type: "error", error: "not sent", requestNotSent: true },
+    )
+  })
   it("records the effective query, which differs per variable value while the query stays the same", async () => {
     // Given one statement that reads a notebook variable
     const sql = "select price from trades where symbol = @sym"

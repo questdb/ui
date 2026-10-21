@@ -15,6 +15,7 @@ export enum EventType {
   MSG_CONNECTION_ERROR = "query.connection.error",
   MSG_CONNECTION_UNAUTHORIZED = "query.connection.unauthorized",
   MSG_CONNECTION_FORBIDDEN = "query.connection.forbidden",
+  MSG_AUTH_REFRESH_FAILED = "auth.refresh.failed",
   REACT_READY = "react.ready",
   TAB_FOCUS = "tab.focus",
   TAB_BLUR = "tab.blur",

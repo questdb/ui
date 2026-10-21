@@ -35,6 +35,8 @@ export enum StoreKey {
   EXAMPLE_QUERIES_VISITED = "editor.exampleQueriesVisited",
   EDITOR_SPLITTER_BASIS = "splitter.editor.basis",
   RESULTS_SPLITTER_BASIS = "splitter.results.basis",
+  // Stored in sessionStorage: reloading one tab must not switch its login method.
+  LOGIN_METHOD = "auth.login.method",
   REST_TOKEN = "rest.token",
   BASIC_AUTH_HEADER = "basic.auth.header",
   AUTO_REFRESH_TABLES = "auto.refresh.tables",

@@ -89,6 +89,11 @@ import { LiteEditor } from "../../../components/LiteEditor"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import {
+  isAuthFailure,
+  isSessionEnded,
+  sessionEndedQueryMessage,
+} from "../../../modules/OAuth2/session"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
 import {
@@ -1580,23 +1585,33 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     } catch (_error: unknown) {
       const error = _error as ErrorResult
 
-      const bufferIdStr = activeBufferId.toString()
-      if (!executionRefs.current[bufferIdStr]) {
-        executionRefs.current[bufferIdStr] = {}
-      }
+      // A session end or failed renewal is no SQL error: it has no position
+      // to mark in the query.
+      if (!isAuthFailure(error)) {
+        const bufferIdStr = activeBufferId.toString()
+        if (!executionRefs.current[bufferIdStr]) {
+          executionRefs.current[bufferIdStr] = {}
+        }
 
-      const startOffset = getQueryStartOffset(editor, query)
-      executionRefs.current[bufferIdStr][queryKey] = {
-        error,
-        queryText: query.query,
-        startOffset,
-        endOffset: startOffset + normalizeQueryText(query.query).length,
-        selection: query.selection,
+        const startOffset = getQueryStartOffset(editor, query)
+        executionRefs.current[bufferIdStr][queryKey] = {
+          error,
+          queryText: query.query,
+          startOffset,
+          endOffset: startOffset + normalizeQueryText(query.query).length,
+          selection: query.selection,
+        }
       }
 
       notification = {
         query: queryKey,
-        content: <Text color="statusDanger">{error.error}</Text>,
+        content: (
+          <Text color="statusDanger">
+            {isSessionEnded(error)
+              ? sessionEndedQueryMessage(error)
+              : error.error}
+          </Text>
+        ),
         sideContent: <QueryInNotification query={query.query} />,
         type: NotificationType.ERROR,
       }
@@ -1744,6 +1759,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     const startTime = Date.now()
     for (let i = 0; i < queries.length; i++) {
+      // The run can also be stopped while it waits to start, e.g. by the end
+      // of the session. No statement may be sent after that.
+      if (scriptStopRef.current) break
       const query = queries[i]
       const lineNumber = query.row + 1
       editor.revealPositionInCenterIfOutsideViewport({
@@ -1824,7 +1842,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       )
     }
     editor.focus()
-    editor.revealPositionInCenterIfOutsideViewport(editor.getPosition()!)
+    // Ending the session unmounts the editor while the script settles, and an
+    // editor without a model has no position. The run must still be settled.
+    const position = editor.getPosition()
+    if (position) editor.revealPositionInCenterIfOutsideViewport(position)
 
     const completedGracefully = queries.length === individualQueryResults.length
     if (
@@ -1850,11 +1871,21 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
           content: (
             <Text color="contentPrimary">
-              {notificationPrefix}
-              {successfulQueries > 0 ? `${successfulQueries} successful` : ""}
-              {successfulQueries > 0 && failedQueries > 0 ? " and " : ""}
-              {failedQueries > 0 ? `${failedQueries} failed` : ""}{" "}
-              {failedQueries + successfulQueries > 1 ? " queries" : " query"}
+              {!completedGracefully && individualQueryResults.length === 0 ? (
+                "Stopped before running any query"
+              ) : (
+                <>
+                  {notificationPrefix}
+                  {successfulQueries > 0
+                    ? `${successfulQueries} successful`
+                    : ""}
+                  {successfulQueries > 0 && failedQueries > 0 ? " and " : ""}
+                  {failedQueries > 0 ? `${failedQueries} failed` : ""}{" "}
+                  {failedQueries + successfulQueries > 1
+                    ? " queries"
+                    : " query"}
+                </>
+              )}
             </Text>
           ),
           type: completedGracefully
@@ -2174,6 +2205,32 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
           .catch((error: ErrorResult) => {
             const { inflightQuery, currentQueryKey } = settleExecution()
+
+            if (isAuthFailure(error)) {
+              // A session end or failed renewal is no SQL error, and has no
+              // position to mark: only replace the "Running..." notification.
+              // Do so even if a session end is unmounting the editor: the next
+              // login reads it, and must not be asked to sign in again.
+              dispatch(
+                actions.query.addNotification(
+                  {
+                    query: currentQueryKey,
+                    isExplain: isRunningExplain,
+                    content: (
+                      <Text color="statusDanger">
+                        {isSessionEnded(error)
+                          ? sessionEndedQueryMessage(error)
+                          : error.error}
+                      </Text>
+                    ),
+                    sideContent: <QueryInNotification query={queryToRun} />,
+                    type: NotificationType.ERROR,
+                  },
+                  targetBufferId,
+                ),
+              )
+              return
+            }
 
             if (editorRef?.current && monacoRef?.current) {
               const model = editorRef.current.getModel()

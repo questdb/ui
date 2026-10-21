@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { FilesToUpload } from "./files-to-upload"
-import { ProcessedFile } from "./types"
+import { ProcessedFile, TableNameCheck } from "./types"
 import { SchemaColumn } from "../../../components/TableSchemaDialog/types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
@@ -22,7 +22,7 @@ import {
 import { Upload } from "./upload"
 import { getValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
-import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -46,6 +46,15 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const isVisible = useIsVisible(rootRef)
   const [state, setState] = useState<State>("upload")
   const [ownedByList, setOwnedByList] = useState<string[]>([])
+  // Dropped files are listed once their table names are checked, which can
+  // wait for a token refresh. Until then their names count as queued, so that
+  // dropping one again is reported as a duplicate instead of importing it
+  // twice. Kept here: the drop box is replaced when the list is first shown.
+  const unlistedDrops = useRef(new Set<string[]>())
+  const unlistedNames = useCallback(
+    () => Array.from(unlistedDrops.current).flat(),
+    [],
+  )
 
   const getOwnedByList = async () => {
     const isEE = getValue(StoreKey.RELEASE_TYPE) === "EE"
@@ -56,11 +65,13 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
     try {
       let ownedByNames: string[] = []
-      const userResult = await quest.query<Parameter>(`select current_user()`)
+      const userResult = await quest.query<Parameter>(`select current_user()`, {
+        background: true,
+      })
       if (userResult.type === "dql" && userResult.count > 0) {
         const username = Object.values(userResult.data[0])[0] as string
         if (username) {
-          const ssoAuthenticated = ssoAuthState.isSSOAuthenticated()
+          const ssoAuthenticated = authSessionState.isSSOAuthenticated()
           if (!ssoAuthenticated) {
             // no OAuth2 payload, non-SSO users can set themselves as owner
             ownedByNames.push(username)
@@ -68,6 +79,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
           const result = await quest.query<Parameter>(
             `show groups '${username}'`,
+            { background: true },
           )
           if (result.type === "dql" && result.count > 0) {
             const groups = result.data.map(
@@ -106,35 +118,52 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     setFileProperties(file.id, { isUploading })
   }
 
+  // The checks below can wait for a token refresh, and then fail. A failed
+  // check must not lose the dropped file: list it with the failure shown, as
+  // for a renamed file, and let the user still upload it.
+  const checkTableName = async (name: string) => {
+    try {
+      return (await quest.checkCSVFile(name)).status
+    } catch {
+      return TableNameCheck.FAILED
+    }
+  }
+
+  // The schema of an existing table only pre-fills the schema dialog.
+  // Without it, QuestDB infers the schema from the file, as for a new table.
+  const getExistingTableSchema = async (
+    name: string,
+  ): Promise<SchemaColumn[]> => {
+    try {
+      const columnResponse = await quest.showColumns(name)
+      if (columnResponse && columnResponse.type === QuestDB.Type.DQL) {
+        return columnResponse.data.map((column) => ({
+          name: column.column,
+          type: mapColumnTypeToUI(column.type),
+          pattern: getTimestampFormat(column.type),
+          precision: isGeoHash(column.type)
+            ? extractPrecionFromGeohash(column.type)
+            : "",
+        }))
+      }
+    } catch {
+      // Keep the file, without a pre-filled schema.
+    }
+    return []
+  }
+
   const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
     return await Promise.all(
       files.map(async (file) => {
-        const result = await quest.checkCSVFile(file.name)
+        const status = await checkTableName(file.name)
 
         const schema =
-          result.status === FileCheckStatus.EXISTS
-            ? await (async () => {
-                const columnResponse = await quest.showColumns(file.name)
-                if (
-                  columnResponse &&
-                  columnResponse.type === QuestDB.Type.DQL
-                ) {
-                  // Find a table schema
-                  return columnResponse.data.map((column) => ({
-                    name: column.column,
-                    type: mapColumnTypeToUI(column.type),
-                    pattern: getTimestampFormat(column.type),
-                    precision: isGeoHash(column.type)
-                      ? extractPrecionFromGeohash(column.type)
-                      : "",
-                  }))
-                }
-                return []
-              })()
+          status === FileCheckStatus.EXISTS
+            ? await getExistingTableSchema(file.name)
             : []
 
         const partitionBy =
-          result.status === FileCheckStatus.EXISTS && tables
+          status === FileCheckStatus.EXISTS && tables
             ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.partitionBy ?? "NONE"
@@ -142,7 +171,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             : "NONE"
 
         const ttlValue =
-          result.status === FileCheckStatus.EXISTS && tables
+          status === FileCheckStatus.EXISTS && tables
             ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.ttlValue ?? 0
@@ -150,7 +179,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             : 0
 
         const ttlUnit =
-          result.status === FileCheckStatus.EXISTS && tables
+          status === FileCheckStatus.EXISTS && tables
             ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.ttlUnit ?? "HOURS"
@@ -158,7 +187,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             : "HOURS"
 
         const timestamp =
-          result.status === FileCheckStatus.EXISTS && tables
+          status === FileCheckStatus.EXISTS && tables
             ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.designatedTimestamp ?? ""
@@ -170,8 +199,8 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           fileObject: file,
           table_name: file.name,
           table_owner: ownedByList[0],
-          status: result.status,
-          exists: result.status === FileCheckStatus.EXISTS,
+          status,
+          exists: status === FileCheckStatus.EXISTS,
           schema,
           partitionBy,
           ttlValue,
@@ -195,22 +224,43 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   }
 
   const handleDrop = async (files: File[]) => {
-    const fileConfigs = await getFileConfigs(files)
-    setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
-    setState("list")
+    const names = files.map((file) => file.name)
+    unlistedDrops.current.add(names)
+    try {
+      const fileConfigs = await getFileConfigs(files)
+      setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
+      setState("list")
+    } finally {
+      // React 17 has rendered the list already, as it renders updates outside
+      // event handlers at once: the drop box counts the files as listed.
+      unlistedDrops.current.delete(names)
+    }
   }
 
   const handleVisible = async () => {
-    const fileStatusList = await Promise.all(
-      filesDropped.map(async (file) => {
-        const result = await quest.checkCSVFile(file.table_name)
-        return {
-          ...file,
-          status: result.status,
+    const checks = await Promise.all(
+      filesDropped.map(async ({ id, table_name }) => {
+        try {
+          const { status } = await quest.checkCSVFile(table_name)
+          return [[id, { table_name, status }] as const]
+        } catch {
+          // A failed recheck says nothing new: keep the file's status.
+          return []
         }
       }),
     )
-    setFilesDropped(fileStatusList)
+    const checked = new Map(checks.flat())
+    // The checks can wait for a token refresh. Merge only their statuses into
+    // the current list: files may have been uploaded, edited, added or removed
+    // meanwhile, and a status is outdated once its file has been renamed.
+    setFilesDropped((files) =>
+      files.map((file) => {
+        const check = checked.get(file.id)
+        return check && check.table_name === file.table_name
+          ? { ...file, status: check.status }
+          : file
+      }),
+    )
   }
 
   useEffect(() => {
@@ -224,6 +274,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
       {state === "upload" && (
         <Upload
           files={filesDropped}
+          unlistedNames={unlistedNames}
           onFilesDropped={handleDrop}
           dialogOpen={dialogOpen}
         />
@@ -233,6 +284,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
         <FilesToUpload
           dialogOpen={dialogOpen}
           files={filesDropped}
+          unlistedNames={unlistedNames}
           onViewData={onViewData}
           onFilesDropped={handleDrop}
           onDialogToggle={setDialogOpen}
@@ -240,7 +292,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           onFileUpload={async (id) => {
             const file = filesDropped.find((f) => f.id === id) as ProcessedFile
 
-            if (file.isUploading) {
+            if (file.isUploading || file.status === TableNameCheck.PENDING) {
               return
             }
             void trackEvent(ConsoleEvent.IMPORT_FILE_UPLOAD, {
@@ -310,25 +362,41 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             )
           }}
           onFilePropertyChange={async (id, partialFile) => {
-            const processedFiles = await Promise.all(
-              filesDropped.map(async (file) => {
-                if (file.id === id) {
-                  // Only check for file existence if table name is changed
-                  const result = partialFile.table_name
-                    ? await quest.checkCSVFile(partialFile.table_name)
-                    : await Promise.resolve({ status: file.status })
-                  return {
-                    ...file,
+            const tableName = partialFile.table_name
+            // Apply the edit at once: the name check below can wait for a
+            // token refresh. The previous status described another table, so
+            // the new name has no status, and can't be uploaded to, until its
+            // check answers. A new name also resets the prior error.
+            setFileProperties(
+              id,
+              tableName
+                ? {
                     ...partialFile,
-                    status: result.status,
-                    error: partialFile.table_name ? undefined : file.error, // reset prior error if table name is changed
+                    error: undefined,
+                    status: TableNameCheck.PENDING,
                   }
-                } else {
-                  return file
-                }
-              }),
+                : partialFile,
             )
-            setFilesDropped(processedFiles)
+            // Only check for file existence if table name is changed
+            if (!tableName) return
+            let status: string
+            try {
+              status = (await quest.checkCSVFile(tableName)).status
+            } catch {
+              status = TableNameCheck.FAILED
+            }
+            setFilesDropped((files) =>
+              files.map((file) =>
+                // Ignore the result if the file has been renamed again. A
+                // failure doesn't replace a status found by another check.
+                file.id === id &&
+                file.table_name === tableName &&
+                (status !== TableNameCheck.FAILED ||
+                  file.status === TableNameCheck.PENDING)
+                  ? { ...file, status }
+                  : file,
+              ),
+            )
           }}
         />
       )}

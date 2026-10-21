@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import type { Client } from "../questdb/client"
 import { Type } from "../questdb/types"
 import {
   buildRunQueryPayload,
@@ -143,6 +144,24 @@ describe("buildRunQueryPayload", () => {
 })
 
 describe("mapQueryRawToResult", () => {
+  it("does not report a resolved ErrorResult as DML success", async () => {
+    const error = {
+      type: Type.ERROR,
+      query: "insert into t values (1)",
+      error: "not sent",
+      position: -1,
+      requestNotSent: true,
+    }
+    const quest = {
+      queryRaw: vi.fn(() => ({ promise: Promise.resolve(error), queryId: 1 })),
+      abort: vi.fn(),
+    } as unknown as Client
+    expect(await mapQueryRawToResult(quest, error.query, 100)).toMatchObject({
+      type: "error",
+      error: "not sent",
+      requestNotSent: true,
+    })
+  })
   const stubDqlReturn = () => ({
     promise: Promise.resolve({
       type: Type.DQL,
@@ -194,6 +213,57 @@ describe("mapQueryRawToResult", () => {
       25,
     )
     expect(res).toMatchObject({ type: "notice", message: "hint applied" })
+  })
+
+  it("preserves the session-ended outcome flag on rejection", async () => {
+    const error = {
+      type: Type.ERROR,
+      error: "Your session has ended. Please sign in again.",
+      position: -1,
+      sessionEnded: true,
+    }
+    const queryRaw = vi.fn().mockReturnValue({
+      promise: Promise.reject(error),
+      queryId: 1,
+    })
+
+    const result = await mapQueryRawToResult(
+      { queryRaw, abort: vi.fn() } as never,
+      "INSERT INTO t VALUES (1)",
+      100,
+    )
+
+    expect(result).toEqual({
+      type: "error",
+      error: error.error,
+      position: -1,
+      sessionEnded: true,
+    })
+  })
+
+  it("preserves not-sent metadata for the agent's outcome classifier", async () => {
+    const error = {
+      type: Type.ERROR,
+      error:
+        "Could not renew your SSO session; the request was not executed. Please retry or sign in again.",
+      position: -1,
+      requestNotSent: true,
+    }
+    const queryRaw = vi
+      .fn()
+      .mockReturnValue({ promise: Promise.reject(error), queryId: 1 })
+    expect(
+      await mapQueryRawToResult(
+        { queryRaw, abort: vi.fn() } as never,
+        "INSERT INTO t VALUES (1)",
+        100,
+      ),
+    ).toEqual({
+      type: "error",
+      error: error.error,
+      position: -1,
+      requestNotSent: true,
+    })
   })
 
   it("sends the requested row limit to /exec using the cancellable queryRaw overload", async () => {

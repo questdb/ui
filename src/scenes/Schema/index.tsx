@@ -74,6 +74,12 @@ import { SchemaProvider, useSchema, type SelectedTable } from "./SchemaContext"
 import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import {
+  endedFor,
+  isAuthFailure,
+  isAuthRefreshUnavailable,
+} from "../../modules/OAuth2/session"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -160,11 +166,28 @@ const Schema = ({
   const { selectOpen, setSelectOpen, selectedTables, setSelectedTables } =
     useSchema()
 
+  // A failed SSO renewal publishes no MSG_CONNECTION_ERROR, because the
+  // connection is fine. Record it like one, so the panel explains why it is
+  // empty and MSG_CONNECTION_OK reloads it once a request succeeds again.
+  // Other errors stay unrecorded: a 400 response publishes MSG_CONNECTION_OK
+  // before rejecting, so recording it would reload in a loop.
+  const recordRenewalFailure = (error: unknown) => {
+    if (!isAuthRefreshUnavailable(error)) return
+    errorRef.current = error as ErrorResult
+    setLoadingError(error as ErrorResult)
+  }
+
   const fetchTables = async () => {
+    const session = authSessionState.capture()
     try {
       const response = await quest.showTables()
+      // The catalog belongs to the login that read it. The next one reads its
+      // own: ending the session cleared this one from the store.
+      if (!session.isCurrent()) return
       if (response && response.type === QuestDB.Type.DQL) {
+        // A later, unrelated failure must not show a recovered error.
         errorRef.current = null
+        setLoadingError(null)
         const data = response.data.map((item) => ({
           ...item,
           table_type: item.table_type ?? (item.matView ? "M" : "T"),
@@ -185,6 +208,9 @@ const Schema = ({
         dispatchState({ view: View.error })
       }
     } catch (error) {
+      // Ending the session interrupted the request, and unmounts the panel.
+      if (endedFor(session, error)) return
+      recordRenewalFailure(error)
       dispatchState({
         view: View.error,
       })
@@ -230,20 +256,32 @@ const Schema = ({
       "information_schema.columns()", // fallback for older servers
     ]
 
+    const session = authSessionState.capture()
+    let lastError: unknown
     for (const query of queries) {
       try {
-        const response =
-          await quest.query<QuestDB.InformationSchemaColumn>(query)
+        const response = await quest.query<QuestDB.InformationSchemaColumn>(
+          query,
+          { background: true },
+        )
+        if (!session.isCurrent()) return
 
         if (response?.type === QuestDB.Type.DQL) {
           dispatch(actions.query.setColumns(response.data))
           return
         }
-      } catch {
-        // let's try another query
+      } catch (error) {
+        // Ending the session interrupted the request: no fallback is sent
+        // without the login's credentials.
+        if (endedFor(session, error)) return
+        lastError = error
+        // The server ran no query, so it may well support this one. Otherwise,
+        // let's try another query.
+        if (isAuthFailure(error)) break
       }
     }
 
+    recordRenewalFailure(lastError)
     dispatchState({ view: View.error })
   }
 

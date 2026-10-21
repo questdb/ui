@@ -8,6 +8,11 @@ import type {
 } from "../../../../store/notebook"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { authSessionState } from "../../../../modules/OAuth2/authSessionState"
+import {
+  AuthRefreshUnavailableError,
+  SESSION_ENDED_MESSAGE,
+} from "../../../../modules/OAuth2/session"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 import type { CellResultStatus } from "../resultHydration/cellResultHydration"
@@ -230,6 +235,7 @@ describe("CellRefreshEngine", () => {
       "select 1",
       expect.any(AbortSignal),
       10_000,
+      { background: true },
     )
     const state = engine.getState("c1")
     expect(state?.settledKey).toBe(state?.queriesKey)
@@ -694,6 +700,7 @@ describe("CellRefreshEngine", () => {
         "select 2",
         expect.anything(),
         expect.anything(),
+        { background: true },
       )
       expect(engine.getState("c1")?.fetchCancelled).toBe(false)
     })
@@ -1247,6 +1254,7 @@ describe("CellRefreshEngine", () => {
       "select 2",
       expect.any(AbortSignal),
       10_000,
+      { background: true },
     )
   })
 
@@ -1745,6 +1753,7 @@ describe("CellRefreshEngine", () => {
       "select 2",
       expect.any(AbortSignal),
       10_000,
+      { background: true },
     )
   })
 
@@ -2566,6 +2575,7 @@ describe("CellRefreshEngine", () => {
         "select 2",
         expect.any(AbortSignal),
         10_000,
+        { background: true },
       )
     })
 
@@ -2610,6 +2620,7 @@ describe("CellRefreshEngine", () => {
         "select 2",
         expect.any(AbortSignal),
         10_000,
+        { background: true },
       )
 
       // And the debounce expiry does not fetch a second time
@@ -2636,6 +2647,299 @@ describe("CellRefreshEngine", () => {
       // And the debounce expiry adds nothing
       await vi.advanceTimersByTimeAsync(1000)
       expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe("session end", () => {
+    // What an aborted request settles with once logout ended the session.
+    const sessionEnded = (query: string): QueryExecResult => ({
+      type: "error",
+      query,
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: SESSION_ENDED_MESSAGE,
+      sessionEnded: true,
+    })
+    const settleWithSessionEnd = () => {
+      const settles: (() => void)[] = []
+      deps.executeSingle = vi.fn(
+        (sql: string) =>
+          new Promise<QueryExecResult>((resolve) => {
+            settles.push(() => resolve(sessionEnded(sql)))
+          }),
+      )
+      return () => settles.forEach((settle) => settle())
+    }
+
+    it("drops a chart round in flight instead of writing or deleting its frame", async () => {
+      // Given a draw cell whose fetch is in flight
+      const settle = settleWithSessionEnd()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledOnce()
+
+      // When logout ends the session before React unmounts the notebook, and
+      // the aborted request settles
+      authSessionState.endSession()
+      settle()
+      await flushAsync()
+
+      // Then the round is dropped: no frame is written and no snapshot deleted
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+    })
+
+    it("drops a grid round in flight instead of saving its error", async () => {
+      // Given a run cell with rows whose refresh is in flight
+      const frame: CellResult = {
+        results: [
+          {
+            type: "dql",
+            query: "select 1",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [[1]],
+            count: 1,
+            timestamp: 0,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }
+      cellResults.set("g1", frame)
+      const settle = settleWithSessionEnd()
+      syncOnScreen([
+        {
+          id: "g1",
+          position: 0,
+          value: "select 1",
+          autoRefresh: false,
+          result: frame,
+        },
+      ])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledOnce()
+
+      // When logout ends the session and the aborted request settles
+      authSessionState.endSession()
+      settle()
+      await flushAsync()
+
+      // Then the rows stay and no refresh error is saved for the next login
+      expect(cellResults.get("g1")).toBe(frame)
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+    })
+  })
+
+  // E.g. after a failed SSO renewal, while the user is still signed in.
+  describe("statements the server never executed", () => {
+    const notExecuted = (query: string): QueryExecResult => ({
+      type: "error",
+      query,
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: new AuthRefreshUnavailableError().message,
+      requestNotSent: true,
+    })
+    const failToExecute = () =>
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve(notExecuted(sql)),
+      )
+
+    it("keeps a chart's frame and saved snapshot while its refreshes cannot be executed", async () => {
+      // Given a polling chart that settled and saved a frame
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      const frame = cellResults.get("c1")
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When its next polls are not executed
+      failToExecute()
+      await vi.advanceTimersByTimeAsync(3000)
+
+      // Then the frame on screen and the snapshot on disk stay
+      expect(deps.executeSingle.mock.calls.length).toBeGreaterThan(1)
+      expect(cellResults.get("c1")).toBe(frame)
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows the failure of a chart with no frame, without deleting its saved snapshot", async () => {
+      // Given a chart whose first fetch is not executed
+      failToExecute()
+
+      // When it fetches
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then it shows why, and a snapshot from an earlier session survives
+      expect(cellResults.get("c1")?.results[0]).toMatchObject({
+        type: "error",
+        requestNotSent: true,
+      })
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+    })
+
+    it.each(["polls", "is refreshed again"])(
+      "keeps the saved snapshot of a chart with no frame while it %s without being executed",
+      async (trigger) => {
+        // Given a chart that shows the failure of a round not executed
+        failToExecute()
+        syncOnScreen([
+          drawCell("c1", "select 1", trigger === "polls" ? "1s" : false),
+        ])
+        await flushAsync()
+        expect(cellResults.get("c1")?.results[0]).toMatchObject({
+          type: "error",
+          requestNotSent: true,
+        })
+
+        // When its next rounds are not executed either, and so match the
+        // failure on screen
+        if (trigger === "polls") {
+          await vi.advanceTimersByTimeAsync(3000)
+        } else {
+          await engine.refresh("c1")
+          await flushAsync()
+        }
+
+        // Then it stays settled on the failure, and the snapshot on disk stays
+        // until a round reaches the server
+        expect(deps.executeSingle.mock.calls.length).toBeGreaterThan(1)
+        const state = engine.getState("c1")!
+        expect(state.settledKey).toBe(state.queriesKey)
+        expect(cellResults.get("c1")?.results[0]).toMatchObject({
+          type: "error",
+          requestNotSent: true,
+        })
+        expect(deleteCellSnapshot).not.toHaveBeenCalled()
+        expect(persistCellSnapshot).not.toHaveBeenCalled()
+      },
+    )
+
+    it("shows the failure of an edited chart instead of keeping the frame of its old SQL", async () => {
+      // Given a chart that settled and saved a frame
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When its SQL is edited, and the edited statement is not executed
+      failToExecute()
+      engine.sync([drawCell("c1", "select 2", false)])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenLastCalledWith(
+        "select 2",
+        expect.any(AbortSignal),
+        10_000,
+        { background: true },
+      )
+
+      // Then it settles on the failure instead of "Drawing" forever: the old
+      // frame was never on screen for the new SQL
+      const state = engine.getState("c1")
+      expect(state?.settledKey).toBe(state?.queriesKey)
+      expect(cellResults.get("c1")?.results).toEqual([
+        expect.objectContaining({
+          type: "error",
+          query: "select 2",
+          requestNotSent: true,
+        }),
+      ])
+      expect(
+        toChartResult(cellResults.get("c1"), state!.queries),
+      ).toMatchObject({ kind: "settled", hadError: true })
+
+      // And the saved snapshot stays until a round reaches the server
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows the failure of a chart whose frame for its SQL has nothing to draw", async () => {
+      // Given a chart that kept the error of its last run when it became one
+      cellResults.set("c1", {
+        results: [
+          { type: "error", query: "select 1", error: "table does not exist" },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      })
+
+      // When its fetch is not executed
+      failToExecute()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledOnce()
+
+      // Then it settles on the failure instead of "Drawing" forever
+      const state = engine.getState("c1")!
+      const result = cellResults.get("c1")
+      expect(state.settledKey).toBe(state.queriesKey)
+      expect(result?.results).toEqual([
+        expect.objectContaining({ type: "error", requestNotSent: true }),
+      ])
+      expect(
+        deriveChartLoading(state, toChartResult(result, state.queries), false),
+      ).toBe(false)
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
+    })
+
+    it("keeps a grid's rows without showing or saving an error, until a refresh is executed", async () => {
+      // Given a run cell with rows
+      const frame: CellResult = {
+        results: [
+          {
+            type: "dql",
+            query: "select 1",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [[1]],
+            count: 1,
+            timestamp: 0,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }
+      cellResults.set("g1", frame)
+      syncOnScreen([
+        {
+          id: "g1",
+          position: 0,
+          value: "select 1",
+          autoRefresh: false,
+          result: frame,
+        },
+      ])
+      await flushAsync()
+
+      // When a refresh is not executed
+      failToExecute()
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then the rows stay, and no error is shown or saved for the next login
+      expect(deps.executeSingle).toHaveBeenCalledOnce()
+      expect(cellResults.get("g1")).toBe(frame)
+      expect(engine.getState("g1")?.slotErrors.size).toBe(0)
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+
+      // And a refresh that is executed saves the frame as usual
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve(dqlResult(sql)),
+      )
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledOnce()
+      expect(
+        vi.mocked(persistCellSnapshot).mock.calls[0][0].refreshErrors,
+      ).toBeUndefined()
     })
   })
 

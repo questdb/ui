@@ -50,6 +50,7 @@ import {
 } from "./components"
 import { ScreenSizeProvider } from "./hooks"
 import { rootEpic, rootReducer } from "./store"
+import { clearLoginDataOnSessionEnd } from "./store/clearLoginDataOnSessionEnd"
 import { StoreAction, StoreShape } from "./types"
 
 import Layout from "./scenes/Layout"
@@ -72,6 +73,8 @@ const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
 
 epicMiddleware.run(rootEpic)
 
+clearLoginDataOnSessionEnd(store.dispatch)
+
 const FadeReg = createGlobalFadeTransition("fade-reg", TransitionDuration.REG)
 
 const FadeSlow = createGlobalFadeTransition(
@@ -90,8 +93,8 @@ ReactDOM.render(
           <SettingsProvider>
             <PosthogProviderWrapper>
               <AuthProvider>
+                {ReactDOM.createPortal(<ToastContainer />, document.body)}
                 <QuestProvider>
-                  {ReactDOM.createPortal(<ToastContainer />, document.body)}
                   <LocalStorageProvider>
                     <FadeSlow />
                     <FadeReg />

@@ -16,6 +16,10 @@ import * as QuestDB from "./questdb"
 import type { ExecutionRefs } from "../scenes/Editor/index"
 import type { Dispatch } from "redux"
 import actions from "../store/Query/actions"
+import {
+  isSessionEnded,
+  sessionEndedQueryMessage,
+} from "../modules/OAuth2/session"
 
 export type RunDetachedQueryConfig = {
   normalizedSQL: string
@@ -138,7 +142,9 @@ export async function runDetachedQuery(
           query: queryKey,
           content: (
             <Text color="statusDanger">
-              {error.error || error.message || "Query execution failed"}
+              {isSessionEnded(_error)
+                ? sessionEndedQueryMessage(_error)
+                : error.error || error.message || "Query execution failed"}
             </Text>
           ),
           type: NotificationType.ERROR,
