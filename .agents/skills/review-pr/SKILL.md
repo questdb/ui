@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: Review a code change against QuestDB Web Console coding standards
-argument-hint: [PR number, PR URL, commit hash, unstaged changes, staged changes] [--level=0..3]
+argument-hint: "[PR number, PR URL, commit hash, unstaged changes, staged changes] [--level=0..3]"
 allowed-tools: Bash(gh *), Bash(git diff*), Bash(git show*), Bash(git log*), Bash(git blame*), Bash(git rev-parse*), Bash(git merge-base*), Bash(git status*), Bash(yarn test:unit), Bash(yarn vitest*), Bash(yarn lint), Bash(yarn typecheck), Bash(yarn build), Bash(yarn cypress*), Bash(env -u ELECTRON_RUN_AS_NODE yarn cypress*), Read, Write, Grep, Glob, Agent
 ---
 
@@ -48,12 +48,12 @@ The level controls how much of the review below actually runs. Lower levels keep
 
 Agent count is never evidence; roles whose domain the diff does not touch are skipped at every level.
 
-| Level           | What runs                                                                                                                                                                                                                                                                                                            |
-|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **0**           | Steps 1, 2, 4. Skip Step 2.5. No agent spawn; discover candidates inline in the main loop, then apply the Step 3c admission protocol inline from a blank evidence form before writing any report prose. Step 3b runs `yarn typecheck` and `yarn lint` only.                                                             |
-| **1**           | Adds Step 2.5a (semantic delta only — skip 2.5b/2.5c/2.5d). In Step 3a, select from Agents 1, 2, 3, 9 the roles whose domain the diff touches. Step 3b runs the full quality gate. Admission runs inline as in level 0.                                                                                                 |
-| **2 (default)** | Full Step 2.5. In Step 3a, select from Agents 1-12 the roles whose domain the diff materially touches. Skip Agent 13. Step 3b runs the full quality gate. Step 3c uses a single batched blinded falsifier for all candidates.                                                                                           |
-| **3**           | Every step below as written: all applicable roles plus Agent 13, one fresh-context falsifier per atomic candidate, and the full executed-evidence ladder including the browser rung. The full mission-critical pass.                                                                                                    |
+| Level           | What runs                                                                                                                                                                                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0**           | Steps 1, 2, 4. Skip Step 2.5. No agent spawn; discover candidates inline in the main loop, then apply the Step 3c admission protocol inline from a blank evidence form before writing any report prose. Step 3b runs `yarn typecheck` and `yarn lint` only. |
+| **1**           | Adds Step 2.5a (semantic delta only — skip 2.5b/2.5c/2.5d). In Step 3a, select from Agents 1, 2, 3, 9 the roles whose domain the diff touches. Step 3b runs the full quality gate. Admission runs inline as in level 0.                                     |
+| **2 (default)** | Full Step 2.5. In Step 3a, select from Agents 1-12 the roles whose domain the diff materially touches. Skip Agent 13. Step 3b runs the full quality gate. Step 3c uses a single batched blinded falsifier for all candidates.                               |
+| **3**           | Every step below as written: all applicable roles plus Agent 13, one fresh-context falsifier per atomic candidate, and the full executed-evidence ladder including the browser rung. The full mission-critical pass.                                        |
 
 State the chosen level in one line at the start of the review so the user knows what they're getting (e.g., "Reviewing PR #565 at level 2"). If the level was defaulted, mention that level 3 exists for high-stakes changes.
 
