@@ -1,5 +1,11 @@
-import { describe, it, expect } from "vitest"
-import { patchRowStatus } from "./tableStatusSync"
+import { describe, it, expect, vi } from "vitest"
+import {
+  patchRowStatus,
+  pickViewStatus,
+  publishTableStatusUpdate,
+  subscribeTableStatusUpdate,
+  type TableStatusUpdate,
+} from "./tableStatusSync"
 import {
   getTableKind,
   type MaterializedView,
@@ -24,6 +30,69 @@ const isMatViewTable = (name: string) => (row: Table) =>
 
 const isView = (name: string) => (row: MaterializedView) =>
   row.view_name === name
+
+describe("pickViewStatus", () => {
+  it("should pick only the status fields of a view row", () => {
+    // Given
+    const matView = {
+      ...makeMatView("trades_1h", "retrying"),
+      base_table_name: "trades",
+    }
+
+    // When
+    const result = pickViewStatus(matView)
+
+    // Then
+    expect(result).toEqual({
+      view_status: "retrying",
+      invalidation_reason: null,
+    })
+  })
+
+  it("should return undefined without a row", () => {
+    expect(pickViewStatus(null)).toBeUndefined()
+  })
+})
+
+describe("subscribeTableStatusUpdate", () => {
+  const update: TableStatusUpdate = {
+    tableName: "trades",
+    kind: "table",
+    table: { table_suspended: true },
+  }
+
+  it("should deliver published updates until unsubscribed", () => {
+    // Given
+    const handler = vi.fn()
+    const unsubscribe = subscribeTableStatusUpdate(handler)
+
+    // When
+    publishTableStatusUpdate(update)
+    unsubscribe()
+    publishTableStatusUpdate(update)
+
+    // Then
+    expect(handler).toHaveBeenCalledOnce()
+    expect(handler).toHaveBeenCalledWith(update)
+  })
+
+  it("should keep other subscribers when one unsubscribes", () => {
+    // Given
+    const first = vi.fn()
+    const second = vi.fn()
+    const unsubscribeFirst = subscribeTableStatusUpdate(first)
+    const unsubscribeSecond = subscribeTableStatusUpdate(second)
+
+    // When
+    unsubscribeFirst()
+    publishTableStatusUpdate(update)
+    unsubscribeSecond()
+
+    // Then
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledOnce()
+  })
+})
 
 describe("patchRowStatus", () => {
   it("should update only the target row", () => {
@@ -66,6 +135,26 @@ describe("patchRowStatus", () => {
     // Then
     expect(result[0].view_status).toBe("valid")
     expect(result[0].invalidation_reason).toBeNull()
+  })
+
+  it("should keep the same array without a status or a matching row", () => {
+    // Given
+    const matViews = [makeMatView("trades_1h", "valid")]
+
+    // When
+    const withoutStatus = patchRowStatus(
+      matViews,
+      isView("trades_1h"),
+      undefined,
+    )
+    const withoutRow = patchRowStatus(matViews, isView("other"), {
+      view_status: "invalid",
+      invalidation_reason: "x",
+    })
+
+    // Then
+    expect(withoutStatus).toBe(matViews)
+    expect(withoutRow).toBe(matViews)
   })
 
   it("should keep the same array when the status did not change", () => {

@@ -1117,6 +1117,11 @@ describe("TableDetailsDrawer", () => {
         .should("exist")
     })
 
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+    })
+
     it("should show critical health status for invalid matview", () => {
       interceptMatViewsQuery({
         view_status: "invalid",
@@ -1132,6 +1137,65 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("table-details-error-banner").should("be.visible")
       cy.getByDataHook("table-details-error-title").should("contain", "invalid")
       cy.getByDataHook("table-details-resume-wal-button").should("not.exist")
+      cy.getByDataHook("table-details-view-status").should("contain", "Invalid")
+    })
+
+    it("should show a retrying refresh as a warning, not as invalid", () => {
+      // Given
+      interceptMatViewsQuery({
+        view_status: "retrying",
+        invalidation_reason: null,
+      })
+      cy.expandMatViews()
+
+      // When
+      cy.openDetailsDrawer(TEST_MATVIEW, "matview")
+
+      // Then
+      cy.getByDataHook("table-details-view-status")
+        .should("contain", "Retrying refresh")
+        .should("not.contain", "Invalid")
+      cy.getByDataHook("table-details-health-status").should(
+        "not.have.attr",
+        "data-severity",
+        "critical",
+      )
+    })
+
+    it("should sync the tree row with the status read by the drawer", () => {
+      // Given: only the drawer's own read reports the view as invalid
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /materialized_views\(\) WHERE view_name/ },
+        },
+        (req) => {
+          req.continue((res) => {
+            const statusIndex = res.body.columns.findIndex(
+              (c) => c.name === "view_status",
+            )
+            const reasonIndex = res.body.columns.findIndex(
+              (c) => c.name === "invalidation_reason",
+            )
+            res.body.dataset.forEach((row) => {
+              row[statusIndex] = "invalid"
+              row[reasonIndex] = "Base table structure changed"
+            })
+            return res
+          })
+        },
+      )
+      cy.expandMatViews()
+      cy.getByDataHook("schema-matview-title").should("contain", TEST_MATVIEW)
+      cy.getByDataHook("schema-row-error-icon").should("not.exist")
+
+      // When
+      cy.openDetailsDrawer(TEST_MATVIEW, "matview")
+
+      // Then: the tree follows the drawer without refetching the schema
+      cy.getByDataHook("table-details-view-status").should("contain", "Invalid")
+      cy.getByDataHook("schema-row-error-icon").should("be.visible")
     })
 
     after(() => {

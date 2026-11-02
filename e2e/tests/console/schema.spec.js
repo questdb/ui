@@ -399,6 +399,45 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     cy.getByDataHook("schema-suspension-dialog-trigger").should("not.exist")
   })
 
+  it("should keep the suspension dialog open after resuming WAL while the details drawer shows the table", () => {
+    // Given
+    cy.getByDataHook("schema-table-title")
+      .contains("ecommerce_stats")
+      .rightclick()
+    cy.getByDataHook("table-context-menu-view-details")
+      .filter(":visible")
+      .click()
+    cy.getByDataHook("table-details-name").should(
+      "have.value",
+      "ecommerce_stats",
+    )
+    cy.getByDataHook("schema-table-title")
+      .contains("ecommerce_stats")
+      .rightclick()
+    cy.getByDataHook("table-context-menu-resume-wal").filter(":visible").click()
+
+    // When
+    cy.getByDataHook("schema-suspension-dialog-restart-transaction").click()
+
+    // Then: the drawer's fresh status reaches the tree...
+    cy.getByDataHook("schema-filter-suspended-button").should("not.exist")
+    // ...and the dialog stays open until the user closes it
+    cy.getByDataHook("schema-suspension-dialog")
+      .should("be.visible")
+      .should("contain", "WAL resumed successfully!")
+    cy.getByDataHook("schema-suspension-dialog-dismiss").click()
+    cy.getByDataHook("schema-suspension-dialog").should("not.exist")
+
+    // A later suspension does not reopen the closed dialog
+    cy.typeQuery(
+      "ALTER TABLE ecommerce_stats SUSPEND WAL WITH 12, 'Out of memory';",
+    )
+      .clickRunQuery()
+      .clearEditor()
+    cy.getByDataHook("schema-filter-suspended-button").should("contain", "1")
+    cy.getByDataHook("schema-suspension-dialog").should("not.exist")
+  })
+
   after(() => {
     cy.loadConsoleWithAuth()
     tables.forEach((table) => {

@@ -658,16 +658,20 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                       ...(item.table?.table_suspended ? [`Suspended`] : []),
                     ]}
                   />
-                  {suspendableKind && item.table?.table_suspended && (
-                    <SuspensionDialog
-                      tableName={item.name}
-                      kind={suspendableKind}
-                      open={openedSuspensionDialog === item.id}
-                      onOpenChange={(isOpen) => {
-                        setOpenedSuspensionDialog(isOpen ? item.id : null)
-                      }}
-                    />
-                  )}
+                  {/* Stays mounted while open: a drawer status update can
+                      clear the suspension before the user closes it */}
+                  {suspendableKind &&
+                    (item.table?.table_suspended ||
+                      openedSuspensionDialog === item.id) && (
+                      <SuspensionDialog
+                        tableName={item.name}
+                        kind={suspendableKind}
+                        open={openedSuspensionDialog === item.id}
+                        onOpenChange={(isOpen) => {
+                          setOpenedSuspensionDialog(isOpen ? item.id : null)
+                        }}
+                      />
+                    )}
                 </>
               </ContextMenuTrigger>
               <ContextMenuContent>
