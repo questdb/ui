@@ -1205,6 +1205,127 @@ describe("TableDetailsDrawer", () => {
     })
   })
 
+  describe("materialized view suspension sync with the schema tree", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createMaterializedView(TEST_MATVIEW)
+      cy.execQuery(`ALTER MATERIALIZED VIEW ${TEST_MATVIEW} RESUME WAL`)
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+      cy.expandMatViews()
+    })
+
+    it("should not overwrite a newer schema refresh with an older drawer read", () => {
+      // Given: the drawer is open on the view, and its next tables() read
+      // does not land during the test
+      cy.openDetailsDrawer(TEST_MATVIEW, "matview")
+      cy.getByDataHook("table-details-view-status").should("be.visible")
+      cy.getByDataHook("schema-filter-suspended-button").should("not.exist")
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /tables\(\) where table_name = 'btc_trades_mv'/ },
+        },
+        (req) => {
+          req.on("response", (res) => {
+            res.setDelay(60000)
+          })
+        },
+      )
+
+      // When: the view is suspended and the tree reads it
+      cy.execQuery(
+        `ALTER MATERIALIZED VIEW ${TEST_MATVIEW} SUSPEND WAL WITH 12, 'Out of memory'`,
+      )
+      cy.refreshSchema()
+      cy.getByDataHook("schema-filter-suspended-button").should("contain", "1")
+      cy.intercept({
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /materialized_views\(\) WHERE view_name/ },
+      }).as("matViewPoll")
+      cy.wait("@matViewPoll")
+      cy.wait("@matViewPoll")
+
+      // Then: the view polls do not bring back the drawer's older table read.
+      // Without the fix, no later table read lands to correct the tree.
+      cy.getByDataHook("schema-filter-suspended-button").should("contain", "1")
+    })
+
+    // Cleans up without the UI, so a failed test leaves no suspended view
+    after(() => {
+      cy.execQueryAsAdmin(`ALTER MATERIALIZED VIEW ${TEST_MATVIEW} RESUME WAL`)
+      cy.execQueryAsAdmin(`DROP MATERIALIZED VIEW IF EXISTS ${TEST_MATVIEW}`)
+      cy.execQueryAsAdmin(`DROP TABLE IF EXISTS ${TEST_TABLE}`)
+    })
+  })
+
+  describe("suspension dialog reopened in the drawer", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.execQuery(
+        `ALTER TABLE ${TEST_TABLE} SUSPEND WAL WITH 12, 'Out of memory'`,
+      )
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+    })
+
+    it("should keep loading when a read from the previous opening lands", () => {
+      // Given: slow WAL reads, the first one faster than the later ones
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-resume-wal-button").should("be.visible")
+      let walReads = 0
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /wal_tables\(\) WHERE name/ },
+        },
+        (req) => {
+          walReads += 1
+          const delay = walReads === 1 ? 2000 : 5000
+          req.on("response", (res) => {
+            res.setDelay(delay)
+          })
+        },
+      ).as("walRead")
+      cy.getByDataHook("table-details-resume-wal-button").click()
+      cy.getByDataHook("schema-suspension-dialog").should("be.visible")
+      cy.realPress("Escape")
+      cy.getByDataHook("schema-suspension-dialog").should("not.exist")
+
+      // When: the dialog reopens, and then the first opening's read lands
+      cy.getByDataHook("table-details-resume-wal-button").click()
+      cy.wait("@walRead")
+      // Let the app handle that response; the reopened read lands seconds later
+      cy.wait(500)
+
+      // Then: the dialog waits for its own read instead of reporting a failure
+      cy.getByDataHook("schema-suspension-dialog")
+        .should("contain", "Loading WAL status")
+        .should("not.contain", "Failed to load WAL data")
+      cy.getByDataHook("schema-suspension-dialog-restart-transaction").should(
+        "be.visible",
+      )
+    })
+
+    // Cleans up without the UI, so a failed test leaves no suspended table
+    after(() => {
+      cy.execQueryAsAdmin(`ALTER TABLE ${TEST_TABLE} RESUME WAL`)
+      cy.execQueryAsAdmin(`DROP TABLE IF EXISTS ${TEST_TABLE}`)
+    })
+  })
+
   describe("live view specific", () => {
     before(() => {
       cy.loadConsoleWithAuth()

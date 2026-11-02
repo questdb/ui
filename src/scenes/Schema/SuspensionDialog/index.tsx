@@ -133,7 +133,11 @@ export const SuspensionDialog = ({
     if (!open) return
 
     setLoading(true)
-    void fetchWalTableData().finally(() => setLoading(false))
+    const version = infoVersionRef.current
+    void fetchWalTableData().finally(() => {
+      // A read from a previous opening must not end this opening's loading
+      if (version === infoVersionRef.current) setLoading(false)
+    })
 
     const interval = setInterval(() => {
       void fetchWalTableData()

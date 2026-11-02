@@ -556,28 +556,27 @@ export const TableDetailsDrawer = () => {
     tableSource.state,
   ])
 
+  // Each source publishes only its own fresh read: a kind source poll must not
+  // re-send an older table_suspended over a newer schema refresh
+  useEffect(() => {
+    if (!isOpen || !hasTarget || !freshTableRow) return
+    publishTableStatusUpdate({
+      tableName,
+      kind,
+      table: { table_suspended: freshTableRow.table_suspended },
+    })
+  }, [isOpen, hasTarget, tableName, kind, freshTableRow])
+
   useEffect(() => {
     if (!isOpen || !hasTarget) return
     publishTableStatusUpdate({
       tableName,
       kind,
-      table: freshTableRow
-        ? { table_suspended: freshTableRow.table_suspended }
-        : undefined,
       matView: pickViewStatus(matViewData),
       view: pickViewStatus(viewData),
       liveView: pickViewStatus(liveViewData),
     })
-  }, [
-    isOpen,
-    hasTarget,
-    tableName,
-    kind,
-    freshTableRow,
-    matViewData,
-    viewData,
-    liveViewData,
-  ])
+  }, [isOpen, hasTarget, tableName, kind, matViewData, viewData, liveViewData])
 
   const { poll: pollTableSource } = tableSource
   const pollTable = useCallback(async () => {

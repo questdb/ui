@@ -580,6 +580,19 @@ Cypress.Commands.add("selectQueries", (selection) => {
   })
 })
 
+// For cleanup hooks: it needs no page or login, so it also runs after a test
+// failed mid-way, and a failed statement does not stop the next one
+Cypress.Commands.add(
+  "execQueryAsAdmin",
+  (query, username = "admin", password = "quest") =>
+    cy.request({
+      method: "GET",
+      url: `${baseUrl}/exec?query=${encodeURIComponent(query)};`,
+      auth: { username, password },
+      failOnStatusCode: false,
+    }),
+)
+
 Cypress.Commands.add("execQuery", (query) => {
   return cy.window().then(({ localStorage }) => {
     // EE password login stores a REST token, OSS stores a Basic header.

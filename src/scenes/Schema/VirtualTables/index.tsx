@@ -207,9 +207,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   )
   // Lives outside the rows: a status update can clear the suspension or
   // filter the row out while the dialog is open, and it must stay open.
-  const [suspensionDialogTarget, setSuspensionDialogTarget] = useState<{
+  // The target is kept after closing, so the dialog stays mounted and its
+  // close animation can play.
+  const [suspensionDialogState, setSuspensionDialogState] = useState<{
     tableName: string
     kind: Exclude<TableKind, "view">
+    open: boolean
   } | null>(null)
   const dispatch = useDispatch()
 
@@ -768,9 +771,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                       void trackEvent(ConsoleEvent.SCHEMA_CONTEXT_RESUME_WAL)
                       if (item.table?.table_suspended && suspendableKind) {
                         setTimeout(() =>
-                          setSuspensionDialogTarget({
+                          setSuspensionDialogState({
                             tableName: item.name,
                             kind: suspendableKind,
+                            open: true,
                           }),
                         )
                       }
@@ -909,14 +913,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     schemaTreeRef.current = schemaTree
   }, [schemaTree])
 
-  const suspensionDialog = suspensionDialogTarget && (
+  const suspensionDialog = suspensionDialogState && (
     <SuspensionDialog
-      key={`${suspensionDialogTarget.kind}:${suspensionDialogTarget.tableName}`}
-      tableName={suspensionDialogTarget.tableName}
-      kind={suspensionDialogTarget.kind}
-      open
-      onOpenChange={(isOpen) => {
-        if (!isOpen) setSuspensionDialogTarget(null)
+      key={`${suspensionDialogState.kind}:${suspensionDialogState.tableName}`}
+      tableName={suspensionDialogState.tableName}
+      kind={suspensionDialogState.kind}
+      open={suspensionDialogState.open}
+      onOpenChange={(open) => {
+        setSuspensionDialogState((prev) => prev && { ...prev, open })
       }}
     />
   )
