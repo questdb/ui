@@ -45,6 +45,7 @@ import { getTrendSamplesForIssue } from "./utils"
 import { HealthStatusLabel } from "./HealthStatusLabel"
 import { useDebouncedWarnings } from "./useDebouncedWarnings"
 import { SuspensionDialog } from "../SuspensionDialog"
+import { pickViewStatus, publishTableStatusUpdate } from "../tableStatusSync"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import {
   MANUAL_RETRY_POLICY,
@@ -363,6 +364,13 @@ export const TableDetailsDrawer = () => {
     viewSource.state.status === "ready" ? viewSource.state.data : null
   const liveViewData =
     liveViewSource.state.status === "ready" ? liveViewSource.state.data : null
+
+  const freshTableRow =
+    tableSource.state.status === "ready" &&
+    tableSource.state.data.type === "found" &&
+    getTableKind(tableSource.state.data.data) === kind
+      ? tableSource.state.data.data
+      : null
   const baseTableName =
     matViewData?.base_table_name ?? liveViewData?.base_table_name ?? undefined
   const escapedBaseTableName = QuestDB.escapeSqlLiteral(baseTableName ?? "")
@@ -546,6 +554,29 @@ export const TableDetailsDrawer = () => {
     tableKindMismatch,
     tableName,
     tableSource.state,
+  ])
+
+  useEffect(() => {
+    if (!isOpen || !hasTarget) return
+    publishTableStatusUpdate({
+      tableName,
+      kind,
+      table: freshTableRow
+        ? { table_suspended: freshTableRow.table_suspended }
+        : undefined,
+      matView: pickViewStatus(matViewData),
+      view: pickViewStatus(viewData),
+      liveView: pickViewStatus(liveViewData),
+    })
+  }, [
+    isOpen,
+    hasTarget,
+    tableName,
+    kind,
+    freshTableRow,
+    matViewData,
+    viewData,
+    liveViewData,
   ])
 
   const { poll: pollTableSource } = tableSource

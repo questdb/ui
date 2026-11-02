@@ -44,6 +44,7 @@ import {
   type TrendDirection,
 } from "./healthCheck"
 import { ErrorBanner } from "./ErrorBanner"
+import { MatViewStatusValue } from "./MatViewStatusValue"
 import { PerformanceAlerts } from "./PerformanceAlerts"
 import {
   Section,
@@ -586,27 +587,7 @@ export const MonitoringTab = ({
                 {matViewUnavailable || liveViewUnavailable ? (
                   <UnavailableValue />
                 ) : matView ? (
-                  matView.view_status === "valid" ? (
-                    <>
-                      <CheckCircleIcon
-                        size={16}
-                        weight="fill"
-                        color={theme.color.statusSuccess}
-                      />
-                      <Text color="statusSuccess">Valid</Text>
-                    </>
-                  ) : matView.view_status === "refreshing" ? (
-                    <MetricValue>Refreshing</MetricValue>
-                  ) : (
-                    <>
-                      <XSquareIcon
-                        size={16}
-                        weight="fill"
-                        color={theme.color.statusDanger}
-                      />
-                      <Text color="statusDanger">Invalid</Text>
-                    </>
-                  )
+                  <MatViewStatusValue status={matView.view_status} />
                 ) : liveView ? (
                   liveView.view_status === "active" ? (
                     <>
