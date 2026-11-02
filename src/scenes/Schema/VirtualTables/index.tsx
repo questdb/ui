@@ -205,9 +205,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
     null,
   )
-  const [openedSuspensionDialog, setOpenedSuspensionDialog] = useState<
-    string | null
-  >(null)
+  // Lives outside the rows: a status update can clear the suspension or
+  // filter the row out while the dialog is open, and it must stay open.
+  const [suspensionDialogTarget, setSuspensionDialogTarget] = useState<{
+    tableName: string
+    kind: Exclude<TableKind, "view">
+  } | null>(null)
   const dispatch = useDispatch()
 
   const symbolColumnDetailsRef = useRef<Map<string, SymbolColumnDetails>>(
@@ -658,20 +661,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                       ...(item.table?.table_suspended ? [`Suspended`] : []),
                     ]}
                   />
-                  {/* Stays mounted while open: a drawer status update can
-                      clear the suspension before the user closes it */}
-                  {suspendableKind &&
-                    (item.table?.table_suspended ||
-                      openedSuspensionDialog === item.id) && (
-                      <SuspensionDialog
-                        tableName={item.name}
-                        kind={suspendableKind}
-                        open={openedSuspensionDialog === item.id}
-                        onOpenChange={(isOpen) => {
-                          setOpenedSuspensionDialog(isOpen ? item.id : null)
-                        }}
-                      />
-                    )}
                 </>
               </ContextMenuTrigger>
               <ContextMenuContent>
@@ -777,8 +766,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                     data-hook="table-context-menu-resume-wal"
                     onClick={() => {
                       void trackEvent(ConsoleEvent.SCHEMA_CONTEXT_RESUME_WAL)
-                      if (item.table?.table_suspended) {
-                        setTimeout(() => setOpenedSuspensionDialog(item.id))
+                      if (item.table?.table_suspended && suspendableKind) {
+                        setTimeout(() =>
+                          setSuspensionDialogTarget({
+                            tableName: item.name,
+                            kind: suspendableKind,
+                          }),
+                        )
                       }
                     }}
                     icon={<Restart size={16} />}
@@ -822,7 +816,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       liveViewTables,
       toggleNodeExpansion,
       openedContextMenu,
-      openedSuspensionDialog,
       navigateInTree,
       getOrFetchSymbolDetails,
     ],
@@ -916,28 +909,47 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     schemaTreeRef.current = schemaTree
   }, [schemaTree])
 
-  if (state.view === View.loading) {
-    return <Loading />
-  }
+  const suspensionDialog = suspensionDialogTarget && (
+    <SuspensionDialog
+      key={`${suspensionDialogTarget.kind}:${suspensionDialogTarget.tableName}`}
+      tableName={suspensionDialogTarget.tableName}
+      kind={suspensionDialogTarget.kind}
+      open
+      onOpenChange={(isOpen) => {
+        if (!isOpen) setSuspensionDialogTarget(null)
+      }}
+    />
+  )
 
-  if (state.view === View.error) {
-    return loadingError ? <LoadingError error={loadingError} /> : <FlexSpacer />
-  }
-
+  // One tree position for the dialog in every view state, so a schema reload
+  // cannot remount it and reset its state
   return (
-    <div ref={wrapperRef} style={{ height: "100%" }}>
-      <Virtuoso
-        totalCount={flattenedItems.length}
-        ref={virtuosoRef}
-        data-hook="schema-tree"
-        rangeChanged={(newRange) => {
-          rangeRef.current = newRange
-        }}
-        data={flattenedItems}
-        itemContent={(index) => renderRow(index)}
-        style={{ height: "100%" }}
-      />
-    </div>
+    <>
+      {state.view === View.loading ? (
+        <Loading />
+      ) : state.view === View.error ? (
+        loadingError ? (
+          <LoadingError error={loadingError} />
+        ) : (
+          <FlexSpacer />
+        )
+      ) : (
+        <div ref={wrapperRef} style={{ height: "100%" }}>
+          <Virtuoso
+            totalCount={flattenedItems.length}
+            ref={virtuosoRef}
+            data-hook="schema-tree"
+            rangeChanged={(newRange) => {
+              rangeRef.current = newRange
+            }}
+            data={flattenedItems}
+            itemContent={(index) => renderRow(index)}
+            style={{ height: "100%" }}
+          />
+        </div>
+      )}
+      {suspensionDialog}
+    </>
   )
 }
 

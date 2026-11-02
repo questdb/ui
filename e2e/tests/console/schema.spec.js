@@ -438,6 +438,64 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     cy.getByDataHook("schema-suspension-dialog").should("not.exist")
   })
 
+  it("should keep the suspension dialog open and follow the latest status when the suspended filter hides the table", () => {
+    // Given: two suspended tables, shown through the suspended filter, and
+    // the details drawer open on the one to resume
+    cy.execQuery(
+      "ALTER TABLE btc_trades SUSPEND WAL WITH 24, 'Too many open files'",
+    )
+    cy.refreshSchema()
+    cy.getByDataHook("schema-filter-suspended-button")
+      .should("contain", "2")
+      .click()
+    cy.getByDataHook("schema-table-title")
+      .contains("ecommerce_stats")
+      .rightclick()
+    cy.getByDataHook("table-context-menu-view-details")
+      .filter(":visible")
+      .click()
+    cy.getByDataHook("table-details-name").should(
+      "have.value",
+      "ecommerce_stats",
+    )
+    cy.getByDataHook("schema-table-title")
+      .contains("ecommerce_stats")
+      .rightclick()
+    cy.getByDataHook("table-context-menu-resume-wal").filter(":visible").click()
+
+    // When
+    cy.getByDataHook("schema-suspension-dialog-restart-transaction").click()
+
+    // Then: the resumed table leaves the filtered tree, the dialog stays
+    cy.getByDataHook("schema-filter-suspended-button").should("contain", "1")
+    cy.getByDataHook("schema-table-title").should(
+      "not.contain",
+      "ecommerce_stats",
+    )
+    cy.getByDataHook("schema-suspension-dialog")
+      .should("be.visible")
+      .should("have.attr", "data-suspended", "false")
+      .should("contain", "WAL resumed successfully!")
+
+    // When: the table is suspended again while the dialog is open
+    cy.execQuery(
+      "ALTER TABLE ecommerce_stats SUSPEND WAL WITH 12, 'Out of memory'",
+    )
+
+    // Then: the dialog stays and follows the latest status
+    cy.getByDataHook("schema-suspension-dialog")
+      .should("be.visible")
+      .should("have.attr", "data-suspended", "true")
+      .should("not.contain", "WAL resumed successfully!")
+    cy.getByDataHook("schema-suspension-dialog-dismiss").click()
+    cy.getByDataHook("schema-suspension-dialog").should("not.exist")
+
+    // Showing every table again does not reopen the closed dialog
+    cy.getByDataHook("schema-filter-suspended-button").click()
+    cy.getByDataHook("schema-table-title").should("contain", "ecommerce_stats")
+    cy.getByDataHook("schema-suspension-dialog").should("not.exist")
+  })
+
   after(() => {
     cy.loadConsoleWithAuth()
     tables.forEach((table) => {
