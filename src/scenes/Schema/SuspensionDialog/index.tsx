@@ -166,6 +166,10 @@ export const SuspensionDialog = ({
           ? "LIVE VIEW"
           : "TABLE"
     }`
+    // A resume answered after the dialog was closed belongs to that opening:
+    // it must not change the state of the next one
+    const version = infoVersionRef.current
+    let isStale = false
     try {
       const response = await quest.query(
         `${queryStart} '${escapedName}' RESUME WAL${
@@ -174,6 +178,8 @@ export const SuspensionDialog = ({
             : ""
         }`,
       )
+      isStale = version !== infoVersionRef.current
+      if (isStale) return
       if (response && response.type === QuestDB.Type.DDL) {
         infoVersionRef.current += 1
         setIsSubmitted(true)
@@ -181,13 +187,14 @@ export const SuspensionDialog = ({
       } else {
         setError(GENERIC_ERROR_TEXT)
       }
-      setIsSubmitting(false)
     } catch (e) {
+      isStale = version !== infoVersionRef.current
+      if (isStale) return
       const error = e as ErrorResult
-      setIsSubmitting(false)
       setError(`${GENERIC_ERROR_TEXT}${error.error ? `: ${error.error}` : ""}`)
     } finally {
-      await fetchWalTableData()
+      setIsSubmitting(false)
+      if (!isStale) await fetchWalTableData()
     }
   }
 

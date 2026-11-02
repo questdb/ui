@@ -1319,6 +1319,50 @@ describe("TableDetailsDrawer", () => {
       )
     })
 
+    it("should load the reopened dialog when a resume from the previous opening lands", () => {
+      // Given: the dialog is open, and the resume reaches the server late
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-resume-wal-button").click()
+      cy.getByDataHook("schema-suspension-dialog-restart-transaction").should(
+        "be.visible",
+      )
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /RESUME WAL/ },
+        },
+        () => new Promise((resolve) => setTimeout(resolve, 3000)),
+      ).as("resume")
+
+      // When: the user resumes, closes the dialog and reopens it, and the
+      // resume lands while the reopened dialog's first read is in flight
+      cy.getByDataHook("schema-suspension-dialog-restart-transaction").click()
+      cy.realPress("Escape")
+      cy.getByDataHook("schema-suspension-dialog").should("not.exist")
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /wal_tables\(\) WHERE name/ },
+        },
+        (req) => {
+          req.on("response", (res) => {
+            res.setDelay(5000)
+          })
+        },
+      )
+      cy.getByDataHook("table-details-resume-wal-button").click()
+      cy.getByDataHook("schema-suspension-dialog").should("be.visible")
+      cy.wait("@resume")
+
+      // Then: the dialog loads once its own read lands
+      cy.getByDataHook("schema-suspension-dialog", { timeout: 15000 })
+        .should("not.contain", "Loading WAL status")
+        .should("have.attr", "data-suspended", "false")
+    })
+
     // Cleans up without the UI, so a failed test leaves no suspended table
     after(() => {
       cy.execQueryAsAdmin(`ALTER TABLE ${TEST_TABLE} RESUME WAL`)
