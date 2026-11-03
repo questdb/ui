@@ -5,7 +5,8 @@ require("@4tw/cypress-drag-drop")
 const { ctrlOrCmd, escapeRegExp, seedNotebookOnboarding } = require("./utils")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
-const baseUrl = `http://localhost:9999${contextPath}`
+const baseUrl =
+  Cypress.config("baseUrl") || `http://localhost:9999${contextPath}`
 
 const tableSchemas = {
   btc_trades:
@@ -127,7 +128,7 @@ beforeEach(() => {
 })
 
 Cypress.Commands.add("clearSimulatedWarnings", () => {
-  cy.execQuery("select simulate_warnings('', '');")
+  cy.execAdminQuery("select simulate_warnings('', '');")
 })
 
 Cypress.Commands.add("getByDataHook", (name, options) =>
@@ -596,40 +597,49 @@ Cypress.Commands.add("execQuery", (query) => {
   })
 })
 
+Cypress.Commands.add("execAdminQuery", (query) =>
+  cy.request({
+    method: "GET",
+    url: `${baseUrl}/exec`,
+    qs: { query },
+    headers: { Authorization: `Basic ${btoa("admin:quest")}` },
+  }),
+)
+
 Cypress.Commands.add("createTable", (name) => {
-  cy.execQuery(tableSchemas[name])
+  cy.execAdminQuery(tableSchemas[name])
 })
 
 Cypress.Commands.add("createMaterializedView", (name) => {
-  cy.execQuery(materializedViewSchemas[name])
+  cy.execAdminQuery(materializedViewSchemas[name])
 })
 
 Cypress.Commands.add("createView", (name) => {
-  cy.execQuery(viewSchemas[name])
+  cy.execAdminQuery(viewSchemas[name])
 })
 
 Cypress.Commands.add("dropTable", (name) => {
-  cy.execQuery(`DROP TABLE ${name};`)
+  cy.execAdminQuery(`DROP TABLE ${name};`)
 })
 
 Cypress.Commands.add("dropTableIfExists", (name) => {
-  cy.execQuery(`DROP TABLE IF EXISTS ${name};`)
+  cy.execAdminQuery(`DROP TABLE IF EXISTS ${name};`)
 })
 
 Cypress.Commands.add("dropMaterializedView", (name) => {
-  cy.execQuery(`DROP MATERIALIZED VIEW ${name};`)
+  cy.execAdminQuery(`DROP MATERIALIZED VIEW ${name};`)
 })
 
 Cypress.Commands.add("dropViewIfExists", (name) => {
-  cy.execQuery(`DROP VIEW IF EXISTS ${name};`)
+  cy.execAdminQuery(`DROP VIEW IF EXISTS ${name};`)
 })
 
 Cypress.Commands.add("createLiveView", (name) => {
-  cy.execQuery(liveViewSchemas[name])
+  cy.execAdminQuery(liveViewSchemas[name])
 })
 
 Cypress.Commands.add("dropLiveViewIfExists", (name) => {
-  cy.execQuery(`DROP LIVE VIEW IF EXISTS ${name};`)
+  cy.execAdminQuery(`DROP LIVE VIEW IF EXISTS ${name};`)
 })
 
 Cypress.Commands.add("interceptQuery", (query, alias, response) => {
@@ -680,45 +690,67 @@ Cypress.Commands.add(
 )
 
 Cypress.Commands.add(
+  "loginWithApi",
+  (username = "admin", password = "quest") => {
+    const authorization = `Basic ${btoa(`${username}:${password}`)}`
+    return cy.request(`${baseUrl}/settings`).then(({ body }) => {
+      const isEnterprise = body.config["release.type"] === "EE"
+      const query = isEnterprise
+        ? `alter user '${username}' create token type rest with ttl '1d' refresh transient`
+        : "select 1"
+
+      return cy
+        .request({
+          method: "GET",
+          url: `${baseUrl}/exec`,
+          qs: { query, session: true },
+          headers: { Authorization: authorization },
+        })
+        .then(({ body }) =>
+          isEnterprise
+            ? { "rest.token": body.dataset[0][1] }
+            : { "basic.auth.header": authorization },
+        )
+    })
+  },
+)
+
+Cypress.Commands.add(
   "loadConsoleWithAuth",
-  (clearWarnings = false, localStorageItems = {}) => {
-    cy.handleStorageAndVisit(baseUrl, true, localStorageItems)
-    cy.loginWithUserAndPassword()
+  (clearWarnings = false, localStorageItems = {}, options = {}) => {
+    const { username, password, url = baseUrl, onBeforeLoad } = options
     if (clearWarnings) {
       cy.clearSimulatedWarnings()
-      cy.handleStorageAndVisit(baseUrl, false, localStorageItems)
-      cy.getEditor().should("be.visible")
     }
+    cy.loginWithApi(username, password).then((credentials) => {
+      cy.handleStorageAndVisit(url, true, localStorageItems, (win) => {
+        win.sessionStorage.clear()
+        onBeforeLoad?.(win)
+        for (const [key, value] of Object.entries(credentials)) {
+          win.localStorage.setItem(key, value)
+        }
+        win.sessionStorage.setItem("auth.login.method", "password")
+      })
+    })
+    cy.getEditor().should("be.visible")
   },
 )
 
 Cypress.Commands.add(
   "loadConsoleAsAdminAndCreateSSOGroup",
   (group, externalGroup = undefined) => {
-    cy.loadConsoleWithAuth(true)
-
-    cy.executeSQL(
+    cy.execAdminQuery(
       `CREATE GROUP '${group}' WITH EXTERNAL ALIAS '${externalGroup || group}';`,
     )
-    cy.getByDataHook("success-notification").should("be.visible")
-    cy.executeSQL(`GRANT HTTP TO '${group}';`)
-    cy.getByDataHook("success-notification").should("be.visible")
-
-    cy.logout()
+    cy.execAdminQuery(`GRANT HTTP TO '${group}';`)
   },
 )
 
 Cypress.Commands.add(
   "loadConsoleAsAdminAndCreateDBUser",
   (username, password = "pwd") => {
-    cy.loadConsoleWithAuth(true)
-
-    cy.executeSQL(`create user '${username}' with password '${password}'`)
-    cy.getByDataHook("success-notification").should("be.visible")
-    cy.executeSQL(`grant HTTP to '${username}'`)
-    cy.getByDataHook("success-notification").should("be.visible")
-
-    cy.logout()
+    cy.execAdminQuery(`create user '${username}' with password '${password}'`)
+    cy.execAdminQuery(`grant HTTP to '${username}'`)
   },
 )
 

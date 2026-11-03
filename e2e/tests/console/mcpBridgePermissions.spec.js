@@ -43,18 +43,11 @@ const deepLinkSuffix = () =>
   `?mcp-pair=1&mcp-ws=${encodeURIComponent(TEST_BRIDGE_URL)}` +
   `&mcp-token=${encodeURIComponent(TEST_BRIDGE_TOKEN)}`
 
-// Visit with deep-link params before login so they survive into the SPA boot.
 const loginAndVisitDeepLink = (seedLocalStorage = {}) => {
-  cy.handleStorageAndVisit(
-    `${baseUrl}/${deepLinkSuffix()}`,
-    true,
-    seedLocalStorage,
-    (win) => {
-      win.sessionStorage.clear()
-      installFakeWebSocket(win)
-    },
-  )
-  cy.loginWithUserAndPassword()
+  cy.loadConsoleWithAuth(false, seedLocalStorage, {
+    url: `${baseUrl}/${deepLinkSuffix()}`,
+    onBeforeLoad: installFakeWebSocket,
+  })
 }
 
 const waitForPaired = () => {

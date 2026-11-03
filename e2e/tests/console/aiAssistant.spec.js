@@ -820,12 +820,9 @@ describe("ai assistant", () => {
 
   describe("explain schema", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable("test_trades")
-      cy.refreshSchema()
     })
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable("test_trades")
     })
 
@@ -903,15 +900,12 @@ describe("ai assistant", () => {
     const testTables = ["btc_trades", "ecommerce_stats"]
 
     before(() => {
-      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
       testTables.forEach((table) => {
         cy.createTable(table)
       })
-      cy.refreshSchema()
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       testTables.forEach((table) => {
         cy.dropTableIfExists(table)
       })
@@ -1592,15 +1586,12 @@ Syntax: \`avg(column)\`
     const testTables = ["btc_trades", "ecommerce_stats"]
 
     before(() => {
-      cy.loadConsoleWithAuth(false, getAnthropicConfiguredSettings())
       testTables.forEach((table) => {
         cy.createTable(table)
       })
-      cy.refreshSchema()
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       testTables.forEach((table) => {
         cy.dropTableIfExists(table)
       })
@@ -2387,15 +2378,12 @@ Syntax: \`avg(column)\`
     const testTables = ["btc_trades"]
 
     before(() => {
-      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
       testTables.forEach((table) => {
         cy.createTable(table)
       })
-      cy.refreshSchema()
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       testTables.forEach((table) => {
         cy.dropTableIfExists(table)
       })

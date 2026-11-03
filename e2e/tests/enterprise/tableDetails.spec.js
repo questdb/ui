@@ -6,9 +6,8 @@ const TEST_LIVE_VIEW = "btc_trades_lv"
 describe("TableDetailsDrawer in enterprise", () => {
   describe("without a STORAGE POLICY shows 'Not configured'", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
+      cy.loadConsoleWithAuth()
     })
 
     it("shows loading before the 'Not configured' placeholder", () => {
@@ -75,19 +74,17 @@ describe("TableDetailsDrawer in enterprise", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("with a STORAGE POLICY", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.execQuery(
+      cy.execAdminQuery(
         `ALTER TABLE ${TEST_TABLE} SET STORAGE POLICY(TO PARQUET 3 DAYS, TO REMOTE 10 DAYS, DROP LOCAL 1 YEARS)`,
       )
-      cy.refreshSchema()
+      cy.loadConsoleWithAuth()
     })
 
     it("renders catalog policy values and disabled status", () => {
@@ -128,7 +125,7 @@ describe("TableDetailsDrawer in enterprise", () => {
         })
 
       // When
-      cy.execQuery(`ALTER TABLE ${TEST_TABLE} DISABLE STORAGE POLICY`)
+      cy.execAdminQuery(`ALTER TABLE ${TEST_TABLE} DISABLE STORAGE POLICY`)
 
       // Then the next poll picks the change up, up to 5s away
       cy.getByDataHook("table-details-storage-disabled", { timeout: 12000 })
@@ -137,17 +134,15 @@ describe("TableDetailsDrawer in enterprise", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("hides the STORAGE POLICY section for a live view", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createLiveView(TEST_LIVE_VIEW)
-      cy.refreshSchema()
+      cy.loadConsoleWithAuth()
       cy.expandLiveViews()
     })
 
@@ -172,7 +167,6 @@ describe("TableDetailsDrawer in enterprise", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
       cy.dropTable(TEST_TABLE)
     })

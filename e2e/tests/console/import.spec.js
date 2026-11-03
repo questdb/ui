@@ -6,11 +6,7 @@ describe("questdb import", () => {
   })
 
   afterEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.typeQueryDirectly("drop all tables;")
-    cy.clickRunIconInLine(1)
-    cy.getByDataHook("success-notification").should("be.visible")
-    cy.clearEditor()
+    cy.execAdminQuery("DROP ALL TABLES;")
   })
 
   it("display import panel", () => {

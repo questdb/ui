@@ -12,19 +12,17 @@ describe("System configuration - no warnings", () => {
 
 describe("System configuration - 3 warnings", () => {
   after(() => {
-    cy.typeQueryDirectly("select simulate_warnings('', '');")
-      .runLine()
-      .clearEditor()
+    cy.clearSimulatedWarnings()
   })
 
   before(() => {
-    cy.loadConsoleWithAuth(true)
+    cy.clearSimulatedWarnings()
     ;[
       "select simulate_warnings('UNSUPPORTED FILE SYSTEM', 'Unsupported file system [dir=/questdb/path/dbRoot, magic=0x6400A468]');",
       "select simulate_warnings('TOO MANY OPEN FILES', 'fs.file-max limit is too low [current=1024, recommended=1048576]');",
       "select simulate_warnings('OUT OF MMAP AREAS', 'vm.max_map_count limit is too low [current=4096, recommended=1048576]');",
     ].forEach((query) => {
-      cy.execQuery(query)
+      cy.execAdminQuery(query)
     })
   })
 

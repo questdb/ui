@@ -163,9 +163,7 @@ describe("TableDetailsDrawer", () => {
 
   describe("view state", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -196,16 +194,13 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("healthy table state", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -228,16 +223,13 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("source availability", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -533,15 +525,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("critical health issues - WAL suspended (R1)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
     })
 
@@ -566,15 +557,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("critical health issues - memory backoff (R3)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
     })
 
@@ -595,15 +585,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("warning health issues - small transactions (Y3)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
     })
 
@@ -623,15 +612,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("warning health issues - high write amplification (Y4)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
     })
 
@@ -651,15 +639,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("warning health issues - high memory pressure (Y5)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
     })
 
@@ -679,15 +666,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("ingestion - WAL disabled", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE_NO_WAL)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
     })
 
@@ -701,15 +687,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE_NO_WAL)
     })
   })
 
   describe("ingestion - pending rows increasing (Y2)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
     })
 
@@ -762,15 +747,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("ingestion - transaction lag decreasing", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
     })
 
@@ -826,16 +810,13 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("expandable sections", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -896,16 +877,13 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("copy functionality", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -942,14 +920,12 @@ describe("TableDetailsDrawer", () => {
     }
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("materialized view specific", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createMaterializedView(TEST_MATVIEW)
     })
@@ -1053,7 +1029,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropMaterializedView(TEST_MATVIEW)
       cy.dropTable(TEST_TABLE)
     })
@@ -1061,7 +1036,6 @@ describe("TableDetailsDrawer", () => {
 
   describe("materialized view based on another materialized view", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createMaterializedView(TEST_MATVIEW)
       cy.createMaterializedView(TEST_MATVIEW_ON_MV)
@@ -1099,7 +1073,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropMaterializedView(TEST_MATVIEW_ON_MV)
       cy.dropMaterializedView(TEST_MATVIEW)
       cy.dropTable(TEST_TABLE)
@@ -1108,9 +1081,9 @@ describe("TableDetailsDrawer", () => {
 
   describe("materialized view invalid state (R2)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createMaterializedView(TEST_MATVIEW)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
       cy.getByDataHook("schema-folder-title")
         .contains("Materialized views")
@@ -1135,7 +1108,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropMaterializedView(TEST_MATVIEW)
       cy.dropTable(TEST_TABLE)
     })
@@ -1143,11 +1115,10 @@ describe("TableDetailsDrawer", () => {
 
   describe("live view specific", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.execQuery(TEST_LIVE_VIEW_BASE_2_DDL)
+      cy.execAdminQuery(TEST_LIVE_VIEW_BASE_2_DDL)
       cy.createLiveView(TEST_LIVE_VIEW)
-      cy.execQuery(TEST_LIVE_VIEW_2_DDL)
+      cy.execAdminQuery(TEST_LIVE_VIEW_2_DDL)
     })
 
     beforeEach(() => {
@@ -1646,7 +1617,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW_2)
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
       cy.dropTableIfExists(TEST_LIVE_VIEW_BASE_2)
@@ -1656,9 +1626,9 @@ describe("TableDetailsDrawer", () => {
 
   describe("live view invalid state (R5)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createLiveView(TEST_LIVE_VIEW)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
       cy.getByDataHook("schema-folder-title")
         .contains("Live views")
@@ -1693,7 +1663,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
       cy.dropTableIfExists(TEST_TABLE)
     })
@@ -1701,9 +1670,9 @@ describe("TableDetailsDrawer", () => {
 
   describe("live view load-failure states (R6/R7)", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createLiveView(TEST_LIVE_VIEW)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
       cy.getByDataHook("schema-folder-title")
         .contains("Live views")
@@ -1835,7 +1804,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
       cy.dropTableIfExists(TEST_TABLE)
     })
@@ -1845,9 +1813,9 @@ describe("TableDetailsDrawer", () => {
     // beforeEach so a retry starts from a re-created live view: the test
     // drops it mid-flow, and a before() would poison the second attempt.
     beforeEach(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createLiveView(TEST_LIVE_VIEW)
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
       cy.getByDataHook("schema-folder-title")
         .contains("Live views")
@@ -1891,7 +1859,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
       cy.dropTableIfExists(TEST_TABLE)
     })
@@ -1899,7 +1866,6 @@ describe("TableDetailsDrawer", () => {
 
   describe("view specific", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createView(TEST_VIEW)
     })
@@ -1962,15 +1928,14 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropViewIfExists(TEST_VIEW)
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("view invalid state (R4)", () => {
-    before(() => {
-      cy.loadConsoleWithAuth()
+    beforeEach(() => {
+      cy.dropViewIfExists(TEST_VIEW)
       cy.createTable(TEST_TABLE)
       cy.createView(TEST_VIEW)
     })
@@ -2010,7 +1975,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropViewIfExists(TEST_VIEW)
       cy.dropTableIfExists(TEST_TABLE)
     })
@@ -2018,9 +1982,7 @@ describe("TableDetailsDrawer", () => {
 
   describe("AI interactions disabled", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -2063,16 +2025,13 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("AI interactions disabled - schema access not granted", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -2116,16 +2075,13 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
 
   describe("AI interactions", () => {
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -2204,7 +2160,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
     })
   })
@@ -2213,10 +2168,8 @@ describe("TableDetailsDrawer", () => {
     const TEST_TABLE_2 = "test_trades"
 
     before(() => {
-      cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createTable(TEST_TABLE_2)
-      cy.refreshSchema()
     })
 
     beforeEach(() => {
@@ -2394,7 +2347,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     after(() => {
-      cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
       cy.dropTable(TEST_TABLE_2)
     })

@@ -1,7 +1,6 @@
 /// <reference types="cypress" />
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
-const baseUrl = `http://localhost:9999${contextPath}`
+const baseUrl = Cypress.config("baseUrl")
 
 const { ctrlOrCmd } = require("../../utils")
 
@@ -891,9 +890,9 @@ describe("&query URL param", () => {
   it("should lock editor and show confirmation dialog for DML mixed with SELECT, then run on confirm", () => {
     // Given
     const tableName = "share_link_a1"
-    cy.execQuery(`DROP TABLE IF EXISTS ${tableName}`)
-    cy.execQuery(`CREATE TABLE ${tableName} (val INT)`)
-    cy.execQuery(`INSERT INTO ${tableName} VALUES (1)`)
+    cy.execAdminQuery(`DROP TABLE IF EXISTS ${tableName}`)
+    cy.execAdminQuery(`CREATE TABLE ${tableName} (val INT)`)
+    cy.execAdminQuery(`INSERT INTO ${tableName} VALUES (1)`)
     cy.intercept("/api/v1/sql/validate*", {
       delay: 1500,
       body: { queryType: "UPDATE" },
@@ -933,14 +932,14 @@ describe("&query URL param", () => {
         "match",
         /Running completed in \d+ms with\s+2 successful\s+queries/,
       )
-    cy.execQuery(`DROP TABLE ${tableName}`)
+    cy.execAdminQuery(`DROP TABLE ${tableName}`)
   })
 
   it("should lock editor and show confirmation dialog for DDL mixed with SELECT, then NOT run on cancel", () => {
     // Given
     const tableName = "share_link_a2"
-    cy.execQuery(`DROP TABLE IF EXISTS ${tableName}`)
-    cy.execQuery(`CREATE TABLE ${tableName} (val INT)`)
+    cy.execAdminQuery(`DROP TABLE IF EXISTS ${tableName}`)
+    cy.execAdminQuery(`CREATE TABLE ${tableName} (val INT)`)
     cy.intercept("/api/v1/sql/validate*", {
       delay: 1500,
       body: { queryType: "DROP" },
@@ -975,8 +974,8 @@ describe("&query URL param", () => {
     // Then
     cy.getByDataHook("share-link-confirmation-dialog").should("not.exist")
     cy.getByDataHook("success-notification").should("not.exist")
-    cy.execQuery(`SELECT * FROM ${tableName}`)
-    cy.execQuery(`DROP TABLE ${tableName}`)
+    cy.execAdminQuery(`SELECT * FROM ${tableName}`)
+    cy.execAdminQuery(`DROP TABLE ${tableName}`)
   })
 
   it("should auto-run multiple SELECT statements without confirmation", () => {
@@ -999,8 +998,8 @@ describe("&query URL param", () => {
   it("should drop standalone executeQuery param and not auto-run buffer contents", () => {
     // Given
     const tableName = "share_link_c11"
-    cy.execQuery(`DROP TABLE IF EXISTS ${tableName}`)
-    cy.execQuery(`CREATE TABLE ${tableName} (val INT)`)
+    cy.execAdminQuery(`DROP TABLE IF EXISTS ${tableName}`)
+    cy.execAdminQuery(`CREATE TABLE ${tableName} (val INT)`)
     cy.getEditorContent().should("be.visible")
     cy.typeQueryDirectly(`DROP TABLE ${tableName}`)
     cy.getCursorQueryGlyph().should("be.visible")
@@ -1014,8 +1013,8 @@ describe("&query URL param", () => {
     cy.location("search").should("not.contain", "executeQuery")
     cy.getByDataHook("share-link-confirmation-dialog").should("not.exist")
     cy.getByDataHook("success-notification").should("not.exist")
-    cy.execQuery(`SELECT * FROM ${tableName}`)
-    cy.execQuery(`DROP TABLE ${tableName}`)
+    cy.execAdminQuery(`SELECT * FROM ${tableName}`)
+    cy.execAdminQuery(`DROP TABLE ${tableName}`)
   })
 
   it("should copy share-link URL from glyph dropdown, Alt+L, and Alt+Shift+L", () => {
@@ -1091,14 +1090,16 @@ describe("&query URL param", () => {
 
 describe("autocomplete", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
-    // We're creating two tables (my_secrets and my_secrets2) with the same column name.
-    // The autocomplete should merge the column completions into one
-    // and respond with something like `secret (my_secrets, my_secrets2)
-    ;["my_publics", "my_secrets", "my_secrets2"].forEach((table) => {
-      cy.createTable(table)
+    const tables = {
+      my_publics: "public STRING",
+      my_secrets: "secret STRING",
+      my_secrets2: "secret STRING",
+    }
+    Object.entries(tables).forEach(([table, columns]) => {
+      cy.execAdminQuery(`DROP TABLE IF EXISTS ${table}`)
+      cy.execAdminQuery(`CREATE TABLE ${table} (${columns})`)
     })
-    cy.refreshSchema()
+    cy.loadConsoleWithAuth()
   })
 
   beforeEach(() => {
@@ -1263,9 +1264,8 @@ describe("autocomplete", () => {
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     ;["my_publics", "my_secrets", "my_secrets2"].forEach((table) => {
-      cy.dropTable(table)
+      cy.execAdminQuery(`DROP TABLE IF EXISTS ${table}`)
     })
   })
 })
@@ -1540,7 +1540,7 @@ describe.skip("editor tabs history", () => {
 
 describe("handling comments", () => {
   beforeEach(() => {
-    cy.loadConsoleWithAuth(false)
+    cy.loadConsoleWithAuth()
   })
 
   beforeEach(() => {
@@ -2144,17 +2144,17 @@ describe("editor settings", () => {
   const runWithSelectionTable = "e2e_run_with_selection"
 
   beforeEach(() => {
+    cy.execAdminQuery(`DROP TABLE IF EXISTS ${runWithSelectionTable}`)
+    cy.execAdminQuery(
+      `CREATE TABLE ${runWithSelectionTable} AS (SELECT x a, x b, x c FROM long_sequence(1))`,
+    )
     cy.loadConsoleWithAuth()
     cy.getEditorContent().should("be.visible")
     cy.clearEditor()
-    cy.execQuery(`DROP TABLE IF EXISTS ${runWithSelectionTable}`)
-    cy.execQuery(
-      `CREATE TABLE ${runWithSelectionTable} AS (SELECT x a, x b, x c FROM long_sequence(1))`,
-    )
   })
 
   afterEach(() => {
-    cy.execQuery(`DROP TABLE IF EXISTS ${runWithSelectionTable}`)
+    cy.execAdminQuery(`DROP TABLE IF EXISTS ${runWithSelectionTable}`)
   })
 
   const openEditorSettings = () => {

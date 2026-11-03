@@ -13,7 +13,6 @@ const {
   TEST_BRIDGE_TOKEN,
   TEST_BRIDGE_URL,
 } = require("../../utils/mcpFakeWebSocket")
-const { seedNotebookOnboarding } = require("../../utils")
 
 // Computed in SQL so the sentinel appears ONLY in the result grid — asserting
 // on it can never match the cell editor's SQL text.
@@ -29,20 +28,20 @@ const deepLinkSuffix = () =>
   `&mcp-token=${encodeURIComponent(TEST_BRIDGE_TOKEN)}`
 
 const loginAndVisitDeepLink = () => {
-  cy.visit(`${baseUrl}/${deepLinkSuffix()}`, {
-    onBeforeLoad: (win) => {
-      win.localStorage.clear()
-      win.sessionStorage.clear()
-      win.indexedDB.deleteDatabase("web-console")
-      seedNotebookOnboarding(win)
-      win.localStorage.setItem(
-        "mcp:permissions",
-        JSON.stringify({ grantSchemaAccess: true, read: true, write: true }),
-      )
-      installFakeWebSocket(win)
+  cy.loadConsoleWithAuth(
+    false,
+    {
+      "mcp:permissions": JSON.stringify({
+        grantSchemaAccess: true,
+        read: true,
+        write: true,
+      }),
     },
-  })
-  cy.loginWithUserAndPassword()
+    {
+      url: `${baseUrl}/${deepLinkSuffix()}`,
+      onBeforeLoad: installFakeWebSocket,
+    },
+  )
 }
 
 const waitForPaired = () => {

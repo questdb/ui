@@ -20,11 +20,10 @@ const liveViews = ["btc_trades_lv"]
 
 describe("questdb schema with working tables", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
-
     tables.forEach((table) => {
       cy.createTable(table)
     })
+    cy.loadConsoleWithAuth()
     cy.refreshSchema()
   })
 
@@ -117,7 +116,6 @@ describe("questdb schema with working tables", () => {
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     tables.forEach((table) => {
       cy.dropTable(table)
     })
@@ -126,10 +124,10 @@ describe("questdb schema with working tables", () => {
 
 describe("questdb schema with search column tables", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
     searchColumnTables.forEach((table) => {
       cy.createTable(table)
     })
+    cy.loadConsoleWithAuth()
     cy.refreshSchema()
   })
 
@@ -173,7 +171,6 @@ describe("questdb schema with search column tables", () => {
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     searchColumnTables.forEach((table) => {
       cy.dropTable(table)
     })
@@ -182,7 +179,6 @@ describe("questdb schema with search column tables", () => {
 
 describe("keyboard navigation", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
     tables.forEach((table) => {
       cy.createTable(table)
     })
@@ -192,6 +188,7 @@ describe("keyboard navigation", () => {
     views.forEach((view) => {
       cy.createView(view)
     })
+    cy.loadConsoleWithAuth()
     cy.refreshSchema()
   })
 
@@ -319,7 +316,6 @@ describe("keyboard navigation", () => {
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     tables.forEach((table) => {
       cy.dropTable(table)
     })
@@ -331,25 +327,18 @@ describe("keyboard navigation", () => {
 
 describe("questdb schema with suspended tables with Linux OS error codes", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
-
     tables.forEach((table) => {
       cy.createTable(table)
     })
-    cy.refreshSchema()
-    cy.typeQuery(
+  })
+
+  beforeEach(() => {
+    cy.execAdminQuery(
       "ALTER TABLE btc_trades SUSPEND WAL WITH 24, 'Too many open files';",
     )
-      .clickRunQuery()
-      .clearEditor()
-
-    cy.typeQuery(
+    cy.execAdminQuery(
       "ALTER TABLE ecommerce_stats SUSPEND WAL WITH 12, 'Out of memory';",
     )
-      .clickRunQuery()
-      .clearEditor()
-  })
-  beforeEach(() => {
     cy.loadConsoleWithAuth()
   })
 
@@ -400,7 +389,6 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     tables.forEach((table) => {
       cy.dropTable(table)
     })
@@ -409,12 +397,9 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
 
 describe("table select UI", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
-
     tables.forEach((table) => {
       cy.createTable(table)
     })
-    cy.refreshSchema()
   })
   beforeEach(() => {
     cy.loadConsoleWithAuth()
@@ -448,7 +433,6 @@ describe("table select UI", () => {
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     tables.forEach((table) => {
       cy.dropTable(table)
     })
@@ -484,17 +468,16 @@ describe("questdb schema in read-only mode", () => {
 })
 
 describe("views", () => {
-  before(() => {
-    cy.loadConsoleWithAuth()
+  beforeEach(() => {
+    views.forEach((view) => {
+      cy.dropViewIfExists(view)
+    })
     tables.forEach((table) => {
       cy.createTable(table)
     })
     views.forEach((view) => {
       cy.createView(view)
     })
-  })
-
-  beforeEach(() => {
     cy.loadConsoleWithAuth()
   })
 
@@ -534,7 +517,6 @@ describe("views", () => {
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     tables.forEach((table) => {
       cy.dropTableIfExists(table)
     })
@@ -546,14 +528,13 @@ describe("views", () => {
 
 describe("materialized views", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
-
     tables.forEach((table) => {
       cy.createTable(table)
     })
     materializedViews.forEach((mv) => {
       cy.createMaterializedView(mv)
     })
+    cy.loadConsoleWithAuth()
     cy.refreshSchema()
   })
 
@@ -725,8 +706,6 @@ describe("materialized views", () => {
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
-
     materializedViews.forEach((mv) => {
       cy.dropMaterializedView(mv)
     })
@@ -739,14 +718,13 @@ describe("materialized views", () => {
 
 describe("live views", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
-
     tables.forEach((table) => {
       cy.createTable(table)
     })
     liveViews.forEach((lv) => {
       cy.createLiveView(lv)
     })
+    cy.loadConsoleWithAuth()
     cy.refreshSchema()
   })
 
@@ -1000,8 +978,6 @@ describe("live views", () => {
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
-
     liveViews.forEach((lv) => {
       cy.dropLiveViewIfExists(lv)
     })
@@ -1033,15 +1009,14 @@ describe("create materialized view from context menu", () => {
   }
 
   before(() => {
-    cy.loadConsoleWithAuth()
     cy.createTable(sourceTable)
     cy.createTable(nonWalTable)
     cy.createTable(nonPartitionedTable)
+    cy.loadConsoleWithAuth()
     cy.refreshSchema()
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     cy.dropMaterializedView(generatedMatView)
     cy.dropTableIfExists(sourceTable)
     cy.dropTableIfExists(nonWalTable)
@@ -1139,14 +1114,13 @@ describe("create materialized view from matview context menu", () => {
   const generatedMatView = "btc_trades_mv_5m"
 
   before(() => {
-    cy.loadConsoleWithAuth()
     cy.createTable(sourceTable)
     cy.createMaterializedView(sourceMatView)
+    cy.loadConsoleWithAuth()
     cy.refreshSchema()
   })
 
   after(() => {
-    cy.loadConsoleWithAuth()
     cy.dropMaterializedView(generatedMatView)
     cy.dropMaterializedView(sourceMatView)
     cy.dropTableIfExists(sourceTable)

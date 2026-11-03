@@ -13,27 +13,26 @@ const {
   TEST_BRIDGE_TOKEN,
   TEST_BRIDGE_URL,
 } = require("../../utils/mcpFakeWebSocket")
-const { seedNotebookOnboarding } = require("../../utils")
 
 const deepLinkSuffix = () =>
   `?mcp-pair=1&mcp-ws=${encodeURIComponent(TEST_BRIDGE_URL)}` +
   `&mcp-token=${encodeURIComponent(TEST_BRIDGE_TOKEN)}`
 
 const loginAndVisitDeepLink = () => {
-  cy.visit(`${baseUrl}/${deepLinkSuffix()}`, {
-    onBeforeLoad: (win) => {
-      win.localStorage.clear()
-      win.sessionStorage.clear()
-      win.indexedDB.deleteDatabase("web-console")
-      seedNotebookOnboarding(win)
-      win.localStorage.setItem(
-        "mcp:permissions",
-        JSON.stringify({ grantSchemaAccess: true, read: true, write: true }),
-      )
-      installFakeWebSocket(win)
+  cy.loadConsoleWithAuth(
+    false,
+    {
+      "mcp:permissions": JSON.stringify({
+        grantSchemaAccess: true,
+        read: true,
+        write: true,
+      }),
     },
-  })
-  cy.loginWithUserAndPassword()
+    {
+      url: `${baseUrl}/${deepLinkSuffix()}`,
+      onBeforeLoad: installFakeWebSocket,
+    },
+  )
 }
 
 const waitForPaired = () => {

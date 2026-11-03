@@ -52,7 +52,8 @@ describe("HTTP Session Management", () => {
 
   it("should destroy session on logout, clear local storage, and show login screen after refresh", () => {
     // Given
-    cy.loadConsoleWithAuth()
+    cy.handleStorageAndVisit(baseUrl)
+    cy.loginWithUserAndPassword()
     cy.window().then((win) => {
       const basicAuthHeader = win.localStorage.getItem("basic.auth.header")
       expect(basicAuthHeader).to.not.be.null
