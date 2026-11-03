@@ -38,6 +38,7 @@ import {
 import { hasPendingResult, statementKeysFor } from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 
 export type DrawGateOutcome =
   | { granted: true }
@@ -1031,15 +1032,22 @@ export const useCellExecution = ({
     const barrierControllersMap = barrierAbortsRef.current
     const controllersMap = abortControllersRef.current
     const runGenerations = runGenerationRef.current
-    return () => {
-      // Supersede before aborting so both validation- and request-phase
-      // continuations bail instead of launching after teardown or overwriting
-      // the cell's last good snapshot with an abort result.
+    // Supersede before aborting so both validation- and request-phase
+    // continuations bail instead of launching after teardown or overwriting
+    // the cell's last good snapshot with an abort result.
+    const abortRuns = () =>
       abortCellRunsOnUnmount(
         barrierControllersMap,
         controllersMap,
         runGenerations,
       )
+    // Session end aborts every request before React 17 runs this cleanup, so
+    // the aborted results would still count as current runs. Supersede them
+    // as soon as the session ends instead.
+    const stopOnSessionEnd = authSessionState.beforeEnd(abortRuns)
+    return () => {
+      stopOnSessionEnd()
+      abortRuns()
     }
   }, [])
 

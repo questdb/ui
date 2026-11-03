@@ -77,6 +77,7 @@ const AddFilesRow = styled.div`
 
 type Props = {
   files: ProcessedFile[]
+  unlistedNames: () => string[]
   onDialogToggle: (open: boolean) => void
   onFileRemove: (id: string) => void
   onFileUpload: (id: string) => void
@@ -89,6 +90,7 @@ type Props = {
 
 export const FilesToUpload = ({
   files,
+  unlistedNames,
   onDialogToggle,
   onFileRemove,
   onFilePropertyChange,
@@ -381,6 +383,7 @@ export const FilesToUpload = ({
   return (
     <DropBox
       files={files}
+      unlistedNames={unlistedNames}
       onFilesDropped={onFilesDropped}
       dialogOpen={dialogOpen}
       render={({ duplicates, addToQueue }) => (

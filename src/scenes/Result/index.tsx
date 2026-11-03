@@ -59,6 +59,7 @@ import { ResultViewMode } from "scenes/Console/types"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { isSessionEnded } from "../../modules/OAuth2/session"
 import { QuestContext } from "../../providers"
 import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
@@ -199,11 +200,15 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         const result = await quest.queryRaw(sql, {
           limit: `${lo},${hi}`,
           nm: true,
+          background: true,
         })
         if (result.type === QuestDB.Type.DQL) {
           rendererFn(result)
         }
       } catch (err) {
+        // A page read interrupted by the end of the session has nothing to
+        // report, and its notification would be read after signing in again.
+        if (isSessionEnded(err)) return
         // Order of actions is important
         dispatch(
           actions.query.addNotification({

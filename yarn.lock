@@ -2491,12 +2491,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@questdb/sql-parser@npm:0.1.19":
-  version: 0.1.19
-  resolution: "@questdb/sql-parser@npm:0.1.19"
+"@questdb/sql-parser@npm:0.1.20":
+  version: 0.1.20
+  resolution: "@questdb/sql-parser@npm:0.1.20"
   dependencies:
     chevrotain: "npm:11.1.1"
-  checksum: 10/16f1142f3513594246ba9d3997f6a32becb3aa4ce3794bc52f5395c7a65615a2ee153ed658722558d79e02c0b324e94e4b2fdbb5fc604ee68f9aaa80da5ca12e
+  checksum: 10/7244239e40127bbad9a3e4a39f5c7a2d1c6c9178f7fa1993c3c22b9d0b9030367942283f871c0d95b26c1aadcb160e4945c38bf02a1364e806bdb5176aba4473
   languageName: node
   linkType: hard
 
@@ -2518,7 +2518,7 @@ __metadata:
     "@monaco-editor/react": "npm:^4.7.0"
     "@phosphor-icons/react": "npm:^2.1.10"
     "@popperjs/core": "npm:2.4.2"
-    "@questdb/sql-parser": "npm:0.1.19"
+    "@questdb/sql-parser": "npm:0.1.20"
     "@radix-ui/react-alert-dialog": "npm:^1.1.15"
     "@radix-ui/react-context-menu": "npm:^2.2.16"
     "@radix-ui/react-dialog": "npm:^1.1.15"
@@ -2539,6 +2539,7 @@ __metadata:
     "@types/react-grid-layout": "npm:^2.1.0"
     "@types/react-highlight-words": "npm:^0.16.7"
     "@types/react-redux": "npm:7.1.9"
+    "@types/react-test-renderer": "npm:17.0.9"
     "@types/react-transition-group": "npm:4.4.0"
     "@types/styled-components": "npm:5.1.7"
     "@types/throttle-debounce": "npm:2.1.0"
@@ -2599,6 +2600,7 @@ __metadata:
     react-markdown: "npm:^8.0.7"
     react-popper: "npm:2.2.3"
     react-redux: "npm:7.2.0"
+    react-test-renderer: "npm:17.0.2"
     react-toastify: "npm:^9.1.3"
     react-transition-group: "npm:4.4.1"
     react-virtuoso: "npm:^2.2.6"
@@ -3930,6 +3932,15 @@ __metadata:
     hoist-non-react-statics: "npm:^3.3.0"
     redux: "npm:^4.0.0"
   checksum: 10/63f5a9dc02765be0d76bd4b9dec74550a44b171f9cfffd33070dbe0b18d63fd84acfa6d83e9f6222c00ad852b68238e726b61724edc1bbe1770baa1bbbf6b180
+  languageName: node
+  linkType: hard
+
+"@types/react-test-renderer@npm:17.0.9":
+  version: 17.0.9
+  resolution: "@types/react-test-renderer@npm:17.0.9"
+  dependencies:
+    "@types/react": "npm:^17"
+  checksum: 10/4d78a7c98cdfedc0d706df873a55534b70deab143b0403d0db1ca91d580a246322a4da4460862dd80d2a3452882cb40f4188efa358bd3468a93699a65ce5b089
   languageName: node
   linkType: hard
 
@@ -10382,6 +10393,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-is@npm:^16.12.0 || ^17.0.0 || ^18.0.0, react-is@npm:^18.0.0, react-is@npm:^18.1.0":
+  version: 18.3.1
+  resolution: "react-is@npm:18.3.1"
+  checksum: 10/d5f60c87d285af24b1e1e7eaeb123ec256c3c8bdea7061ab3932e3e14685708221bf234ec50b21e10dd07f008f1b966a2730a0ce4ff67905b3872ff2042aec22
+  languageName: node
+  linkType: hard
+
 "react-is@npm:^16.13.1, react-is@npm:^16.7.0, react-is@npm:^16.9.0":
   version: 16.13.1
   resolution: "react-is@npm:16.13.1"
@@ -10389,10 +10407,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-is@npm:^18.0.0, react-is@npm:^18.1.0":
-  version: 18.3.1
-  resolution: "react-is@npm:18.3.1"
-  checksum: 10/d5f60c87d285af24b1e1e7eaeb123ec256c3c8bdea7061ab3932e3e14685708221bf234ec50b21e10dd07f008f1b966a2730a0ce4ff67905b3872ff2042aec22
+"react-is@npm:^17.0.2":
+  version: 17.0.2
+  resolution: "react-is@npm:17.0.2"
+  checksum: 10/73b36281e58eeb27c9cc6031301b6ae19ecdc9f18ae2d518bdb39b0ac564e65c5779405d623f1df9abf378a13858b79442480244bd579968afc1faf9a2ce5e05
   languageName: node
   linkType: hard
 
@@ -10511,6 +10529,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-shallow-renderer@npm:^16.13.1":
+  version: 16.15.0
+  resolution: "react-shallow-renderer@npm:16.15.0"
+  dependencies:
+    object-assign: "npm:^4.1.1"
+    react-is: "npm:^16.12.0 || ^17.0.0 || ^18.0.0"
+  peerDependencies:
+    react: ^16.0.0 || ^17.0.0 || ^18.0.0
+  checksum: 10/06457fe5bcaa44aeca998905b6849304742ea1cc2d3841e4a0964c745ff392bc4dec07f8c779f317faacce3a0bf6f84e15020ac0fa81adb931067dbb0baf707b
+  languageName: node
+  linkType: hard
+
 "react-style-singleton@npm:^2.2.2, react-style-singleton@npm:^2.2.3":
   version: 2.2.3
   resolution: "react-style-singleton@npm:2.2.3"
@@ -10524,6 +10554,20 @@ __metadata:
     "@types/react":
       optional: true
   checksum: 10/62498094ff3877a37f351b29e6cad9e38b2eb1ac3c0cb27ebf80aee96554f80b35e17bdb552bcd7ac8b7cb9904fea93ea5668f2057c73d38f90b5d46bb9b27ab
+  languageName: node
+  linkType: hard
+
+"react-test-renderer@npm:17.0.2":
+  version: 17.0.2
+  resolution: "react-test-renderer@npm:17.0.2"
+  dependencies:
+    object-assign: "npm:^4.1.1"
+    react-is: "npm:^17.0.2"
+    react-shallow-renderer: "npm:^16.13.1"
+    scheduler: "npm:^0.20.2"
+  peerDependencies:
+    react: 17.0.2
+  checksum: 10/8137f061880c296b0e8346a487370caf4f1da522a5d19edb00ae9b5834a39198e4e60adaa8e9426cdd7e123bdcb0bbd741abcf8832919c4c1a2234501db2b906
   languageName: node
   linkType: hard
 

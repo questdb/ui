@@ -33,8 +33,24 @@ import {
   catchError,
   scan,
   delayWhen,
+  takeUntil,
 } from "rxjs/operators"
-import { defer, from, NEVER, of, timer, throwError } from "rxjs"
+import {
+  defer,
+  EMPTY,
+  from,
+  NEVER,
+  of,
+  timer,
+  throwError,
+  Observable,
+} from "rxjs"
+import { authSessionState } from "../../modules/OAuth2/authSessionState"
+import { isSessionEnded } from "../../modules/OAuth2/session"
+
+const sessionEnded$ = new Observable<void>((subscriber) =>
+  authSessionState.onEnd(() => subscriber.next()),
+)
 
 const MAX_RETRIES = 5
 const RETRY_BASE_DELAY_MS = 1000
@@ -50,54 +66,34 @@ import {
   StoreShape,
   TelemetryAction,
   TelemetryAT,
-  TelemetryConfigShape,
 } from "../../types"
 
 import { fromFetch } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
-import { getValue } from "../../utils/localStorage"
-import { StoreKey } from "../../utils/localStorage/types"
-import { AuthPayload } from "../../modules/OAuth2/types"
+import { questClient as quest } from "../../utils/questdb/queryClient"
 import {
   sendServerInfoTelemetry,
   getTelemetryTimestamp,
 } from "../../utils/telemetry"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
-const quest = new QuestDB.Client()
+import {
+  queryTelemetryConfig,
+  TELEMETRY_QUERY_OPTIONS,
+  TELEMETRY_STARTUP_QUERY_OPTIONS,
+} from "../../utils/telemetryQueries"
 
 export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
   action$,
 ) =>
   action$.pipe(
     ofType<StoreAction, TelemetryAction>(TelemetryAT.START),
-    switchMap(() => {
-      // Set an authorization header for the QuestDB client instance within the telemetry epic
-      const authPayload = ssoAuthState.getAuthPayload()
-      const token = authPayload ?? ({} as AuthPayload)
-      if (token.access_token) {
-        quest.setCommonHeaders({
-          Authorization: `Bearer ${token.groups_encoded_in_token ? token.id_token : token.access_token}`,
-        })
-      } else {
-        const restToken = getValue(StoreKey.REST_TOKEN)
-        if (restToken) {
-          quest.setCommonHeaders({
-            Authorization: `Bearer ${restToken}`,
-          })
-        } else {
-          const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-          if (basicAuth) {
-            quest.setCommonHeaders({
-              Authorization: basicAuth,
-            })
-          }
-        }
-      }
-      return from(
-        quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`),
-      )
-    }),
+    switchMap(() =>
+      from(queryTelemetryConfig(quest, TELEMETRY_STARTUP_QUERY_OPTIONS)).pipe(
+        // Keep the root epic alive so a later login/START can retry.
+        catchError(() => EMPTY),
+        takeUntil(sessionEnded$),
+      ),
+    ),
     switchMap((response) => {
       if (response.type === QuestDB.Type.DQL) {
         return of(actions.telemetry.setConfig(response.data[0]))
@@ -120,7 +116,7 @@ export const getLatestTelemetryTimestamp: Epic<
       if (serverInfo) {
         void sendServerInfoTelemetry(serverInfo)
       }
-      return getTelemetryTimestamp(serverInfo)
+      return getTelemetryTimestamp(serverInfo).pipe(takeUntil(sessionEnded$))
     }),
     map((response) => {
       // Start the loop even if fetching remote config fails.
@@ -182,17 +178,32 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
            `
             .replace(/\s+/g, " ")
             .trim(),
+          TELEMETRY_QUERY_OPTIONS,
         ),
-      ).pipe(map((result) => ({ type: "data" as const, result, remoteConfig })))
+      ).pipe(
+        map((result) => ({ type: "data" as const, result, remoteConfig })),
+        // Keep the root listener alive for a later login, but stop the old
+        // session's loop on authentication failure. Transient failures retry.
+        catchError((error: unknown) =>
+          error &&
+          typeof error === "object" &&
+          (("status" in error && error.status === 401) || isSessionEnded(error))
+            ? of({ type: "stop" as const })
+            : of({ type: "skip" as const, remoteConfig }),
+        ),
+        takeUntil(sessionEnded$),
+      )
     }),
     withLatestFrom(state$),
     switchMap(([payload, state]) => {
+      if (payload.type === "stop") return EMPTY
       const config = selectors.telemetry.getConfig(state)
 
       if (payload.type === "skip") {
         // No lastUpdated, schedule next check
         return of(null).pipe(
           delay(TELEMETRY_INTERVAL_MS),
+          takeUntil(sessionEnded$),
           map(() =>
             actions.telemetry.setRemoteConfig(payload.remoteConfig ?? {}),
           ),
@@ -252,6 +263,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
           }),
           catchError(() => of(remoteConfig)),
           delay(TELEMETRY_INTERVAL_MS),
+          takeUntil(sessionEnded$),
           map((cfg) => actions.telemetry.setRemoteConfig(cfg ?? {})),
         )
       }
@@ -259,6 +271,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
       // No data to send, but still schedule next check in 1 hour
       return of(null).pipe(
         delay(TELEMETRY_INTERVAL_MS),
+        takeUntil(sessionEnded$),
         map(() => actions.telemetry.setRemoteConfig(remoteConfig ?? {})),
       )
     }),

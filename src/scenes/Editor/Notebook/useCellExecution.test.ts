@@ -1,10 +1,93 @@
+import { createElement } from "react"
+import { act, create } from "react-test-renderer"
 import { describe, expect, it, vi } from "vitest"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
+import { SESSION_ENDED_MESSAGE } from "../../../modules/OAuth2/session"
+import type { CellResult, NotebookCell } from "../../../store/notebook"
 import {
   MAX_ACTIVE_STATEMENT_REQUESTS,
   statementRequestLimiter,
 } from "../../../utils/questdb/requestLimiter"
-import { abortCellRunsOnUnmount, launchStatement } from "./useCellExecution"
+import { persistCellSnapshot } from "./persistCellSnapshot"
+import {
+  abortCellRunsOnUnmount,
+  launchStatement,
+  useCellExecution,
+} from "./useCellExecution"
+
+vi.mock("./persistCellSnapshot", () => ({
+  persistCellSnapshot: vi.fn().mockResolvedValue(true),
+}))
+
+describe("useCellExecution at session end", () => {
+  it("drops a run aborted by the session end instead of recording it", async () => {
+    // Given a cell with a last good result, re-run with a statement in flight
+    const sql = "insert into trades values (1)"
+    const lastGood: CellResult = {
+      results: [{ type: "dml", query: sql, fetchedAt: 1 }],
+      activeResultIndex: 0,
+      timestamp: 1,
+    }
+    const cellsRef = {
+      current: [
+        { id: "c1", position: 0, value: sql, result: lastGood },
+      ] as NotebookCell[],
+    }
+    let finish!: (exec: QueryExecResult) => void
+    const executeSingle = vi.fn(
+      () =>
+        new Promise<QueryExecResult>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const updateCell = vi.fn(
+      (cellId: string, updates: Partial<NotebookCell>) => {
+        cellsRef.current = cellsRef.current.map((cell) =>
+          cell.id === cellId ? { ...cell, ...updates } : cell,
+        )
+      },
+    )
+    let runCell!: ReturnType<typeof useCellExecution>["runCell"]
+    const Harness = () => {
+      runCell = useCellExecution({
+        bufferId: 1,
+        cellsRef,
+        executeSingle,
+        validateWithGlobals: vi.fn(),
+        updateCellResult: vi.fn(),
+        updateCell,
+        updateCells: vi.fn(),
+        setScriptSummary: vi.fn(),
+        onSnapshotPersisted: vi.fn(),
+      }).runCell
+      return null
+    }
+    const renderer = create(createElement(Harness))
+    const run = runCell("c1")
+    await vi.waitFor(() => expect(executeSingle).toHaveBeenCalledOnce())
+    expect(updateCell).toHaveBeenCalledOnce()
+
+    // When logout ends the session before React unmounts the notebook, and
+    // the aborted request settles
+    act(() => authSessionState.endSession())
+    finish({
+      type: "error",
+      query: sql,
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: SESSION_ENDED_MESSAGE,
+      sessionEnded: true,
+    })
+
+    // Then the run is superseded: the last good result and run history stay
+    await expect(run).resolves.toMatchObject({ superseded: true })
+    expect(updateCell).toHaveBeenCalledOnce()
+    expect(persistCellSnapshot).not.toHaveBeenCalled()
+    act(() => renderer.unmount())
+  })
+})
 
 describe("abortCellRunsOnUnmount", () => {
   it("aborts validation and request phases before clearing their registries", () => {

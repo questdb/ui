@@ -108,6 +108,7 @@ export const useChartQuery = ({ seed, enabled }: Params): ChartQuery => {
       count: true,
       src: "vis",
       cancellable: true,
+      background: true,
     })
     activeQueryIdRef.current = queryId
     let superseded = false

@@ -19,6 +19,7 @@ import {
 } from "../../../../utils/questdb/requestLimiter"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { authSessionState } from "../../../../modules/OAuth2/authSessionState"
 import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
 import {
   autoRefreshIntervalMs,
@@ -97,11 +98,15 @@ export type CellFetchState = {
   fetchCancelled: boolean
 }
 
+// Refreshes only run statements the write gate classified as reads.
+const REFRESH_READ = { background: true }
+
 export type CellRefreshDeps = {
   executeSingle: (
     sql: string,
     signal?: AbortSignal,
     limit?: number,
+    options?: { background?: boolean },
   ) => Promise<QueryExecResult>
   validateWithGlobals: (
     sql: string,
@@ -209,6 +214,11 @@ const errorMessage = (cause: unknown): string => {
   if (cause instanceof Error && cause.message) return cause.message
   return "Query failed"
 }
+
+// The server never executed the statement, e.g. because the SSO session could
+// not be renewed. Like an aborted request, it says nothing about the data.
+const isNotExecuted = (result: QueryExecResult): boolean =>
+  result.type === "error" && result.requestNotSent === true
 
 const errorExecResult = (query: string, cause: unknown): QueryExecResult => ({
   type: "error",
@@ -346,6 +356,7 @@ export class CellRefreshEngine {
   // replacement still runs. Keyed outside the entries so a run on a cell whose
   // entry appears mid-run (first run of an editor-only cell) is still covered.
   private pendingRunCounts = new Map<string, number>()
+  private stopOnSessionEnd: (() => void) | null = null
 
   private refreshHandler = (payload?: { cellId?: string }) => {
     if (payload?.cellId) void this.refresh(payload.cellId)
@@ -377,6 +388,11 @@ export class CellRefreshEngine {
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
     )
+    // Session end aborts every request before React unmounts this engine.
+    // Rounds settling with those aborts would be recorded as refresh errors
+    // or delete chart snapshots, so tear down first and drop them.
+    this.stopOnSessionEnd?.()
+    this.stopOnSessionEnd = authSessionState.beforeEnd(() => this.destroy())
     if (typeof document !== "undefined") {
       this.documentHidden = document.hidden
       document.addEventListener(
@@ -387,6 +403,8 @@ export class CellRefreshEngine {
   }
 
   destroy() {
+    this.stopOnSessionEnd?.()
+    this.stopOnSessionEnd = null
     eventBus.unsubscribe(
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
@@ -1264,18 +1282,31 @@ export class CellRefreshEngine {
           const previous = carriedResults[index]
           if (previous) return Promise.resolve(toExecResult(previous))
           return this.limitRequest(
-            () => deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP),
+            () =>
+              deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP, REFRESH_READ),
             ac.signal,
           ).catch((e) => errorExecResult(q, e))
         }),
       )
       const fetchDurationMs = Date.now() - fetchStartedAt
       if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
+      // A round with a statement that was never executed keeps the chart drawn
+      // on screen and the saved snapshot until a round reaches the server. With
+      // no chart drawn for these statements (no frame yet, one left from edited
+      // SQL, or one without rows), it shows the failure, but still leaves the
+      // snapshot.
+      const notExecuted = out.some(isNotExecuted)
       // Compare against the CURRENT cell.result, not a retained copy — the
       // hydration engine may have released or replaced it since the last tick,
       // and an unchanged frame must still be re-written in that case.
       const currentSqlHash = sqlHash(entry.sql)
       const current = this.getDeps().getCellResult(entry.cellId)
+      // Only a settled frame with rows for these statements is drawn, as in
+      // deriveChartLoading. Keeping any other would leave the cell on
+      // "Drawing…", e.g. a run's error kept when the cell became a chart.
+      const kept = toChartResult(current, queries)
+      if (notExecuted && kept.kind === "settled" && kept.results.length > 0)
+        return
       if (
         current != null &&
         resultsEquivalent(current.results.map(toExecResult), out)
@@ -1285,6 +1316,10 @@ export class CellRefreshEngine {
           slotVerifiedAt: verifiedSlots(entry, out, carriedResults),
         })
         this.deriveChartSlotErrors(entry)
+        // This round repeats the failure an earlier unexecuted round put on
+        // screen. Like that round, it leaves the snapshot until a round
+        // reaches the server.
+        if (notExecuted) return
         if (successResults(out).length === 0) {
           this.clearSnapshot(entry)
           return
@@ -1313,6 +1348,7 @@ export class CellRefreshEngine {
       })
       this.setState(entry, { settledKey: queriesKey })
       this.deriveChartSlotErrors(entry)
+      if (notExecuted) return
       // The disk copy follows the frame on screen, carried rows included.
       if (written.some(isChartableResult)) {
         this.queueSnapshot(entry, written, fetchDurationMs)
@@ -1392,6 +1428,7 @@ export class CellRefreshEngine {
         launchPatch.slotFetching = slotFetching
       }
       this.setState(entry, launchPatch)
+      const notExecutedSlots = new Set<StatementKey>()
       await Promise.all(
         launchSlots.map(async ({ key, index }) => {
           if (round.signal.aborted) return
@@ -1404,10 +1441,17 @@ export class CellRefreshEngine {
                   queries[index],
                   slotAbort.signal,
                   NOTEBOOK_ROW_CAP,
+                  REFRESH_READ,
                 ),
               slotAbort.signal,
             )
             if (slotAbort.signal.aborted || round.signal.aborted) return
+            // Like a cancelled slot, it keeps its rows, and no error is shown
+            // or saved for it.
+            if (isNotExecuted(exec)) {
+              notExecutedSlots.add(key)
+              return
+            }
             this.batchUpdates(() => {
               if (exec.type === "error") {
                 this.setSlotError(entry, key, exec.error ?? "Query failed")
@@ -1442,7 +1486,8 @@ export class CellRefreshEngine {
       )
       if (round.signal.aborted) return
       this.setState(entry, { settledKey: queriesKey })
-      this.persistGridFrame(entry, manual)
+      // A round that could not execute a statement changes nothing on disk.
+      if (notExecutedSlots.size === 0) this.persistGridFrame(entry, manual)
     } finally {
       this.finishRound(entry, round)
     }

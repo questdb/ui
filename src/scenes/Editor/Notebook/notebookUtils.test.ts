@@ -271,6 +271,23 @@ describe("isUnverifiableExecError", () => {
     }
   })
 
+  it("flags session-ended errors independently of their message", () => {
+    expect(
+      isUnverifiableExecError({
+        type: "error",
+        error: "The query confirmation belongs to an ended session",
+        sessionEnded: true,
+      }),
+    ).toBe(true)
+    expect(
+      isUnverifiableExecError({
+        type: "error",
+        error: "table does not exist",
+        sessionEnded: false,
+      }),
+    ).toBe(false)
+  })
+
   it("does NOT flag a real server error (definitively did not commit)", () => {
     expect(
       isUnverifiableExecError({

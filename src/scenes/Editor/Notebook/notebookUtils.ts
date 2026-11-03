@@ -1,4 +1,11 @@
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
+import {
+  isSessionEnded,
+  sessionEndedQueryMessage,
+  sessionFailureOf,
+  type SessionFailure,
+} from "../../../modules/OAuth2/session"
+import { CANCELLED_BY_USER } from "../../../utils/questdb/cancellation"
 import type {
   AgentCellView,
   AutoRefresh,
@@ -286,7 +293,17 @@ export const singleResultFromExec = (
         fetchedAt: Date.now(),
       }
     case "error":
-      return errorResult(query, exec.error ?? "Unknown error")
+      return {
+        // A cell keeps its result after the session ends, so it is read after
+        // signing in again: say what the end of the session did to the query.
+        ...errorResult(
+          query,
+          isSessionEnded(exec)
+            ? sessionEndedQueryMessage(exec)
+            : (exec.error ?? "Unknown error"),
+        ),
+        ...sessionFailureOf(exec),
+      }
     default:
       return { type: exec.type, query, fetchedAt: Date.now() }
   }
@@ -346,20 +363,24 @@ export const capResultBytes = (
 export { sqlHash }
 
 const UNVERIFIABLE_ERROR_MARKERS = [
-  "Cancelled by user",
+  CANCELLED_BY_USER,
   "An error occurred, please try again",
   "Failed to read response",
   "Invalid JSON response from the server",
   "QuestDB is not reachable",
 ]
 
-export const isUnverifiableExecError = (exec: {
-  type: string
-  error?: string
-}): boolean =>
+export const isUnverifiableExecError = (
+  exec: {
+    type: string
+    error?: string
+  } & SessionFailure,
+): boolean =>
   exec.type === "error" &&
-  exec.error !== undefined &&
-  UNVERIFIABLE_ERROR_MARKERS.some((m) => exec.error?.includes(m) ?? false)
+  !exec.requestNotSent &&
+  (isSessionEnded(exec) ||
+    (exec.error !== undefined &&
+      UNVERIFIABLE_ERROR_MARKERS.some((m) => exec.error?.includes(m) ?? false)))
 
 export const UNVERIFIED_RUN_NOTE =
   "Run outcome unverified: the request did not return a confirmation, so the " +

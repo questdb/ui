@@ -125,6 +125,7 @@ export const Metric = ({
               to: toIso,
             }),
           ),
+          { background: true },
         ),
       ])
 

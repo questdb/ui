@@ -1,7 +1,7 @@
 import React from "react"
 import { FileCheckStatus as FileStatusType } from "../../../utils"
 import { Box, Badge } from "../../../components"
-import { BadgeType, ProcessedFile } from "./types"
+import { BadgeType, ProcessedFile, TableNameCheck } from "./types"
 import styled from "styled-components"
 import { CheckboxCircle } from "../../../components/icons"
 
@@ -65,6 +65,16 @@ const mapStatusToLabel = (
       return {
         label: "Ready to upload",
         type: BadgeType.SUCCESS,
+      }
+    case TableNameCheck.PENDING:
+      return {
+        label: "Checking table name…",
+        type: BadgeType.INFO,
+      }
+    case TableNameCheck.FAILED:
+      return {
+        label: "Could not check table name",
+        type: BadgeType.WARNING,
       }
   }
 }
