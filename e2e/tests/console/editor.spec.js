@@ -1333,25 +1333,38 @@ describe("errors", () => {
 
   it("JIT-validates queries after content-change (1000ms) and cursor-change (500ms) debounces", () => {
     cy.intercept("/api/v1/sql/validate*").as("validate")
+    // The debounce checks drive the editor's timers with a fake clock instead
+    // of racing them against real time.
+    cy.clock(Date.now(), ["setTimeout", "clearTimeout"])
 
     cy.typeQuery("selec 1;\n\n   selec 2")
 
-    cy.wait(750)
+    // Just under the content-change debounce: nothing validated yet
+    cy.tick(999)
+    cy.get("@validate.all").should("have.length", 0)
     cy.getErrorMarker().should("not.exist")
 
+    // Typing again restarts the debounce
     cy.typeQuery("34")
-    cy.wait(750)
+    cy.tick(999)
+    cy.get("@validate.all").should("have.length", 0)
     cy.getErrorMarker().should("not.exist")
 
-    // Let the debounce expire and the validate request return
+    // The debounce expires and the validate request goes out. From here on the
+    // real clock runs, so the response and Monaco's marker update land.
+    cy.tick(1)
+    cy.clock().invoke("restore")
     cy.wait("@validate")
     cy.matchErrorMarkerPosition({ left: 24, width: 40 })
 
+    // The cursor now sits in a valid query, so its validation clears the marker
     cy.typeQuery(";\n\nselect * from tables()")
-    cy.wait(2000)
+    cy.wait("@validate")
     cy.getErrorMarker().should("not.exist")
 
+    // A cursor move validates the query under it after the shorter debounce
     cy.clickLine(3)
+    cy.wait("@validate")
     cy.matchErrorMarkerPosition({ left: 24, width: 40 })
   })
 })
