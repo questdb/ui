@@ -20,4 +20,5 @@ export {
 } from "./inlineGridUtils"
 export { buildResultPageMarkdown } from "./resultPageMarkdown"
 export { CELL_FONT_SIZE_PX, HEADER_HEIGHT, ROW_HEIGHT } from "./dimensions"
+export { DEFAULT_FLASH_DURATION_MS } from "./styles"
 export { toAbsoluteIndex } from "./virtualRowMapping"

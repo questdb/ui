@@ -1,0 +1,79 @@
+name: Enterprise E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: enterprise-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    name: Dispatch Enterprise Web Console E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Mirrors the TypeScript client lane. Fork PRs never receive dispatch
+    # credentials; live EE tests/builds execute only in the private repository.
+    if: >-
+      vars.ENTERPRISE_E2E_ENABLED == 'true' && (github.event_name !=
+      'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Queue private Enterprise Web Console pipeline
+        env:
+          ENT_DISPATCH_PAT: ${{ secrets.ENT_DISPATCH_PAT }}
+          UI_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          UI_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          UI_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "${ENT_DISPATCH_PAT:-}" || {
+            echo "ENT_DISPATCH_PAT is not configured" >&2
+            exit 1
+          }
+          [[ "$UI_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Expected an immutable UI commit SHA" >&2
+            exit 1
+          }
+          ORG_URL="https://dev.azure.com/questdb/"
+          PROJECT="questdb-enterprise"
+          PIPELINE_NAME="build-and-test-e2e-web-console"
+          azure_failure() {
+            if [ -z "$2" ]; then
+              echo "Azure DevOps $1 failed without a response body; see curl's error above." >&2
+            else
+              echo "Azure DevOps rejected $1: $(
+                jq -er '.message | strings | select(length > 0)' <<<"$2" 2>/dev/null ||
+                  head -c 500 <<<"$2"
+              )" >&2
+            fi
+          }
+          if ! PIPELINES=$(curl --fail-with-body -sS -u ":${ENT_DISPATCH_PAT}" \
+            "${ORG_URL}${PROJECT}/_apis/pipelines?api-version=7.0"); then
+            azure_failure "pipeline lookup" "$PIPELINES"
+            exit 1
+          fi
+          PIPELINE_ID=$(jq -r --arg name "$PIPELINE_NAME" \
+            '.value[] | select(.name == $name) | .id' <<<"$PIPELINES" | head -1)
+          test -n "$PIPELINE_ID" && [ "$PIPELINE_ID" != "null" ] || {
+            echo "Enterprise pipeline '$PIPELINE_NAME' is not registered" >&2
+            exit 1
+          }
+          BODY=$(jq -n --arg commit "$UI_COMMIT" --arg pr "$UI_PR_NUMBER" --arg branch "$UI_BRANCH" '
+            {templateParameters: (
+              {webConsoleCommit: $commit, clientBranch: $branch}
+              + (if $pr == "" then {} else {webConsolePrNumber: $pr} end)
+            )}')
+          if ! RESPONSE=$(curl --fail-with-body -sS -u ":${ENT_DISPATCH_PAT}" \
+            -H "Content-Type: application/json" -X POST -d "$BODY" \
+            "${ORG_URL}${PROJECT}/_apis/pipelines/${PIPELINE_ID}/runs?api-version=7.0"); then
+            azure_failure "dispatch" "$RESPONSE"
+            exit 1
+          fi
+          echo "Enterprise E2E queued: $(jq -r '._links.web.href' <<<"$RESPONSE")"

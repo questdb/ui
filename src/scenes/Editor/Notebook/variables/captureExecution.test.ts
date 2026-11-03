@@ -54,6 +54,24 @@ describe("captureExecution", () => {
     expect(read).toHaveBeenCalledTimes(1)
   })
 
+  it("stops waiting as soon as the signal aborts", async () => {
+    // Given variables that never finish loading
+    const quest = client()
+    const controller = new AbortController()
+    const read = vi.fn(() => [])
+    const pending = captureExecution(
+      quest as unknown as Client,
+      () => new Promise(() => undefined),
+      read,
+      controller.signal,
+    )
+    // When the run is cancelled
+    controller.abort()
+    // Then the capture rejects at once and reads nothing
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    expect(read).not.toHaveBeenCalled()
+  })
+
   it("sends a cell's own declaration to QuestDB for validation and execution", async () => {
     // Given
     const quest = client()
@@ -72,6 +90,25 @@ describe("captureExecution", () => {
     ])
     expect(quest.queryRaw.mock.calls.map(([query]) => query)).toEqual([sql])
     expect(result.type).toBe("dql")
+  })
+
+  it("marks a background read as background on the request", async () => {
+    // Given
+    const quest = client()
+    const execution = await captureExecution(
+      quest as unknown as Client,
+      () => Promise.resolve(),
+      () => [],
+    )
+    // When
+    await execution.executeSingle("SELECT 1", undefined, 100, {
+      background: true,
+    })
+    // Then
+    expect(quest.queryRaw).toHaveBeenCalledWith(
+      "SELECT 1",
+      expect.objectContaining({ background: true }),
+    )
   })
 
   it("returns QuestDB's error when a referenced variable has no declaration", async () => {

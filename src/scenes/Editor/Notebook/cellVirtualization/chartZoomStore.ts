@@ -1,3 +1,6 @@
+import { eventBus } from "../../../../modules/EventBus"
+import { EventType } from "../../../../modules/EventBus/types"
+
 const zoomWindows = new Map<string, { start: number; end: number }>()
 const listeners = new Map<string, Set<() => void>>()
 
@@ -21,6 +24,13 @@ export const getChartZoom = (
 export const clearChartZoom = (cellId: string) => {
   if (!zoomWindows.delete(cellId)) return
   notify(cellId)
+}
+
+// A mounted chart holds its window in ECharts too: the event resets it there.
+export const resetChartZoom = (cellId: string) => {
+  if (!zoomWindows.has(cellId)) return
+  clearChartZoom(cellId)
+  eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
 }
 
 export const clearChartZooms = (cellIds: Iterable<string>) => {

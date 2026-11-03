@@ -1,5 +1,9 @@
 import type { Client } from "../questdb/client"
 import { Type } from "../questdb/types"
+import {
+  sessionFailureOf,
+  type SessionFailure,
+} from "../../modules/OAuth2/session"
 
 export const RUN_QUERY_DEFAULT_LIMIT = 100
 export const RUN_QUERY_MAX_LIMIT = 10_000
@@ -15,7 +19,11 @@ export type RunQueryRawResult =
       notice?: string
     }
   | { type: "ddl" | "dml" | "notice"; durationMs?: number; message?: string }
-  | { type: "error"; error: string; position?: number }
+  | ({
+      type: "error"
+      error: string
+      position?: number
+    } & SessionFailure)
 
 // Wire shape is (string | number | boolean | null)[] — array/object cells
 // (e.g. QuestDB ARRAY columns) get flattened to a JSON string so the agent
@@ -107,7 +115,9 @@ export const mapQueryRawToResult = async (
       signal.addEventListener("abort", onAbort, { once: true })
       cleanup = () => signal.removeEventListener("abort", onAbort)
     }
-    const res = await promise
+    const res = await promise.then((result) =>
+      result.type === Type.ERROR ? Promise.reject(result) : result,
+    )
     const durationMs = Math.round(performance.now() - startedAt)
     if (res.type === Type.DQL) {
       return {
@@ -117,9 +127,6 @@ export const mapQueryRawToResult = async (
         count: res.count,
         durationMs,
       }
-    }
-    if (res.type === Type.DDL || res.type === Type.DML) {
-      return { type: res.type, durationMs }
     }
     if (res.type === Type.NOTICE) {
       if (res.columns && res.columns.length > 0) {
@@ -134,16 +141,20 @@ export const mapQueryRawToResult = async (
       }
       return { type: "notice", durationMs, message: res.notice }
     }
-    return { type: "error", error: res.error, position: res.position }
+    return { type: res.type === Type.DDL ? "ddl" : "dml", durationMs }
   } catch (e) {
     if (e && typeof e === "object" && "error" in e) {
-      const errLike = e as { error?: unknown; position?: unknown }
+      const errLike = e as {
+        error?: unknown
+        position?: unknown
+      }
       if (typeof errLike.error === "string") {
         return {
           type: "error",
           error: errLike.error,
           position:
             typeof errLike.position === "number" ? errLike.position : -1,
+          ...sessionFailureOf(e),
         }
       }
     }
@@ -151,6 +162,7 @@ export const mapQueryRawToResult = async (
       type: "error",
       error: e instanceof Error ? e.message : "Unknown error",
       position: -1,
+      ...sessionFailureOf(e),
     }
   } finally {
     cleanup?.()

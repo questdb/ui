@@ -9,6 +9,7 @@ import {
   TIME_VARIABLE_NAMES,
 } from "../../scenes/Editor/Notebook/variables/timeRange"
 import type { StatusCallback } from "../ai/aiAssistant"
+import type { RunCancellation } from "../../scenes/Editor/Notebook/runCancellation"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import {
   getAgentQuest,
@@ -19,16 +20,20 @@ import {
   applyNotebookStateTransition,
   withBoundNotebook,
   withBoundNotebookReadOnly,
+  type AppliedNotebookState,
   type ApplyNotebookStateCellRequest,
   type ApplyNotebookStateRequest,
 } from "../notebooks/notebookController"
 import type {
+  AgentCellView,
   CellMode,
   CellType,
+  NotebookCell,
   NotebookVariable,
   TimeRange,
 } from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import { loadRe2 } from "../../components/ResultGrid/highlight"
 import {
   denyReasonUnresolvedSql,
   requireAllDQL,
@@ -36,6 +41,7 @@ import {
   type Permissions,
 } from "./permissions"
 import { isAutoRefresh } from "../../scenes/Editor/Notebook/notebookUtils"
+import { hasExplicitModeForEditor } from "../../scenes/Editor/Notebook/cellSizing"
 import type { ValidateQueryResult } from "../questdb/types"
 import {
   isValidVariableName,
@@ -62,6 +68,14 @@ import {
   type ToolAxisBounds,
 } from "./chartConfigWire"
 import {
+  type HighlightConfigWire,
+  parseHighlightConfigFor,
+  regexLiteralNotes,
+  shownResultsOf,
+  wireUsesPatterns,
+} from "./highlightConfigWire"
+import { loadCellSnapshot } from "../../store/notebookResults"
+import {
   applyStaleNotebookResult,
   notebookErrorHint,
 } from "../notebooks/notebookToolMessages"
@@ -72,6 +86,11 @@ type ToolResult = { content: string; is_error?: boolean }
 const isAbortError = (e: unknown): boolean =>
   e instanceof Error && e.name === "AbortError"
 
+const appliedPayload = ({ applied, resultsCleared }: AppliedNotebookState) => ({
+  applied,
+  results_cleared: resultsCleared,
+})
+
 const validationError = (message: string): ToolResult => ({
   content: JSON.stringify({
     error_code: "validation",
@@ -80,6 +99,9 @@ const validationError = (message: string): ToolResult => ({
   is_error: true,
 })
 
+// Static checks only. QuestDB validation of each variable runs in
+// prepareNotebookVariables, which reports a failing variable in
+// `variable_values` instead of refusing the apply.
 type VariablesValidation =
   | { error: ToolResult }
   | { variables: NotebookVariable[] | undefined }
@@ -155,6 +177,7 @@ type RunEntry = {
   queryCount?: number
   results?: string[]
   error?: string
+  cancelled?: RunCancellation
   unverified?: boolean
   note?: string
   skipped?: boolean
@@ -163,8 +186,8 @@ type RunEntry = {
 const runAppliedCells = async (
   resolved: ResolvedRun[],
   bufferId: number,
-  perms: Permissions | undefined,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
+  perms: Permissions,
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal: AbortSignal | undefined,
 ): Promise<RunEntry[]> => {
   const settled = await Promise.all(
@@ -176,12 +199,7 @@ const runAppliedCells = async (
         const result = await withBoundNotebook(
           bufferId,
           (ctrl) =>
-            ctrl.runCell(
-              r.cellId,
-              signal,
-              perms && validateSql ? r.value : undefined,
-              perms && validateSql ? { kind: "autoRun" } : undefined,
-            ),
+            ctrl.runCell(r.cellId, signal, r.value, { kind: "autoRun" }),
           signal,
         )
         if (result.denied !== undefined) {
@@ -200,6 +218,9 @@ const runAppliedCells = async (
           success: result.success,
           queryCount: result.queryCount,
           results: result.results,
+          ...(result.cancelled !== undefined
+            ? { cancelled: result.cancelled }
+            : {}),
           ...(result.unverified ? { unverified: result.unverified } : {}),
           ...(result.note ? { note: result.note } : {}),
         }
@@ -219,8 +240,8 @@ const runAppliedCells = async (
 export const dispatchApplyNotebookState = async (
   input: unknown,
   setStatus: StatusCallback,
-  perms: Permissions | undefined,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
+  perms: Permissions,
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal: AbortSignal | undefined,
   toolContext: ToolExecutionContext | undefined,
 ): Promise<{ content: string; is_error?: boolean }> => {
@@ -251,14 +272,17 @@ export const dispatchApplyNotebookState = async (
         time_range?: { from?: unknown; to?: unknown } | null
         time_shift?: string | null
         show_time_range?: boolean | null
-        is_view_maximized?: boolean | null
+        editor_height?: number | "auto" | null
+        result_height?: number | "auto" | null
+        view?: AgentCellView | null
+        highlight_config?: HighlightConfigWire | null
         chart_config?: {
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
           left_axis?: ToolAxisBounds | null
           right_axis?: ToolAxisBounds | null
         } | null
-        grid?: { x: number; y: number; w: number; h: number } | null
+        grid?: { x: number; y: number; w: number } | null
       }>
     }) || {}
   setStatus(AIOperationStatus.BuildingNotebook)
@@ -298,12 +322,19 @@ export const dispatchApplyNotebookState = async (
     return {
       content: JSON.stringify({
         error_code: "validation",
-        message: `VALIDATION_ERROR: auto_refresh_default must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+        message: `VALIDATION_ERROR: auto_refresh_default must be true, false, null, or an interval of digits plus ms, s or m from 50ms to 60m, e.g. "250ms", "5s", "15m".`,
       }),
       is_error: true,
     }
   }
   for (const [idx, c] of cells.entries()) {
+    if (hasExplicitModeForEditor(c.mode, c.view)) {
+      return validationError(
+        `cells[${idx}].view "editor" cannot be combined with an explicit mode. ` +
+          `Editor view clears the stored result and hides the result pane. ` +
+          `Set mode to null to request an editor-only view.`,
+      )
+    }
     if (
       c.auto_refresh !== undefined &&
       c.auto_refresh !== null &&
@@ -312,7 +343,7 @@ export const dispatchApplyNotebookState = async (
       return {
         content: JSON.stringify({
           error_code: "validation",
-          message: `VALIDATION_ERROR: cells[${idx}].auto_refresh must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+          message: `VALIDATION_ERROR: cells[${idx}].auto_refresh must be true, false, null, or an interval of digits plus ms, s or m from 50ms to 60m, e.g. "250ms", "5s", "15m".`,
         }),
         is_error: true,
       }
@@ -435,41 +466,54 @@ export const dispatchApplyNotebookState = async (
   // Shared by the draw-invariant gate (below) and the post-apply
   // auto-run loop's mode resolution.
   const existingModes = new Map<string, CellMode | undefined>()
-  if (validateSql) {
-    const preApplyBasics = await readBasics()
-    for (const c of cells) {
-      if (typeof c.id !== "string" || c.id.length === 0) continue
-      const existing = preApplyBasics.get(c.id)
-      // Unknown ids fall through so applyNotebookState's all-or-nothing
-      // validation surfaces the precise error.
-      if (existing) existingModes.set(c.id, existing.mode)
-    }
-    const drawCells = cells.filter((c) => {
-      const resolved =
-        c.mode === undefined || c.mode === null
-          ? typeof c.id === "string"
-            ? existingModes.get(c.id)
-            : undefined
-          : c.mode
-      return resolved === "draw"
-    })
-    const decisions = await Promise.all(
-      drawCells.map(async (c): Promise<PermissionDecision> => {
-        const sql = resolveCellSql(c, preApplyBasics)
-        if (sql === null) {
-          return {
-            granted: false,
-            reason: denyReasonUnresolvedSql("apply_notebook_state"),
-          }
-        }
-        return requireAllDQL(sql, validateSql)
-      }),
-    )
-    const denied = decisions.find((d) => !d.granted)
-    if (denied && !denied.granted) {
-      return { content: denied.reason, is_error: true }
-    }
+  const preApplyBasics = await readBasics()
+  for (const c of cells) {
+    if (typeof c.id !== "string" || c.id.length === 0) continue
+    const existing = preApplyBasics.get(c.id)
+    // Unknown ids fall through so applyNotebookState's all-or-nothing
+    // validation surfaces the precise error.
+    if (existing) existingModes.set(c.id, existing.mode)
   }
+  const drawCells = cells.filter((c) => {
+    if (c.view === "editor") return false
+    const resolved =
+      c.mode === undefined || c.mode === null
+        ? typeof c.id === "string"
+          ? existingModes.get(c.id)
+          : undefined
+        : c.mode
+    return resolved === "draw"
+  })
+  const decisions = await Promise.all(
+    drawCells.map(async (c): Promise<PermissionDecision> => {
+      const sql = resolveCellSql(c, preApplyBasics)
+      if (sql === null) {
+        return {
+          granted: false,
+          reason: denyReasonUnresolvedSql("apply_notebook_state"),
+        }
+      }
+      return requireAllDQL(sql, validateSql)
+    }),
+  )
+  const denied = decisions.find((d) => !d.granted)
+  if (denied && !denied.granted) {
+    return { content: denied.reason, is_error: true }
+  }
+  if (
+    cells.some(
+      (c) => c.highlight_config && wireUsesPatterns(c.highlight_config),
+    )
+  ) {
+    await loadRe2()
+  }
+  const snapshots = await Promise.all(
+    cells.map(async (c) =>
+      c.highlight_config && c.id
+        ? loadCellSnapshot(buffer_id, c.id)
+        : undefined,
+    ),
+  )
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
     autoRefreshDefault: isAutoRefresh(auto_refresh_default)
@@ -492,8 +536,9 @@ export const dispatchApplyNotebookState = async (
       }
       if (typeof c.time_shift === "string") cell.timeShift = c.time_shift
       if (c.show_time_range === true) cell.showTimeRange = true
-      if (c.is_view_maximized !== undefined && c.is_view_maximized !== null)
-        cell.isViewMaximized = c.is_view_maximized
+      if (c.editor_height !== undefined) cell.editorHeight = c.editor_height
+      if (c.result_height !== undefined) cell.resultHeight = c.result_height
+      if (c.view !== undefined) cell.view = c.view
       if (c.chart_config) {
         const cfg = c.chart_config
         const chartConfig: ChartConfig = {
@@ -546,6 +591,38 @@ export const dispatchApplyNotebookState = async (
     nextSettings,
     normalizeVariables((await getNotebookGlobals())?.variables),
   )
+  // Rules are checked against the columns the cell's results have shown, in
+  // memory or in its snapshot, so the parse waits for the live cells. A new
+  // cell, or one whose SQL this request rewrites, has no columns to check
+  // against yet.
+  const shownCellFor = (
+    existing: NotebookCell[],
+    c: (typeof cells)[number],
+  ): NotebookCell | undefined => {
+    const live = existing.find((cell) => cell.id === c.id)
+    const sameSql = c.preserve_value === true || c.value === live?.value
+    return sameSql ? live : undefined
+  }
+  const withHighlightConfigs = (
+    existing: NotebookCell[],
+  ): ApplyNotebookStateRequest => ({
+    ...request,
+    cells: request.cells.map((cell, index) => {
+      const wire = cells[index].highlight_config
+      if (!wire) return cell
+      return {
+        ...cell,
+        highlightConfig: parseHighlightConfigFor(
+          wire,
+          shownResultsOf(
+            shownCellFor(existing, cells[index]),
+            snapshots[index],
+          ),
+          `cells[${index}].highlight_config`,
+        ),
+      }
+    }),
+  })
   if (signal?.aborted) {
     return {
       content: JSON.stringify({
@@ -561,16 +638,18 @@ export const dispatchApplyNotebookState = async (
   if (getBufferActionSeq(buffer_id) !== staleBaseline) {
     return applyStaleNotebookResult(toolContext)
   }
-  let committed:
-    | { applied: { added: string[]; updated: string[]; deleted: string[] } }
-    | undefined
+  let committed: AppliedNotebookState | undefined
   try {
     const { out, variable_values } = await withBoundNotebook(
       buffer_id,
       async (ctrl) => {
-        const applied = await ctrl.mutate(
-          (parts) => ({
-            ...applyNotebookStateTransition(parts, request),
+        const applied = await ctrl.mutateWithResultStatus(
+          (parts, resultStatusOf) => ({
+            ...applyNotebookStateTransition(
+              parts,
+              withHighlightConfigs(parts.cells),
+              resultStatusOf,
+            ),
             preparedVariables,
           }),
           signal,
@@ -610,6 +689,7 @@ export const dispatchApplyNotebookState = async (
       // notebook and never auto-run prose as SQL.
       const isMarkdown = postApplyBasics.get(cellId)?.type === "markdown"
       const runnable =
+        c.view !== "editor" &&
         !isMarkdown &&
         resolvedMode === "run" &&
         value !== null &&
@@ -623,8 +703,20 @@ export const dispatchApplyNotebookState = async (
       validateSql,
       signal,
     )
+    const notes = cells.flatMap((c, index) =>
+      c.highlight_config
+        ? regexLiteralNotes(c.highlight_config).map(
+            (note) => `cells[${index}].highlight_config ${note}`,
+          )
+        : [],
+    )
     return {
-      content: JSON.stringify({ applied: out.applied, variable_values, runs }),
+      content: JSON.stringify({
+        ...appliedPayload(out),
+        variable_values,
+        runs,
+        ...(notes.length > 0 ? { notes } : {}),
+      }),
     }
   } catch (e) {
     // Once withBoundNotebook resolved the mutation is durably committed, so an
@@ -634,7 +726,7 @@ export const dispatchApplyNotebookState = async (
     if (committed && isAbortError(e)) {
       return {
         content: JSON.stringify({
-          applied: committed.applied,
+          ...appliedPayload(committed),
           runs: [],
           state_applied: true,
           post_apply_aborted: true,

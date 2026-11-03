@@ -9,7 +9,7 @@ export type ActiveExecution = {
   scopeKey: ScopeKey
   bufferId: NotificationNamespaceKey
   queryKey: QueryKey
-  abort: () => void
+  abort: (reason?: string) => void
 }
 
 type PendingExecution = ActiveExecution & {
@@ -18,7 +18,7 @@ type PendingExecution = ActiveExecution & {
 }
 
 export type QueryExecutionRequest = {
-  abort: () => void
+  abort: (reason?: string) => void
   bufferId: NotificationNamespaceKey
   execute: () => void
   onDismiss?: () => void
@@ -44,6 +44,20 @@ export class QueryExecutionManager {
   }
 
   private _idleWaiters = new Map<ScopeKey, Array<() => void>>()
+  private generation = 0
+
+  reset = (): void => {
+    this.generation++
+    const active = [...this._activeByScope.values()]
+    const pending = [...this._pendingByScope.values()]
+    this._activeByScope.clear()
+    this._pendingByScope.clear()
+    this._dialogScopeKey = null
+    active.forEach((execution) => execution.abort())
+    pending.forEach((execution) => execution.onDismiss?.())
+    for (const scope of this._idleWaiters.keys()) this.flushIdleWaiters(scope)
+    this.refreshSnapshot()
+  }
 
   private waitForIdle(scopeKey: ScopeKey): Promise<void> {
     if (!this._activeByScope.has(scopeKey)) return Promise.resolve()
@@ -142,17 +156,18 @@ export class QueryExecutionManager {
     this.refreshSnapshot()
   }
 
-  private abortActive(scopeKey: ScopeKey): void {
+  private abortActive(scopeKey: ScopeKey, reason?: string): void {
     const active = this._activeByScope.get(scopeKey)
     if (!active) return
-    active.abort()
+    active.abort(reason)
   }
 
   abortActiveByScope = (
     scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
+    reason?: string,
   ): void => {
     if (!this._activeByScope.has(scopeKey)) return
-    this.abortActive(scopeKey)
+    this.abortActive(scopeKey, reason)
     this._activeByScope.delete(scopeKey)
     this.refreshSnapshot()
     this.flushIdleWaiters(scopeKey)
@@ -177,9 +192,14 @@ export class QueryExecutionManager {
     // (which also dispatches stopRunning in its handler) before starting the
     // pending query. Otherwise execute() can fire toggleRunning(QUERY) while
     // running is still QUERY, producing a no-op useEffect.
+    const generation = this.generation
     const idle = this.waitForIdle(scopeKey)
     this.abortActive(scopeKey)
     await idle
+    if (this.generation !== generation) {
+      pending.onDismiss?.()
+      return
+    }
 
     this._activeByScope.set(scopeKey, {
       scopeKey,

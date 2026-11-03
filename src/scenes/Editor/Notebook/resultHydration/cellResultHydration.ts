@@ -1,31 +1,46 @@
-import type {
-  CellResult,
-  NotebookCell,
-  SingleQueryResult,
-} from "../../../../store/notebook"
-import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
-import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
-import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
 import {
+  isSettledResult,
+  type CellResult,
+  type NotebookCell,
+  type SingleQueryResult,
+} from "../../../../store/notebook"
+import type {
+  NotebookResultSnapshot,
+  SnapshotRefreshState,
+} from "../../../../store/notebookResults"
+import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
+import { getQueriesFromText } from "../../Monaco/utils"
+import {
+  normalizeSnapshotResultQuery,
   reconcileResultsForStatements,
   statementKeysFor,
-} from "../notebookUtils"
-
-// Legacy records hold the raw cell text — comments included — as the
-// statement's query. Parsing it back to the statement lets those results
-// survive key matching; the changed frame then rewrites to disk.
-const normalizeSnapshotResultQuery = (
-  result: SingleQueryResult,
-): SingleQueryResult => {
-  const parsed = getQueriesFromText(result.query)
-  if (parsed.length !== 1) return result
-  if (normalizeQueryText(parsed[0]) === normalizeQueryText(result.query)) {
-    return result
-  }
-  return { ...result, query: parsed[0] }
-}
+} from "../statementIdentity"
 import { scheduleIdle } from "../notebookScheduling"
 import { PerKeyListeners } from "../perKeyListeners"
+
+// Results saved before they carried their fetch time take it once here: the
+// snapshot's legacy per-slot stamp, or else its save time as read. The
+// rewrite below persists it, so no later write can re-date these rows.
+const foldLegacyFetchedAt = (
+  results: SingleQueryResult[],
+  keys: string[],
+  snapshot: NotebookResultSnapshot,
+): SingleQueryResult[] => {
+  const stamps = new Map(
+    (snapshot.slotFetchedAt ?? []).map((stamp) => [
+      stamp.statementKey,
+      stamp.fetchedAt,
+    ]),
+  )
+  return results.map((result, index) => {
+    if (!isSettledResult(result) || result.fetchedAt !== undefined)
+      return result
+    return {
+      ...result,
+      fetchedAt: stamps.get(keys[index]) ?? snapshot.savedAt,
+    }
+  })
+}
 
 export type CellResultStatus =
   | "unrequested"
@@ -45,10 +60,7 @@ export type CellResultHydrationDeps = {
   applyResult: (cellId: string, result: CellResult) => void
   releaseResult: (cellId: string) => void
   canRelease: (cellId: string) => boolean
-  seedRefreshErrors: (
-    cellId: string,
-    errors: Array<{ statementKey: string; message: string }>,
-  ) => void
+  seedRefreshState: (cellId: string, seed: SnapshotRefreshState) => void
 }
 
 export const hasRunMarker = (cell: NotebookCell): boolean =>
@@ -231,8 +243,14 @@ export class CellResultHydrationEngine {
     snapshot: NotebookResultSnapshot,
   ) {
     const statements = getQueriesFromText(cell.value)
+    const loaded = snapshot.results.map(normalizeSnapshotResultQuery)
+    const results = foldLegacyFetchedAt(
+      loaded,
+      statementKeysFor(loaded.map((result) => result.query)),
+      snapshot,
+    )
     const reconciled = reconcileResultsForStatements(statements, {
-      results: snapshot.results.map(normalizeSnapshotResultQuery),
+      results,
       activeResultIndex: snapshot.activeResultIndex ?? 0,
       ...(snapshot.activeStatementKey !== undefined
         ? { activeStatementKey: snapshot.activeStatementKey }
@@ -252,22 +270,26 @@ export class CellResultHydrationEngine {
       reconciled.results.some((result, index) => {
         return result !== snapshot.results[index]
       })
-    const slotKeys = new Set(statementKeysFor(statements))
+    const slotKeySet = new Set(statementKeysFor(statements))
     const refreshErrors = snapshot.refreshErrors?.filter((error) =>
-      slotKeys.has(error.statementKey),
+      slotKeySet.has(error.statementKey),
     )
+    const refreshState: SnapshotRefreshState = {
+      ...(refreshErrors && refreshErrors.length > 0 ? { refreshErrors } : {}),
+    }
+    // A time-folded snapshot rewrites too, so the disk copy holds every
+    // result's fetch time and the next reload folds nothing.
     if (frameChanged) {
       const rewritten: NotebookResultSnapshot = {
         ...snapshot,
         results: reconciled.results,
         activeResultIndex: reconciled.activeResultIndex,
         activeStatementKey: reconciled.activeStatementKey,
-        ...(refreshErrors && refreshErrors.length > 0 ? { refreshErrors } : {}),
       }
-      delete rewritten.script
-      if (!refreshErrors || refreshErrors.length === 0) {
-        delete rewritten.refreshErrors
-      }
+      if (!reconciled.allResultsKept) delete rewritten.script
+      delete rewritten.refreshErrors
+      delete rewritten.slotFetchedAt
+      Object.assign(rewritten, refreshState)
       void this.deps
         .rewriteSnapshot(rewritten)
         .then((saved) => {
@@ -282,12 +304,14 @@ export class CellResultHydrationEngine {
       activeResultIndex: reconciled.activeResultIndex,
       activeStatementKey: reconciled.activeStatementKey,
       timestamp: snapshot.savedAt,
-      ...(snapshot.script && !frameChanged ? { script: snapshot.script } : {}),
+      ...(snapshot.script && reconciled.allResultsKept
+        ? { script: snapshot.script }
+        : {}),
     })
     // Persisted refresh failures re-enter the engine channel, so a reload
     // restores the red badge and last_refresh_error alongside the old rows.
-    if (refreshErrors && refreshErrors.length > 0) {
-      this.deps.seedRefreshErrors(cellId, refreshErrors)
+    if (Object.keys(refreshState).length > 0) {
+      this.deps.seedRefreshState(cellId, refreshState)
     }
     this.setStatus(cellId, "loaded")
   }

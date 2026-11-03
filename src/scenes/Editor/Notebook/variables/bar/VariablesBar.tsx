@@ -18,6 +18,7 @@ import { customListOptions } from "../listOptions"
 import { effectiveVariables, type VariableScope } from "../scope"
 import { isQueryList } from "../options/fetchVariableOptions"
 import { listOptionsState } from "../declareEntries"
+import type { VariableOptionsState } from "../useVariableOptions"
 import { ListPicker } from "./ListPicker"
 import { TextPicker } from "./TextPicker"
 
@@ -32,6 +33,14 @@ const Bar = styled.div`
   flex-shrink: 0;
 `
 
+const LOADING_OPTIONS: VariableOptionsState = {
+  status: "loading",
+  options: [],
+  columns: [],
+  truncated: false,
+  warnings: [],
+}
+
 const Picker = styled.div`
   display: flex;
   align-items: center;
@@ -39,7 +48,8 @@ const Picker = styled.div`
 `
 
 export const VariablesBar: React.FC = () => {
-  const { settings, listOptions } = useNotebookVariablesState()
+  const { settings, listOptions, variablesPending } =
+    useNotebookVariablesState()
   const { updateVariable, refreshVariableOptions } = useNotebookActions()
   const { variables: globalVariables, listOptions: globalListOptions } =
     useGlobalVariablesState()
@@ -91,11 +101,14 @@ export const VariablesBar: React.FC = () => {
   const renderList = (scope: VariableScope, variable: ListVariable) => {
     if (isQueryList(variable)) {
       const options = scope === "global" ? globalListOptions : listOptions
+      const status =
+        listOptionsState(options, variable.name) ??
+        (scope === "notebook" && variablesPending ? LOADING_OPTIONS : undefined)
       return (
         <ListPicker
           variable={variable}
-          options={listOptionsState(options, variable.name)?.options ?? []}
-          status={listOptionsState(options, variable.name)}
+          options={status?.options ?? []}
+          status={status}
           onChange={(selected) => selectList(scope, variable, selected)}
           onRefresh={() =>
             scope === "global"

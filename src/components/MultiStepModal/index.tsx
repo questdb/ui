@@ -1,7 +1,15 @@
-import React, { ReactNode, useState, createContext, useContext } from "react"
+import React, {
+  ReactNode,
+  useState,
+  useRef,
+  createContext,
+  useContext,
+} from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
+import { Dialog } from "../Dialog"
 import styled, { css } from "styled-components"
 import { ArrowLeft } from "../icons"
+import { ValidationNotice } from "../ValidationNotice"
 import { Overlay } from "../Overlay"
 import { Box } from "../Box"
 import { Button } from "../Button"
@@ -141,13 +149,6 @@ const FooterButtons = styled(Box).attrs({
   width: 100%;
 `
 
-const ValidationError = styled(Text)`
-  color: ${({ theme }) => theme.color.statusDanger};
-  font-size: 1.3rem;
-  text-align: right;
-  width: 100%;
-`
-
 const CancelButton = styled(Button)`
   flex: 1;
   padding: 1.1rem 1.2rem;
@@ -187,7 +188,6 @@ type MultiStepModalProps = {
   canProceed?: (stepIndex: number) => boolean | Promise<boolean>
   completeButtonText?: string
   onStepChange?: (stepIndex: number, direction: "next" | "previous") => void
-  showValidationError?: boolean
 }
 
 export const MultiStepModal = ({
@@ -200,11 +200,12 @@ export const MultiStepModal = ({
   canProceed,
   completeButtonText = "Complete",
   onStepChange,
-  showValidationError = true,
 }: MultiStepModalProps) => {
   const [currentStep, setCurrentStep] = useState(0)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [isValidating, setIsValidating] = useState(false)
+
+  const sessionRef = useRef(0)
 
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen && onCancel) {
@@ -212,6 +213,7 @@ export const MultiStepModal = ({
     }
     onOpenChange?.(isOpen)
     if (!isOpen) {
+      sessionRef.current += 1
       setCurrentStep(0)
       setValidationError(null)
       setIsValidating(false)
@@ -226,19 +228,21 @@ export const MultiStepModal = ({
     }
 
     if (currentStepData?.validate) {
+      const session = sessionRef.current
       setValidationError(null)
       setIsValidating(true)
       try {
         const validationResult = await currentStepData.validate()
 
+        if (session !== sessionRef.current) return
         if (typeof validationResult === "string") {
           setValidationError(validationResult)
           return
         } else if (validationResult === false) {
-          setValidationError("Validation failed")
           return
         }
       } catch (error) {
+        if (session !== sessionRef.current) return
         const errorMessage =
           error instanceof Error ? error.message : "Validation failed"
         setValidationError(errorMessage)
@@ -286,7 +290,7 @@ export const MultiStepModal = ({
   }
 
   return (
-    <RadixDialog.Root open={open} onOpenChange={handleOpenChange}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <RadixDialog.Portal>
         <ForwardRef>
           <Overlay primitive={RadixDialog.Overlay} />
@@ -324,10 +328,12 @@ export const MultiStepModal = ({
                 ? steps[currentStep]?.content()
                 : steps[currentStep]?.content}
             </Content>
+            {validationError && (
+              <ValidationNotice dataHook="multi-step-modal-error">
+                {validationError}
+              </ValidationNotice>
+            )}
             <FooterSection>
-              {showValidationError && validationError && (
-                <ValidationError>{validationError}</ValidationError>
-              )}
               <FooterButtons>
                 <CancelButton
                   data-hook="multi-step-modal-cancel-button"
@@ -362,6 +368,6 @@ export const MultiStepModal = ({
           </NavigationContext.Provider>
         </StyledContent>
       </RadixDialog.Portal>
-    </RadixDialog.Root>
+    </Dialog.Root>
   )
 }

@@ -20,6 +20,7 @@ export const menuItemStyles = css`
   gap: 0.6rem;
   align-items: center;
   min-height: 3.2rem;
+  flex-shrink: 0;
   padding: 0.5rem 0.8rem;
   border-radius: 0.4rem;
   user-select: none;
@@ -32,6 +33,16 @@ export const menuItemStyles = css`
   &[data-disabled] {
     opacity: 0.5;
     pointer-events: none;
+  }
+`
+
+export const menuInputStyles = css`
+  height: 3.2rem;
+  font-size: 1.3rem;
+  border-radius: 0.4rem;
+
+  &::placeholder {
+    font-size: 1.2rem;
   }
 `
 

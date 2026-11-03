@@ -2,6 +2,7 @@ import React from "react"
 import { Stop } from "../../../../components/icons"
 import { ArrowClockwiseIcon, Queue } from "@phosphor-icons/react"
 import { Box, Text } from "../../../../components"
+import { useHeldFlag } from "../../../../hooks"
 import Notification from "../../../Notifications/Notification"
 import { NotificationType } from "../../../../store/Query/types"
 import type { SingleQueryResult } from "../../../../store/notebook"
@@ -11,6 +12,9 @@ import type { StatementSlotView } from "./statementSlotView"
 import { CancelButton, LiveRegion, NotificationContainer } from "./styles"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+
+// A fast refresh still shows "Refreshing..." long enough to read.
+const REFRESHING_MIN_VISIBLE_MS = 250
 
 // Announcements ride on TEXT CHANGES: a steady-state poll that reverifies the
 // same rows keeps the message identical, so the screen reader stays quiet.
@@ -44,29 +48,33 @@ const liveRegionMessage = (slot: StatementSlotView): string => {
 }
 
 type Props = {
-  timestamp: number
   slot: StatementSlotView
   onCancelQuery?: (statementKey: string) => void
 }
 
 export const StatusNotification: React.FC<Props> = ({
-  timestamp,
   slot,
   onCancelQuery,
 }) => {
+  const refreshingHeld = useHeldFlag(slot.refreshing, REFRESHING_MIN_VISIBLE_MS)
   const activeResult: SingleQueryResult = slot.result ?? {
     type: "queued",
     query: slot.sql,
   }
   const { type } = activeResult
+  const showsRefreshing =
+    slot.refreshing || (refreshingHeld && type !== "running")
   const isError =
     type === "error" || (slot.refreshError !== undefined && type !== "running")
   const isCancelled = type === "cancelled"
   const notice = activeResult.type === "dql" ? activeResult.notice : undefined
 
+  // A settled slot's time is when its rows were fetched; a queued or running
+  // slot has none yet and shows no time.
   const baseProps = {
     query: "@0-0" as const,
-    createdAt: new Date(slot.fetchedAt ?? timestamp),
+    createdAt: new Date(slot.fetchedAt ?? 0),
+    hideTimestamp: slot.fetchedAt === undefined,
     compact: true,
     isMinimized: true,
     sideContent: <QueryInNotification query={slot.sql} />,
@@ -88,7 +96,7 @@ export const StatusNotification: React.FC<Props> = ({
   // A live run wins over refresh state; refresh state wins over the settled
   // result the tab still shows — those rows are the previous round's, and
   // the line must say so.
-  if (slot.refreshing) {
+  if (showsRefreshing) {
     body = (
       <Notification
         {...baseProps}

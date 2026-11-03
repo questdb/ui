@@ -9,7 +9,7 @@ const request = (
   queryKey: QueryKey,
   execute: () => void = vi.fn(),
   options: {
-    abort?: () => void
+    abort?: (reason?: string) => void
     onDismiss?: () => void
     scopeKey?: string
   } = {},
@@ -102,6 +102,20 @@ describe("QueryExecutionManager", () => {
     expect(abort).toHaveBeenCalledTimes(1)
     expect(manager.getActive(scopeKey)).toBeNull()
     expect(manager.isAnyRunning(scopeKey)).toBe(false)
+  })
+
+  it("forwards the abort reason to the active execution", () => {
+    // Given an active run in a cell scope
+    const manager = createManager()
+    const scopeKey = "notebook:1:cell-a"
+    const abort = vi.fn()
+    request(manager, "active@0-6" as QueryKey, vi.fn(), { abort, scopeKey })
+
+    // When a newer run supersedes it
+    manager.abortActiveByScope(scopeKey, "superseded")
+
+    // Then the run learns why it was aborted
+    expect(abort).toHaveBeenCalledWith("superseded")
   })
 
   it("aborts only the requested scope", () => {

@@ -1,4 +1,5 @@
 import type { EChartsOption } from "echarts"
+import type { ChartZoomDensity } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type {
   AxisBounds,
@@ -40,8 +41,6 @@ type SeriesContext = {
   xMode: XMode
   categoryUnion: string[] | null // set only when overlaying series onto a shared category axis; null for a single positional query
 }
-
-const DATAZOOM_THRESHOLD = 200
 
 const LEGEND_BOTTOM = 3
 const SLIDER_HEIGHT = 18
@@ -123,9 +122,11 @@ const buildColumnIndexMap = (
   return m
 }
 
+// Keep both keys even when unset: chart updates merge into the prior option,
+// and an omitted key would keep a cleared bound on screen.
 const pinnedBounds = (axis: AxisBounds | undefined) => ({
-  ...(axis?.min != null ? { min: axis.min } : {}),
-  ...(axis?.max != null ? { max: axis.max } : {}),
+  min: axis?.min ?? undefined,
+  max: axis?.max ?? undefined,
 })
 
 const toNumberOrNull = (v: unknown): number | null => {
@@ -650,7 +651,7 @@ export const buildEchartsOption = (
   viewport: ChartViewport,
 ): EChartsOption => {
   const chartText = { fontSize: CHART_FONT_SIZE }
-  const axisLabel = { fontSize: CHART_FONT_SIZE }
+  const axisLabel = { fontSize: CHART_FONT_SIZE, hideOverlap: true }
   const axisName = { fontSize: CHART_FONT_SIZE }
   const baseLegend = {
     type: "scroll" as const,
@@ -760,17 +761,10 @@ export const buildEchartsOption = (
       ? (rightQueries[0].name ?? rightQueries[0].yColumns[0] ?? "")
       : "")
 
-  const maxRows = queries.reduce((m, q) => Math.max(m, q.dataset.length), 0)
-  const hasZoom = maxRows > DATAZOOM_THRESHOLD
-  const sliderZoom = {
-    type: "slider" as const,
-    height: SLIDER_HEIGHT,
-    bottom: SLIDER_BOTTOM,
-    textStyle: chartText,
-  }
-
   const rightPadding = 36
-  const gridBottom = hasZoom ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM
+  // Zoom controls are added by withZoomDensity, which lifts the panes when
+  // the slider shows.
+  const gridBottom = GRID_BOTTOM_NO_ZOOM
 
   // Two stacked panes cannot share the automatic label fitting, so both take
   // the same fixed margins and line up exactly.
@@ -915,7 +909,6 @@ export const buildEchartsOption = (
       grid,
       xAxis,
       yAxis,
-      dataZoom: hasZoom ? [{ type: "inside" }, sliderZoom] : undefined,
       series: series as EChartsOption["series"],
     }
   }
@@ -926,7 +919,6 @@ export const buildEchartsOption = (
     )
     .filter((s): s is Series => s !== null)
   const volumeSeriesIndex = volumeSeries.map((_, i) => series.length + i)
-  const bothAxes = { xAxisIndex: [0, 1] }
   // Linked panes would each print the hovered time under their own axis.
   const noPointerLabel = { label: { show: false } }
   return {
@@ -948,12 +940,57 @@ export const buildEchartsOption = (
     yAxis,
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     visualMap: volumeVisualMap(volumeSeriesIndex, palette),
-    dataZoom: hasZoom
-      ? [
-          { type: "inside", ...bothAxes },
-          { ...sliderZoom, ...bothAxes },
-        ]
-      : undefined,
     series: [...series, ...volumeSeries] as EChartsOption["series"],
+  }
+}
+
+// Every cartesian chart embeds both zoom components, and density only toggles
+// their visibility — never the option's structure, which would remount the
+// chart through its structural key. Wheel zoom arms while marks are merely
+// tight (it costs no plot space); the slider costs plot height, so it waits
+// until marks fall under the readable floor. The renderer measures the density
+// from its own width.
+export const withZoomDensity = (
+  option: EChartsOption,
+  density: ChartZoomDensity,
+): EChartsOption => {
+  if (option.xAxis == null) return option
+  // Linked panes (candles over volume) zoom together and both move up by the
+  // slider's height; the volume pane keeps its height.
+  const xAxisIndex = Array.isArray(option.xAxis)
+    ? option.xAxis.map((_, index) => index)
+    : undefined
+  const sliderLift = density.slider
+    ? GRID_BOTTOM_WITH_ZOOM - GRID_BOTTOM_NO_ZOOM
+    : 0
+  const grid = Array.isArray(option.grid)
+    ? option.grid.map((pane) => {
+        const { bottom } = pane as { bottom?: unknown }
+        return typeof bottom === "number"
+          ? { ...pane, bottom: bottom + sliderLift }
+          : pane
+      })
+    : {
+        ...(option.grid as object),
+        bottom: density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
+      }
+  return {
+    ...option,
+    grid,
+    dataZoom: [
+      {
+        type: "inside",
+        disabled: !density.wheel,
+        ...(xAxisIndex ? { xAxisIndex } : {}),
+      },
+      {
+        type: "slider",
+        show: density.slider,
+        height: SLIDER_HEIGHT,
+        bottom: SLIDER_BOTTOM,
+        textStyle: { fontSize: CHART_FONT_SIZE },
+        ...(xAxisIndex ? { xAxisIndex } : {}),
+      },
+    ],
   }
 }

@@ -22,3 +22,7 @@ export const HEADER_PADDING_PX = 20
 export const HEADER_GAP_PX = 6
 export const HEADER_COPY_BUTTON_PX = 14
 export const HEADER_BORDER_PX = 1
+
+// Reserved beside the value in columns that show a direction glyph.
+export const DIRECTION_GLYPH_WIDTH = 14
+export const DIRECTION_GLYPH_SIZE = 10

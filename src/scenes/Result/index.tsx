@@ -59,6 +59,7 @@ import { ResultViewMode } from "scenes/Console/types"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { isSessionEnded } from "../../modules/OAuth2/session"
 import { QuestContext } from "../../providers"
 import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
@@ -183,6 +184,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const { active: activeQueryExecution } = useQueryExecutionState()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | null>(null)
+  const resultActionsRef = useRef<HTMLDivElement | null>(null)
   const runningRef = useRef(running)
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
@@ -198,11 +200,15 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         const result = await quest.queryRaw(sql, {
           limit: `${lo},${hi}`,
           nm: true,
+          background: true,
         })
         if (result.type === QuestDB.Type.DQL) {
           rendererFn(result)
         }
       } catch (err) {
+        // A page read interrupted by the end of the session has nothing to
+        // report, and its notification would be read after signing in again.
+        if (isSessionEnded(err)) return
         // Order of actions is important
         dispatch(
           actions.query.addNotification({
@@ -407,10 +413,16 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     downloadQueryResult(sql, format)
   }
 
+  const focusResultActions = () => {
+    resultActionsRef.current
+      ?.querySelector<HTMLButtonElement>("button")
+      ?.focus()
+  }
+
   return (
     <Root>
       <Wrapper>
-        <Actions>
+        <Actions ref={resultActionsRef}>
           {count !== undefined && (
             <ResultCountBadge
               aria-label={`${count.toLocaleString()} ${count === 1 ? "row" : "rows"}`}
@@ -533,6 +545,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             <ResultChart
               result={result?.type === QuestDB.Type.DQL ? result : null}
               visible={viewMode === "chart"}
+              onResetZoomFocus={focusResultActions}
             />
           )}
         </Content>

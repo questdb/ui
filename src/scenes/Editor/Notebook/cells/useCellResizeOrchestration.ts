@@ -1,31 +1,27 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellResize } from "./useCellResize"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
+  MAX_PANE_HEIGHT_PX,
+  MIN_EDITOR_HEIGHT,
+  clampPaneHeight,
   computeCellHeights,
+  gridBoxRowsChange,
   hasAgentVisibleCellHeightChanged,
-  MIN_BOTTOM_HEIGHT_PX,
+  minBottomHeightFor,
   partitionCellHeights,
-  scaleCellHeights,
   topHeightForSql,
-} from "../notebookUtils"
-
-// Minimum content area heights. `MIN_EDITOR_HEIGHT` matches Monaco's reported
-// content height for an empty editor (one line + padding); the previous
-// `MAX_EDITOR_HEIGHT` cap is gone — the editor now auto-grows freely with
-// pasted content (user-confirmed: unbounded).
-export const MIN_EDITOR_HEIGHT = 72
+} from "../cellSizing"
 
 type Options = {
   cell: NotebookCell
   layoutMode: "list" | "grid"
   isMaximized: boolean
+  isSplit: boolean
   showBottomSlot: boolean
   expectingResult: boolean
   editorContainerRef: React.RefObject<HTMLDivElement | null>
@@ -33,14 +29,21 @@ type Options = {
   getEditorContentHeight: () => number | null
 }
 
-// Every way a cell's editor / result split can be resized — the inner split
-// handle, the bottom-edge handle, the maximized-chart handle, the spotlight
-// ratio, and their double-click resets — plus the derived top/bottom heights
-// the layout renders from.
+// Every way a cell's editor / result panes can be resized — the split handle,
+// the bottom-edge handle, the spotlight ratio, and their double-click resets —
+// plus the derived top/bottom heights the layout renders from.
+//
+// The split handle owns the editor pane only. The result keeps its own height
+// and the cell grows with the editor, the same way Monaco auto-grow does. The
+// drag is local state; the store is written on drop, and in grid layout also
+// whenever the box needs another row, so it follows the drag without a
+// notebook-wide render per pointer move. A maximized cell fills the viewport,
+// so there the handle moves the editor/result ratio instead.
 export const useCellResizeOrchestration = ({
   cell,
   layoutMode,
   isMaximized,
+  isSplit,
   showBottomSlot,
   expectingResult,
   editorContainerRef,
@@ -53,29 +56,42 @@ export const useCellResizeOrchestration = ({
   const [spotlightLiveRatio, setSpotlightLiveRatio] = useState<number | null>(
     null,
   )
+  // A drag that crosses grid rows writes the store mid-drag, so the split
+  // handle remembers the cell it started from and signals once, on drop,
+  // against that cell: a drag that returns to its start is not an edit.
+  const [splitDragStartCell, setSplitDragStartCell] =
+    useState<NotebookCell | null>(null)
+  const [spotlightSpan, setSpotlightSpan] = useState<number | null>(null)
+
+  // The grid edge handle publishes its reset; the subscription lives for the
+  // cell and reads the handler of the current render.
+  const resetBottomAreaRef = useRef<(() => void) | null>(null)
 
   const readResetTopHeight = useCallback(() => {
     const contentHeight = getEditorContentHeight()
     return contentHeight != null
-      ? Math.max(MIN_EDITOR_HEIGHT, contentHeight)
+      ? clampPaneHeight(MIN_EDITOR_HEIGHT, contentHeight)
       : topHeightForSql(cell.value)
   }, [cell.value, getEditorContentHeight])
 
   const signalAgentVisibleHeightChange = useCallback(
-    (patch: Partial<NotebookCell>) => {
-      if (hasAgentVisibleCellHeightChanged(cell, patch, layoutMode)) {
+    (patch: Partial<NotebookCell>, from: NotebookCell = cell) => {
+      if (hasAgentVisibleCellHeightChanged(from, patch)) {
         signalUserEdit(bufferIdForEvents)
       }
     },
-    [bufferIdForEvents, cell, layoutMode],
+    [bufferIdForEvents, cell],
   )
 
   const topResize = useCellResize(
     MIN_EDITOR_HEIGHT,
     useCallback(
-      (height: number) =>
-        updateCell(cell.id, { topHeight: height, topResized: true }),
-      [cell.id, updateCell],
+      (height: number) => {
+        const patch = { topHeight: height, topResized: true }
+        signalAgentVisibleHeightChange(patch)
+        updateCell(cell.id, patch)
+      },
+      [cell.id, signalAgentVisibleHeightChange, updateCell],
     ),
     // Write Monaco's CURRENT content height directly on reset, rather
     // than setting `topHeight: undefined` and waiting for the next
@@ -90,11 +106,14 @@ export const useCellResizeOrchestration = ({
     }, [cell.id, readResetTopHeight, updateCell]),
   )
   const bottomResize = useCellResize(
-    MIN_BOTTOM_HEIGHT_PX,
+    minBottomHeightFor(cell),
     useCallback(
-      (height: number) =>
-        updateCell(cell.id, { bottomHeight: height, bottomResized: true }),
-      [cell.id, updateCell],
+      (height: number) => {
+        const patch = { bottomHeight: height, bottomResized: true }
+        signalAgentVisibleHeightChange(patch)
+        updateCell(cell.id, patch)
+      },
+      [cell.id, signalAgentVisibleHeightChange, updateCell],
     ),
     useCallback(
       () =>
@@ -103,157 +122,150 @@ export const useCellResizeOrchestration = ({
     ),
   )
 
-  const { topHeight, bottomHeight } = computeCellHeights(cell, {
-    liveTopHeight: topResize.liveHeight,
-    liveBottomHeight: bottomResize.liveHeight,
-    expectingResult,
-  })
+  // An unpinned result pane sizes itself from the result frame, which formats
+  // the statements when the frame text and the SQL differ: once per change,
+  // not on every render in between.
+  const { topHeight, bottomHeight } = useMemo(
+    () =>
+      computeCellHeights(cell, {
+        liveTopHeight: topResize.liveHeight,
+        liveBottomHeight: bottomResize.liveHeight,
+        expectingResult,
+      }),
+    [cell, topResize.liveHeight, bottomResize.liveHeight, expectingResult],
+  )
 
   const spotlightEditorRatio =
     spotlightLiveRatio ??
     cell.spotlightEditorRatio ??
     topHeight / (topHeight + bottomHeight)
 
-  const middleSum = () => {
-    if (!isMaximized) return topHeight + bottomHeight
+  // A maximized cell fills the viewport, so its editor stops where the result
+  // pane reaches its floor.
+  const splitMaxHeight =
+    isMaximized && spotlightSpan !== null
+      ? Math.max(MIN_EDITOR_HEIGHT, spotlightSpan - minBottomHeightFor(cell))
+      : MAX_PANE_HEIGHT_PX
+
+  const spotlightRatioFor = (height: number) => {
     const editorH =
       editorContainerRef.current?.getBoundingClientRect().height ?? 0
     const bottomH = resultRef.current?.getBoundingClientRect().height ?? 0
-    return editorH + bottomH
-  }
-
-  const middleResizeLive = (height: number) => {
     const { top, bottom } = partitionCellHeights(
-      middleSum(),
+      editorH + bottomH,
       height,
       MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
+      minBottomHeightFor(cell),
     )
-    if (isMaximized) {
-      setSpotlightLiveRatio(top / (top + bottom))
-      return
-    }
-    topResize.resizeLive(top)
-    bottomResize.resizeLive(bottom)
+    return top / (top + bottom)
   }
 
-  const middleResizeEnd = (height: number) => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region: "mid" })
-    const { top, bottom } = partitionCellHeights(
-      middleSum(),
-      height,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
+  const editorHeightPatch = (height: number) => ({
+    topHeight: clampPaneHeight(MIN_EDITOR_HEIGHT, height),
+    topResized: true,
+  })
+
+  const splitResizeLive = (height: number) => {
     if (isMaximized) {
-      setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: top / (top + bottom) })
+      setSpotlightLiveRatio(spotlightRatioFor(height))
       return
     }
-    signalAgentVisibleHeightChange({
-      topHeight: top,
-      topResized: true,
-      bottomHeight: bottom,
-      bottomResized: true,
-    })
-    topResize.resizeEnd(top)
-    bottomResize.resizeEnd(bottom)
+    if (splitDragStartCell === null) setSplitDragStartCell(cell)
+    topResize.resizeLive(height)
+    const patch = editorHeightPatch(height)
+    if (gridBoxRowsChange(cell, patch, layoutMode, expectingResult)) {
+      updateCell(cell.id, patch)
+    }
   }
 
-  const resetToDefaults = () => {
+  const splitResizeEnd = (height: number) => {
     if (isMaximized) {
       setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: undefined })
+      updateCell(cell.id, { spotlightEditorRatio: spotlightRatioFor(height) })
       return
     }
+    setSplitDragStartCell(null)
+    signalAgentVisibleHeightChange(
+      editorHeightPatch(height),
+      splitDragStartCell ?? cell,
+    )
+    topResize.resizeEnd(height)
+  }
+
+  const resetSpotlightRatio = () => {
+    setSpotlightLiveRatio(null)
+    updateCell(cell.id, { spotlightEditorRatio: undefined })
+  }
+
+  const resetEditorHeight = () => {
     signalAgentVisibleHeightChange({
       topHeight: readResetTopHeight(),
       topResized: false,
+    })
+    topResize.resetHeight()
+  }
+
+  const resetSplit = isMaximized ? resetSpotlightRatio : resetEditorHeight
+
+  const resetBottomArea = () => {
+    if (isMaximized) {
+      resetSpotlightRatio()
+      return
+    }
+    if (!showBottomSlot) {
+      resetEditorHeight()
+      return
+    }
+    signalAgentVisibleHeightChange({
       bottomHeight: undefined,
       bottomResized: false,
     })
     bottomResize.resetHeight()
-    topResize.resetHeight()
-  }
-
-  const resetBottomArea = useCallback(() => {
-    if (isMaximized) {
-      setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: undefined })
-      return
-    }
-    if (showBottomSlot) {
-      signalAgentVisibleHeightChange({
-        bottomHeight: undefined,
-        bottomResized: false,
-      })
-      bottomResize.resetHeight()
-    } else {
-      signalAgentVisibleHeightChange({
-        topHeight: readResetTopHeight(),
-        topResized: false,
-      })
-      topResize.resetHeight()
-    }
-  }, [
-    isMaximized,
-    showBottomSlot,
-    bottomResize,
-    topResize,
-    cell.id,
-    readResetTopHeight,
-    signalAgentVisibleHeightChange,
-    updateCell,
-  ])
-
-  // When a chart is maximized the BottomSlot fills the whole cell, so its
-  // measured height IS the cell total — scale top/bottom to that new total
-  // (preserving the split so it's intact when the chart is restored).
-  const maximizedChartResizeLive = (newTotalHeight: number) => {
-    const { top, bottom } = scaleCellHeights(
-      topHeight,
-      bottomHeight,
-      newTotalHeight,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    topResize.resizeLive(top)
-    bottomResize.resizeLive(bottom)
-  }
-
-  const maximizedChartResizeEnd = (newTotalHeight: number) => {
-    const { top, bottom } = scaleCellHeights(
-      topHeight,
-      bottomHeight,
-      newTotalHeight,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    topResize.resizeEnd(top)
-    bottomResize.resizeEnd(bottom)
   }
 
   useEffect(() => {
+    const editor = editorContainerRef.current
+    const result = resultRef.current
+    if (!isMaximized || !isSplit || !editor || !result) return
+    const observer = new ResizeObserver(() =>
+      setSpotlightSpan(
+        Math.round(
+          editor.getBoundingClientRect().height +
+            result.getBoundingClientRect().height,
+        ),
+      ),
+    )
+    observer.observe(editor)
+    observer.observe(result)
+    return () => {
+      observer.disconnect()
+      setSpotlightSpan(null)
+    }
+  }, [isMaximized, isSplit, editorContainerRef, resultRef])
+
+  useEffect(() => {
+    resetBottomAreaRef.current = resetBottomArea
+  })
+
+  useEffect(() => {
     const handler = (payload?: { cellId?: string }) => {
-      if (payload?.cellId !== cell.id) return
-      resetBottomArea()
+      if (payload?.cellId === cell.id) resetBottomAreaRef.current?.()
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
     return () =>
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
-  }, [cell.id, resetBottomArea])
+  }, [cell.id])
 
   return {
     topHeight,
     bottomHeight,
     spotlightEditorRatio,
+    splitMaxHeight,
     topResize,
     bottomResize,
-    middleResizeLive,
-    middleResizeEnd,
-    resetToDefaults,
+    splitResizeLive,
+    splitResizeEnd,
+    resetSplit,
     resetBottomArea,
-    maximizedChartResizeLive,
-    maximizedChartResizeEnd,
   }
 }

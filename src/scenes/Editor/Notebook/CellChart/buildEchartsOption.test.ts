@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   buildEchartsOption,
+  withZoomDensity,
   type ChartGlobals,
   type ResolvedQuery,
 } from "./buildEchartsOption"
@@ -867,16 +868,29 @@ describe("buildEchartsOption — candlestick with a volume sub-pane", () => {
       11,
       100,
     ])
-    // When
+    // When the renderer adds the zoom controls with the slider shown
     const opt = build({ xColumn: "ts" }, [candle({ dataset: rows })])
+    const zoomed = withZoomDensity(opt, { slider: true, wheel: true })
     // Then
     expect(opt.axisPointer).toEqual({ link: [{ xAxisIndex: "all" }] })
     for (const axis of records(opt.xAxis)) {
       expect(axis.axisPointer).toEqual({ label: { show: false } })
     }
-    for (const zoom of records(opt.dataZoom)) {
+    const zooms = records(zoomed.dataZoom)
+    expect(zooms).toHaveLength(2)
+    for (const zoom of zooms) {
       expect(zoom.xAxisIndex).toEqual([0, 1])
     }
+    // And both panes lift by the slider's space, keeping the volume height
+    const before = records(opt.grid)
+    const after = records(zoomed.grid)
+    expect(after).toHaveLength(2)
+    const lift = (after[1].bottom as number) - (before[1].bottom as number)
+    expect(lift).toBeGreaterThan(0)
+    expect((after[0].bottom as number) - (before[0].bottom as number)).toBe(
+      lift,
+    )
+    expect(after[1].height).toBe(before[1].height)
   })
 
   it("places the volume axis after an existing right axis and prints compact labels", () => {
@@ -956,5 +970,53 @@ describe("buildEchartsOption — candlestick with a volume sub-pane", () => {
     expect(Array.isArray(noVolume.grid)).toBe(false)
     expect(noVolume.visualMap).toBeUndefined()
     expect(Array.isArray(categorical.grid)).toBe(false)
+  })
+})
+
+describe("buildEchartsOption — axis labels", () => {
+  it("hides overlapping x-axis labels so a narrow chart thins them instead of colliding", () => {
+    // Given a temporal x column with more ticks than a narrow chart can fit
+    const columns = [col("ts", "TIMESTAMP"), col("v", "DOUBLE")]
+    const dataset = Array.from({ length: 15 }, (_, i) => [i * 120_000, i])
+    // When the option builds
+    const opt = build({ xColumn: "ts" }, [
+      resolved({
+        columns,
+        dataset,
+        xColumn: "ts",
+        type: "bar",
+        yColumns: ["v"],
+      }),
+    ])
+    // Then the x-axis label config asks ECharts to hide overlaps
+    expect(firstAxis(opt.xAxis).axisLabel).toMatchObject({ hideOverlap: true })
+  })
+})
+
+describe("buildEchartsOption — right-axis bounds", () => {
+  it("keeps unset bounds as explicit keys so a cleared bound resets the merged chart", () => {
+    // Given a chart with a right axis whose min/max were cleared
+    const columns = [
+      col("ts", "TIMESTAMP"),
+      col("a", "DOUBLE"),
+      col("b", "DOUBLE"),
+    ]
+    const dataset = [[1000, 1, 100]]
+    // When the option builds
+    const opt = build({ xColumn: "ts", rightAxis: {} }, [
+      resolved({ columns, dataset, xColumn: "ts", yColumns: ["a"] }),
+      resolved({
+        index: 1,
+        columns,
+        dataset,
+        xColumn: "ts",
+        yColumns: ["b"],
+        axis: "right",
+      }),
+    ])
+    // Then both bound keys are present, so ECharts' merge overwrites stale bounds
+    const rightAxis = (opt.yAxis as Record<string, unknown>[])[1]
+    expect(rightAxis).toHaveProperty("min", undefined)
+    expect(rightAxis).toHaveProperty("max", undefined)
   })
 })

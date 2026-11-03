@@ -2,7 +2,7 @@
 // WS frame as `v` and echoed in `hello.expectedBridgeVersion`. Bridge
 // compares same-major (connect + warning) vs different-major (close 4004).
 // Bump in lockstep with verified bridge releases.
-export const EXPECTED_MCP_VERSION = "0.4.0"
+export const EXPECTED_MCP_VERSION = "0.5.0"
 
 export type BridgeVersionMismatch = "major" | "minor"
 

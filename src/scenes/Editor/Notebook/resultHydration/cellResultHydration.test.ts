@@ -4,9 +4,12 @@ import type {
   NotebookCell,
   SingleQueryResult,
 } from "../../../../store/notebook"
-import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
+import type {
+  NotebookResultSnapshot,
+  SnapshotRefreshState,
+} from "../../../../store/notebookResults"
 import { CellVirtualizationEngine } from "../cellVirtualization/cellVirtualizationEngine"
-import { statementKeysFor } from "../notebookUtils"
+import { statementKeysFor } from "../statementIdentity"
 import { CellResultHydrationEngine } from "./cellResultHydration"
 
 vi.mock("../notebookScheduling", () => ({
@@ -15,6 +18,16 @@ vi.mock("../notebookScheduling", () => ({
 }))
 
 const dqlResult = (query: string): SingleQueryResult => ({
+  type: "dql",
+  query,
+  columns: [{ name: "x", type: "INT" }],
+  dataset: [[1]],
+  count: 1,
+  fetchedAt: 500,
+})
+
+// A result persisted before results carried their fetch time.
+const legacyDqlResult = (query: string): SingleQueryResult => ({
   type: "dql",
   query,
   columns: [{ name: "x", type: "INT" }],
@@ -51,9 +64,7 @@ describe("CellResultHydrationEngine", () => {
   let rewrites: NotebookResultSnapshot[]
   let pendingRewrites: Array<(saved: boolean) => void>
   let deletedSnapshots: string[]
-  let seededErrors: Array<
-    [string, Array<{ statementKey: string; message: string }>]
-  >
+  let seededRefreshState: Array<[string, SnapshotRefreshState]>
 
   const ranCell = (id: string): NotebookCell => ({
     id,
@@ -88,7 +99,7 @@ describe("CellResultHydrationEngine", () => {
     rewrites = []
     pendingRewrites = []
     deletedSnapshots = []
-    seededErrors = []
+    seededRefreshState = []
     engine = new CellResultHydrationEngine({
       loadSnapshot: (cellId) =>
         new Promise((resolve, reject) => {
@@ -111,8 +122,8 @@ describe("CellResultHydrationEngine", () => {
         snapshots.delete(cellId)
         return Promise.resolve()
       },
-      seedRefreshErrors: (cellId, errors) => {
-        seededErrors.push([cellId, errors])
+      seedRefreshState: (cellId, seed) => {
+        seededRefreshState.push([cellId, seed])
       },
       getCell: (cellId) => cells.get(cellId),
       applyResult: (cellId, result) => {
@@ -327,6 +338,47 @@ describe("CellResultHydrationEngine", () => {
     expect(rewrites[0].refreshErrors).toEqual([
       { statementKey: statementKeysFor(["select 1"])[0], message: "boom" },
     ])
+  })
+
+  it("folds a legacy snapshot's fetch time into each result once and drops the legacy stamps from the rewrite", async () => {
+    // Given a snapshot saved before results carried their fetch time: one
+    // statement has a legacy per-slot stamp, the other only the save time
+    const key1 = statementKeysFor(["select 1"])[0]
+    seedCell({ ...ranCell("c1"), value: "select 1; select 2" })
+    snapshots.set("c1", {
+      ...snapshot("c1", [
+        legacyDqlResult("select 1"),
+        legacyDqlResult("select 2"),
+      ]),
+      slotFetchedAt: [{ statementKey: key1, fetchedAt: 700 }],
+    })
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then every result carries a fetch time — the stamp, else the save time —
+    // the rewrite persists it without the legacy field, and nothing is seeded
+    const fetchedAt = (result: SingleQueryResult) =>
+      "fetchedAt" in result ? result.fetchedAt : undefined
+    expect(applied[0][1].results.map(fetchedAt)).toEqual([700, 1000])
+    expect(rewrites[0].results.map(fetchedAt)).toEqual([700, 1000])
+    expect(rewrites[0]).not.toHaveProperty("slotFetchedAt")
+    expect(seededRefreshState).toEqual([])
+  })
+
+  it("leaves a snapshot whose results already carry their fetch time untouched", async () => {
+    // Given a snapshot saved with current keys
+    seedCell(ranCell("c1"))
+    snapshots.set("c1", snapshot("c1", [dqlResult("select 1")]))
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then the result keeps its time and nothing is rewritten
+    expect(applied[0][1].results[0]).toMatchObject({ fetchedAt: 500 })
+    expect(rewrites).toEqual([])
   })
 
   it("never clobbers a live result that lands while the snapshot load is in flight", async () => {
@@ -856,7 +908,7 @@ describe("virtualization band → hydration engine wiring", () => {
         }),
       rewriteSnapshot: () => Promise.resolve(true),
       deleteSnapshot: () => Promise.resolve(),
-      seedRefreshErrors: () => undefined,
+      seedRefreshState: () => undefined,
       getCell: (cellId) => cells.get(cellId),
       applyResult: (cellId, result) => {
         applied.push([cellId, result])

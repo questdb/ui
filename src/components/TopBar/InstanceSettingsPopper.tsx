@@ -416,7 +416,6 @@ export const InstanceSettingsPopper = ({
                 },
               ]}
               value={values.instance_type ?? "development"}
-              modal={false}
               onValueChange={(value) =>
                 onValuesChange({
                   ...values,

@@ -73,7 +73,7 @@ export type RawDmlResult = {
 export type RawErrorResult = {
   ddl: undefined
   dml: undefined
-  error: "<error message>"
+  error: string
   position: number
   query: string
 }
@@ -82,7 +82,7 @@ export type RawNoticeResult = {
   ddl: undefined
   dml: undefined
   error: undefined
-  notice: "<notice message>"
+  notice: string
   position: undefined
   query: string
   columns?: ColumnDefinition[]
@@ -109,10 +109,19 @@ export type RawResult =
   | RawErrorResult
   | RawNoticeResult
 
-export type ErrorResult = RawErrorResult & {
-  type: Type.ERROR
-  status: number
+// Local execution metadata shared by the client, notebooks and agent adapters.
+export type SessionFailure = {
+  sessionEnded?: boolean
+  requestNotSent?: boolean
 }
+
+export type ErrorResult = Omit<RawErrorResult, "ddl" | "dml"> & {
+  type: Type.ERROR
+  // Local failures and aborted/session-ended requests have no HTTP response.
+  status?: number
+  connectionError?: boolean
+  authRefreshUnavailable?: boolean
+} & SessionFailure
 
 export type NoticeResult = RawNoticeResult & {
   type: Type.NOTICE
@@ -364,6 +373,27 @@ export type Options = {
   cols?: string
   src?: string
   cancellable?: boolean
+  /** Background work must not extend an idle login; never sent on the wire. */
+  refreshAuth?: boolean
+  /**
+   * A console-issued catalog, monitoring or display read (schema, catalog
+   * sources, metrics, telemetry, result pages and charts), not a statement the
+   * user ran. It is still aborted when the session ends, but never makes the
+   * session busy or raises the "statements may have executed" warning.
+   * Never sent on the wire.
+   */
+  background?: boolean
+}
+
+// In-process lifecycle hooks are not SQL wire parameters.
+export type QueryLifecycle = {
+  /** Invoked immediately before the SQL fetch, after any token refresh wait. */
+  onRequestStart?: () => void
+  /**
+   * Invoked when the query starts waiting for a token refresh: before its first
+   * fetch, or before retrying a fetch that the server rejected with 401.
+   */
+  onRefreshWait?: (timeoutMs: number) => void
 }
 
 export type Release = {

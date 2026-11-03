@@ -3,12 +3,17 @@ import type { Client } from "./questdb/client"
 import type { ColumnDefinition, Timings } from "./questdb/types"
 import { expandGlobals } from "../scenes/Editor/Notebook/declareUtils"
 import type { DeclareEntry } from "../store/notebook"
+import {
+  sessionFailureOf,
+  type SessionFailure,
+} from "../modules/OAuth2/session"
 
 export const RESULT_DISPLAY_LIMIT = 50_000
 
-export type QueryExecResult = {
+export type QueryExecResult = SessionFailure & {
   type: "dql" | "ddl" | "dml" | "error"
   query: string
+  effectiveQuery?: string
   columns: ColumnDefinition[]
   dataset: (boolean | string | number | null)[][]
   count: number
@@ -28,6 +33,7 @@ export const executeSingleRaw = async (
   globals: DeclareEntry[] | undefined,
   signal?: AbortSignal,
   limit: number = RESULT_DISPLAY_LIMIT,
+  options: { background?: boolean } = {},
 ): Promise<QueryExecResult> => {
   let cleanup: (() => void) | undefined
   try {
@@ -45,18 +51,24 @@ export const executeSingleRaw = async (
     const { promise, queryId } = quest.queryRaw(expanded, {
       limit: `0,${limit}`,
       cancellable: true,
+      ...(options.background ? { background: true } : {}),
     })
     if (signal) {
       const onAbort = () => quest.abort(queryId)
       signal.addEventListener("abort", onAbort, { once: true })
       cleanup = () => signal.removeEventListener("abort", onAbort)
     }
-    const result = await promise
+    // Normalize adapters/test doubles that resolve errors to the client's
+    // usual rejection contract, so one catch formats every failure.
+    const result = await promise.then((result) =>
+      result.type === QuestDB.Type.ERROR ? Promise.reject(result) : result,
+    )
 
     if (result.type === QuestDB.Type.DQL) {
       return {
         type: "dql",
         query: sql,
+        effectiveQuery: expanded,
         columns: result.columns,
         dataset: result.dataset,
         count: result.count,
@@ -69,23 +81,13 @@ export const executeSingleRaw = async (
       return {
         type: "dql",
         query: sql,
+        effectiveQuery: expanded,
         columns: result.columns ?? [],
         dataset: result.dataset ?? [],
         count: result.count ?? 0,
         timestamp: result.timestamp,
         timings: result.timings,
         notice: result.notice,
-      }
-    }
-
-    if (result.type === QuestDB.Type.ERROR) {
-      return {
-        type: "error",
-        query: sql,
-        columns: [],
-        dataset: [],
-        count: 0,
-        error: result.error,
       }
     }
 
@@ -106,6 +108,7 @@ export const executeSingleRaw = async (
       count: 0,
       error:
         (err?.error as string) ?? (err?.message as string) ?? "Unknown error",
+      ...sessionFailureOf(e),
     }
   } finally {
     cleanup?.()

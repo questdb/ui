@@ -107,30 +107,65 @@ describe("ranEventStatus", () => {
   const prior = { results: [{ type: "dql" }] }
 
   it("reports cancelled when a fresh result ends cancelled (user Stop mid-run)", () => {
-    // Multi-statement: stmt 0 committed, user cancelled stmt 1. runScript's
-    // boolean is true (failedCount===0), but the truthful status is cancelled.
+    // Given a multi-statement run where stmt 0 committed and the user cancelled stmt 1,
+    // while runScript's boolean is true (failedCount===0)
     const fresh = { results: [{ type: "dml" }, { type: "cancelled" }] }
-    expect(createRunStatus(prior, fresh, true)).toBe("cancelled")
+
+    // When the ran event status is derived
+    const status = createRunStatus(prior, fresh, { ok: true })
+
+    // Then the truthful status is cancelled
+    expect(status).toBe("cancelled")
   })
 
   it("reports cancelled for a single cancelled statement even when ok=false", () => {
+    // Given a fresh result with one cancelled statement and a false boolean
     const fresh = { results: [{ type: "cancelled" }] }
-    expect(createRunStatus(prior, fresh, false)).toBe("cancelled")
+
+    // When the ran event status is derived
+    const status = createRunStatus(prior, fresh, { ok: false })
+
+    // Then the result wins over the boolean
+    expect(status).toBe("cancelled")
   })
 
   it("reports success/error from the fresh result, ignoring the boolean", () => {
-    expect(createRunStatus(prior, { results: [{ type: "dml" }] }, false)).toBe(
-      "success",
-    )
-    expect(createRunStatus(prior, { results: [{ type: "error" }] }, true)).toBe(
-      "error",
-    )
+    // Given a committed result paired with ok=false and an error result paired with ok=true
+    const committed = { results: [{ type: "dml" }] }
+    const failed = { results: [{ type: "error" }] }
+
+    // When the ran event status is derived for each
+    const committedStatus = createRunStatus(prior, committed, { ok: false })
+    const failedStatus = createRunStatus(prior, failed, { ok: true })
+
+    // Then the fresh result decides, not the boolean
+    expect(committedStatus).toBe("success")
+    expect(failedStatus).toBe("error")
   })
 
   it("falls back to the boolean for a no-op run (result unchanged)", () => {
-    // Empty cell run: runCell returns false without producing a new result.
-    expect(createRunStatus(prior, prior, false)).toBe("error")
-    expect(createRunStatus(null, null, true)).toBe("success")
+    // Given an empty cell run where runCell produced no new result
+    const unchanged = createRunStatus(prior, prior, { ok: false })
+    const absent = createRunStatus(null, null, { ok: true })
+
+    // Then the boolean decides the status
+    expect(unchanged).toBe("error")
+    expect(absent).toBe("success")
+  })
+
+  it("reports cancelled for a run stopped before any statement launched", () => {
+    // Given a run that Stop aborted during validation, so no result was written
+    const stoppedBeforeStart = {
+      ok: false,
+      notStarted: true,
+      cancelled: "cancelled",
+    }
+
+    // When the ran event status is derived from the unchanged result
+    const status = createRunStatus(prior, prior, stoppedBeforeStart)
+
+    // Then the run is cancelled, not an error
+    expect(status).toBe("cancelled")
   })
 })
 

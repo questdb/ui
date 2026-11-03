@@ -3,14 +3,16 @@ import { Check } from "@phosphor-icons/react"
 import styled from "styled-components"
 import { statusInfoFocus } from "../../theme"
 
-type Props = React.InputHTMLAttributes<HTMLInputElement>
+type Props = React.InputHTMLAttributes<HTMLInputElement> & {
+  compact?: boolean
+}
 
-const Indicator = styled.span`
+const Indicator = styled.span<{ $compact: boolean }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 100%;
+  height: 100%;
   box-sizing: border-box;
   border: 1px solid ${({ theme }) => theme.color.borderStrong};
   border-radius: 0.4rem;
@@ -22,8 +24,8 @@ const Indicator = styled.span`
     box-shadow 120ms ease;
 
   svg {
-    width: 1.3rem;
-    height: 1.3rem;
+    width: ${({ $compact }) => ($compact ? "1rem" : "1.3rem")};
+    height: ${({ $compact }) => ($compact ? "1rem" : "1.3rem")};
     opacity: 0;
     transform: scale(0.72);
     transition:
@@ -75,22 +77,22 @@ const NativeCheckbox = styled.input`
   }
 `
 
-const Root = styled.span`
+const Root = styled.span<{ $compact: boolean }>`
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
-  width: 1.8rem;
-  height: 1.8rem;
+  width: ${({ $compact }) => ($compact ? "1.4rem" : "1.8rem")};
+  height: ${({ $compact }) => ($compact ? "1.4rem" : "1.8rem")};
   vertical-align: middle;
 `
 
 export const Checkbox: React.FunctionComponent<Props> = forwardRef<
   HTMLInputElement,
   Props
->((props, ref) => (
-  <Root>
+>(({ compact = false, ...props }, ref) => (
+  <Root $compact={compact}>
     <NativeCheckbox ref={ref} type="checkbox" {...props} />
-    <Indicator aria-hidden="true">
+    <Indicator aria-hidden="true" $compact={compact}>
       <Check weight="bold" />
     </Indicator>
   </Root>

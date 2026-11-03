@@ -10,8 +10,10 @@ export const editorStageSurfaceStyles = css`
   background-size: 16px 16px;
 `
 
+export const EDITOR_CARD_HEADER_HEIGHT = "4.2rem"
+
 export const editorCardHeaderStyles = css`
-  height: 4.2rem;
+  height: ${EDITOR_CARD_HEADER_HEIGHT};
   flex-shrink: 0;
   display: flex;
   align-items: center;

@@ -22,3 +22,12 @@ export const FieldLabel = styled.span`
   font-size: 1.1rem;
   color: ${({ theme }) => theme.color.contentSecondary};
 `
+
+export const CheckboxRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  cursor: pointer;
+`

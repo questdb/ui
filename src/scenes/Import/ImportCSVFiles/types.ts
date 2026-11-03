@@ -21,6 +21,13 @@ export type ProcessedFile = {
   exists: boolean
 }
 
+// Statuses of a table name that the server has not answered for. Unlike
+// FileCheckStatus, they never come from the server.
+export enum TableNameCheck {
+  PENDING = "Checking",
+  FAILED = "Check failed",
+}
+
 export enum BadgeType {
   SUCCESS = "success",
   INFO = "info",

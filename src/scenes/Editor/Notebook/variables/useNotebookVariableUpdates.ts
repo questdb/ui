@@ -56,9 +56,10 @@ type Args = {
   setSettingsState: Dispatch<SetStateAction<NotebookSettings>>
   getVariableErrors: () => VariableErrors
   applyVariableChanges: ReturnType<typeof useVariableOptions>["apply"]
+  // Settles once the document is durable; rejects with a typed persist failure.
   applyTransition: <T>(
     transition: (parts: ViewParts) => NotebookTransitionResult<T>,
-  ) => T
+  ) => Promise<T>
 }
 
 type ApplySettingsOptions = {
@@ -236,18 +237,21 @@ export const useNotebookVariableUpdates = ({
             "The notebook changed during validation. Read its current state and retry.",
           )
       }
-      const out = transition(readParts())
-      if (!out.variables) return applyTransition(() => out)
-      const diff = out.variables
+      // The preview only tells which variables change. The transition runs
+      // again right before the commit, so the cells it publishes are current.
+      const preview = transition(readParts())
+      if (!preview.variables) return applyTransition(() => preview)
+      const diff = preview.variables
       const controller = new AbortController()
       const operationSignal = signal ?? controller.signal
       let preparedGlobal: PreparedVariables
-      await applyVariableChanges(out.parts.settings, {
+      let committed = preview
+      await applyVariableChanges(preview.parts.settings, {
         signal: operationSignal,
         prepare: async (_settings, signal) => {
           requireUnchanged()
           const result =
-            out.preparedVariables ??
+            preview.preparedVariables ??
             (await prepareNotebookVariables(
               {
                 quest,
@@ -264,7 +268,7 @@ export const useNotebookVariableUpdates = ({
                 ),
               },
               bufferId,
-              out.parts.settings,
+              preview.parts.settings,
               globals.getVariables(),
             ))
           preparedGlobal = result.global
@@ -272,11 +276,20 @@ export const useNotebookVariableUpdates = ({
         },
         saveSettings: async () => {
           requireUnchanged()
+          committed = transition(readParts())
+          // Published in the same tick as the read, so a result landing
+          // during the write is not overwritten. The exact save this queues
+          // also drops any pending debounced write of older cells; the
+          // commit below reports a failed write.
+          void applyTransition(() => ({
+            ...committed,
+            variables: undefined,
+          })).catch(() => undefined)
           await commitPreparedVariables(
             GLOBAL_OPTIONS_OWNER,
             preparedGlobal,
             async () => {
-              const result = await commitView(bufferId, out.parts)
+              const result = await commitView(bufferId, committed.parts)
               if (result !== "committed")
                 throw new Error("Notebook is no longer available.")
             },
@@ -284,11 +297,6 @@ export const useNotebookVariableUpdates = ({
           )
         },
         onCommit: () => {
-          applyTransition(() => ({
-            ...out,
-            variables: undefined,
-            persisted: true,
-          }))
           globals.adoptVariables(
             globals.getVariables(),
             preparedGlobal,
@@ -296,7 +304,7 @@ export const useNotebookVariableUpdates = ({
           )
         },
       })
-      return out.result
+      return committed.result
     },
     [applyTransition, applyVariableChanges, bufferId, globals, quest, cellsRef],
   )

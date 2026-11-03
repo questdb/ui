@@ -1,11 +1,9 @@
 import "../../../../test/stubBrowserGlobals"
+import { queryKeyFor } from "../queryKey"
 import { describe, expect, it } from "vitest"
 import type { DqlQueryResult } from "../../../../store/notebook"
 import { columnId } from "../../../../components/ResultGrid/inlineGridUtils"
-import {
-  columnLayoutQueryKey,
-  saveNotebookColumnLayout,
-} from "../notebookColumnLayoutStore"
+import { saveNotebookColumnLayout } from "../notebookColumnLayoutStore"
 import { displayColumnsFor } from "./GridShimmer"
 
 const BUFFER_ID = 7
@@ -28,12 +26,7 @@ const saveLayout = (
   active: DqlQueryResult,
   layout: Parameters<typeof saveNotebookColumnLayout>[3],
 ) =>
-  saveNotebookColumnLayout(
-    BUFFER_ID,
-    cellId,
-    columnLayoutQueryKey(active.query),
-    layout,
-  )
+  saveNotebookColumnLayout(BUFFER_ID, cellId, queryKeyFor(active.query), layout)
 
 describe("displayColumnsFor", () => {
   it("keeps natural order, alignment, and sampled widths without a layout", () => {

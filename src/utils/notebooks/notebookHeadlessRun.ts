@@ -1,5 +1,10 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import {
+  authSessionState,
+  type AuthSession,
+} from "../../modules/OAuth2/authSessionState"
+import { SESSION_ENDED_MESSAGE } from "../../modules/OAuth2/session"
 import type {
   CellResult,
   DeclareEntry,
@@ -25,19 +30,27 @@ import {
   buildInitialScriptResults,
   CELL_CHANGED_BEFORE_RUN_NOTE,
   CELL_CHANGED_MID_RUN_NOTE,
-  CELL_DELETED_MID_RUN_NOTE,
+  errorResult,
   MOUNTED_MID_RUN_NOTE,
-  NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
-  NOTEBOOK_DELETED_MID_RUN_NOTE,
   NOTEBOOK_ROW_CAP,
-  patchCellRunResult,
   RESULT_NOT_SAVED_RUN_NOTE,
   singleResultFromExec,
   STORAGE_FULL_RUN_NOTE,
   summarizeCellResults,
-  SUPERSEDED_RUN_NOTE,
   USER_CHANGED_MID_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
+import { patchCellRunResult } from "../../scenes/Editor/Notebook/cellSizing"
+import {
+  cancelledBeforeLaunchSummary,
+  midRunCancellationNote,
+  runCancellationOf,
+  type RunCancellation,
+  type RunCancelReason,
+  cancelledResult,
+  CELL_DELETED_MID_RUN_NOTE,
+  NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
+  NOTEBOOK_DELETED_MID_RUN_NOTE,
+} from "../../scenes/Editor/Notebook/runCancellation"
 import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
 import { pruneToRecentNotebooks } from "../../store/notebookResults"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
@@ -82,56 +95,182 @@ type RunCommitOutcome =
         | "cell_gone"
         | "cell_changed"
         | "user_changed"
-        | "superseded"
         | "storage_full"
+        | RunCancellation
     }
 
-type ActiveHeadlessRun = {
+type HeadlessClaim = {
   controller: AbortController
+  generation: number
+  launched: boolean
+  // Set at launch: classification found no write among the run's statements.
+  readOnly: boolean
 }
 
-type HeadlessRunHandle = {
+type HeadlessCellClaims = {
+  claims: Set<HeadlessClaim>
+  nextGeneration: number
+  latestLaunchedGeneration: number
+}
+
+type HeadlessRunClaim = {
   signal: AbortSignal
+  launch: (readOnly: boolean) => boolean
   isCurrent: () => boolean
-  finish: () => void
+  release: () => void
 }
 
-// Mirrors the live path's beginCellRun (useCellExecution): a newer headless run
-// of the same cell aborts the older run as well as superseding its result
-const activeHeadlessRuns = new Map<number, Map<string, ActiveHeadlessRun>>()
+// One claim covers a headless run's whole phase, validation through commit.
+// Cancellation reaches it through the signal, whose reason names the cause
+// (a transition, an archive, a supersession). Generations are assigned when
+// validation begins, but a claim becomes authoritative only when it launches:
+// a newer invocation that is denied or skipped must not cancel an in-flight
+// statement. Launching stops honouring the external signal so a statement
+// already in flight records its real outcome.
+const headlessClaims = new Map<number, Map<string, HeadlessCellClaims>>()
 
-const beginHeadlessRun = (
+const claimHeadlessRun = (
   bufferId: number,
   cellId: string,
-): HeadlessRunHandle => {
+  session: AuthSession,
+  externalSignal?: AbortSignal,
+): HeadlessRunClaim => {
   const perBuffer =
-    activeHeadlessRuns.get(bufferId) ?? new Map<string, ActiveHeadlessRun>()
-  perBuffer.get(cellId)?.controller.abort()
-  const activeRun: ActiveHeadlessRun = {
-    controller: new AbortController(),
+    headlessClaims.get(bufferId) ?? new Map<string, HeadlessCellClaims>()
+  const state = perBuffer.get(cellId) ?? {
+    claims: new Set<HeadlessClaim>(),
+    nextGeneration: 0,
+    latestLaunchedGeneration: 0,
   }
-  perBuffer.set(cellId, activeRun)
-  activeHeadlessRuns.set(bufferId, perBuffer)
+  const generation = state.nextGeneration + 1
+  const claim: HeadlessClaim = {
+    controller: new AbortController(),
+    generation,
+    launched: false,
+    readOnly: false,
+  }
+  state.nextGeneration = generation
+  state.claims.add(claim)
+  perBuffer.set(cellId, state)
+  headlessClaims.set(bufferId, perBuffer)
+  // Ending the session cancels the claims that have not launched, but not one
+  // taken after the session of its run had already ended.
+  if (!session.isCurrent()) claim.controller.abort()
+
+  const abortFromExternal = () => claim.controller.abort(externalSignal?.reason)
+  if (externalSignal?.aborted) abortFromExternal()
+  else
+    externalSignal?.addEventListener("abort", abortFromExternal, { once: true })
+  const stopExternal = () =>
+    externalSignal?.removeEventListener("abort", abortFromExternal)
+
   return {
-    signal: activeRun.controller.signal,
+    signal: claim.controller.signal,
+    launch: (readOnly) => {
+      stopExternal()
+      if (
+        claim.controller.signal.aborted ||
+        claim.generation < state.latestLaunchedGeneration
+      ) {
+        if (!claim.controller.signal.aborted) {
+          claim.controller.abort("superseded" satisfies RunCancelReason)
+        }
+        return false
+      }
+
+      state.latestLaunchedGeneration = claim.generation
+      claim.launched = true
+      claim.readOnly = readOnly
+      for (const older of state.claims) {
+        if (older.generation < claim.generation) {
+          older.controller.abort("superseded" satisfies RunCancelReason)
+        }
+      }
+      return true
+    },
     isCurrent: () =>
-      activeHeadlessRuns.get(bufferId)?.get(cellId) === activeRun,
-    finish: () => {
-      const currentPerBuffer = activeHeadlessRuns.get(bufferId)
-      if (currentPerBuffer?.get(cellId) !== activeRun) return
-      currentPerBuffer.delete(cellId)
-      if (currentPerBuffer.size === 0) activeHeadlessRuns.delete(bufferId)
+      !claim.controller.signal.aborted &&
+      claim.generation === state.latestLaunchedGeneration,
+    release: () => {
+      stopExternal()
+      state.claims.delete(claim)
+      if (state.claims.size === 0 && perBuffer.get(cellId) === state) {
+        perBuffer.delete(cellId)
+      }
+      if (perBuffer.size === 0 && headlessClaims.get(bufferId) === perBuffer) {
+        headlessClaims.delete(bufferId)
+      }
     },
   }
 }
 
-export const forgetHeadlessRuns = (bufferId: number): void => {
-  const perBuffer = activeHeadlessRuns.get(bufferId)
-  if (perBuffer) {
-    for (const run of perBuffer.values()) run.controller.abort()
+export const cancelHeadlessBufferRuns = (
+  bufferId: number,
+  reason: Extract<RunCancelReason, "notebook_archived" | "notebook_deleted">,
+): void => {
+  const perBuffer = headlessClaims.get(bufferId)
+  if (!perBuffer) return
+  for (const state of perBuffer.values()) {
+    for (const claim of state.claims) claim.controller.abort(reason)
   }
-  activeHeadlessRuns.delete(bufferId)
+  headlessClaims.delete(bufferId)
 }
+
+export const cancelHeadlessCellRuns = (
+  bufferId: number,
+  cellIds: readonly string[],
+  reason: RunCancelReason,
+): void => {
+  const perBuffer = headlessClaims.get(bufferId)
+  if (!perBuffer) return
+  for (const cellId of cellIds) {
+    const state = perBuffer.get(cellId)
+    if (!state) continue
+    for (const claim of state.claims) claim.controller.abort(reason)
+  }
+}
+
+// Ending the session aborts every request. A run that has not launched is
+// cancelled before it executes anything. So is a read-only run: its reads in
+// flight could only come back as interrupted, and the rest as not executed,
+// which would replace the previous run on record and its rows. A launched
+// run that writes still records its outcome: the statements that completed
+// did run, and dropping them would leave the previous run on record, so that
+// an agent could repeat writes that already committed. The statement in
+// flight records that the session ended around it, which leaves its outcome
+// unverified, and the rest are not sent.
+authSessionState.beforeEnd(() => {
+  for (const perBuffer of headlessClaims.values()) {
+    for (const state of perBuffer.values()) {
+      for (const claim of state.claims) {
+        if (!claim.launched || claim.readOnly) claim.controller.abort()
+      }
+    }
+  }
+})
+
+// A run's statements belong to the login that started it. Once its session
+// has ended, a statement is not sent, as it would run without that login's
+// credentials, and is recorded as not executed.
+const executeInSession = (
+  session: AuthSession,
+  quest: Client,
+  query: string,
+  variables: DeclareEntry[] | undefined,
+  signal: AbortSignal,
+): Promise<QueryExecResult> =>
+  session.isCurrent()
+    ? executeSingleRaw(quest, query, variables, signal, NOTEBOOK_ROW_CAP)
+    : Promise.resolve({
+        type: "error",
+        query,
+        columns: [],
+        dataset: [],
+        count: 0,
+        error: SESSION_ENDED_MESSAGE,
+        sessionEnded: true,
+        requestNotSent: true,
+      })
 
 const emptySummary = (): RunCellSummary => ({
   success: false,
@@ -144,10 +283,19 @@ const executeCellQueries = async (args: {
   queryText: string
   variables: DeclareEntry[] | undefined
   quest: Client
+  session: AuthSession
   signal?: AbortSignal
   supersedeSignal: AbortSignal
 }): Promise<CellResult> => {
-  const { queries, queryText, variables, quest, signal, supersedeSignal } = args
+  const {
+    queries,
+    queryText,
+    variables,
+    quest,
+    session,
+    signal,
+    supersedeSignal,
+  } = args
   const runAbort = new AbortController()
   let aborted = false
   const onAbort = () => {
@@ -177,20 +325,16 @@ const executeCellQueries = async (args: {
       // cancelled would push the agent into re-running a committed write.
       if (aborted) {
         for (let j = i; j < queries.length; j++) {
-          results[j] = {
-            type: "cancelled",
-            query: queries[j],
-            reason: "user",
-          }
+          results[j] = cancelledResult(queries[j], "user")
         }
         break
       }
-      const exec = await executeSingleRaw(
+      const exec = await executeInSession(
+        session,
         quest,
         queries[i],
         variables,
         runAbort.signal,
-        NOTEBOOK_ROW_CAP,
       )
       if (exec.type === "ddl" || exec.type === "dml") {
         eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -199,11 +343,7 @@ const executeCellQueries = async (args: {
       if (exec.type === "error") {
         failedCount++
         for (let j = i + 1; j < queries.length; j++) {
-          results[j] = {
-            type: "cancelled",
-            query: queries[j],
-            reason: "priorFailure",
-          }
+          results[j] = cancelledResult(queries[j], "priorFailure")
         }
         break
       }
@@ -239,11 +379,19 @@ const executeCellQueriesParallel = async (args: {
   classified: ClassifiedStatement[]
   variables: DeclareEntry[] | undefined
   quest: Client
+  session: AuthSession
   signal?: AbortSignal
   supersedeSignal: AbortSignal
 }): Promise<CellResult> => {
-  const { queries, classified, variables, quest, signal, supersedeSignal } =
-    args
+  const {
+    queries,
+    classified,
+    variables,
+    quest,
+    session,
+    signal,
+    supersedeSignal,
+  } = args
   const runAbort = new AbortController()
   let aborted = false
   const onAbort = () => {
@@ -267,32 +415,28 @@ const executeCellQueriesParallel = async (args: {
         const stmt = classified[index]
         if (stmt?.klass === "ERROR") {
           failedCount++
-          results[index] = {
-            type: "error",
-            query,
-            error: stmt.error ?? "Invalid statement",
-          }
+          results[index] = errorResult(query, stmt.error ?? "Invalid statement")
           return
         }
         if (aborted) {
-          results[index] = { type: "cancelled", query, reason: "user" }
+          results[index] = cancelledResult(query, "user")
           return
         }
         let exec: QueryExecResult
         try {
           exec = await statementRequestLimiter(
             () =>
-              executeSingleRaw(
+              executeInSession(
+                session,
                 quest,
                 query,
                 variables,
                 runAbort.signal,
-                NOTEBOOK_ROW_CAP,
               ),
             runAbort.signal,
           )
         } catch {
-          results[index] = { type: "cancelled", query, reason: "user" }
+          results[index] = cancelledResult(query, "user")
           return
         }
         results[index] = singleResultFromExec(exec, query)
@@ -329,6 +473,7 @@ export const runHeadlessCell = async (
   sql?: string,
   gate?: RunCellGate,
 ): Promise<RunCellSummary> => {
+  const session = authSessionState.capture()
   const prep = await enqueueBufferTask(bufferId, async () => {
     const view = await readNotebookView(bufferId)
     return {
@@ -360,60 +505,85 @@ export const runHeadlessCell = async (
     )
   }
 
-  // Failed lists are not surfaced here on purpose: a cell may DECLARE the name
-  // itself, so QuestDB decides (undeclared-variable error vs. shadowed list).
-  const { entries } = await resolveHeadlessDeclareEntries({
-    bufferId,
-    quest,
-    settings: prep.settings,
-    globals: prep.globals,
-    signal: signal ?? new AbortController().signal,
-  })
-  const variables = withCellTime(entries, prep.settings.timeRange, prep.cell)
-  if (signal?.aborted) return emptySummary()
-
   // The runner's barrier classification is the single decision for permission
   // enforcement, auto-run eligibility, and strategy — dispatch never
-  // classifies separately (live-path parity).
-  const validate = createValidateWithGlobals(quest, () => variables)
-  const barrier = await resolveRunBarrier(
-    queryText,
-    queries.length,
-    gate,
-    (stmt) => statementRequestLimiter(() => validate(stmt, signal), signal),
-  )
-  if (signal?.aborted) return emptySummary()
-  if (barrier.action === "denied") {
-    return { ...emptySummary(), denied: barrier.reason }
-  }
-  if (barrier.action === "skipped") {
-    return { ...emptySummary(), skipped: barrier.reason }
-  }
-  const classified = barrier.classified
-
-  const run = beginHeadlessRun(bufferId, cellId)
-
+  // classifies separately (live-path parity). The claim opens the run's
+  // phase here, so a concurrent transition can stop it before it launches.
+  const claim = claimHeadlessRun(bufferId, cellId, session, signal)
   try {
+    // Resolved under the claim, so a transition that lands while list values
+    // load still cancels the run. Failed lists are not surfaced here on
+    // purpose: a cell may DECLARE the name itself, so QuestDB decides
+    // (undeclared-variable error vs. shadowed list).
+    let variables: DeclareEntry[]
+    try {
+      const { entries } = await resolveHeadlessDeclareEntries({
+        bufferId,
+        quest,
+        settings: prep.settings,
+        globals: prep.globals,
+        signal: claim.signal,
+      })
+      variables = withCellTime(entries, prep.settings.timeRange, prep.cell)
+    } catch (error) {
+      if (claim.signal.aborted) {
+        return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
+      }
+      throw error
+    }
+    if (claim.signal.aborted) {
+      return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
+    }
+    const validate = createValidateWithGlobals(quest, () => variables)
+    const barrier = await resolveRunBarrier(
+      queryText,
+      queries.length,
+      gate,
+      (stmt) =>
+        statementRequestLimiter(
+          () => validate(stmt, claim.signal),
+          claim.signal,
+        ),
+    )
+    if (claim.signal.aborted) {
+      return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
+    }
+    if (barrier.action === "denied") {
+      return { ...emptySummary(), denied: barrier.reason }
+    }
+    if (barrier.action === "skipped") {
+      return { ...emptySummary(), skipped: barrier.reason }
+    }
+    const classified = barrier.classified
+    // Without a classification, the run may write.
+    const readOnlyStatements =
+      classified && !hasWriteStatement(classified) ? classified : null
+
+    if (!claim.launch(readOnlyStatements !== null)) {
+      return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
+    }
     // The queue is NOT held during execution, so runs on other cells of the
     // same notebook proceed in parallel; the commit re-reads and patches only
     // this cell.
     const ranResult =
-      classified && !hasWriteStatement(classified)
+      readOnlyStatements !== null
         ? await executeCellQueriesParallel({
             queries,
-            classified,
+            classified: readOnlyStatements,
             variables,
             quest,
+            session,
             signal,
-            supersedeSignal: run.signal,
+            supersedeSignal: claim.signal,
           })
         : await executeCellQueries({
             queries,
             queryText,
             variables,
             quest,
+            session,
             signal,
-            supersedeSignal: run.signal,
+            supersedeSignal: claim.signal,
           })
 
     const outcome = await enqueueBufferTask(
@@ -440,8 +610,8 @@ export const runHeadlessCell = async (
         if (getMountEpoch(bufferId) !== prep.mountEpochAtPrep) {
           return { committed: false, reason: "mounted" }
         }
-        if (!run.isCurrent()) {
-          return { committed: false, reason: "superseded" }
+        if (!claim.isCurrent()) {
+          return { committed: false, reason: runCancellationOf(claim.signal) }
         }
         // The user visited the notebook and edited or ran something while
         // this run was executing — their newer state wins over a stale result.
@@ -496,8 +666,6 @@ export const runHeadlessCell = async (
         return { ...summary, unverified: true, note: MOUNTED_MID_RUN_NOTE }
       case "user_changed":
         return { ...summary, unverified: true, note: USER_CHANGED_MID_RUN_NOTE }
-      case "superseded":
-        return { ...summary, unverified: true, note: SUPERSEDED_RUN_NOTE }
       case "cell_changed":
         return { ...summary, unverified: true, note: CELL_CHANGED_MID_RUN_NOTE }
       case "storage_full":
@@ -516,15 +684,22 @@ export const runHeadlessCell = async (
           unverified: true,
           note: NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
         }
+      default:
+        return {
+          ...summary,
+          unverified: true,
+          cancelled: outcome.reason,
+          note: midRunCancellationNote(outcome.reason),
+        }
     }
   } finally {
-    run.finish()
+    claim.release()
   }
 }
 
 export const __resetNotebookHeadlessRunsForTests = (): void => {
-  for (const bufferId of activeHeadlessRuns.keys()) {
-    forgetHeadlessRuns(bufferId)
+  for (const bufferId of [...headlessClaims.keys()]) {
+    cancelHeadlessBufferRuns(bufferId, "notebook_deleted")
   }
   __resetBufferOwnershipForTests()
 }

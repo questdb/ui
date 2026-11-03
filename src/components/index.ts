@@ -52,6 +52,7 @@ export * from "./Loader"
 export * from "./Markdown"
 export * from "./LoadingSpinner"
 export * from "./MultiSelect"
+export * from "./ColorPalette"
 export * from "./MultiStepModal"
 export * from "./Overlay"
 export * from "./PaneContent"
@@ -61,12 +62,19 @@ export * from "./PopperHover"
 export * from "./PopperToggle"
 export * from "./Popover"
 export * from "./SelectMenu"
-export * from "./SegmentedControl"
+export {
+  SegmentedControl,
+  SegmentedControlButton,
+  type SegmentedControlActiveTone,
+  type SegmentedControlSize,
+  type SegmentedControlTone,
+} from "./SegmentedControl"
 export * from "./SelectableCardButton"
 export * from "./SetupAIAssistant"
 export * from "./Spinner"
 export * from "./Switch"
 export * from "./Table"
+export * from "./SearchableSelect"
 export * from "./TableSelector"
 export * from "./TabButton"
 export * from "./Text"

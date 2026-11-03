@@ -77,6 +77,7 @@ const AddFilesRow = styled.div`
 
 type Props = {
   files: ProcessedFile[]
+  unlistedNames: () => string[]
   onDialogToggle: (open: boolean) => void
   onFileRemove: (id: string) => void
   onFileUpload: (id: string) => void
@@ -89,6 +90,7 @@ type Props = {
 
 export const FilesToUpload = ({
   files,
+  unlistedNames,
   onDialogToggle,
   onFileRemove,
   onFilePropertyChange,
@@ -232,7 +234,6 @@ export const FilesToUpload = ({
           ariaLabel="Table owner"
           dataHook="import-table-owner-select"
           value={data.table_owner || ownedByList[0] || ""}
-          modal={false}
           onValueChange={(value) =>
             onFilePropertyChange(data.id, {
               table_owner: value,
@@ -330,7 +331,6 @@ export const FilesToUpload = ({
             ariaLabel="Write mode"
             value={writeMode}
             dataHook="import-write-mode-trigger"
-            modal={false}
             onValueChange={(value) => {
               const overwrite = value === "overwrite"
 
@@ -383,6 +383,7 @@ export const FilesToUpload = ({
   return (
     <DropBox
       files={files}
+      unlistedNames={unlistedNames}
       onFilesDropped={onFilesDropped}
       dialogOpen={dialogOpen}
       render={({ duplicates, addToQueue }) => (

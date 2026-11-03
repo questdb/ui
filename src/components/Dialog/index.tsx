@@ -1,7 +1,9 @@
+import React from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
 import { Button } from "../Button"
 import { modalSurfaceStyles } from "../overlayStyles"
+import { ModalLayer } from "../ModalLayer"
 
 const dialogShow = css`
   @keyframes dialogShow {
@@ -25,8 +27,17 @@ const dialogHide = css`
   }
 `
 
+const Root = ({
+  modal = true,
+  ...props
+}: React.ComponentProps<typeof RadixDialog.Root>) => (
+  <ModalLayer modal={modal}>
+    <RadixDialog.Root modal={modal} {...props} />
+  </ModalLayer>
+)
+
 export const Dialog = {
-  Root: RadixDialog.Root,
+  Root,
   Overlay: RadixDialog.Overlay,
   Trigger: RadixDialog.Trigger,
   Portal: RadixDialog.Portal,
