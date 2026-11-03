@@ -878,7 +878,7 @@ describe("ai provider setup flows", () => {
       })
 
       // When
-      cy.typeQuery("SELECT 1;")
+      cy.typeQueryDirectly("SELECT 1;")
 
       // Then
       cy.getAIIconInLine(1).should("be.visible")

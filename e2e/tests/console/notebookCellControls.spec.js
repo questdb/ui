@@ -3,13 +3,15 @@
 // Cell controls that only a real browser exercises: the keyboard pane resize
 // and the Stop control of a first run or first chart fetch.
 
+const { createNotebookBuffer } = require("../../utils/editorBuffers")
+
 const HELD_QUERY = /\/exec\?.*long_sequence/
 const CHART_SQL =
   "select timestamp_sequence(0, 1000000) ts, x from long_sequence(50)"
 
-const setCellSql = (sql) => {
+const loadNotebookCell = (sql) => {
+  cy.loadConsoleWithAuth(false, {}, { buffers: [createNotebookBuffer(sql)] })
   cy.focusNotebookCell()
-  cy.withFocusedEditor((editor) => editor.setValue(sql))
 }
 
 const runFocusedCell = () =>
@@ -96,15 +98,10 @@ const clickStop = (label) => {
 }
 
 describe("notebook cell controls", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.createNotebook()
-  })
-
   describe("keyboard resize", () => {
     it("stores the height on key release and keeps it across a reload", () => {
       // Given a cell whose result splits it into an editor and a result pane
-      setCellSql("select 1")
+      loadNotebookCell("select 1")
       runFocusedCell()
       editorSeparator().should("have.attr", "aria-valuenow")
       let before
@@ -135,8 +132,8 @@ describe("notebook cell controls", () => {
   describe("Stop", () => {
     it("cancels a first run and reports it in the result", () => {
       // Given a cell whose first run the server has not answered yet
+      loadNotebookCell("select x from long_sequence(100)")
       const held = holdFirstExec()
-      setCellSql("select x from long_sequence(100)")
       runFocusedCell()
       awaitHeld(held)
 
@@ -153,8 +150,8 @@ describe("notebook cell controls", () => {
 
     it("cancels a first chart fetch and retries it", () => {
       // Given a draw cell whose first fetch the server has not answered yet
+      loadNotebookCell(CHART_SQL)
       const held = holdFirstExec()
-      setCellSql(CHART_SQL)
       cy.get("[data-notebook-cell] button[aria-label='Draw']").click()
       awaitHeld(held)
 

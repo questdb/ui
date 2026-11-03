@@ -60,8 +60,7 @@ for (const oidcEnabled of [false, true]) {
             req.reply({ statusCode: 401, body: "Unauthorized" })
           },
         ).as("unauthorized")
-        cy.clearEditor()
-        cy.typeQuery("select current_user()")
+        cy.typeQueryDirectly("select current_user()")
         cy.runLine()
         cy.wait("@unauthorized")
         cy.getByDataHook("auth-login").should("be.visible")

@@ -208,8 +208,7 @@ describe("OIDC", () => {
         },
         { statusCode: 401, body: "Unauthorized" },
       ).as("rejectedBearerQuery")
-      cy.clearEditor()
-      cy.typeQuery("select current_user()")
+      cy.typeQueryDirectly("select current_user()")
       cy.runLine()
       cy.wait("@rejectedBearerQuery")
       cy.contains("the request was not executed").should("be.visible")
@@ -435,8 +434,7 @@ describe("OIDC", () => {
         },
         { statusCode: 401, body: "Unauthorized" },
       ).as("rejectedBearerQuery")
-      cy.clearEditor()
-      cy.typeQuery("select current_user()")
+      cy.typeQueryDirectly("select current_user()")
       cy.runLine()
       cy.wait("@rejectedBearerQuery")
       cy.wait("@refreshRejected")

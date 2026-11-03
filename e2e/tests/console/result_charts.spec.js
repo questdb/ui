@@ -1,12 +1,11 @@
 /// <reference types="cypress" />
 
-describe("questdb charts", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-  })
+const loadChartConsole = (query) =>
+  cy.loadConsoleWithAuth(false, {}, { buffers: [{ value: query }] })
 
+describe("questdb charts", () => {
   it("should render the chart after a successful query invocation", () => {
-    cy.typeQueryDirectly(
+    loadChartConsole(
       "SELECT rnd_timestamp(to_timestamp('2024-07-19:00:00:00.000000', 'yyyy-MM-dd:HH:mm:ss.SSSUUU'), to_timestamp('2024-07-20:00:00:00.000000', 'yyyy-MM-dd:HH:mm:ss.SSSUUU'), 0), x FROM long_sequence(10);",
     )
     cy.clickRunIconInLine(1)
@@ -56,7 +55,7 @@ describe("questdb charts", () => {
   it("keeps reset zoom available after the viewport widens", () => {
     // Given a narrow viewport with a dense chart that shows the zoom slider
     cy.viewport(760, 900)
-    cy.typeQueryDirectly(
+    loadChartConsole(
       "SELECT rnd_timestamp(to_timestamp('2024-07-19:00:00:00.000000', 'yyyy-MM-dd:HH:mm:ss.SSSUUU'), to_timestamp('2024-07-20:00:00:00.000000', 'yyyy-MM-dd:HH:mm:ss.SSSUUU'), 0), x FROM long_sequence(500);",
     )
     cy.clickRunIconInLine(1)

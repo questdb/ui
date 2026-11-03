@@ -1,5 +1,8 @@
 /// <reference types="cypress" />
 
+const loadGridConsole = (query) =>
+  cy.loadConsoleWithAuth(false, {}, { buffers: [{ value: query }] })
+
 const rowHeight = 30
 
 const threeColumnQuery = "select x a, x b, x c from long_sequence(20)"
@@ -14,13 +17,9 @@ const readClipboard = () =>
     .then((clip) => clip.readText())
 
 describe("questdb grid", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-  })
-
   describe("rendering and pagination", () => {
     it("when results empty", () => {
-      cy.typeQuery("select x from long_sequence(0)")
+      loadGridConsole("select x from long_sequence(0)")
       cy.runLine()
       cy.getGridViewport().should("be.visible")
       // Scoped from the viewport so the zero-length assertion doesn't wait for
@@ -29,7 +28,7 @@ describe("questdb grid", () => {
     })
 
     it("when results have vertical scroll", () => {
-      cy.typeQuery(`select x from long_sequence(100)`)
+      loadGridConsole(`select x from long_sequence(100)`)
       cy.runLine()
       cy.wait(100)
 
@@ -45,7 +44,7 @@ describe("questdb grid", () => {
     it("multiple scrolls till the bottom", () => {
       const rows = 1000
       const rowsPerPage = 128
-      cy.typeQuery(`select x from long_sequence(${rows})`)
+      loadGridConsole(`select x from long_sequence(${rows})`)
       cy.runLine()
 
       for (let i = 0; i < rows; i += rowsPerPage) {
@@ -61,7 +60,7 @@ describe("questdb grid", () => {
 
     it("multiple scrolls till the bottom with error", () => {
       const rows = 1200
-      cy.typeQuery(`select simulate_crash('P') from long_sequence(${rows})`)
+      loadGridConsole(`select simulate_crash('P') from long_sequence(${rows})`)
       cy.runLine()
 
       cy.getGridViewport().scrollTo(0, 999 * rowHeight)
@@ -79,7 +78,7 @@ describe("questdb grid", () => {
 
     it("deep pages lazily load the correct value into the correct cell", () => {
       // Given a result several pages deep (the seed page holds 1000 rows)
-      cy.typeQuery("select x a, x * 10 b from long_sequence(5000)")
+      loadGridConsole("select x a, x * 10 b from long_sequence(5000)")
       cy.runLine()
       cy.wait(100)
 
@@ -99,7 +98,7 @@ describe("questdb grid", () => {
 
     it("loads two adjacent pages correctly across a page boundary", () => {
       // Given a multi-page result
-      cy.typeQuery("select x from long_sequence(5000)")
+      loadGridConsole("select x from long_sequence(5000)")
       cy.runLine()
       cy.wait(100)
 
@@ -114,6 +113,7 @@ describe("questdb grid", () => {
     })
 
     it("a slow page from a superseded query never lands in the new result", () => {
+      loadGridConsole("select x a from long_sequence(5000)")
       // Given every page fetch past the seed is stalled, so a deep-page request
       // can still be in flight when a new query supersedes it on the shared grid
       cy.intercept("/exec*", (req) => {
@@ -124,15 +124,13 @@ describe("questdb grid", () => {
       })
 
       // And query A is run, then scrolled deep enough to dispatch a stalled page
-      cy.typeQuery("select x a from long_sequence(5000)")
       cy.runLine()
       cy.wait(100)
       cy.getGridViewport().scrollTo(0, 2500 * rowHeight)
       cy.wait(300)
 
       // When query B supersedes A before A's page-2 response lands
-      cy.clearEditor()
-      cy.typeQuery("select x * 1000 a from long_sequence(5000)")
+      cy.typeQueryDirectly("select x * 1000 a from long_sequence(5000)")
       cy.runLine()
       cy.wait(100)
 
@@ -147,13 +145,12 @@ describe("questdb grid", () => {
 
     it("updates the header names when a new query reuses the same column widths", () => {
       // Given a result whose single column clamps to some width
-      cy.typeQuery("select x aa from long_sequence(20)")
+      loadGridConsole("select x aa from long_sequence(20)")
       cy.runLine()
       cy.getColumnName(0).should("eq", "aa")
 
       // When a new query returns a column of the same width but a different name
-      cy.clearEditor()
-      cy.typeQuery("select x bb from long_sequence(20)")
+      cy.typeQueryDirectly("select x bb from long_sequence(20)")
       cy.runLine()
 
       // Then the header reflects the new column, not the previous one
@@ -165,7 +162,7 @@ describe("questdb grid", () => {
   describe("keyboard navigation", () => {
     it("arrow keys move the active cell", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
 
       // When
@@ -179,7 +176,7 @@ describe("questdb grid", () => {
 
     it("Home and End jump to the row's first and last column", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       cy.selectGridCell(0, 1)
 
@@ -193,7 +190,7 @@ describe("questdb grid", () => {
 
     it("Ctrl+Home and Ctrl+End jump to the grid corners", () => {
       // Given
-      cy.typeQuery("select x from long_sequence(50)")
+      loadGridConsole("select x from long_sequence(50)")
       cy.runLine()
       cy.selectGridCell(0, 0)
 
@@ -207,7 +204,7 @@ describe("questdb grid", () => {
 
     it("PageDown and PageUp move by a viewport of rows", () => {
       // Given
-      cy.typeQuery("select x from long_sequence(200)")
+      loadGridConsole("select x from long_sequence(200)")
       cy.runLine()
       cy.selectGridCell(0, 0)
 
@@ -226,7 +223,7 @@ describe("questdb grid", () => {
   describe("copy", () => {
     it("Ctrl+C copies the focused cell and pulses it", () => {
       // Given
-      cy.typeQuery("select x from long_sequence(10)")
+      loadGridConsole("select x from long_sequence(10)")
       cy.runLine()
       cy.selectGridCell(0, 0)
 
@@ -240,7 +237,7 @@ describe("questdb grid", () => {
 
     it("the header copy button copies the column name", () => {
       // Given
-      cy.typeQuery("select x from long_sequence(10)")
+      loadGridConsole("select x from long_sequence(10)")
       cy.runLine()
 
       // When
@@ -254,7 +251,7 @@ describe("questdb grid", () => {
   describe("yield focus to editor", () => {
     it("F2 clears the selection and returns focus to the editor", () => {
       // Given
-      cy.typeQuery("select x from long_sequence(10)")
+      loadGridConsole("select x from long_sequence(10)")
       cy.runLine()
       cy.selectGridCell(0, 0)
       cy.getActiveCell().should("exist")
@@ -271,7 +268,7 @@ describe("questdb grid", () => {
   describe("move column to front", () => {
     it("the '/' shortcut moves the focused column to the front", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       cy.selectGridCell(0, 2)
 
@@ -284,7 +281,7 @@ describe("questdb grid", () => {
 
     it("the toolbar button moves the focused column to the front", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       cy.selectGridCell(0, 2)
 
@@ -297,7 +294,7 @@ describe("questdb grid", () => {
 
     it("the toolbar button is disabled until a cell is selected", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
 
       // Then — nothing selected yet
@@ -312,7 +309,7 @@ describe("questdb grid", () => {
 
     it("keeps each value under its own header when a column is already frozen", () => {
       // Given a result with distinct per-column values and the left column (a) frozen
-      cy.typeQuery(distinctColumnQuery)
+      loadGridConsole(distinctColumnQuery)
       cy.runLine()
       cy.gridToolbar("freeze").click()
       cy.getGridCellAt(0, 0).should("have.attr", "data-frozen", "true")
@@ -336,7 +333,7 @@ describe("questdb grid", () => {
   describe("freeze left", () => {
     it("the toolbar freezes and unfreezes the left column", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
 
       // When
@@ -356,7 +353,7 @@ describe("questdb grid", () => {
 
     it("dragging the freeze handle freezes an additional column", () => {
       // Given
-      cy.typeQuery("select x a, x b, x c, x d from long_sequence(20)")
+      loadGridConsole("select x a, x b, x c, x d from long_sequence(20)")
       cy.runLine()
       cy.gridToolbar("freeze").click()
       cy.getGridCellAt(0, 1).should("not.have.attr", "data-frozen")
@@ -370,7 +367,7 @@ describe("questdb grid", () => {
 
     it("dragging the handle from an unfrozen grid freezes multiple columns", () => {
       // Given a four-column result with no frozen columns
-      cy.typeQuery("select x a, x b, x c, x d from long_sequence(20)")
+      loadGridConsole("select x a, x b, x c, x d from long_sequence(20)")
       cy.runLine()
       cy.getGridCellAt(0, 0).should("be.visible")
       cy.getFrozenCells().should("have.length", 0)
@@ -401,7 +398,7 @@ describe("questdb grid", () => {
       const columns = Array.from({ length: 100 }, (_, i) => `x c${i}`).join(
         ", ",
       )
-      cy.typeQueryDirectly(`select ${columns} from long_sequence(10)`)
+      loadGridConsole(`select ${columns} from long_sequence(10)`)
       cy.runLine()
       cy.gridToolbar("freeze").click()
       cy.getGridCellAt(0, 0).should("have.attr", "data-frozen", "true")
@@ -431,7 +428,7 @@ describe("questdb grid", () => {
   describe("column resize", () => {
     it("dragging the separator widens the column", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       let startWidth
       cy.getGridCellAt(0, 0).then(($cell) => {
@@ -451,7 +448,7 @@ describe("questdb grid", () => {
 
     it("arrow keys on the separator resize the column", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       let startWidth
       cy.getGridCellAt(0, 0).then(($cell) => {
@@ -479,7 +476,7 @@ describe("questdb grid", () => {
   describe("reset layout", () => {
     it("the toolbar reset restores the default column width", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       let defaultWidth
       cy.getGridCellAt(0, 0).then(($cell) => {
@@ -501,7 +498,7 @@ describe("questdb grid", () => {
 
     it("Ctrl+B resets the layout", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       let defaultWidth
       cy.getGridCellAt(0, 0).then(($cell) => {
@@ -526,7 +523,7 @@ describe("questdb grid", () => {
   describe("layout persistence", () => {
     it("a resized column keeps its width after a re-run", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       cy.resizeColumn(0, 150)
       let widenedWidth
@@ -548,7 +545,7 @@ describe("questdb grid", () => {
 
     it("column order and freeze survive a re-run", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       cy.selectGridCell(0, 2)
       cy.gridKey({ key: "/" })
@@ -566,7 +563,7 @@ describe("questdb grid", () => {
 
     it("reset clears the persisted layout for the next run", () => {
       // Given
-      cy.typeQuery(threeColumnQuery)
+      loadGridConsole(threeColumnQuery)
       cy.runLine()
       let defaultWidth
       cy.getGridCellAt(0, 0).then(($cell) => {
@@ -593,21 +590,21 @@ describe("questdb grid", () => {
     const table = "grid_designated_ts"
 
     afterEach(() => {
-      cy.execQuery(`drop table if exists ${table}`)
+      cy.execAdminQuery(`drop table if exists ${table}`)
     })
 
     it("colors only the designated timestamp column, not every timestamp column", () => {
       // Given — ts is designated, ts2 is a plain timestamp column
-      cy.execQuery(`drop table if exists ${table}`)
-      cy.execQuery(
+      cy.execAdminQuery(`drop table if exists ${table}`)
+      cy.execAdminQuery(
         `create table ${table} (ts timestamp, ts2 timestamp, val long) timestamp(ts)`,
       )
-      cy.execQuery(
+      cy.execAdminQuery(
         `insert into ${table} values('2024-01-01T00:00:00.000000Z','2024-01-01T00:00:00.000000Z',1)`,
       )
 
       // When
-      cy.typeQuery(`select * from ${table}`)
+      loadGridConsole(`select * from ${table}`)
       cy.runLine()
 
       // Then
@@ -619,7 +616,7 @@ describe("questdb grid", () => {
   describe("cell formatting", () => {
     it("renders null values as the literal 'null'", () => {
       // Given / When
-      cy.typeQuery("select cast(null as long) n from long_sequence(1)")
+      loadGridConsole("select cast(null as long) n from long_sequence(1)")
       cy.runLine()
 
       // Then
@@ -635,7 +632,7 @@ describe("questdb grid", () => {
 
     it("shows the full value of a truncated cell after a hover delay", () => {
       // Given
-      cy.typeQuery("select rpad('a', 500, 'b') wide from long_sequence(1)")
+      loadGridConsole("select rpad('a', 500, 'b') wide from long_sequence(1)")
       cy.runLine()
 
       // When
@@ -648,7 +645,7 @@ describe("questdb grid", () => {
 
     it("re-running the query hides the open tooltip", () => {
       // Given
-      cy.typeQuery("select rpad('a', 500, 'b') wide from long_sequence(1)")
+      loadGridConsole("select rpad('a', 500, 'b') wide from long_sequence(1)")
       cy.runLine()
       cy.getGridCellAt(0, 0).realHover()
       getTooltipValue().should("be.visible")
@@ -664,7 +661,7 @@ describe("questdb grid", () => {
   describe("toolbar actions", () => {
     it("copies the current page as a Markdown table", () => {
       // Given
-      cy.typeQuery("select x from long_sequence(5)")
+      loadGridConsole("select x from long_sequence(5)")
       cy.runLine()
 
       // When
@@ -676,7 +673,7 @@ describe("questdb grid", () => {
 
     it("refresh re-runs the query and keeps the rows", () => {
       // Given
-      cy.typeQuery("select x from long_sequence(5)")
+      loadGridConsole("select x from long_sequence(5)")
       cy.runLine()
       cy.intercept("/exec*").as("refresh")
 
@@ -690,11 +687,6 @@ describe("questdb grid", () => {
   })
 
   describe("column width allocation", () => {
-    beforeEach(() => {
-      cy.getEditorContent().should("be.visible")
-      cy.clearEditor()
-    })
-
     const longArray = (n) =>
       `ARRAY[${Array.from({ length: n }, (_, i) => `${i + 1}.0`).join(",")}]`
 
@@ -703,7 +695,7 @@ describe("questdb grid", () => {
     const cellIn = (col) => gridArea().find(`#cell-0-${col}`)
 
     const runQuery = (query) => {
-      cy.typeQueryDirectly(query)
+      loadGridConsole(query)
       cy.clickRunQuery()
       cellIn(0).should("be.visible")
     }

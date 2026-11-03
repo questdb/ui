@@ -4,6 +4,10 @@ const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`
 
 const { ctrlOrCmd } = require("../../utils")
+const { createNotebookBuffer } = require("../../utils/editorBuffers")
+
+const loadEditorWithQuery = (value) =>
+  cy.loadConsoleWithAuth(false, {}, { buffers: [{ value }] })
 
 const getTabDragHandleByTitle = (title) =>
   `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`
@@ -30,23 +34,16 @@ const dragTabOnto = (sourceTitle, targetTitle) => {
 }
 
 describe("run query", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
-    cy.clearEditor()
-  })
-
   it("should correctly run query in the first line", () => {
-    cy.typeQuery("select 1;\n\nselect 2;")
+    loadEditorWithQuery("select 1;\n\nselect 2;")
     cy.clickRunIconInLine(1)
     cy.getGridRow(0).should("contain", "1")
   })
 
   it("should run the correct query when there are multiple queries in the same line", () => {
-    cy.typeQuery(
-      "with longseq as (\nselect * from long_sequence(100)\n-- comment",
+    loadEditorWithQuery(
+      "with longseq as (\nselect * from long_sequence(100)\n-- comment\n) select count(*) from longseq;select 1;",
     )
-    cy.typeQuery(" select count(*) from longseq;select 1;")
 
     // go to the end of second query
     cy.clickLine(4)
@@ -85,10 +82,9 @@ describe("run query", () => {
   })
 
   it("should not change cursor position when query run succeeds", () => {
-    cy.typeQuery(
-      "with longseq as (\nselect * from long_sequence(100)\n-- comment",
+    loadEditorWithQuery(
+      "with longseq as (\nselect * from long_sequence(100)\n-- comment\n) select count(*) from longseq;select 1;",
     )
-    cy.typeQuery(" select count(*) from longseq;select 1;")
     cy.clickLine(4)
     cy.focused().type(`${ctrlOrCmd}{enter}`)
     cy.getByDataHook("success-notification").should("contain", "select 1")
@@ -119,7 +115,7 @@ describe("run query", () => {
   })
 
   it("should provide query selection dropdown when multiple queries start from the same line", () => {
-    cy.typeQuery("select 1;select 2;select 3;")
+    loadEditorWithQuery("select 1;select 2;select 3;")
     cy.clickRunIconInLine(1)
     cy.getByDataHook("dropdown-item-run-query-0").should(
       "contain",
@@ -141,18 +137,14 @@ describe("run query", () => {
 })
 
 describe("run query with selection", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
-    cy.clearEditor()
-  })
-
   it("should correctly identify and run selected queries", () => {
     // Given
+    cy.loadConsoleWithAuth()
     cy.getByDataHook("button-run-query").should("be.disabled")
 
     // When
-    cy.typeQuery("select 11;select 22;select 33;")
+    cy.typeQueryDirectly("select 11;select 22;select 33;")
+    cy.selectRange({ lineNumber: 1, column: 31 }, { lineNumber: 1, column: 31 })
     // Then
     cy.getByDataHook("button-run-query").should("contain", "Run query")
 
@@ -211,7 +203,7 @@ describe("run query with selection", () => {
     const subQueryTruncated = "select md5(concat('1', x)) as ..."
 
     // When
-    cy.typeQueryDirectly(
+    loadEditorWithQuery(
       `create table long_seq as (\n  ${subQuery}\n  --comment\n);`,
     )
     cy.openRunDropdownInLine(1)
@@ -270,12 +262,12 @@ describe("run query with selection", () => {
 
   it("should cancel the running query without opening the run-all modal when all queries are selected", () => {
     // Given a single query is running
+    loadEditorWithQuery("select 1;\nselect 2;\nselect 3;")
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(3000)
       })
     })
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
     cy.clickLine(1)
     cy.getByDataHook("button-run-query").should("contain", "Run query").click()
     cy.getByDataHook("button-cancel-query").should("be.visible")
@@ -299,12 +291,12 @@ describe("run query with selection", () => {
 
   it("should run only the selected queries (not all) when starting a run while a query is busy", () => {
     // Given a single query is running
+    loadEditorWithQuery("select 1;\nselect 2;\nselect 3;")
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(1000)
       })
     })
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
     cy.clickLine(1)
     cy.getByDataHook("button-run-query").should("contain", "Run query").click()
     cy.getByDataHook("button-cancel-query").should("be.visible")
@@ -346,12 +338,12 @@ describe("run query with selection", () => {
 
   it("should queue selected queries when starting a run while a script is busy", () => {
     // Given a script is running
+    loadEditorWithQuery("select 1;\nselect 2;\nselect 3;")
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(1000)
       })
     })
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
     cy.clickRunScript()
     cy.getByDataHook("loading-notification").should(
       "contain",
@@ -383,12 +375,12 @@ describe("run query with selection", () => {
 
   it("should run all queries when starting a run-all while a query is busy", () => {
     // Given a single query is running
+    loadEditorWithQuery("select 1;\nselect 2;\nselect 3;")
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(1000)
       })
     })
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
     cy.clickLine(1)
     cy.getByDataHook("button-run-query").should("contain", "Run query").click()
     cy.getByDataHook("button-cancel-query").should("be.visible")
@@ -422,15 +414,9 @@ describe("run query with selection", () => {
 })
 
 describe("run all queries in tab", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
-    cy.clearEditor()
-  })
-
   it("should run all queries in tab", () => {
     // Given
-    cy.typeQueryDirectly(
+    loadEditorWithQuery(
       "select 1;select 2;select 3;\n\ncreate table long_seq as (\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment\n);\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n",
     )
 
@@ -495,7 +481,7 @@ describe("run all queries in tab", () => {
 
   it("should not run all queries if stop after failure is checked", () => {
     // Given
-    cy.typeQuery("select 1;\nselect a;\nselect 3;")
+    loadEditorWithQuery("select 1;\nselect a;\nselect 3;")
 
     // When
     cy.clickRunScript()
@@ -514,7 +500,7 @@ describe("run all queries in tab", () => {
 
   it("should run all queries if stop after failure is unchecked", () => {
     // Given
-    cy.typeQuery("select 1;\nselect a;\nselect 3;")
+    loadEditorWithQuery("select 1;\nselect a;\nselect 3;")
 
     // When
     cy.clickRunScript(true)
@@ -533,14 +519,14 @@ describe("run all queries in tab", () => {
 
   it("should scroll to the running query and show the loading notification", () => {
     // Given
+    loadEditorWithQuery(
+      "select 1;\n\n\n\n\n\n\n\n\nselect 2;\n\n\n\n\n\n\n\n\n\nselect 3;",
+    )
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(1000)
       })
     })
-    cy.typeQuery(
-      "select 1;\n\n\n\n\n\n\n\n\nselect 2;\n\n\n\n\n\n\n\n\n\nselect 3;",
-    )
 
     // When
     cy.clickRunScript()
@@ -567,12 +553,12 @@ describe("run all queries in tab", () => {
 
   it("should disable editing when running script", () => {
     // Given
+    loadEditorWithQuery("select 1;\nselect 2;\nselect 3;")
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(1000)
       })
     })
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
 
     // When
     cy.clickRunScript()
@@ -584,12 +570,12 @@ describe("run all queries in tab", () => {
 
   it("should not allow adding a new tab while running script", () => {
     // Given
+    loadEditorWithQuery("select 1;\nselect 2;\nselect 3;")
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(1000)
       })
     }).as("exec")
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
 
     cy.getEditorTabs().then(($tabs) => {
       const initialTabCount = $tabs.length
@@ -619,12 +605,12 @@ describe("run all queries in tab", () => {
 
   it("should ignore the add-new-tab command (Alt+T) while running script", () => {
     // Given
+    loadEditorWithQuery("select 1;\nselect 2;\nselect 3;")
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(1000)
       })
     }).as("exec")
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
 
     cy.getEditorTabs().then(($tabs) => {
       const initialTabCount = $tabs.length
@@ -648,7 +634,7 @@ describe("run all queries in tab", () => {
 
   it("should move cursor to the failed query after running script", () => {
     // Given
-    cy.typeQuery("select 1;\nselect a;\nselect 2;")
+    loadEditorWithQuery("select 1;\nselect a;\nselect 2;")
     cy.clickLine(1)
 
     // When
@@ -660,7 +646,7 @@ describe("run all queries in tab", () => {
 
   it("should keep the cursor position if all queries are successful", () => {
     // Given
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+    loadEditorWithQuery("select 1;\nselect 2;\nselect 3;")
     cy.clickLine(1)
 
     // When
@@ -735,7 +721,8 @@ describe("appendQuery", () => {
   })
 
   it("should correctly append and select query when position is first line which is empty", () => {
-    cy.typeQuery(`{enter}--b{upArrow}`)
+    cy.typeQueryDirectly("\n--b")
+    cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 1, column: 1 })
     cy.selectQuery(0)
     cy.selectQuery(1)
     const expected = `\n--b\n${queries[0]}\n\n${queries[1]}`
@@ -744,7 +731,8 @@ describe("appendQuery", () => {
   })
 
   it("should correctly append and select query when position is first line which is not empty", () => {
-    cy.typeQuery(`--a`)
+    cy.typeQueryDirectly("--a")
+    cy.selectRange({ lineNumber: 1, column: 4 }, { lineNumber: 1, column: 4 })
     cy.selectQuery(0)
     const expected = `--a\n${queries[0]}`
     cy.getEditorContent().should("have.value", expected)
@@ -752,7 +740,8 @@ describe("appendQuery", () => {
   })
 
   it("should correctly append and select query when position is first line which is not empty and there's more content after", () => {
-    cy.typeQuery(`--a{enter}{enter}--b{upArrow}{upArrow}`)
+    cy.typeQueryDirectly("--a\n\n--b")
+    cy.selectRange({ lineNumber: 1, column: 4 }, { lineNumber: 1, column: 4 })
     cy.selectQuery(0)
     const expected = `--a\n\n--b\n${queries[0]}`
     cy.getEditorContent().should("have.value", expected)
@@ -760,7 +749,8 @@ describe("appendQuery", () => {
   })
 
   it("should correctly append and add surrounding new lines when position is middle line which is empty", () => {
-    cy.typeQuery(`--a{enter}{enter}--b{upArrow}`)
+    cy.typeQueryDirectly("--a\n\n--b")
+    cy.selectRange({ lineNumber: 2, column: 1 }, { lineNumber: 2, column: 1 })
     cy.selectQuery(0)
     const expected = `--a\n\n--b\n\n${queries[0]}`
     cy.getEditorContent().should("have.value", expected)
@@ -768,7 +758,8 @@ describe("appendQuery", () => {
   })
 
   it("should correctly append and add surrounding new lines when position is last line which is empty", () => {
-    cy.typeQuery(`--a{enter}--b`)
+    cy.typeQueryDirectly("--a\n--b")
+    cy.selectRange({ lineNumber: 2, column: 4 }, { lineNumber: 2, column: 4 })
     cy.selectQuery(0)
     const expected = `--a\n--b\n\n${queries[0]}`
     cy.getEditorContent().should("have.value", expected)
@@ -776,7 +767,8 @@ describe("appendQuery", () => {
   })
 
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
-    cy.typeQuery(`--a{enter}`)
+    cy.typeQueryDirectly("--a\n")
+    cy.selectRange({ lineNumber: 2, column: 1 }, { lineNumber: 2, column: 1 })
     cy.selectQuery(0)
     const expected = `--a\n\n\n${queries[0]}`
     cy.getEditorContent().should("have.value", expected)
@@ -784,7 +776,7 @@ describe("appendQuery", () => {
   })
 
   it("should correctly append and add surrounding new lines when position is middle of non empty line and next line is empty", () => {
-    cy.typeQuery(`--a{enter}--b{enter}{enter}--c`)
+    cy.typeQueryDirectly("--a\n--b\n\n--c")
     cy.typeQuery(`{ctrl}g2{enter}{rightArrow}`) // go to line 2
     cy.selectQuery(0)
     const expected = `--a\n--b\n\n--c\n\n${queries[0]}`
@@ -793,7 +785,8 @@ describe("appendQuery", () => {
   })
 
   it("should inject a semicolon when the existing query is unterminated", () => {
-    cy.typeQuery(`select 1`)
+    cy.typeQueryDirectly("select 1")
+    cy.selectRange({ lineNumber: 1, column: 9 }, { lineNumber: 1, column: 9 })
     cy.selectQuery(0)
     const expected = `select 1;\n${queries[0]}`
     cy.getEditorContent().should("have.value", expected)
@@ -802,15 +795,16 @@ describe("appendQuery", () => {
 })
 
 describe("&query URL param", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-  })
-
   it("should open single line query in a new tab and select it", () => {
-    cy.typeQueryDirectly("select x from long_sequence(1)") // running query caches it, it's available after refresh
-    cy.getCursorQueryGlyph().should("be.visible")
     const query = encodeURIComponent("select x+1 from long_sequence(1)")
-    cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`)
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [{ value: "select x from long_sequence(1)" }],
+        url: `${baseUrl}/?query=${query}&executeQuery=true`,
+      },
+    )
     cy.getEditor().should("be.visible")
     cy.getEditorTabByTitle("Shared Query")
       .should("be.visible")
@@ -824,14 +818,19 @@ describe("&query URL param", () => {
   })
 
   it("should open multiline query in a new tab and select it", () => {
-    cy.typeQueryDirectly(
-      `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(
-        5,
-      )}`,
-    )
-    cy.getCursorQueryGlyph().should("be.visible")
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);")
-    cy.visit(`${baseUrl}?query=${query}&executeQuery=true`)
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [
+          {
+            value: `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(5)}`,
+          },
+        ],
+        url: `${baseUrl}?query=${query}&executeQuery=true`,
+      },
+    )
     cy.getEditor().should("be.visible")
     cy.getEditorTabByTitle("Shared Query")
       .should("be.visible")
@@ -842,22 +841,48 @@ describe("&query URL param", () => {
 
   it("should not open a new tab if the query already exists in the editor", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c"
-    cy.typeQueryDirectly(query)
-    cy.clickRunIconInLine(1)
-    cy.wait(1000)
-    cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [{ value: query }],
+        url: `${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`,
+      },
+    )
     cy.getEditorContent().should("be.visible")
     cy.getEditorTabs().should("have.length", 1)
     cy.getEditorContent().should("have.value", query)
   })
 
   it("should open the query in a new tab and reveal it", () => {
-    cy.typeQueryDirectly("select x from long_sequence(1);")
-    cy.getCursorQueryGlyph().should("be.visible")
-    cy.typeQuery("\n".repeat(20))
-
     const sharedQuery = "-- hello world"
-    cy.visit(`${baseUrl}?query=${encodeURIComponent(sharedQuery)}`)
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [
+          {
+            value: `select x from long_sequence(1);${"\n".repeat(20)}`,
+            editorViewState: {
+              cursorState: [
+                {
+                  inSelectionMode: false,
+                  selectionStart: { lineNumber: 21, column: 1 },
+                  position: { lineNumber: 21, column: 1 },
+                },
+              ],
+              viewState: {
+                scrollLeft: 0,
+                firstPosition: { lineNumber: 21, column: 1 },
+                firstPositionDeltaTop: 0,
+              },
+              contributionsState: {},
+            },
+          },
+        ],
+        url: `${baseUrl}?query=${encodeURIComponent(sharedQuery)}`,
+      },
+    )
     cy.getEditor().should("be.visible")
     cy.getEditorTabByTitle("Shared Query")
       .should("be.visible")
@@ -869,17 +894,20 @@ describe("&query URL param", () => {
   })
 
   it("should open a new editor tab when the last active buffer is a metrics buffer", () => {
-    // when
-    cy.getByDataHook("schema-add-metrics-button").click()
-    // then
-    cy.getByDataHook("metrics-root").should("be.visible")
+    // Given
+    const query = encodeURIComponent("select x from long_sequence(1)")
 
-    // when
-    cy.visit(
-      `${baseUrl}?query=${encodeURIComponent("select x from long_sequence(1)")}`,
+    // When
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [{}, { label: "Metrics 1", metricsViewState: {} }],
+        url: `${baseUrl}?query=${query}`,
+      },
     )
 
-    // then
+    // Then
     cy.getEditor().should("be.visible")
     cy.getEditorTabs().should("have.length", 3)
     cy.getEditorTabByTitle("Metrics 1").should("be.visible")
@@ -901,7 +929,13 @@ describe("&query URL param", () => {
     const query = `UPDATE ${tableName} SET val=999; SELECT val FROM ${tableName}`
 
     // When
-    cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        url: `${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`,
+      },
+    )
 
     // Then
     cy.getByDataHook("editor-tabs-disabled").should("be.visible")
@@ -948,7 +982,13 @@ describe("&query URL param", () => {
     const query = `DROP TABLE ${tableName}; SELECT 1`
 
     // When
-    cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        url: `${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`,
+      },
+    )
 
     // Then
     cy.getByDataHook("editor-tabs-disabled").should("be.visible")
@@ -984,7 +1024,13 @@ describe("&query URL param", () => {
     const query = "SELECT 1; SELECT 2"
 
     // When
-    cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        url: `${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`,
+      },
+    )
 
     // Then
     cy.getByDataHook("success-notification")
@@ -1001,13 +1047,16 @@ describe("&query URL param", () => {
     const tableName = "share_link_c11"
     cy.execAdminQuery(`DROP TABLE IF EXISTS ${tableName}`)
     cy.execAdminQuery(`CREATE TABLE ${tableName} (val INT)`)
-    cy.getEditorContent().should("be.visible")
-    cy.typeQueryDirectly(`DROP TABLE ${tableName}`)
-    cy.getCursorQueryGlyph().should("be.visible")
-    cy.wait(1000)
 
     // When
-    cy.visit(`${baseUrl}?executeQuery=true`)
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [{ value: `DROP TABLE ${tableName}` }],
+        url: `${baseUrl}?executeQuery=true`,
+      },
+    )
 
     // Then
     cy.getEditor().should("be.visible")
@@ -1022,8 +1071,7 @@ describe("&query URL param", () => {
     if (!Cypress.isBrowser("electron")) return
 
     // Given
-    cy.getEditorContent().should("be.visible")
-    cy.typeQueryDirectly("SELECT 1;\nSELECT 2;\nSELECT 3;")
+    loadEditorWithQuery("SELECT 1;\nSELECT 2;\nSELECT 3;")
     cy.getCursorQueryGlyph().should("be.visible")
     const expectedUrl = (sql) => {
       const params = new URLSearchParams()
@@ -1105,6 +1153,7 @@ describe("autocomplete", () => {
 
   beforeEach(() => {
     cy.getEditorContent().should("be.visible")
+    cy.clearEditor()
   })
 
   it("should work when provided table name doesn't exist", () => {
@@ -1283,7 +1332,8 @@ describe("errors", () => {
 
   it("should mark date position as error", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`
-    cy.typeQuery(query)
+    cy.typeQueryDirectly(query)
+    cy.clickLine(1)
     cy.runLine()
     // Whole date string is shown as error
     cy.matchErrorMarkerPosition({ left: 506, width: 185 })
@@ -1310,7 +1360,8 @@ describe("errors", () => {
   operators.forEach((char) => {
     it(`should mark operator '${char}' as error`, () => {
       const query = `select x FROM long_sequence(100 ${char} "string");`
-      cy.typeQuery(query)
+      cy.typeQueryDirectly(query)
+      cy.clickLine(1)
       cy.runLine()
       cy.matchErrorMarkerPosition({ left: 270, width: 8 })
       cy.clearEditor()
@@ -1323,7 +1374,7 @@ describe("errors", () => {
       body: "This is not valid JSON {invalid json content",
     }
 
-    cy.typeQuery("long_sequence(100);")
+    cy.typeQueryDirectly("long_sequence(100);")
     cy.runLineWithResponse(response)
 
     cy.getCollapsedNotifications().should(
@@ -1368,34 +1419,45 @@ describe("running query with F9", () => {
   })
 
   it("should execute correct query, when text cursor is on query which has no semicolon", () => {
-    cy.typeQuery("select * from long_sequence(1)")
+    cy.typeQueryDirectly("select * from long_sequence(1)")
+    cy.getEditor().realClick()
+    cy.clickLine(1)
     cy.F9()
     cy.getGridRow(0).should("contain", "1")
-    cy.clearEditor()
-    cy.typeQuery(`select * from long_sequence(2);{leftArrow}`)
+    cy.typeQueryDirectly("select * from long_sequence(2);")
+    cy.getEditor().realClick()
+    cy.clickLine(1)
+    cy.focused().type("{leftArrow}")
     cy.F9()
     cy.getGridRow(1).should("contain", "2")
   })
 
   it("should execute correct query, when multiple queries exist", () => {
-    cy.typeQuery(
-      "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2;{upArrow}{upArrow}{end}{leftArrow}",
+    cy.typeQueryDirectly(
+      "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2;",
     )
+    cy.getEditor().realClick()
+    cy.clickLine(1)
+    cy.focused().type("{leftArrow}")
     cy.F9()
     cy.getGridRow(0).should("contain", "3")
-    cy.clearEditor()
-    cy.typeQuery(
-      "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2{upArrow}{upArrow}{end}{leftArrow}",
+    cy.typeQueryDirectly(
+      "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2",
     )
+    cy.getEditor().realClick()
+    cy.clickLine(1)
+    cy.focused().type("{leftArrow}")
     cy.F9()
     cy.getGridRow(0).should("contain", "3")
   })
 
   it("should execute a correct query when line comment is present", () => {
-    cy.clearEditor()
-    cy.typeQuery(
-      "select * from long_sequence(1); -- comment\nselect * from long_sequence(2);{upArrow}{rightArrow}{rightArrow}",
+    cy.typeQueryDirectly(
+      "select * from long_sequence(1); -- comment\nselect * from long_sequence(2);",
     )
+    cy.getEditor().realClick()
+    cy.clickLine(2)
+    cy.focused().type("{upArrow}{rightArrow}{rightArrow}")
     cy.F9()
     cy.getGridRows().should("have.length", 1)
     cy.getCursorQueryDecoration().should("have.length", 1)
@@ -1403,14 +1465,14 @@ describe("running query with F9", () => {
 })
 
 describe("editor tabs", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.clearEditor()
+  const loadTabs = (buffers) => {
+    cy.loadConsoleWithAuth(false, {}, { buffers })
     cy.getEditorContent().should("be.visible")
     cy.getEditorTabs().should("be.visible")
-  })
+  }
 
   it("should open the new single tab with empty editor", () => {
+    loadTabs()
     cy.getEditorContent().should("have.value", "")
     cy.getEditorTabs().should("have.length", 1)
     cy.getEditorTabByTitle("SQL").should("be.visible")
@@ -1418,6 +1480,7 @@ describe("editor tabs", () => {
   })
 
   it("should open the second empty tab on plus icon click", () => {
+    loadTabs()
     cy.addEditorTab()
     cy.get(".chrome-tab-was-just-added").should("not.exist")
     cy.getEditorTabs().should("have.length", 2)
@@ -1430,6 +1493,7 @@ describe("editor tabs", () => {
   })
 
   it("should rename a tab", () => {
+    loadTabs()
     cy.getEditorTabByTitle("SQL").within(() => {
       cy.get(".chrome-tab-drag-handle").dblclick()
       cy.get(".chrome-tab-rename").should("be.visible").type("New name{enter}")
@@ -1469,8 +1533,7 @@ describe("editor tabs", () => {
   })
 
   it("should drag tabs", () => {
-    cy.addEditorTab()
-    cy.get(".chrome-tab-was-just-added").should("not.exist")
+    loadTabs([{ label: "SQL" }, { label: "SQL 1" }])
     cy.getEditorTabByTitle("SQL").should("be.visible")
     cy.getEditorTabByTitle("SQL 1").should("be.visible")
 
@@ -1497,23 +1560,26 @@ describe("editor tabs", () => {
 // TODO: This test is flaky because of the IndexedDB calls. Investigate the slow response time in test environment.
 describe.skip("editor tabs history", () => {
   before(() => {
-    cy.loadConsoleWithAuth()
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [
+          { label: "SQL", value: "--1" },
+          { label: "SQL 1", value: "-- 1" },
+          { label: "SQL 2", value: "-- 2" },
+        ],
+      },
+    )
     cy.getEditorContent().should("be.visible")
     cy.getEditorTabs().should("be.visible")
   })
 
   it("should close and archive tabs", () => {
-    cy.typeQuery("--1")
     ;["SQL 1", "SQL 2"].forEach((title) => {
-      cy.addEditorTab()
-      const dragHandle = getTabDragHandleByTitle(title)
-      cy.get(dragHandle).should("be.visible")
-    })
-    ;["SQL 1", "SQL 2"].forEach((title, index) => {
       const dragHandle = getTabDragHandleByTitle(title)
       cy.get(dragHandle).click()
       cy.getEditorContent().should("be.visible")
-      cy.typeQuery(`-- ${index + 1}`)
       cy.getEditorTabByTitle(title).within(() => {
         cy.get(".chrome-tab-close").click()
       })
@@ -1540,17 +1606,11 @@ describe.skip("editor tabs history", () => {
 })
 
 describe("handling comments", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-  })
-
-  beforeEach(() => {
-    cy.getEditorContent().should("be.visible")
-    cy.getEditorTabs().should("be.visible")
-  })
-
   it("should highlight and execute sql with line comments in front", () => {
-    cy.typeQuery("-- comment\n-- comment\nselect x from long_sequence(1);")
+    loadEditorWithQuery(
+      "-- comment\n-- comment\nselect x from long_sequence(1);",
+    )
+    cy.clickLine(3)
     cy.getCursorQueryDecoration().should("have.length", 1)
     cy.getCursorQueryGlyph().should("have.length", 1)
     cy.runLine()
@@ -1558,7 +1618,8 @@ describe("handling comments", () => {
   })
 
   it("should highlight and execute sql with empty line comment in front", () => {
-    cy.typeQuery("--\nselect x from long_sequence(1);")
+    loadEditorWithQuery("--\nselect x from long_sequence(1);")
+    cy.clickLine(2)
     cy.getCursorQueryDecoration().should("have.length", 1)
     cy.getCursorQueryGlyph().should("have.length", 1)
     cy.runLine()
@@ -1566,14 +1627,15 @@ describe("handling comments", () => {
   })
 
   it("should highlight and execute sql with block comments", () => {
-    cy.typeQuery("/* comment */\nselect x from long_sequence(1);")
+    loadEditorWithQuery("/* comment */\nselect x from long_sequence(1);")
+    cy.clickLine(2)
     cy.getCursorQueryDecoration().should("have.length", 1)
     cy.getCursorQueryGlyph().should("have.length", 1)
     cy.runLine()
     cy.getGridRow(0).should("contain", "1")
 
-    cy.clearEditor()
-    cy.typeQuery("/*\ncomment\n*/\nselect x from long_sequence(1);")
+    cy.typeQueryDirectly("/*\ncomment\n*/\nselect x from long_sequence(1);")
+    cy.clickLine(4)
     cy.getCursorQueryDecoration().should("have.length", 1)
     cy.getCursorQueryGlyph().should("have.length", 1)
     cy.runLine()
@@ -1585,7 +1647,7 @@ describe("handling comments", () => {
   })
 
   it("should highlight and execute sql with line comments inside", () => {
-    cy.typeQueryDirectly("select\nx\n-- y\n-- z\n from long_sequence(1);")
+    loadEditorWithQuery("select\nx\n-- y\n-- z\n from long_sequence(1);")
     cy.getCursorQueryDecoration().should("have.length", 5)
     cy.getCursorQueryGlyph().should("have.length", 1)
     cy.runLine()
@@ -1593,7 +1655,8 @@ describe("handling comments", () => {
   })
 
   it("should highlight and execute sql with line comment at the end", () => {
-    cy.typeQuery("select x from long_sequence(1); -- comment")
+    loadEditorWithQuery("select x from long_sequence(1); -- comment")
+    cy.clickLine(1)
     cy.getCursorQueryDecoration().should("have.length", 1)
     cy.getCursorQueryGlyph().should("have.length", 1)
     cy.runLine()
@@ -1605,7 +1668,7 @@ describe("handling comments", () => {
   })
 
   it("should extract only two queries when comments have semicolons", () => {
-    cy.typeQueryDirectly(
+    loadEditorWithQuery(
       "-- not a query;\n/* not a query 2;\n not a query 3; */select /* not; a; query;*/ 1; --not a query /* ; 4;\nselect\n\n --line;\n 2;",
     )
     cy.clickLine(4)
@@ -1625,7 +1688,7 @@ describe("handling comments", () => {
   })
 
   it("should correctly handle single quotes in multiline comments", () => {
-    cy.typeQueryDirectly(
+    loadEditorWithQuery(
       "/* Today's aggregations for the BTC-USDT symbol downsampled in 15-minute intervals.\n We use the SQL extension SAMPLE BY to aggregate data at regular intervals. QuestDB\n ingests live market data.; */\nSELECT *\nFROM long_sequence(100);",
     )
     cy.getCursorQueryGlyph().should("have.length", 1)
@@ -1641,7 +1704,7 @@ describe("handling comments", () => {
   })
 
   it("should handle comprehensive edge cases: multiline comments, single line comments, quotes, and semicolons", () => {
-    cy.typeQueryDirectly(
+    loadEditorWithQuery(
       "/* Comment with semicolon; and single quote ' */\n-- Line comment with quote ' and semicolon;\nSELECT 'another;test' AS col2;\n/* Multi\nline;\ncomment;\nwith ' quote */\nSELECT 1 AS col3;\nSELECT 'text'/* inline; ' */ AS col5;",
     )
 
@@ -1684,14 +1747,8 @@ describe("handling comments", () => {
 })
 
 describe("multiple run buttons with dynamic query log", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
-    cy.clearEditor()
-  })
-
   it("should click run icon in specific line and open dropdown", () => {
-    cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;")
+    loadEditorWithQuery("select 1;\n\nselect 2;\n\nselect 3;")
     cy.openRunDropdownInLine(3)
 
     cy.getByDataHook("dropdown-item-run-query").should(
@@ -1732,14 +1789,14 @@ describe("multiple run buttons with dynamic query log", () => {
   })
 
   it("should run query from specific line using dropdown", () => {
-    cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;")
+    loadEditorWithQuery("select 1;\n\nselect 2;\n\nselect 3;")
     cy.clickRunIconInLine(3)
 
     cy.getByDataHook("success-notification").should("contain", "select 2")
   })
 
   it("should get query plan from specific line using dropdown", () => {
-    cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;")
+    loadEditorWithQuery("select 1;\n\nselect 2;\n\nselect 3;")
 
     cy.openRunDropdownInLine(5).clickDropdownGetQueryPlan()
 
@@ -1747,7 +1804,9 @@ describe("multiple run buttons with dynamic query log", () => {
   })
 
   it("should indicate error in glyph and notification", () => {
-    cy.typeQuery("select * from non_existent_table;\n\nselect 1;\n\nselect 2;")
+    loadEditorWithQuery(
+      "select * from non_existent_table;\n\nselect 1;\n\nselect 2;",
+    )
 
     cy.clickRunIconInLine(3)
 
@@ -1800,7 +1859,7 @@ describe("multiple run buttons with dynamic query log", () => {
 
   it("should keep execution info per tab", () => {
     // When
-    cy.typeQuery("select 1;\nselect a;\nselect 3;")
+    loadEditorWithQuery("select 1;\nselect a;\nselect 3;")
     cy.clickRunScript(true)
 
     // Then
@@ -1822,7 +1881,7 @@ describe("multiple run buttons with dynamic query log", () => {
       .should("have.attr", "active")
 
     // When
-    cy.typeQuery("select 1;\nselect a;\nselect 3;")
+    cy.typeQueryDirectly("select 1;\nselect a;\nselect 3;")
     // Then
     cy.getSuccessIcons().should("have.length", 0)
     cy.getErrorIcons().should("have.length", 0)
@@ -1849,9 +1908,7 @@ describe("multiple run buttons with dynamic query log", () => {
 
 describe("abortion on new query execution", () => {
   beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
-    cy.clearEditor()
+    loadEditorWithQuery("select 1;\nselect 2;")
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(1200)
@@ -1861,7 +1918,6 @@ describe("abortion on new query execution", () => {
 
   it("should show abort confirmation dialog when triggering new query while another is running", () => {
     // When
-    cy.typeQuery("select 1;\nselect 2;")
     cy.clickRunIconInLine(1)
 
     // Then
@@ -1897,7 +1953,6 @@ describe("abortion on new query execution", () => {
 
   it("should keep original query running when dismiss is clicked in abort dialog", () => {
     // When
-    cy.typeQuery("select 1;\nselect 2;")
     cy.clickRunIconInLine(1)
 
     // Then
@@ -1919,7 +1974,6 @@ describe("abortion on new query execution", () => {
 
   it("should run new query after original completes while abort dialog is open", () => {
     // When
-    cy.typeQuery("select 1;\nselect 2;")
     cy.clickRunIconInLine(1)
 
     // Then
@@ -1951,12 +2005,23 @@ describe("abortion on new query execution", () => {
 })
 
 describe("import/export tabs", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
+  const importedBuffers = [
+    { label: "Imported Tab 1", value: "SELECT 1;" },
+    { label: "Imported Tab 2", value: "SELECT 2;" },
+  ]
+  const archivedImport = {
+    label: "Archived Import",
+    value: "SELECT 'archived';",
+    archived: true,
+    archivedAt: 1706400000000,
+  }
+  const loadTabsForImport = (buffers) => {
+    cy.loadConsoleWithAuth(false, {}, { buffers })
     cy.getEditorTabs().should("be.visible")
-  })
+  }
 
   it("should show validation reason in import summary when importing invalid file", () => {
+    loadTabsForImport()
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu").should("be.visible")
 
@@ -1982,6 +2047,7 @@ describe("import/export tabs", () => {
   })
 
   it("should import tabs successfully with active and archived tabs", () => {
+    loadTabsForImport()
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu").should("be.visible")
 
@@ -2008,17 +2074,9 @@ describe("import/export tabs", () => {
   })
 
   it("should show import summary dialog when importing duplicate tabs", () => {
-    // First import the tabs
-    cy.getByDataHook("editor-tabs-menu-button").click()
-    cy.getByDataHook("editor-tabs-menu").should("be.visible")
-    cy.getByDataHook("editor-tabs-menu-import").click()
-    cy.getByDataHook("editor-tabs-import-input").selectFile(
-      "e2e/fixtures/valid-tabs-export.json",
-      { force: true },
-    )
-    cy.get(".toast-success-container").should("be.visible").click()
+    loadTabsForImport([{}, ...importedBuffers, archivedImport])
 
-    // Now try to import the same tabs again (duplicates)
+    // When the same tabs are imported again
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu").should("be.visible")
     cy.getByDataHook("editor-tabs-menu-import").click()
@@ -2046,17 +2104,9 @@ describe("import/export tabs", () => {
   })
 
   it("should show import summary dialog with mixed results", () => {
-    // First import only one tab
-    cy.getByDataHook("editor-tabs-menu-button").click()
-    cy.getByDataHook("editor-tabs-menu").should("be.visible")
-    cy.getByDataHook("editor-tabs-menu-import").click()
-    cy.getByDataHook("editor-tabs-import-input").selectFile(
-      "e2e/fixtures/duplicate-tabs-export.json",
-      { force: true },
-    )
-    cy.get(".toast-success-container").should("be.visible").click()
+    loadTabsForImport([{}, ...importedBuffers])
 
-    // Now import mixed tabs (one duplicate, one new)
+    // When one duplicate and one new tab are imported
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu").should("be.visible")
     cy.getByDataHook("editor-tabs-menu-import").click()
@@ -2084,6 +2134,7 @@ describe("import/export tabs", () => {
   })
 
   it("should show error toast when importing non-dexie format", () => {
+    loadTabsForImport()
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu").should("be.visible")
 
@@ -2099,24 +2150,14 @@ describe("import/export tabs", () => {
   })
 
   it("should show 'closed' badge for duplicates of archived tabs in import summary", () => {
-    // First import tabs that include active ones
-    cy.getByDataHook("editor-tabs-menu-button").click()
-    cy.getByDataHook("editor-tabs-menu").should("be.visible")
-    cy.getByDataHook("editor-tabs-menu-import").click()
-    cy.getByDataHook("editor-tabs-import-input").selectFile(
-      "e2e/fixtures/valid-tabs-export.json",
-      { force: true },
-    )
-    cy.get(".toast-success-container").should("be.visible").click()
+    loadTabsForImport([
+      {},
+      { ...importedBuffers[0], archived: true, archivedAt: 1706400000001 },
+      importedBuffers[1],
+      archivedImport,
+    ])
 
-    // Close one of the imported tabs to archive it
-    cy.getEditorTabByTitle("Imported Tab 1").within(() => {
-      cy.get(".chrome-tab-close").click()
-    })
-    cy.getEditorTabByTitle("Imported Tab 1").should("not.exist")
-    cy.getEditor().find("textarea").should("be.focused")
-
-    // Now import the same tabs again — archived duplicate should show "closed" badge
+    // When the same tabs are imported again
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu").should("be.visible")
     cy.getByDataHook("editor-tabs-menu-import").click()
@@ -2149,9 +2190,6 @@ describe("editor settings", () => {
     cy.execAdminQuery(
       `CREATE TABLE ${runWithSelectionTable} AS (SELECT x a, x b, x c FROM long_sequence(1))`,
     )
-    cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
-    cy.clearEditor()
   })
 
   afterEach(() => {
@@ -2166,6 +2204,7 @@ describe("editor settings", () => {
 
   it("changes 'Run with selection' from the modal and persists it", () => {
     // Given the setting defaults to partial
+    cy.loadConsoleWithAuth()
     openEditorSettings()
     cy.getByDataHook("editor-settings-run-with-selection").should(
       "contain",
@@ -2196,6 +2235,7 @@ describe("editor settings", () => {
 
   it("toggles 'Capitalize keywords on format' and formats with it", () => {
     // Given the setting defaults to off
+    loadEditorWithQuery(`select a from ${runWithSelectionTable}`)
     openEditorSettings()
     cy.getByDataHook("editor-settings-capitalize-keywords").should(
       "have.attr",
@@ -2215,8 +2255,6 @@ describe("editor settings", () => {
       .should("eq", "true")
 
     // And formatting the document uppercases keywords but not identifiers
-    cy.clearEditor()
-    cy.typeQuery(`select a from ${runWithSelectionTable}`)
     cy.window().then((win) => {
       const editor = win.monaco.editor.getEditors()[0]
       editor.focus()
@@ -2243,7 +2281,12 @@ describe("editor settings", () => {
   it("migrates a legacy disabled setting to Off on boot", () => {
     // Given a console booting with the boolean a previous version persisted
     // under the same key the mode enum now uses
-    cy.loadConsoleWithAuth(false, { "editor.runWithSelection": "false" })
+    const query = `select a from ${runWithSelectionTable}`
+    cy.loadConsoleWithAuth(
+      false,
+      { "editor.runWithSelection": "false" },
+      { buffers: [{ value: query }] },
+    )
     cy.getEditorContent().should("be.visible")
 
     // When the settings modal is opened
@@ -2258,9 +2301,7 @@ describe("editor settings", () => {
     cy.getByDataHook("editor-settings-modal").should("not.exist")
 
     // And the selection is genuinely ignored, not merely labelled Off
-    const query = `select a from ${runWithSelectionTable}`
     const startColumn = query.indexOf(runWithSelectionTable) + 1
-    cy.typeQueryDirectly(query)
     cy.selectRange(
       { lineNumber: 1, column: startColumn },
       { lineNumber: 1, column: startColumn + runWithSelectionTable.length },
@@ -2288,7 +2329,7 @@ describe("editor settings", () => {
     }
 
     // Given a query selecting one column, with the table name highlighted
-    cy.typeQueryDirectly(query)
+    loadEditorWithQuery(query)
     selectTableName()
 
     // When the mode is partial (default), the selection runs as-is
@@ -2323,13 +2364,13 @@ describe("editor settings", () => {
 
   it("expands a cross-statement selection to both whole queries in complete mode", () => {
     // Given the mode is set to complete
+    loadEditorWithQuery("select 1; select 2;")
     openEditorSettings()
     cy.getByDataHook("editor-settings-run-with-selection").click()
     cy.getByDataHook("run-with-selection-complete").click()
     cy.getByDataHook("editor-settings-save").click()
 
     // And two statements with a selection cutting into both
-    cy.typeQueryDirectly("select 1; select 2;")
     cy.selectRange({ lineNumber: 1, column: 8 }, { lineNumber: 1, column: 14 })
 
     // When both expanded queries run
@@ -2346,6 +2387,7 @@ describe("editor settings", () => {
 
   it("runs the glyph's own query in complete mode while a selection spans both statements", () => {
     // Given the mode is set to complete
+    loadEditorWithQuery("select 1;\nselect 2;")
     openEditorSettings()
     cy.getByDataHook("editor-settings-run-with-selection").click()
     cy.getByDataHook("run-with-selection-complete").click()
@@ -2360,7 +2402,6 @@ describe("editor settings", () => {
     })
 
     // And two statements with a selection whose caret ends inside the second
-    cy.typeQueryDirectly("select 1;\nselect 2;")
     cy.selectRange({ lineNumber: 1, column: 8 }, { lineNumber: 2, column: 9 })
     cy.getByDataHook("button-run-query").should(
       "contain",
@@ -2379,7 +2420,7 @@ describe("editor settings", () => {
 
   it("disables run while the selection covers only a comment between statements", () => {
     // Given a commented-out statement between two live statements
-    cy.typeQueryDirectly("select 1;\n-- old: delete from t\nselect 2;")
+    loadEditorWithQuery("select 1;\n-- old: delete from t\nselect 2;")
 
     // When a word inside the comment is selected
     cy.selectRange({ lineNumber: 2, column: 9 }, { lineNumber: 2, column: 15 })
@@ -2399,7 +2440,7 @@ describe("editor settings", () => {
 
   it("disables run while the selection covers only a statement separator", () => {
     // Given two statements, the second of which drops a table
-    cy.typeQueryDirectly("select 1;\ndrop table if exists t;")
+    loadEditorWithQuery("select 1;\ndrop table if exists t;")
 
     // When only the first statement's terminating semicolon and the newline
     // are selected, leaving the caret inside the second statement
@@ -2443,9 +2484,8 @@ describe("editor settings", () => {
     const cellResultTabs = () => cy.get("[role='tablist'] [role='tab']")
 
     // And a resolved notebook whose focused cell holds two statements
-    cy.createNotebook()
+    cy.loadConsoleWithAuth(false, {}, { buffers: [createNotebookBuffer(sql)] })
     cy.focusNotebookCell()
-    cy.focused().type(sql, { delay: 0 })
     cy.withFocusedEditor((editor) => {
       expect(editor.getValue()).to.eq(sql)
     })
@@ -2526,9 +2566,14 @@ describe("editor settings", () => {
 
   it("runs the whole notebook cell from Run cell and Run All regardless of selection", () => {
     // Given a cell with two statements and a comment-only selection
-    cy.createNotebook()
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [createNotebookBuffer("select 1;\n-- note\nselect 2;")],
+      },
+    )
     cy.focusNotebookCell()
-    cy.focused().type("select 1;\n-- note\nselect 2;", { delay: 0 })
     cy.withFocusedEditor((editor) =>
       editor.setSelection({
         startLineNumber: 2,
@@ -2585,9 +2630,14 @@ describe("editor settings", () => {
 
   it("never widens notebook Cmd+Enter beyond its focused query", () => {
     // Given a fresh cell whose cursor is in the gap between two statements
-    cy.createNotebook()
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [createNotebookBuffer("select 1;\n-- note\nselect 2;")],
+      },
+    )
     cy.focusNotebookCell()
-    cy.focused().type("select 1;\n-- note\nselect 2;", { delay: 0 })
     cy.withFocusedEditor((editor) =>
       editor.setPosition({ lineNumber: 2, column: 4 }),
     )
@@ -2685,13 +2735,13 @@ describe("editor settings", () => {
 
   it("isolates a shared fragment that only matches part of a query", () => {
     // Given the setting is turned off
+    loadEditorWithQuery("select 1 union all select 2;")
     openEditorSettings()
     cy.getByDataHook("editor-settings-run-with-selection").click()
     cy.getByDataHook("run-with-selection-off").click()
     cy.getByDataHook("editor-settings-save").click()
 
     // And a persisted buffer whose statement contains the shared fragment
-    cy.typeQueryDirectly("select 1 union all select 2;")
     cy.waitForActiveBufferValue("select 1 union all select 2;")
     cy.reload()
     cy.getEditorContent().should("have.value", "select 1 union all select 2;")
@@ -2716,7 +2766,7 @@ describe("editor settings", () => {
       cy.get("[data-hook='result-grid-tanstack']:visible #cell-0-0")
 
     // Given a result with a very wide column under automatic sizing
-    cy.typeQueryDirectly(
+    loadEditorWithQuery(
       "select string_agg(x::string, ',') s from long_sequence(500)",
     )
     cy.clickRunQuery()
@@ -2773,20 +2823,18 @@ describe("editor settings", () => {
 })
 
 describe("editing while a query is running", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
-    cy.clearEditor()
+  const loadRunningQuery = (value) => {
+    loadEditorWithQuery(value)
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(2000)
       })
     })
-  })
+  }
 
   it("keeps the editor editable in flight and still lands the result", () => {
     // Given a running query
-    cy.typeQuery("select 1")
+    loadRunningQuery("select 1")
     cy.clickRunIconInLine(1)
     cy.getCancelIconInLine(1).should("be.visible")
 
@@ -2818,7 +2866,7 @@ describe("editing while a query is running", () => {
 
   it("drops the glyphs but still lands the result when the running query is edited", () => {
     // Given a running query
-    cy.typeQuery("select 1")
+    loadRunningQuery("select 1")
     cy.clickRunIconInLine(1)
     cy.getCancelIconInLine(1).should("be.visible")
 
@@ -2842,7 +2890,7 @@ describe("editing while a query is running", () => {
 
   it("keeps the cursor where the user types when the query fails after an edit", () => {
     // Given a running query that will fail
-    cy.typeQuery("select * from non_existent_table")
+    loadRunningQuery("select * from non_existent_table")
     cy.clickRunIconInLine(1)
     cy.getCancelIconInLine(1).should("be.visible")
 
@@ -2874,7 +2922,7 @@ describe("editing while a query is running", () => {
 
   it("supersedes the running query when a second run is confirmed, landing only the new result", () => {
     // Given a first query that is still running
-    cy.typeQuery("select 1 a;{enter}select 2 b;")
+    loadRunningQuery("select 1 a;\nselect 2 b;")
     cy.clickRunIconInLine(1)
     cy.getCancelIconInLine(1).should("be.visible")
 

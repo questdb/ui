@@ -678,8 +678,7 @@ describe("Auth - OIDC ID token", () => {
         },
         { statusCode: 401, body: "Unauthorized" },
       ).as("expiredBearerQuery")
-      cy.clearEditor()
-      cy.typeQuery("select current_user()")
+      cy.typeQueryDirectly("select current_user()")
       cy.runLine()
       cy.wait("@expiredBearerQuery")
       cy.contains("the request was not executed").should("be.visible")
@@ -771,8 +770,7 @@ describe("Auth - OIDC ID token", () => {
         )
       },
     ).as("statement")
-    cy.clearEditor()
-    cy.typeQuery("select current_user()")
+    cy.typeQueryDirectly("select current_user()")
     cy.runLine()
     cy.wait("@statement")
     cy.wait("@statement")
@@ -787,12 +785,29 @@ describe("Auth - OIDC ID token", () => {
   it("clears the remembered identity before the redirect guard forces sign-in", () => {
     // Unknown expiry avoids a renewal on 401: this test targets the redirect
     // guard's forced-login path, not refresh recovery or its connection events.
+    for (const [query, alias] of [
+      ["materialized_views()", "initialSchema"],
+      ["information_schema.questdb_columns()", "initialColumns"],
+    ]) {
+      cy.intercept(
+        {
+          method: "GET",
+          url: `${baseUrl}/exec*`,
+          query: { query },
+          middleware: true,
+        },
+        (req) => {
+          req.alias = alias
+        },
+      )
+    }
     signIn({
       idTokens: { authorization_code: "opaque-id-token" },
       accessTokenLifetime: null,
       credentials: { "auto.refresh.tables": "false" },
     })
     cy.getEditor().should("be.visible")
+    cy.wait(["@authCheck", "@initialSchema", "@initialColumns"])
     cy.window().then(({ localStorage }) => {
       localStorage.setItem("sso.username.test-client", "previous-user")
     })
@@ -804,8 +819,7 @@ describe("Auth - OIDC ID token", () => {
       },
       { statusCode: 401, body: "Unauthorized" },
     ).as("rejectedIdentity")
-    cy.clearEditor()
-    cy.typeQuery("select current_user()")
+    cy.typeQueryDirectly("select current_user()")
     cy.window()
       .its("localStorage")
       .invoke("setItem", "oauth.redirect.count", "5")
@@ -872,8 +886,9 @@ describe("Auth - OIDC ID token", () => {
     }
 
     const runScriptDespiteFailures = () => {
-      cy.clearEditor()
-      cy.typeQuery(statements.map((statement) => `${statement};`).join("\n"))
+      cy.typeQueryDirectly(
+        statements.map((statement) => `${statement};`).join("\n"),
+      )
       cy.typeQuery(`${ctrlOrCmd}{shift}{enter}`)
       cy.getByRole("dialog").should("contain", "Run all queries")
       // Then only the end of the session can stop the script after statement 1
@@ -1006,8 +1021,7 @@ describe("Auth - OIDC ID token", () => {
         )
       })
     })
-    cy.clearEditor()
-    cy.typeQuery("select 42")
+    cy.typeQueryDirectly("select 42")
     cy.tick(3575000)
     cy.clickRunIconInLine(1)
     cy.wrap(null).should(() => expect(releaseRefresh).to.be.a("function"))
@@ -1274,8 +1288,7 @@ describe("Auth - OIDC bearer rejected at startup", () => {
         },
         answer(statements),
       ).as("statement")
-      cy.clearEditor()
-      cy.typeQuery("select current_user()")
+      cy.typeQueryDirectly("select current_user()")
       cy.runLine()
       cy.wait("@statement")
       cy.getByDataHook("success-notification").should("be.visible")
@@ -1453,8 +1466,7 @@ describe("Auth - OIDC token without a lifetime", () => {
       },
       { statusCode: 401, body: "Unauthorized" },
     ).as("rejected")
-    cy.clearEditor()
-    cy.typeQuery("select current_user()")
+    cy.typeQueryDirectly("select current_user()")
     cy.runLine()
 
     // Then the user signs in again, without a refresh or a retried query

@@ -4,6 +4,13 @@
 // saves rules, a re-run flashes changed cells with a direction glyph, and a
 // value rule colors a cell on the first run.
 
+const { createNotebookBuffer } = require("../../utils/editorBuffers")
+
+const loadNotebookCell = (sql) => {
+  cy.loadConsoleWithAuth(false, {}, { buffers: [createNotebookBuffer(sql)] })
+  cy.focusNotebookCell()
+}
+
 // Every run returns a larger value than the run before it.
 const RISING_VALUE_QUERY = "select 'A' as k, cast(now() as long) as v"
 
@@ -45,16 +52,9 @@ const runCell = () => {
 }
 
 describe("notebook highlight rules", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
-    cy.createNotebook()
-    cy.focusNotebookCell()
-  })
-
   it("flashes changed values with a direction glyph after up and down rules are saved", () => {
     // Given a cell whose value grows on every run
-    cy.focused().type(RISING_VALUE_QUERY, { delay: 0 })
+    loadNotebookCell(RISING_VALUE_QUERY)
     runCell()
 
     // When an up rule and a down rule on v are saved
@@ -82,7 +82,7 @@ describe("notebook highlight rules", () => {
 
   it("colors a cell that passes a value rule without a previous result", () => {
     // Given a cell with a constant value
-    cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
+    loadNotebookCell("select 'A' as k, 5 as v")
     runCell()
 
     // When a "> value" rule on v is saved with a threshold of 1
@@ -106,7 +106,7 @@ describe("notebook highlight rules", () => {
 
   it("keeps an open draft when Highlight rules is chosen again from the menu", () => {
     // Given a drafted rule in the open drawer
-    cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
+    loadNotebookCell("select 'A' as k, 5 as v")
     runCell()
     openHighlightDrawer()
     addRule("v", "> value")
@@ -122,7 +122,7 @@ describe("notebook highlight rules", () => {
 
   it("does not save a dismissed draft when Enter follows Escape", () => {
     // Given a drafted rule whose value input has focus
-    cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
+    loadNotebookCell("select 'A' as k, 5 as v")
     runCell()
     openHighlightDrawer()
     addRule("v", "> value")
@@ -149,7 +149,7 @@ describe("notebook highlight rules", () => {
 
   it("keeps the saved rules when Save is clicked again while the drawer slides out", () => {
     // Given a drafted rule
-    cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
+    loadNotebookCell("select 'A' as k, 5 as v")
     runCell()
     openHighlightDrawer()
     addRule("v", "> value")
@@ -190,7 +190,7 @@ describe("notebook highlight rules", () => {
 
   it("blocks Save on a bad threshold instead of storing another value", () => {
     // Given a "changed by at least" rule
-    cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
+    loadNotebookCell("select 'A' as k, 5 as v")
     runCell()
     openHighlightDrawer()
     addRule("v", "changed by at least")
@@ -214,7 +214,7 @@ describe("notebook highlight rules", () => {
 
   it("does not bring the drawer back after a run that failed while it was open", () => {
     // Given the drawer is open with an unsaved rule
-    cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
+    loadNotebookCell("select 'A' as k, 5 as v")
     runCell()
     openHighlightDrawer()
     addRule("v", "> value")
@@ -243,7 +243,7 @@ describe("notebook highlight rules", () => {
 
   it("colors every cell of the row when a rule applies to the row", () => {
     // Given a cell with two columns and a constant value
-    cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
+    loadNotebookCell("select 'A' as k, 5 as v")
     runCell()
 
     // When a "> value" rule on v is saved with "Applies to" set to Row
@@ -273,7 +273,7 @@ describe("notebook highlight rules", () => {
 
   it("flashes a changed cell on an auto-refresh tick", () => {
     // Given a saved "changed" rule on a value that grows on every run
-    cy.focused().type(RISING_VALUE_QUERY, { delay: 0 })
+    loadNotebookCell(RISING_VALUE_QUERY)
     runCell()
     openHighlightDrawer()
     addRule("v", "changed")
@@ -295,9 +295,7 @@ describe("notebook highlight rules", () => {
 
   it("keeps an open chart draft when Chart settings is chosen again from the menu", () => {
     // Given a chart drawer with the type changed to Line, not saved
-    cy.focused().type("select x, x * 2 as y from long_sequence(5)", {
-      delay: 0,
-    })
+    loadNotebookCell("select x, x * 2 as y from long_sequence(5)")
     runCell()
     cy.get("[data-notebook-cell] button[aria-label='View chart']").click()
     cy.getByDataHook("draw-canvas").should("be.visible")
@@ -320,9 +318,7 @@ describe("notebook highlight rules", () => {
 
   it("saves a chart setting from the drawer and shows it again on reopen", () => {
     // Given a cell shown as a chart
-    cy.focused().type("select x, x * 2 as y from long_sequence(5)", {
-      delay: 0,
-    })
+    loadNotebookCell("select x, x * 2 as y from long_sequence(5)")
     runCell()
     cy.get("[data-notebook-cell] button[aria-label='View chart']").click()
     cy.getByDataHook("draw-canvas").should("be.visible")

@@ -3,6 +3,7 @@ require("cypress-real-events")
 require("@4tw/cypress-drag-drop")
 
 const { ctrlOrCmd, escapeRegExp, seedNotebookOnboarding } = require("./utils")
+const { seedEditorBuffers } = require("./utils/editorBuffers")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`
@@ -717,13 +718,24 @@ Cypress.Commands.add(
 Cypress.Commands.add(
   "loadConsoleWithAuth",
   (clearWarnings = false, localStorageItems = {}, options = {}) => {
-    const { username, password, url = baseUrl, onBeforeLoad } = options
+    const {
+      username,
+      password,
+      url = baseUrl,
+      onBeforeLoad,
+      buffers,
+      activeBufferId,
+    } = options
+    let seeded
     if (clearWarnings) {
       cy.clearSimulatedWarnings()
     }
     cy.loginWithApi(username, password).then((credentials) => {
       cy.handleStorageAndVisit(url, true, localStorageItems, (win) => {
         win.sessionStorage.clear()
+        if (buffers) {
+          seeded = seedEditorBuffers(win, buffers, activeBufferId)
+        }
         onBeforeLoad?.(win)
         for (const [key, value] of Object.entries(credentials)) {
           win.localStorage.setItem(key, value)
@@ -731,6 +743,7 @@ Cypress.Commands.add(
         win.sessionStorage.setItem("auth.login.method", "password")
       })
     })
+    cy.then(() => seeded)
     cy.getEditor().should("be.visible")
   },
 )
@@ -759,8 +772,7 @@ Cypress.Commands.add("logout", () => {
 })
 
 Cypress.Commands.add("executeSQL", (sql) => {
-  cy.clearEditor()
-  cy.typeQuery(sql)
+  cy.typeQueryDirectly(sql)
   cy.intercept("/exec*").as("exec")
   cy.clickRunIconInLine(1)
   cy.wait("@exec")
@@ -892,8 +904,7 @@ Cypress.Commands.add("ensureDataSourcesPanel", () => {
 })
 
 Cypress.Commands.add("searchFor", (query) => {
-  cy.getByDataHook("search-input").clear().type(query)
-  cy.wait(400) // Wait for debounce
+  cy.getByDataHook("search-input").clear().type(query, { delay: 0 })
 })
 
 Cypress.Commands.add("toggleSearchOption", (option) => {

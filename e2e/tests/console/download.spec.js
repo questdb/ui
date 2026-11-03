@@ -1,21 +1,21 @@
-describe("download functionality", () => {
-  beforeEach(() => {
-    cy.loadConsoleWithAuth()
-    cy.getEditor().should("be.visible")
+const loadDownloadConsole = (query) => {
+  cy.loadConsoleWithAuth(false, {}, { buffers: [{ value: query }] })
+  cy.getEditor().should("be.visible")
 
-    cy.document().should((doc) => {
-      const activeElement = doc.activeElement
-      expect(activeElement).to.exist
-      expect(activeElement.classList.contains("monaco-mouse-cursor-text")).to.be
-        .true
-    })
-
-    cy.clearEditor()
+  cy.document().should((doc) => {
+    const activeElement = doc.activeElement
+    expect(activeElement).to.exist
+    expect(activeElement.classList.contains("monaco-mouse-cursor-text")).to.be
+      .true
   })
+}
 
+describe("download functionality", () => {
   it("should show download button with results", () => {
+    // Given
+    loadDownloadConsole("select x from long_sequence(10)")
+
     // When
-    cy.typeQueryDirectly("select x from long_sequence(10)")
     cy.clickRunIconInLine(1)
 
     // Then
@@ -34,6 +34,7 @@ describe("download functionality", () => {
     const query = "select x from long_sequence(10)"
 
     // Given
+    loadDownloadConsole(query)
     cy.intercept("GET", "**/exp?*", (req) => {
       req.reply({
         statusCode: 200,
@@ -42,7 +43,6 @@ describe("download functionality", () => {
     }).as("exportRequest")
 
     // When
-    cy.typeQuery(query)
     cy.runLine()
     cy.getByDataHook("download-dropdown-button").click()
     cy.getByDataHook("download-csv-button").click()
@@ -60,6 +60,7 @@ describe("download functionality", () => {
     const query = "select x from long_sequence(10)"
 
     // Given
+    loadDownloadConsole(query)
     cy.intercept("GET", "**/exp?*", (req) => {
       req.reply({
         statusCode: 200,
@@ -68,7 +69,6 @@ describe("download functionality", () => {
     }).as("exportRequest")
 
     // When
-    cy.typeQuery(query)
     cy.runLine()
     cy.getByDataHook("download-parquet-button").click()
 
@@ -84,6 +84,7 @@ describe("download functionality", () => {
 
   it("should show error toast on bad request", () => {
     // Given
+    loadDownloadConsole("select x from long_sequence(5)")
     cy.intercept("GET", "**/exp?*", (req) => {
       const url = new URL(req.url)
       url.searchParams.set("query", "badquery")
@@ -91,7 +92,6 @@ describe("download functionality", () => {
     }).as("badExportRequest")
 
     // When
-    cy.typeQuery("select x from long_sequence(5)")
     cy.runLine()
     cy.getByDataHook("download-dropdown-button").click()
     cy.getByDataHook("download-csv-button").click()

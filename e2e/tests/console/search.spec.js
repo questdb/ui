@@ -1,7 +1,8 @@
 /// <reference types="cypress" />
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
-const baseUrl = `http://localhost:9999${contextPath}`
+const loadSearchConsole = (buffers) => {
+  cy.loadConsoleWithAuth(false, {}, { buffers })
+}
 
 describe("search panel", () => {
   describe("panel visibility and basic functionality", () => {
@@ -100,21 +101,22 @@ describe("search panel", () => {
 
   describe("search functionality", () => {
     beforeEach(() => {
-      cy.loadConsoleWithAuth()
-      cy.ensureDataSourcesPanel()
-      cy.closeSearchPanel()
-      cy.typeQueryDirectly(
-        "SELECT timestamp, symbol, price, volume FROM crypto_trades WHERE symbol = 'BTC-USD';\n",
-      )
-
-      cy.createTabWithContent(
-        "SELECT count(*), avg(price), sum(volume) FROM crypto_trades WHERE price > 50000;\n",
-      )
-
-      cy.createTabWithContent(
-        "CREATE TABLE market_data_staging (\n  timestamp TIMESTAMP,\nsymbol SYMBOL,\nopen_price DOUBLE,\nclose_price DOUBLE,\nvolume LONG \n{rightArrow}{rightArrow}TIMESTAMP(timestamp);\n",
-        "markets",
-      )
+      // Given three saved SQL tabs
+      loadSearchConsole([
+        {
+          value:
+            "SELECT timestamp, symbol, price, volume FROM crypto_trades WHERE symbol = 'BTC-USD';\n",
+        },
+        {
+          value:
+            "SELECT count(*), avg(price), sum(volume) FROM crypto_trades WHERE price > 50000;\n",
+        },
+        {
+          label: "markets",
+          value:
+            "CREATE TABLE market_data_staging (\n  timestamp TIMESTAMP,\nsymbol SYMBOL,\nopen_price DOUBLE,\nclose_price DOUBLE,\nvolume LONG \n{rightArrow}{rightArrow}TIMESTAMP(timestamp);\n",
+        },
+      ])
 
       cy.openSearchPanel()
     })
@@ -146,8 +148,6 @@ describe("search panel", () => {
       cy.getEditor().click()
       cy.typeQueryDirectly("\n-- INSERT INTO market_data_staging VALUES")
 
-      cy.wait(400)
-
       cy.getByDataHook("search-summary").should(
         "contain",
         "2 results in 2 tabs",
@@ -155,8 +155,14 @@ describe("search panel", () => {
     })
 
     it("should show no results when no matches found", () => {
+      // Given an existing set of matches
+      cy.searchFor("crypto_trades")
+      cy.getByDataHook("search-summary").should("contain", "results in 2 tabs")
+
+      // When the query has no matches
       cy.searchFor("nonexistenttext123")
 
+      // Then the previous results disappear
       cy.getSearchResults().should("not.exist")
       cy.getByDataHook("search-no-results").should("be.visible")
     })
@@ -178,8 +184,6 @@ describe("search panel", () => {
         .should("be.visible")
         .type("changed!{enter}")
 
-      cy.wait(400)
-
       cy.getByDataHook("search-summary").should("contain", "1 result in 1 tab")
       cy.getByDataHook("search-result-buffer-group")
         .find("mark")
@@ -196,7 +200,6 @@ describe("search panel", () => {
       )
 
       cy.getEditorTabByTitle("markets").find(".chrome-tab-close").click()
-      cy.wait(400)
 
       cy.getByDataHook("search-result-buffer-group").should("contain", "closed")
 
@@ -218,12 +221,13 @@ describe("search panel", () => {
 
   describe("search options", () => {
     beforeEach(() => {
-      cy.loadConsoleWithAuth()
-      cy.ensureDataSourcesPanel()
-      cy.closeSearchPanel()
-      cy.typeQueryDirectly(
-        "-- Daily OHLC aggregation for major cryptocurrency symbols\nSELECT \n  SYMBOL,\nfirst(price) as open_price,\nmax(price) as high_price,\nmin(price) as low_price,\nlast(price) as close_price,\nsum(volume) as total_volume\nFROM crypto_trades \nWHERE SYMBOL IN ('BTC-USD', 'ETH-USD', 'ADA-USD');\n",
-      )
+      // Given a saved SQL tab
+      loadSearchConsole([
+        {
+          value:
+            "-- Daily OHLC aggregation for major cryptocurrency symbols\nSELECT \n  SYMBOL,\nfirst(price) as open_price,\nmax(price) as high_price,\nmin(price) as low_price,\nlast(price) as close_price,\nsum(volume) as total_volume\nFROM crypto_trades \nWHERE SYMBOL IN ('BTC-USD', 'ETH-USD', 'ADA-USD');\n",
+        },
+      ])
       cy.openSearchPanel()
     })
 
@@ -232,7 +236,6 @@ describe("search panel", () => {
       cy.getByDataHook("search-summary").should("contain", "3 results in 1 tab")
 
       cy.toggleSearchOption("caseSensitive")
-      cy.wait(400)
 
       cy.getByDataHook("search-summary").should("contain", "1 result in 1 tab")
     })
@@ -242,7 +245,6 @@ describe("search panel", () => {
       cy.getByDataHook("search-summary").should("contain", "8 results in 1 tab")
 
       cy.toggleSearchOption("wholeWord")
-      cy.wait(400)
 
       cy.getSearchResults().should("have.length", 4)
 
@@ -282,21 +284,22 @@ describe("search panel", () => {
 
   describe("search with closed tabs", () => {
     beforeEach(() => {
-      cy.loadConsoleWithAuth()
-      cy.ensureDataSourcesPanel()
-      cy.closeSearchPanel()
-      cy.typeQueryDirectly(
-        "SELECT symbol, avg(return_pct) as avg_return FROM portfolio_returns;",
-      )
-
-      cy.createTabWithContent("DROP TABLE IF EXISTS portfolio_positions;")
-
-      cy.createTabWithContent(
-        "CREATE TABLE portfolio_positions (symbol SYMBOL, risk_score DOUBLE);",
-      )
-
-      // Close the middle tab
-      cy.getEditorTabs().eq(1).find(".chrome-tab-close").click()
+      // Given two open tabs and one archived tab
+      loadSearchConsole([
+        {
+          value:
+            "SELECT symbol, avg(return_pct) as avg_return FROM portfolio_returns;",
+        },
+        {
+          value: "DROP TABLE IF EXISTS portfolio_positions;",
+          archived: true,
+          archivedAt: Date.now(),
+        },
+        {
+          value:
+            "CREATE TABLE portfolio_positions (symbol SYMBOL, risk_score DOUBLE);",
+        },
+      ])
 
       cy.openSearchPanel()
     })
@@ -310,7 +313,6 @@ describe("search panel", () => {
       )
 
       cy.toggleSearchOption("includeDeleted")
-      cy.wait(400)
 
       cy.getByDataHook("search-summary").should(
         "contain",
@@ -365,11 +367,18 @@ describe("search panel", () => {
     })
 
     it("should handle empty search query", () => {
+      // Given an existing search result
+      cy.typeQueryDirectly("SELECT symbol FROM trades;")
       cy.openSearchPanel()
-      cy.getByDataHook("search-input").clear()
-      cy.wait(400)
+      cy.searchFor("symbol")
+      cy.getSearchResults().should("have.length", 1)
 
+      // When clearing the query
+      cy.getByDataHook("search-input").clear()
+
+      // Then results and the empty-state message disappear
       cy.getSearchResults().should("not.exist")
+      cy.getByDataHook("search-summary").should("have.text", "")
       cy.getByDataHook("search-no-results").should("not.exist")
     })
 
@@ -431,12 +440,13 @@ describe("search panel", () => {
 
   describe("keyboard shortcuts", () => {
     beforeEach(() => {
-      cy.loadConsoleWithAuth()
-      cy.ensureDataSourcesPanel()
-      cy.closeSearchPanel()
-      cy.typeQueryDirectly(
-        "SELECT symbol, position_size, unrealized_pnl FROM active_positions WHERE status = 'ACTIVE';",
-      )
+      // Given a saved SQL tab
+      loadSearchConsole([
+        {
+          value:
+            "SELECT symbol, position_size, unrealized_pnl FROM active_positions WHERE status = 'ACTIVE';",
+        },
+      ])
       cy.openSearchPanel()
     })
 
@@ -452,20 +462,21 @@ describe("search panel", () => {
 
   describe("search result display", () => {
     beforeEach(() => {
-      cy.loadConsoleWithAuth()
-      cy.ensureDataSourcesPanel()
-      cy.closeSearchPanel()
-      cy.typeQueryDirectly(
-        "SELECT \n  trader_id,\ntrader_name,\ntrader_email,\nsum(profit_loss) as total_pnl,\ncount(*) as trade_count\nFROM trading_activity \nWHERE trader_email LIKE '%@hedgefund.com'\nAND trade_date >= '2024-01-01'\nGROUP BY trader_id, trader_name, trader_email\n;",
-      )
+      // Given a saved SQL tab
+      loadSearchConsole([
+        {
+          value:
+            "SELECT \n  trader_id,\ntrader_name,\ntrader_email,\nsum(profit_loss) as total_pnl,\ncount(*) as trade_count\nFROM trading_activity \nWHERE trader_email LIKE '%@hedgefund.com'\nAND trade_date >= '2024-01-01'\nGROUP BY trader_id, trader_name, trader_email\n;",
+        },
+        {
+          value:
+            "SELECT customer_email, sum(trade_volume) as total_volume FROM customer_trades WHERE account_status = 'ACTIVE' AND trade_date > dateadd('m', -1, now()) GROUP BY customer_email;",
+        },
+      ])
       cy.openSearchPanel()
     })
 
     it("should group results by buffer/tab", () => {
-      cy.createTabWithContent(
-        "SELECT customer_email, sum(trade_volume) as total_volume FROM customer_trades WHERE account_status = 'ACTIVE' AND trade_date > dateadd('m', -1, now()) GROUP BY customer_email;",
-      )
-
       cy.searchFor("_email")
 
       cy.getSearchResultGroups().should("have.length", 2)
@@ -485,23 +496,22 @@ describe("search panel", () => {
   })
 
   describe("title matching functionality", () => {
-    beforeEach(() => {
-      cy.loadConsoleWithAuth()
-      cy.ensureDataSourcesPanel()
-      cy.closeSearchPanel()
-    })
-
     it("should find title-only matches", () => {
-      cy.typeQueryDirectly("SELECT symbol FROM market_data;")
-      cy.createTabWithContent(
-        "INSERT INTO trades VALUES(now(), 'BTC-USD', 45000.0, 1000);",
-        "crypto analysis",
-      )
-      cy.createTabWithContent("DROP TABLE temp_portfolio;", "portfolio cleanup")
+      // Given tabs whose names contain the search terms
+      loadSearchConsole([
+        { value: "SELECT symbol FROM market_data;" },
+        {
+          label: "crypto analysis",
+          value: "INSERT INTO trades VALUES(now(), 'BTC-USD', 45000.0, 1000);",
+        },
+        { label: "portfolio cleanup", value: "DROP TABLE temp_portfolio;" },
+      ])
 
+      // When searching for a title
       cy.openSearchPanel()
       cy.searchFor("crypto")
 
+      // Then the matching title is highlighted
       cy.getByDataHook("search-result-title-match").should("have.length", 1)
       cy.getByDataHook("search-result-title-match-text").should(
         "contain",
@@ -513,20 +523,24 @@ describe("search panel", () => {
     })
 
     it("should find title matches with closed tabs", () => {
-      cy.createTabWithContent(
-        "CREATE TABLE trading_positions (symbol SYMBOL, qty DOUBLE);",
-        "position tracking",
-      )
-      cy.createTabWithContent(
-        "SELECT * FROM market_data WHERE symbol = 'ETH-USD';",
-      )
-      cy.toggleSearchOption("wholeWord")
+      // Given an archived tab with a matching title
+      loadSearchConsole([
+        {},
+        {
+          label: "position tracking",
+          value: "CREATE TABLE trading_positions (symbol SYMBOL, qty DOUBLE);",
+          archived: true,
+          archivedAt: Date.now(),
+        },
+        { value: "SELECT * FROM market_data WHERE symbol = 'ETH-USD';" },
+      ])
 
-      cy.getEditorTabs().eq(1).find(".chrome-tab-close").click()
-
+      // When searching for a whole word
       cy.openSearchPanel()
+      cy.toggleSearchOption("wholeWord")
       cy.searchFor("position")
 
+      // Then the title identifies the closed tab
       cy.getByDataHook("search-result-title-match").should("have.length", 1)
       cy.getByDataHook("search-result-title-match-closed-status").should(
         "contain",
@@ -535,14 +549,20 @@ describe("search panel", () => {
     })
 
     it("should show header with title highlight when buffer has both title and content matches", () => {
-      cy.createTabWithContent(
-        "SELECT price FROM crypto_trades WHERE symbol = 'BTC-USD';",
-        "crypto price query",
-      )
+      // Given a tab with matches in its title and content
+      loadSearchConsole([
+        {},
+        {
+          label: "crypto price query",
+          value: "SELECT price FROM crypto_trades WHERE symbol = 'BTC-USD';",
+        },
+      ])
 
+      // When searching for the shared term
       cy.openSearchPanel()
       cy.searchFor("crypto")
 
+      // Then the group highlights the title and counts the content match
       cy.getByDataHook("search-result-buffer-group").should("have.length", 1)
       cy.getByDataHook("search-result-buffer-group")
         .find("mark")
@@ -554,28 +574,39 @@ describe("search panel", () => {
     })
 
     it("should navigate to buffer when title match is clicked", () => {
-      cy.createTabWithContent(
-        "SELECT timestamp FROM price_history;",
-        "price analysis",
-      )
+      // Given a saved query
+      loadSearchConsole([
+        {},
+        {
+          label: "price analysis",
+          value: "SELECT timestamp FROM price_history;",
+        },
+      ])
 
+      // When selecting its search result
       cy.openSearchPanel()
       cy.searchFor("price")
 
       cy.getByDataHook("search-result-buffer-group").click()
 
+      // Then the query is active
       cy.getEditorTabByTitle("price analysis").should("have.attr", "active")
       cy.getEditor().should("contain", "price_history")
     })
 
     it("should convert temporary buffer to permanent on double click", () => {
-      cy.createTabWithContent(
-        "INSERT INTO orders VALUES(now(), 'BTC-USD', 1.5);",
-        "order entry",
-      )
+      // Given an archived query
+      loadSearchConsole([
+        {},
+        {
+          label: "order entry",
+          value: "INSERT INTO orders VALUES(now(), 'BTC-USD', 1.5);",
+          archived: true,
+          archivedAt: Date.now(),
+        },
+      ])
 
-      cy.getEditorTabs().eq(1).find(".chrome-tab-close").click()
-
+      // When previewing its search result
       cy.openSearchPanel()
       cy.searchFor("order")
 
@@ -588,6 +619,7 @@ describe("search panel", () => {
 
       cy.getByDataHook("search-result-buffer-group").dblclick()
 
+      // Then the tab becomes permanent
       cy.getEditorTabByTitle("order entry").should(
         "not.have.class",
         "temporary-tab",
@@ -596,23 +628,16 @@ describe("search panel", () => {
     })
 
     it("should navigate between metrics and editor without losing focus", () => {
-      // Add a metrics tab
-      cy.getByDataHook("schema-add-metrics-button").click()
-      cy.getByDataHook("metrics-root").should("be.visible")
-      // Rename it to "trades"
-      cy.get(".chrome-tab[active]").find(".chrome-tab-drag-handle").dblclick()
-      cy.get(".chrome-tab[active]")
-        .find(".chrome-tab-rename")
-        .should("be.visible")
-        .type("trades{enter}")
-
-      // Add a new tab with "trades" content
-      cy.createTabWithContent(
-        "SELECT symbol, price FROM trades WHERE symbol = 'BTC-USD';",
-      )
+      // Given a metrics tab and a SQL tab
+      loadSearchConsole([
+        {},
+        { label: "trades", metricsViewState: {} },
+        { value: "SELECT symbol, price FROM trades WHERE symbol = 'BTC-USD';" },
+      ])
 
       // Navigate to the "trades" tab
       cy.getEditorTabByTitle("trades").find(".chrome-tab-drag-handle").click()
+      cy.getByDataHook("metrics-root").should("be.visible")
 
       // Search for "trades"
       cy.openSearchPanel()
@@ -659,12 +684,10 @@ describe("search panel", () => {
 
   describe("search error handling", () => {
     beforeEach(() => {
-      cy.loadConsoleWithAuth()
-      cy.ensureDataSourcesPanel()
-      cy.closeSearchPanel()
-      cy.typeQueryDirectly(
-        "SELECT symbol, price FROM trades WHERE symbol = 'BTC-USD';",
-      )
+      // Given a saved SQL tab
+      loadSearchConsole([
+        { value: "SELECT symbol, price FROM trades WHERE symbol = 'BTC-USD';" },
+      ])
       cy.openSearchPanel()
     })
 
@@ -708,7 +731,6 @@ describe("search panel", () => {
       cy.getByDataHook("search-error").should("be.visible")
 
       cy.getByDataHook("search-input").clear()
-      cy.wait(400)
 
       cy.getByDataHook("search-error").should("not.exist")
       cy.getByDataHook("search-no-results").should("not.exist")
@@ -751,7 +773,6 @@ describe("search panel", () => {
 
       testCases.forEach((testCase) => {
         cy.searchFor(testCase.search)
-        cy.wait(400)
 
         cy.getByDataHook("search-error").should("not.exist")
 
@@ -763,7 +784,11 @@ describe("search panel", () => {
         )
 
         if (testCase.expectedMatches > 0) {
-          cy.getSearchResults().first().should("contain", testCase.search)
+          cy.getSearchResults()
+            .first()
+            .find("mark")
+            .first()
+            .should("have.text", testCase.search)
         }
       })
     })
@@ -779,13 +804,11 @@ describe("search panel", () => {
       cy.toggleSearchOption("useRegex")
 
       cy.searchFor("(btc|eth)_trades")
-      cy.wait(400)
 
       cy.getByDataHook("search-error").should("not.exist")
       cy.getByDataHook("search-summary").should("contain", "2 results in 1 tab")
 
       cy.searchFor("\\(btc\\|eth\\)_trades")
-      cy.wait(400)
 
       cy.getByDataHook("search-error").should("not.exist")
       cy.getSearchResults().should("have.length", 0)
@@ -811,6 +834,7 @@ describe("search panel", () => {
       "teXt",
     ]
     const checkMatches = (matches) => {
+      cy.getSearchResults().should("have.length", matches.length)
       for (let i = 0; i < matches.length; i++) {
         const result = cy.getSearchResults().eq(i)
         result.should("contain", allWords[matches[i]])
@@ -827,44 +851,44 @@ describe("search panel", () => {
 
       // !regex + !wholeWord + !caseSensitive (default)
       cy.searchFor("product")
-      cy.wait(400)
+
       checkMatches([1, 3, 4, 5, 6])
 
       // !regex + !wholeWord + caseSensitive
       cy.toggleSearchOption("caseSensitive")
-      cy.wait(400)
+
       checkMatches([1, 3, 5])
 
       // !regex + wholeWord + caseSensitive
       cy.toggleSearchOption("wholeWord")
-      cy.wait(400)
+
       checkMatches([1])
 
       // !regex + wholeWord + !caseSensitive
       cy.toggleSearchOption("caseSensitive")
-      cy.wait(400)
+
       checkMatches([1, 4, 6])
 
       cy.searchFor("te[sx]t")
 
       // regex + wholeWord + !caseSensitive
       cy.toggleSearchOption("useRegex")
-      cy.wait(400)
+
       checkMatches([8, 9])
 
       // regex + !wholeWord + !caseSensitive
       cy.toggleSearchOption("wholeWord")
-      cy.wait(400)
+
       checkMatches([7, 8, 9])
 
       // regex + !wholeWord + caseSensitive
       cy.toggleSearchOption("caseSensitive")
-      cy.wait(400)
+
       checkMatches([7, 8])
 
       // regex + wholeWord + caseSensitive
       cy.toggleSearchOption("wholeWord")
-      cy.wait(400)
+
       checkMatches([8])
     })
   })

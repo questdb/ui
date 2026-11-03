@@ -27,7 +27,7 @@ describe("HTTP Session Management", () => {
 
     // When
     cy.clearEditor()
-    cy.typeQuery("SELECT 1")
+    cy.typeQueryDirectly("SELECT 1")
     cy.clickRunIconInLine(1)
 
     // Then
@@ -44,7 +44,7 @@ describe("HTTP Session Management", () => {
     // Then
     cy.getEditor().should("be.visible")
     cy.clearEditor()
-    cy.typeQuery("SELECT 2")
+    cy.typeQueryDirectly("SELECT 2")
     cy.clickRunIconInLine(1)
     cy.getGrid().should("be.visible")
     cy.getGridRow(0).should("contain", "2")

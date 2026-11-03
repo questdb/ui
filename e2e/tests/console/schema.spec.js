@@ -284,7 +284,7 @@ describe("keyboard navigation", () => {
 
   it("should switch the focus between editor, grid, and schema", () => {
     cy.getEditorContent().should("be.visible")
-    cy.typeQuery("SELECT 123123;")
+    cy.typeQueryDirectly("SELECT 123123;")
     cy.runLine()
     cy.contains("[data-hook='grid-cell']", "123123").click()
     cy.focused().should("contain", "123123")
@@ -601,7 +601,7 @@ describe("materialized views", () => {
 
   it("should resume WAL for a materialized view", () => {
     cy.getByDataHook("schema-row-error-icon").should("not.exist")
-    cy.typeQuery(
+    cy.typeQueryDirectly(
       "ALTER MATERIALIZED VIEW btc_trades_mv SUSPEND WAL WITH 24, 'Too many open files';",
     )
       .runLine()

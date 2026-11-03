@@ -16,6 +16,11 @@ const {
   getCustomProviderEndpoint,
 } = require("../../utils/aiAssistant")
 
+const loadConsoleWithQuery = (value) =>
+  cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings(), {
+    buffers: [{ value }],
+  })
+
 /**
  * Intercepts AI requests with a custom response body.
  * Automatically detects streaming vs non-streaming based on request body.
@@ -556,13 +561,9 @@ describe("ai assistant", () => {
   })
 
   describe("query - chat integration", () => {
-    beforeEach(() => {
-      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
-    })
-
     it("should show initial query box with quick actions when glyph icon is clicked", () => {
-      // Given - Type a query
-      cy.typeQuery("SELECT a;")
+      // Given a query that fails
+      loadConsoleWithQuery("SELECT a;")
       cy.clickRunIconInLine(1)
       cy.getByDataHook("error-notification").should("be.visible")
 
@@ -584,8 +585,8 @@ describe("ai assistant", () => {
     })
 
     it("should transition AI glyph icon from noChat to highlight to active", () => {
-      // Given - Type a query
-      cy.typeQuery("SELECT 1;")
+      // Given a query without a chat
+      loadConsoleWithQuery("SELECT 1;")
 
       // Then - AI icon should be in noChat state (hollow)
       cy.getAIIconInLine(1, "noChat").should("be.visible")
@@ -615,8 +616,8 @@ describe("ai assistant", () => {
     })
 
     it("should show active state for queries with existing chats", () => {
-      // Given - Create two queries
-      cy.typeQuery("SELECT 1;\n\nSELECT 2;")
+      // Given two queries without chats
+      loadConsoleWithQuery("SELECT 1;\n\nSELECT 2;")
 
       // Then - Both should be in noChat state initially
       cy.getAIIconInLine(1, "noChat").should("be.visible")
@@ -655,8 +656,8 @@ describe("ai assistant", () => {
     })
 
     it("should toggle chat window when clicking AI icon for current query", () => {
-      // Given - Type a query and create a chat
-      cy.typeQuery("SELECT 1;")
+      // Given a query with a chat
+      loadConsoleWithQuery("SELECT 1;")
       cy.getAIIconInLine(1).click()
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading
@@ -687,8 +688,8 @@ describe("ai assistant", () => {
     })
 
     it("should move glyph icons when query position changes", () => {
-      // Given - Type a query starting at line 1
-      cy.typeQuery("DECLARE @myVar := 'shift-this' select @myVar;")
+      // Given a query starting at line 1
+      loadConsoleWithQuery("DECLARE @myVar := 'shift-this' select @myVar;")
 
       // Then - AI icon should be on line 1
       cy.getAIIconInLine(1, "noChat").should("be.visible").click()
@@ -711,6 +712,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-window-close").click()
       cy.getByDataHook("ai-chat-window").should("not.exist")
       // When - Add empty lines before the query (press Home, then Enter twice)
+      cy.clickLine(1)
       cy.getEditor().realClick()
       ;["{home}", "{enter}", "{enter}"].forEach((key) => {
         cy.focused().type(key)
@@ -725,7 +727,7 @@ describe("ai assistant", () => {
 
     it("should navigate to query tab when clicking context badge from different tab", () => {
       // Given - Create a query with chat in Tab 1
-      cy.typeQuery("SELECT 'tab1_query';")
+      loadConsoleWithQuery("SELECT 'tab1_query';")
       cy.getAIIconInLine(1).click()
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading
@@ -758,7 +760,7 @@ describe("ai assistant", () => {
         .should("not.be.disabled")
 
       // When - Create a query with chat in Tab 2
-      cy.typeQuery("SELECT 'tab2_query';")
+      cy.withFocusedEditor((editor) => editor.setValue("SELECT 'tab2_query';"))
       cy.getAIIconInLine(1).click()
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading
@@ -2389,11 +2391,8 @@ Syntax: \`avg(column)\`
       })
     })
 
-    beforeEach(() => {
-      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
-    })
-
     it("should accept suggestion to active buffer and move notification", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
       const sql = "SELECT * FROM btc_trades LIMIT 10;"
       const flow = createToolCallFlow({
         provider: "openai",
@@ -2442,6 +2441,7 @@ Syntax: \`avg(column)\`
     })
 
     it("should accept suggestion to new tab when no prior buffer exists", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
       const sql = "SELECT count() FROM btc_trades;"
       const flow = createToolCallFlow({
         provider: "openai",
@@ -2490,11 +2490,11 @@ Syntax: \`avg(column)\`
     })
 
     it("should accept suggestion to new tab when previous buffer is archived", () => {
+      loadConsoleWithQuery("SELECT 1;")
       const firstSQL = "SELECT symbol FROM btc_trades;"
       const secondSQL = "SELECT price FROM btc_trades;"
 
       // Open chat from a query glyph icon so the chat is bound to the current buffer
-      cy.typeQuery("SELECT 1;")
       cy.getAIIconInLine(1).click()
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("chat-input-textarea").should("be.visible")
@@ -2580,6 +2580,7 @@ Syntax: \`avg(column)\`
 
     it("should show abort dialog when running chat query while editor query is in flight", () => {
       // Given
+      loadConsoleWithQuery("select 1;")
       const sql = "SELECT * FROM btc_trades LIMIT 10;"
       const flow = createToolCallFlow({
         provider: "openai",
@@ -2596,7 +2597,6 @@ Syntax: \`avg(column)\`
       })
 
       flow.intercept()
-      cy.typeQuery("select 1;")
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("chat-input-textarea").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type(flow.question, {
@@ -2654,6 +2654,7 @@ Syntax: \`avg(column)\`
 
     it("should show abort dialog when running editor query while chat query is in flight", () => {
       // Given
+      loadConsoleWithQuery("select 1;")
       const sql = "SELECT * FROM btc_trades LIMIT 10;"
       const flow = createToolCallFlow({
         provider: "openai",
@@ -2670,7 +2671,6 @@ Syntax: \`avg(column)\`
       })
 
       flow.intercept()
-      cy.typeQuery("select 1;")
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("chat-input-textarea").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type(flow.question, {
@@ -2719,6 +2719,7 @@ Syntax: \`avg(column)\`
     })
 
     it("should show error notification when running invalid SQL from chat", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
       const sql = "SELECT * FROM nonexistent_table_xyz;"
       const flow = createToolCallFlow({
         provider: "openai",
