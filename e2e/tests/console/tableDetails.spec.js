@@ -1186,22 +1186,29 @@ describe("TableDetailsDrawer", () => {
           })
         },
       )
+      // Only this view's row: views left over by other specs can be invalid
+      const matViewRowErrorIcon = () =>
+        cy
+          .get(
+            `[data-hook="schema-row"][data-id="questdb:expanded:matviews:${TEST_MATVIEW}"]`,
+          )
+          .find('[data-hook="schema-row-error-icon"]')
       cy.expandMatViews()
       cy.getByDataHook("schema-matview-title").should("contain", TEST_MATVIEW)
-      cy.getByDataHook("schema-row-error-icon").should("not.exist")
+      matViewRowErrorIcon().should("not.exist")
 
       // When
       cy.openDetailsDrawer(TEST_MATVIEW, "matview")
 
       // Then: the tree follows the drawer without refetching the schema
       cy.getByDataHook("table-details-view-status").should("contain", "Invalid")
-      cy.getByDataHook("schema-row-error-icon").should("be.visible")
+      matViewRowErrorIcon().should("be.visible")
     })
 
+    // Cleans up without the UI, so a failed test leaves no view behind
     after(() => {
-      cy.loadConsoleWithAuth()
-      cy.dropMaterializedView(TEST_MATVIEW)
-      cy.dropTable(TEST_TABLE)
+      cy.execQueryAsAdmin(`DROP MATERIALIZED VIEW IF EXISTS ${TEST_MATVIEW}`)
+      cy.execQueryAsAdmin(`DROP TABLE IF EXISTS ${TEST_TABLE}`)
     })
   })
 

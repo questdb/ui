@@ -1137,12 +1137,12 @@ describe("create materialized view from context menu", () => {
     cy.refreshSchema()
   })
 
+  // Cleans up without the UI, so a failed test leaves no view behind
   after(() => {
-    cy.loadConsoleWithAuth()
-    cy.dropMaterializedView(generatedMatView)
-    cy.dropTableIfExists(sourceTable)
-    cy.dropTableIfExists(nonWalTable)
-    cy.dropTableIfExists(nonPartitionedTable)
+    cy.execQueryAsAdmin(`DROP MATERIALIZED VIEW IF EXISTS ${generatedMatView}`)
+    cy.execQueryAsAdmin(`DROP TABLE IF EXISTS ${sourceTable}`)
+    cy.execQueryAsAdmin(`DROP TABLE IF EXISTS ${nonWalTable}`)
+    cy.execQueryAsAdmin(`DROP TABLE IF EXISTS ${nonPartitionedTable}`)
   })
 
   it("disables the menu item for non-WAL and non-partitioned tables, and generates a runnable matview DDL from a valid source", () => {

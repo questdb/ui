@@ -524,8 +524,19 @@ Cypress.Commands.add("selectRange", (startPos, endPos) => {
 })
 
 Cypress.Commands.add("createNotebook", () => {
-  cy.get(".chrome-tabs .new-tab-button").click()
-  cy.getByDataHook("new-tab-notebook").click()
+  // The checks below also pass on a notebook that is already open, so first
+  // wait for the new tab to become the active one
+  cy.get(".chrome-tab[active]")
+    .invoke("attr", "data-tab-id")
+    .then((previousTabId) => {
+      cy.get(".chrome-tabs .new-tab-button").click()
+      cy.getByDataHook("new-tab-notebook").click()
+      cy.get(".chrome-tab[active]").should(
+        "not.have.attr",
+        "data-tab-id",
+        previousTabId,
+      )
+    })
   cy.getByDataHook("notebook-toolbar").should("be.visible")
   cy.getByDataHook("cell-editor-shimmer").should("not.exist")
   cy.getByDataHook("cell-grid-shimmer").should("not.exist")
