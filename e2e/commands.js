@@ -847,6 +847,10 @@ Cypress.Commands.add("collapseLiveViews", () => {
 Cypress.Commands.add("openDetailsDrawer", (name, kind = "table") => {
   const titleHook = `schema-${kind}-title`
   cy.getByDataHook(titleHook).contains(name).click()
+  cy.getByDataHook(titleHook)
+    .contains(name)
+    .closest('[data-hook="schema-row"]')
+    .should("be.focused")
   cy.realPress("Enter")
   cy.getByDataHook("table-details-drawer").should("be.visible")
   cy.getByDataHook("table-details-name").should("have.value", name)

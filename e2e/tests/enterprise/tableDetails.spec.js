@@ -142,8 +142,14 @@ describe("TableDetailsDrawer in enterprise", () => {
     before(() => {
       cy.createTable(TEST_TABLE)
       cy.createLiveView(TEST_LIVE_VIEW)
+    })
+
+    beforeEach(() => {
       cy.loadConsoleWithAuth()
-      cy.expandLiveViews()
+      cy.getByDataHook("expand-live-views").dblclick()
+      cy.getByDataHook("schema-liveview-title")
+        .contains(TEST_LIVE_VIEW)
+        .should("be.visible")
     })
 
     it("shows no storage policy section, unlike a table on the same server", () => {
