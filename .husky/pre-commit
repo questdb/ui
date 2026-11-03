@@ -1,2 +1,8 @@
-sh scripts/sync-questdb-submodule.sh
+# Move e2e/questdb to the head of QuestDB master, which the OSS submodule
+# check requires. A failure (offline, local edits in the submodule) only
+# prints a warning. SKIP_QUESTDB_SYNC=1 skips the step.
+if [ "${SKIP_QUESTDB_SYNC:-}" != "1" ]; then
+  git submodule update --remote e2e/questdb && git add e2e/questdb ||
+    echo "Could not update e2e/questdb to QuestDB master; the pointer stays as is."
+fi
 yarn lint-staged
