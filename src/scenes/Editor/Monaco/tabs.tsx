@@ -21,7 +21,6 @@ import {
   createBufferContentKey,
 } from "./importTabs"
 import { migrateBuffer, getCurrentDbVersion } from "../../../store/migrations"
-import { importInto, peakImportFile } from "dexie-export-import"
 import { exportBuffers } from "./exportTabs"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
 import { getNotebookGlobals } from "../../../store/notebookGlobals"
@@ -192,6 +191,9 @@ export const Tabs = () => {
 
       try {
         const blob = new Blob([await file.arrayBuffer()])
+        const { importInto, peakImportFile } = await import(
+          "dexie-export-import"
+        )
 
         let importVersion: number
         try {

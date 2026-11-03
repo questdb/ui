@@ -1,4 +1,3 @@
-import { exportDB } from "dexie-export-import"
 import { db } from "../../../store/db"
 import type { Buffer } from "../../../store/buffers"
 import type { NotebookVariable } from "../../../store/notebook"
@@ -93,6 +92,7 @@ export const exportBuffers = async (options?: ExportOptions) => {
   const skipTables = db.tables
     .map((t) => t.name)
     .filter((name) => name !== "buffers")
+  const { exportDB } = await import("dexie-export-import")
   const blob = await exportDB(db, {
     skipTables,
     filter: (_table, value) => shouldExportBuffer(value as Buffer, options),
