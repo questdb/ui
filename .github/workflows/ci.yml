@@ -2,17 +2,14 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
   CI:
     name: Monorepo CI flow
     runs-on: ubuntu-latest
-    # Branches in this repo already run on push. A fork PR has no push event
-    # here, so run it on pull_request instead (after a maintainer approves it).
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name != github.repository
 
     steps:
       - uses: actions/checkout@v4

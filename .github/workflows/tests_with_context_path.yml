@@ -2,17 +2,14 @@ name: Run Tests With Context Path
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
   run_tests_with_context_path:
     name: Running Tests With Context Path
     runs-on: ubuntu-latest
-    # Branches in this repo already run on push. A fork PR has no push event
-    # here, so run it on pull_request instead (after a maintainer approves it).
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name != github.repository
 
     env:
       QDB_HTTP_CONTEXT_WEB_CONSOLE: "/context"
