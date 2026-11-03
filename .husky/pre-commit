@@ -1,1 +1,2 @@
+sh scripts/sync-questdb-submodule.sh
 yarn lint-staged
