@@ -56,6 +56,9 @@ def check_commit_is_from_recent_master(oss_master_commits: [pygit2.Oid], oss_hea
             f'last {ACCEPTABLE_LAG} commits in the `questdb` master branch.\n')
         for commit in oss_master_commits:
             sys.stderr.write(f'  * {commit}\n')
+        sys.stderr.write(
+            'Run `yarn sync:questdb` and commit the updated `e2e/questdb` ' +
+            'pointer.\n')
         sys.exit(1)
 
 
