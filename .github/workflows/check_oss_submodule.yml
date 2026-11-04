@@ -13,8 +13,9 @@ jobs:
         with:
           submodules: "recursive"
           # The depth also applies to the submodule. The check walks
-          # ACCEPTABLE_LAG + 2 commits of QuestDB master (see
-          # submodule_is_mergeable.py), so the depth must be at least that.
+          # ACCEPTABLE_LAG + 2 commits of QuestDB master (the head, the
+          # ACCEPTABLE_LAG commits behind it, and one more to stop the walk;
+          # see submodule_is_mergeable.py), so the depth must be at least that.
           # A depth of 1 would leave only the head commit and reject every
           # pointer behind it.
           fetch-depth: 10

@@ -42,9 +42,9 @@ def get_last_master_commits(questdb_repo: pygit2.Repository) -> [pygit2.Oid]:
     origin_master_head: pygit2.Oid = oss_master_ref.peel().id
     for index, commit in enumerate(questdb_repo.walk(origin_master_head)):
         # print(f'{commit.id}\t{commit.message}')
-        commit_ids.append(commit.id)
         if index > ACCEPTABLE_LAG:
             break
+        commit_ids.append(commit.id)
     return commit_ids
 
 
@@ -53,7 +53,8 @@ def check_commit_is_from_recent_master(oss_master_commits: [pygit2.Oid], oss_hea
         sys.stderr.write('The `questdb` submodule is not mergeable.\n')
         sys.stderr.write(
             f'The submodule\'s commit ({oss_head}) is not one of the ' +
-            f'last {ACCEPTABLE_LAG} commits in the `questdb` master branch.\n')
+            f'last {len(oss_master_commits)} commits in the `questdb` master ' +
+            f'branch (at most {ACCEPTABLE_LAG} commits behind its head).\n')
         for commit in oss_master_commits:
             sys.stderr.write(f'  * {commit}\n')
         sys.stderr.write(
