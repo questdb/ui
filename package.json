@@ -29,7 +29,7 @@
     "lint": "eslint src/ e2e/tests/ && npm run lint:colors",
     "lint:colors": "node scripts/check-color-literals.mjs",
     "lint:fix": "eslint src/ e2e/tests/ --fix",
-    "sync:questdb": "git submodule update --init --remote e2e/questdb && git add e2e/questdb && git --no-pager -C e2e/questdb log -1 --oneline",
+    "sync:questdb": "git submodule update --init --remote --checkout e2e/questdb && git add e2e/questdb && git --no-pager -C e2e/questdb log -1 --oneline",
     "prepare": "husky"
   },
   "dependencies": {
