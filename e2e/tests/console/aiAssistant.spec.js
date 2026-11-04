@@ -18,6 +18,14 @@ const {
 
 const { createChat, createQueryChat } = require("../../utils/aiConversations")
 
+const createResponseGate = () => {
+  let release
+  const promise = new Cypress.Promise((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
+}
+
 const loadConsoleWithChats = (conversations, options = {}) =>
   cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings(), {
     ...options,
@@ -684,13 +692,10 @@ describe("ai assistant", () => {
       })
       cy.getAIIconInLine(1, "active").should("be.visible")
 
-      // When - Add empty lines before the query (press Home, then Enter twice)
-      cy.clickLine(1)
-      cy.getEditor().realClick()
-      ;["{home}", "{enter}", "{enter}"].forEach((key) => {
-        cy.focused().type(key)
-        cy.wait(50)
-      })
+      // When
+      cy.getEditorContent().type("{moveToStart}{enter}")
+      cy.getAIIconInLine(2, "active").should("be.visible")
+      cy.getEditorContent().type("{enter}")
 
       cy.getAIIconInLine(3, "active").should("be.visible")
 
@@ -1303,15 +1308,19 @@ Syntax: \`avg(column)\`
       const finalExplanation =
         "This query groups all trades by their symbol and calculates the average price for each."
 
+      const responseGates = Array.from({ length: 4 }, createResponseGate)
       let requestCount = 0
 
-      cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+      cy.intercept("POST", PROVIDERS.openai.endpoint, async (req) => {
         if (isTitleRequest("openai", req.body)) {
           req.reply(createChatTitleResponse("openai"))
           return
         }
 
         requestCount++
+        if (requestCount > 1) {
+          await responseGates[requestCount - 2].promise
+        }
 
         // Round 1: thinking + get_tables tool call
         if (requestCount === 1) {
@@ -1466,6 +1475,8 @@ Syntax: \`avg(column)\`
       // Reviewing tables status appears
       cy.getByDataHook("assistant-mode-reviewing-tables").should("be.visible")
 
+      cy.then(responseGates[0].release)
+
       // --- After Round 2: text + get_table_schema ---
       // Mid-content from round 2 should appear in the interleaved timeline
       cy.getByDataHook("chat-message-assistant").should(
@@ -1477,6 +1488,8 @@ Syntax: \`avg(column)\`
         "be.visible",
       )
 
+      cy.then(responseGates[1].release)
+
       // --- After Round 3: thinking + validate_query ---
       // Second thinking block content should be visible
       cy.getByDataHook("chat-message-assistant").should(
@@ -1486,17 +1499,19 @@ Syntax: \`avg(column)\`
       // Validating query status appears
       cy.getByDataHook("assistant-mode-validating-query").should("be.visible")
 
+      cy.then(responseGates[2].release)
+
       // --- After Round 4: text + suggest_query ---
       // Mid-content from round 4 visible
       cy.getByDataHook("chat-message-assistant").should(
         "contain",
         "query syntax is valid",
       )
-      // SQL suggestion should appear as inline diff
-      cy.getByDataHook("inline-diff-container").should("be.visible")
+      cy.then(responseGates[3].release)
 
       // --- After Round 5: final explanation ---
       cy.waitForStreamingComplete()
+      cy.getByDataHook("inline-diff-container").should("be.visible")
       cy.getByDataHook("chat-message-assistant").should(
         "contain",
         "groups all trades by their symbol",
@@ -2182,9 +2197,10 @@ Syntax: \`avg(column)\`
       const explanation =
         "The btc_trades table stores cryptocurrency trading data."
 
+      const finalResponseGate = createResponseGate()
       let requestCount = 0
 
-      cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
+      cy.intercept("POST", PROVIDERS.anthropic.endpoint, async (req) => {
         if (isTitleRequest("anthropic", req.body)) {
           req.reply(createChatTitleResponse("anthropic"))
           return
@@ -2216,6 +2232,7 @@ Syntax: \`avg(column)\`
             }),
           )
         } else {
+          await finalResponseGate.promise
           // Second response: final text explanation
           req.reply(
             createResponse(
@@ -2239,6 +2256,8 @@ Syntax: \`avg(column)\`
       cy.getByDataHook("assistant-mode-thinking").should("be.visible")
       cy.getByDataHook("chat-message-assistant").should("contain", thinkingText)
 
+      cy.then(finalResponseGate.release)
+
       // Wait for full response to complete
       cy.waitForStreamingComplete()
       cy.getByDataHook("chat-message-assistant").should("contain", explanation)
@@ -2258,9 +2277,10 @@ Syntax: \`avg(column)\`
       const explanation =
         "QuestDB supports several aggregate functions including sum, avg, and count."
 
+      const finalResponseGate = createResponseGate()
       let requestCount = 0
 
-      cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+      cy.intercept("POST", PROVIDERS.openai.endpoint, async (req) => {
         if (isTitleRequest("openai", req.body)) {
           req.reply(createChatTitleResponse("openai"))
           return
@@ -2290,6 +2310,7 @@ Syntax: \`avg(column)\`
             createResponse("openai", thinkingAndToolData, { streaming: true }),
           )
         } else {
+          await finalResponseGate.promise
           // Second response: final text explanation
           req.reply(
             createResponse(
@@ -2312,6 +2333,8 @@ Syntax: \`avg(column)\`
       // Thinking section should be visible and expanded by default (live state)
       cy.getByDataHook("assistant-mode-thinking").should("be.visible")
       cy.getByDataHook("chat-message-assistant").should("contain", thinkingText)
+
+      cy.then(finalResponseGate.release)
 
       // Wait for full response to complete
       cy.waitForStreamingComplete()

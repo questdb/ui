@@ -901,7 +901,7 @@ describe("TableDetailsDrawer", () => {
         if (Cypress.isBrowser("electron")) {
           cy.window()
             .its("navigator.clipboard")
-            .invoke("readText")
+            .then((clipboard) => clipboard.readText())
             .should("contain", `CREATE TABLE \'${TEST_TABLE}\'`)
         }
       }
@@ -914,7 +914,7 @@ describe("TableDetailsDrawer", () => {
         cy.getByDataHook("table-details-copy-name").click()
         cy.window()
           .its("navigator.clipboard")
-          .invoke("readText")
+          .then((clipboard) => clipboard.readText())
           .should("contain", TEST_TABLE)
       })
     }

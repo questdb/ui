@@ -4,7 +4,7 @@ This repository hosts the implementation of QuestDB user interface and surroundi
 
 ## Prerequisites
 
-- **Node.js** >= 18.18.0 (check with `node -v`)
+- **Node.js** 24 (see `package.json` for other supported versions; check with `node -v`)
 - **Yarn** 4.1.1+ (check with `yarn -v`)
 
 If your Node.js version doesn't match, use [fnm](https://fnm.vercel.app) or [nvm](https://github.com/nvm-sh/nvm) to switch versions:

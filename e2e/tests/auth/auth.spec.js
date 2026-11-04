@@ -864,7 +864,7 @@ describe("Auth - OIDC ID token", () => {
         statements.map((statement) => `${statement};`).join("\n"),
       )
       cy.typeQuery(`${ctrlOrCmd}{shift}{enter}`)
-      cy.getByRole("dialog").should("contain", "Run all queries")
+      cy.getByRoleAttribute("dialog").should("contain", "Run all queries")
       // Then only the end of the session can stop the script after statement 1
       cy.getByDataHook("stop-after-failure-checkbox").uncheck()
       cy.getByDataHook("run-all-queries-confirm").click()

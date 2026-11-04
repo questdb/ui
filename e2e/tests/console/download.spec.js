@@ -98,7 +98,7 @@ describe("download functionality", () => {
 
     // Then
     cy.wait("@badExportRequest").then(() => {
-      cy.getByRole("alert").should(
+      cy.getByRoleAttribute("alert").should(
         "contain",
         "An error occurred while downloading the file: table does not exist [table=badquery]",
       )

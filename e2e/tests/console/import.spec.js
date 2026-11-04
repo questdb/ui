@@ -64,7 +64,7 @@ describe("questdb import", () => {
     cy.getByDataHook("table-schema-dialog-column-0-designated-button").click()
     cy.getByDataHook("form-submit-button").click()
 
-    cy.getByDataHook("create-table-panel").should("not.be.visible")
+    cy.getByDataHook("create-table-panel").should("not.exist")
 
     cy.getByDataHook("import-write-mode-trigger").click()
     cy.getByDataHook("import-write-mode-overwrite").click()

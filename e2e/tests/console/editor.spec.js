@@ -282,7 +282,7 @@ describe("run query with selection", () => {
     cy.getByDataHook("button-cancel-query").should("be.visible").click()
 
     // Then the query is cancelled, with no run-all modal
-    cy.getByRole("dialog").should("not.exist")
+    cy.getByRoleAttribute("dialog").should("not.exist")
     cy.getByDataHook("run-all-queries-confirm").should("not.exist")
     cy.getByDataHook("button-run-query").should("be.visible")
     cy.expandNotifications()
@@ -313,9 +313,9 @@ describe("run query with selection", () => {
     cy.focused().type(`${ctrlOrCmd}{enter}`)
 
     // Then the modal is for the selection (2 queries), not "run all"
-    cy.getByRole("dialog").should("be.visible")
-    cy.getByRole("dialog").should("contain", "Run selected queries")
-    cy.getByRole("dialog").should("contain", "2 selected queries")
+    cy.getByRoleAttribute("dialog").should("be.visible")
+    cy.getByRoleAttribute("dialog").should("contain", "Run selected queries")
+    cy.getByRoleAttribute("dialog").should("contain", "2 selected queries")
     cy.getByDataHook("run-all-queries-warning").should(
       "contain",
       "Current query execution will be aborted",
@@ -360,9 +360,9 @@ describe("run query with selection", () => {
     cy.focused().type(`${ctrlOrCmd}{enter}`)
 
     // Then the selected run is queued for confirmation instead of discarded
-    cy.getByRole("dialog").should("be.visible")
-    cy.getByRole("dialog").should("contain", "Run selected queries")
-    cy.getByRole("dialog").should("contain", "2 selected queries")
+    cy.getByRoleAttribute("dialog").should("be.visible")
+    cy.getByRoleAttribute("dialog").should("contain", "Run selected queries")
+    cy.getByRoleAttribute("dialog").should("contain", "2 selected queries")
 
     // When confirmed, the active script is cancelled and the selection runs
     cy.getByDataHook("run-all-queries-confirm").click()
@@ -392,8 +392,8 @@ describe("run query with selection", () => {
     cy.focused().type(`${ctrlOrCmd}{shift}{enter}`)
 
     // Then the modal is for running all queries
-    cy.getByRole("dialog").should("be.visible")
-    cy.getByRole("dialog").should("contain", "Run all queries")
+    cy.getByRoleAttribute("dialog").should("be.visible")
+    cy.getByRoleAttribute("dialog").should("contain", "Run all queries")
     cy.getByDataHook("run-all-queries-warning").should(
       "contain",
       "Current query execution will be aborted",
@@ -441,7 +441,7 @@ describe("run all queries in tab", () => {
     // When
     cy.getByDataHook("button-run-script").click()
     // Then
-    cy.getByRole("dialog").should("be.visible")
+    cy.getByRoleAttribute("dialog").should("be.visible")
     cy.getByDataHook("stop-after-failure-checkbox").should("be.checked")
 
     // When
@@ -1158,7 +1158,11 @@ describe("autocomplete", () => {
 
   it("should work when provided table name doesn't exist", () => {
     cy.typeQuery("select * from teletubies")
-    cy.getAutocomplete().should("not.be.visible").clearEditor()
+    cy.get("body").should(($body) => {
+      const widget = $body.find('[widgetid="editor.widget.suggestWidget"]')
+      if (widget.length) expect(widget).not.to.be.visible
+    })
+    cy.clearEditor()
   })
 
   it("should be case insensitive", () => {

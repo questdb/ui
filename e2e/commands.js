@@ -82,6 +82,10 @@ before(() => {
 })
 
 beforeEach(() => {
+  // Preserve Cypress 10 cleanup for suites that keep the page between tests.
+  cy.clearLocalStorage()
+  cy.clearCookies()
+
   cy.intercept(
     {
       method: "GET",
@@ -135,7 +139,7 @@ Cypress.Commands.add("getByDataHook", (name, options) =>
   cy.get(`[data-hook="${name}"]`, options),
 )
 
-Cypress.Commands.add("getByRole", (name) => cy.get(`[role="${name}"]`))
+Cypress.Commands.add("getByRoleAttribute", (name) => cy.get(`[role="${name}"]`))
 
 Cypress.Commands.add("getGrid", () =>
   cy
@@ -480,7 +484,7 @@ Cypress.Commands.add("clickRunScript", (continueOnFailure = false) => {
   cy.getByDataHook("button-run-query-dropdown").click()
   cy.getByDataHook("button-run-script").click()
 
-  cy.getByRole("dialog").should("be.visible")
+  cy.getByRoleAttribute("dialog").should("be.visible")
   if (continueOnFailure) {
     cy.getByDataHook("stop-after-failure-checkbox").uncheck()
   }

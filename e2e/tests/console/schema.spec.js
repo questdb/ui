@@ -591,7 +591,7 @@ describe("materialized views", () => {
     if (Cypress.isBrowser("electron")) {
       cy.window()
         .its("navigator.clipboard")
-        .invoke("readText")
+        .then((clipboard) => clipboard.readText())
         .should(
           "match",
           /^CREATE MATERIALIZED VIEW.*'btc_trades_mv' WITH BASE 'btc_trades'/,
@@ -800,7 +800,7 @@ describe("live views", () => {
     if (Cypress.isBrowser("electron")) {
       cy.window()
         .its("navigator.clipboard")
-        .invoke("readText")
+        .then((clipboard) => clipboard.readText())
         .should("match", /^CREATE LIVE VIEW.*'btc_trades_lv'/)
     }
   })
