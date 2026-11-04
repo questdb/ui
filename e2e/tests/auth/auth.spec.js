@@ -783,48 +783,22 @@ describe("Auth - OIDC ID token", () => {
   })
 
   it("clears the remembered identity before the redirect guard forces sign-in", () => {
-    // Unknown expiry avoids a renewal on 401: this test targets the redirect
-    // guard's forced-login path, not refresh recovery or its connection events.
-    for (const [query, alias] of [
-      ["materialized_views()", "initialSchema"],
-      ["information_schema.questdb_columns()", "initialColumns"],
-    ]) {
-      cy.intercept(
-        {
-          method: "GET",
-          url: `${baseUrl}/exec*`,
-          query: { query },
-          middleware: true,
-        },
-        (req) => {
-          req.alias = alias
-        },
-      )
-    }
+    // Given: five rejected redirects and a remembered identity.
+    // Unknown expiry prevents token renewal from replacing the SQL 401.
     signIn({
       idTokens: { authorization_code: "opaque-id-token" },
       accessTokenLifetime: null,
-      credentials: { "auto.refresh.tables": "false" },
-    })
-    cy.getEditor().should("be.visible")
-    cy.wait(["@authCheck", "@initialSchema", "@initialColumns"])
-    cy.window().then(({ localStorage }) => {
-      localStorage.setItem("sso.username.test-client", "previous-user")
-    })
-    cy.intercept(
-      {
-        method: "GET",
-        url: `${baseUrl}/exec*`,
-        query: { query: "select current_user()" },
+      credentials: {
+        "sso.username.test-client": "previous-user",
+        "oauth.redirect.count": "5",
       },
-      { statusCode: 401, body: "Unauthorized" },
-    ).as("rejectedIdentity")
-    cy.typeQueryDirectly("select current_user()")
-    cy.window()
-      .its("localStorage")
-      .invoke("setItem", "oauth.redirect.count", "5")
-    cy.runLine()
-    cy.wait("@rejectedIdentity")
+      authCheckReply: { statusCode: 401, body: "Unauthorized" },
+    })
+
+    // When: reject before successful startup queries can reset the guard.
+    cy.wait("@authCheck").its("response.statusCode").should("eq", 401)
+
+    // Then: the guard clears the identity before Login renders.
     cy.getByDataHook("auth-login").should("be.visible")
     cy.getByDataHook("button-sso-continue").should("not.exist")
     cy.getByDataHook("button-sso-login").should(
