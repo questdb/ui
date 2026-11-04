@@ -66,6 +66,52 @@ function interceptAIRequestWithResponse(
   }).as(aliasName)
 }
 
+const countStoredConversations = (win) =>
+  new Cypress.Promise((resolve, reject) => {
+    const openRequest = win.indexedDB.open("web-console")
+    openRequest.onerror = () => reject(openRequest.error)
+    openRequest.onblocked = () =>
+      reject(new Error("web-console IndexedDB open is blocked"))
+    openRequest.onsuccess = () => {
+      const database = openRequest.result
+      const fail = (error) => {
+        database.close()
+        reject(error)
+      }
+      try {
+        const countRequest = database
+          .transaction("ai_conversations", "readonly")
+          .objectStore("ai_conversations")
+          .count()
+        countRequest.onerror = () => fail(countRequest.error)
+        countRequest.onsuccess = () => {
+          database.close()
+          resolve(countRequest.result)
+        }
+      } catch (error) {
+        fail(error)
+      }
+    }
+  })
+
+// Closing an empty chat deletes it without waiting, and the chat list follows
+// the database through a live query. A reopen sent before the delete lands
+// opens the chat being deleted, and the window then renders nothing. A user
+// can't reopen that fast; the test waits for the delete instead.
+const waitForNoStoredConversations = () =>
+  cy.window().then((win) => {
+    const deadline = Date.now() + 8000
+    const poll = () =>
+      countStoredConversations(win).then((count) => {
+        if (count === 0) return
+        if (Date.now() > deadline) {
+          throw new Error(`${count} AI conversations are still stored`)
+        }
+        return Cypress.Promise.delay(50).then(poll)
+      })
+    return poll()
+  })
+
 describe("ai assistant", () => {
   beforeEach(() => {
     cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
@@ -267,6 +313,7 @@ describe("ai assistant", () => {
 
       // Then - Chat window should be closed
       cy.getByDataHook("ai-chat-window").should("not.exist")
+      waitForNoStoredConversations()
 
       // When - Reopen chat window
       cy.getByDataHook("ai-chat-button").click()
