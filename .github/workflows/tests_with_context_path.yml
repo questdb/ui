@@ -17,29 +17,47 @@ jobs:
           submodules: "recursive"
 
       - uses: actions/setup-java@v4
+        id: java
         with:
           java-version: "25"
           distribution: "temurin"
           cache: maven
 
-      - name: Resolve build profiles
-        id: profiles
+      - name: Resolve QuestDB build inputs
+        id: questdb
         run: |
+          echo "revision=$(git -C e2e/questdb rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
           v=$(grep -m1 -oE '<questdb\.client\.version>[^<]+' e2e/questdb/core/pom.xml | sed 's/.*>//')
           if [[ "$v" == *-SNAPSHOT ]]; then
-            echo "list=build-binaries,local-client" >> "$GITHUB_OUTPUT"
+            echo "profiles=build-binaries,local-client" >> "$GITHUB_OUTPUT"
           else
-            echo "list=build-binaries" >> "$GITHUB_OUTPUT"
+            echo "profiles=build-binaries" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Restore QuestDB archive
+        id: questdb-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz
+          key: questdb-runtime-v1-${{ steps.questdb.outputs.image }}-${{ runner.arch }}-${{ steps.java.outputs.distribution }}-${{ steps.java.outputs.version }}-${{ steps.questdb.outputs.revision }}-${{ steps.questdb.outputs.profiles }}-skip-tests
+
       - name: Build QuestDB
+        if: steps.questdb-cache.outputs.cache-hit != 'true'
         run:
-          mvn clean package -f e2e/questdb/pom.xml -DskipTests -P ${{ steps.profiles.outputs.list }}
+          mvn clean package -f e2e/questdb/pom.xml -DskipTests -P ${{ steps.questdb.outputs.profiles }}
 
       - name: Extract QuestDB
         run:
           tar -xzf e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C
           tmp/
+
+      - name: Save QuestDB archive
+        if: steps.questdb-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz
+          key: ${{ steps.questdb-cache.outputs.cache-primary-key }}
 
       - name: Create DB Root
         run: mkdir tmp/dbroot
