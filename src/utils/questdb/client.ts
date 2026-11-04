@@ -58,6 +58,34 @@ type RequestExecution = { requestNotSent: boolean }
 // Catalog lookups read metadata only. Interrupting them needs no outcome check.
 const BACKGROUND_READ: Options = { background: true }
 
+// QuestDB reports SQL errors with HTTP 400 as `{ query, error, position }`. An
+// error raised after rows started streaming arrives with HTTP 200 instead, after
+// the partial dataset, and names the position `errorPos`. Keep any other fields,
+// but always give the editor a string message and a position inside the query.
+const toErrorResult = (
+  body: Record<string, unknown>,
+  query: string,
+  fallbackError: string,
+  status?: number,
+): ErrorResult => {
+  const { error } = body
+  const position = body.position ?? body.errorPos
+  return {
+    ...body,
+    query,
+    error: typeof error === "string" && error ? error : fallbackError,
+    position:
+      typeof position === "number" &&
+      Number.isInteger(position) &&
+      position >= 0 &&
+      position <= query.length
+        ? position
+        : -1,
+    type: Type.ERROR,
+    ...(status === undefined ? {} : { status }),
+  }
+}
+
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
 export const buildDDLQuery = (name: string, kind: TableKind): string => {
@@ -710,25 +738,16 @@ export class Client {
             // A proxy can return a non-JSON error instead of a QuestDB response.
           }
 
-          const position = errorData.position
           eventBus.publish(EventType.MSG_CONNECTION_OK)
           ensureCurrentSession()
-          return Promise.reject({
-            query,
-            error:
-              typeof errorData.error === "string" && errorData.error
-                ? errorData.error
-                : response.statusText || "Query failed",
-            position:
-              typeof position === "number" &&
-              Number.isInteger(position) &&
-              position >= 0 &&
-              position <= query.length
-                ? position
-                : -1,
-            type: Type.ERROR,
-            status: response.status,
-          })
+          return Promise.reject(
+            toErrorResult(
+              errorData,
+              query,
+              response.statusText || "Query failed",
+              response.status,
+            ),
+          )
         }
         let data
         try {
@@ -762,10 +781,7 @@ export class Client {
         }
 
         if (data.error !== undefined) {
-          return Promise.reject({
-            ...data,
-            type: Type.ERROR,
-          })
+          return Promise.reject(toErrorResult(data, query, "Query failed"))
         }
 
         if (data.notice !== undefined) {

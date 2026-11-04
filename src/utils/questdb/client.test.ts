@@ -140,6 +140,74 @@ describe("Client queryRaw HTTP errors", () => {
       })
     },
   )
+
+  it("keeps other fields of an HTTP 400 error body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ error: "bad query", position: 0, errorCode: 42 }),
+            { status: 400 },
+          ),
+        ),
+    )
+
+    await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+      error: "bad query",
+      position: 0,
+      errorCode: 42,
+    })
+  })
+
+  // An error raised after rows started streaming keeps HTTP 200 and follows
+  // the partial dataset, with the position named errorPos.
+  it("rejects an HTTP 200 error raised while rows stream", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        response({
+          query,
+          columns: [{ name: "1", type: "INT" }],
+          timestamp: -1,
+          dataset: [[1]],
+          count: 1,
+          error: "timeout, query aborted",
+          errorPos: 7,
+        }),
+      ),
+    )
+
+    await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+      query,
+      error: "timeout, query aborted",
+      position: 7,
+      type: Type.ERROR,
+    })
+  })
+
+  it.each([
+    ["invalid position", { error: "bad query", position: 99 }, "bad query", -1],
+    [
+      "object error",
+      { error: { message: "bad" }, position: 0 },
+      "Query failed",
+      0,
+    ],
+  ])(
+    "normalizes an HTTP 200 error body with an %s",
+    async (_, body, error, position) => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(body)))
+
+      await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+        query,
+        error,
+        position,
+        type: Type.ERROR,
+      })
+    },
+  )
 })
 
 const rawDqlResult = (
