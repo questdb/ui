@@ -16,6 +16,20 @@ const {
   getCustomProviderEndpoint,
 } = require("../../utils/aiAssistant")
 
+const { createChat, createQueryChat } = require("../../utils/aiConversations")
+
+const loadConsoleWithChats = (conversations, options = {}) =>
+  cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings(), {
+    ...options,
+    conversations,
+  })
+
+const openSavedChat = (name = "Test Chat") => {
+  cy.getByDataHook("ai-chat-button").click()
+  cy.getByDataHook("chat-window-history").click()
+  cy.getByDataHook("chat-history-item").contains(name).click()
+}
+
 const loadConsoleWithQuery = (value) =>
   cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings(), {
     buffers: [{ value }],
@@ -76,11 +90,9 @@ describe("ai assistant", () => {
   })
 
   describe("ai chat window ergonomics", () => {
-    beforeEach(() => {
-      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
-    })
-
     it("should open chat window with blank state on first open", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+
       // When - Click the chat button
       cy.getByDataHook("ai-chat-button").should("be.visible").click()
 
@@ -91,6 +103,8 @@ describe("ai assistant", () => {
     })
 
     it("should show current empty chat in history", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+
       // When - Open chat window
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("ai-chat-window").should("be.visible")
@@ -104,6 +118,8 @@ describe("ai assistant", () => {
     })
 
     it("should have new chat disabled when current chat is empty", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+
       // When - Open chat window
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("ai-chat-window").should("be.visible")
@@ -113,6 +129,8 @@ describe("ai assistant", () => {
     })
 
     it("should persist messages and restore on reopen", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+
       // Given - Set up intercept for chat request
       interceptAIChatRequest("openai")
 
@@ -143,6 +161,8 @@ describe("ai assistant", () => {
     })
 
     it("should show chats in history after creating multiple chats", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+
       // Given - Create first chat with a message
       interceptAIChatRequest("openai", "firstChat")
       cy.getByDataHook("ai-chat-button").click()
@@ -173,12 +193,10 @@ describe("ai assistant", () => {
     })
 
     it("should rename chats from history", () => {
-      // Given - Create a chat with a message
-      interceptAIChatRequest("openai")
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").type("Test message")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@openaiChatRequest")
+      // Given
+      loadConsoleWithChats([createChat()])
+      openSavedChat()
+      cy.getByDataHook("chat-message-user").should("contain", "Test message")
 
       // When - Open history and click edit on the chat
       cy.getByDataHook("chat-window-history").click()
@@ -210,21 +228,13 @@ describe("ai assistant", () => {
     })
 
     it("should delete chats from history", () => {
-      // Given - Create two chats
-      interceptAIChatRequest("openai", "firstChat")
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").type("First message")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@firstChat")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
-
-      cy.getByDataHook("chat-window-new").click()
-      interceptAIChatRequest("openai", "secondChat")
-      cy.getByDataHook("chat-blank-state").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type("Second message")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@secondChat")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
+      // Given
+      loadConsoleWithChats([
+        createChat({ name: "First Chat", userMessage: "First message" }),
+        createChat({ name: "Second Chat", userMessage: "Second message" }),
+      ])
+      openSavedChat("Second Chat")
+      cy.getByDataHook("chat-message-user").should("contain", "Second message")
 
       // When - Open history
       cy.getByDataHook("chat-window-history").click()
@@ -245,6 +255,8 @@ describe("ai assistant", () => {
     })
 
     it("should delete empty chat when closing chat window", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+
       // When - Open chat window (creates empty chat)
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("ai-chat-window").should("be.visible")
@@ -264,13 +276,10 @@ describe("ai assistant", () => {
     })
 
     it("should delete empty chat when creating new chat", () => {
-      // Given - Create a chat with a message first
-      interceptAIChatRequest("openai")
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").type("First message")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@openaiChatRequest")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
+      // Given
+      loadConsoleWithChats([createChat({ userMessage: "First message" })])
+      openSavedChat()
+      cy.getByDataHook("chat-message-user").should("contain", "First message")
 
       // When - Create new chat (which is empty)
       cy.getByDataHook("chat-window-new").click()
@@ -284,64 +293,16 @@ describe("ai assistant", () => {
     })
 
     it("should search chats by name", () => {
-      // Given - Create three chats with different names
-      const chatNames = [
-        "Database Queries",
-        "Performance Tips",
-        "Schema Design",
-      ]
-
-      // Create first chat
-      interceptAIChatRequest("openai", "chat1")
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-blank-state").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type("First message")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@chat1")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
-      cy.getByDataHook("chat-input-textarea")
-        .should("be.visible")
-        .should("not.be.disabled")
-
-      // Create second chat
-      cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
-      interceptAIChatRequest("openai", "chat2")
-      cy.getByDataHook("chat-blank-state").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type("Second message")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@chat2")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
-      cy.getByDataHook("chat-input-textarea")
-        .should("be.visible")
-        .should("not.be.disabled")
-
-      // Create third chat
-      cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
-      interceptAIChatRequest("openai", "chat3")
-      cy.getByDataHook("chat-blank-state").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type("Third message")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@chat3")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
-      cy.getByDataHook("chat-input-textarea")
-        .should("be.visible")
-        .should("not.be.disabled")
-
-      // When - Open history
+      // Given
+      loadConsoleWithChats([
+        createChat({ name: "Database Queries" }),
+        createChat({ name: "Performance Tips" }),
+        createChat({ name: "Schema Design" }),
+      ])
+      openSavedChat("Schema Design")
+      cy.getByDataHook("chat-message-user").should("be.visible")
       cy.getByDataHook("chat-window-history").click()
       cy.getByDataHook("chat-history-item").should("have.length", 3)
-
-      // When - Rename each chat
-      chatNames.forEach((name, index) => {
-        cy.getByDataHook("chat-history-item")
-          .eq(index)
-          .should("not.be.disabled")
-          .trigger("mouseover")
-        cy.getByDataHook("chat-history-edit").eq(index).click()
-        cy.getByDataHook("chat-history-rename").clear().type(`${name}{enter}`)
-        cy.getByDataHook("chat-history-rename").should("not.exist")
-        cy.getByDataHook("chat-history-title").eq(index).should("contain", name)
-      })
 
       // Then - Search for "Database" should show only one result
       cy.getByDataHook("chat-history-search").type("Database")
@@ -389,33 +350,22 @@ describe("ai assistant", () => {
     })
 
     it("should switch between chats from history", () => {
-      // Given - Create two chats with different messages
-      interceptAIChatRequest("openai", "chat1")
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea")
-        .should("be.visible")
-        .should("not.be.disabled")
-        .type("First chat unique message")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@chat1")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
-      cy.getByDataHook("chat-input-textarea")
-        .should("be.visible")
-        .should("not.be.disabled")
-
-      cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
-      cy.getByDataHook("chat-blank-state").should("be.visible")
-      interceptAIChatRequest("openai", "chat2")
-      cy.getByDataHook("chat-input-textarea")
-        .should("be.visible")
-        .should("not.be.disabled")
-        .type("Second chat different content")
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@chat2")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
-      cy.getByDataHook("chat-input-textarea")
-        .should("be.visible")
-        .should("not.be.disabled")
+      // Given
+      loadConsoleWithChats([
+        createChat({
+          name: "First Chat",
+          userMessage: "First chat unique message",
+        }),
+        createChat({
+          name: "Second Chat",
+          userMessage: "Second chat different content",
+        }),
+      ])
+      openSavedChat("Second Chat")
+      cy.getByDataHook("chat-message-user").should(
+        "contain",
+        "Second chat different content",
+      )
 
       // When - Open history
       cy.getByDataHook("chat-window-history").should("not.be.disabled").click()
@@ -656,21 +606,13 @@ describe("ai assistant", () => {
     })
 
     it("should toggle chat window when clicking AI icon for current query", () => {
-      // Given a query with a chat
-      loadConsoleWithQuery("SELECT 1;")
-      cy.getAIIconInLine(1).click()
-      cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading
-      cy.getByDataHook("chat-initial-query-box").should("be.visible")
-      interceptAIChatRequest("openai")
-      cy.getByDataHook("chat-input-textarea").type("Test message", {
-        force: true,
+      // Given
+      const query = "SELECT 1;"
+      loadConsoleWithChats([createQueryChat({ bufferId: 1, query })], {
+        buffers: [{ value: query }],
       })
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@openaiChatRequest")
-
-      // Then - Chat window should be open
-      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getAIIconInLine(1, "active").click()
+      cy.getByDataHook("chat-message-user").should("contain", "Test message")
 
       // When - Click AI icon again (should close chat)
       cy.getAIIconInLine(1, "active").click()
@@ -688,29 +630,13 @@ describe("ai assistant", () => {
     })
 
     it("should move glyph icons when query position changes", () => {
-      // Given a query starting at line 1
-      loadConsoleWithQuery("DECLARE @myVar := 'shift-this' select @myVar;")
-
-      // Then - AI icon should be on line 1
-      cy.getAIIconInLine(1, "noChat").should("be.visible").click()
-
-      cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").should("be.visible")
-      cy.getByDataHook("chat-context-badge").should("be.visible")
-
-      interceptAIChatRequest("openai", "openaiChatRequest", 2000)
-      cy.getByDataHook("chat-input-textarea").type("Explain this query", {
-        force: true,
+      // Given
+      const query = "DECLARE @myVar := 'shift-this' select @myVar;"
+      loadConsoleWithChats([createQueryChat({ bufferId: 1, query })], {
+        buffers: [{ value: query }],
       })
-      cy.getByDataHook("chat-send-button").click()
-      cy.getAIIconInLine(1, "highlight").should("be.visible")
-
-      cy.waitForAIResponse("@openaiChatRequest")
-      cy.getByDataHook("chat-message-assistant").should("be.visible")
       cy.getAIIconInLine(1, "active").should("be.visible")
 
-      cy.getByDataHook("chat-window-close").click()
-      cy.getByDataHook("ai-chat-window").should("not.exist")
       // When - Add empty lines before the query (press Home, then Enter twice)
       cy.clickLine(1)
       cy.getEditor().realClick()
@@ -726,61 +652,37 @@ describe("ai assistant", () => {
     })
 
     it("should navigate to query tab when clicking context badge from different tab", () => {
-      // Given - Create a query with chat in Tab 1
-      loadConsoleWithQuery("SELECT 'tab1_query';")
-      cy.getAIIconInLine(1).click()
-      cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading
-      interceptAIChatRequest("openai", "tab1Chat")
-      cy.getByDataHook("chat-input-textarea").type("Message for tab 1", {
-        force: true,
-      })
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@tab1Chat")
-
-      // When - Open history and rename this chat
-      cy.getByDataHook("chat-window-history").click()
-      cy.getByDataHook("chat-history-list").should("be.visible") // Wait for history to load
-      cy.getByDataHook("chat-history-item").first().trigger("mouseover")
-      cy.getByDataHook("chat-history-edit").first().click()
-      cy.getByDataHook("chat-history-rename").clear().type("Tab 1 Chat{enter}")
-      cy.getByDataHook("chat-history-rename").should("not.exist")
-      cy.getByDataHook("chat-history-title")
-        .should("be.visible")
-        .should("contain", "Tab 1 Chat")
-
-      // When - Close chat and create a new tab
-      cy.getByDataHook("chat-window-close").click()
-      cy.addEditorTab()
-
-      // Then - New tab should be created (2 tabs total now)
+      // Given
+      const firstQuery = "SELECT 'tab1_query';"
+      const secondQuery = "SELECT 'tab2_query';"
+      loadConsoleWithChats(
+        [
+          createQueryChat({
+            bufferId: 1,
+            query: firstQuery,
+            name: "Tab 1 Chat",
+            userMessage: "Message for tab 1",
+          }),
+          createQueryChat({
+            bufferId: 2,
+            query: secondQuery,
+            name: "Tab 2 Chat",
+            userMessage: "Message for tab 2",
+          }),
+        ],
+        {
+          buffers: [{ value: firstQuery }, { value: secondQuery }],
+          activeBufferId: 2,
+        },
+      )
       cy.getEditorTabs().should("have.length", 2)
-      cy.focused()
-        .should("have.class", "monaco-mouse-cursor-text")
-        .should("not.be.disabled")
-
-      // When - Create a query with chat in Tab 2
-      cy.withFocusedEditor((editor) => editor.setValue("SELECT 'tab2_query';"))
-      cy.getAIIconInLine(1).click()
-      cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading
-      interceptAIChatRequest("openai", "tab2Chat")
-      cy.getByDataHook("chat-input-textarea").type("Message for tab 2", {
-        force: true,
-      })
-      cy.getByDataHook("chat-send-button").click()
-      cy.waitForAIResponse("@tab2Chat")
-
-      // When - Open history and rename this chat
+      cy.getAIIconInLine(1, "active").click()
+      cy.getByDataHook("chat-message-user").should(
+        "contain",
+        "Message for tab 2",
+      )
       cy.getByDataHook("chat-window-history").click()
-      cy.getByDataHook("chat-history-list").should("be.visible") // Wait for history to load
-      cy.getByDataHook("chat-history-item").first().trigger("mouseover")
-      cy.getByDataHook("chat-history-edit").first().click()
-      cy.getByDataHook("chat-history-rename").clear().type("Tab 2 Chat{enter}")
-      cy.getByDataHook("chat-history-rename").should("not.exist")
-      cy.getByDataHook("chat-history-title")
-        .first()
-        .should("contain", "Tab 2 Chat")
+      cy.getByDataHook("chat-history-item").should("have.length", 2)
 
       // When - Navigate to Tab 1 Chat via history
       cy.getByDataHook("chat-history-item")
@@ -2490,39 +2392,23 @@ Syntax: \`avg(column)\`
     })
 
     it("should accept suggestion to new tab when previous buffer is archived", () => {
-      loadConsoleWithQuery("SELECT 1;")
-      const firstSQL = "SELECT symbol FROM btc_trades;"
+      // Given
+      const query = "SELECT 1;"
       const secondSQL = "SELECT price FROM btc_trades;"
-
-      // Open chat from a query glyph icon so the chat is bound to the current buffer
-      cy.getAIIconInLine(1).click()
-      cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").should("be.visible")
-
-      // First turn: get a suggestion and accept it to bind to this buffer
-      const firstFlow = createToolCallFlow({
-        provider: "openai",
-        streaming: true,
-        question: "Show symbols",
-        steps: [
-          {
-            finalResponse: {
-              explanation: "Query for symbols.",
-              sql: firstSQL,
-            },
-          },
+      loadConsoleWithChats(
+        [
+          createQueryChat({
+            bufferId: 1,
+            query,
+            userMessage: "Show symbols",
+            sql: "SELECT symbol FROM btc_trades;",
+          }),
         ],
-      })
+        { buffers: [{ value: query }] },
+      )
+      cy.getAIIconInLine(1, "active").click()
 
-      firstFlow.intercept()
-
-      cy.getByDataHook("chat-input-textarea").type(firstFlow.question, {
-        force: true,
-      })
-      cy.getByDataHook("chat-send-button").click()
-
-      firstFlow.waitForCompletion()
-
+      // When
       cy.getByDataHook("message-action-accept").should("be.visible").click()
       cy.getByDataHook("diff-status-accepted").should("contain", "Accepted")
       cy.getByDataHook("chat-context-badge").should("contain", "SELECT symbol")
@@ -2580,30 +2466,14 @@ Syntax: \`avg(column)\`
 
     it("should show abort dialog when running chat query while editor query is in flight", () => {
       // Given
-      loadConsoleWithQuery("select 1;")
-      const sql = "SELECT * FROM btc_trades LIMIT 10;"
-      const flow = createToolCallFlow({
-        provider: "openai",
-        streaming: true,
-        question: "Show btc data",
-        steps: [
-          {
-            finalResponse: {
-              explanation: "Here is a query.",
-              sql,
-            },
-          },
-        ],
-      })
+      loadConsoleWithChats(
+        [createChat({ sql: "SELECT * FROM btc_trades LIMIT 10;" })],
+        {
+          buffers: [{ value: "select 1;" }],
+        },
+      )
+      openSavedChat()
 
-      flow.intercept()
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type(flow.question, {
-        force: true,
-      })
-      cy.getByDataHook("chat-send-button").click()
-      flow.waitForCompletion()
       cy.getByDataHook("message-action-run-sql").should("be.visible")
       cy.intercept("/exec*", (req) => {
         req.on("response", (res) => {
@@ -2654,30 +2524,14 @@ Syntax: \`avg(column)\`
 
     it("should show abort dialog when running editor query while chat query is in flight", () => {
       // Given
-      loadConsoleWithQuery("select 1;")
-      const sql = "SELECT * FROM btc_trades LIMIT 10;"
-      const flow = createToolCallFlow({
-        provider: "openai",
-        streaming: true,
-        question: "Show btc data",
-        steps: [
-          {
-            finalResponse: {
-              explanation: "Here is a query.",
-              sql,
-            },
-          },
-        ],
-      })
+      loadConsoleWithChats(
+        [createChat({ sql: "SELECT * FROM btc_trades LIMIT 10;" })],
+        {
+          buffers: [{ value: "select 1;" }],
+        },
+      )
+      openSavedChat()
 
-      flow.intercept()
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type(flow.question, {
-        force: true,
-      })
-      cy.getByDataHook("chat-send-button").click()
-      flow.waitForCompletion()
       cy.getByDataHook("message-action-run-sql").should("be.visible")
       cy.intercept("/exec*", (req) => {
         req.on("response", (res) => {
@@ -2719,30 +2573,11 @@ Syntax: \`avg(column)\`
     })
 
     it("should show error notification when running invalid SQL from chat", () => {
-      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
-      const sql = "SELECT * FROM nonexistent_table_xyz;"
-      const flow = createToolCallFlow({
-        provider: "openai",
-        streaming: true,
-        question: "Show nonexistent data",
-        steps: [
-          {
-            finalResponse: {
-              explanation: "Here is a query.",
-              sql,
-            },
-          },
-        ],
-      })
-
-      flow.intercept()
-
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type(flow.question)
-      cy.getByDataHook("chat-send-button").click()
-
-      flow.waitForCompletion()
+      // Given
+      loadConsoleWithChats([
+        createChat({ sql: "SELECT * FROM nonexistent_table_xyz;" }),
+      ])
+      openSavedChat()
 
       // Run the invalid query from chat
       cy.getByDataHook("message-action-run-sql").should("be.visible").click()

@@ -3,7 +3,7 @@ require("cypress-real-events")
 require("@4tw/cypress-drag-drop")
 
 const { ctrlOrCmd, escapeRegExp, seedNotebookOnboarding } = require("./utils")
-const { seedEditorBuffers } = require("./utils/editorBuffers")
+const { seedConsoleStorage } = require("./utils/consoleStorage")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`
@@ -725,6 +725,7 @@ Cypress.Commands.add(
       onBeforeLoad,
       buffers,
       activeBufferId,
+      conversations,
     } = options
     let seeded
     if (clearWarnings) {
@@ -733,8 +734,12 @@ Cypress.Commands.add(
     cy.loginWithApi(username, password).then((credentials) => {
       cy.handleStorageAndVisit(url, true, localStorageItems, (win) => {
         win.sessionStorage.clear()
-        if (buffers) {
-          seeded = seedEditorBuffers(win, buffers, activeBufferId)
+        if (buffers || conversations) {
+          seeded = seedConsoleStorage(win, {
+            buffers,
+            activeBufferId,
+            conversations,
+          })
         }
         onBeforeLoad?.(win)
         for (const [key, value] of Object.entries(credentials)) {
