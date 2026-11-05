@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: Review a code change against QuestDB Web Console coding standards
-argument-hint: [PR number, PR URL, commit hash, unstaged changes, staged changes] [--level=0..3]
+argument-hint: "[PR number, PR URL, commit hash, unstaged changes, staged changes] [--level=0..3]"
 allowed-tools: Bash(gh *), Bash(git diff*), Bash(git show*), Bash(git log*), Bash(git blame*), Bash(git rev-parse*), Bash(git merge-base*), Bash(git status*), Bash(yarn test:unit), Bash(yarn vitest*), Bash(yarn lint), Bash(yarn typecheck), Bash(yarn build), Bash(yarn cypress*), Bash(env -u ELECTRON_RUN_AS_NODE yarn cypress*), Read, Write, Grep, Glob, Agent
 ---
 
