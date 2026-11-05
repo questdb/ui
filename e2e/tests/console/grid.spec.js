@@ -633,7 +633,7 @@ describe("questdb grid", () => {
     it("shows the full value of a truncated cell after a hover delay", () => {
       // Given
       loadGridConsole("select rpad('a', 500, 'b') wide from long_sequence(1)")
-      cy.runLine()
+      cy.clickRunQuery()
 
       // When
       cy.getGridCellAt(0, 0).realHover()
@@ -646,12 +646,12 @@ describe("questdb grid", () => {
     it("re-running the query hides the open tooltip", () => {
       // Given
       loadGridConsole("select rpad('a', 500, 'b') wide from long_sequence(1)")
-      cy.runLine()
+      cy.clickRunQuery()
       cy.getGridCellAt(0, 0).realHover()
       getTooltipValue().should("be.visible")
 
       // When
-      cy.runLine()
+      cy.clickRunQuery()
 
       // Then
       cy.getByDataHook("grid-cell-tooltip-value").should("not.exist")
