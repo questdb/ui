@@ -3,6 +3,9 @@ name: Check OSS Submodule
 on:
   push:
 
+permissions:
+  contents: read
+
 jobs:
   check_oss_submodule:
     name: Check if OSS is on master
@@ -12,9 +15,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
-          # The depth also applies to the submodule. The check walks the last
-          # ACCEPTABLE_LAG commits of QuestDB master, so a depth of 1 would
-          # leave only the head commit and reject every pointer behind it.
+          # The depth also applies to the submodule. The check walks
+          # ACCEPTABLE_LAG + 2 commits of QuestDB master (the head, the
+          # ACCEPTABLE_LAG commits behind it, and one more to stop the walk;
+          # see submodule_is_mergeable.py), so the depth must be at least that.
+          # A depth of 1 would leave only the head commit and reject every
+          # pointer behind it.
           fetch-depth: 10
 
       - name: Install uv

@@ -49,12 +49,25 @@ corepack enable
 - `yarn typecheck` - Run TypeScript type checking
 - `yarn lint` - Lint source code (ESLint)
 - `yarn lint:fix` - Fix linting issues automatically
+- `yarn sync:questdb` - Move the `e2e/questdb` submodule to the head of QuestDB `master` and stage it
 
 ## Development Notes
 
 ### Running E2E Tests
 
 E2E tests require a running QuestDB server. The tests connect to `localhost:9000` by default.
+
+### QuestDB Submodule
+
+CI builds the QuestDB server for E2E tests from the `e2e/questdb` submodule. The "Check OSS Submodule" workflow fails a push when the submodule is not one of the latest commits of QuestDB `master`. To fix it, run:
+
+```bash
+yarn sync:questdb
+```
+
+Then commit the staged `e2e/questdb` change. The first run clones the submodule if it is not initialized yet.
+
+To test against a QuestDB branch that is not merged yet, check out that commit in `e2e/questdb` and commit the pointer as usual. Run `yarn sync:questdb` before merging.
 
 ### Working with Context Path
 

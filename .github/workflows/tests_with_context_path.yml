@@ -3,6 +3,9 @@ name: Run Tests With Context Path
 on:
   push:
 
+permissions:
+  contents: read
+
 jobs:
   run_tests_with_context_path:
     name: Running Tests With Context Path

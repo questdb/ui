@@ -10,18 +10,18 @@ This script does not modify the repo in any way.
 This is achieved if the commit that the submodule points to respects that it:
 * Is a commit that is in the `questdb` master branch's history.
 * Is no more than ACCEPTABLE_LAG commits behind.
-* Is same or newer as the current commit pointed to currently.
 
-Before running, you may first need to install dependencies:
-
-    $ python3 -m pip install -U pip
-    $ python3 -m pip install -U pygit2
+(A third rule, "same or newer than the commit `main` points to", lives in
+`check_not_older` but is currently disabled in `main()`.)
 
 To run, from the root of the repo, call:
 
-    git fetch
-    (cd questdb && git fetch)
-    python3 ci/submodule_is_mergeable.py
+    git -C e2e/questdb fetch origin master
+    uv run --python 3.12 --with "pygit2==1.14.1" submodule_is_mergeable.py
+
+This is the same command CI uses (see
+.github/workflows/check_oss_submodule.yml). If the check fails, run
+`yarn sync:questdb` and commit the updated `e2e/questdb` pointer.
 
 On error, will return non-zero exit code and fail the CI run.
 """
@@ -42,9 +42,9 @@ def get_last_master_commits(questdb_repo: pygit2.Repository) -> [pygit2.Oid]:
     origin_master_head: pygit2.Oid = oss_master_ref.peel().id
     for index, commit in enumerate(questdb_repo.walk(origin_master_head)):
         # print(f'{commit.id}\t{commit.message}')
-        commit_ids.append(commit.id)
         if index > ACCEPTABLE_LAG:
             break
+        commit_ids.append(commit.id)
     return commit_ids
 
 
@@ -53,9 +53,13 @@ def check_commit_is_from_recent_master(oss_master_commits: [pygit2.Oid], oss_hea
         sys.stderr.write('The `questdb` submodule is not mergeable.\n')
         sys.stderr.write(
             f'The submodule\'s commit ({oss_head}) is not one of the ' +
-            f'last {ACCEPTABLE_LAG} commits in the `questdb` master branch.\n')
+            f'last {len(oss_master_commits)} commits in the `questdb` master ' +
+            f'branch (at most {ACCEPTABLE_LAG} commits behind its head).\n')
         for commit in oss_master_commits:
             sys.stderr.write(f'  * {commit}\n')
+        sys.stderr.write(
+            'Run `yarn sync:questdb` and commit the updated `e2e/questdb` ' +
+            'pointer.\n')
         sys.exit(1)
 
 
