@@ -133,4 +133,5 @@ export {
   updateCellTransition,
   type AppliedNotebookState,
   type NotebookTransitionResult,
+  type VariableSettingsDiff,
 } from "./notebookTransitions"

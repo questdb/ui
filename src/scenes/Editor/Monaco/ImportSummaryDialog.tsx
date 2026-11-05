@@ -15,6 +15,7 @@ import {
   CheckCircleIcon,
   FileTextIcon,
 } from "@phosphor-icons/react"
+import type { VariableImportReport } from "./importTabs"
 
 export type SkippedTab = {
   label: string
@@ -28,6 +29,7 @@ type Props = {
   onOpenChange: (open: boolean) => void
   importedCount: number
   skippedTabs: SkippedTab[]
+  variableReports: VariableImportReport[]
 }
 
 const StyledDescription = styled(Dialog.Description)`
@@ -61,6 +63,21 @@ const TabLabel = styled(Text).attrs({
   min-width: 0;
 `
 
+const VariablesItem = styled(SkippedItem)`
+  align-items: flex-start;
+  border-left-color: ${({ theme }) => theme.color.statusInfo};
+`
+
+const VariableLines = styled.div`
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.3rem;
+`
+
+const atNames = (list: string[]) => list.map((name) => `@${name}`).join(", ")
+
 const SummaryStats = styled(Box).attrs({
   gap: "2rem",
 })`
@@ -88,6 +105,7 @@ export const ImportSummaryDialog = ({
   onOpenChange,
   importedCount,
   skippedTabs,
+  variableReports,
 }: Props) => {
   const theme = useTheme()
 
@@ -158,6 +176,40 @@ export const ImportSummaryDialog = ({
                 </SkippedItem>
               ))}
             </SkippedList>
+            {variableReports.length > 0 && (
+              <SkippedList data-hook="import-summary-variables-list">
+                {variableReports.map((report) => (
+                  <VariablesItem
+                    key={report.label}
+                    data-hook="import-summary-variables-item"
+                  >
+                    <FileTextIcon
+                      size={18}
+                      color={theme.color.contentPrimary}
+                    />
+                    <VariableLines>
+                      <TabLabel title={report.label}>{report.label}</TabLabel>
+                      {report.reusedGlobals.length > 0 && (
+                        <Text color="contentSecondary" size="sm">
+                          Uses existing globals: {atNames(report.reusedGlobals)}
+                        </Text>
+                      )}
+                      {report.localizedGlobals.length > 0 && (
+                        <Text color="contentSecondary" size="sm">
+                          Imported as notebook variables:{" "}
+                          {atNames(report.localizedGlobals)}
+                        </Text>
+                      )}
+                      {report.dropped.length > 0 && (
+                        <Text color="statusWarning" size="sm">
+                          Dropped, not recognized: {atNames(report.dropped)}
+                        </Text>
+                      )}
+                    </VariableLines>
+                  </VariablesItem>
+                ))}
+              </SkippedList>
+            )}
           </StyledDescription>
 
           <Dialog.ActionButtons>

@@ -32,7 +32,8 @@ import {
   NotebookProvider,
   useNotebookActions,
   useNotebookBufferId,
-  useNotebookState,
+  useNotebookCellsState,
+  useNotebookVariablesState,
 } from "./NotebookProvider"
 import { Cell } from "./cells/Cell"
 import { MarkdownCell } from "./cells/MarkdownCell"
@@ -40,6 +41,7 @@ import type { AutoRefresh, NotebookCell } from "../../../store/notebook"
 import { AddCellBottom, AddCellBetween } from "./cells/AddCellButton"
 import { Button, LoadingSpinner } from "../../../components"
 import { NotebookToolbar } from "./NotebookToolbar"
+import { VariablesBar } from "./variables/bar/VariablesBar"
 import { NotebookMcpPromo } from "./NotebookMcpPromo"
 import { renderEdgeHandle } from "./resize"
 import {
@@ -375,8 +377,9 @@ const CellView: React.FC<CellViewProps> = ({ autoRefreshDefault, ...props }) =>
   )
 
 const ListLayout: React.FC = () => {
-  const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
-    useNotebookState()
+  const { cells, focusedCellId, maximizedCellId, runningCellIds } =
+    useNotebookCellsState()
+  const { settings } = useNotebookVariablesState()
   const { setFocusedCell } = useNotebookActions()
   useScrollUserAddedCellIntoView()
 
@@ -414,8 +417,9 @@ const ListLayout: React.FC = () => {
 }
 
 const GridLayout: React.FC = () => {
-  const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
-    useNotebookState()
+  const { cells, focusedCellId, maximizedCellId, runningCellIds } =
+    useNotebookCellsState()
+  const { settings } = useNotebookVariablesState()
   const resultHydration = useCellResultHydrationEngine()
   // Re-render when a cell's known-missing state flips — the only status
   // boundary the layout math below reads (via statusOf).
@@ -715,7 +719,7 @@ const useNotebookSearchReveal = () => {
   const { activeBuffer, isNavigatingFromSearchRef } = useEditor()
   const { setFocusedCell, setMaximizedCellId, getCellsSnapshot } =
     useNotebookActions()
-  const { maximizedCellId } = useNotebookState()
+  const { maximizedCellId } = useNotebookCellsState()
 
   const bufferId = activeBuffer.id
   const maximizedCellIdRef = useRef(maximizedCellId)
@@ -763,8 +767,9 @@ const useNotebookSearchReveal = () => {
 }
 
 const NotebookContent: React.FC = () => {
-  const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
-    useNotebookState()
+  const { cells, focusedCellId, maximizedCellId, runningCellIds } =
+    useNotebookCellsState()
+  const { settings } = useNotebookVariablesState()
   const chartEngine = useCellRefresh()
   const virtualizationEngine = useCellVirtualizationEngine()
   const layoutMode = settings.layoutMode ?? "list"
@@ -836,6 +841,7 @@ const NotebookContent: React.FC = () => {
   return (
     <NotebookWrapper>
       <NotebookToolbar />
+      <VariablesBar />
       {layoutMode === "grid" ? <GridLayout /> : <ListLayout />}
     </NotebookWrapper>
   )

@@ -1,10 +1,18 @@
-import { isValidDate } from "../../../utils"
-import { format, formatISO, subMinutes } from "date-fns"
+import { formatISO } from "date-fns"
 import { utcToLocal } from "../../../utils"
 import uPlot from "uplot"
 import type { Duration } from "./types"
+import {
+  durationTokenToDate,
+  durationToHumanReadable as presetsToHumanReadable,
+} from "../TimeRangePicker/utils"
 
-export const DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss"
+export {
+  DATETIME_FORMAT,
+  durationTokenToDate,
+  getSamplingRateForPeriod,
+  isDateToken,
+} from "../TimeRangePicker/utils"
 
 export const MAX_DATE_RANGE = 7 * 24 * 60 * 60
 
@@ -105,8 +113,8 @@ export const refreshRatesInSeconds: Record<RefreshRate, number> = {
 
 export const getAutoRefreshRate = (dateFrom: string, dateTo: string) => {
   const seconds =
-    (new Date(durationTokenToDate(dateTo)).getTime() -
-      new Date(durationTokenToDate(dateFrom)).getTime()) /
+    (new Date(durationTokenToDate(dateTo, "to")).getTime() -
+      new Date(durationTokenToDate(dateFrom, "from")).getTime()) /
     1000
   if (seconds <= 60 * 5) return RefreshRate.FIVE_SECONDS
   if (seconds <= 60 * 15) return RefreshRate.FIVE_SECONDS
@@ -206,68 +214,10 @@ export const getTimeFilter = (from: Date | string, to: Date | string) => {
   return `FROM '${formatToISOIfNeeded(from)}' TO '${formatToISOIfNeeded(to)}'`
 }
 
-const seconds = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 45, 75, 90]
-
-const minutes = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 45, 75, 90]
-
-const hours = [1, 2, 3, 4, 6, 8, 12, 18, 24]
-
-export const getSamplingRateForPeriod = (
-  from: string,
-  to: string,
-  pointsToPlot = 600,
-) => {
-  const durationInSeconds =
-    (new Date(to).getTime() - new Date(from).getTime()) / 1000
-  const all = [
-    ...seconds,
-    ...minutes.map((m) => m * 60),
-    ...hours.map((h) => h * 3600),
-  ]
-  return all
-    .sort((a, b) => Math.abs(a) - Math.abs(b))
-    .find((s) => s > durationInSeconds / pointsToPlot) as number
-}
-
 export const hasData = (data?: uPlot.AlignedData) => {
   if (!data || data[1].length === 0) return false
   return data[1].length > 0 && data[1].some((value) => value !== null)
 }
 
-export const isDateToken = (token: string) => {
-  return /^now(-\d+[hdm]$)?$/.test(token)
-}
-
-// Converts tokens like `now-1h` or `now-7d` to date string
-export const durationTokenToDate = (token: string) => {
-  if (!isDateToken(token)) return isValidDate(token) ? token : "Invalid date"
-  const now = new Date()
-  if (token === "now") return formatISO(now)
-  const [_, _operator, value, unit] = token.match(/now(-)?(\d+)([a-z]+)$/)!
-  let subtractedMinutes = 0
-  switch (unit) {
-    case "m":
-      subtractedMinutes = parseInt(value)
-      break
-    case "h":
-      subtractedMinutes = parseInt(value) * 60
-      break
-    case "d":
-      subtractedMinutes = parseInt(value) * 60 * 24
-      break
-    default:
-      return "Invalid date"
-  }
-  return formatISO(subMinutes(now, subtractedMinutes))
-}
-
-export const durationToHumanReadable = (from: string, to: string) => {
-  const findDuration = metricDurations.find(
-    (d) => d.dateFrom === from && d.dateTo === to,
-  )
-  if (findDuration) return findDuration.label
-  return `${
-    from.startsWith("now") ? from : format(new Date(from), DATETIME_FORMAT)
-  } - ${to.startsWith("now") ? to : format(new Date(to), DATETIME_FORMAT)}
-  `
-}
+export const durationToHumanReadable = (from: string, to: string) =>
+  presetsToHumanReadable(from, to, metricDurations)

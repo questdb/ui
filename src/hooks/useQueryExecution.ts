@@ -1,6 +1,6 @@
 import { useCallback, useContext } from "react"
 import { QuestContext } from "../providers/QuestProvider"
-import type { NotebookVariable } from "../store/notebook"
+import type { DeclareEntry } from "../store/notebook"
 import {
   executeSingleRaw,
   RESULT_DISPLAY_LIMIT,
@@ -13,7 +13,9 @@ export {
   type QueryExecResult,
 } from "../utils/executeSingleRaw"
 
-export const useQueryExecution = (globals?: NotebookVariable[]) => {
+export const useQueryExecution = (
+  getGlobals: () => DeclareEntry[] | undefined,
+) => {
   const { quest } = useContext(QuestContext)
 
   const executeSingle = useCallback(
@@ -23,8 +25,8 @@ export const useQueryExecution = (globals?: NotebookVariable[]) => {
       limit: number = RESULT_DISPLAY_LIMIT,
       options?: { background?: boolean },
     ): Promise<QueryExecResult> =>
-      executeSingleRaw(quest, sql, globals, signal, limit, options),
-    [quest, globals],
+      executeSingleRaw(quest, sql, getGlobals(), signal, limit, options),
+    [quest, getGlobals],
   )
 
   return { executeSingle }

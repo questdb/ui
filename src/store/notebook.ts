@@ -70,6 +70,9 @@ export type NotebookCell = {
   // edit to the SQL never touches it.
   highlightConfig?: HighlightConfig
   autoRefresh?: AutoRefresh
+  timeRange?: TimeRange
+  timeShift?: string
+  showTimeRange?: boolean
   // Stored pane arrangement for a cell with a result. A cell without one
   // shows only the editor; that never rewrites it.
   paneView?: CellPaneView
@@ -158,15 +161,69 @@ export type CellLayoutItem = {
 
 export type NotebookLayoutMode = "list" | "grid"
 
-export type NotebookVariable = {
+export type TimeRange = {
+  from: string
+  to: string
+}
+
+export type DeclareEntry = {
   name: string
   value: string
 }
+
+export type VariableOption = {
+  value: string
+  label: string
+}
+
+type VariableBase = {
+  name: string
+  label?: string
+  description?: string
+}
+
+export type ExpressionVariable = VariableBase & {
+  kind: "expression"
+  value: string
+}
+
+export type TextVariable = VariableBase & {
+  kind: "text"
+  value: string
+}
+
+export type ListSource =
+  | {
+      type: "query"
+      query: string
+      labelColumn?: string
+      regex?: string
+    }
+  | { type: "custom"; entries: string }
+
+export type ListSort = "none" | "alphaAsc" | "alphaDesc" | "numAsc" | "numDesc"
+
+export type AllMode = { mode: "list" } | { mode: "custom"; value: string }
+
+export type ListVariable = VariableBase & {
+  kind: "list"
+  source: ListSource
+  sort: ListSort
+  multi: boolean
+  includeAll: boolean
+  all: AllMode
+  selected: "all" | VariableOption[]
+}
+
+export type NotebookVariable = ExpressionVariable | TextVariable | ListVariable
+
+export type VariableKind = NotebookVariable["kind"]
 
 export type NotebookSettings = {
   layoutMode?: NotebookLayoutMode
   layout?: CellLayoutItem[]
   variables?: NotebookVariable[]
+  timeRange?: TimeRange
   autoRefreshDefault?: AutoRefresh
 }
 
@@ -244,3 +301,11 @@ export const migrateLegacyCellNames = (
   state.cells.some(hasLegacyChartName)
     ? { ...state, cells: state.cells.map(migrateCellName) }
     : state
+
+const isTypedVariable = (variable: unknown): boolean =>
+  typeof variable === "object" &&
+  variable !== null &&
+  typeof (variable as { kind?: unknown }).kind === "string"
+
+export const hasLegacyVariables = (state: NotebookViewState): boolean =>
+  (state.settings?.variables ?? []).some((v) => !isTypedVariable(v))

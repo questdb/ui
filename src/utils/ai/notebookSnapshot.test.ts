@@ -19,6 +19,12 @@ import {
 } from "../notebooks/notebookController"
 import { __resetNotebookBufferQueuesForTests } from "../notebooks/notebookBufferQueue"
 import { db } from "../../store/db"
+import { saveNotebookGlobals } from "../../store/notebookGlobals"
+import {
+  GLOBAL_OPTIONS_OWNER,
+  notebookOptionsOwner,
+  saveStoredOptions,
+} from "../../store/notebookOptions"
 import { saveCellSnapshot } from "../../store/notebookResults"
 import type {
   NotebookCell,
@@ -47,6 +53,8 @@ const makeController = (
 ): NotebookController => ({
   bufferId,
   kind: "live",
+  syncVariableOptions: () => Promise.resolve([]),
+  waitForVariableOptions: () => Promise.resolve([]),
   mutate: (transition) =>
     Promise.resolve(
       transition({ cells, settings, maximizedCellId, focusedCellId: null })
@@ -236,6 +244,53 @@ describe("buildSnapshot", () => {
     if (snap?.status === "ok") {
       expect(snap.cells[0].preview).toBe("persisted")
     }
+  })
+
+  it("reports a cell's time range, shift and header flag only when set, never on markdown", async () => {
+    // Given
+    const cells = [
+      sql("a", "SELECT 1", {
+        timeRange: { from: "now-15m", to: "now" },
+        timeShift: "-1d",
+        showTimeRange: true,
+      }),
+      sql("b", "SELECT 2"),
+      sql("c", "# note", {
+        type: "markdown",
+        timeRange: { from: "now-15m", to: "now" },
+      }),
+    ]
+    const id = await seedNotebook({ cells })
+
+    // When
+    const snap = await buildSnapshot(id)
+    const summaries = summarizeCells(cells, undefined, () => "unrequested")
+    const details = serializeCell(
+      cells,
+      "a",
+      id,
+      false,
+      undefined,
+      "unrequested",
+    )
+
+    // Then
+    expect(snap?.status).toBe("ok")
+    if (snap?.status === "ok") {
+      expect(snap.cells[0]).toMatchObject({
+        time_range: { from: "now-15m", to: "now" },
+        time_shift: "-1d",
+        show_time_range: true,
+      })
+      expect(snap.cells[1].time_range).toBeUndefined()
+      expect(snap.cells[1].time_shift).toBeUndefined()
+      expect(snap.cells[2].time_range).toBeUndefined()
+      expect(formatSnapshot(snap)).toContain("time_shift: -1d")
+    }
+    expect(summaries[0].time_shift).toBe("-1d")
+    expect(summaries[1].time_shift).toBeUndefined()
+    expect(details.time_range).toEqual({ from: "now-15m", to: "now" })
+    expect(details.show_time_range).toBe(true)
   })
 
   it("truncates previews to 120 chars and escapes newlines", async () => {
@@ -444,8 +499,8 @@ describe("buildSnapshot", () => {
       cells,
       settings: {
         variables: [
-          { name: "x", value: "10" },
-          { name: "sym", value: "'BTC'" },
+          { name: "x", kind: "expression", value: "10" },
+          { name: "sym", kind: "expression", value: "'BTC'" },
         ],
       },
     })
@@ -454,13 +509,95 @@ describe("buildSnapshot", () => {
     const b = await buildSnapshot(withoutVarsId)
     if (a?.status === "ok" && b?.status === "ok") {
       expect(a.variables).toEqual([
-        { name: "x", value: "10" },
-        { name: "sym", value: "'BTC'" },
+        { name: "x", kind: "expression", value: "10" },
+        { name: "sym", kind: "expression", value: "'BTC'" },
       ])
       expect(b.variables).toBeUndefined()
     } else {
       throw new Error("expected ok snapshots")
     }
+  })
+
+  it("reports stored values for notebook lists only, never for globals", async () => {
+    // Given a notebook list and a global list, both with stored values
+    const queryList = (name: string) => ({
+      name,
+      kind: "list" as const,
+      source: {
+        type: "query" as const,
+        query: "SELECT DISTINCT symbol FROM fx_trades",
+      },
+      sort: "none" as const,
+      multi: true,
+      includeAll: true,
+      all: { mode: "list" as const },
+      selected: "all" as const,
+    })
+    await saveNotebookGlobals([queryList("venue")])
+    const id = await seedNotebook({
+      cells: [sql("a", "SELECT 1")],
+      settings: { variables: [queryList("pair")] },
+    })
+    await saveStoredOptions({
+      owner: notebookOptionsOwner(id),
+      name: "pair",
+      options: [
+        { value: "'EURUSD'", label: "EURUSD" },
+        { value: "'GBPUSD'", label: "GBPUSD" },
+      ],
+      fetchedAt: Date.UTC(2026, 8, 10, 12, 0, 0),
+    })
+    await saveStoredOptions({
+      owner: GLOBAL_OPTIONS_OWNER,
+      name: "venue",
+      options: [{ value: "'LSE'", label: "LSE" }],
+      fetchedAt: Date.UTC(2026, 8, 10, 12, 0, 0),
+    })
+
+    // When
+    const snap = await buildSnapshot(id)
+    await saveNotebookGlobals([])
+    await db.notebook_options
+      .where("owner")
+      .equals(GLOBAL_OPTIONS_OWNER)
+      .delete()
+
+    // Then
+    if (snap?.status !== "ok") throw new Error("expected an ok snapshot")
+    expect(snap.variable_values).toEqual([
+      { name: "pair", count: 2, fetched_at: Date.UTC(2026, 8, 10, 12, 0, 0) },
+    ])
+    const text = formatSnapshot(snap)
+    expect(text).toContain(
+      "pair: list all (multi) [2 values fetched at 2026-09-10T12:00:00.000Z]",
+    )
+    expect(text).toContain("venue: list all (multi)\n")
+  })
+
+  it("keeps global variables visible when saved local names conflict", async () => {
+    // Given
+    await saveNotebookGlobals([
+      { name: "sym", kind: "expression", value: "'EURUSD'" },
+      { name: "venue", kind: "expression", value: "'LSE'" },
+    ])
+    const id = await seedNotebook({
+      cells: [sql("a", "SELECT @sym FROM trades")],
+      settings: {
+        variables: [{ name: "sym", kind: "expression", value: "'GBPUSD'" }],
+      },
+    })
+
+    // When
+    const snap = await buildSnapshot(id)
+    await saveNotebookGlobals([])
+
+    // Then
+    if (snap?.status !== "ok") throw new Error("expected an ok snapshot")
+    expect(snap.global_variables).toEqual([
+      { name: "sym", kind: "expression", value: "'EURUSD'" },
+      { name: "venue", kind: "expression", value: "'LSE'" },
+    ])
+    expect(formatSnapshot(snap)).toContain("global_variables")
   })
 
   it("reports auto_refresh_default only when the notebook configured one", async () => {
@@ -493,6 +630,29 @@ describe("buildSnapshot", () => {
     }
   })
 
+  it("carries a candlestick volume column in the wire shape", async () => {
+    // Given
+    const ohlc = { open: "o", high: "h", low: "l", close: "c" }
+    const cell = sql("a", "SELECT 1", {
+      mode: "draw",
+      chartConfig: {
+        xColumn: "ts",
+        queries: [{ type: "candlestick", yColumns: [], ohlc, volume: "v" }],
+      },
+    })
+    const id = await seedNotebook({ cells: [cell] })
+    // When
+    const snap = await buildSnapshot(id)
+    // Then
+    if (snap?.status !== "ok") throw new Error("expected ok snapshot")
+    expect(snap.cells[0].chart_config?.queries[0]).toEqual({
+      type: "candlestick",
+      y_columns: [],
+      ohlc,
+      volume: "v",
+    })
+  })
+
   it("surfaces the full chart config in wire shape (for PUT round-trip) without leaking series data", async () => {
     // Given a named draw cell with a chart config and a 5s auto-refresh override
     const cell = sql("a", "SELECT 1", {
@@ -502,6 +662,7 @@ describe("buildSnapshot", () => {
       name: "Trades",
       chartConfig: {
         xColumn: "ts",
+        leftAxis: { min: 0, max: 100 },
         queries: [{ type: "line", yColumns: ["price", "volume"] }],
       },
     })
@@ -520,6 +681,7 @@ describe("buildSnapshot", () => {
       expect(snap.cells[0].chart_config).toEqual({
         x_column: "ts",
         queries: [{ type: "line", y_columns: ["price", "volume"] }],
+        left_axis: { min: 0, max: 100 },
       })
       expect(snap.cells[0].name).toBe("Trades")
       expect(snap.cells[0].mode).toBe("draw")
@@ -733,8 +895,8 @@ describe("formatSnapshot", () => {
       cells: [sql("a", "SELECT @x")],
       settings: {
         variables: [
-          { name: "x", value: "10" },
-          { name: "sym", value: "'BTC'" },
+          { name: "x", kind: "expression", value: "10" },
+          { name: "sym", kind: "expression", value: "'BTC'" },
         ],
       },
     })

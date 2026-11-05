@@ -106,7 +106,6 @@ export const MultiSelect: React.FC<Props> = ({
         <SelectMenuTriggerButton
           className={className}
           label={summary}
-          labelFontSize="1.3rem"
           fullWidth
           disabled={disabled}
           title={summary}

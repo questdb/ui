@@ -5,6 +5,7 @@ import { bufferStore } from "../../store/buffers"
 import {
   dropLegacyChartConfigs,
   dropMalformedHighlightConfigs,
+  hasLegacyVariables,
   exceedsCellLineLimit,
   MAX_CELL_LINES,
   migrateLegacyCellNames,
@@ -16,6 +17,7 @@ import type {
 } from "../../store/notebook"
 import { isCellPaneView } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 import { foldLegacyMaximizedHeights } from "../../scenes/Editor/Notebook/cellSizing"
 
@@ -29,6 +31,17 @@ type NotebookBufferMeta =
   | { kind: "deleted" }
   | { kind: "not_a_notebook" }
 
+const upgradeVariables = (view: NotebookViewState): NotebookViewState =>
+  hasLegacyVariables(view)
+    ? {
+        ...view,
+        settings: {
+          ...view.settings,
+          variables: normalizeVariables(view.settings?.variables),
+        },
+      }
+    : view
+
 // Main persisted `isViewMaximized`. Materialize the stored pane view and drop
 // the legacy key from the runtime view. A stored "editor" predates the
 // discard-on-editor model and normalizes to the split default. Markdown
@@ -41,6 +54,9 @@ const MARKDOWN_FOREIGN_FIELDS = [
   "chartConfig",
   "highlightConfig",
   "autoRefresh",
+  "timeRange",
+  "timeShift",
+  "showTimeRange",
   "bottomHeight",
   "bottomResized",
   "result",
@@ -69,8 +85,10 @@ const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
 }
 
 export const migratePersistedNotebookView = (view: NotebookViewState) => {
-  const migrated = dropMalformedHighlightConfigs(
-    dropLegacyChartConfigs(migrateLegacyCellNames(view)),
+  const migrated = upgradeVariables(
+    dropMalformedHighlightConfigs(
+      dropLegacyChartConfigs(migrateLegacyCellNames(view)),
+    ),
   )
   return { ...migrated, cells: migrated.cells.map(migrateCellPaneView) }
 }
@@ -168,6 +186,7 @@ export type CommitOutcome = "committed" | "archived" | "deleted"
 export const commitView = async (
   bufferId: number,
   parts: ViewParts,
+  validateCurrent?: (view: NotebookViewState) => void,
 ): Promise<CommitOutcome> => {
   const outcome = await db.transaction(
     "rw",
@@ -176,6 +195,9 @@ export const commitView = async (
       const buffer = await bufferStore.getById(bufferId)
       if (!buffer) return "deleted"
       if (buffer.archived) return "archived"
+      if (validateCurrent && buffer.notebookViewState) {
+        validateCurrent(migratePersistedNotebookView(buffer.notebookViewState))
+      }
       const updated = await bufferStore.update(bufferId, {
         notebookViewState: buildPersistPayload(
           parts.cells,

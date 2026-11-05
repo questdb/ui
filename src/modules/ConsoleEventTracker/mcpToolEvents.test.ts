@@ -27,6 +27,9 @@ const textResult = (text: string, isError = true) => ({
 describe("mcpToolCallEvent", () => {
   it("maps known tool names to their enum member", () => {
     expect(mcpToolCallEvent("add_cell")).toBe(ConsoleEvent.MCP_ADD_CELL)
+    expect(mcpToolCallEvent("set_cell_time_range")).toBe(
+      ConsoleEvent.MCP_SET_CELL_TIME_RANGE,
+    )
     expect(mcpToolCallEvent("apply_notebook_state")).toBe(
       ConsoleEvent.MCP_APPLY_NOTEBOOK_STATE,
     )

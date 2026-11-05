@@ -8,7 +8,7 @@ import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
 import {
   useNotebookActions,
   useNotebookBufferId,
-  useNotebookState,
+  useNotebookCellsState,
 } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
@@ -131,7 +131,7 @@ const BetweenButtons = styled.div`
 // User-origin only: tool-driven add_cell goes through NotebookController directly and doesn't emit here.
 const useUserAddCell = () => {
   const { addCell } = useNotebookActions()
-  const { cells } = useNotebookState()
+  const { cells } = useNotebookCellsState()
   const bufferId = useNotebookBufferId()
   const atLimit = cells.length >= MAX_NOTEBOOK_CELLS
   const emit = (cellId: string) => {

@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest"
 import {
   isValidVariableName,
   mapWireErrorPosition,
-  normalizeVariables,
   parseDeclareBlock,
   prependGlobalsDeclare,
   renderDeclareBlock,
-  stripLeadingAt,
   validateVariableShape,
 } from "./declareUtils"
 
@@ -56,32 +54,6 @@ describe("isValidVariableName", () => {
     "x\\y", // escape safety
   ])("rejects %s", (n) => {
     expect(isValidVariableName(n)).toBe(false)
-  })
-})
-
-describe("stripLeadingAt", () => {
-  it("strips a leading @", () => {
-    expect(stripLeadingAt("@symbol")).toBe("symbol")
-  })
-  it("leaves names without @ untouched", () => {
-    expect(stripLeadingAt("symbol")).toBe("symbol")
-  })
-})
-
-describe("normalizeVariables", () => {
-  it("preserves ordered variable arrays", () => {
-    expect(
-      normalizeVariables([
-        { name: "base", value: "10" },
-        { name: "derived", value: "@base + 1" },
-      ]),
-    ).toEqual(vars({ base: "10", derived: "@base + 1" }))
-  })
-
-  it("upgrades old object-shaped variables without crashing", () => {
-    expect(normalizeVariables({ x: "1", y: "@x + 1" })).toEqual(
-      vars({ x: "1", y: "@x + 1" }),
-    )
   })
 })
 
@@ -278,6 +250,20 @@ describe("prependGlobalsDeclare", () => {
       vars({ x: "1" }),
     )
     expect(sql.startsWith("DECLARE\n  @x := 1\nWITH ")).toBe(true)
+  })
+
+  it("prepends DECLARE before an implicit select", () => {
+    const { sql, insertedRange } = prependGlobalsDeclare(
+      "trades WHERE symbol = @x",
+      vars({ x: "'EURUSD'" }),
+    )
+    expect(sql).toBe("DECLARE\n  @x := 'EURUSD'\ntrades WHERE symbol = @x")
+    expect(insertedRange?.start).toBe(0)
+  })
+
+  it("prepends DECLARE before a bare variable used as the table name", () => {
+    const { sql } = prependGlobalsDeclare("@t", vars({ t: "'trades'" }))
+    expect(sql).toBe("DECLARE\n  @t := 'trades'\n@t")
   })
 
   it("preserves a leading line comment, with insertion offset AFTER the comment", () => {

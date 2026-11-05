@@ -70,6 +70,32 @@ export const findOhlc = (
   return undefined
 }
 
+const VOLUME_COLUMN_NAMES = [
+  "volume",
+  "vol",
+  "total_volume",
+  "size",
+  "qty",
+  "quantity",
+  "amount",
+]
+
+export const findVolume = (
+  numeric: ColumnDefinition[],
+  ohlc: NonNullable<QueryChart["ohlc"]>,
+): string | undefined => {
+  const taken = new Set(Object.values(ohlc))
+  const byName = new Map<string, string>()
+  for (const c of numeric) {
+    if (!taken.has(c.name)) byName.set(c.name.toLowerCase(), c.name)
+  }
+  for (const name of VOLUME_COLUMN_NAMES) {
+    const match = byName.get(name)
+    if (match) return match
+  }
+  return undefined
+}
+
 type QueryHints = {
   hasSampleBy?: boolean
   hasLatest?: boolean
@@ -118,12 +144,14 @@ export const inferChartConfig = (
   if (groups.temporal.length > 0 && groups.numeric.length >= 4) {
     const ohlc = findOhlc(groups.numeric)
     if (ohlc) {
+      const volume = findVolume(groups.numeric, ohlc)
       return {
         xColumn: groups.temporal[0].name,
         chart: {
           type: "candlestick",
           yColumns: [ohlc.open, ohlc.high, ohlc.low, ohlc.close],
           ohlc,
+          ...(volume ? { volume } : {}),
         },
       }
     }
