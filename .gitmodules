@@ -1,3 +1,4 @@
 [submodule "questdb"]
 	path = test/e2e/questdb
 	url = https://github.com/questdb/questdb.git
+	branch = master

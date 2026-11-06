@@ -2335,14 +2335,7 @@ describe("editor browser interactions", () => {
   it("JIT-validates queries after content-change (1000ms) and cursor-change (500ms) debounces", () => {
     // Given
     cy.loadConsoleWithAuth()
-    let lastEdit = 0
     let lastMove = 0
-    cy.window().then((win) => {
-      const editor = win.monaco.editor.getEditors()[0]
-      editor.onDidChangeModelContent(() => {
-        lastEdit = performance.now()
-      })
-    })
     cy.intercept("**/api/v1/sql/validate*", (req) => {
       req.reply({
         body: String(req.query.query).startsWith("selec ")
@@ -2350,12 +2343,24 @@ describe("editor browser interactions", () => {
           : { query: req.query.query, columns: [], timestamp: -1 },
       })
     }).as("validation")
+    cy.clock(Date.now(), ["setTimeout", "clearTimeout"])
     // When
     cy.typeQuery("selec 1;\n\n   selec 2")
+    cy.tick(999)
+    // Then
+    cy.get("@validation.all").should("have.length", 0)
+    cy.getErrorMarker().should("not.exist")
+    // When
     cy.typeQuery("34")
+    cy.tick(999)
+    // Then
+    cy.get("@validation.all").should("have.length", 0)
+    cy.getErrorMarker().should("not.exist")
+    // When
+    cy.tick(1)
+    cy.clock().invoke("restore")
     // Then
     cy.wait("@validation").its("request.query.query").should("eq", "selec 234")
-    cy.then(() => expect(performance.now() - lastEdit).to.be.at.least(950))
     cy.getErrorMarker().should("be.visible")
     // When
     cy.typeQuery(";\n\nselect * from tables()")

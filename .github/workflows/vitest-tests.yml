@@ -3,6 +3,9 @@ name: Unit, component and integration tests
 on:
   push:
 
+permissions:
+  contents: read
+
 jobs:
   tests:
     name: Unit, component and integration tests

@@ -3,6 +3,9 @@ name: E2E tests
 on:
   push:
 
+permissions:
+  contents: read
+
 jobs:
   CI:
     name: E2E tests
