@@ -11,6 +11,11 @@ const { createNotebookBuffer } = require("../utils/editorBuffers")
 const loadEditorWithQuery = (value) =>
   cy.loadConsoleWithAuth(false, {}, { buffers: [{ value }] })
 
+const focusEditor = () => {
+  cy.window().then((win) => win.monaco.editor.getEditors()[0].focus())
+  return cy.getEditorContent().should("have.focus")
+}
+
 const holdNextExecution = () => {
   let release
   cy.intercept(
@@ -52,6 +57,7 @@ describe("run query", () => {
       cy.focused().type(ctrlOrCmd + "{enter}")
       // Then
       cy.wait("@cursorQuery").its("request.query.query").should("eq", sql)
+      cy.getByDataHook("button-cancel-query").should("not.exist")
       cy.getGridRow(0).should("contain", value)
       cy.window().should((win) => {
         const position = win.monaco.editor.getEditors()[0].getPosition()
@@ -150,24 +156,33 @@ describe("run query with selection", () => {
     cy.getExpandedNotifications().should("contain", "select 2")
   })
 
-  it("should run and explain a specific query from the line glyph", () => {
+  it("runs and explains selected SQL from its statement's glyph", () => {
     // Given
     const query = "select md5(concat('1', x)) as md from long_sequence(100)"
-    loadEditorWithQuery("select 1;\n" + query + ";")
+    loadEditorWithQuery(`select 1;\ncreate table unused as (\n${query}\n);`)
     cy.intercept(editorExecution).as("selectedGlyphQuery")
-    cy.selectRange({ lineNumber: 2, column: 1 }, { lineNumber: 2, column: 7 })
+    cy.selectRange(
+      { lineNumber: 3, column: 1 },
+      { lineNumber: 3, column: query.length + 1 },
+    )
+    cy.getByDataHook("button-run-query").should("contain", "Run selected query")
     // When
     cy.openRunDropdownInLine(2)
-    cy.getByDataHook("dropdown-item-run-query").click()
+    cy.getByDataHook("dropdown-item-run-query")
+      .should("contain", "select md5")
+      .click()
     // Then
     cy.wait("@selectedGlyphQuery")
       .its("request.query.query")
       .should("eq", query)
+    cy.getByDataHook("button-cancel-query").should("not.exist")
     cy.getColumnName(0).should("contain", "md")
     cy.getGridRow(0).should("contain", "6512bd43d9caa6e02c990b0a82652dca")
     // When
     cy.openRunDropdownInLine(2)
-    cy.getByDataHook("dropdown-item-get-query-plan").click()
+    cy.getByDataHook("dropdown-item-get-query-plan")
+      .should("contain", "select md5")
+      .click()
     // Then
     cy.wait("@selectedGlyphQuery")
       .its("request.query.query")
@@ -877,7 +892,7 @@ describe("errors", () => {
     cy.typeQueryDirectly(query)
     cy.clickLine(1)
     cy.intercept(editorExecution).as("dateError")
-    cy.runLine()
+    focusEditor().type(`${ctrlOrCmd}{enter}`)
     // Whole date string is shown as error
     cy.wait("@dateError").then(({ response }) => {
       const position = response.body.position
@@ -905,7 +920,9 @@ describe("errors", () => {
       const query = `select x FROM long_sequence(100 ${char} "string");`
       cy.typeQueryDirectly(query)
       cy.clickLine(1)
-      cy.runLine()
+      cy.intercept(editorExecution).as("operatorError")
+      focusEditor().type(`${ctrlOrCmd}{enter}`)
+      cy.wait("@operatorError")
       cy.window().should((win) => {
         const model = win.monaco.editor.getEditors()[0].getModel()
         const markers = win.monaco.editor.getModelMarkers({
@@ -935,44 +952,45 @@ describe("running query with F9", () => {
     cy.intercept(editorExecution).as("f9Query")
 
     cy.typeQueryDirectly("select * from long_sequence(1)")
-    cy.getEditor().realClick()
     cy.clickLine(1)
-    cy.getEditor().realPress("F9")
+    focusEditor()
+    cy.realPress("F9")
     cy.wait("@f9Query")
       .its("request.query.query")
       .should("eq", "select * from long_sequence(1)")
+    cy.getByDataHook("button-cancel-query").should("not.exist")
     cy.getGridRow(0).should("contain", "1")
     cy.typeQueryDirectly("select * from long_sequence(2);")
-    cy.getEditor().realClick()
     cy.clickLine(1)
-    cy.focused().type("{leftArrow}")
-    cy.getEditor().realPress("F9")
+    focusEditor().type("{leftArrow}")
+    cy.realPress("F9")
     cy.wait("@f9Query")
       .its("request.query.query")
       .should("eq", "select * from long_sequence(2)")
+    cy.getByDataHook("button-cancel-query").should("not.exist")
     cy.getGridRow(1).should("contain", "2")
 
     cy.typeQueryDirectly(
       "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2;",
     )
-    cy.getEditor().realClick()
     cy.clickLine(1)
-    cy.focused().type("{leftArrow}")
-    cy.getEditor().realPress("F9")
+    focusEditor().type("{leftArrow}")
+    cy.realPress("F9")
     cy.wait("@f9Query")
       .its("request.query.query")
       .should("eq", "long_sequence(10) where x = 3")
+    cy.getByDataHook("button-cancel-query").should("not.exist")
     cy.getGridRow(0).should("contain", "3")
     cy.typeQueryDirectly(
       "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2",
     )
-    cy.getEditor().realClick()
     cy.clickLine(1)
-    cy.focused().type("{leftArrow}")
-    cy.getEditor().realPress("F9")
+    focusEditor().type("{leftArrow}")
+    cy.realPress("F9")
     cy.wait("@f9Query")
       .its("request.query.query")
       .should("eq", "long_sequence(10) where x = 3")
+    cy.getByDataHook("button-cancel-query").should("not.exist")
     cy.getGridRow(0).should("contain", "3")
   })
 })
@@ -1001,10 +1019,12 @@ describe("editor tabs", () => {
       })
     })
 
+    cy.getEditorTabByTitle("SQL 1").should("have.attr", "active")
     cy.typeQueryDirectly("select 42")
+    cy.waitForActiveBufferValue("select 42")
     cy.getEditorTabByTitle("SQL 1").find(".chrome-tab-drag-handle").dblclick()
     cy.get(".chrome-tab-rename:visible").type("Saved query{enter}")
-    cy.waitForActiveBufferValue("select 42")
+    waitForSavedTabOrder(["SQL", "Saved query"])
     cy.reload()
     cy.getEditorTabs().should("have.length", 2)
     cy.getEditorTabByTitle("SQL").should("be.visible")
@@ -2533,7 +2553,7 @@ describe("editor browser interactions", () => {
 
     // When — Alt+L copies single query at cursor
     cy.clickLine(3)
-    cy.getEditor().realClick()
+    focusEditor()
     cy.realPress(["Alt", "L"])
 
     // Then
@@ -2545,6 +2565,7 @@ describe("editor browser interactions", () => {
       "contain",
       "Run selected queries",
     )
+    focusEditor()
     cy.realPress(["Alt", "L"])
 
     // Then
@@ -2732,6 +2753,7 @@ describe("editor browser interactions", () => {
     })
     cy.getEditorTabByTitle("Renamed via button").should("be.visible")
 
+    waitForSavedTabOrder(["Renamed via button"])
     cy.reload()
     cy.getEditorTabByTitle("Renamed via button").should("be.visible")
   })
@@ -2739,28 +2761,31 @@ describe("editor browser interactions", () => {
 
 const dragTabOnto = (source, target) => {
   cy.get(".chrome-tabs-ready").should("be.visible")
-  cy.get(getTabDragHandleByTitle(source)).realHover({
-    position: "center",
-    scrollBehavior: false,
-  })
-  cy.get(getTabDragHandleByTitle(source)).realMouseDown({
-    position: "center",
-    scrollBehavior: false,
-  })
-  cy.get(getTabDragHandleByTitle(source)).realMouseMove(10, 0, {
-    position: "center",
-    keepMouseDownButton: "left",
-    scrollBehavior: false,
-  })
-  cy.get(getTabDragHandleByTitle(target)).realMouseMove(0, 0, {
-    position: "center",
-    keepMouseDownButton: "left",
-    scrollBehavior: false,
-  })
-  cy.get(".chrome-tab-is-dragging").should("exist")
-  cy.get(getTabDragHandleByTitle(target)).realMouseUp({
-    position: "center",
-    scrollBehavior: false,
+  cy.get(getTabDragHandleByTitle(source)).click(10, 10)
+  cy.getEditorTabByTitle(source).should("have.attr", "active")
+  cy.get(getTabDragHandleByTitle(target)).then(($target) => {
+    const { x, y, width, height } = $target[0].getBoundingClientRect()
+    const destination = { x: x + width / 2, y: y + height / 2 }
+
+    cy.get(getTabDragHandleByTitle(source)).realMouseDown({
+      position: "center",
+      scrollBehavior: false,
+    })
+    cy.get(getTabDragHandleByTitle(source)).realMouseMove(10, 0, {
+      position: "center",
+      keepMouseDownButton: "left",
+      scrollBehavior: false,
+    })
+    cy.get(".chrome-tab-is-dragging").should("exist")
+    cy.get("body").realMouseMove(destination.x, destination.y, {
+      position: "topLeft",
+      keepMouseDownButton: "left",
+      scrollBehavior: false,
+    })
+    cy.get("body").realMouseUp({
+      ...destination,
+      scrollBehavior: false,
+    })
   })
   cy.get(".chrome-tabs-is-sorting").should("not.exist")
 }

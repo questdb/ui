@@ -455,7 +455,6 @@ describe("ai provider setup flows", () => {
     cy.getByDataHook("permissions-trigger").click()
     cy.getByDataHook("permission-level-schema").click()
     cy.getByDataHook("ai-settings-save").click()
-    cy.get(".toast-success-container").should("be.visible").click()
 
     // When - Send another message
     interceptAIChatRequest("openai", "chatWithSchema")

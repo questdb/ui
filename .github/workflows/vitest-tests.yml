@@ -21,11 +21,11 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Run unit, component and integration tests
-        run: yarn test
-
       - name: Build
         run: yarn build
 
       - name: Run bundle watcher
         run: yarn bundlewatch
+
+      - name: Run unit, component and integration tests
+        run: yarn test

@@ -98,6 +98,8 @@ jobs:
 
       - name: Run e2e tests
         run: yarn test:e2e
+        env:
+          CYPRESS_NO_COMMAND_LOG: "1"
 
       - name: Stop QuestDB before context-path tests
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
