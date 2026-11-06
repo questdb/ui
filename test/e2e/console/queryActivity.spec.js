@@ -94,11 +94,15 @@ const {
   LARGE_LISTING_NEEDLE_INDEX,
   LARGE_LISTING_MAX_AGE_SECONDS,
 } = require("../utils/queryActivity")
-const get = (name) => cy.get(`[data-hook="${name}"]`)
+// Responsiveness bound for the 10k-row listing: rendering, filtering and
+// sorting must settle within this window instead of the 10s command default.
+// The original bound was a 500ms settle with no retry; 2000ms keeps the guard
+// meaningful while leaving headroom for slower CI machines.
+const SETTLE = { timeout: 2000 }
 
-const settledRows = () => {
-  return get("query-activity-row")
-}
+const get = (name, options) => cy.get(`[data-hook="${name}"]`, options)
+
+const settledRows = () => get("query-activity-row", SETTLE)
 
 const settledFirstRowId = (queryId) =>
   settledRows().should(($rows) =>
@@ -112,26 +116,42 @@ const pickOrder = (key) => {
 
 describe("Query Activity large catalog", () => {
   it("lists, filters and sorts ten thousand queries without stalling", () => {
-    // Given
-    cy.loadConsoleWithAuth(false, { "auto.refresh.queryActivity": "false" })
+    // Given auto refresh is on and every poll returns the full 10k listing
+    const listing = listingResponse([SELF_ROW, ...largeListing()])
+    let polls = 0
+    cy.loadConsoleWithAuth(false, { "auto.refresh.queryActivity": "true" })
     cy.intercept(
       {
         method: "GET",
         pathname: "/exec",
         query: { query: /query_activity\(\)/ },
       },
-      { body: listingResponse([SELF_ROW, ...largeListing()]) },
+      (request) => {
+        polls += 1
+        request.reply({ body: listing })
+      },
     ).as("queryActivity")
+    // Waits until a poll requested after this point has been answered and the
+    // next one has started, so a full 10k-row re-poll lands on the current view.
+    const waitThroughPoll = () => {
+      let mark
+      cy.then(() => {
+        mark = polls
+      })
+      cy.wrap(null).should(() =>
+        expect(polls, "auto refresh polls").to.be.greaterThan(mark + 1),
+      )
+    }
 
     // When
     get("query-activity-toggle-button").click()
     cy.wait("@queryActivity")
 
     // Then the listing renders through the virtual list
-    get("query-activity-count-badge").should(($badge) =>
+    get("query-activity-count-badge", SETTLE).should(($badge) =>
       expect($badge.text()).to.contain(`${LARGE_LISTING_SIZE} running`),
     )
-    get("query-activity-row").should(($rows) =>
+    settledRows().should(($rows) =>
       expect($rows.length, "rendered rows").to.be.within(1, 199),
     )
 
@@ -150,22 +170,29 @@ describe("Query Activity large catalog", () => {
     // Then the lightest query is rendered
     settledRows()
       .last()
-      .within(() =>
-        cy
-          .get('[data-hook="query-activity-row-memory"]')
-          .should(($memory) => expect($memory.text()).to.match(/^0 B \//)),
-      )
+      .find('[data-hook="query-activity-row-memory"]', SETTLE)
+      .should(($memory) => expect($memory.text()).to.match(/^0 B \//))
 
     // When a filter matches a single user
     get("query-activity-search").type(LARGE_LISTING_NEEDLE_USER)
 
     // Then only that query remains
-    settledRows().should(($rows) => {
+    const onlyNeedleRow = ($rows) => {
       expect($rows.length).to.equal(1)
       expect($rows.first().attr("data-query-id")).to.equal(
         String(LARGE_LISTING_FIRST_ID + LARGE_LISTING_NEEDLE_INDEX),
       )
-    })
+    }
+    settledRows().should(onlyNeedleRow)
+
+    // When auto refresh re-polls the full listing
+    waitThroughPoll()
+
+    // Then the filter still holds against the refreshed listing
+    get("query-activity-count-badge", SETTLE).should(($badge) =>
+      expect($badge.text()).to.contain(`${LARGE_LISTING_SIZE} running`),
+    )
+    settledRows().should(onlyNeedleRow)
 
     // When the filter is cleared
     get("query-activity-search-clear").click()
@@ -189,6 +216,14 @@ describe("Query Activity large catalog", () => {
     pickOrder("started-asc")
 
     // Then
+    settledFirstRowId(
+      LARGE_LISTING_FIRST_ID + LARGE_LISTING_MAX_AGE_SECONDS - 1,
+    )
+
+    // When auto refresh re-polls the full listing
+    waitThroughPoll()
+
+    // Then the sort order still holds
     settledFirstRowId(
       LARGE_LISTING_FIRST_ID + LARGE_LISTING_MAX_AGE_SECONDS - 1,
     )

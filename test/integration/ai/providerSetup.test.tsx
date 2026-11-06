@@ -308,7 +308,7 @@ it.each(["openai", "anthropic"])(
   },
 )
 
-it("activates two listed models, switches them, then removes the provider and AI controls", async () => {
+it("activates two listed models with no data access, switches them, then removes the provider and AI controls", async () => {
   // Given
   const server = modelServer()
   server.reply = () =>
@@ -330,9 +330,18 @@ it("activates two listed models, switches them, then removes the provider and AI
   ).toBe(true)
   await userEvent.click(checkbox("gpt-5.4", "configure-models"))
   await userEvent.click(checkbox("gpt-5-mini", "configure-models"))
+  expect(getByHook("permissions-trigger")).toHaveTextContent("Schema access")
+  await userEvent.click(getByHook("permissions-trigger"))
+  await userEvent.click(getByHook("permission-level-none"))
+  expect(getByHook("permissions-trigger")).toHaveTextContent("None")
   await userEvent.click(getByHook("multi-step-modal-next-button"))
 
   // Then
+  expect(storedSettings().providers?.openai).toMatchObject({
+    grantSchemaAccess: false,
+    read: false,
+    write: false,
+  })
   expect(getByHook("ai-assistant-settings-button")).toHaveTextContent(
     "AI Settings",
   )

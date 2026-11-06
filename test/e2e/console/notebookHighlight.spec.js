@@ -302,22 +302,45 @@ describe("notebook highlight rules", () => {
 
     // When
     watchDrawerExit().then((exit) => {
-      cy.contains("button", "Save").then(($save) => {
-        const rect = $save[0].getBoundingClientRect()
-        const x = rect.left + rect.width / 2
-        const y = rect.top + rect.height / 2
-        cy.wrap($save).click()
-        cy.wrap(null).should(() => exit.animation())
-        for (const fraction of [0.08, 0.32, 0.64, 0.96]) {
-          cy.then(() => {
-            const animation = exit.animation()
-            animation.currentTime =
-              Number(animation.effect.getTiming().duration) * fraction
+      cy.wrap(exit.drawer)
+        .contains("button", "Clear all")
+        .then(($clearAll) => {
+          cy.contains("button", "Save").then(($save) => {
+            const rect = $save[0].getBoundingClientRect()
+            const x = rect.left + rect.width / 2
+            const y = rect.top + rect.height / 2
+            let clearAllUnderPointer = 0
+            cy.wrap($save).click()
+            cy.wrap(null).should(() => exit.animation())
+            // Dense sweep (0.08..0.96 of the exit) so every footer control,
+            // Clear all included, slides under the Save coordinates.
+            for (let step = 1; step <= 12; step += 1) {
+              cy.then(() => {
+                const animation = exit.animation()
+                animation.currentTime =
+                  (Number(animation.effect.getTiming().duration) * step * 8) /
+                  100
+                const clearAll = $clearAll[0].getBoundingClientRect()
+                if (
+                  x >= clearAll.left &&
+                  x <= clearAll.right &&
+                  y >= clearAll.top &&
+                  y <= clearAll.bottom
+                ) {
+                  clearAllUnderPointer += 1
+                }
+              })
+              cy.get("body").realClick({ x, y, position: "topLeft" })
+            }
+            cy.then(() => {
+              expect(
+                clearAllUnderPointer,
+                "sweeps with Clear all under the pointer",
+              ).to.be.greaterThan(0)
+              exit.animation().finish()
+            })
           })
-          cy.get("body").realClick({ x, y, position: "topLeft" })
-        }
-        cy.then(() => exit.animation().finish())
-      })
+        })
     })
 
     // Then

@@ -28,15 +28,9 @@ describe("schema notebook workflows", () => {
 
   it("creates and focuses a notebook from a metrics tab and saves its generated DDL", () => {
     // Given
-    cy.loadConsoleWithAuth(
-      false,
-      {},
-      {
-        buffers: [{}, { label: "Metrics", metricsViewState: {} }],
-        activeBufferId: 1,
-      },
-    )
-    cy.getEditorTabByTitle("Metrics").find(".chrome-tab-drag-handle").click()
+    cy.loadConsoleWithAuth(false, {}, { buffers: [{}] })
+    cy.getEditorTabs().should("have.length", 1)
+    cy.getByDataHook("schema-add-metrics-button").click()
     cy.getByDataHook("metrics-root").should("be.visible")
     cy.getEditorTabs().should("have.length", 2)
     // When

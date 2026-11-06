@@ -894,19 +894,16 @@ describe("errors", () => {
     cy.intercept(editorExecution).as("dateError")
     focusEditor().type(`${ctrlOrCmd}{enter}`)
     // Whole date string is shown as error
-    cy.wait("@dateError").then(({ response }) => {
-      const position = response.body.position
-      expect(query.slice(position)).to.contain("2012-04-12T12:00:00A")
-      cy.window().should((win) => {
-        const model = win.monaco.editor.getEditors()[0].getModel()
-        const markers = win.monaco.editor.getModelMarkers({
-          resource: model.uri,
-        })
-        expect(markers).to.have.length(1)
-        expect(model.getValueInRange(markers[0])).to.contain(
-          "2012-04-12T12:00:00A",
-        )
+    cy.wait("@dateError")
+      .its("response.body.position")
+      .should("eq", query.indexOf("'2012"))
+    cy.window().should((win) => {
+      const model = win.monaco.editor.getEditors()[0].getModel()
+      const markers = win.monaco.editor.getModelMarkers({
+        resource: model.uri,
       })
+      expect(markers).to.have.length(1)
+      expect(model.getValueInRange(markers[0])).to.eq("'2012-04-12T12:00:00A'")
     })
     cy.getErrorMarker().should("be.visible")
 
@@ -2356,6 +2353,21 @@ describe("editor browser interactions", () => {
     // Given
     cy.loadConsoleWithAuth()
     let lastMove = 0
+    const expectSelecMarker = () =>
+      cy.window().should((win) => {
+        const model = win.monaco.editor.getEditors()[0].getModel()
+        const markers = win.monaco.editor.getModelMarkers({
+          resource: model.uri,
+        })
+        expect(markers).to.have.length(1)
+        expect(model.getValueInRange(markers[0])).to.eq("selec")
+        expect(markers[0]).to.include({
+          startLineNumber: 3,
+          startColumn: 4,
+          endLineNumber: 3,
+          endColumn: 9,
+        })
+      })
     cy.intercept("**/api/v1/sql/validate*", (req) => {
       req.reply({
         body: String(req.query.query).startsWith("selec ")
@@ -2382,6 +2394,7 @@ describe("editor browser interactions", () => {
     // Then
     cy.wait("@validation").its("request.query.query").should("eq", "selec 234")
     cy.getErrorMarker().should("be.visible")
+    expectSelecMarker()
     // When
     cy.typeQuery(";\n\nselect * from tables()")
     cy.wait("@validation")
@@ -2398,6 +2411,39 @@ describe("editor browser interactions", () => {
     cy.wait("@validation").its("request.query.query").should("eq", "selec 234")
     cy.then(() => expect(performance.now() - lastMove).to.be.at.least(450))
     cy.getErrorMarker().should("be.visible")
+    expectSelecMarker()
+    // Given the real server validates from here on
+    cy.intercept("**/api/v1/sql/validate*", (req) => req.continue()).as(
+      "realValidation",
+    )
+    // When
+    cy.window().then((win) => {
+      const editor = win.monaco.editor.getEditors()[0]
+      const lastLine = editor.getModel().getLineCount()
+      editor.setPosition({
+        lineNumber: lastLine,
+        column: editor.getModel().getLineMaxColumn(lastLine),
+      })
+    })
+    // Then
+    cy.wait("@realValidation").then(({ request, response }) => {
+      expect(request.query.query).to.eq("select * from tables()")
+      expect(response.statusCode).to.eq(200)
+    })
+    cy.getErrorMarker().should("not.exist")
+    // When
+    cy.window().then((win) =>
+      win.monaco.editor
+        .getEditors()[0]
+        .setPosition({ lineNumber: 3, column: 5 }),
+    )
+    // Then
+    cy.wait("@realValidation").then(({ request, response }) => {
+      expect(request.query.query).to.eq("selec 234")
+      expect(response.statusCode).to.eq(400)
+    })
+    cy.getErrorMarker().should("be.visible")
+    expectSelecMarker()
   })
   it("should execute a correct query when line comment is present", () => {
     cy.intercept(editorExecution).as("targetQuery")

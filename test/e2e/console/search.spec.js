@@ -366,6 +366,25 @@ describe("search browser navigation", () => {
         ).to.eq(true)
       })
     }
+
+    // When an invalid regex is searched while regex mode is on
+    cy.getByDataHook("search-option-regex").should(
+      "have.attr",
+      "aria-pressed",
+      "true",
+    )
+    cy.searchFor("[invalid-regex")
+    // Then the worker's regex error is shown and no results remain
+    cy.getByDataHook("search-error")
+      .should("be.visible")
+      .and("contain", "Invalid regular expression")
+    cy.getSearchResults().should("not.exist")
+    // When the regex becomes valid again
+    cy.searchFor("Trading day 99:")
+    // Then the error clears and results return
+    cy.getByDataHook("search-error").should("not.exist")
+    cy.getByDataHook("search-summary").should("contain", "1 result in 1 tab")
+    cy.getSearchResults().should("have.length", 1)
   })
   it("activates a matching tab and updates the title match after rename", () => {
     loadSearchConsole([

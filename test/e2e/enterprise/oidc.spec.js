@@ -273,6 +273,11 @@ describe("OIDC", () => {
         "contain",
         "Choose a different account",
       )
+      // The admin password session must not overwrite the remembered SSO user
+      cy.getByDataHook("button-sso-continue").should(
+        "contain",
+        "Continue as john doe",
+      )
       cy.getByDataHook("button-sso-continue").click()
       cy.wait("@authorizationCode").then(({ request }) =>
         expect(new URL(request.url).searchParams.get("prompt")).to.equal(null),

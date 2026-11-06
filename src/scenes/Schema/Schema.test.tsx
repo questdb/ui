@@ -120,6 +120,32 @@ describe("schema filtering and selection", () => {
   })
 })
 
+describe("schema table icon", () => {
+  it("describes a WAL day-partitioned table from its tree row metadata", async () => {
+    // Given
+    const server = schemaServer()
+    server.tables = server.tables.map((row) =>
+      row.table_name === "btc_trades"
+        ? row
+        : { ...row, walEnabled: false, partitionBy: "MONTH" },
+    )
+    await mountSchema()
+    // When
+    await hover(
+      tableTitle("btc_trades")
+        .closest<HTMLElement>('[data-hook="schema-row"]')!
+        .querySelector<HTMLElement>('[data-hook="table-icon"]')!,
+    )
+    // Then
+    expect(get("tooltip")).toHaveTextContent(
+      'WAL-based table. Partitioned by "day", ordered on "timestamp" column.',
+    )
+    expect(get("tooltip")).toHaveTextContent(
+      "WAL-based tables are the current and most up-to-date table format.",
+    )
+  })
+})
+
 describe("schema keyboard handlers", () => {
   it("walks table, column, symbol, and base-table hierarchies with arrow keys", async () => {
     // Given
