@@ -1,22 +1,23 @@
-import { describe, it, expect } from "vitest"
 import type { editor, IRange } from "monaco-editor"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+  applyQueryKeyUpdates,
+  buildShareLinkUrl,
+  createInflightQuery,
   getQueriesFromText,
+  getQueriesToRun,
+  getQueryFromCursor,
+  getQueryRequestFromEditor,
+  getStatementOffsets,
   isCursorInComment,
   isCursorInQuotedIdentifier,
-  getQueriesToRun,
-  getQueryRequestFromEditor,
-  getQueryFromCursor,
-  isQueryTextAtOffset,
-  createInflightQuery,
-  shiftInflightQuery,
-  isInflightQueryStillInPlace,
-  shiftSelection,
-  applyQueryKeyUpdates,
-  getStatementOffsets,
   isFullQueryMatch,
+  isInflightQueryStillInPlace,
+  isQueryTextAtOffset,
   joinQueryTexts,
   resolveSelectionRun,
+  shiftInflightQuery,
+  shiftSelection,
 } from "./utils"
 
 type SingleLineSelection = { startColumn: number; endColumn: number }
@@ -1310,4 +1311,80 @@ describe("applyQueryKeyUpdates", () => {
       [thirdKey]: second,
     })
   })
+})
+
+describe("statement boundaries around comments", () => {
+  it.each([
+    [
+      "leading line comments",
+      "-- comment\n-- comment\nselect x from long_sequence(1);",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "empty line comments",
+      "--\nselect x from long_sequence(1);",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "leading block comment",
+      "/* comment */\nselect x from long_sequence(1);",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "multiline block comment",
+      "/*\ncomment\n*/\nselect x from long_sequence(1);",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "comments inside a statement",
+      "select\nx\n-- y\n-- z\n from long_sequence(1);",
+      ["select\nx\n-- y\n-- z\n from long_sequence(1)"],
+    ],
+    [
+      "trailing comment",
+      "select x from long_sequence(1); -- comment",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "comment semicolons",
+      "-- not a query;\n/* not a query 2;\n not a query 3; */select /* not; a; query;*/ 1; --not a query /* ; 4;\nselect\n\n --line;\n 2;",
+      ["select /* not; a; query;*/ 1", "select\n\n --line;\n 2"],
+    ],
+    [
+      "apostrophes in block comments",
+      "/* Today's aggregation;\n is not SQL */\nSELECT *\nFROM long_sequence(100);",
+      ["SELECT *\nFROM long_sequence(100)"],
+    ],
+  ])("keeps executable statements separate from %s", (_, source, expected) => {
+    // Given / When
+    const statements = getQueriesFromText(source)
+    // Then
+    expect(statements).toEqual(expected)
+  })
+})
+
+describe("share link encoding", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  it.each(["/", "/console/", "/nested/console/", "/nested/console/index.html"])(
+    "preserves %s while encoding SQL and dropping old query parameters",
+    (path) => {
+      // Given
+      vi.stubGlobal("window", {
+        location: new URL(`${path}?old=value#old-fragment`, "http://localhost"),
+      })
+      const sql = "select 'a&b+c; 日本語' as name;\nselect 2;"
+      // When
+      const url = new URL(buildShareLinkUrl(sql))
+      // Then
+      expect(url.origin).toBe("http://localhost")
+      expect(url.pathname).toBe(path)
+      expect([...url.searchParams]).toEqual([
+        ["query", sql],
+        ["executeQuery", "true"],
+      ])
+      expect(url.hash).toBe("")
+    },
+  )
 })

@@ -1,4 +1,4 @@
-import { isServerError } from "../../utils"
+import { isServerError } from ".."
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"

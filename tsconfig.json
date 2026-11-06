@@ -16,9 +16,9 @@
     "strict": true,
     "target": "es5",
     "baseUrl": "./src",
-    "rootDir": "./src",
+    "rootDir": ".",
     "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src"],
+  "include": ["src", "test/integration"],
   "exclude": ["node_modules"]
 }

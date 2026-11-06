@@ -29,7 +29,7 @@ import Console from "../Console"
 import SideMenu from "../SideMenu"
 import { Sidebar } from "../../components/Sidebar"
 import { TopBar } from "../../components/TopBar"
-import News from "../../scenes/News"
+import News from "../News"
 import {
   EditorProvider,
   SearchProvider,

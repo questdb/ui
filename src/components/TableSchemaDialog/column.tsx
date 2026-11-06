@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { Box, Form, IconWithTooltip, Switch, Text } from "../../components"
+import { Box, Form, IconWithTooltip, Switch, Text } from ".."
 import { DEFAULT_TIMESTAMP_FORMAT } from "../../scenes/Import/ImportCSVFiles/const"
 import styled from "styled-components"
 import { SchemaColumn } from "utils"

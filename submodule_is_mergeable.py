@@ -26,6 +26,7 @@ To run, from the root of the repo, call:
 On error, will return non-zero exit code and fail the CI run.
 """
 
+import configparser
 import sys
 sys.dont_write_bytecode = True
 import pygit2
@@ -65,7 +66,10 @@ def check_not_older(
         oss_head: pygit2.Oid):
     ui_main_head = ui_repo.references['refs/remotes/origin/main'].peel().id
     ui_main_tree = ui_repo[ui_main_head].tree
-    questdb_main_commit_id = ui_main_tree['e2e/questdb'].id
+    modules = configparser.ConfigParser()
+    modules.read_string(ui_repo[ui_main_tree['.gitmodules'].id].data.decode())
+    questdb_path = modules['submodule "questdb"']['path']
+    questdb_main_commit_id = ui_main_tree[questdb_path].id
 
     if questdb_main_commit_id not in oss_master_commits:
         sys.stderr.write(

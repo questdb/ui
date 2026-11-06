@@ -13,7 +13,7 @@ import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
-import { Panel } from "../../components/Panel"
+import { Panel } from "../Panel"
 import { Actions } from "./actions"
 
 const Items = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
