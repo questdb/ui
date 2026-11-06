@@ -48,7 +48,8 @@ describe("OIDC", () => {
           "acl.oidc.authorization.endpoint": oidcAuthorizationCodeUrl,
           "acl.oidc.token.endpoint": oidcTokenUrl,
           "acl.oidc.pkce.required": true,
-          "acl.oidc.state.required": Cypress.env("oidcStateRequired") !== false,
+          "acl.oidc.state.required":
+            Cypress.expose("oidcStateRequired") !== false,
           "acl.oidc.groups.encoded.in.token": false,
         },
       })
@@ -64,7 +65,7 @@ describe("OIDC", () => {
 
     it(
       "renews and resends once when the server rejects the bearer of a cookie session",
-      { env: { oidcStateRequired: false } },
+      { expose: { oidcStateRequired: false } },
       () => {
         // No /exec request is stubbed: the EE server answers them all. Its
         // userinfo fixture accepts acceptedBearer and rejects rejectedBearer.
