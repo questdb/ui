@@ -264,9 +264,36 @@ Cypress.Commands.add("dragFreezeHandleTo", (clientX) => {
   })
 })
 
-Cypress.Commands.add("typeQuery", (query) =>
-  cy.getEditor().realClick().type(query),
-)
+// Allotment sizes its panes only after measuring them. Until then the editor
+// can sit squeezed under the left panel, so a click at its centre lands on
+// another element and focus never reaches Monaco. Wait until the editor's
+// centre hits its text area and its box has stopped moving.
+Cypress.Commands.add("waitForEditorLayout", () => {
+  let previousBox
+  cy.getEditor().should(($editors) => {
+    const editor = $editors[0]
+    const rect = editor.getBoundingClientRect()
+    const hit = editor.ownerDocument.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    )
+    const box = [rect.left, rect.top, rect.width, rect.height]
+      .map(Math.round)
+      .join()
+    const stable = box === previousBox
+    previousBox = box
+    expect(
+      Boolean(hit && editor.contains(hit) && hit.closest(".editor-scrollable")),
+      "editor centre is inside its text area",
+    ).to.equal(true)
+    expect(stable, "editor layout is stable").to.equal(true)
+  })
+})
+
+Cypress.Commands.add("typeQuery", (query) => {
+  cy.waitForEditorLayout()
+  return cy.getEditor().realClick().type(query)
+})
 
 Cypress.Commands.add("typeQueryDirectly", (query) => {
   cy.window().then((win) => {
