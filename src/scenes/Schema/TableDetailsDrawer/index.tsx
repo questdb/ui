@@ -45,6 +45,7 @@ import { getTrendSamplesForIssue } from "./utils"
 import { HealthStatusLabel } from "./HealthStatusLabel"
 import { useDebouncedWarnings } from "./useDebouncedWarnings"
 import { SuspensionDialog } from "../SuspensionDialog"
+import { pickViewStatus, publishTableStatusUpdate } from "../tableStatusSync"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import {
   MANUAL_RETRY_POLICY,
@@ -363,6 +364,13 @@ export const TableDetailsDrawer = () => {
     viewSource.state.status === "ready" ? viewSource.state.data : null
   const liveViewData =
     liveViewSource.state.status === "ready" ? liveViewSource.state.data : null
+
+  const freshTableRow =
+    tableSource.state.status === "ready" &&
+    tableSource.state.data.type === "found" &&
+    getTableKind(tableSource.state.data.data) === kind
+      ? tableSource.state.data.data
+      : null
   const baseTableName =
     matViewData?.base_table_name ?? liveViewData?.base_table_name ?? undefined
   const escapedBaseTableName = QuestDB.escapeSqlLiteral(baseTableName ?? "")
@@ -547,6 +555,28 @@ export const TableDetailsDrawer = () => {
     tableName,
     tableSource.state,
   ])
+
+  // Each source publishes only its own fresh read: a kind source poll must not
+  // re-send an older table_suspended over a newer schema refresh
+  useEffect(() => {
+    if (!isOpen || !hasTarget || !freshTableRow) return
+    publishTableStatusUpdate({
+      tableName,
+      kind,
+      table: { table_suspended: freshTableRow.table_suspended },
+    })
+  }, [isOpen, hasTarget, tableName, kind, freshTableRow])
+
+  useEffect(() => {
+    if (!isOpen || !hasTarget) return
+    publishTableStatusUpdate({
+      tableName,
+      kind,
+      matView: pickViewStatus(matViewData),
+      view: pickViewStatus(viewData),
+      liveView: pickViewStatus(liveViewData),
+    })
+  }, [isOpen, hasTarget, tableName, kind, matViewData, viewData, liveViewData])
 
   const { poll: pollTableSource } = tableSource
   const pollTable = useCallback(async () => {
