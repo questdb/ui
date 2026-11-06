@@ -46,7 +46,7 @@ import {
 import { Metrics } from "./Metrics"
 import { Notebook } from "./Notebook"
 import { NotebookWorkspaceBridge } from "./Notebook/NotebookWorkspaceBridge"
-import Notifications from "../../scenes/Notifications"
+import Notifications from "../Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
 import { color } from "../../utils"

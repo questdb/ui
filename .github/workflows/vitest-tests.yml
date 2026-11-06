@@ -1,0 +1,31 @@
+name: Unit, component and integration tests
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Unit, component and integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Run bundle watcher
+        run: yarn bundlewatch
+
+      - name: Run unit, component and integration tests
+        run: yarn test

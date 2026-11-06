@@ -11,6 +11,18 @@ import { readFileSync, existsSync, appendFileSync, readdirSync } from 'fs'
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: string }
 
+const hookTests = 'src/**/use*.test.{ts,tsx,js,jsx}'
+const integrationTests = 'test/integration/**/*.test.{ts,tsx,js,jsx}'
+const testSuites = {
+  unit: { include: ['src/**/*.test.{ts,js}', hookTests] },
+  component: { include: ['src/**/*.test.{tsx,jsx}'], exclude: [hookTests] },
+  integration: { include: [integrationTests] },
+}
+const testSuite = process.env.TEST_SUITE
+if (testSuite && !(testSuite in testSuites)) {
+  throw new Error(`Unknown TEST_SUITE: ${testSuite}`)
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const isProduction = mode === 'production'
@@ -197,8 +209,14 @@ export default defineConfig(({ mode }) => {
 
     test: {
       environment: 'node',
-      include: 'src/**/*.(test|spec).(ts|tsx|js|jsx)',
+      include: ['src/**/*.test.{ts,tsx,js,jsx}', integrationTests],
+      ...(testSuite ? testSuites[testSuite as keyof typeof testSuites] : {}),
       globals: true,
+      server: {
+        deps: {
+          inline: [/@radix-ui\//],
+        },
+      },
     },
 
     server: {

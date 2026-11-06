@@ -68,8 +68,8 @@ import {
   metricDurations,
   MetricViewMode,
   RefreshRate,
-} from "../../scenes/Editor/Metrics/utils"
-import type { Duration } from "../../scenes/Editor/Metrics/types"
+} from "../Editor/Metrics/utils"
+import type { Duration } from "../Editor/Metrics/types"
 import { SchemaProvider, useSchema, type SelectedTable } from "./SchemaContext"
 import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
