@@ -55,7 +55,7 @@ corepack enable
 
 ### Running E2E Tests
 
-E2E tests require a running QuestDB server. The tests connect to `localhost:9000` by default.
+E2E tests require a running QuestDB server. Cypress connects to the Web Console at `localhost:9999` (started with `yarn start` or `yarn preview`), which proxies API requests to the QuestDB server on `localhost:9000`. See [e2e/README.md](e2e/README.md) for details.
 
 ### QuestDB Submodule
 
