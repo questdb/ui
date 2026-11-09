@@ -361,6 +361,22 @@ describe("search panel", () => {
       cy.getEditorTabByTitle("SQL 1").should("have.attr", "active")
     })
 
+    it("should focus the editor after keeping the preview open", () => {
+      cy.searchFor("DROP")
+
+      cy.getSearchResults().contains("DROP").click()
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
+
+      cy.getByDataHook("tab-preview-keep-open").realClick()
+
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
+      cy.getEditorTabByTitle("SQL 1").should("not.have.class", "temporary-tab")
+      // typing right away goes into the kept tab, no click needed
+      cy.focused().should("have.class", "inputarea")
+      cy.realType("XYZ")
+      cy.getEditor().should("contain", "XYZ")
+    })
+
     it("should close the preview from the preview bar", () => {
       cy.searchFor("DROP")
 

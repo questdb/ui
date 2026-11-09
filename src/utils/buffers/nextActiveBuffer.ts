@@ -48,3 +48,37 @@ export const pickNextActiveBuffer = (
     (buffer) => buffer.id === previewId && buffer.id !== removedId,
   )
 }
+
+/**
+ * Picks the tab to activate after `removedId` is closed or deleted, using the
+ * rows currently stored in IndexedDB. The picked buffer seeds the new Monaco
+ * model, so it must not come from a caller's render snapshot: a stale closure
+ * (e.g. the Alt+W editor action registered at mount) would rebuild the editor
+ * from outdated content and the next keystroke would overwrite the saved text.
+ * `snapshot` is only used to locate the removed tab's neighbours, because the
+ * stored row is already deleted or archived at this point.
+ */
+export const resolveNextActiveBuffer = async ({
+  snapshot,
+  loadStored,
+  removedId,
+  recentIds,
+  previewId,
+}: {
+  snapshot: Buffer[]
+  loadStored: () => Promise<Buffer[]>
+  removedId: number
+  recentIds: number[]
+  previewId: number | null
+}): Promise<Buffer | undefined> => {
+  const stored = (await loadStored())
+    .filter((buffer) => buffer.id !== removedId)
+    .map((buffer) => ({ ...buffer, isTemporary: buffer.id === previewId }))
+  const removed = snapshot.find((buffer) => buffer.id === removedId)
+  return pickNextActiveBuffer(
+    removed ? [...stored, removed] : stored,
+    removedId,
+    recentIds,
+    previewId,
+  )
+}

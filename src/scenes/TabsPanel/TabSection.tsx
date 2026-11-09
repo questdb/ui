@@ -2,6 +2,7 @@ import React, { useState } from "react"
 import styled from "styled-components"
 import { CaretRightIcon } from "@phosphor-icons/react"
 import { Text } from "../../components"
+import { isOwnActivationKey } from "./keyboard"
 
 type Props = {
   title: string
@@ -82,7 +83,7 @@ export const TabSection = ({
         aria-expanded={expanded}
         onClick={toggle}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
+          if (isOwnActivationKey(event)) {
             event.preventDefault()
             toggle()
           }

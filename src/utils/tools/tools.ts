@@ -31,6 +31,9 @@ export const categoryFor = (name: string): ToolCategory =>
 export const mutatesNotebook = (name: string): boolean =>
   !!_DEF_BY_NAME.get(name)?.mutatesNotebook
 
+export const mutatesWorkspace = (name: string): boolean =>
+  !!_DEF_BY_NAME.get(name)?.mutatesWorkspace
+
 export const createsNotebook = (name: string): boolean =>
   !!_DEF_BY_NAME.get(name)?.createsNotebook
 

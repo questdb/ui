@@ -4369,6 +4369,41 @@ describe("dispatchTool — tab management", () => {
     expect(client.deleteTab).toHaveBeenCalledWith(7)
   })
 
+  it.each([
+    ["archive_tab", { buffer_id: 7 }, "archiveTab"],
+    ["restore_tab", { buffer_id: 7 }, "restoreTab"],
+    ["activate_tab", { buffer_id: 7 }, "activateTab"],
+    ["rename_tab", { buffer_id: 7, label: "Trades" }, "renameTab"],
+    ["delete_tab", { buffer_id: 7 }, "deleteTab"],
+  ] as const)(
+    "%s marks the turn replay-unsafe without requiring a notebook read",
+    async (toolName, input, method) => {
+      // Given an AI flow context that has never read buffer 7
+      const client = makeClient()
+      const toolContext: ToolExecutionContext = {
+        notebookFreshness: createNotebookFreshness(),
+      }
+
+      // When the agent runs a tab-management tool
+      const res = await dispatchTool(
+        toolName,
+        input,
+        client,
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+        undefined,
+        toolContext,
+      )
+
+      // Then the freshness gate does not block it
+      expect(res.is_error).toBeUndefined()
+      expect(client[method]).toHaveBeenCalled()
+      // And a retryable provider error can no longer replay the turn
+      expect(toolContext.notebookMutated).toBe(true)
+    },
+  )
+
   it("surfaces the last_tab guard as a tool error", async () => {
     // Given a workspace that refuses to close the only open tab
     const client = makeClient({

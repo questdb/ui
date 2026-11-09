@@ -19,6 +19,10 @@ import {
   MAX_BUFFER_NAME_LENGTH,
 } from "../../../store/buffers"
 import { emitAgentEdit } from "../../../utils/notebooks/agentActivity"
+import {
+  nextOpenPosition,
+  pinnedBuffersWithout,
+} from "../../../utils/buffers/tabOrder"
 import { requestCellReveal } from "./cellReveal"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
@@ -72,14 +76,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
   }
 
   const remainingOpenTabs = (bufferId: number) =>
-    buffersRef.current
-      .filter(
-        (b) =>
-          (!b.archived || b.isTemporary) &&
-          typeof b.id === "number" &&
-          b.id !== bufferId,
-      )
-      .sort((a, b) => a.position - b.position)
+    pinnedBuffersWithout(buffersRef.current, bufferId)
 
   useEffect(() => {
     registerWorkspace({
@@ -163,7 +160,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
           archived: false,
           archivedAt: undefined,
           isTemporary: false,
-          position: remainingOpenTabs(bufferId).length,
+          position: nextOpenPosition(buffersRef.current),
         })
       },
       async activateTab(bufferId) {
@@ -198,7 +195,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
             "Cannot delete the only open tab. Create another tab first, then delete this one.",
           )
         }
-        await deleteBuffer(bufferId)
+        await deleteBuffer(bufferId, true, "agent")
         if (!target.archived) {
           await updateBuffersPositions(
             remaining.map((b, index) => ({

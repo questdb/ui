@@ -8,10 +8,12 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { TabRow, type LeadingVisibility } from "./TabRow"
 import { DeleteRowButton, ROW_ICON_SIZE, RowIconButton } from "./rowActions"
 import { useRowDrag, type RowDragState } from "./useRowDrag"
+import { isOwnActivationKey } from "./keyboard"
 import { displayedIndexDuringDrag } from "../../components/TabBar/tabLayout"
 import { useOptimisticOrder } from "../../hooks/useOptimisticOrder"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { sortPinnedBuffers } from "../../utils/buffers/tabOrder"
 
 type Props = {
   buffers: Buffer[]
@@ -65,6 +67,7 @@ const slotStyleFor = (
 
 export const OpenTabList = ({ buffers, reorderable }: Props) => {
   const {
+    buffers: allBuffers,
     activeBuffer,
     setActiveBuffer,
     closeBuffer,
@@ -88,7 +91,9 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
     },
   })
 
-  const canRemove = rows.length > 1
+  // `buffers` may be filtered; gate on every open tab so a filter that hides
+  // the other tabs does not disable Close/Delete (same rule as closeBuffer).
+  const canRemove = sortPinnedBuffers(allBuffers).length > 1
 
   const activate = (buffer: Buffer) => {
     if (consumeDrop()) return
@@ -158,7 +163,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
             }}
             onClick={() => activate(buffer)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
+              if (isOwnActivationKey(event)) {
                 event.preventDefault()
                 void setActiveBuffer(buffer)
               }

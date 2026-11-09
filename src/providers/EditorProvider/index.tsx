@@ -35,16 +35,19 @@ import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/formatSql"
 import type { Buffer, PreviewContent } from "../../store/buffers"
 import {
+  closedBuffersToDelete,
+  nextOpenPosition,
   positionsAfterMove,
   positionsWithout,
-  sortArchivedBuffers,
   sortOpenBuffers,
   sortPinnedBuffers,
 } from "../../utils/buffers/tabOrder"
 import {
-  pickNextActiveBuffer,
+  resolveNextActiveBuffer,
   pushRecentBuffer,
 } from "../../utils/buffers/nextActiveBuffer"
+import { promoteActivePreview } from "../../utils/buffers/previewPromotion"
+import { appendQueryTarget } from "../../utils/buffers/appendQueryTarget"
 import { tabKindOf } from "../../utils/ai/workspaceInfo"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
@@ -141,7 +144,11 @@ export type EditorContext = {
       signal?: AbortSignal
     },
   ) => Promise<Buffer | undefined>
-  deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
+  deleteBuffer: (
+    id: number,
+    setActiveBuffer?: boolean,
+    initiator?: "user" | "agent",
+  ) => Promise<void>
   archiveBuffer: (id: number, initiator?: "user" | "agent") => Promise<void>
   duplicateNotebook: (
     id: number,
@@ -616,6 +623,14 @@ export const EditorProvider: React.FC = ({ children }) => {
           : {}),
       })
     }
+    const promotedActive = promoteActivePreview(activeBufferRef.current, id, {
+      ...payload,
+      ...effectivePayload,
+    })
+    if (promotedActive) {
+      activeBufferRef.current = promotedActive
+      setActiveBufferState(promotedActive)
+    }
     if (setNewActiveBuffer) {
       await setActiveBufferOnRemoved(id)
     }
@@ -649,12 +664,16 @@ export const EditorProvider: React.FC = ({ children }) => {
       (recentId) => recentId !== id,
     )
     if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
-      const nextActive = pickNextActiveBuffer(
-        buffers,
-        id,
-        recentBufferIdsRef.current,
-        temporaryBufferId,
-      )
+      const nextActive = await resolveNextActiveBuffer({
+        snapshot: buffers,
+        loadStored: async () =>
+          (await bufferStore.getAll()).filter(
+            (buffer) => !isPendingImportDeletion(buffer),
+          ),
+        removedId: id,
+        recentIds: recentBufferIdsRef.current,
+        previewId: temporaryBufferId,
+      })
       await setActiveBuffer(nextActive ?? fallbackBuffer)
     } else {
       editorRef.current?.focus()
@@ -754,10 +773,16 @@ export const EditorProvider: React.FC = ({ children }) => {
   const deleteBuffer: EditorContext["deleteBuffer"] = async (
     id,
     setActiveBuffer = true,
+    initiator = "user",
   ) => {
     const target = buffers.find((b) => b.id === id)
     await bufferStore.delete(id)
     cleanupExecutionRefs(id)
+    // Deleting the previewed tab ends the preview; don't keep pointing at a
+    // row that no longer exists.
+    if (id === temporaryBufferId) {
+      setTemporaryBufferId(null)
+    }
     if (setActiveBuffer) {
       await setActiveBufferOnRemoved(id)
     }
@@ -765,7 +790,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       type: "delete",
       bufferId: id,
     })
-    if (target) {
+    if (target && initiator === "user") {
       emitUserAction({
         kind: "user_deleted_tab",
         bufferId: id,
@@ -851,6 +876,12 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
     await updateBuffer(id, keptFields)
     await setActiveBuffer({ ...buffer, ...keptFields }, { focus: true })
+    // The kept tab is usually already active, so setActiveBuffer returned early
+    // without focusing. Focus explicitly: the "Keep open" button that held focus
+    // has just unmounted, and the first keystrokes would otherwise be lost.
+    if (!buffer.notebookViewState && !buffer.metricsViewState) {
+      editorRef.current?.focus()
+    }
   }
 
   const restoreBuffer: EditorContext["restoreBuffer"] = async (id) => {
@@ -863,7 +894,8 @@ export const EditorProvider: React.FC = ({ children }) => {
     const restoredFields = {
       archived: false,
       archivedAt: undefined,
-      position: sortOpenBuffers(buffers).length,
+      // Fresh read: the render-time list can miss a just-finished restore.
+      position: nextOpenPosition(await bufferStore.getAll()),
     }
     await updateBuffer(id, restoredFields)
     await setActiveBuffer({ ...buffer, ...restoredFields })
@@ -878,7 +910,7 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const clearArchivedBuffers: EditorContext["clearArchivedBuffers"] =
     async () => {
-      for (const buffer of sortArchivedBuffers(buffers)) {
+      for (const buffer of closedBuffersToDelete(buffers)) {
         await deleteBuffer(buffer.id as number)
       }
     }
@@ -886,7 +918,9 @@ export const EditorProvider: React.FC = ({ children }) => {
   const closePreviewBuffer: EditorContext["closePreviewBuffer"] = async () => {
     const previewBuffer = buffers.find((b) => b.isPreviewBuffer && !b.archived)
     if (previewBuffer && previewBuffer.id) {
-      await deleteBuffer(previewBuffer.id, true)
+      // The diff buffer belongs to the AI suggestion flow, not to the user's
+      // tabs — never report its removal as a user deletion.
+      await deleteBuffer(previewBuffer.id, true, "agent")
     }
   }
 
@@ -1090,19 +1124,22 @@ export const EditorProvider: React.FC = ({ children }) => {
         },
         appendQuery: (text) => {
           const targetBuffer = activeBufferRef.current
-          const bufferType = bufferTypeOf(targetBuffer)
-          if (bufferType === BufferType.NOTEBOOK) {
-            if (targetBuffer.id !== undefined) {
-              void appendNotebookCell(targetBuffer.id, text)
-            }
-            return
-          }
-          if (bufferType === BufferType.METRICS) {
-            void openNotebookWithCell(text)
-            return
-          }
-          if (editorRef?.current) {
-            appendQuery(editorRef.current, text)
+          switch (appendQueryTarget(targetBuffer)) {
+            case "notebook-cell":
+              if (targetBuffer.id !== undefined) {
+                void appendNotebookCell(targetBuffer.id, text)
+              }
+              return
+            case "new-notebook":
+              void openNotebookWithCell(text)
+              return
+            case "new-sql-tab":
+              void addBuffer({ value: text }, { shouldSelectAll: true })
+              return
+            case "editor":
+              if (editorRef?.current) {
+                appendQuery(editorRef.current, text)
+              }
           }
         },
         tabsDisabled,

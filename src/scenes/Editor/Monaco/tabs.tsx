@@ -40,7 +40,7 @@ import {
   MAX_BUFFER_NAME_LENGTH,
 } from "../../../store/buffers"
 import {
-  sortArchivedBuffers,
+  sortClosedBuffers,
   sortOpenBuffers,
 } from "../../../utils/buffers/tabOrder"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -385,7 +385,7 @@ export const Tabs = () => {
     input.click()
   }
 
-  const archivedBuffers = sortArchivedBuffers(buffers)
+  const closedBuffers = sortClosedBuffers(buffers)
 
   const active = async (id: string) => {
     const activeBuffer = buffers.find((buffer) => buffer.id === parseInt(id))
@@ -506,13 +506,13 @@ export const Tabs = () => {
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenuContent data-hook="editor-tabs-history">
-            {archivedBuffers.length === 0 ? (
+            {closedBuffers.length === 0 ? (
               <div style={{ padding: "0.5rem 1.4rem" }}>
                 <Text color="contentSecondary">History is empty</Text>
               </div>
             ) : (
               <ArchivedBuffersList>
-                {archivedBuffers.map((buffer) => (
+                {closedBuffers.map((buffer) => (
                   <ArchivedBufferRow key={buffer.id}>
                     <DropdownMenu.Item
                       data-hook="editor-tabs-history-item"
@@ -575,7 +575,7 @@ export const Tabs = () => {
                 ))}
               </ArchivedBuffersList>
             )}
-            {archivedBuffers.length > 0 && (
+            {closedBuffers.length > 0 && (
               <>
                 <DropdownMenu.Divider />
                 <DropdownMenu.Item
@@ -634,7 +634,7 @@ export const Tabs = () => {
       <EditorSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <ClearHistoryDialog
         open={clearHistoryOpen}
-        count={archivedBuffers.length}
+        count={closedBuffers.length}
         onDismiss={() => setClearHistoryOpen(false)}
         onConfirm={() => {
           void trackEvent(ConsoleEvent.TAB_HISTORY_CLEAR)

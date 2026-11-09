@@ -37,6 +37,7 @@ import { stringifyWithBigInts } from "../questdb/serialize"
 import {
   categoryFor,
   mutatesNotebook,
+  mutatesWorkspace,
   requiresFreshNotebookRead,
 } from "./tools"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
@@ -312,7 +313,12 @@ export const dispatchTool = async (
   if (!gate.granted) {
     return { content: gate.reason, is_error: true }
   }
-  if (toolContext && mutatesNotebook(toolName)) {
+  // Any user-visible side effect makes the turn unsafe to replay on a
+  // retryable provider error (see tryWithRetries' isReplaySafe).
+  if (
+    toolContext &&
+    (mutatesNotebook(toolName) || mutatesWorkspace(toolName))
+  ) {
     toolContext.notebookMutated = true
   }
   // Read-before-write gate, same predicate as the MCP surface: every

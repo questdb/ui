@@ -286,6 +286,11 @@ const getDefaultLineNumbersMinChars = (canUseAI: boolean) => {
 const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const theme = useTheme()
   const editorContext = useEditor()
+  // Editor actions and legacy bus handlers are registered once in onMount; read
+  // the context through a ref so they always call the latest provider
+  // callbacks (current tab list, limit, positions), not mount-time ones.
+  const editorContextRef = useRef(editorContext)
+  editorContextRef.current = editorContext
   const { executionRefs, cleanupExecutionRefs } = editorContext
   const {
     tabsDisabled,
@@ -1050,6 +1055,20 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         editor,
         toggleRunning,
         getRunning: () => runningValueRef.current,
+        isPreviewing: () => activeBufferRef.current.isTemporary === true,
+        openQueryInNewTab: async (query) => {
+          try {
+            const created = await editorContextRef.current.addBuffer(
+              { value: query },
+              { shouldSelectAll: true },
+            )
+            return created !== undefined
+          } catch (error) {
+            console.error("Could not open the query in a new tab:", error)
+            toast.error("Could not open the query in a new tab.")
+            return false
+          }
+        },
       }),
     )
     cleanupActionsRef.current.push(
@@ -1068,10 +1087,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         copyQueriesLink: () => {
           handleCopyLinkAllQueries(true)
         },
-        deleteBuffer: (id: number) => editorContext.deleteBuffer(id),
+        deleteBuffer: (id: number) => editorContextRef.current.deleteBuffer(id),
         addBuffer: () => {
           if (tabsDisabledRef.current) return
-          void editorContext.addBuffer()
+          void editorContextRef.current.addBuffer()
         },
       }),
     )

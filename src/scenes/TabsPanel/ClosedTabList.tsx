@@ -9,6 +9,7 @@ import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { TabRow } from "./TabRow"
 import { DeleteRowButton, ROW_ICON_SIZE, RowIconButton } from "./rowActions"
+import { isOwnActivationKey } from "./keyboard"
 
 type Props = {
   buffers: Buffer[]
@@ -71,7 +72,7 @@ export const ClosedTabList = ({ buffers }: Props) => {
           meta={closedAgo(buffer)}
           onClick={() => void preview(buffer)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
+            if (isOwnActivationKey(event)) {
               event.preventDefault()
               void preview(buffer)
             }
