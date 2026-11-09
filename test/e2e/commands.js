@@ -6,7 +6,8 @@ const { ctrlOrCmd, escapeRegExp, seedNotebookOnboarding } = require("./utils")
 const { seedConsoleStorage } = require("./utils/consoleStorage")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
-const baseUrl = Cypress.config("baseUrl") || `http://localhost:9999${contextPath}`
+const baseUrl =
+  Cypress.config("baseUrl") || `http://localhost:9999${contextPath}`
 
 const tableSchemas = {
   btc_trades:
@@ -296,10 +297,16 @@ Cypress.Commands.add("typeQuery", (query) => {
 })
 
 Cypress.Commands.add("typeQueryDirectly", (query) => {
-  cy.window().then((win) => {
-    const monacoEditor = win.monaco.editor.getEditors()[0]
-    monacoEditor.setValue(query)
-  })
+  // After a sign-in, the console may still be mounting Monaco.
+  cy.window()
+    .should(
+      (win) =>
+        expect(win.monaco?.editor.getEditors(), "Monaco editors").to.not.be
+          .empty,
+    )
+    .then((win) => {
+      win.monaco.editor.getEditors()[0].setValue(query)
+    })
 })
 
 Cypress.Commands.add("waitForActiveBufferValue", (expectedValue) => {

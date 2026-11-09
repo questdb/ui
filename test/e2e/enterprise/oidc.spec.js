@@ -284,6 +284,7 @@ describe("OIDC", () => {
         expect(new URL(request.url).searchParams.get("prompt")).to.equal(null),
       )
       cy.wait("@tokens")
+      cy.getEditor().should("be.visible")
       cy.executeSQL("select current_user();")
       cy.getGridRow(0).should("contain", "john doe")
       cy.get("@tokens.all").each(({ request }) =>
