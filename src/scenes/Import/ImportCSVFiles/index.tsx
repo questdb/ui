@@ -303,7 +303,8 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
               const response = await quest.uploadCSVFile({
                 file: file.fileObject,
                 name: file.table_name,
-                owner: file.table_owner,
+                // A file can be queued before the owner lookup finishes. Match the displayed default.
+                owner: file.table_owner || ownedByList[0],
                 settings: file.settings,
                 schema: file.schema.map(mapColumnTypeToQuestDB),
                 partitionBy: file.partitionBy,

@@ -1445,3 +1445,93 @@ describe("agentCellDimensionsPatch", () => {
     })
   })
 })
+
+describe("cell height limits and released results", () => {
+  const tenLines = Array.from({ length: 10 }, (_, i) => `SELECT ${i}`).join(
+    "\n",
+  )
+  const withResult: NotebookCell = {
+    id: "x",
+    position: 0,
+    value: "SELECT 1",
+    topHeight: 100,
+    topResized: true,
+    result: { results: [], activeResultIndex: 0, timestamp: 0 },
+  }
+  const errored = (id: string): NotebookCell => ({
+    id,
+    position: 0,
+    value: "select boom",
+    result: {
+      results: [
+        { type: "error", query: "select boom", error: "table does not exist" },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    },
+  })
+  it("releaseCellResultPatch carries the error when the result leaves memory", () => {
+    // When an errored result is released to IndexedDB-only
+    const patch = releaseCellResultPatch(errored("a"))
+
+    // Then the failure marker and message survive the release
+    expect(patch.lastRunStatus).toBe("error")
+    expect(patch.lastRunError).toBe("table does not exist")
+  })
+
+  it("floors topHeightForSql at the default editor height for short SQL", () => {
+    expect(topHeightForSql("SELECT 1")).toBe(72)
+  })
+
+  it("computes lines × lineHeight + padding beyond the floor", () => {
+    expect(topHeightForSql(tenLines)).toBe(10 * 24 + 8)
+  })
+
+  it("caps the editor estimate for a huge pasted query", () => {
+    // Given a query with 100,000 lines
+    // When the editor height is estimated
+    // Then it stops at the pane ceiling
+    expect(topHeightForSql(Array(100_000).fill("x").join("\n"))).toBe(2400)
+  })
+
+  it("caps the markdown auto-height snap", () => {
+    // Given a markdown height far above the ceiling
+    // When it snaps
+    // Then it stops at the pane ceiling
+    expect(snapMarkdownTopHeight(9_999)).toBe(2400)
+  })
+
+  it("caps a south-edge drag that asks for more rows than the ceiling", () => {
+    // Given a result-only cell
+    // When a drag asks for 500 rows
+    // Then the result pane stops at the ceiling
+    expect(
+      paneHeightsFromGridRows(
+        { ...withResult, paneView: "result" },
+        500,
+        10,
+        20,
+        false,
+      ),
+    ).toEqual({ bottomHeight: 2400, bottomResized: true })
+  })
+
+  it("limits grid rows to the pane the south edge owns at the ceiling", () => {
+    // Given a cell with a 100px editor and a result
+    // When the grid bounds are computed for the result-only and split layouts
+    // Then maxH covers the ceiling of the pane the edge owns
+    // Rounded UP like h, so maxH can never land below the rendered height;
+    // the save path clamps any overshoot back to the 2400px pane ceiling.
+    // result-only: 2400 + 44 chrome = 2444px → 83 rows
+    expect(
+      computeCellGridBounds(
+        { ...withResult, paneView: "result" },
+        10,
+        20,
+        false,
+      ).maxH,
+    ).toBe(83)
+    // split keeps the 100px editor: 100 + 2400 + 50 = 2550px → 86 rows
+    expect(computeCellGridBounds(withResult, 10, 20, false).maxH).toBe(86)
+  })
+})

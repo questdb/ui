@@ -16,16 +16,17 @@ This is achieved if the commit that the submodule points to respects that it:
 
 To run, from the root of the repo, call:
 
-    git -C e2e/questdb fetch origin master
+    git -C test/e2e/questdb fetch origin master
     uv run --python 3.12 --with "pygit2==1.14.1" submodule_is_mergeable.py
 
 This is the same command CI uses (see
 .github/workflows/check_oss_submodule.yml). If the check fails, run
-`yarn sync:questdb` and commit the updated `e2e/questdb` pointer.
+`yarn sync:questdb` and commit the updated `test/e2e/questdb` pointer.
 
 On error, will return non-zero exit code and fail the CI run.
 """
 
+import configparser
 import sys
 sys.dont_write_bytecode = True
 import pygit2
@@ -58,7 +59,7 @@ def check_commit_is_from_recent_master(oss_master_commits: [pygit2.Oid], oss_hea
         for commit in oss_master_commits:
             sys.stderr.write(f'  * {commit}\n')
         sys.stderr.write(
-            'Run `yarn sync:questdb` and commit the updated `e2e/questdb` ' +
+            'Run `yarn sync:questdb` and commit the updated `test/e2e/questdb` ' +
             'pointer.\n')
         sys.exit(1)
 
@@ -69,7 +70,10 @@ def check_not_older(
         oss_head: pygit2.Oid):
     ui_main_head = ui_repo.references['refs/remotes/origin/main'].peel().id
     ui_main_tree = ui_repo[ui_main_head].tree
-    questdb_main_commit_id = ui_main_tree['e2e/questdb'].id
+    modules = configparser.ConfigParser()
+    modules.read_string(ui_repo[ui_main_tree['.gitmodules'].id].data.decode())
+    questdb_path = modules['submodule "questdb"']['path']
+    questdb_main_commit_id = ui_main_tree[questdb_path].id
 
     if questdb_main_commit_id not in oss_master_commits:
         sys.stderr.write(

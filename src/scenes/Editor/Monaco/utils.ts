@@ -22,6 +22,7 @@
  *
  ******************************************************************************/
 import type { editor, IPosition, IRange } from "monaco-editor"
+import { appendQueryEdit } from "./appendQueryEdit"
 import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 import { hashString } from "../../../utils"
@@ -953,39 +954,23 @@ export const appendQuery = (editor: IStandaloneCodeEditor, query: string) => {
 
   if (model && position) {
     const existing = model.getValue()
-    const isFirstLine = position.lineNumber === 1
-
     const lastPosition = getLastPosition(editor)
     const { nextSql } = lastPosition
       ? getQueriesFromPosition(editor, lastPosition)
       : { nextSql: null }
-    const needsSemicolon = nextSql !== null
-
-    const newQueryLines = query.split("\n")
-    const prefix = isFirstLine ? 1 : 2
-    const selectStartOffset = isFirstLine ? 0 : 1
-
-    const lineStart = existing.split("\n").length + 1
-    const positionSelect = {
-      lineStart: lineStart + selectStartOffset,
-      lineEnd: lineStart + selectStartOffset + (newQueryLines.length - 1),
-      columnStart: 1,
-      columnEnd: newQueryLines[newQueryLines.length - 1].length + 1,
-    }
-
+    const edit = appendQueryEdit(
+      existing,
+      position.lineNumber,
+      query,
+      nextSql !== null,
+    )
     insertText({
       editor,
-      lineNumber: lineStart,
+      lineNumber: edit.lineStart,
       column: 1,
-      text: `${needsSemicolon ? ";" : ""}${"\n".repeat(prefix)}${query}`,
+      text: edit.text,
     })
-
-    editor.setSelection({
-      startLineNumber: positionSelect.lineStart,
-      endLineNumber: positionSelect.lineEnd,
-      startColumn: positionSelect.columnStart,
-      endColumn: positionSelect.columnEnd,
-    })
+    editor.setSelection(edit.selection)
 
     editor.focus()
     editor.revealLine(model.getLineCount())

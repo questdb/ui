@@ -86,7 +86,13 @@ export default [
     },
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['test/e2e/**/*.d.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+    },
+  },
+  {
+    files: ['src/**/*.{ts,tsx}', 'test/integration/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {
