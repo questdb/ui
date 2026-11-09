@@ -20,7 +20,11 @@ import type { Preferences } from "../../utils/questdb/types"
 
 vi.mock("../../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
 const hook = (name: string) => getHook(`topbar-instance-${name}`)
-const mountToolbar = async (readonly = false, initial: Preferences = {}) => {
+const mountToolbar = async (
+  readonly = false,
+  initial: Preferences = {},
+  enterpriseUser?: string,
+) => {
   let preferences = initial
   const writes: Preferences[] = []
   const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -33,7 +37,10 @@ const mountToolbar = async (readonly = false, initial: Preferences = {}) => {
       }
       return Promise.resolve(
         Response.json({
-          config: { "release.type": "OSS", "http.settings.readonly": readonly },
+          config: {
+            "release.type": enterpriseUser ? "EE" : "OSS",
+            "http.settings.readonly": readonly,
+          },
           preferences,
           "preferences.version": writes.length,
         }),
@@ -46,14 +53,31 @@ const mountToolbar = async (readonly = false, initial: Preferences = {}) => {
       return Promise.reject(
         new Error("Image preload is outside this settings fixture"),
       )
-    if (url.pathname === "/exec")
+    if (url.pathname === "/exec") {
+      const query = url.searchParams.get("query") ?? ""
+      if (query.toLowerCase().startsWith("show permissions")) {
+        // The server rejects a dotted user name unless it is quoted.
+        return Promise.resolve(
+          query === `SHOW PERMISSIONS '${enterpriseUser}';`
+            ? Response.json({
+                columns: [{ name: "permission", type: "STRING" }],
+                dataset: [["SETTINGS"]],
+                count: 1,
+              })
+            : Response.json(
+                { query, error: "unexpected token [.]", position: 21 },
+                { status: 400 },
+              ),
+        )
+      }
       return Promise.resolve(
         Response.json({
           columns: [{ name: "current_user", type: "STRING" }],
-          dataset: [["admin"]],
+          dataset: [[enterpriseUser ?? "admin"]],
           count: 1,
         }),
       )
+    }
     throw new Error(`Unexpected request: ${requestUrl(input).href}`)
   })
   vi.stubGlobal("fetch", fetch)
@@ -75,7 +99,7 @@ const mountToolbar = async (readonly = false, initial: Preferences = {}) => {
       ),
     ).toBe(true),
   )
-  return { writes }
+  return { writes, fetch }
 }
 
 const openSettings = async () => {
@@ -160,6 +184,20 @@ describe("Instance settings", () => {
     expect(await findHook("topbar-instance-tooltip")).toHaveTextContent(
       "Market data",
     )
+  })
+
+  it("lets an enterprise user with a dot in their name and SETTINGS permission edit", async () => {
+    // Given / When
+    const { fetch } = await mountToolbar(false, {}, "john.doe")
+
+    // Then
+    await openSettings()
+    expect(hook("name-input")).toBeInTheDocument()
+    expect(
+      fetch.mock.calls.map(([input]) =>
+        requestUrl(input).searchParams.get("query"),
+      ),
+    ).toContain("SHOW PERMISSIONS 'john.doe';")
   })
 
   it.each([true, false])(

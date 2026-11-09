@@ -84,7 +84,8 @@ describe("Enterprise instance settings permissions", () => {
 
   it("denies editing with HTTP alone and allows it after SETTINGS is granted and the console reloads", () => {
     // Given
-    user = `settings_review_${Date.now()}_${Cypress._.random(100000)}`
+    // The dot guards #446: the permission check must quote the user name.
+    user = `settings.review.${Date.now()}_${Cypress._.random(100000)}`
     cy.execAdminQuery(`CREATE USER '${user}' WITH PASSWORD 'pwd'`)
     cy.execAdminQuery(`GRANT HTTP TO '${user}'`)
     watchPermissions(user)
