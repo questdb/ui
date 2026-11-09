@@ -348,8 +348,10 @@ describe("search panel", () => {
       cy.getEditorTabByTitle("SQL 1").should("have.attr", "active")
       cy.getByDataHook("tab-preview-bar").should("be.visible")
 
-      // clicking in the editor keeps the preview state
+      // the preview is read-only: clicking and typing change nothing
       cy.getEditor().realClick()
+      cy.realType("XYZ")
+      cy.getEditor().should("not.contain", "XYZ")
       cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
 
       cy.getByDataHook("tab-preview-keep-open").click()

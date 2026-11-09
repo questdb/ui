@@ -42,7 +42,7 @@ export const PreviewBar = () => {
       <Message>
         <EyeIcon size={16} />
         <Text color="contentPrimary" ellipsis>
-          Preview of a closed tab. The content is read-only.
+          Preview of a closed tab. Keep it open to make changes.
         </Text>
       </Message>
       <Box align="center" gap="0.6rem">
