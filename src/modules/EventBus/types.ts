@@ -19,6 +19,7 @@ export enum EventType {
   REACT_READY = "react.ready",
   TAB_FOCUS = "tab.focus",
   TAB_BLUR = "tab.blur",
+  TAB_REVEAL = "tab.reveal",
   METRICS_REFRESH_DATA = "metrics.refresh.data",
   BUFFERS_UPDATED = "buffers.updated",
   EXPLAIN_QUERY_EXEC = "ai.explain.query.exec",

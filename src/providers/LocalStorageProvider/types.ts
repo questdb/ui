@@ -40,6 +40,7 @@ export type RunWithSelectionMode = "partial" | "complete" | "off"
 
 export enum LeftPanelType {
   DATASOURCES = "datasources",
+  TABS = "tabs",
   SEARCH = "search",
 }
 

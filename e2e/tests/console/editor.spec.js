@@ -1456,7 +1456,7 @@ describe("editor tabs", () => {
     cy.getEditorTabByTitle("Cancelled new name").should("not.exist")
     cy.getEditorTabByTitle("New name").within(() => {
       cy.get(".chrome-tab-drag-handle").dblclick()
-      cy.get(".chrome-tab-rename").type("{selectall}{esc}{enter}")
+      cy.get(".chrome-tab-rename").type("{selectall}{backspace}{enter}")
       // empty tab name is not allowed, should not proceed
       cy.get(".chrome-tab-rename").should("be.visible")
     })
@@ -1546,6 +1546,9 @@ describe.skip("editor tabs history", () => {
     cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 2")
     // Clear history
     cy.getByDataHook("editor-tabs-history-clear").click()
+    cy.getByDataHook("clear-history-dialog").should("be.visible")
+    cy.getByDataHook("clear-history-confirm").click()
+    cy.getByDataHook("clear-history-dialog").should("not.exist")
     cy.getByDataHook("editor-tabs-history-button").click()
     cy.getByDataHook("editor-tabs-history-item").should("not.exist")
   })

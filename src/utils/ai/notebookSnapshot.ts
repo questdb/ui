@@ -399,8 +399,19 @@ export const formatDigest = (digest: UserActionDigest): string => {
   if (digest.layoutModeTo) parts.push(`  layout_mode: ${digest.layoutModeTo}`)
   if (digest.autoRefreshDefaultTo !== undefined)
     parts.push(`  auto_refresh_default: ${digest.autoRefreshDefaultTo}`)
-  if (digest.notebookStatusChange)
-    parts.push(`  notebook_status: ${digest.notebookStatusChange}`)
+  for (const status of ["closed", "deleted"] as const) {
+    const changes = digest.tabChanges.filter((c) => c.status === status)
+    if (changes.length === 0) continue
+    const entries = changes
+      .map(
+        (c) =>
+          `{ buffer_id: ${c.bufferId}, label: ${JSON.stringify(
+            sanitizeForPromptContext(c.label),
+          )}, kind: ${c.kind} }`,
+      )
+      .join(", ")
+    parts.push(`  tabs_${status}: [${entries}]`)
+  }
   if (parts.length === 0) return ""
   return [
     `<user_events since_last_turn="true">`,
@@ -420,19 +431,20 @@ export const formatWorkspace = (ws: WorkspaceInfo): string => {
       )}, kind: ${ws.active.kind}${archived} }`,
     )
   }
-  if (ws.notebooks.length > 0) {
-    lines.push("  notebooks:")
-    for (const nb of ws.notebooks) {
+  if (ws.tabs.length > 0) {
+    lines.push("  tabs:")
+    for (const tab of ws.tabs) {
       const parts = [
-        `buffer_id: ${nb.buffer_id}`,
-        `label: ${JSON.stringify(sanitizeForPromptContext(nb.label))}`,
+        `buffer_id: ${tab.buffer_id}`,
+        `label: ${JSON.stringify(sanitizeForPromptContext(tab.label))}`,
+        `kind: ${tab.kind}`,
       ]
-      if (nb.archived) parts.push("archived: true")
-      if (nb.bound_to_this_chat) parts.push("bound_to_this_chat: true")
+      if (tab.archived) parts.push("archived: true")
+      if (tab.bound_to_this_chat) parts.push("bound_to_this_chat: true")
       lines.push(`    - { ${parts.join(", ")} }`)
     }
   } else {
-    lines.push("  notebooks: []")
+    lines.push("  tabs: []")
   }
   lines.push("</workspace>")
   return lines.join("\n")

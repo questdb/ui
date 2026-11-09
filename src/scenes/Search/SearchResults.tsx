@@ -204,14 +204,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   searchQuery,
   staleBuffers,
 }) => {
-  const {
-    setActiveBuffer,
-    buffers,
-    setTemporaryBuffer,
-    temporaryBufferId,
-    editorRef,
-    updateBuffer,
-  } = useEditor()
+  const { setActiveBuffer, buffers, previewBuffer, editorRef } = useEditor()
   const [expandedBuffers, setExpandedBuffers] = useState<Map<number, boolean>>(
     new Map(Array.from(groupedMatches.keys()).map((id) => [id, true])),
   )
@@ -220,11 +213,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   const selectionDecorations = useRef<string[]>([])
   const virtualizedTreeRef = useRef<VirtualizedTreeHandle>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
-
-  const activeBufferCount = useMemo(
-    () => buffers.filter((b) => !b.archived || b.isTemporary).length,
-    [buffers],
-  )
 
   const flattenedItems = useMemo(() => {
     const items: FlattenedItem[] = []
@@ -281,28 +269,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     return items
   }, [groupedMatches, expandedBuffers, staleBuffers])
 
-  const convertTemporaryToPermanent = useCallback(async () => {
-    if (temporaryBufferId !== null) {
-      const tempBuffer = buffers.find((b) => b.id === temporaryBufferId)
-      const updatedFields = {
-        archived: false,
-        archivedAt: undefined,
-        isTemporary: false,
-      }
-
-      if (tempBuffer) {
-        await updateBuffer(temporaryBufferId, updatedFields)
-        await setActiveBuffer(
-          { ...tempBuffer, ...updatedFields },
-          { focus: true, fromSearch: true },
-        )
-
-        return tempBuffer
-      }
-    }
-    return null
-  }, [temporaryBufferId, buffers, updateBuffer, setActiveBuffer])
-
   const toggleBufferExpansion = useCallback((bufferId: number) => {
     setExpandedBuffers((prev) => {
       const newMap = new Map(prev)
@@ -330,50 +296,13 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       const buffer = buffers?.find((b) => b.id === bufferId)
       if (!buffer) return null
 
-      if (!buffer.archived) {
-        if (temporaryBufferId !== null) {
-          await updateBuffer(temporaryBufferId, { isTemporary: false })
-        }
-        await setActiveBuffer(buffer, { focus: shouldFocus, fromSearch: true })
+      if (buffer.archived) {
+        await previewBuffer(bufferId)
       } else {
-        if (shouldFocus) {
-          // Double-click on archived buffer
-          if (temporaryBufferId !== null && temporaryBufferId === bufferId) {
-            await convertTemporaryToPermanent()
-          } else {
-            const restoredFields = {
-              archived: false,
-              archivedAt: undefined,
-              position: activeBufferCount,
-            }
-            await updateBuffer(bufferId, restoredFields)
-            await setActiveBuffer(
-              { ...buffer, ...restoredFields },
-              { focus: true, fromSearch: true },
-            )
-
-            if (temporaryBufferId !== null) {
-              await updateBuffer(temporaryBufferId, { isTemporary: false })
-            }
-          }
-        } else {
-          // Single-click on archived buffer
-          if (temporaryBufferId !== bufferId) {
-            await setTemporaryBuffer(buffer)
-          }
-        }
+        await setActiveBuffer(buffer, { focus: shouldFocus, fromSearch: true })
       }
     },
-    [
-      getBufferIdFromItem,
-      buffers,
-      temporaryBufferId,
-      updateBuffer,
-      setActiveBuffer,
-      convertTemporaryToPermanent,
-      activeBufferCount,
-      setTemporaryBuffer,
-    ],
+    [getBufferIdFromItem, buffers, setActiveBuffer, previewBuffer],
   )
 
   const revealNotebookCell = useCallback(async (item: FlattenedItem) => {
@@ -697,33 +626,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     })
   }, [groupedMatches])
 
-  useEffect(() => {
-    const handleGlobalClick = async (event: MouseEvent) => {
-      if (
-        searchResultsRef.current &&
-        !searchResultsRef.current.contains(event.target as Node)
-      ) {
-        if (temporaryBufferId !== null) {
-          const target = event.target as HTMLElement | null
-          if (
-            target?.closest(".monaco-editor") ||
-            target?.closest(".metrics-root") ||
-            target?.closest("[data-notebook-root]")
-          ) {
-            await convertTemporaryToPermanent()
-          } else {
-            await updateBuffer(temporaryBufferId, { isTemporary: false }, true)
-          }
-        }
-      }
-    }
-    document.addEventListener("mousedown", handleGlobalClick)
-
-    return () => {
-      document.removeEventListener("mousedown", handleGlobalClick)
-    }
-  }, [temporaryBufferId, updateBuffer, convertTemporaryToPermanent])
-
   if (groupedMatches.size === 0 && searchQuery.trim()) {
     return (
       <NoResults data-hook="search-no-results" role="status" aria-live="polite">
@@ -743,6 +645,9 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
         ref={virtualizedTreeRef}
         items={flattenedItems}
         renderItem={renderItem}
+        onItemClick={(_item, index) => {
+          if (index === focusedIndex) void handleClick(index)
+        }}
         onItemDoubleClick={handleDoubleClick}
         onItemKeyDown={handleItemKeyDown}
         focusedIndex={focusedIndex}

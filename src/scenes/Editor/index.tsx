@@ -46,6 +46,7 @@ import {
 import { Metrics } from "./Metrics"
 import { Notebook } from "./Notebook"
 import { NotebookWorkspaceBridge } from "./Notebook/NotebookWorkspaceBridge"
+import { PreviewBar } from "./PreviewBar"
 import Notifications from "../../scenes/Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
@@ -342,6 +343,7 @@ const Editor = ({
       <NotebookWorkspaceBridge />
       <EditorLeftPane>
         <Tabs />
+        {activeBuffer.isTemporary && <PreviewBar />}
         <EditorContent>
           <EditorPane>
             {activeBuffer.editorViewState && <Monaco hidden={isMonacoHidden} />}

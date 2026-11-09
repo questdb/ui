@@ -34,6 +34,18 @@ import { requestCellReveal } from "../../scenes/Editor/Notebook/cellReveal"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/formatSql"
 import type { Buffer, PreviewContent } from "../../store/buffers"
+import {
+  positionsAfterMove,
+  positionsWithout,
+  sortArchivedBuffers,
+  sortOpenBuffers,
+  sortPinnedBuffers,
+} from "../../utils/buffers/tabOrder"
+import {
+  pickNextActiveBuffer,
+  pushRecentBuffer,
+} from "../../utils/buffers/nextActiveBuffer"
+import { tabKindOf } from "../../utils/ai/workspaceInfo"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
@@ -143,9 +155,14 @@ export type EditorContext = {
   updateBuffersPositions: (
     positions: { id: number; position: number }[],
   ) => Promise<void>
+  closeBuffer: (id: number) => Promise<void>
+  restoreBuffer: (id: number) => Promise<void>
+  keepBufferOpen: (id: number) => Promise<void>
+  reorderBuffer: (id: number, toIndex: number) => Promise<void>
+  clearArchivedBuffers: () => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
-  setTemporaryBuffer: (buffer: Buffer) => Promise<void>
-  temporaryBufferId: number | null
+  previewBuffer: (id: number) => Promise<void>
+  discardPreview: () => Promise<void>
   queryParamProcessedRef: MutableRefObject<boolean>
   isNavigatingFromSearchRef: MutableRefObject<boolean>
   showPreviewBuffer: (content: PreviewBufferContent) => Promise<void>
@@ -172,9 +189,14 @@ const defaultValues = {
   duplicateNotebook: () => Promise.resolve(undefined),
   updateBuffer: () => Promise.resolve(),
   updateBuffersPositions: () => Promise.resolve(),
+  closeBuffer: () => Promise.resolve(),
+  restoreBuffer: () => Promise.resolve(),
+  keepBufferOpen: () => Promise.resolve(),
+  reorderBuffer: () => Promise.resolve(),
+  clearArchivedBuffers: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
-  setTemporaryBuffer: () => Promise.resolve(),
-  temporaryBufferId: null,
+  previewBuffer: () => Promise.resolve(),
+  discardPreview: () => Promise.resolve(),
   queryParamProcessedRef: { current: false },
   isNavigatingFromSearchRef: { current: false },
   showPreviewBuffer: () => Promise.resolve(),
@@ -184,6 +206,9 @@ const defaultValues = {
   cleanupExecutionRefs: () => undefined,
   highlightQuery: () => Promise.resolve(false),
 }
+
+const isPendingImportDeletion = (buffer: Buffer) =>
+  (buffer as Record<string, unknown>)._markedForDeletion === true
 
 const EditorContext = createContext<EditorContext>(defaultValues)
 
@@ -199,10 +224,12 @@ export const EditorProvider: React.FC = ({ children }) => {
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
     if (!rawBuffers) return undefined
-    return rawBuffers.map((buffer) => ({
-      ...buffer,
-      isTemporary: buffer.id === temporaryBufferId,
-    }))
+    return rawBuffers
+      .filter((buffer) => !isPendingImportDeletion(buffer))
+      .map((buffer) => ({
+        ...buffer,
+        isTemporary: buffer.id === temporaryBufferId,
+      }))
   }, [rawBuffers, temporaryBufferId])
 
   const activeBufferId = useLiveQuery(
@@ -212,6 +239,7 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const activeBufferRef = useRef(activeBuffer)
+  const recentBufferIdsRef = useRef<number[]>([])
   const searchUpdateTimeoutRef = useRef<number | null>(null)
   const queryParamProcessedRef = useRef(false)
   const isNavigatingFromSearchRef = useRef(false)
@@ -249,6 +277,10 @@ export const EditorProvider: React.FC = ({ children }) => {
         await bufferStore.setActiveId(buffer.id as number)
         activeBufferRef.current = buffer
         setActiveBufferState(buffer)
+        recentBufferIdsRef.current = pushRecentBuffer(
+          recentBufferIdsRef.current,
+          buffer.id as number,
+        )
 
         if (options?.fromSearch) {
           isNavigatingFromSearchRef.current = true
@@ -360,7 +392,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       }
       if (buffers && buffers.length >= MAX_TABS) {
         toast.error(
-          `Tab limit reached (${MAX_TABS}). Please clear history to free up space.`,
+          `Tab limit reached (${MAX_TABS}). Delete closed tabs from the Tabs panel to free up space.`,
         )
         return undefined
       }
@@ -563,8 +595,16 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
 
     const { isTemporary: _, ...dbPayload } = payload || {}
+    const isPreviewContentWrite =
+      id === temporaryBufferId && !(payload && "isTemporary" in payload)
+    const {
+      value: _value,
+      metricsViewState: _metrics,
+      notebookViewState: _notebook,
+      ...previewSafePayload
+    } = dbPayload
     const effectivePayload = {
-      ...dbPayload,
+      ...(isPreviewContentWrite ? previewSafePayload : dbPayload),
       ...(newPosition !== null ? { position: newPosition } : {}),
     }
 
@@ -605,16 +645,16 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const setActiveBufferOnRemoved = async (id: number) => {
     const activeBufferId = (await bufferStore.getActiveId())?.value
+    recentBufferIdsRef.current = recentBufferIdsRef.current.filter(
+      (recentId) => recentId !== id,
+    )
     if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
-      const nextActive = await db.buffers
-        .toCollection()
-        .filter((buffer) => {
-          return (
-            !buffer.archived &&
-            !(buffer.id === temporaryBufferId || buffer.id === id)
-          )
-        })
-        .last()
+      const nextActive = pickNextActiveBuffer(
+        buffers,
+        id,
+        recentBufferIdsRef.current,
+        temporaryBufferId,
+      )
       await setActiveBuffer(nextActive ?? fallbackBuffer)
     } else {
       editorRef.current?.focus()
@@ -626,7 +666,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     initiator = "user",
   ) => {
     // Snapshot before write — live query refresh makes post-update read unreliable.
-    const wasNotebook = !!buffers.find((b) => b.id === id)?.notebookViewState
+    const target = buffers.find((b) => b.id === id)
     await updateBuffer(id, {
       archived: true,
       archivedAt: new Date().getTime(),
@@ -637,10 +677,15 @@ export const EditorProvider: React.FC = ({ children }) => {
       type: "archive",
       bufferId: id,
     })
-    if (wasNotebook) {
-      if (initiator === "user") {
-        emitUserAction({ kind: "user_archived_notebook", bufferId: id })
-      }
+    if (target && initiator === "user") {
+      emitUserAction({
+        kind: "user_archived_tab",
+        bufferId: id,
+        tabKind: tabKindOf(target),
+        label: target.label,
+      })
+    }
+    if (target?.notebookViewState) {
       releaseArchivedBuffer(id)
     }
   }
@@ -710,7 +755,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     id,
     setActiveBuffer = true,
   ) => {
-    const wasNotebook = !!buffers.find((b) => b.id === id)?.notebookViewState
+    const target = buffers.find((b) => b.id === id)
     await bufferStore.delete(id)
     cleanupExecutionRefs(id)
     if (setActiveBuffer) {
@@ -720,28 +765,39 @@ export const EditorProvider: React.FC = ({ children }) => {
       type: "delete",
       bufferId: id,
     })
-    if (wasNotebook) {
+    if (target) {
+      emitUserAction({
+        kind: "user_deleted_tab",
+        bufferId: id,
+        tabKind: tabKindOf(target),
+        label: target.label,
+      })
+    }
+    if (target?.notebookViewState) {
       void deleteNotebookSnapshots(id)
       removeNotebookBufferLayouts(id)
-      emitUserAction({ kind: "user_deleted_notebook", bufferId: id })
     }
     forgetBuffer(id)
   }
 
-  const setTemporaryBuffer: EditorContext["setTemporaryBuffer"] = async (
-    buffer,
-  ) => {
-    if (temporaryBufferId !== null && temporaryBufferId !== buffer.id) {
-      await updateBuffer(temporaryBufferId, { isTemporary: false })
+  const previewBuffer: EditorContext["previewBuffer"] = async (id) => {
+    const buffer = buffers.find((b) => b.id === id)
+    if (!buffer) return
+    if (temporaryBufferId !== id) {
+      if (temporaryBufferId !== null) {
+        await updateBuffer(temporaryBufferId, { isTemporary: false })
+      }
+      await updateBuffer(id, { isTemporary: true })
     }
-    await updateBuffer(buffer.id as number, {
-      isTemporary: true,
-    })
-
     await setActiveBuffer(
       { ...buffer, isTemporary: true },
       { focus: false, fromSearch: true },
     )
+  }
+
+  const discardPreview: EditorContext["discardPreview"] = async () => {
+    if (temporaryBufferId === null) return
+    await updateBuffer(temporaryBufferId, { isTemporary: false }, true)
   }
 
   const updateBuffersPositions: EditorContext["updateBuffersPositions"] =
@@ -751,6 +807,80 @@ export const EditorProvider: React.FC = ({ children }) => {
           await db.buffers.update(id, { position })
         }
       })
+    }
+
+  const hasContent = (buffer: Buffer) =>
+    buffer.value !== "" ||
+    (buffer.metricsViewState?.metrics?.length ?? 0) > 0 ||
+    buffer.notebookViewState != null
+
+  const closeBuffer: EditorContext["closeBuffer"] = async (id) => {
+    const buffer = buffers.find((b) => b.id === id)
+    if (!buffer) return
+
+    if (buffer.isTemporary) {
+      await discardPreview()
+      return
+    }
+
+    if (sortPinnedBuffers(buffers).length === 1) return
+
+    if (buffer.isPreviewBuffer) {
+      await deleteBuffer(id, true)
+      await updateBuffersPositions(positionsWithout(buffers, id))
+      return
+    }
+
+    if (hasContent(buffer)) {
+      void trackEvent(ConsoleEvent.TAB_ARCHIVE, { type: bufferTypeOf(buffer) })
+      await archiveBuffer(id)
+    } else {
+      await deleteBuffer(id)
+    }
+    await updateBuffersPositions(positionsWithout(buffers, id))
+  }
+
+  const keepBufferOpen: EditorContext["keepBufferOpen"] = async (id) => {
+    const buffer = buffers.find((b) => b.id === id)
+    if (!buffer) return
+    const keptFields = {
+      archived: false,
+      archivedAt: undefined,
+      isTemporary: false,
+      position: sortOpenBuffers(buffers).length - 1,
+    }
+    await updateBuffer(id, keptFields)
+    await setActiveBuffer({ ...buffer, ...keptFields }, { focus: true })
+  }
+
+  const restoreBuffer: EditorContext["restoreBuffer"] = async (id) => {
+    if (id === temporaryBufferId) {
+      await keepBufferOpen(id)
+      return
+    }
+    const buffer = buffers.find((b) => b.id === id)
+    if (!buffer) return
+    const restoredFields = {
+      archived: false,
+      archivedAt: undefined,
+      position: sortOpenBuffers(buffers).length,
+    }
+    await updateBuffer(id, restoredFields)
+    await setActiveBuffer({ ...buffer, ...restoredFields })
+  }
+
+  const reorderBuffer: EditorContext["reorderBuffer"] = async (id, toIndex) => {
+    const positions = positionsAfterMove(buffers, id, toIndex)
+    if (positions.length > 0) {
+      await updateBuffersPositions(positions)
+    }
+  }
+
+  const clearArchivedBuffers: EditorContext["clearArchivedBuffers"] =
+    async () => {
+      for (const buffer of sortArchivedBuffers(buffers)) {
+        await deleteBuffer(buffer.id as number)
+      }
     }
 
   const closePreviewBuffer: EditorContext["closePreviewBuffer"] = async () => {
@@ -986,8 +1116,13 @@ export const EditorProvider: React.FC = ({ children }) => {
         duplicateNotebook,
         updateBuffer,
         updateBuffersPositions,
-        setTemporaryBuffer,
-        temporaryBufferId,
+        closeBuffer,
+        restoreBuffer,
+        keepBufferOpen,
+        reorderBuffer,
+        clearArchivedBuffers,
+        previewBuffer,
+        discardPreview,
         queryParamProcessedRef,
         isNavigatingFromSearchRef,
         showPreviewBuffer,

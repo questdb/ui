@@ -8,6 +8,7 @@ export type NotebookToolErrorCode =
   | "workspace_unavailable"
   | "mounted_mid_edit"
   | "last_tab"
+  | "tab_limit"
   | "last_cell"
   | "cell_limit"
   | "cell_too_large"

@@ -161,22 +161,47 @@ describe("user_changed_autorefresh_default", () => {
   })
 })
 
-describe("notebook lifecycle events", () => {
-  it("user_archived_notebook flips the flag to archived", () => {
-    const d = apply([{ kind: "user_archived_notebook", bufferId: 1 }])
-    expect(d.notebookStatusChange).toBe("archived")
-  })
-
-  it("user_deleted_notebook flips the flag to deleted", () => {
-    const d = apply([{ kind: "user_deleted_notebook", bufferId: 1 }])
-    expect(d.notebookStatusChange).toBe("deleted")
-  })
-
-  it("delete wins over archive if both fire", () => {
+describe("tab lifecycle events", () => {
+  it("user_archived_tab records a closed tab of any kind", () => {
     const d = apply([
-      { kind: "user_archived_notebook", bufferId: 1 },
-      { kind: "user_deleted_notebook", bufferId: 1 },
+      { kind: "user_archived_tab", bufferId: 1, tabKind: "sql", label: "Q1" },
     ])
-    expect(d.notebookStatusChange).toBe("deleted")
+    expect(d.tabChanges).toEqual([
+      { bufferId: 1, kind: "sql", label: "Q1", status: "closed" },
+    ])
+  })
+
+  it("user_deleted_tab records a deleted tab", () => {
+    const d = apply([
+      {
+        kind: "user_deleted_tab",
+        bufferId: 2,
+        tabKind: "metrics",
+        label: "CPU",
+      },
+    ])
+    expect(d.tabChanges).toEqual([
+      { bufferId: 2, kind: "metrics", label: "CPU", status: "deleted" },
+    ])
+  })
+
+  it("delete wins over close for the same tab", () => {
+    const d = apply([
+      {
+        kind: "user_archived_tab",
+        bufferId: 1,
+        tabKind: "notebook",
+        label: "N",
+      },
+      {
+        kind: "user_deleted_tab",
+        bufferId: 1,
+        tabKind: "notebook",
+        label: "N",
+      },
+    ])
+    expect(d.tabChanges).toEqual([
+      { bufferId: 1, kind: "notebook", label: "N", status: "deleted" },
+    ])
   })
 })

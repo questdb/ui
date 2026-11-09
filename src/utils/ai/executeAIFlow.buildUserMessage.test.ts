@@ -124,9 +124,19 @@ describe("buildUserMessage — notebook prefix injection", () => {
       notebookContext: {
         snapshot: null,
         workspace: {
-          notebooks: [
-            { buffer_id: 2, label: "Notebook 1", archived: false },
-            { buffer_id: 7, label: "Archived one", archived: true },
+          tabs: [
+            {
+              buffer_id: 2,
+              label: "Notebook 1",
+              kind: "notebook",
+              archived: false,
+            },
+            {
+              buffer_id: 7,
+              label: "Archived one",
+              kind: "notebook",
+              archived: true,
+            },
           ],
           active: { buffer_id: 3, label: "Query 1", kind: "sql" },
         },

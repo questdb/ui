@@ -207,7 +207,7 @@ describe("search panel", () => {
         .should("have.attr", "active")
       cy.getByDataHook("search-result-buffer-group").should("contain", "closed")
 
-      cy.getEditor().click()
+      cy.getByDataHook("tab-preview-keep-open").click()
 
       cy.getByDataHook("search-result-buffer-group").should(
         "not.contain",
@@ -333,13 +333,12 @@ describe("search panel", () => {
 
       cy.getSearchResults().contains("DROP").dblclick()
 
-      // should navigate to editor on double click
-      cy.getEditor().get(".searchHighlight").should("not.exist")
-      cy.getEditorTabByTitle("SQL 1").should("not.have.class", "temporary-tab")
+      // double click keeps the preview; only the preview bar promotes it
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
       cy.getEditorTabByTitle("SQL 1").should("have.attr", "active")
     })
 
-    it("should navigate to closed tab when result is clicked", () => {
+    it("should keep the previewed tab open from the preview bar", () => {
       cy.searchFor("DROP")
 
       cy.getSearchResults().contains("DROP").click()
@@ -347,13 +346,30 @@ describe("search panel", () => {
       cy.getEditorTabs().should("have.length", 3)
       cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
       cy.getEditorTabByTitle("SQL 1").should("have.attr", "active")
+      cy.getByDataHook("tab-preview-bar").should("be.visible")
 
-      // clicking on editor should activate the tab
+      // clicking in the editor keeps the preview state
       cy.getEditor().realClick()
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
 
-      cy.getEditor().get(".searchHighlight").should("not.exist")
+      cy.getByDataHook("tab-preview-keep-open").click()
+
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
       cy.getEditorTabByTitle("SQL 1").should("not.have.class", "temporary-tab")
       cy.getEditorTabByTitle("SQL 1").should("have.attr", "active")
+    })
+
+    it("should close the preview from the preview bar", () => {
+      cy.searchFor("DROP")
+
+      cy.getSearchResults().contains("DROP").click()
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
+
+      cy.getByDataHook("tab-preview-close").click()
+
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
+      cy.getEditorTabs().should("have.length", 2)
+      cy.getEditorTabByTitle("SQL 1").should("not.exist")
     })
   })
 
@@ -568,7 +584,7 @@ describe("search panel", () => {
       cy.getEditor().should("contain", "price_history")
     })
 
-    it("should convert temporary buffer to permanent on double click", () => {
+    it("should keep the previewed tab open only from the preview bar", () => {
       cy.createTabWithContent(
         "INSERT INTO orders VALUES(now(), 'BTC-USD', 1.5);",
         "order entry",
@@ -587,6 +603,13 @@ describe("search panel", () => {
       )
 
       cy.getByDataHook("search-result-buffer-group").dblclick()
+
+      cy.getEditorTabByTitle("order entry").should(
+        "have.class",
+        "temporary-tab",
+      )
+
+      cy.getByDataHook("tab-preview-keep-open").click()
 
       cy.getEditorTabByTitle("order entry").should(
         "not.have.class",

@@ -27,7 +27,7 @@ import {
 import type { AIProvider } from "./index"
 import type { ToolExecutionContext } from "./shared"
 import type { NotebookFreshness } from "../notebooks/notebookFreshness"
-import { getWorkspace } from "../notebooks/notebookAIBridge"
+import { getWorkspace, requireWorkspace } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 
 export type ActiveProviderSettings = {
@@ -79,7 +79,11 @@ export interface ModelToolsClient {
     bufferId: number,
     signal?: AbortSignal,
   ) => Promise<{ bufferId: number; label: string }>
-  deleteNotebook: (bufferId: number) => Promise<void>
+  archiveTab: (bufferId: number) => Promise<void>
+  restoreTab: (bufferId: number) => Promise<void>
+  activateTab: (bufferId: number) => Promise<void>
+  renameTab: (bufferId: number, label: string) => Promise<void>
+  deleteTab: (bufferId: number) => Promise<void>
   activateNotebook: (
     bufferId: number,
     cellToFocus: string | null | undefined,
@@ -275,15 +279,24 @@ export function createModelToolsClient(
       return ws.activateNotebook(bufferId, cellToFocus)
     },
 
-    async deleteNotebook(bufferId) {
-      const ws = getWorkspace()
-      if (!ws) {
-        throw new NotebookToolError(
-          "workspace_unavailable",
-          "Notebook workspace is not mounted.",
-        )
-      }
-      await ws.deleteNotebook(bufferId)
+    async archiveTab(bufferId) {
+      await requireWorkspace().archiveTab(bufferId)
+    },
+
+    async restoreTab(bufferId) {
+      await requireWorkspace().restoreTab(bufferId)
+    },
+
+    async activateTab(bufferId) {
+      await requireWorkspace().activateTab(bufferId)
+    },
+
+    async renameTab(bufferId, label) {
+      await requireWorkspace().renameTab(bufferId, label)
+    },
+
+    async deleteTab(bufferId) {
+      await requireWorkspace().deleteTab(bufferId)
     },
   }
 }

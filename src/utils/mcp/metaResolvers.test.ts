@@ -25,6 +25,7 @@ const emptyDigest = (): UserActionDigest => ({
   deleted: new Set(),
   edited: new Set(),
   ran: new Map(),
+  tabChanges: [],
 })
 
 beforeEach(async () => {
@@ -51,9 +52,9 @@ describe("resolveGetWorkspaceState", () => {
     const ctx: MetaToolContext = {
       getActiveBufferId: () => null,
       getWorkspace: () => ({
-        notebooks: [
-          { buffer_id: 2, label: "Trades", archived: false },
-          { buffer_id: 5, label: "Latency", archived: false },
+        tabs: [
+          { buffer_id: 2, label: "Trades", kind: "notebook", archived: false },
+          { buffer_id: 5, label: "Latency", kind: "notebook", archived: false },
         ],
         active: { buffer_id: 9, label: "Query 1", kind: "sql" },
       }),
@@ -76,7 +77,9 @@ describe("resolveGetWorkspaceState", () => {
     const ctx: MetaToolContext = {
       getActiveBufferId: () => 1,
       getWorkspace: () => ({
-        notebooks: [{ buffer_id: 1, label: "n1", archived: false }],
+        tabs: [
+          { buffer_id: 1, label: "n1", kind: "notebook", archived: false },
+        ],
         active: { buffer_id: 1, label: "n1", kind: "notebook" },
       }),
       getDigest: () => null,
@@ -93,7 +96,9 @@ describe("resolveGetWorkspaceState", () => {
     const ctx: MetaToolContext = {
       getActiveBufferId: () => 1,
       getWorkspace: () => ({
-        notebooks: [{ buffer_id: 1, label: "n1", archived: false }],
+        tabs: [
+          { buffer_id: 1, label: "n1", kind: "notebook", archived: false },
+        ],
         active: { buffer_id: 1, label: "n1", kind: "notebook" },
       }),
       getDigest: () => digest,

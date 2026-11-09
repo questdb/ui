@@ -9,7 +9,7 @@ export const notebookErrorHint = (code: NotebookToolErrorCode): string => {
     case "archived":
       return "Notebook is archived. Offer create_notebook, or ask the user to unarchive."
     case "deleted":
-      return "Notebook no longer exists. Call create_notebook to start fresh."
+      return "The tab no longer exists. Re-read <workspace> (or call get_workspace_state) to pick a valid buffer_id, or call create_notebook to start fresh."
     case "unknown_buffer":
       return "The buffer id is unknown. Call create_notebook or confirm the id from <notebook_context>."
     case "not_a_notebook":
@@ -21,7 +21,9 @@ export const notebookErrorHint = (code: NotebookToolErrorCode): string => {
     case "workspace_unavailable":
       return "The notebook workspace is not ready yet. Retry in a moment."
     case "last_tab":
-      return "This is the only open tab. Call create_notebook first, then delete this one."
+      return "This is the only open tab and cannot be closed or deleted. Call create_notebook first, then retry."
+    case "tab_limit":
+      return "The tab limit is reached. Call delete_tab on closed tabs (archived: true in <workspace>) to free space, then retry."
     case "last_cell":
       return "A notebook must keep at least one cell. Use update_cell to clear or replace it instead of deleting the last cell."
     case "mounted_mid_edit":

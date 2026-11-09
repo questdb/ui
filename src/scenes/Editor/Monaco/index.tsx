@@ -378,12 +378,28 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const isAIDropdownRef = useRef<boolean>(false)
   const cleanupActionsRef = useRef<(() => void)[]>([])
 
+  const syncReadOnly = (editor: editor.IStandaloneCodeEditor) => {
+    editor.updateOptions({
+      readOnly: activeBufferRef.current.isTemporary === true,
+    })
+  }
+
+  const revertModelToBufferValue = () => {
+    if (editorRef.current && currentBufferValueRef.current !== undefined) {
+      editorRef.current.setValue(currentBufferValueRef.current)
+    }
+  }
+
   const handleBufferContentChange = (value: string | undefined) => {
+    if (activeBufferRef.current.isTemporary) {
+      if (value !== currentBufferValueRef.current) {
+        revertModelToBufferValue()
+      }
+      return
+    }
     const lineCount = editorRef.current?.getModel()?.getLineCount()
     if (lineCount && lineCount > LINE_NUMBER_HARD_LIMIT) {
-      if (editorRef.current && currentBufferValueRef.current !== undefined) {
-        editorRef.current.setValue(currentBufferValueRef.current)
-      }
+      revertModelToBufferValue()
       toast.error("Maximum line limit reached")
       return
     }
@@ -606,7 +622,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const handlePrimaryRun = () => {
     const editor = editorRef.current
-    if (!editor) return
+    if (!editor || activeBufferRef.current.isTemporary) return
 
     const selectionMode = runWithSelectionModeRef.current
     const selectedText = getSelectedText(editor)
@@ -1021,6 +1037,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         addExtraSpaceOnTop: false,
       },
     })
+    syncReadOnly(editor)
     editor.setModel(
       monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )
@@ -1413,7 +1430,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         editor.updateOptions({ readOnly: true })
         const unlockEditor = () => {
           setTabsDisabled(false)
-          editorRef.current?.updateOptions({ readOnly: false })
+          if (editorRef.current) syncReadOnly(editorRef.current)
         }
         void Promise.all(statements.map((sql) => quest.validateQuery(sql)))
           .then((results) => {
@@ -1632,6 +1649,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     runAll?: boolean,
     selectedQueries?: readonly Request[],
   ) => {
+    if (activeBufferRef.current.isTemporary) return
     if (runningValueRef.current === RunningType.SCRIPT && runAll) {
       dispatch(actions.query.toggleRunning())
       return
@@ -1898,7 +1916,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     setTabsDisabled(false)
     isRunningScriptRef.current = false
     stopAfterFailureRef.current = true
-    editor.updateOptions({ readOnly: false })
+    syncReadOnly(editor)
     if (scriptStopRef.current) {
       scriptStopRef.current = false
       if (!scriptConfirmationOpenRef.current) {
@@ -2385,6 +2403,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     activeBufferRef.current = activeBuffer
     currentBufferValueRef.current = activeBuffer.value
     if (monacoRef.current && editorRef.current) {
+      syncReadOnly(editorRef.current)
       clearModelMarkers(monacoRef.current, editorRef.current)
 
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -2511,7 +2530,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   return (
     <>
       <Content $hidden={hidden}>
-        {!hidden && (
+        {!hidden && !activeBuffer.isTemporary && (
           <ButtonBar
             onRunQuery={handlePrimaryRun}
             onTriggerRunScript={handleTriggerRunScript}

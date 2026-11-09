@@ -15,7 +15,11 @@ import { actions, selectors } from "../../store"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
 import { Database2, FileSearch } from "../../components/icons"
-import { ChartLineIcon, GridNineIcon } from "@phosphor-icons/react"
+import {
+  CardsThreeIcon,
+  ChartLineIcon,
+  GridNineIcon,
+} from "@phosphor-icons/react"
 import { ResultViewMode } from "./types"
 import { SIDEBAR_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
@@ -25,6 +29,7 @@ import { Allotment, AllotmentHandle, LayoutPriority } from "allotment"
 import { Import as ImportIcon } from "../../components/icons/import"
 import { useSettings, useSearch } from "../../providers"
 import { SearchPanel } from "../Search"
+import { TabsPanel } from "../TabsPanel"
 import { LeftPanelType } from "../../providers/LocalStorageProvider/types"
 import { AIStatusIndicator } from "../../components/AIStatusIndicator"
 
@@ -125,6 +130,17 @@ const Console = () => {
 
   const isDataSourcesPanelOpen =
     leftPanelState.type === LeftPanelType.DATASOURCES
+  const isTabsPanelOpen = leftPanelState.type === LeftPanelType.TABS
+
+  const toggleTabsPanel = () => {
+    if (!isTabsPanelOpen) {
+      void trackEvent(ConsoleEvent.TAB_PANEL_OPEN)
+    }
+    updateLeftPanelState({
+      type: isTabsPanelOpen ? null : LeftPanelType.TABS,
+      width: leftPanelState.width,
+    })
+  }
 
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
   const resultRef = React.useRef<HTMLDivElement>(null)
@@ -213,6 +229,20 @@ const Console = () => {
                     selected={isDataSourcesPanelOpen}
                   >
                     <Database2 size={SIDEBAR_ICON_SIZE} />
+                  </Navigation>
+                </Tooltip>
+                <Tooltip
+                  placement="right"
+                  content={isTabsPanelOpen ? "Hide tabs" : "Show tabs"}
+                >
+                  <Navigation
+                    aria-label={isTabsPanelOpen ? "Hide tabs" : "Show tabs"}
+                    data-hook="tabs-panel-button"
+                    direction="left"
+                    onClick={toggleTabsPanel}
+                    selected={isTabsPanelOpen}
+                  >
+                    <CardsThreeIcon size={SIDEBAR_ICON_SIZE} />
                   </Navigation>
                 </Tooltip>
                 <Tooltip
@@ -335,12 +365,17 @@ const Console = () => {
                     >
                       <Allotment.Pane
                         preferredSize={leftPanelState.width}
-                        visible={isDataSourcesPanelOpen || isSearchPanelOpen}
+                        visible={
+                          isDataSourcesPanelOpen ||
+                          isTabsPanelOpen ||
+                          isSearchPanelOpen
+                        }
                         minSize={320}
                         priority={LayoutPriority.Low}
                       >
                         <Wrapper>
                           <Schema open={isDataSourcesPanelOpen} />
+                          <TabsPanel open={isTabsPanelOpen} />
                           <SearchPanel
                             ref={searchPanelRef}
                             open={isSearchPanelOpen}

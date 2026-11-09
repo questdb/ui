@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled, { css } from "styled-components"
-import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
+import { TabBar, type TabProperties } from "../../../components/TabBar"
 import { useEditor, MAX_TABS } from "../../../providers"
 import { History, LineChart, Trash } from "../../../components/icons"
 import {
@@ -23,6 +23,7 @@ import { migrateBuffer, getCurrentDbVersion } from "../../../store/migrations"
 import { importInto, peakImportFile } from "dexie-export-import"
 import { exportBuffers } from "./exportTabs"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
+import { ClearHistoryDialog } from "../ClearHistoryDialog"
 import { EditorSettingsModal } from "../../../components/EditorSettingsModal"
 import {
   Box,
@@ -38,16 +39,12 @@ import {
   bufferTypeOf,
   MAX_BUFFER_NAME_LENGTH,
 } from "../../../store/buffers"
+import {
+  sortArchivedBuffers,
+  sortOpenBuffers,
+} from "../../../utils/buffers/tabOrder"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
-
-type Tab = {
-  id: string
-  title: string
-  faviconClass: string
-  active: boolean
-  className?: string
-}
 
 const Root = styled(Box).attrs({
   align: "center",
@@ -111,6 +108,18 @@ const ArchivedBuffersList = styled.div`
   overflow-y: auto;
 `
 
+const ArchivedBufferRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-right: 0.4rem;
+
+  > [role="menuitem"] {
+    flex: 1;
+    min-width: 0;
+  }
+`
+
 // Invisible trigger we reposition to anchor Radix's menu at the chrome-tabs "+".
 const NewTabAnchor = styled(DropdownMenu.Trigger)`
   position: fixed;
@@ -142,9 +151,11 @@ export const Tabs = () => {
     setActiveBuffer,
     addBuffer,
     updateBuffer,
-    updateBuffersPositions,
     deleteBuffer,
-    archiveBuffer,
+    closeBuffer,
+    restoreBuffer,
+    reorderBuffer,
+    clearArchivedBuffers,
     tabsDisabled,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
@@ -157,6 +168,7 @@ export const Tabs = () => {
     y: number
   } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false)
   const [importSummaryOpen, setImportSummaryOpen] = useState(false)
   const [importedCount, setImportedCount] = useState(0)
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
@@ -373,14 +385,7 @@ export const Tabs = () => {
     input.click()
   }
 
-  const archivedBuffers = buffers
-    .filter(
-      (buffer) =>
-        buffer.archived && buffer.archivedAt && buffer.position === -1,
-    )
-    .sort((a, b) =>
-      a.archivedAt && b.archivedAt ? b.archivedAt - a.archivedAt : 0,
-    )
+  const archivedBuffers = sortArchivedBuffers(buffers)
 
   const active = async (id: string) => {
     const activeBuffer = buffers.find((buffer) => buffer.id === parseInt(id))
@@ -389,95 +394,10 @@ export const Tabs = () => {
     }
   }
 
-  const repositionActiveBuffers = async (excludedId: string) => {
-    const sortedActiveBuffers = buffers
-      .filter(
-        (buffer) =>
-          (!buffer.archived || buffer.isTemporary) &&
-          buffer.id !== parseInt(excludedId),
-      )
-      .sort((a, b) => a.position - b.position)
+  const close = (id: string) => closeBuffer(parseInt(id))
 
-    const positions = sortedActiveBuffers
-      .map((buffer, index) => ({
-        id: buffer.id as number,
-        position: index,
-      }))
-      .filter((p) => p.id !== undefined)
-
-    if (positions.length > 0) {
-      await updateBuffersPositions(positions)
-    }
-  }
-
-  const close = async (id: string) => {
-    const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
-    if (
-      !buffer ||
-      buffers.filter((buffer) => !buffer.archived || buffer.isTemporary)
-        .length === 1
-    ) {
-      return
-    }
-
-    if (buffer.isPreviewBuffer) {
-      await deleteBuffer(parseInt(id), true)
-      await repositionActiveBuffers(id)
-      return
-    }
-
-    if (buffer.isTemporary) {
-      await updateBuffer(parseInt(id), { isTemporary: false }, true)
-      return
-    }
-
-    if (
-      buffer?.value !== "" ||
-      (buffer.metricsViewState?.metrics &&
-        buffer.metricsViewState.metrics.length > 0) ||
-      buffer.notebookViewState != null
-    ) {
-      void trackEvent(ConsoleEvent.TAB_ARCHIVE, {
-        type: bufferTypeOf(buffer),
-      })
-      await archiveBuffer(parseInt(id))
-    } else {
-      await deleteBuffer(parseInt(id))
-    }
-    await repositionActiveBuffers(id)
-  }
-
-  const reorder = async (
-    tabId: string,
-    _fromIndex: number,
-    toIndex: number,
-  ) => {
-    const beforeTab = buffers.find((tab) => tab.id === parseInt(tabId))
-    if (!beforeTab) {
-      return
-    }
-    const newTabs = buffers
-      .filter(
-        (tab) =>
-          tab.id !== parseInt(tabId) && (!tab.archived || tab.isTemporary),
-      )
-      .sort((a, b) => {
-        if (a.isTemporary) {
-          return 1
-        }
-        if (b.isTemporary) {
-          return -1
-        }
-        return a.position - b.position
-      })
-    newTabs.splice(toIndex, 0, beforeTab)
-
-    const positions = newTabs.map((tab, index) => ({
-      id: tab.id as number,
-      position: index,
-    }))
-    await updateBuffersPositions(positions)
-  }
+  const reorder = (tabId: string, _fromIndex: number, toIndex: number) =>
+    reorderBuffer(parseInt(tabId), toIndex)
 
   const rename = async (id: string, title: string) => {
     const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
@@ -487,12 +407,6 @@ export const Tabs = () => {
     await updateBuffer(parseInt(id), {
       label: title.slice(0, MAX_BUFFER_NAME_LENGTH),
     })
-  }
-
-  const removeAllArchived = async () => {
-    for (const buffer of archivedBuffers) {
-      await deleteBuffer(buffer.id as number)
-    }
   }
 
   const handleNewTab = () => {
@@ -530,7 +444,7 @@ export const Tabs = () => {
       $tabsDisabled={tabsDisabled}
       data-hook={`editor-tabs${tabsDisabled ? "-disabled" : ""}`}
     >
-      <ReactChromeTabs
+      <TabBar
         darkMode
         limit={
           MAX_TABS - buffers.filter((b) => b.archived && !b.isTemporary).length
@@ -540,47 +454,33 @@ export const Tabs = () => {
         onTabActive={active}
         onTabRename={rename}
         onNewTab={handleNewTab}
-        tabs={buffers
-          .filter(
-            (buffer) =>
-              !(buffer as Record<string, unknown>)._markedForDeletion &&
-              (!buffer.archived || buffer.isTemporary),
-          )
-          .sort((a, b) => {
-            if (a.isTemporary) {
-              return 1
-            }
-            if (b.isTemporary) {
-              return -1
-            }
-            return a.position - b.position
-          })
-          .map((buffer) => {
-            const classNames = []
-            if (buffer.notebookViewState) {
-              classNames.push("notebook-tab")
-            }
-            if (buffer.metricsViewState) {
-              classNames.push("metrics-tab")
-            }
-            if (buffer.isTemporary) {
-              classNames.push("temporary-tab")
-            }
-            if (buffer.isPreviewBuffer) {
-              classNames.push("preview-tab")
-            }
+        tabs={sortOpenBuffers(buffers).map((buffer) => {
+          const classNames = []
+          if (buffer.notebookViewState) {
+            classNames.push("notebook-tab")
+          }
+          if (buffer.metricsViewState) {
+            classNames.push("metrics-tab")
+          }
+          if (buffer.isTemporary) {
+            classNames.push("temporary-tab")
+          }
+          if (buffer.isPreviewBuffer) {
+            classNames.push("preview-tab")
+          }
 
-            const className =
-              classNames.length > 0 ? classNames.join(" ") : undefined
+          const className =
+            classNames.length > 0 ? classNames.join(" ") : undefined
 
-            return {
-              id: buffer.id?.toString(),
-              faviconClass: mapTabIconToType(buffer),
-              title: buffer.label,
-              active: activeBuffer.id === buffer.id,
-              className,
-            } as Tab
-          })}
+          const tab: TabProperties = {
+            id: String(buffer.id),
+            faviconClass: mapTabIconToType(buffer),
+            title: buffer.label,
+            active: activeBuffer.id === buffer.id,
+            className,
+          }
+          return tab
+        })}
       />
       <DropdownMenu.Root
         modal={false}
@@ -613,54 +513,65 @@ export const Tabs = () => {
             ) : (
               <ArchivedBuffersList>
                 {archivedBuffers.map((buffer) => (
-                  <DropdownMenu.Item
-                    data-hook="editor-tabs-history-item"
-                    key={buffer.id}
-                    title={buffer.label}
-                    onClick={async () => {
-                      void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
-                      await updateBuffer(buffer.id as number, {
-                        archived: false,
-                        archivedAt: undefined,
-                        position: buffers.filter(
-                          (b) => !b.archived || b.isTemporary,
-                        ).length,
-                      })
-                      await setActiveBuffer(buffer)
-                    }}
-                    icon={
-                      buffer.metricsViewState ? (
-                        <LineChart size="16px" />
-                      ) : buffer.notebookViewState ? (
-                        <NotebookIcon size="16px" />
-                      ) : (
-                        <FileTextIcon size="16px" />
-                      )
-                    }
-                    subtitle={
-                      buffer.archivedAt ? (
-                        <span
-                          title={format(new Date(buffer.archivedAt), "P pppp", {
-                            locale: getLocaleFromLanguage(userLocale),
-                          })}
-                        >
-                          {formatDistance(
-                            buffer.archivedAt,
-                            new Date().getTime(),
-                            {
-                              locale: getLocaleFromLanguage(userLocale),
-                            },
-                          )}
-                          {" ago"}
-                        </span>
-                      ) : undefined
-                    }
-                  >
-                    <Text color="contentPrimary" ellipsis>
-                      {buffer.label.substring(0, 30)}
-                      {buffer.label.length > 30 ? "..." : ""}
-                    </Text>
-                  </DropdownMenu.Item>
+                  <ArchivedBufferRow key={buffer.id}>
+                    <DropdownMenu.Item
+                      data-hook="editor-tabs-history-item"
+                      title={buffer.label}
+                      onClick={() => {
+                        void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
+                        void restoreBuffer(buffer.id as number)
+                      }}
+                      icon={
+                        buffer.metricsViewState ? (
+                          <LineChart size="16px" />
+                        ) : buffer.notebookViewState ? (
+                          <NotebookIcon size="16px" />
+                        ) : (
+                          <FileTextIcon size="16px" />
+                        )
+                      }
+                      subtitle={
+                        buffer.archivedAt ? (
+                          <span
+                            title={format(
+                              new Date(buffer.archivedAt),
+                              "P pppp",
+                              {
+                                locale: getLocaleFromLanguage(userLocale),
+                              },
+                            )}
+                          >
+                            {formatDistance(
+                              buffer.archivedAt,
+                              new Date().getTime(),
+                              {
+                                locale: getLocaleFromLanguage(userLocale),
+                              },
+                            )}
+                            {" ago"}
+                          </span>
+                        ) : undefined
+                      }
+                    >
+                      <Text color="contentPrimary" ellipsis>
+                        {buffer.label.substring(0, 30)}
+                        {buffer.label.length > 30 ? "..." : ""}
+                      </Text>
+                    </DropdownMenu.Item>
+                    <IconButton
+                      label="Delete from history"
+                      size="sm"
+                      variant="dangerQuiet"
+                      data-hook="editor-tabs-history-item-delete"
+                      onClick={(event: React.MouseEvent) => {
+                        event.stopPropagation()
+                        void trackEvent(ConsoleEvent.TAB_HISTORY_DELETE)
+                        void deleteBuffer(buffer.id as number)
+                      }}
+                    >
+                      <Trash size="14px" />
+                    </IconButton>
+                  </ArchivedBufferRow>
                 ))}
               </ArchivedBuffersList>
             )}
@@ -668,10 +579,7 @@ export const Tabs = () => {
               <>
                 <DropdownMenu.Divider />
                 <DropdownMenu.Item
-                  onClick={() => {
-                    void trackEvent(ConsoleEvent.TAB_HISTORY_CLEAR)
-                    void removeAllArchived()
-                  }}
+                  onClick={() => setClearHistoryOpen(true)}
                   data-hook="editor-tabs-history-clear"
                   icon={<Trash size="16px" />}
                 >
@@ -724,6 +632,16 @@ export const Tabs = () => {
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
       <EditorSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <ClearHistoryDialog
+        open={clearHistoryOpen}
+        count={archivedBuffers.length}
+        onDismiss={() => setClearHistoryOpen(false)}
+        onConfirm={() => {
+          void trackEvent(ConsoleEvent.TAB_HISTORY_CLEAR)
+          void clearArchivedBuffers()
+          setClearHistoryOpen(false)
+        }}
+      />
       <ImportSummaryDialog
         open={importSummaryOpen}
         onOpenChange={setImportSummaryOpen}

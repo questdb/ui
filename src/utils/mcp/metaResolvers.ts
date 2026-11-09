@@ -18,7 +18,7 @@ export type MetaToolContext = {
 }
 
 const noNotebookOpenPayload = (ws: WorkspaceInfo | null): ToolContent[] => {
-  const hasNotebooks = !!ws && ws.notebooks.length > 0
+  const hasNotebooks = !!ws && ws.tabs.some((tab) => tab.kind === "notebook")
   const status = JSON.stringify({
     status: "no_notebook_open",
     hint: hasNotebooks
