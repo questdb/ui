@@ -1028,6 +1028,35 @@ describe("editor tabs", () => {
     cy.getEditorTabByTitle("Saved query").should("have.attr", "active")
     cy.getEditorContent().should("have.value", "select 42")
   })
+
+  it("creates a notebook from the plus menu and runs its first cell", () => {
+    // Computed in SQL, so the value appears only in the result grid
+    const sql = "select concat('new_', 'notebook_ok') as probe"
+
+    // Given a console with a single editor tab
+    loadTabs()
+
+    // When a notebook is created from the plus menu
+    cy.createNotebook()
+
+    // Then it opens in a new active tab and survives a reload
+    waitForSavedTabOrder(["SQL", "Notebook 1"])
+    cy.reload()
+    cy.getEditorTabs().should("have.length", 2)
+    cy.getEditorTabByTitle("Notebook 1").should("have.attr", "active")
+
+    // And it holds a single empty cell that runs a query
+    cy.get("[data-notebook-cell]").should("have.length", 1)
+    cy.focusNotebookCell()
+    cy.withFocusedEditor((editor) => {
+      expect(editor.getValue()).to.eq("")
+      editor.setValue(sql)
+      editor.getAction("notebook-run").run()
+    })
+    cy.get("[data-notebook-cell]")
+      .contains("new_notebook_ok")
+      .should("be.visible")
+  })
 })
 
 // TODO: This test is flaky because of the IndexedDB calls. Investigate the slow response time in test environment.
