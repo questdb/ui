@@ -416,6 +416,14 @@ describe("questdb grid", () => {
     const query = "select rpad('a', 500, 'b') wide from long_sequence(1)"
     loadGridConsole(query)
     cy.runLine()
+    // The first layout can size the column to its full content width; hover
+    // only once it is clamped, or the pointer lands outside the viewport
+    cy.getGridCellAt(0, 0).should(($cell) => {
+      const viewport = $cell[0].closest('[data-hook="grid-viewport"]')
+      expect($cell[0].getBoundingClientRect().right).to.be.at.most(
+        viewport.getBoundingClientRect().right,
+      )
+    })
     cy.clock(Date.now(), ["setTimeout", "clearTimeout"])
     cy.getGridCellAt(0, 0).realHover()
     // When / Then
