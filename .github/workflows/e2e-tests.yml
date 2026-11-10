@@ -10,6 +10,8 @@ jobs:
   CI:
     name: E2E tests
     runs-on: ubuntu-latest
+    env:
+      CYPRESS_TRASH_ASSETS_BEFORE_RUNS: "false"
 
     steps:
       - uses: actions/checkout@v4
