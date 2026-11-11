@@ -314,7 +314,11 @@ export const QueryActivityRow = ({
       <HeadLine>
         <Identity>
           {phase === "finished" ? (
-            <Tooltip content={FINISHED_STATUS} placement="bottom">
+            <Tooltip
+              hoverableContent
+              content={FINISHED_STATUS}
+              placement="bottom"
+            >
               {indicator}
             </Tooltip>
           ) : (
@@ -324,7 +328,7 @@ export const QueryActivityRow = ({
             {PHASE_LABELS[phase]}
           </StateLabel>
         </Identity>
-        <Tooltip content={memoryTooltip} placement="bottom">
+        <Tooltip hoverableContent content={memoryTooltip} placement="bottom">
           {row.memoryUsed === null ? (
             <MemoryUnavailable>
               <MemoryIcon size={16} />
@@ -341,6 +345,7 @@ export const QueryActivityRow = ({
         </Tooltip>
 
         <Tooltip
+          hoverableContent
           content={
             <Box gap="1rem" align="center">
               <span style={{ whiteSpace: "nowrap" }}>{startedAt}</span>
@@ -388,7 +393,7 @@ export const QueryActivityRow = ({
             <UserIcon size={16} />
             <TruncatedText>{row.username ?? "unknown"}</TruncatedText>
           </MetaItem>
-          <Tooltip content={workerTooltip} placement="bottom">
+          <Tooltip hoverableContent content={workerTooltip} placement="bottom">
             <MetaItem>
               <WrenchIcon size={16} />
               <TruncatedText>{workerLabel}</TruncatedText>

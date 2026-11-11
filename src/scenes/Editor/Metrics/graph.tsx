@@ -234,6 +234,7 @@ export const Graph = ({
           <TitleInfo>
             <HeaderText>{chartTitle}</HeaderText>
             <IconWithTooltip
+              hoverableContent
               icon={
                 <Information
                   size="16px"
@@ -251,6 +252,7 @@ export const Graph = ({
           {delayedLoading && <Loader size="18px" spin />}
           {hasError && (
             <IconWithTooltip
+              hoverableContent
               icon={<ErrorIcon size="18px" />}
               tooltip="Error fetching latest data, try refreshing manually"
               placement="bottom"
