@@ -275,7 +275,21 @@ export const createSchemaCompletionProvider = (
 
       return {
         incomplete: true,
-        suggestions: filtered.map((s) => toCompletionItem(s, range, openQuote)),
+        suggestions: filtered.map((s) => {
+          // A qualified function already includes its namespace. Replace the
+          // whole word so `pg_catalog.pg_c` becomes `pg_catalog.pg_class()`.
+          // Column completions still replace only the part after `t.`.
+          const replacesQualifiedFunction =
+            !isInsideQuotedIdentifier &&
+            !isOperatorWord &&
+            dotIndex >= 0 &&
+            s.kind === SuggestionKind.Function &&
+            s.insertText.includes(".")
+          const itemRange = replacesQualifiedFunction
+            ? { ...range, startColumn: word.startColumn }
+            : range
+          return toCompletionItem(s, itemRange, openQuote)
+        }),
       }
     },
   }

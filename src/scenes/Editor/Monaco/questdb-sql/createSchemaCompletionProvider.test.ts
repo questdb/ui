@@ -540,6 +540,71 @@ describe("createSchemaCompletionProvider", () => {
     })
   })
 
+  describe("accepting qualified completions", () => {
+    function accept(sql: string, label: string): string {
+      const { model, position } = cursorInput(sql)
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+      const item = getSuggestions(result).find(
+        (s) =>
+          (typeof s.label === "string" ? s.label : s.label.label) === label,
+      )
+      expect(item, `Missing suggestion: ${label}`).toBeDefined()
+      // These function snippets contain only the final cursor marker ($0).
+      model.applyEdits([
+        {
+          range: item!.range as IRange,
+          text: item!.insertText.replace("$0", ""),
+        },
+      ])
+      return model.getValue()
+    }
+
+    it.each([
+      [
+        "SELECT * FROM pg_catalog.pg_c|",
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        "SELECT * FROM information_schema._pg_e|",
+        "information_schema._pg_expandarray",
+        "SELECT * FROM information_schema._pg_expandarray()",
+      ],
+      [
+        "SELECT 1;\nSELECT * FROM PG_CATALOG.pg_c|",
+        "pg_catalog.pg_class",
+        "SELECT 1;\nSELECT * FROM pg_catalog.pg_class()",
+      ],
+    ])("replaces a qualified function in %s", (sql, label, expected) => {
+      expect(accept(sql, label)).toBe(expected)
+    })
+
+    it("inserts the full function name when its namespace was not typed", () => {
+      expect(accept("SELECT * FROM pg_c|", "pg_catalog.pg_class")).toBe(
+        "SELECT * FROM pg_catalog.pg_class()",
+      )
+    })
+
+    it("keeps the qualifier when accepting an alias-qualified column", () => {
+      expect(accept("SELECT t.pr| FROM trades t", "price")).toBe(
+        "SELECT t.price  FROM trades t",
+      )
+    })
+
+    it.each([
+      ['SELECT * FROM "quoted-t|"', 'SELECT * FROM "quoted-table.1" '],
+      ["SELECT * FROM `quoted-t|`", "SELECT * FROM `quoted-table.1` "],
+    ])(
+      "keeps dotted table names inside their quotes in %s",
+      (sql, expected) => {
+        expect(accept(sql, "quoted-table.1")).toBe(expected)
+      },
+    )
+  })
+
   describe("quoted identifier support", () => {
     it("suggests table names inside double quotes", () => {
       const { model, position } = cursorInput('SELECT * FROM "q|"')
