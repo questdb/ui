@@ -429,7 +429,7 @@ describe("tabs panel example dashboards", () => {
       { method: "GET", url: `${baseUrl}/assets/console-configuration.json` },
       consoleConfiguration,
     ).as("getConsoleConfiguration")
-    cy.readFile("e2e/fixtures/example-dashboard.json").then((body) => {
+    cy.readFile("test/e2e/fixtures/example-dashboard.json").then((body) => {
       cy.intercept(
         { method: "GET", url: `${baseUrl}/assets/examples/trades.json` },
         body,

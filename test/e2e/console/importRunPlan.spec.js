@@ -17,7 +17,7 @@ describe("import runs read-only cells", () => {
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu-import").click()
     cy.getByDataHook("editor-tabs-import-input").selectFile(
-      "e2e/fixtures/notebook-run-plan-export.json",
+      "test/e2e/fixtures/notebook-run-plan-export.json",
       { force: true },
     )
 
