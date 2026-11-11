@@ -24,6 +24,7 @@ import {
 
 const notebook = vi.hoisted(() => ({
   actions: null as Partial<NotebookActions> | null,
+  enterNotebook: null as (() => void) | null,
 }))
 
 vi.mock("../NotebookProvider", () => ({
@@ -106,7 +107,7 @@ const FakeNotebook: React.FC<Props> = ({
     }),
     [onPaste, onUndo],
   )
-  useCellShortcuts(focusedCellId)
+  notebook.enterNotebook = useCellShortcuts(focusedCellId).enterNotebook
 
   useEffect(() => {
     cellsRef.current = cells
@@ -390,6 +391,46 @@ describe("useCellShortcuts", () => {
     // (jsdom never ends the exit animation, so the node itself stays.)
     expect(dismiss).toHaveBeenCalledTimes(1)
     dismiss.mockRestore()
+  })
+
+  it("ignores the keys after the user works outside the notebook", () => {
+    // Given a selected cell, and a click in another panel, e.g. Search
+    renderComponent(
+      <>
+        <FakeNotebook selectedCellId="a" />
+        <Button>Search result</Button>
+      </>,
+    )
+    const outside = screen.getByRole("button", { name: "Search result" })
+    fireEvent.pointerDown(outside)
+    outside.focus()
+
+    // When the user presses Delete there
+    fireEvent.keyDown(outside, { key: "Delete" })
+
+    // Then the notebook keeps the cell
+    expect(screen.getByText("More actions a")).toBeInTheDocument()
+  })
+
+  it("acts on a picked search result although focus stays in the Search panel", () => {
+    // Given a click on a search result in another panel, which selects its
+    // cell in the notebook and keeps keyboard focus in the panel
+    renderComponent(
+      <>
+        <FakeNotebook selectedCellId="a" />
+        <Button>Search result</Button>
+      </>,
+    )
+    const outside = screen.getByRole("button", { name: "Search result" })
+    fireEvent.pointerDown(outside)
+    outside.focus()
+    act(() => notebook.enterNotebook?.())
+
+    // When the user presses Delete
+    fireEvent.keyDown(outside, { key: "Delete" })
+
+    // Then the picked cell is deleted, as if the user had clicked it
+    expect(screen.queryByText("More actions a")).not.toBeInTheDocument()
   })
 
   it.each([

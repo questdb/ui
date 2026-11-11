@@ -721,7 +721,9 @@ const useScrollFocusedCellIntoViewOnOpen = (focusedCellId: string | null) => {
 }
 
 // Scroll + glow the cell a search result points at, drained on mount and on the nudge.
-const useNotebookSearchReveal = () => {
+// A result the user picked in the Search panel also counts as going into the
+// notebook, so the cell shortcuts act on it (`onSearchResultPicked`).
+const useNotebookSearchReveal = (onSearchResultPicked: () => void) => {
   const { activeBuffer, isNavigatingFromSearchRef } = useEditor()
   const { setFocusedCell, setMaximizedCellId, getCellsSnapshot } =
     useNotebookActions()
@@ -748,6 +750,7 @@ const useNotebookSearchReveal = () => {
         setMaximizedCellId(null)
       }
       setFocusedCell(request.cellId)
+      if (request.fromSearch) onSearchResultPicked()
       scrollNotebookCellIntoView(request.cellId)
       // SQL cell matches flash in their own editor (which consumes the request);
       // markdown/chart matches have no in-editor consumer, so clear here.
@@ -769,6 +772,7 @@ const useNotebookSearchReveal = () => {
     setFocusedCell,
     setMaximizedCellId,
     isNavigatingFromSearchRef,
+    onSearchResultPicked,
   ])
 }
 
@@ -780,8 +784,8 @@ const NotebookContent: React.FC = () => {
   const layoutMode = settings.layoutMode ?? "list"
   useScrollRestoredCellIntoView(maximizedCellId)
   useScrollFocusedCellIntoViewOnOpen(focusedCellId)
-  useNotebookSearchReveal()
-  useCellShortcuts(focusedCellId)
+  const { enterNotebook } = useCellShortcuts(focusedCellId)
+  useNotebookSearchReveal(enterNotebook)
   useCellBandObservers({
     onNearBand: useCallback(
       (cellId, inBand, distancePx) => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import {
   CELL_CLIPBOARD_MIME,
   parseCellClipboardPayload,
@@ -33,7 +33,9 @@ const isBlockedByDrawer = (
 
 // The focused cell id outlives clicks outside the notebook, so the shortcuts
 // also require the last pointer or focus interaction to be inside it. The
-// notebook mounts when the user opens its tab, which counts as one.
+// notebook mounts when the user opens its tab, which counts as one, and so
+// does picking a search result in it (see enterNotebook), although keyboard
+// focus stays in the Search panel.
 const useLastInteractionInNotebook = () => {
   const insideRef = useRef(true)
 
@@ -54,7 +56,9 @@ const useLastInteractionInNotebook = () => {
   return insideRef
 }
 
-export const useCellShortcuts = (focusedCellId: string | null) => {
+export const useCellShortcuts = (
+  focusedCellId: string | null,
+): { enterNotebook: () => void } => {
   const {
     copyCell,
     cutCell,
@@ -121,4 +125,10 @@ export const useCellShortcuts = (focusedCellId: string | null) => {
     redo,
     lastInteractionInNotebookRef,
   ])
+
+  const enterNotebook = useCallback(() => {
+    lastInteractionInNotebookRef.current = true
+  }, [lastInteractionInNotebookRef])
+
+  return { enterNotebook }
 }
