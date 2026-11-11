@@ -69,6 +69,7 @@ export enum ConsoleEvent {
 
   SCHEMA_FILTER_SUSPENDED = "schema.filter_suspended",
   SCHEMA_CONTEXT_MENU_OPEN = "schema.context_menu_open",
+  SCHEMA_QUERY_TABLE = "schema.query_table",
   SCHEMA_CONTEXT_RESUME_WAL = "schema.context_resume_wal",
   SCHEMA_RESUME_WAL_SUBMIT = "schema.resume_wal_submit",
   SCHEMA_CONTEXT_COPY_DDL = "schema.context_copy_ddl",
@@ -98,10 +99,13 @@ export enum ConsoleEvent {
   TAB_HISTORY_CLEAR = "tab.history_clear",
   TAB_HISTORY_DELETE = "tab.history_delete",
   TAB_PANEL_OPEN = "tab.panel_open",
-  TAB_PANEL_REORDER = "tab.panel_reorder",
+  TAB_PANEL_INCLUDE_CLOSED = "tab.panel_include_closed",
+  TAB_PANEL_VIEW_MODE = "tab.panel_view_mode",
+  TAB_PANEL_EXAMPLE_OPEN = "tab.panel_example_open",
   TAB_PANEL_CLOSE = "tab.panel_close",
   TAB_PANEL_DELETE = "tab.panel_delete",
   TAB_PANEL_RESTORE = "tab.panel_restore",
+  TAB_PANEL_REORDER = "tab.panel_reorder",
   TAB_PREVIEW_KEEP_OPEN = "tab.preview_keep_open",
   TAB_PREVIEW_CLOSE = "tab.preview_close",
 

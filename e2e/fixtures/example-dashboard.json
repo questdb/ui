@@ -1,0 +1,40 @@
+{
+  "formatName": "dexie",
+  "formatVersion": 1,
+  "data": {
+    "databaseName": "web-console",
+    "databaseVersion": 5,
+    "tables": [
+      {
+        "name": "buffers",
+        "schema": "++id,label,position,archived,archivedAt",
+        "rowCount": 1
+      }
+    ],
+    "data": [
+      {
+        "tableName": "buffers",
+        "inbound": true,
+        "rows": [
+          {
+            "label": "Example dashboard export",
+            "value": "",
+            "position": 0,
+            "notebookViewState": {
+              "cells": [
+                {
+                  "id": "example-cell-1",
+                  "position": 0,
+                  "value": "select 'example' as source, 42 as answer;",
+                  "result": { "stale": "results are stripped on open" },
+                  "lastRunStatus": "success"
+                }
+              ]
+            },
+            "id": 7
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,7 +1,7 @@
-import React, { useLayoutEffect, useState, useMemo } from "react"
+import React, { useContext, useLayoutEffect, useState, useMemo } from "react"
 import styled, { css } from "styled-components"
 import { TabBar, type TabProperties } from "../../../components/TabBar"
-import { useEditor, MAX_TABS } from "../../../providers"
+import { QuestContext, useEditor, MAX_TABS } from "../../../providers"
 import { History, LineChart, Trash } from "../../../components/icons"
 import {
   DotsThreeVerticalIcon,
@@ -22,6 +22,12 @@ import {
 import { migrateBuffer, getCurrentDbVersion } from "../../../store/migrations"
 import { importInto, peakImportFile } from "dexie-export-import"
 import { exportBuffers } from "./exportTabs"
+import {
+  cellsShowingResults,
+  heldCellsNote,
+  planImportRuns,
+} from "../../../utils/notebooks/importRunPlan"
+import { createValidateWithGlobals } from "../Notebook/declareUtils"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
 import { ClearHistoryDialog } from "../ClearHistoryDialog"
 import { EditorSettingsModal } from "../../../components/EditorSettingsModal"
@@ -43,6 +49,7 @@ import {
   sortClosedBuffers,
   sortOpenBuffers,
 } from "../../../utils/buffers/tabOrder"
+import { acceptDeleteClick } from "../../../utils/buffers/deleteClickGuard"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -157,7 +164,9 @@ export const Tabs = () => {
     reorderBuffer,
     clearArchivedBuffers,
     tabsDisabled,
+    runImportedNotebookCells,
   } = useEditor()
+  const { quest } = useContext(QuestContext)
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -256,6 +265,10 @@ export const Tabs = () => {
         let importedCount = 0
         const skipped: SkippedTab[] = []
         const idsToDelete: number[] = []
+        // Cells that were showing a result in the source, per notebook; the
+        // sanitiser drops that marker, so it is read here, before it does.
+        const resultCellsByKey = new Map<string, string[]>()
+        const existingIds = new Set(existingBuffers.map((b) => b.id))
 
         await importInto(db, blob, {
           acceptVersionDiff: true,
@@ -330,6 +343,14 @@ export const Tabs = () => {
             }
             existingContentKeys.set(contentKey, sanitized.archived === true)
 
+            const rawNotebook = migratedValue.notebookViewState as
+              | { cells?: unknown }
+              | undefined
+            const resultCells = cellsShowingResults(rawNotebook?.cells)
+            if (resultCells.length > 0) {
+              resultCellsByKey.set(contentKey, resultCells)
+            }
+
             const isArchived = sanitized.archived === true
             sanitized.position = isArchived
               ? -1
@@ -354,17 +375,44 @@ export const Tabs = () => {
           await db.buffers.bulkDelete(idsToDelete)
         }
 
+        // Give imported notebooks back the results they were showing: each
+        // read-only cell runs again; cells with DDL/DML are held and noted.
+        const runs: Array<{ bufferId: number; cellIds: string[] }> = []
+        let heldCount = 0
+        for (const b of allBuffersAfterImport) {
+          if (b.id === undefined || existingIds.has(b.id)) continue
+          if (idsToDelete.includes(b.id) || b.archived || !b.notebookViewState)
+            continue
+          const candidates = resultCellsByKey.get(createBufferContentKey(b))
+          if (!candidates) continue
+          const { variables } = b.notebookViewState.settings ?? {}
+          const plan = await planImportRuns(
+            b.notebookViewState.cells,
+            candidates,
+            createValidateWithGlobals(quest, () => variables),
+          )
+          heldCount += plan.held.length
+          if (plan.run.length > 0)
+            runs.push({ bufferId: b.id, cellIds: plan.run })
+        }
+        const heldNote = heldCount > 0 ? ` ${heldCellsNote(heldCount)}` : ""
+
         // Show dialog only if there are skipped tabs, otherwise show toast
         if (skipped.length > 0) {
           setImportedCount(importedCount)
           setSkippedTabs(skipped)
           setImportSummaryOpen(true)
+          if (heldCount > 0) toast.info(heldCellsNote(heldCount))
         } else if (importedCount > 0) {
           toast.success(
-            `Imported ${importedCount} tab${importedCount === 1 ? "" : "s"} successfully.`,
+            `Imported ${importedCount} tab${importedCount === 1 ? "" : "s"} successfully.${heldNote}`,
           )
         } else {
           toast.info("All tabs already exist. Nothing imported.")
+        }
+
+        for (const { bufferId, cellIds } of runs) {
+          void runImportedNotebookCells(bufferId, cellIds)
         }
       } catch (err) {
         console.error("Import error:", err)
@@ -565,6 +613,7 @@ export const Tabs = () => {
                       data-hook="editor-tabs-history-item-delete"
                       onClick={(event: React.MouseEvent) => {
                         event.stopPropagation()
+                        if (!acceptDeleteClick()) return
                         void trackEvent(ConsoleEvent.TAB_HISTORY_DELETE)
                         void deleteBuffer(buffer.id as number)
                       }}
@@ -665,15 +714,6 @@ export const Tabs = () => {
           >
             <DropdownMenu.Item
               onSelect={() => {
-                void addBuffer()
-              }}
-              data-hook="new-tab-editor"
-              icon={<FileTextIcon size={16} />}
-            >
-              New editor
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              onSelect={() => {
                 void addBuffer({
                   notebookViewState: createDefaultNotebookViewState(),
                 }).then((buffer) => {
@@ -691,6 +731,15 @@ export const Tabs = () => {
               icon={<NotebookIcon size={16} />}
             >
               New notebook
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() => {
+                void addBuffer()
+              }}
+              data-hook="new-tab-editor"
+              icon={<FileTextIcon size={16} />}
+            >
+              New editor
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>

@@ -6,6 +6,7 @@ import type { Buffer } from "../../store/buffers"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { TabRow, type LeadingVisibility } from "./TabRow"
+import { BufferIcon } from "./bufferIcon"
 import { DeleteRowButton, ROW_ICON_SIZE, RowIconButton } from "./rowActions"
 import { useRowDrag, type RowDragState } from "./useRowDrag"
 import { isOwnActivationKey } from "./keyboard"
@@ -14,6 +15,7 @@ import { useOptimisticOrder } from "../../hooks/useOptimisticOrder"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { sortPinnedBuffers } from "../../utils/buffers/tabOrder"
+import { acceptDeleteClick } from "../../utils/buffers/deleteClickGuard"
 
 type Props = {
   buffers: Buffer[]
@@ -116,6 +118,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
   }
 
   const remove = async (buffer: Buffer) => {
+    if (!acceptDeleteClick()) return
     void trackEvent(ConsoleEvent.TAB_PANEL_DELETE)
     await deleteBuffer(buffer.id as number)
   }
@@ -147,12 +150,15 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
         <RowSlot
           key={buffer.id}
           role="listitem"
+          data-hook="tabs-panel-open-row"
           style={slotStyleFor(drag, buffer.id as number, index)}
           $sorting={drag !== null}
           $dragging={drag?.id === buffer.id}
         >
           <TabRow
-            buffer={buffer}
+            label={buffer.label}
+            icon={<BufferIcon buffer={buffer} />}
+            data-buffer-id={buffer.id}
             active={activeBuffer.id === buffer.id}
             dimmed={false}
             onPointerDown={(event) => {

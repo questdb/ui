@@ -98,6 +98,10 @@ export type Buffer = {
   isTemporary?: boolean
   isPreviewBuffer?: boolean
   previewContent?: PreviewContent
+  // Set on notebooks opened from the Tabs panel's example dashboards, so a
+  // second click on the same example activates the open tab instead of
+  // creating another copy.
+  templateId?: string
 }
 
 export const MAX_BUFFER_NAME_LENGTH = 100
@@ -151,6 +155,7 @@ export const makeBuffer = ({
   isTemporary,
   isPreviewBuffer,
   previewContent,
+  templateId,
 }: {
   label: string
   value?: string
@@ -163,6 +168,7 @@ export const makeBuffer = ({
   isTemporary?: boolean
   isPreviewBuffer?: boolean
   previewContent?: PreviewContent
+  templateId?: string
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
@@ -178,6 +184,7 @@ export const makeBuffer = ({
   isTemporary,
   isPreviewBuffer,
   previewContent,
+  templateId,
 })
 
 export const makeFallbackBuffer = (bufferType: BufferType): Buffer => {

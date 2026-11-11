@@ -1,7 +1,7 @@
 import { BufferType, bufferTypeOf } from "../../store/buffers"
 import type { Buffer } from "../../store/buffers"
 
-// Where a query sent to the editor from outside it (example queries, schema
+// Where a query sent to the editor from outside it (schema actions, Import
 // DDL) lands. A previewed closed tab is read-only, so instead of being
 // silently dropped the query opens in a new tab and the preview is untouched.
 export type AppendQueryTarget =

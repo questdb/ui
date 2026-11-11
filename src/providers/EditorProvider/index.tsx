@@ -48,7 +48,18 @@ import {
 } from "../../utils/buffers/nextActiveBuffer"
 import { promoteActivePreview } from "../../utils/buffers/previewPromotion"
 import { appendQueryTarget } from "../../utils/buffers/appendQueryTarget"
+import {
+  fetchExampleDashboard,
+  type ExampleDashboardContent,
+} from "../../utils/examples/exampleDashboards"
+import type { ExampleDashboard } from "../SettingsProvider/types"
+import { useSettings } from "../SettingsProvider/context"
+import { hasExampleDashboards } from "../../utils/examples/hasExampleDashboards"
+import { isFreshWorkspace } from "../../utils/examples/isFreshWorkspace"
+import { getValue, setValue } from "../../utils/localStorage"
+import { StoreKey } from "../../utils/localStorage/types"
 import { tabKindOf } from "../../utils/ai/workspaceInfo"
+import { buildTablePreviewCell } from "../../utils/notebooks/tablePreviewCell"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
@@ -167,6 +178,15 @@ export type EditorContext = {
   keepBufferOpen: (id: number) => Promise<void>
   reorderBuffer: (id: number, toIndex: number) => Promise<void>
   clearArchivedBuffers: () => Promise<void>
+  openExampleDashboard: (example: ExampleDashboard) => Promise<void>
+  runImportedNotebookCells: (
+    bufferId: number,
+    cellIds: string[],
+  ) => Promise<void>
+  openTableNotebook: (table: {
+    name: string
+    designatedTimestamp?: string
+  }) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
   previewBuffer: (id: number) => Promise<void>
   discardPreview: () => Promise<void>
@@ -201,6 +221,9 @@ const defaultValues = {
   keepBufferOpen: () => Promise.resolve(),
   reorderBuffer: () => Promise.resolve(),
   clearArchivedBuffers: () => Promise.resolve(),
+  openExampleDashboard: () => Promise.resolve(),
+  runImportedNotebookCells: () => Promise.resolve(),
+  openTableNotebook: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
   previewBuffer: () => Promise.resolve(),
   discardPreview: () => Promise.resolve(),
@@ -252,6 +275,32 @@ export const EditorProvider: React.FC = ({ children }) => {
   const isNavigatingFromSearchRef = useRef(false)
 
   const ranOnce = useRef(false)
+
+  // Showcase deployments open the first example dashboard for a first-time
+  // visitor, so the first paint is live charts rather than an empty editor.
+  // The file is fetched the moment the provider mounts, in parallel with the
+  // IndexedDB read, and the tab is created before the first render below.
+  // Done once per browser: after that the visitor's own tabs decide.
+  const { consoleConfig } = useSettings()
+  const firstExample = hasExampleDashboards(consoleConfig)
+    ? consoleConfig.exampleDashboards![0]
+    : undefined
+  const autoOpenRef = useRef<Promise<ExampleDashboardContent | null> | null>(
+    null,
+  )
+  if (
+    autoOpenRef.current === null &&
+    firstExample &&
+    getValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED) === ""
+  ) {
+    autoOpenRef.current = fetchExampleDashboard(firstExample.path).catch(
+      (error: unknown) => {
+        console.error("Could not preload the example dashboard:", error)
+        return null
+      },
+    )
+  }
+  const [autoOpenedId, setAutoOpenedId] = useState<number | null>(null)
 
   useSchemaCompletionProvider(loadedMonaco)
 
@@ -562,18 +611,64 @@ export const EditorProvider: React.FC = ({ children }) => {
   }, [])
 
   useEffect(() => {
-    if (!ranOnce.current && buffers && activeBufferId) {
+    if (ranOnce.current || !buffers || !activeBufferId) return
+    ranOnce.current = true
+
+    const activateStored = () => {
       const buffer =
-        buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
+        buffers.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
       const activeBuffers = buffers.filter((b) => !b.archived)
       const nextBuffer = buffer.archived
         ? (activeBuffers[0] ?? fallbackBuffer)
         : buffer
       activeBufferRef.current = nextBuffer
       setActiveBufferState(nextBuffer)
-      ranOnce.current = true
     }
+
+    const pending = autoOpenRef.current
+    if (!pending || !firstExample || !isFreshWorkspace(buffers)) {
+      activateStored()
+      return
+    }
+    // First visit on a showcase deployment: create the example tab and make it
+    // the active one before anything is painted.
+    void pending.then(async (content) => {
+      if (!content) {
+        activateStored()
+        return
+      }
+      try {
+        const buffer = makeBuffer({
+          label: firstExample.title,
+          notebookViewState: content.notebookViewState,
+          templateId: firstExample.id,
+          position: nextOpenPosition(buffers),
+        })
+        const id = await db.buffers.add(buffer)
+        await bufferStore.setActiveId(id)
+        setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+        const created = { ...buffer, id }
+        activeBufferRef.current = created
+        setActiveBufferState(created)
+        recentBufferIdsRef.current = pushRecentBuffer(
+          recentBufferIdsRef.current,
+          id,
+        )
+        setAutoOpenedId(id)
+      } catch (error) {
+        console.error("Could not open the example dashboard:", error)
+        activateStored()
+      }
+    })
   }, [buffers, activeBufferId])
+
+  // The notebook has to be mounted (the provider renders children only once an
+  // active buffer exists) before its cells can be run.
+  useEffect(() => {
+    if (autoOpenedId === null || activeBuffer.id !== autoOpenedId) return
+    void runNotebookCells(autoOpenedId)
+    setAutoOpenedId(null)
+  }, [autoOpenedId, activeBuffer.id])
 
   if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
@@ -610,9 +705,16 @@ export const EditorProvider: React.FC = ({ children }) => {
       notebookViewState: _notebook,
       ...previewSafePayload
     } = dbPayload
+    // Renaming a notebook opened from an example dashboard makes it the user's
+    // own: it leaves the example row and is kept like any other notebook.
+    const detachFromExample =
+      payload !== undefined &&
+      "label" in payload &&
+      buffers.find((b) => b.id === id)?.templateId !== undefined
     const effectivePayload = {
       ...(isPreviewContentWrite ? previewSafePayload : dbPayload),
       ...(newPosition !== null ? { position: newPosition } : {}),
+      ...(detachFromExample ? { templateId: undefined } : {}),
     }
 
     if (Object.keys(effectivePayload).length > 0) {
@@ -803,6 +905,11 @@ export const EditorProvider: React.FC = ({ children }) => {
       removeNotebookBufferLayouts(id)
     }
     forgetBuffer(id)
+    // Deleting an open tab leaves a gap in the positions; a new tab would
+    // land in the middle of the bar because addBuffer positions by count.
+    if (target && !target.archived && !target.isTemporary) {
+      await updateBuffersPositions(positionsWithout(buffers, id))
+    }
   }
 
   const previewBuffer: EditorContext["previewBuffer"] = async (id) => {
@@ -850,9 +957,10 @@ export const EditorProvider: React.FC = ({ children }) => {
 
     if (sortPinnedBuffers(buffers).length === 1) return
 
-    if (buffer.isPreviewBuffer) {
+    // The AI diff tab and notebooks opened from an example dashboard are not
+    // kept in history: the example row recreates its notebook on demand.
+    if (buffer.isPreviewBuffer || buffer.templateId !== undefined) {
       await deleteBuffer(id, true)
-      await updateBuffersPositions(positionsWithout(buffers, id))
       return
     }
 
@@ -914,6 +1022,103 @@ export const EditorProvider: React.FC = ({ children }) => {
         await deleteBuffer(buffer.id as number)
       }
     }
+
+  // The template's cells start fresh (results are stripped on parse); charts
+  // bootstrap themselves on mount, grid cells are run here so the dashboard
+  // fills in without a click per cell.
+  const runNotebookCells = async (bufferId: number) => {
+    try {
+      const cells = await withBoundNotebook(
+        bufferId,
+        async (controller) => (await controller.readView()).cells,
+      )
+      for (const cell of cells) {
+        if (cell.type === "markdown" || cell.mode === "draw") continue
+        await withBoundNotebook(bufferId, (controller) =>
+          controller.runCell(cell.id),
+        )
+      }
+    } catch (error) {
+      console.error("Could not run the example dashboard:", error)
+    }
+  }
+
+  // First run of an imported notebook's cells: only the ones the import
+  // planned, through the auto-run gate so a write statement can never slip
+  // through even if the plan was stale.
+  const runImportedNotebookCells: EditorContext["runImportedNotebookCells"] =
+    async (bufferId, cellIds) => {
+      for (const cellId of cellIds) {
+        try {
+          await withBoundNotebook(bufferId, (controller) =>
+            controller.runCell(cellId, undefined, undefined, {
+              kind: "autoRun",
+            }),
+          )
+        } catch (error) {
+          console.error("Could not run an imported cell:", error)
+        }
+      }
+    }
+
+  const openExampleDashboard: EditorContext["openExampleDashboard"] = async (
+    example,
+  ) => {
+    const open = buffers.find(
+      (b) => b.templateId === example.id && !b.archived && !b.isTemporary,
+    )
+    if (open) {
+      await setActiveBuffer(open)
+      return
+    }
+    try {
+      const { notebookViewState } = await fetchExampleDashboard(example.path)
+      const created = await addBuffer({
+        label: example.title,
+        notebookViewState,
+        templateId: example.id,
+      })
+      if (created?.id !== undefined) {
+        void runNotebookCells(created.id)
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error(
+        error instanceof Error
+          ? `Could not open the example dashboard: ${error.message}`
+          : "Could not open the example dashboard",
+      )
+    }
+  }
+
+  // Schema tree "Query": a one-cell notebook named after the table, reading
+  // its newest rows every second. A second click reuses the open tab.
+  const openTableNotebook: EditorContext["openTableNotebook"] = async ({
+    name,
+    designatedTimestamp,
+  }) => {
+    // Fresh read: the schema rows are virtualized and may call in with a
+    // render snapshot that predates the tab created by the previous click.
+    const open = (await bufferStore.getAll()).find(
+      (b) =>
+        b.label === name &&
+        b.notebookViewState != null &&
+        !b.archived &&
+        b.id !== temporaryBufferId,
+    )
+    if (open) {
+      await setActiveBuffer(open)
+      return
+    }
+    const cell = buildTablePreviewCell(name, designatedTimestamp)
+    const created = await addBuffer({
+      label: name,
+      notebookViewState: { cells: [cell] },
+    })
+    if (created?.id !== undefined) {
+      void runNotebookCells(created.id)
+    }
+  }
 
   const closePreviewBuffer: EditorContext["closePreviewBuffer"] = async () => {
     const previewBuffer = buffers.find((b) => b.isPreviewBuffer && !b.archived)
@@ -1158,6 +1363,9 @@ export const EditorProvider: React.FC = ({ children }) => {
         keepBufferOpen,
         reorderBuffer,
         clearArchivedBuffers,
+        openExampleDashboard,
+        openTableNotebook,
+        runImportedNotebookCells,
         previewBuffer,
         discardPreview,
         queryParamProcessedRef,

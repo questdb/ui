@@ -21,21 +21,25 @@ export type Settings = Partial<{
   "posthog.api.key": string
 }>
 
-export type Query = {
-  name?: string
-  value: string
-}
-
-export type QueryGroup = {
-  title?: string
-  description?: string
-  queries: Query[]
+// A ready-made notebook listed in the Tabs panel's "Example dashboards"
+// folder. `path` is fetched relative to the console root (like
+// `assets/console-configuration.json`) and holds a tab export: either the
+// console's export file or a plain array of tab rows, with one notebook tab.
+// See hasExampleDashboards() for what the list switches on.
+export type ExampleDashboard = {
+  id: string
+  title: string
+  path: string
 }
 
 export type ConsoleConfig = Partial<{
   ctaBanner: boolean
   readOnly?: boolean
-  savedQueries: Array<Query | QueryGroup>
+  // Ready-made notebooks listed first in the Tabs panel. A non-empty list also
+  // switches the console into showcase mode: the Tabs panel opens on the first
+  // visit, the other folders start collapsed and the notebook onboarding modal
+  // stays away.
+  exampleDashboards: ExampleDashboard[]
 }>
 
 export type Warning = {

@@ -1,29 +1,21 @@
 import React from "react"
 import styled, { css } from "styled-components"
 import { Text } from "../../components"
-import type { Buffer } from "../../store/buffers"
-import { BufferIcon } from "./bufferIcon"
 
 export type LeadingVisibility = "auto" | "visible" | "hidden"
 
 type Props = React.ComponentPropsWithoutRef<"div"> & {
-  buffer: Buffer
+  label: string
+  icon: React.ReactNode
   active: boolean
   dimmed: boolean
+  meta?: React.ReactNode
+  actions?: React.ReactNode
+  // Optional handle in the left gutter (e.g. a drag grip), shown on hover
+  // unless the caller pins it visible or hidden.
   leading?: React.ReactNode
   leadingVisibility?: LeadingVisibility
-  meta?: React.ReactNode
-  actions: React.ReactNode
 }
-
-const Actions = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-shrink: 0;
-  opacity: 0.55;
-  transition: opacity 0.1s ease;
-`
 
 const Leading = styled.span<{ $visibility: LeadingVisibility }>`
   position: absolute;
@@ -37,6 +29,15 @@ const Leading = styled.span<{ $visibility: LeadingVisibility }>`
   transition: opacity 0.1s ease;
 `
 
+const Actions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 0.1s ease;
+`
+
 const Root = styled.div<{ $active: boolean }>`
   position: relative;
   display: flex;
@@ -46,10 +47,8 @@ const Root = styled.div<{ $active: boolean }>`
   padding: 0.3rem 1rem 0.3rem 2.5rem;
   cursor: pointer;
   user-select: none;
-  outline: none;
 
-  &:hover,
-  &:focus-visible {
+  &:hover {
     background: ${({ theme }) => theme.color.interactionHover};
   }
 
@@ -90,14 +89,18 @@ const Meta = styled.span`
   color: ${({ theme }) => theme.color.contentMuted};
 `
 
+// One row of the Tabs panel. The row itself is the primary action (button);
+// callers wrap it in the list item so nested Close/Delete buttons keep their
+// own semantics.
 export const TabRow = ({
-  buffer,
+  label,
+  icon,
   active,
   dimmed,
-  leading,
-  leadingVisibility = "auto",
   meta,
   actions,
+  leading,
+  leadingVisibility = "auto",
   ...rest
 }: Props) => (
   <Root
@@ -105,7 +108,7 @@ export const TabRow = ({
     role="button"
     tabIndex={0}
     data-hook="tabs-panel-row"
-    data-buffer-id={buffer.id}
+    data-active={active ? "true" : undefined}
     {...rest}
   >
     {leading && (
@@ -116,11 +119,13 @@ export const TabRow = ({
         {leading}
       </Leading>
     )}
-    <BufferIcon buffer={buffer} />
+    {icon}
     <Label color={dimmed ? "contentSecondary" : "contentPrimary"}>
-      {buffer.label}
+      {label}
     </Label>
     {meta && <Meta>{meta}</Meta>}
-    <Actions onClick={(event) => event.stopPropagation()}>{actions}</Actions>
+    {actions && (
+      <Actions onClick={(event) => event.stopPropagation()}>{actions}</Actions>
+    )}
   </Root>
 )

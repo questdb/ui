@@ -463,7 +463,6 @@ describe("questdb schema in read-only mode", () => {
         url: `${baseUrl}/assets/console-configuration.json`,
       },
       {
-        savedQueries: [],
         readOnly: true,
       },
     ).as("getConsoleConfiguration")

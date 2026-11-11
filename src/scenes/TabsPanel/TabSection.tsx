@@ -6,8 +6,9 @@ import { isOwnActivationKey } from "./keyboard"
 
 type Props = {
   title: string
-  count: number
-  trailing?: React.ReactNode
+  // Rendered as-is next to the title, e.g. "3" or "2 open · 1 closed".
+  count: string
+  defaultExpanded?: boolean
   children: React.ReactNode
   "data-hook": string
 }
@@ -67,11 +68,11 @@ const Count = styled.span`
 export const TabSection = ({
   title,
   count,
-  trailing,
+  defaultExpanded = true,
   children,
   "data-hook": dataHook,
 }: Props) => {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(defaultExpanded)
 
   const toggle = () => setExpanded((value) => !value)
 
@@ -93,10 +94,7 @@ export const TabSection = ({
           <CaretRightIcon size={15} />
         </Caret>
         <Title>{title}</Title>
-        {trailing}
-        <Count>
-          {count} {count === 1 ? "tab" : "tabs"}
-        </Count>
+        <Count data-hook="tabs-panel-section-count">{count}</Count>
       </HeaderRow>
       {expanded && children}
     </Root>

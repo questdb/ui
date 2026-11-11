@@ -32,7 +32,6 @@ export enum StoreKey {
   QUERY_TEXT = "query.text",
   EDITOR_LINE = "editor.line",
   EDITOR_COL = "editor.col",
-  EXAMPLE_QUERIES_VISITED = "editor.exampleQueriesVisited",
   EDITOR_SPLITTER_BASIS = "splitter.editor.basis",
   RESULTS_SPLITTER_BASIS = "splitter.results.basis",
   // Stored in sessionStorage: reloading one tab must not switch its login method.
@@ -44,6 +43,9 @@ export enum StoreKey {
   SSO_USERNAME = "sso.username",
   SSO_SESSION_ACTIVE = "sso.session.active",
   LEFT_PANEL_STATE = "left.panel.state",
+  TABS_PANEL_INCLUDE_CLOSED = "tabs.panel.includeClosed",
+  TABS_PANEL_VIEW_MODE = "tabs.panel.viewMode",
+  EXAMPLE_DASHBOARD_AUTO_OPENED = "tabs.panel.exampleAutoOpened",
   AI_ASSISTANT_SETTINGS = "ai.assistant.settings",
   AI_CHAT_PANEL_WIDTH = "ai.chat.panel.width",
   CLIENT_ID = "client.id",

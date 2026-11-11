@@ -61,7 +61,6 @@ export type LocalConfig = {
   editorLine: number
   editorSplitterBasis: number
   resultsSplitterBasis: number
-  exampleQueriesVisited: boolean
   autoRefreshTables: boolean
   autoRefreshQueryActivity: boolean
   useNewGrid: boolean

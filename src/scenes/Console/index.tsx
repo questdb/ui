@@ -10,6 +10,8 @@ import Schema from "../Schema"
 import { ScreenSize, useScreenSize } from "../../hooks"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
+import { getValue } from "../../utils/localStorage"
+import { hasExampleDashboards } from "../../utils/examples/hasExampleDashboards"
 import { useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
 import { Sidebar } from "../../components/Sidebar"
@@ -131,6 +133,20 @@ const Console = () => {
   const isDataSourcesPanelOpen =
     leftPanelState.type === LeftPanelType.DATASOURCES
   const isTabsPanelOpen = leftPanelState.type === LeftPanelType.TABS
+
+  // Showcase deployments (console-configuration.json ships example dashboards)
+  // open the Tabs panel on the first visit, so the examples are the first thing
+  // a visitor sees. Once the user has toggled any panel, their choice wins.
+  const showcase = hasExampleDashboards(consoleConfig)
+  useEffect(() => {
+    if (!showcase || getValue(StoreKey.LEFT_PANEL_STATE) !== "") return
+    if (leftPanelState.type !== LeftPanelType.TABS) {
+      updateLeftPanelState({
+        type: LeftPanelType.TABS,
+        width: leftPanelState.width,
+      })
+    }
+  }, [showcase])
 
   const toggleTabsPanel = () => {
     if (!isTabsPanelOpen) {
