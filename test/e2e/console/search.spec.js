@@ -508,3 +508,54 @@ describe("search browser navigation", () => {
       .and("have.attr", "active")
   })
 })
+
+describe("search while a script runs", () => {
+  it("keeps the editor read-only when a match in the running tab is opened", () => {
+    // Given a script the user has just written, whose first statement is held
+    // in flight (the edit gives the tab list a newer copy of the buffer than
+    // the active one, which a re-activation then swaps in)
+    const script = "select 1;\nselect 'needle';"
+    loadSearchConsole([{ value: "" }])
+    cy.getEditorContent().should("be.visible")
+    cy.window().then((win) =>
+      win.monaco.editor.getEditors()[0].setValue(script),
+    )
+    cy.waitForActiveBufferValue(script)
+    let release
+    cy.intercept(
+      { url: "**/exec*", query: { explain: "true" }, times: 1 },
+      () =>
+        new Cypress.Promise((resolve) => {
+          release = resolve
+        }),
+    )
+    const readOnly = () =>
+      cy.window().then((win) => {
+        const editor = win.monaco.editor.getEditors()[0]
+        return editor.getOption(win.monaco.editor.EditorOption.readOnly)
+      })
+    cy.clickRunScript()
+    cy.getByDataHook("button-cancel-script").should("be.visible")
+    cy.wrap(null).should(() => expect(release).to.be.a("function"))
+    readOnly().should("eq", true)
+
+    // When the user opens a search match in the running tab
+    cy.openSearchPanel()
+    cy.searchFor("needle")
+    cy.getSearchResults().should("have.length", 1)
+    cy.getSearchResults().first().click()
+    cy.get(".searchHighlight").should("be.visible")
+
+    // Then the editor stays locked and typing does not change the script
+    readOnly().should("eq", true)
+    cy.getEditorContent().type("XYZ", { force: true })
+    cy.window().then((win) => {
+      expect(win.monaco.editor.getEditors()[0].getValue()).to.eq(script)
+    })
+
+    // And it unlocks once the script ends
+    cy.then(() => release())
+    cy.getByDataHook("button-cancel-script").should("not.exist")
+    readOnly().should("eq", false)
+  })
+})
