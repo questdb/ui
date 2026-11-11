@@ -32,6 +32,13 @@ const PASTE_HINT = `Press ${CELL_SHORTCUT_LABELS.paste} to paste.`
 // delete toasts keep the default, to leave time for their Undo button.
 const BRIEF_TOAST_MS = 2000
 
+// One warning at a time, however often the user presses the key.
+const warnCannotStep = (direction: "undo" | "redo") =>
+  toast.warning(`Cannot ${direction} this change.`, {
+    toastId: "notebook-history-stale",
+    autoClose: BRIEF_TOAST_MS,
+  })
+
 const cellWrapperOf = (cellId: string) =>
   document.querySelector<HTMLElement>(
     `[data-notebook-cell][data-cell-id="${CSS.escape(cellId)}"]`,
@@ -109,10 +116,7 @@ export const useCellEditActions = () => {
       const step = direction === "undo" ? undoInNotebook() : redoInNotebook()
       if (step.kind === "empty") return
       if (step.kind === "stale") {
-        toast.warning(`Cannot ${direction} this change.`, {
-          toastId: "notebook-history-stale",
-          autoClose: BRIEF_TOAST_MS,
-        })
+        warnCannotStep(direction)
         return
       }
       void trackEvent(
@@ -145,12 +149,14 @@ export const useCellEditActions = () => {
     [stepHistory],
   )
 
-  // The toast undoes its own change only, never a later one.
+  // The toast undoes its own change only, never a later one. When its change
+  // is no longer the last one, the click says so instead of doing nothing.
   const offerUndo = useCallback(
     (message: string) => {
       const entry = peekUndoEntry(bufferId)
       showUndoToast(bufferId, message, () => {
         if (peekUndoEntry(bufferId) === entry) undo("toast")
+        else warnCannotStep("undo")
       })
     },
     [bufferId, undo],

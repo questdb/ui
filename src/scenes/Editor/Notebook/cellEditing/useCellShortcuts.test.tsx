@@ -14,10 +14,11 @@ import {
 import { getCopiedCells } from "./copiedCellsStore"
 import { CellEditMenuItems } from "./CellEditMenuItems"
 import { useCellShortcuts } from "./useCellShortcuts"
-import { ToastContainer } from "../../../../components/Toast"
+import { ToastContainer, toast } from "../../../../components/Toast"
 import type { HistoryStep } from "../undo/stepUndoHistory"
 import {
   __resetNotebookUndoHistoryForTests,
+  clearNotebookUndoHistory,
   recordUndoEntry,
 } from "../undo/notebookUndoHistory"
 
@@ -341,7 +342,7 @@ describe("useCellShortcuts", () => {
 
   it.each([
     ["undoes the delete from its toast", false, 1],
-    ["ignores the toast after a later change", true, 0],
+    ["warns instead of undoing after a later change", true, 0],
   ])("%s", async (_, laterChange, undoCalls) => {
     // Given a deleted cell and its undo toast
     const onUndo = vi.fn(nothingToStep)
@@ -360,8 +361,35 @@ describe("useCellShortcuts", () => {
     // When the user clicks Undo on the toast
     await userEvent.click(undoButton)
 
-    // Then only the delete's own toast undoes it
+    // Then only the delete's own toast undoes it, and a stale one says so
     expect(onUndo).toHaveBeenCalledTimes(undoCalls)
+    if (laterChange) {
+      expect(
+        await screen.findByText("Cannot undo this change."),
+      ).toBeInTheDocument()
+    }
+  })
+
+  it("closes the undo toast when the history is cleared", async () => {
+    // Given a deleted cell and its undo toast
+    const dismiss = vi.spyOn(toast, "dismiss")
+    renderComponent(
+      <>
+        <FakeNotebook selectedCellId="a" onUndo={vi.fn(nothingToStep)} />
+        <ToastContainer />
+      </>,
+    )
+    fireEvent.keyDown(document.body, { key: "Delete" })
+    await screen.findByRole("button", { name: "Undo" })
+    dismiss.mockClear()
+
+    // When an agent edit clears the notebook's undo history
+    act(() => clearNotebookUndoHistory(1))
+
+    // Then the toast is dismissed, so its Undo cannot silently do nothing.
+    // (jsdom never ends the exit animation, so the node itself stays.)
+    expect(dismiss).toHaveBeenCalledTimes(1)
+    dismiss.mockRestore()
   })
 
   it.each([

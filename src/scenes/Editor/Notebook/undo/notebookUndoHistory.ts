@@ -198,12 +198,31 @@ export const settleUndo = (bufferId: number, applied?: UndoEntry): void =>
 export const settleRedo = (bufferId: number, applied?: UndoEntry): void =>
   settle(bufferId, "redo", applied)
 
+const clearListeners = new Map<number, Set<() => void>>()
+
+// Lets a notebook's undo toast go away when the history it would step is
+// cleared, e.g. by an agent edit.
+export const onUndoHistoryCleared = (
+  bufferId: number,
+  listener: () => void,
+): (() => void) => {
+  const listeners = clearListeners.get(bufferId) ?? new Set()
+  listeners.add(listener)
+  clearListeners.set(bufferId, listeners)
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) clearListeners.delete(bufferId)
+  }
+}
+
 export const clearNotebookUndoHistory = (bufferId: number): void => {
   const history = histories.get(bufferId)
-  if (!history) return
-  dropEntries(bufferId, history, history.undo, "undo")
-  dropEntries(bufferId, history, history.redo, "redo")
-  histories.delete(bufferId)
+  if (history) {
+    dropEntries(bufferId, history, history.undo, "undo")
+    dropEntries(bufferId, history, history.redo, "redo")
+    histories.delete(bufferId)
+  }
+  clearListeners.get(bufferId)?.forEach((listener) => listener())
 }
 
 // A cell held by the history keeps its stored results through a remount.
@@ -218,4 +237,5 @@ export const isCellHeldByUndo = (bufferId: number, cellId: string): boolean => {
 
 export const __resetNotebookUndoHistoryForTests = (): void => {
   histories.clear()
+  clearListeners.clear()
 }
