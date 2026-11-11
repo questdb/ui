@@ -322,6 +322,46 @@ describe("tabs panel", () => {
     openRow("Alpha").should("be.visible")
   })
 
+  it("keeps the editor read-only when the running tab is activated from its row", () => {
+    // Given a script whose first statement is held in flight
+    const script = "select 1;\nselect 2;"
+    createTab("Alpha", script)
+    let release
+    cy.intercept(
+      { url: "**/exec*", query: { explain: "true" }, times: 1 },
+      () =>
+        new Cypress.Promise((resolve) => {
+          release = resolve
+        }),
+    )
+    const readOnly = () =>
+      cy.window().then((win) => {
+        const editor = win.monaco.editor.getEditors()[0]
+        return editor.getOption(win.monaco.editor.EditorOption.readOnly)
+      })
+    cy.clickRunScript()
+    cy.getByDataHook("button-cancel-script").should("be.visible")
+    cy.wrap(null).should(() => expect(release).to.be.a("function"))
+    readOnly().should("eq", true)
+
+    // When the user clicks the running tab's own row
+    setViewMode("list")
+    openRow("Alpha").click()
+
+    // Then the editor stays locked and typing does not change the script
+    readOnly().should("eq", true)
+    cy.getEditorContent().type("XYZ", { force: true })
+    cy.window().then((win) => {
+      expect(win.monaco.editor.getEditors()[0].getValue()).to.eq(script)
+    })
+
+    // And it unlocks once the script ends
+    cy.then(() => release())
+    cy.getByDataHook("button-cancel-script").should("not.exist")
+    readOnly().should("eq", false)
+    setViewMode("groups")
+  })
+
   it("lists tabs in tab bar order with closed ones apart in List mode, and reorders by drag", () => {
     // Given three open tabs and a closed one
     createTab("Alpha", "select 1;")

@@ -383,9 +383,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const isAIDropdownRef = useRef<boolean>(false)
   const cleanupActionsRef = useRef<(() => void)[]>([])
 
+  // A running script keeps the editor locked: its per-query glyphs and
+  // markers are keyed by line, so edits mid-run would shift them.
   const syncReadOnly = (editor: editor.IStandaloneCodeEditor) => {
     editor.updateOptions({
-      readOnly: activeBufferRef.current.isTemporary === true,
+      readOnly:
+        isRunningScriptRef.current ||
+        activeBufferRef.current.isTemporary === true,
     })
   }
 
