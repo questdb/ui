@@ -66,7 +66,12 @@ import {
   VIEWS_GROUP_KEY,
 } from "../localStorageUtils"
 import { TreeNavigationOptions } from "../VirtualTables"
-import { CaretRightIcon, ClockIcon, InfoIcon } from "@phosphor-icons/react"
+import {
+  CaretRightIcon,
+  ClockIcon,
+  InfoIcon,
+  PlayIcon,
+} from "@phosphor-icons/react"
 
 export type TreeNodeKind =
   | "column"
@@ -97,6 +102,7 @@ type Props = Readonly<{
   expanded?: boolean
   onExpandCollapse: () => void | Promise<void>
   onOpenDetailsDrawer?: () => void
+  onQuery?: () => void
   navigateInTree: (options: TreeNavigationOptions) => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
@@ -178,7 +184,7 @@ const Wrapper = styled.div<{
   ${({ $viewDetailsButton }) =>
     $viewDetailsButton &&
     `
-    padding-right: 3rem;
+    padding-right: 6.4rem;
   `}
 
   ${({ $isPulsing, theme }) =>
@@ -199,6 +205,11 @@ const DetailsDrawerButton = styled(Button).attrs({ variant: "ghost" })`
   &&:active:not(:disabled):not([aria-disabled="true"]) {
     filter: none;
   }
+`
+
+// Sits left of the info button; same hover reveal (`.table-menu-button`).
+const QueryButton = styled(DetailsDrawerButton)`
+  right: 4.2rem;
 `
 
 const StyledTitle = styled(Title)`
@@ -422,6 +433,7 @@ const Row = ({
   walEnabled,
   onExpandCollapse,
   onOpenDetailsDrawer,
+  onQuery,
   navigateInTree,
   "data-hook": dataHook,
   isLoading,
@@ -714,6 +726,23 @@ const Row = ({
           )}
         </FlexRow>
       </Box>
+      {!selectOpen && onQuery && (
+        <Tooltip content="Query in a notebook" placement="right">
+          <QueryButton
+            aria-label={`Query ${name}`}
+            size="sm"
+            className="table-menu-button"
+            data-hook="table-query-button"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation()
+              onQuery()
+            }}
+            onDoubleClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <PlayIcon size={16} weight="fill" color={theme.color.statusInfo} />
+          </QueryButton>
+        </Tooltip>
+      )}
       {!selectOpen && onOpenDetailsDrawer && (
         <DetailsDrawerButton
           aria-label="Open table details"

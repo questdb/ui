@@ -199,7 +199,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   } = useAIStatus()
 
   const { handleExplainSchema } = useAIQuickActions()
-  const { appendQuery } = useEditor()
+  const { appendQuery, openTableNotebook } = useEditor()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
@@ -638,6 +638,15 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                     expanded={item.isExpanded}
                     onExpandCollapse={() => toggleNodeExpansion(item.id)}
                     onOpenDetailsDrawer={handleOpenDetailsDrawer}
+                    onQuery={() => {
+                      void trackEvent(ConsoleEvent.SCHEMA_QUERY_TABLE, {
+                        kind: item.kind,
+                      })
+                      void openTableNotebook({
+                        name: item.name,
+                        designatedTimestamp: item.designatedTimestamp,
+                      })
+                    }}
                     navigateInTree={navigateInTree}
                     partitionBy={item.partitionBy}
                     walEnabled={item.walEnabled}
