@@ -5,6 +5,7 @@ import {
   type CellPaneView,
   type CellType,
   type NotebookCell,
+  type NotebookVariable,
 } from "../../../store/notebook"
 import { NotebookToolError } from "../notebookToolError"
 import type { ViewParts } from "../notebookDexieView"
@@ -18,6 +19,14 @@ import {
   clearCellAutoRefresh,
   duplicateCellAt,
   insertCell,
+  cellPlacementsOf,
+  insertCellsAfter,
+  insertCellsLayout,
+  insertPlacedCells,
+  mergeMissingVariables,
+  reindexCells,
+  removeExactVariables,
+  type CellPlacement,
   nextGridSeedPosition,
   removeCell,
   swapCellDown,
@@ -48,6 +57,7 @@ import {
 } from "../../../scenes/Editor/Notebook/cellSizing"
 import { type RunCancelReason } from "../../../scenes/Editor/Notebook/runCancellation"
 import { reconcileCellResultForValue } from "../../../scenes/Editor/Notebook/statementIdentity"
+import type { Arrangement } from "../../../scenes/Editor/Notebook/undo/cellArrangement"
 
 // The single home for every notebook mutation's behavior. Each transition is a
 // pure function `(parts, ...) → { parts, result, ... }` that validates its op
@@ -253,6 +263,211 @@ export const duplicateCellTransition = (
     parts: { ...parts, cells, settings },
     result: newId,
     touchedCellId: newId,
+  }
+}
+
+export type PastedCell = { cell: NotebookCell; gridWidth?: number }
+
+export const pasteCellsTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  args: {
+    afterCellId?: string
+    cells: PastedCell[]
+    variables: NotebookVariable[]
+  },
+): NotebookTransitionResult<string[]> => {
+  if (args.afterCellId !== undefined) {
+    requireCellIn(parts.cells, args.afterCellId, bufferId)
+  }
+  if (parts.cells.length + args.cells.length > MAX_NOTEBOOK_CELLS) {
+    throw new NotebookToolError(
+      "cell_limit",
+      `Notebook ${bufferId} cannot exceed the maximum of ${MAX_NOTEBOOK_CELLS} cells.`,
+    )
+  }
+  const insertedCells = args.cells.map(({ cell }) =>
+    cell.type === "markdown" || cell.topHeight !== undefined
+      ? cell
+      : { ...cell, topHeight: topHeightForSql(cell.value) },
+  )
+  insertedCells
+    .filter((cell) => cell.type !== "markdown")
+    .forEach((cell) => requireCellWithinLineLimit(cell.value))
+  const variables = mergeMissingVariables(
+    parts.settings.variables,
+    args.variables,
+  )
+  const layout =
+    parts.settings.layoutMode === "grid"
+      ? insertCellsLayout(
+          parts.settings.layout,
+          args.afterCellId,
+          args.cells.map(({ cell, gridWidth }) => ({ id: cell.id, gridWidth })),
+        )
+      : parts.settings.layout
+  const settings =
+    variables === parts.settings.variables && layout === parts.settings.layout
+      ? parts.settings
+      : { ...parts.settings, variables, layout }
+  return {
+    parts: {
+      ...parts,
+      cells: insertCellsAfter(parts.cells, args.afterCellId, insertedCells),
+      settings,
+      maximizedCellId: null,
+    },
+    result: insertedCells.map((cell) => cell.id),
+    touchedCellId: insertedCells[0]?.id,
+  }
+}
+
+// Removes cells so an undo can return them: their runs stop, but their stored
+// results stay, unlike deleteCellTransition. Variables that came in with the
+// cells can leave with them.
+export const detachCellsTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  args: { cellIds: string[]; variables: NotebookVariable[] },
+): NotebookTransitionResult<CellPlacement[]> => {
+  args.cellIds.forEach((cellId) => requireCellIn(parts.cells, cellId, bufferId))
+  if (parts.cells.length - args.cellIds.length < 1) {
+    throw new NotebookToolError(
+      "last_cell",
+      `Notebook ${bufferId} must keep at least one cell.`,
+    )
+  }
+  const detached = new Set(args.cellIds)
+  const variables = removeExactVariables(
+    parts.settings.variables,
+    args.variables,
+  )
+  return {
+    parts: {
+      ...parts,
+      cells: reindexCells(parts.cells.filter((cell) => !detached.has(cell.id))),
+      settings:
+        variables === parts.settings.variables
+          ? parts.settings
+          : { ...parts.settings, variables },
+      maximizedCellId:
+        parts.maximizedCellId && detached.has(parts.maximizedCellId)
+          ? null
+          : parts.maximizedCellId,
+      focusedCellId:
+        parts.focusedCellId && detached.has(parts.focusedCellId)
+          ? null
+          : parts.focusedCellId,
+    },
+    result: cellPlacementsOf(parts.cells, parts.settings.layout, args.cellIds),
+    touchedCellId: undefined,
+    cancelRuns: { cellIds: args.cellIds, reason: "cell_deleted" },
+  }
+}
+
+// Returns detached cells to their places, with their ids, so their stored
+// results load again. A saved grid position is restored as it was; vertical
+// compaction settles any overlap.
+export const attachCellsTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  args: { placements: CellPlacement[]; variables: NotebookVariable[] },
+): NotebookTransitionResult<string[]> => {
+  if (parts.cells.length + args.placements.length > MAX_NOTEBOOK_CELLS) {
+    throw new NotebookToolError(
+      "cell_limit",
+      `Notebook ${bufferId} cannot exceed the maximum of ${MAX_NOTEBOOK_CELLS} cells.`,
+    )
+  }
+  const present = new Set(parts.cells.map((cell) => cell.id))
+  const duplicate = args.placements.find(({ cell }) => present.has(cell.id))
+  if (duplicate) {
+    throw new NotebookToolError(
+      "validation",
+      `Cell ${duplicate.cell.id} is already in notebook ${bufferId}.`,
+    )
+  }
+  const savedLayout = parts.settings.layout
+  const layout =
+    savedLayout && savedLayout.length > 0
+      ? args.placements.reduce(
+          (next, { cell, layoutItem }) =>
+            layoutItem ? upsertCellLayout(next, cell.id, layoutItem) : next,
+          savedLayout,
+        )
+      : savedLayout
+  const variables = mergeMissingVariables(
+    parts.settings.variables,
+    args.variables,
+  )
+  const settings =
+    layout === savedLayout && variables === parts.settings.variables
+      ? parts.settings
+      : { ...parts.settings, layout, variables }
+  const cellIds = args.placements.map(({ cell }) => cell.id)
+  return {
+    parts: {
+      ...parts,
+      cells: insertPlacedCells(parts.cells, args.placements),
+      settings,
+    },
+    result: cellIds,
+    touchedCellId: cellIds[0],
+  }
+}
+
+// Puts cells back where an arrangement says: their order, saved grid
+// layout and pane sizes. The order needs the same cells; the layout and the
+// sizes apply to the cells that are still there.
+export const arrangeCellsTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  target: Arrangement,
+): NotebookTransitionResult<true> => {
+  const present = new Map(parts.cells.map((cell) => [cell.id, cell]))
+  let cells = parts.cells
+  if (target.order) {
+    const order = target.order
+    if (
+      order.length !== cells.length ||
+      !order.every((cellId) => present.has(cellId))
+    ) {
+      throw new NotebookToolError(
+        "validation",
+        `The cells of notebook ${bufferId} changed since this arrangement.`,
+      )
+    }
+    cells = reindexCells(
+      order.map((cellId) => present.get(cellId) as NotebookCell),
+    )
+  }
+  const sizes = target.sizes ?? {}
+  if (Object.keys(sizes).length > 0) {
+    if (!Object.keys(sizes).some((cellId) => present.has(cellId))) {
+      throw new NotebookToolError(
+        "unknown_cell",
+        `The resized cells are no longer in notebook ${bufferId}.`,
+      )
+    }
+    cells = cells.map((cell) =>
+      sizes[cell.id] ? { ...cell, ...sizes[cell.id] } : cell,
+    )
+  }
+  // An empty layout is the unsaved one, which follows the cell order.
+  const layout = target.layout
+    ? target.layout.filter(({ i }) => present.has(i))
+    : parts.settings.layout
+  return {
+    parts: {
+      ...parts,
+      cells,
+      settings:
+        layout === parts.settings.layout
+          ? parts.settings
+          : { ...parts.settings, layout },
+    },
+    result: true,
+    touchedCellId: undefined,
   }
 }
 

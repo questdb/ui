@@ -71,6 +71,7 @@ import {
   useResultStatusVersion,
 } from "./resultHydration/CellResultHydrationContext"
 import { editorStageSurfaceStyles } from "../sharedStyles"
+import { useCellShortcuts } from "./cellEditing/useCellShortcuts"
 
 const GRID_COLS = NOTEBOOK_GRID_COLS
 const ROW_HEIGHT = NOTEBOOK_GRID_ROW_HEIGHT
@@ -420,7 +421,8 @@ const GridLayout: React.FC = () => {
   // Re-render when a cell's known-missing state flips — the only status
   // boundary the layout math below reads (via statusOf).
   const resultStatusVersion = useResultStatusVersion()
-  const { setFocusedCell, updateSettings, updateCell } = useNotebookActions()
+  const { setFocusedCell, updateSettings, updateCell, arrange } =
+    useNotebookActions()
   const { activeBuffer } = useEditor()
   // measureBeforeMount: don't render the grid until the container width is
   // measured, so cells first paint at their real width instead of animating
@@ -503,18 +505,22 @@ const GridLayout: React.FC = () => {
     [cells],
   )
 
-  // Drag-stop = move (x/y change). Just persist positions.
+  // Drag-stop = move (x/y change). Just persist positions. Only a real move
+  // goes on the undo history: a click on the header also stops a drag.
   const handleDragStop = useCallback<EventCallback>(
     (newLayout, oldItem, newItem) => {
-      if (
+      const moved =
         oldItem &&
         newItem &&
         (oldItem.x !== newItem.x || oldItem.y !== newItem.y)
-      ) {
+      if (moved) {
         void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "drag" })
       }
       autoScroll.stop()
-      updateSettings({ layout: mapLayoutXYW(newLayout) })
+      const saveLayout = () =>
+        updateSettings({ layout: mapLayoutXYW(newLayout) })
+      if (moved) arrange([newItem.i], saveLayout)
+      else saveLayout()
       if (typeof activeBuffer.id === "number") {
         emitUserAction({
           kind: "user_changed_grid_layout",
@@ -522,40 +528,43 @@ const GridLayout: React.FC = () => {
         })
       }
     },
-    [autoScroll, mapLayoutXYW, updateSettings, activeBuffer.id],
+    [autoScroll, mapLayoutXYW, updateSettings, arrange, activeBuffer.id],
   )
 
   const handleResizeStop = useCallback<EventCallback>(
     (newLayout, oldItem, newItem, _placeholder, _event, element) => {
       const region = element?.dataset.axis
-      if (
-        region &&
+      const resized =
         oldItem &&
         newItem &&
         (oldItem.x !== newItem.x ||
           oldItem.w !== newItem.w ||
           oldItem.h !== newItem.h)
-      ) {
+      if (region && resized) {
         void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region })
       }
-      updateSettings({ layout: mapLayoutXYW(newLayout) })
-      if (oldItem && newItem && oldItem.h !== newItem.h) {
-        const cell = cells.find((candidate) => candidate.id === newItem.i)
-        if (cell) {
-          const expectingResult = isExpectingResult(
-            cell,
-            resultHydration?.statusOf(cell.id) ?? "unrequested",
-          )
-          const patch = paneHeightsFromGridRows(
-            cell,
-            newItem.h,
-            ROW_HEIGHT,
-            GRID_MARGIN_Y,
-            expectingResult,
-          )
-          if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
+      const saveResize = () => {
+        updateSettings({ layout: mapLayoutXYW(newLayout) })
+        if (oldItem && newItem && oldItem.h !== newItem.h) {
+          const cell = cells.find((candidate) => candidate.id === newItem.i)
+          if (cell) {
+            const expectingResult = isExpectingResult(
+              cell,
+              resultHydration?.statusOf(cell.id) ?? "unrequested",
+            )
+            const patch = paneHeightsFromGridRows(
+              cell,
+              newItem.h,
+              ROW_HEIGHT,
+              GRID_MARGIN_Y,
+              expectingResult,
+            )
+            if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
+          }
         }
       }
+      if (resized) arrange([newItem.i], saveResize)
+      else saveResize()
       if (typeof activeBuffer.id === "number") {
         emitUserAction({
           kind: "user_changed_grid_layout",
@@ -567,6 +576,7 @@ const GridLayout: React.FC = () => {
       mapLayoutXYW,
       updateSettings,
       updateCell,
+      arrange,
       cells,
       activeBuffer.id,
       resultHydration,
@@ -601,7 +611,7 @@ const GridLayout: React.FC = () => {
           ? { i: l.i, x: nextX, y: l.y, w: nextW, h: l.h }
           : { i: l.i, x: l.x, y: l.y, w: l.w, h: l.h },
       )
-      updateSettings({ layout: nextLayout })
+      arrange([cellId], () => updateSettings({ layout: nextLayout }))
       if (typeof activeBuffer.id === "number") {
         emitUserAction({
           kind: "user_changed_grid_layout",
@@ -612,7 +622,7 @@ const GridLayout: React.FC = () => {
     eventBus.subscribe(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, handler)
     return () =>
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, handler)
-  }, [currentLayout, updateSettings, activeBuffer.id])
+  }, [currentLayout, updateSettings, arrange, activeBuffer.id])
 
   return (
     <GridScrollContainer
@@ -771,6 +781,7 @@ const NotebookContent: React.FC = () => {
   useScrollRestoredCellIntoView(maximizedCellId)
   useScrollFocusedCellIntoViewOnOpen(focusedCellId)
   useNotebookSearchReveal()
+  useCellShortcuts(focusedCellId)
   useCellBandObservers({
     onNearBand: useCallback(
       (cellId, inBand, distancePx) => {

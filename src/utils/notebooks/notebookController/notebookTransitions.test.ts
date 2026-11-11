@@ -4,8 +4,12 @@ import { describe, expect, it } from "vitest"
 import {
   addCellTransition,
   applyNotebookStateTransition,
+  arrangeCellsTransition,
+  attachCellsTransition,
   deleteCellTransition,
+  detachCellsTransition,
   duplicateCellTransition,
+  pasteCellsTransition,
   setCellDimensionsTransition,
   setCellLayoutTransition,
   setCellModeTransition,
@@ -20,6 +24,8 @@ import {
   type NotebookCell,
 } from "../../../store/notebook"
 import type { CellResultStatusReader } from "../../../scenes/Editor/Notebook/cellSizing"
+import { mergeCellLayout } from "../../../scenes/Editor/Notebook/notebookUtils"
+import { verticalCompactor } from "react-grid-layout/core"
 
 const unrequested: CellResultStatusReader = () => "unrequested"
 
@@ -941,5 +947,299 @@ describe("transition validation guards", () => {
         ),
       ),
     ).toBe("unknown_cell")
+  })
+})
+
+describe("pasteCellsTransition", () => {
+  const pasted = (id: string, gridWidth?: number) => ({
+    cell: cell(id, `SELECT '${id}'`),
+    gridWidth,
+  })
+
+  it("inserts the cells after the anchor and leaves the maximized view", () => {
+    // Given a notebook with a maximized cell
+    const parts = partsOf([cell("a"), cell("b")], { maximizedCellId: "a" })
+
+    // When two cells are pasted after "a"
+    const out = pasteCellsTransition(parts, BUFFER_ID, {
+      afterCellId: "a",
+      cells: [pasted("p1"), pasted("p2")],
+      variables: [],
+    })
+
+    // Then they sit between "a" and "b" in order, and every cell is visible
+    expect(out.parts.cells.map((c) => c.id)).toEqual(["a", "p1", "p2", "b"])
+    expect(out.parts.cells.map((c) => c.position)).toEqual([0, 1, 2, 3])
+    expect(out.parts.maximizedCellId).toBeNull()
+    expect(out.result).toEqual(["p1", "p2"])
+  })
+
+  it("adds only the variables the notebook does not declare", () => {
+    // Given a notebook that already declares @from with its own value
+    const parts = partsOf([cell("a")], {
+      settings: { variables: [{ name: "from", value: "'2024-01-01'" }] },
+    })
+
+    // When a cell that needs @from and @to is pasted
+    const out = pasteCellsTransition(parts, BUFFER_ID, {
+      cells: [pasted("p1")],
+      variables: [
+        { name: "from", value: "now()" },
+        { name: "to", value: "@from + 1d" },
+      ],
+    })
+
+    // Then the existing value wins and the missing variable is appended
+    expect(out.parts.settings.variables).toEqual([
+      { name: "from", value: "'2024-01-01'" },
+      { name: "to", value: "@from + 1d" },
+    ])
+  })
+
+  // The grid renders the merged layout after vertical compaction.
+  const renderedLayout = (parts: ViewParts) => {
+    const merged = mergeCellLayout(parts.settings.layout ?? [], parts.cells, {
+      gridCols: 12,
+      defaultCellH: 30,
+      minW: 2,
+      minH: 5,
+    })
+    const compacted = verticalCompactor.compact(merged, 12)
+    return new Map(compacted.map((item) => [item.i, item]))
+  }
+
+  it.each([
+    ["alone in the right half", [{ i: "t", x: 6, y: 0, w: 6, h: 30 }]],
+    [
+      "next to a left neighbour",
+      [
+        { i: "l", x: 0, y: 0, w: 6, h: 30 },
+        { i: "t", x: 6, y: 0, w: 6, h: 30 },
+      ],
+    ],
+  ])("drops a wide pasted cell below a target %s", (_, layout) => {
+    // Given a grid target in the right half
+    const parts = partsOf(
+      layout.map((item) => cell(item.i)),
+      { settings: { layoutMode: "grid", layout } },
+    )
+
+    // When a cell copied at width 8, too wide for the target's column, is
+    // pasted below it
+    const out = pasteCellsTransition(parts, BUFFER_ID, {
+      afterCellId: "t",
+      cells: [pasted("p1", 8)],
+      variables: [],
+    })
+
+    // Then the target keeps its place and the pasted cell renders below it
+    const rendered = renderedLayout(out.parts)
+    expect(rendered.get("t")?.y).toBe(0)
+    expect(rendered.get("p1")).toMatchObject({
+      y: 30,
+      w: 8,
+      x: 4,
+    })
+  })
+
+  it("places a grid cell at the bottom when it follows no cell", () => {
+    // Given a grid whose last cell in list order sits at the top
+    const parts = partsOf([cell("a"), cell("b")], {
+      settings: {
+        layoutMode: "grid",
+        layout: [
+          { i: "a", x: 0, y: 30, w: 12, h: 30 },
+          { i: "b", x: 0, y: 0, w: 6, h: 30 },
+        ],
+      },
+    })
+
+    // When a cell copied at width 6 is pasted with no cell selected
+    const out = pasteCellsTransition(parts, BUFFER_ID, {
+      cells: [pasted("p1", 6)],
+      variables: [],
+    })
+
+    // Then it goes below the lowest cell, not below the last one in the list
+    expect(out.parts.settings.layout).toContainEqual({
+      i: "p1",
+      x: 0,
+      y: 60,
+      w: 6,
+      h: 1,
+    })
+    expect(out.parts.cells.map((c) => c.id)).toEqual(["a", "b", "p1"])
+  })
+
+  it("leaves an unsaved grid layout to follow the cell order", () => {
+    // Given a grid notebook that has never saved a layout
+    const parts = partsOf([cell("a"), cell("b")], {
+      settings: { layoutMode: "grid" },
+    })
+
+    // When a cell is pasted after "a"
+    const out = pasteCellsTransition(parts, BUFFER_ID, {
+      afterCellId: "a",
+      cells: [pasted("p1", 6)],
+      variables: [],
+    })
+
+    // Then no layout is written, so the default layout keeps the order a, p1, b
+    expect(out.parts.settings.layout).toBeUndefined()
+    expect(out.parts.cells.map((c) => c.id)).toEqual(["a", "p1", "b"])
+  })
+
+  it("rejects a paste that crosses the cell limit", () => {
+    // Given a notebook one cell below the limit
+    const cells = Array.from({ length: MAX_NOTEBOOK_CELLS - 1 }, (_, i) =>
+      cell(`c${i}`),
+    )
+
+    // When two cells are pasted
+    const paste = () =>
+      pasteCellsTransition(partsOf(cells), BUFFER_ID, {
+        cells: [pasted("p1"), pasted("p2")],
+        variables: [],
+      })
+
+    // Then the notebook refuses them
+    expect(paste).toThrow(NotebookToolError)
+  })
+})
+
+describe("detachCellsTransition and attachCellsTransition", () => {
+  it("brings a detached cell back to its place, grid position and run history", () => {
+    // Given a ran cell between two others in a saved grid
+    const ran = cell("b", "SELECT 1", {
+      lastRunStatus: "success",
+      result: { results: [], activeResultIndex: 0, timestamp: 1 },
+    })
+    const parts = partsOf([cell("a"), ran, cell("c")], {
+      settings: {
+        layoutMode: "grid",
+        layout: [
+          { i: "a", x: 0, y: 0, w: 12, h: 10 },
+          { i: "b", x: 0, y: 10, w: 6, h: 10 },
+          { i: "c", x: 6, y: 10, w: 6, h: 10 },
+        ],
+      },
+    })
+
+    // When "b" is detached and attached back
+    const detached = detachCellsTransition(parts, BUFFER_ID, {
+      cellIds: ["b"],
+      variables: [],
+    })
+    const attached = attachCellsTransition(detached.parts, BUFFER_ID, {
+      placements: detached.result,
+      variables: [],
+    })
+
+    // Then its run stops but its stored results stay, and it returns in
+    // place with its run history and without its in-memory rows
+    expect(detached.cancelRuns).toEqual({
+      cellIds: ["b"],
+      reason: "cell_deleted",
+    })
+    expect(detached.cleanup).toBeUndefined()
+    expect(attached.parts.cells.map((c) => c.id)).toEqual(["a", "b", "c"])
+    expect(attached.parts.cells[1]).toMatchObject({
+      id: "b",
+      position: 1,
+      lastRunStatus: "success",
+    })
+    expect(attached.parts.cells[1]).not.toHaveProperty("result")
+    expect(attached.parts.settings.layout).toContainEqual({
+      i: "b",
+      x: 0,
+      y: 10,
+      w: 6,
+      h: 10,
+    })
+  })
+
+  it("falls back to the recorded index when the previous cell is gone", () => {
+    // Given "c" detached from after "b", and "b" later removed
+    const detached = detachCellsTransition(
+      partsOf([cell("a"), cell("b"), cell("c"), cell("d")]),
+      BUFFER_ID,
+      { cellIds: ["c"], variables: [] },
+    )
+    const withoutB = detachCellsTransition(detached.parts, BUFFER_ID, {
+      cellIds: ["b"],
+      variables: [],
+    })
+
+    // When "c" is attached back
+    const attached = attachCellsTransition(withoutB.parts, BUFFER_ID, {
+      placements: detached.result,
+      variables: [],
+    })
+
+    // Then it takes its old index in the shorter list
+    expect(attached.parts.cells.map((c) => c.id)).toEqual(["a", "d", "c"])
+  })
+
+  it("keeps the only cell", () => {
+    expect(() =>
+      detachCellsTransition(partsOf([cell("a")]), BUFFER_ID, {
+        cellIds: ["a"],
+        variables: [],
+      }),
+    ).toThrow(NotebookToolError)
+  })
+})
+
+describe("arrangeCellsTransition", () => {
+  it("puts back the grid positions of the cells that are still there", () => {
+    // Given a grid where "b" moved, and "gone" left the notebook since
+    const parts = partsOf([cell("a"), cell("b")], {
+      settings: {
+        layoutMode: "grid",
+        layout: [
+          { i: "a", x: 0, y: 0, w: 6, h: 10 },
+          { i: "b", x: 0, y: 10, w: 12, h: 10 },
+        ],
+      },
+    })
+
+    // When the arrangement from before the move is restored
+    const out = arrangeCellsTransition(parts, BUFFER_ID, {
+      layout: [
+        { i: "a", x: 0, y: 0, w: 6, h: 10 },
+        { i: "b", x: 6, y: 0, w: 6, h: 10 },
+        { i: "gone", x: 0, y: 10, w: 12, h: 10 },
+      ],
+    })
+
+    // Then "b" is back beside "a", and no item comes back for "gone"
+    expect(out.parts.settings.layout).toEqual([
+      { i: "a", x: 0, y: 0, w: 6, h: 10 },
+      { i: "b", x: 6, y: 0, w: 6, h: 10 },
+    ])
+  })
+
+  it("puts back a layout that was never saved", () => {
+    // Given a grid whose first resize saved a layout
+    const parts = partsOf([cell("a")], {
+      settings: {
+        layoutMode: "grid",
+        layout: [{ i: "a", x: 0, y: 0, w: 6, h: 10 }],
+      },
+    })
+
+    // When the arrangement from before the resize is restored
+    const out = arrangeCellsTransition(parts, BUFFER_ID, { layout: [] })
+
+    // Then the layout is unsaved again and follows the cell order
+    expect(out.parts.settings.layout).toEqual([])
+  })
+
+  it("refuses an order for a different set of cells", () => {
+    expect(() =>
+      arrangeCellsTransition(partsOf([cell("a"), cell("b")]), BUFFER_ID, {
+        order: ["b", "a", "c"],
+      }),
+    ).toThrow(NotebookToolError)
   })
 })

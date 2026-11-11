@@ -50,7 +50,7 @@ export const useCellResizeOrchestration = ({
   resultRef,
   getEditorContentHeight,
 }: Options) => {
-  const { updateCell } = useNotebookActions()
+  const { updateCell, arrange } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
 
   const [spotlightLiveRatio, setSpotlightLiveRatio] = useState<number | null>(
@@ -74,6 +74,19 @@ export const useCellResizeOrchestration = ({
       : topHeightForSql(cell.value)
   }, [cell.value, getEditorContentHeight])
 
+  // Every resize and reset goes on the undo history as one change. A split
+  // drag in the grid writes the store before it ends, so the change starts
+  // from the cell as the drag found it.
+  const recordResize = useCallback(
+    (apply: () => void) =>
+      arrange(
+        [cell.id],
+        apply,
+        splitDragStartCell ? { startCells: [splitDragStartCell] } : {},
+      ),
+    [arrange, cell.id, splitDragStartCell],
+  )
+
   const signalAgentVisibleHeightChange = useCallback(
     (patch: Partial<NotebookCell>, from: NotebookCell = cell) => {
       if (hasAgentVisibleCellHeightChanged(from, patch)) {
@@ -89,9 +102,9 @@ export const useCellResizeOrchestration = ({
       (height: number) => {
         const patch = { topHeight: height, topResized: true }
         signalAgentVisibleHeightChange(patch)
-        updateCell(cell.id, patch)
+        recordResize(() => updateCell(cell.id, patch))
       },
-      [cell.id, signalAgentVisibleHeightChange, updateCell],
+      [cell.id, signalAgentVisibleHeightChange, updateCell, recordResize],
     ),
     // Write Monaco's CURRENT content height directly on reset, rather
     // than setting `topHeight: undefined` and waiting for the next
@@ -99,11 +112,13 @@ export const useCellResizeOrchestration = ({
     // one-frame flicker where `topHeight` falls back to
     // DEFAULT_TOP_HEIGHT (72 px) and the bottom slot jumps up.
     useCallback(() => {
-      updateCell(cell.id, {
-        topHeight: readResetTopHeight(),
-        topResized: false,
-      })
-    }, [cell.id, readResetTopHeight, updateCell]),
+      recordResize(() =>
+        updateCell(cell.id, {
+          topHeight: readResetTopHeight(),
+          topResized: false,
+        }),
+      )
+    }, [cell.id, readResetTopHeight, updateCell, recordResize]),
   )
   const bottomResize = useCellResize(
     minBottomHeightFor(cell),
@@ -111,14 +126,19 @@ export const useCellResizeOrchestration = ({
       (height: number) => {
         const patch = { bottomHeight: height, bottomResized: true }
         signalAgentVisibleHeightChange(patch)
-        updateCell(cell.id, patch)
+        recordResize(() => updateCell(cell.id, patch))
       },
-      [cell.id, signalAgentVisibleHeightChange, updateCell],
+      [cell.id, signalAgentVisibleHeightChange, updateCell, recordResize],
     ),
     useCallback(
       () =>
-        updateCell(cell.id, { bottomHeight: undefined, bottomResized: false }),
-      [cell.id, updateCell],
+        recordResize(() =>
+          updateCell(cell.id, {
+            bottomHeight: undefined,
+            bottomResized: false,
+          }),
+        ),
+      [cell.id, updateCell, recordResize],
     ),
   )
 
@@ -181,7 +201,11 @@ export const useCellResizeOrchestration = ({
   const splitResizeEnd = (height: number) => {
     if (isMaximized) {
       setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: spotlightRatioFor(height) })
+      recordResize(() =>
+        updateCell(cell.id, {
+          spotlightEditorRatio: spotlightRatioFor(height),
+        }),
+      )
       return
     }
     setSplitDragStartCell(null)
@@ -194,7 +218,7 @@ export const useCellResizeOrchestration = ({
 
   const resetSpotlightRatio = () => {
     setSpotlightLiveRatio(null)
-    updateCell(cell.id, { spotlightEditorRatio: undefined })
+    recordResize(() => updateCell(cell.id, { spotlightEditorRatio: undefined }))
   }
 
   const resetEditorHeight = () => {

@@ -227,7 +227,7 @@ const MarkdownCellInner: React.FC<Props> = ({
   isFocused,
   isMaximized,
 }) => {
-  const { updateCell } = useNotebookActions()
+  const { updateCell, arrange } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
 
   const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({
@@ -257,8 +257,8 @@ const MarkdownCellInner: React.FC<Props> = ({
     if (hasAgentVisibleCellHeightChanged(cell, patch)) {
       signalUserEdit(bufferIdForEvents)
     }
-    updateCell(cell.id, patch)
-  }, [bufferIdForEvents, cell, updateCell])
+    arrange([cell.id], () => updateCell(cell.id, patch))
+  }, [bufferIdForEvents, cell, updateCell, arrange])
 
   const heightResize = useCellResize(
     MIN_MARKDOWN_HEIGHT_PX,
@@ -268,9 +268,9 @@ const MarkdownCellInner: React.FC<Props> = ({
         if (hasAgentVisibleCellHeightChanged(cell, patch)) {
           signalUserEdit(bufferIdForEvents)
         }
-        updateCell(cell.id, patch)
+        arrange([cell.id], () => updateCell(cell.id, patch))
       },
-      [bufferIdForEvents, cell, updateCell],
+      [bufferIdForEvents, cell, updateCell, arrange],
     ),
     resetToContentHeight,
   )

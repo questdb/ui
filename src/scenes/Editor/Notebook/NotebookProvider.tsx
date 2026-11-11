@@ -30,11 +30,14 @@ import type { DrawGateOutcome } from "./useCellExecution"
 import { useNotebookPersistence } from "./useNotebookPersistence"
 import {
   addCellTransition,
+  arrangeCellsTransition,
+  attachCellsTransition,
   createNotebookController,
-  deleteCellTransition,
+  detachCellsTransition,
   duplicateCellTransition,
   moveCellDownTransition,
   moveCellUpTransition,
+  pasteCellsTransition,
   registerController,
   setCellMaximizedTransition,
   setCellModeTransition,
@@ -42,14 +45,25 @@ import {
   unregisterController,
   type NotebookControllerActions,
   type NotebookTransitionResult,
+  type PastedCell,
   type ViewParts,
 } from "../../../utils/notebooks/notebookController"
 import {
+  type CellPlacement,
   type CellRunOutcome,
+  cellPlacementsOf,
   clearCellAutoRefresh,
   countAutoRefreshOverrides,
   generateId,
 } from "./notebookUtils"
+import { isCellHeldByUndo, recordUndoEntry } from "./undo/notebookUndoHistory"
+import { stepUndoHistory, type HistoryStep } from "./undo/stepUndoHistory"
+import type { Arrangement } from "./undo/cellArrangement"
+import {
+  recordArrangement,
+  type ArrangeOptions,
+} from "./undo/recordArrangement"
+import { dismissUndoToast } from "./cellEditing/undoToast"
 import {
   computeResultBottomHeight,
   discardCellResult,
@@ -122,13 +136,26 @@ export type NotebookState = {
 
 export type NotebookActions = {
   getVariables: () => NotebookVariable[] | undefined
+  getSettings: () => NotebookSettings
   updateSettings: (updates: Partial<NotebookSettings>) => void
   addCell: (afterCellId?: string, value?: string, type?: CellType) => string
   deleteCell: (cellId: string) => void
   updateCell: (cellId: string, updates: Partial<NotebookCell>) => void
   moveCellUp: (cellId: string) => void
   moveCellDown: (cellId: string) => void
+  arrange: (
+    cellIds: string[],
+    apply: () => void,
+    options?: ArrangeOptions,
+  ) => void
   duplicateCell: (cellId: string) => Promise<string>
+  pasteCells: (
+    afterCellId: string | undefined,
+    cells: PastedCell[],
+    variables: NotebookVariable[],
+  ) => string[]
+  undo: () => HistoryStep
+  redo: () => HistoryStep
   runCell: (
     cellId: string,
     sql?: string,
@@ -163,13 +190,18 @@ type ActionMap = Record<string, (...args: never[]) => unknown>
 
 const NOOP_ACTIONS: NotebookActions = {
   getVariables: () => undefined,
+  getSettings: () => ({}),
   updateSettings: () => undefined,
   addCell: () => "",
   deleteCell: () => undefined,
   updateCell: () => undefined,
   moveCellUp: () => undefined,
   moveCellDown: () => undefined,
+  arrange: (_cellIds, apply) => apply(),
   duplicateCell: () => Promise.resolve(""),
+  pasteCells: () => [],
+  undo: () => ({ kind: "empty" }),
+  redo: () => ({ kind: "empty" }),
   runCell: () => Promise.resolve({ ok: false, superseded: false }),
   validateForDraw: () => Promise.resolve({ granted: false }),
   reRunResultAt: () => Promise.resolve(false),
@@ -191,7 +223,6 @@ const NOOP_ACTIONS: NotebookActions = {
 
 const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   ...NOOP_ACTIONS,
-  getSettings: () => ({}),
   getMaximizedCellId: () => null,
   readRefreshState: () => new Map(),
   readResultStatus: () => "unrequested",
@@ -277,7 +308,8 @@ export const NotebookProvider: React.FC<{
   const notebookRunIdRef = useRef(0)
   const liveActionsRef = useRef<LiveNotebookActions>(NOOP_LIVE_ACTIONS)
 
-  const { executeSingle } = useQueryExecution(settings.variables)
+  const getVariables = useCallback(() => settingsRef.current.variables, [])
+  const { executeSingle } = useQueryExecution(getVariables)
 
   const cellRefreshEngineRef = useRef<CellRefreshEngine | null>(null)
 
@@ -314,6 +346,9 @@ export const NotebookProvider: React.FC<{
   })
 
   const { hydrateCells, cellsRef } = store
+
+  // The undo toast acts on this provider, so it goes when the notebook does.
+  useEffect(() => () => dismissUndoToast(bufferId), [bufferId])
 
   useEffect(() => {
     const unpin = pinNotebookSnapshots(bufferId)
@@ -364,8 +399,10 @@ export const NotebookProvider: React.FC<{
 
   // Reconcile live cells against the persisted snapshot index on mount:
   //   - snapshots whose cell no longer exists (out-of-band divergence, e.g. an
-  //     applied external state) are deleted — index-only read, payloads
-  //     untouched; cell-delete transitions clean up their own snapshots.
+  //     applied external state, or a user delete the undo history let go of
+  //     with a reload) are deleted with the cell's column layout — index-only
+  //     read, payloads untouched. A cell the undo history still holds keeps
+  //     both.
   //   - a run-marked, resultless cell with no snapshot (e.g. a duplicate whose
   //     stale source snapshot was skipped) is marked missing now, so its
   //     reserved result pane collapses on mount instead of shimmering until it
@@ -379,8 +416,14 @@ export const NotebookProvider: React.FC<{
         const cells = cellsRef.current
         const liveCellIds = new Set(cells.map((c) => c.id))
         snapshotCellIds
-          .filter((cellId) => !liveCellIds.has(cellId))
-          .forEach((cellId) => void deleteCellSnapshot(bufferId, cellId))
+          .filter(
+            (cellId) =>
+              !liveCellIds.has(cellId) && !isCellHeldByUndo(bufferId, cellId),
+          )
+          .forEach((cellId) => {
+            void deleteCellSnapshot(bufferId, cellId)
+            removeNotebookCellLayouts(bufferId, cellId)
+          })
         cells
           .filter(
             (cell) =>
@@ -588,19 +631,111 @@ export const NotebookProvider: React.FC<{
     [applyTransition, bufferId],
   )
 
-  const addCell = useCallback(
-    (afterCellId?: string, value?: string, type?: CellType): string =>
+  // User changes to the cell list go on the notebook's undo history. Reads
+  // the document after the change, which commitTransition has already synced.
+  const recordInsertedCells = useCallback(
+    (cellIds: string[], variables: NotebookVariable[]) => {
+      if (cellIds.length === 0) return
+      recordUndoEntry(bufferId, {
+        change: "insert",
+        placements: cellPlacementsOf(
+          store.cellsRef.current,
+          settingsRef.current.layout,
+          cellIds,
+        ),
+        variables,
+      })
+    },
+    [bufferId, store.cellsRef],
+  )
+
+  const detachCells = useCallback(
+    (
+      cellIds: string[],
+      variables: NotebookVariable[],
+    ): CellPlacement[] | undefined => {
+      const placements = silently(() =>
+        applyTransition((parts) =>
+          detachCellsTransition(parts, bufferId, { cellIds, variables }),
+        ),
+      )
+      if (!placements) return undefined
+      for (const cellId of cellIds) {
+        clearChartZoom(cellId)
+        clearSettingsDrawerSessions(cellId)
+      }
+      return placements
+    },
+    [applyTransition, bufferId],
+  )
+
+  const attachCells = useCallback(
+    (
+      placements: CellPlacement[],
+      variables: NotebookVariable[],
+    ): string[] | undefined =>
       silently(() =>
         applyTransition((parts) =>
-          addCellTransition(parts, bufferId, {
-            id: generateId(),
-            value: value ?? "",
-            afterCellId,
-            type,
-          }),
+          attachCellsTransition(parts, bufferId, { placements, variables }),
         ),
-      ) ?? "",
+      ),
     [applyTransition, bufferId],
+  )
+
+  const arrange = useCallback(
+    (cellIds: string[], apply: () => void, options?: ArrangeOptions) =>
+      recordArrangement(
+        bufferId,
+        () => ({
+          cells: store.cellsRef.current,
+          layout: settingsRef.current.layout,
+        }),
+        cellIds,
+        apply,
+        options,
+      ),
+    [bufferId, store.cellsRef],
+  )
+
+  const applyArrangement = useCallback(
+    (arrangement: Arrangement): boolean =>
+      silently(() =>
+        applyTransition((parts) =>
+          arrangeCellsTransition(parts, bufferId, arrangement),
+        ),
+      ) ?? false,
+    [applyTransition, bufferId],
+  )
+
+  const stepHistory = useCallback(
+    (from: "undo" | "redo"): HistoryStep =>
+      stepUndoHistory(bufferId, from, {
+        cells: store.cellsRef.current,
+        variables: settingsRef.current.variables ?? [],
+        detach: detachCells,
+        attach: attachCells,
+        arrange: applyArrangement,
+      }),
+    [bufferId, store.cellsRef, detachCells, attachCells, applyArrangement],
+  )
+
+  const addCell = useCallback(
+    (afterCellId?: string, value?: string, type?: CellType): string => {
+      const cellId =
+        silently(() =>
+          applyTransition((parts) =>
+            addCellTransition(parts, bufferId, {
+              id: generateId(),
+              value: value ?? "",
+              afterCellId,
+              type,
+            }),
+          ),
+        ) ?? ""
+      if (cellId) recordInsertedCells([cellId], [])
+      return cellId
+    },
+    [applyTransition, bufferId, recordInsertedCells],
   )
 
   const setCellMode = useCallback(
@@ -789,15 +924,20 @@ export const NotebookProvider: React.FC<{
     [bufferId, cancelCell, questExecution, runCellNow],
   )
 
+  // A user delete keeps the cell's stored results and column layout for undo;
+  // the history lets them go when it drops the entry.
   const deleteCell = useCallback(
-    // applyTransition cancels the deleted cell's in-flight run via its cleanup.
-    (cellId: string) =>
-      silently(() =>
-        applyTransition((parts) =>
-          deleteCellTransition(parts, bufferId, cellId),
-        ),
-      ),
-    [applyTransition, bufferId],
+    (cellId: string) => {
+      const placements = detachCells([cellId], [])
+      if (placements) {
+        recordUndoEntry(bufferId, {
+          change: "remove",
+          placements,
+          variables: [],
+        })
+      }
+    },
+    [detachCells, bufferId],
   )
 
   const duplicateCell = useCallback(
@@ -845,29 +985,78 @@ export const NotebookProvider: React.FC<{
         return ""
       }
       if (snapshotsCopied === 0) resultHydration.noteMissing(newId)
+      recordInsertedCells([applied], [])
       return applied
     },
-    [applyTransition, bufferId, cellsRef, resultHydration, cellRefreshEngine],
+    [
+      applyTransition,
+      bufferId,
+      cellsRef,
+      resultHydration,
+      cellRefreshEngine,
+      recordInsertedCells,
+    ],
+  )
+
+  const pasteCells = useCallback(
+    (
+      afterCellId: string | undefined,
+      cells: PastedCell[],
+      variables: NotebookVariable[],
+    ): string[] => {
+      const namesBefore = new Set(
+        (settingsRef.current.variables ?? []).map(({ name }) => name),
+      )
+      const cellIds =
+        silently(() =>
+          applyTransition((parts) =>
+            pasteCellsTransition(parts, bufferId, {
+              afterCellId,
+              cells: cells.map(({ cell, gridWidth }) => ({
+                cell: { ...cell, id: generateId() },
+                gridWidth,
+              })),
+              variables,
+            }),
+          ),
+        ) ?? []
+      const addedVariables = (settingsRef.current.variables ?? []).filter(
+        ({ name }) => !namesBefore.has(name),
+      )
+      recordInsertedCells(cellIds, addedVariables)
+      return cellIds
+    },
+    [applyTransition, bufferId, recordInsertedCells],
   )
 
   const moveCellUp = useCallback(
     (cellId: string) =>
-      silently(() =>
-        applyTransition((parts) =>
-          moveCellUpTransition(parts, bufferId, cellId),
-        ),
+      arrange(
+        [cellId],
+        () =>
+          silently(() =>
+            applyTransition((parts) =>
+              moveCellUpTransition(parts, bufferId, cellId),
+            ),
+          ),
+        { mergeKey: `move:${cellId}` },
       ),
-    [applyTransition, bufferId],
+    [applyTransition, arrange, bufferId],
   )
 
   const moveCellDown = useCallback(
     (cellId: string) =>
-      silently(() =>
-        applyTransition((parts) =>
-          moveCellDownTransition(parts, bufferId, cellId),
-        ),
+      arrange(
+        [cellId],
+        () =>
+          silently(() =>
+            applyTransition((parts) =>
+              moveCellDownTransition(parts, bufferId, cellId),
+            ),
+          ),
+        { mergeKey: `move:${cellId}` },
       ),
-    [applyTransition, bufferId],
+    [applyTransition, arrange, bufferId],
   )
 
   const setCellPaneView = useCallback(
@@ -891,14 +1080,18 @@ export const NotebookProvider: React.FC<{
   }, [bufferId, store])
 
   liveActionsRef.current = {
-    getVariables: () => settingsRef.current.variables,
+    getVariables,
     updateSettings,
     addCell,
     deleteCell,
     updateCell: store.updateCell,
     moveCellUp,
     moveCellDown,
+    arrange,
     duplicateCell,
+    pasteCells,
+    undo: () => stepHistory("undo"),
+    redo: () => stepHistory("redo"),
     runCell,
     validateForDraw: execution.validateForDraw,
     reRunResultAt: (cellId, index) => {

@@ -1,12 +1,6 @@
 import React, { useMemo, useState } from "react"
 import styled, { css } from "styled-components"
-import {
-  ChevronUp,
-  ChevronDown,
-  CopyAlt,
-  Trash,
-  Reset,
-} from "../../../../components/icons"
+import { ChevronUp, ChevronDown, Reset } from "../../../../components/icons"
 import {
   DotsThreeVerticalIcon,
   CornersOutIcon,
@@ -46,6 +40,7 @@ import { EventType } from "../../../../modules/EventBus/types"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useCellViewActions } from "./useCellViewActions"
+import { CellEditMenuItems } from "../cellEditing/CellEditMenuItems"
 
 const ToolbarWrapper = styled.div<{
   $inline?: boolean
@@ -107,15 +102,8 @@ export const CellToolbar: React.FC<Props> = ({
   paneLayout,
   chartZoomed = false,
 }) => {
-  const {
-    moveCellUp,
-    moveCellDown,
-    duplicateCell,
-    deleteCell,
-    setFocusedCell,
-    setMaximizedCellId,
-    setCellRefresh,
-  } = useNotebookActions()
+  const { moveCellUp, moveCellDown, setMaximizedCellId, setCellRefresh } =
+    useNotebookActions()
   const bufferId = useNotebookBufferId()
 
   // Grid positions cells via settings.layout, so swapping array order doesn't
@@ -227,29 +215,6 @@ export const CellToolbar: React.FC<Props> = ({
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "menu" })
     moveCellDown(cellId)
     emitUserAction({ kind: "user_moved_cell", bufferId, cellId })
-  }
-  const handleDuplicate = async () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DUPLICATE, {
-      cellType: cell.type ?? "sql",
-      view,
-    })
-    const newCellId = await duplicateCell(cellId)
-    if (newCellId) {
-      setFocusedCell(newCellId)
-      emitUserAction({
-        kind: "user_duplicated_cell",
-        bufferId,
-        cellId,
-        newCellId,
-      })
-    }
-  }
-  const handleDelete = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DELETE, {
-      cellType: cell.type ?? "sql",
-    })
-    deleteCell(cellId)
-    emitUserAction({ kind: "user_deleted_cell", bufferId, cellId })
   }
 
   return (
@@ -421,23 +386,12 @@ export const CellToolbar: React.FC<Props> = ({
                   Move down
                 </DropdownMenu.Item>
               )}
-              {showDuplicate && (
-                <DropdownMenu.Item
-                  onSelect={handleDuplicate}
-                  icon={<CopyAlt size={16} />}
-                >
-                  Duplicate
-                </DropdownMenu.Item>
-              )}
-              {showDelete && (
-                <DropdownMenu.Item
-                  tone="danger"
-                  onSelect={handleDelete}
-                  icon={<Trash size={16} />}
-                >
-                  Delete
-                </DropdownMenu.Item>
-              )}
+              <CellEditMenuItems
+                cellId={cellId}
+                showDuplicate={showDuplicate}
+                showDelete={showDelete}
+                onClose={() => handleMenuOpenChange(false)}
+              />
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
