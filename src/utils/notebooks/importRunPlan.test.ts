@@ -12,10 +12,12 @@ const cell = (id: string, value: string): NotebookCell =>
   ({ id, value, position: 0 }) as NotebookCell
 
 // A stand-in for /sql/validate: SELECTs are DQL, everything else is a write.
-const validate = async (sql: string): Promise<ValidateQueryResult> =>
-  /^\s*select/i.test(sql)
-    ? ({ queryType: "SELECT", columns: [] } as unknown as ValidateQueryResult)
-    : ({ queryType: "INSERT" } as unknown as ValidateQueryResult)
+const validate = (sql: string): Promise<ValidateQueryResult> =>
+  Promise.resolve(
+    /^\s*select/i.test(sql)
+      ? ({ queryType: "SELECT", columns: [] } as unknown as ValidateQueryResult)
+      : ({ queryType: "INSERT" } as unknown as ValidateQueryResult),
+  )
 
 beforeEach(() => clearStatementClassCache())
 

@@ -1,0 +1,147 @@
+name: E2E tests
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  CI:
+    name: E2E tests
+    runs-on: ubuntu-latest
+    env:
+      CYPRESS_TRASH_ASSETS_BEFORE_RUNS: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - uses: actions/setup-java@v4
+        id: java
+        with:
+          java-version: "25"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Resolve QuestDB build inputs
+        id: questdb
+        run: |
+          echo "revision=$(git -C test/e2e/questdb rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
+          v=$(grep -m1 -oE '<questdb\.client\.version>[^<]+' test/e2e/questdb/core/pom.xml | sed 's/.*>//')
+          profiles=build-binaries
+          if [[ "$v" == *-SNAPSHOT ]]; then
+            profiles+=,local-client
+          fi
+          echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
+          echo "profiles-key=${profiles//,/-}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore QuestDB archive
+        id: questdb-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: test/e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz
+          key: questdb-runtime-v1-${{ steps.questdb.outputs.image }}-${{ runner.arch }}-${{ steps.java.outputs.distribution }}-${{ steps.java.outputs.version }}-${{ steps.questdb.outputs.revision }}-${{ steps.questdb.outputs.profiles-key }}-skip-tests
+
+      - name: Build QuestDB
+        if: steps.questdb-cache.outputs.cache-hit != 'true'
+        run:
+          mvn clean package -f test/e2e/questdb/pom.xml -DskipTests -P ${{ steps.questdb.outputs.profiles }}
+
+      - name: Extract QuestDB
+        run:
+          tar -xzf test/e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C
+          tmp/
+
+      - name: Save QuestDB archive
+        if: steps.questdb-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: test/e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz
+          key: ${{ steps.questdb-cache.outputs.cache-primary-key }}
+
+      - name: Create DB Root
+        run: mkdir tmp/dbroot
+
+      - name: Start QuestDB
+        run:
+          ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+        env:
+          QDB_DEV_MODE_ENABLED: "true"
+          QDB_TELEMETRY_ENABLED: "false"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Run e2e tests - auth
+        run: yarn preview & yarn test:e2e:auth
+
+      - name: Stop QuestDB
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
+
+      - name: Start QuestDB, set auth credentials
+        run:
+          ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+        env:
+          QDB_DEV_MODE_ENABLED: "true"
+          QDB_HTTP_USER: "admin"
+          QDB_HTTP_PASSWORD: "quest"
+          QDB_TELEMETRY_ENABLED: "false"
+
+      - name: Run e2e tests
+        run: yarn test:e2e
+        env:
+          CYPRESS_NO_COMMAND_LOG: "1"
+
+      - name: Stop QuestDB before context-path tests
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
+
+      - name: Start QuestDB with a context path
+        run: |
+          ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+          curl --retry 30 --retry-connrefused --retry-delay 1 --fail --silent --show-error --output /dev/null http://localhost:9000/ci/console/settings
+        env:
+          QDB_DEV_MODE_ENABLED: "true"
+          QDB_HTTP_USER: "admin"
+          QDB_HTTP_PASSWORD: "quest"
+          QDB_HTTP_CONTEXT_WEB_CONSOLE: "/ci/console"
+          QDB_HTTP_STATIC_PUBLIC_DIRECTORY: "${{ github.workspace }}/dist"
+          QDB_TELEMETRY_ENABLED: "false"
+
+      - name: Run context-path E2E tests
+        run: yarn test:e2e:context
+        env:
+          CYPRESS_BASE_URL: "http://localhost:9000/ci/console"
+
+      - name: Print Log Files
+        if: success() || failure()
+        run: cat tmp/dbroot/log/*
+
+      - name: Save QuestDB log on test failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: questdb-log
+          path: tmp/dbroot/log/*
+
+      - name: Upload Cypress Screenshots
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: test/e2e/screenshots
+          if-no-files-found: ignore
+
+      - name: Stop QuestDB
+        if: success() || failure()
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop

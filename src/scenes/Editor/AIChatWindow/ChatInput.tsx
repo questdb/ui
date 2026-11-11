@@ -22,7 +22,7 @@ import { assistantLinearGradientHorizontal } from "../../../theme"
 import { TableIcon } from "../../Schema/table-icon"
 import { getTableKind } from "../../../utils/questdb/types"
 import { selectors } from "../../../store"
-import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
+import { CircleNotchSpinner } from "../Monaco/icons"
 
 const InputContainer = styled(Box)`
   display: flex;

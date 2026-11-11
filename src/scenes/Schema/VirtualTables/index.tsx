@@ -17,7 +17,7 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { color, ErrorResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
-import { State, View } from "../../Schema"
+import { State, View } from ".."
 import LoadingError from "../LoadingError"
 import Row, { TreeNodeKind } from "../Row"
 import {

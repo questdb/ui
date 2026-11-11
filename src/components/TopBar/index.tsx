@@ -1,7 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 import Menu from "../../scenes/Editor/Menu"
-import { Box } from "../../components"
+import { Box } from ".."
 import { Toolbar } from "./toolbar"
 import QuestDBLogo from "../../providers/SettingsProvider/QuestDBLogo"
 import { TOP_BAR_HEIGHT } from "../../consts"

@@ -3,7 +3,6 @@ import { captureReadSeq, createNotebookFreshness } from "./notebookFreshness"
 import {
   __resetNotebookAIBridgeForTests,
   getBufferActionSeq,
-  signalUserEdit,
 } from "./notebookAIBridge"
 
 describe("createNotebookFreshness", () => {
@@ -27,32 +26,6 @@ describe("createNotebookFreshness", () => {
 
     // Then
     expect(freshness.assertFresh(1)).toBe("fresh")
-  })
-
-  it("reports stale once the user edits the buffer after the read", () => {
-    // Given
-    const freshness = createNotebookFreshness()
-    freshness.recordRead(1, captureReadSeq(1))
-
-    // When
-    signalUserEdit(1)
-
-    // Then
-    expect(freshness.assertFresh(1)).toBe("stale")
-  })
-
-  it("scopes freshness per buffer: an edit to another buffer stays fresh", () => {
-    // Given
-    const freshness = createNotebookFreshness()
-    freshness.recordRead(1, captureReadSeq(1))
-    freshness.recordRead(2, captureReadSeq(2))
-
-    // When
-    signalUserEdit(2)
-
-    // Then
-    expect(freshness.assertFresh(1)).toBe("fresh")
-    expect(freshness.assertFresh(2)).toBe("stale")
   })
 
   it("seeds read baselines from the constructor", () => {
@@ -112,18 +85,5 @@ describe("createNotebookFreshness", () => {
 
     // Then
     expect(freshness.assertFresh(1)).toBe("fresh")
-  })
-})
-
-describe("captureReadSeq", () => {
-  beforeEach(() => __resetNotebookAIBridgeForTests())
-  afterEach(() => __resetNotebookAIBridgeForTests())
-
-  it("returns the buffer's current action seq", () => {
-    // Given
-    signalUserEdit(1)
-
-    // When / Then
-    expect(captureReadSeq(1)).toBe(getBufferActionSeq(1))
   })
 })

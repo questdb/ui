@@ -1,6 +1,6 @@
 import React from "react"
 import { useFormContext } from "react-hook-form"
-import { Checkbox } from "../../components"
+import { Checkbox } from "../Checkbox"
 
 type Props = React.InputHTMLAttributes<HTMLInputElement> & {
   name: string

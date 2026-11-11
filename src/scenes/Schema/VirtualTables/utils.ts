@@ -3,7 +3,7 @@ import type {
   InformationSchemaColumn,
   SymbolColumnDetails,
 } from "../../../utils/questdb/types"
-import { TreeNode, SchemaTree, FlattenedTreeItem } from "../VirtualTables"
+import { TreeNode, SchemaTree, FlattenedTreeItem } from "."
 import * as QuestDB from "../../../utils/questdb"
 
 export const createSymbolDetailsNodes = (

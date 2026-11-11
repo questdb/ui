@@ -8,7 +8,7 @@ import {
   PopperToggle,
   SelectMenuControl,
   TextArea as DefaultTextArea,
-} from "../../components"
+} from ".."
 import { Preferences, InstanceType } from "../../utils/questdb/types"
 import { menuContainerStyles } from "../menuStyles"
 import { InstanceTypeIcon } from "./InstanceTypeIcon"

@@ -2,7 +2,7 @@ import React from "react"
 import styled, { useTheme } from "styled-components"
 import { Loader3 } from "../icons"
 import { Color } from "../../types"
-import { spinAnimation } from "../../components/Animation"
+import { spinAnimation } from "../Animation"
 
 const StyledLoader = styled(Loader3)<{ $size: string; $color: Color }>`
   width: ${({ $size }) => $size};
