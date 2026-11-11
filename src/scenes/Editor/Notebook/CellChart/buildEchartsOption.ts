@@ -489,7 +489,10 @@ export const buildEchartsOption = (
           scale: true,
           position: "right",
           name: rightTitle,
-          nameTextStyle: axisName,
+          // The name ends at the axis line and grows to the left. Centred,
+          // it ran past the chart's right edge and under the cell's Close
+          // results button, which floats over the top-right corner.
+          nameTextStyle: { ...axisName, align: "right" },
           axisLabel,
           splitLine: { show: false },
           // Keep both keys even when unset: chart updates merge into the prior

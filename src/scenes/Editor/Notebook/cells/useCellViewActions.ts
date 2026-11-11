@@ -8,7 +8,7 @@ import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
 import type { CellView } from "../notebookUtils"
 import type { CellPaneLayout } from "../cellSizing"
 
-type CellViewActionMethod = "menu" | "toggle"
+type CellViewActionMethod = "menu" | "toggle" | "button"
 
 type Params = {
   cellId: string
@@ -29,8 +29,10 @@ export const useCellViewActions = ({
   const bufferId = useNotebookBufferId()
   const resultOnly = paneLayout === "result"
 
+  // Table and Chart only switch the view: choosing the one already shown
+  // does nothing. Closing the results is closeResults.
   const viewTable = () => {
-    if (isCellBusy) return
+    if (isCellBusy || view === "grid") return
     if (view === "none") {
       signalUserEdit(bufferId)
       eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
@@ -38,22 +40,37 @@ export const useCellViewActions = ({
     }
 
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: view === "grid" ? "none" : "grid",
+      to: "grid",
       method,
     })
     signalUserEdit(bufferId)
-    if (view === "grid") clearCellResult(cellId)
-    else setCellMode(cellId, "run")
+    setCellMode(cellId, "run")
   }
 
   const viewChart = () => {
-    if (isCellBusy) return
+    if (isCellBusy || view === "chart") return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: view === "chart" ? "none" : "chart",
+      to: "chart",
       method,
     })
     signalUserEdit(bufferId)
     eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
+  }
+
+  // Drops the rows and the stored result, so the cell shows its editor only.
+  // A chart goes through the draw toggle, which also leaves chart mode.
+  const closeResults = () => {
+    if (isCellBusy || view === "none") return
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
+      to: "none",
+      method,
+    })
+    signalUserEdit(bufferId)
+    if (view === "chart") {
+      eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
+    } else {
+      clearCellResult(cellId)
+    }
   }
 
   const toggleEditor = () => {
@@ -67,5 +84,5 @@ export const useCellViewActions = ({
 
   const resetZoom = () => resetChartZoom(cellId)
 
-  return { viewTable, viewChart, toggleEditor, resetZoom }
+  return { viewTable, viewChart, closeResults, toggleEditor, resetZoom }
 }

@@ -78,4 +78,27 @@ export const CellWrapper = styled.div.attrs({
   &:focus-within .cell-toolbar {
     opacity: 1;
   }
+
+  /* Close results stays out of the way until the cell is in use. Hidden, it
+     takes no clicks, so a stray click cannot clear the results. */
+  .cell-close-results {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s;
+  }
+
+  &:hover .cell-close-results,
+  &:focus-within .cell-close-results {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  ${({ $focused }) =>
+    $focused &&
+    css`
+      .cell-close-results {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    `}
 `
