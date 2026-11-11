@@ -383,6 +383,27 @@ describe("createSchemaCompletionProvider", () => {
       const labels = getLabels(result)
       expect(labels).toContain("trades")
     })
+
+    it("returns null inside a nested block comment", () => {
+      const { model, position } = cursorInput("SELECT 1 /* outer /* inner */ |")
+      const result = provider.provideCompletionItems(model, position)
+      expect(result).toBeNull()
+    })
+
+    it("does not treat -- or /* inside a quoted identifier as a comment", () => {
+      for (const sql of [
+        "SELECT * FROM `my--table` WHERE |",
+        'SELECT * FROM "my--table" WHERE |',
+      ]) {
+        const { model, position } = cursorInput(sql)
+        const result = provider.provideCompletionItems(model, position)
+        expect(result, sql).not.toBeNull()
+        expect(
+          getLabels(result as CompletionResult).length,
+          sql,
+        ).toBeGreaterThan(0)
+      }
+    })
   })
 
   describe("parenthesis suppression", () => {
@@ -573,6 +594,36 @@ describe("createSchemaCompletionProvider", () => {
         const closingQuote = text.lastIndexOf('"')
         expect(range.endColumn).toBe(closingQuote + 2)
       }
+    })
+
+    it("closes a backtick-quoted identifier with a backtick", () => {
+      const text = "SELECT * FROM `tra"
+      const model = createModel(text)
+      const position = model.getPositionAt(text.length)
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+      const item = getSuggestions(result).find((s) => s.label === "trades")
+      expect(item).toBeDefined()
+      expect(item!.insertText).toBe("trades` ")
+      const range = item!.range as IRange
+      expect(range.startColumn).toBe(text.indexOf("`") + 2)
+      expect(range.endColumn).toBe(position.column)
+    })
+
+    it("replaces the closing backtick inside `...`", () => {
+      const text = "SELECT * FROM `tra`"
+      const cursorIndex = text.indexOf("tra") + 3
+      const model = createModel(text)
+      const position = model.getPositionAt(cursorIndex)
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+      const item = getSuggestions(result).find((s) => s.label === "trades")
+      expect(item!.insertText).toBe("trades` ")
+      expect((item!.range as IRange).endColumn).toBe(text.length + 1)
     })
 
     it("does not trigger inside single-quoted strings", () => {

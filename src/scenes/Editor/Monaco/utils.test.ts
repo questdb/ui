@@ -348,10 +348,52 @@ describe("isCursorInComment", () => {
   })
 })
 
+describe("isCursorInComment: nesting and backticks", () => {
+  it("block comments nest", () => {
+    const text = "SELECT /* a /* b */ c */ x"
+    expect(isCursorInComment(text, text.indexOf("c */"))).toBe(true)
+    expect(isCursorInComment(text, text.indexOf(" x"))).toBe(false)
+  })
+
+  it("an unclosed outer comment covers the rest of the text", () => {
+    const text = "SELECT 1 /* outer /* inner */ "
+    expect(isCursorInComment(text, text.length)).toBe(true)
+  })
+
+  it("ignores -- and /* inside a backtick-quoted identifier", () => {
+    const text = "SELECT * FROM `my--table` WHERE `a/*b` = 1"
+    expect(isCursorInComment(text, text.indexOf(" WHERE"))).toBe(false)
+    expect(isCursorInComment(text, text.length)).toBe(false)
+  })
+})
+
 describe("isCursorInQuotedIdentifier", () => {
   it("returns -1 when cursor is in normal SQL", () => {
     const text = "SELECT * FROM table"
     expect(isCursorInQuotedIdentifier(text, 0, 7)).toBe(-1)
+  })
+
+  it("detects cursor inside a backtick-quoted identifier", () => {
+    const text = "SELECT * FROM `my_table`"
+    const cursor = text.indexOf("my_table") + 3
+    expect(isCursorInQuotedIdentifier(text, 0, cursor)).toBe(text.indexOf("`"))
+  })
+
+  it("detects cursor inside an unclosed backtick identifier", () => {
+    const text = "SELECT * FROM `tra"
+    expect(isCursorInQuotedIdentifier(text, 0, text.length)).toBe(
+      text.indexOf("`"),
+    )
+  })
+
+  it("backticks have no escape: `a``b` closes after a", () => {
+    const text = "SELECT `a``b` FROM t"
+    expect(isCursorInQuotedIdentifier(text, 0, text.indexOf(" FROM"))).toBe(-1)
+  })
+
+  it("does not see a quoted identifier inside a nested comment", () => {
+    const text = 'SELECT /* a /* b */ "c */ x'
+    expect(isCursorInQuotedIdentifier(text, 0, text.length)).toBe(-1)
   })
 
   it("detects cursor inside a double-quoted identifier", () => {

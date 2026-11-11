@@ -71,8 +71,10 @@ const UPPERCASE_KINDS = new Set([
 const toCompletionItem = (
   suggestion: Suggestion,
   range: languages.CompletionItem["range"],
-  isInsideQuotedIdentifier?: boolean,
+  // The quote (`"` or `` ` ``) that opened the identifier the cursor is in
+  openQuote?: string,
 ): languages.CompletionItem => {
+  const isInsideQuotedIdentifier = openQuote !== undefined
   const shouldUppercase = UPPERCASE_KINDS.has(suggestion.kind)
   const label = shouldUppercase
     ? suggestion.label.toUpperCase()
@@ -92,11 +94,11 @@ const toCompletionItem = (
   const quotedInsertText = shouldAutoQuote ? '"' + insertText + '"' : insertText
 
   // Inside a quoted identifier, the range covers content + closing quote,
-  // so we append '" ' to close the identifier and add a trailing space.
+  // so we append the same quote to close the identifier, plus a space.
   const suffix = isFunction
     ? "($0)"
     : isInsideQuotedIdentifier
-      ? '"' + " "
+      ? openQuote + " "
       : " "
 
   return {
@@ -195,10 +197,14 @@ export const createSchemaCompletionProvider = (
         cursorOffset,
       )
       const isInsideQuotedIdentifier = openQuoteOffset >= 0
+      const openQuote = isInsideQuotedIdentifier
+        ? fullText[openQuoteOffset]
+        : undefined
 
       // When inside a quoted identifier, the parser suppresses suggestions.
       // Work around this by positioning the cursor at the opening " so the
       // parser sees e.g. "SELECT * FROM" and returns table suggestions.
+      // The same applies to backtick-quoted identifiers.
       const relativeCursorOffset = isInsideQuotedIdentifier
         ? openQuoteOffset - queryStartOffset
         : cursorOffset - queryStartOffset
@@ -225,15 +231,18 @@ export const createSchemaCompletionProvider = (
 
       if (isInsideQuotedIdentifier) {
         // Range covers content between quotes AND the closing quote,
-        // so we can replace it all and append '" ' (close quote + space).
+        // so we can replace it all and append the quote + a space.
         const contentStart = model.getPositionAt(openQuoteOffset + 1)
         const lineContent = model.getLineContent(position.lineNumber)
-        const closingIdx = lineContent.indexOf('"', position.column - 1)
+        const closingIdx = lineContent.indexOf(
+          openQuote as string,
+          position.column - 1,
+        )
         range = {
           startLineNumber: contentStart.lineNumber,
           startColumn: contentStart.column,
           endLineNumber: position.lineNumber,
-          // Include the closing " if found, otherwise end at cursor
+          // Include the closing quote if found, otherwise end at cursor
           endColumn: closingIdx >= 0 ? closingIdx + 2 : position.column,
         }
       } else {
@@ -266,9 +275,7 @@ export const createSchemaCompletionProvider = (
 
       return {
         incomplete: true,
-        suggestions: filtered.map((s) =>
-          toCompletionItem(s, range, isInsideQuotedIdentifier),
-        ),
+        suggestions: filtered.map((s) => toCompletionItem(s, range, openQuote)),
       }
     },
   }

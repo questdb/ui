@@ -1533,6 +1533,27 @@ export const createSchemaQueryKey = (
   return `schema:${tableName}:${ddlHash}@0-0` as QueryKey
 }
 
+// Returns the offset just past the `*/` that closes the block comment opened at
+// `start`, or -1 when it is not closed before `limit`. Block comments nest like
+// on the server: every `/*` inside needs its own `*/`.
+function skipBlockComment(text: string, start: number, limit: number): number {
+  let depth = 0
+  let i = start
+  while (i < limit) {
+    if (text[i] === "/" && text[i + 1] === "*") {
+      depth++
+      i += 2
+    } else if (text[i] === "*" && text[i + 1] === "/") {
+      depth--
+      i += 2
+      if (depth === 0) return i
+    } else {
+      i++
+    }
+  }
+  return -1
+}
+
 export function isCursorInComment(text: string, cursorOffset: number): boolean {
   let i = 0
   const end = Math.min(cursorOffset, text.length)
@@ -1546,13 +1567,13 @@ export function isCursorInComment(text: string, cursorOffset: number): boolean {
       continue
     }
     if (ch === "/" && next === "*") {
-      i += 2
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++
-      if (i >= cursorOffset) return true
-      i += 2
+      // Inside unless the comment closes at or before the cursor.
+      i = skipBlockComment(text, i, text.length)
+      if (i < 0 || i > cursorOffset) return true
       continue
     }
-    if (ch === "'" || ch === '"') {
+    // Strings and quoted identifiers ("..." or `...`) hide `--` and `/*`.
+    if (ch === "'" || ch === '"' || ch === "`") {
       i++
       while (i < text.length && text[i] !== ch) i++
       i++
@@ -1563,7 +1584,8 @@ export function isCursorInComment(text: string, cursorOffset: number): boolean {
   return false
 }
 
-// Returns the offset of the opening `"` if cursor is inside a double-quoted identifier, else -1.
+// Returns the offset of the opening `"` or `` ` `` if the cursor is inside a
+// quoted identifier, else -1.
 export function isCursorInQuotedIdentifier(
   text: string,
   startOffset: number,
@@ -1571,33 +1593,29 @@ export function isCursorInQuotedIdentifier(
 ): number {
   if (isCursorInComment(text, cursorOffset)) return -1
 
-  let inDouble = false
-  let inSingle = false
+  let quote: string | null = null
   let openQuoteOffset = -1
   for (let i = startOffset; i < cursorOffset; i++) {
     const ch = text[i]
     const next = text[i + 1]
-    if (inSingle) {
-      if (ch === "'" && next === "'") i++
-      else if (ch === "'") inSingle = false
-    } else if (inDouble) {
-      if (ch === '"' && next === '"') i++
-      else if (ch === '"') inDouble = false
+    if (quote !== null) {
+      // '' and "" escape their quote; backtick names have no escape
+      if (ch === quote && next === quote && quote !== "`") i++
+      else if (ch === quote) quote = null
     } else if (ch === "-" && next === "-") {
       i += 2
       while (i < cursorOffset && text[i] !== "\n") i++
     } else if (ch === "/" && next === "*") {
-      i += 2
-      while (i < cursorOffset && !(text[i] === "*" && text[i + 1] === "/")) i++
-      i++
-    } else if (ch === '"') {
-      inDouble = true
+      // (unclosed before the cursor cannot happen: checked above)
+      const close = skipBlockComment(text, i, cursorOffset)
+      i = close < 0 ? cursorOffset : close - 1
+    } else if (ch === '"' || ch === "`" || ch === "'") {
+      quote = ch
       openQuoteOffset = i
-    } else if (ch === "'") {
-      inSingle = true
     }
   }
-  return inDouble ? openQuoteOffset : -1
+
+  return quote === '"' || quote === "`" ? openQuoteOffset : -1
 }
 
 export const pinMonacoContextMenu = (
