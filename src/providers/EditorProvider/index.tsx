@@ -28,7 +28,7 @@ import {
   nextCopyLabel,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
-import { createCell } from "../../store/notebook"
+import { createCell, type NotebookCell } from "../../store/notebook"
 import { NotebookToolError } from "../../utils/notebooks/notebookToolError"
 import { requestCellReveal } from "../../scenes/Editor/Notebook/cellReveal"
 import type { ConversationId } from "../AIConversationProvider/types"
@@ -39,7 +39,6 @@ import {
   nextOpenPosition,
   positionsAfterMove,
   positionsWithout,
-  sortOpenBuffers,
   sortPinnedBuffers,
 } from "../../utils/buffers/tabOrder"
 import {
@@ -280,7 +279,8 @@ export const EditorProvider: React.FC = ({ children }) => {
   // visitor, so the first paint is live charts rather than an empty editor.
   // The file is fetched the moment the provider mounts, in parallel with the
   // IndexedDB read, and the tab is created before the first render below.
-  // Done once per browser: after that the visitor's own tabs decide.
+  // Decided once per browser, on the first load: after that the visitor's own
+  // tabs decide.
   const { consoleConfig } = useSettings()
   const firstExample = hasExampleDashboards(consoleConfig)
     ? consoleConfig.exampleDashboards![0]
@@ -488,9 +488,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         }
       }
 
-      const activeBuffers = buffers
-        ? buffers.filter((b) => !b.archived && !b.isTemporary)
-        : []
+      const activeBuffers = buffers ? sortPinnedBuffers(buffers) : []
       const insertAfter =
         afterBufferId !== undefined
           ? activeBuffers.find((b) => b.id === afterBufferId)
@@ -627,6 +625,10 @@ export const EditorProvider: React.FC = ({ children }) => {
 
     const pending = autoOpenRef.current
     if (!pending || !firstExample || !isFreshWorkspace(buffers)) {
+      // A visitor who already has tabs keeps them: the example is never opened
+      // for them, now or after they later empty the workspace, and later loads
+      // skip the fetch.
+      if (pending) setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
       activateStored()
       return
     }
@@ -792,6 +794,11 @@ export const EditorProvider: React.FC = ({ children }) => {
       archived: true,
       archivedAt: new Date().getTime(),
       position: -1,
+      // A closed example notebook is the user's own from now on: it is listed
+      // with the other closed notebooks and can be reopened, while the example
+      // row opens a fresh copy. (A user's close deletes it instead; an agent's
+      // archive must stay reversible.)
+      ...(target?.templateId !== undefined ? { templateId: undefined } : {}),
     })
     await setActiveBufferOnRemoved(id)
     eventBus.publish(EventType.BUFFERS_UPDATED, {
@@ -892,7 +899,9 @@ export const EditorProvider: React.FC = ({ children }) => {
       type: "delete",
       bufferId: id,
     })
-    if (target && initiator === "user") {
+    // The AI diff tab is not a user tab and agents never see it in
+    // <workspace>: its removal is not a user deletion, whatever path closed it.
+    if (target && initiator === "user" && !target.isPreviewBuffer) {
       emitUserAction({
         kind: "user_deleted_tab",
         bufferId: id,
@@ -955,11 +964,18 @@ export const EditorProvider: React.FC = ({ children }) => {
       return
     }
 
+    // The AI diff tab is not a user tab: it closes even next to a single tab,
+    // and its removal is never reported to an agent as a user deletion.
+    if (buffer.isPreviewBuffer) {
+      await deleteBuffer(id, true, "agent")
+      return
+    }
+
     if (sortPinnedBuffers(buffers).length === 1) return
 
-    // The AI diff tab and notebooks opened from an example dashboard are not
-    // kept in history: the example row recreates its notebook on demand.
-    if (buffer.isPreviewBuffer || buffer.templateId !== undefined) {
+    // Notebooks opened from an example dashboard are not kept in history: the
+    // example row recreates its notebook on demand.
+    if (buffer.templateId !== undefined) {
       await deleteBuffer(id, true)
       return
     }
@@ -980,7 +996,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       archived: false,
       archivedAt: undefined,
       isTemporary: false,
-      position: sortOpenBuffers(buffers).length - 1,
+      position: nextOpenPosition(buffers),
     }
     await updateBuffer(id, keptFields)
     await setActiveBuffer({ ...buffer, ...keptFields }, { focus: true })
@@ -1091,32 +1107,109 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
-  // Schema tree "Query": a one-cell notebook named after the table, reading
-  // its newest rows every second. A second click reuses the open tab.
+  // Schema tree "Query": a notebook named after the table with a cell reading
+  // its newest rows every second. A notebook with that name is reused: the
+  // cell holding this query is focused, or, without one, the cell is appended
+  // and run. A user notebook that happens to share the name keeps its cells.
   const openTableNotebook: EditorContext["openTableNotebook"] = async ({
     name,
     designatedTimestamp,
   }) => {
+    const cell = buildTablePreviewCell(name, designatedTimestamp)
+    const createTableNotebook = async () => {
+      const created = await addBuffer({
+        label: name,
+        notebookViewState: { cells: [cell] },
+      })
+      if (created?.id !== undefined) {
+        void runNotebookCells(created.id)
+      }
+    }
     // Fresh read: the schema rows are virtualized and may call in with a
     // render snapshot that predates the tab created by the previous click.
-    const open = (await bufferStore.getAll()).find(
+    const candidates = (await bufferStore.getAll()).filter(
       (b) =>
         b.label === name &&
         b.notebookViewState != null &&
         !b.archived &&
-        b.id !== temporaryBufferId,
+        b.id !== temporaryBufferId &&
+        b.id !== undefined,
     )
-    if (open) {
-      await setActiveBuffer(open)
+    if (candidates.length === 0) {
+      await createTableNotebook()
       return
     }
-    const cell = buildTablePreviewCell(name, designatedTimestamp)
-    const created = await addBuffer({
-      label: name,
-      notebookViewState: { cells: [cell] },
-    })
-    if (created?.id !== undefined) {
-      void runNotebookCells(created.id)
+    const sql = cell.value.trim()
+    const isQueryCell = (c: NotebookCell) =>
+      c.type !== "markdown" && c.value.trim() === sql
+    const views = await Promise.all(
+      candidates.map((b) =>
+        withBoundNotebookReadOnly(b.id as number, (view) =>
+          Promise.resolve(view),
+        ),
+      ),
+    )
+    const withCellIndex = views.findIndex((view) =>
+      view.cells.some(isQueryCell),
+    )
+    if (withCellIndex !== -1) {
+      const target = candidates[withCellIndex]
+      const existing = views[withCellIndex].cells.find(isQueryCell)
+      await setActiveBuffer(target)
+      if (existing) revealCellForEditing(target.id as number, existing.id)
+      return
+    }
+
+    const target = candidates[0]
+    const bufferId = target.id as number
+    const cellId = cell.id
+    // The table query's own name, refresh and colouring ride on the new cell.
+    const presentation: Partial<NotebookCell> = {
+      name: cell.name,
+      autoRefresh: cell.autoRefresh,
+      paneView: cell.paneView,
+      highlightConfig: cell.highlightConfig,
+    }
+    try {
+      await withBoundNotebook(bufferId, (controller) =>
+        controller.mutate((parts) => {
+          const added = addCellTransition(parts, bufferId, {
+            id: cellId,
+            value: cell.value,
+          })
+          return {
+            ...added,
+            parts: {
+              ...added.parts,
+              cells: added.parts.cells.map((c) =>
+                c.id === cellId ? { ...c, ...presentation } : c,
+              ),
+            },
+          }
+        }),
+      )
+    } catch (error) {
+      if (error instanceof NotebookToolError && error.code === "cell_limit") {
+        await createTableNotebook()
+        return
+      }
+      console.error(error)
+      toast.error(
+        error instanceof Error
+          ? `Failed to add cell: ${error.message}`
+          : "Failed to add cell",
+      )
+      return
+    }
+    emitUserAction({ kind: "user_added_cell", bufferId, cellId })
+    await setActiveBuffer(target)
+    revealCellForEditing(bufferId, cellId)
+    try {
+      await withBoundNotebook(bufferId, (controller) =>
+        controller.runCell(cellId),
+      )
+    } catch (error) {
+      console.error("Could not run the table query:", error)
     }
   }
 

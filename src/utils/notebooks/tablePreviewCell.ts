@@ -5,6 +5,11 @@ const SIMPLE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
 const quoteTable = (name: string) =>
   SIMPLE_IDENTIFIER.test(name) ? name : `'${name.replace(/'/g, "''")}'`
 
+// QuestDB reads a single-quoted token in ORDER BY as a string literal, not a
+// column, so column names need double quotes.
+const quoteColumn = (name: string) =>
+  SIMPLE_IDENTIFIER.test(name) ? name : `"${name.replace(/"/g, '""')}"`
+
 // The query behind the schema tree's "Query" action. Tables with a designated
 // timestamp are read newest-first, so a 1 s refresh shows the rows arriving;
 // anything else is plain `SELECT * FROM t`.
@@ -13,7 +18,7 @@ export const tablePreviewSql = (
   designatedTimestamp?: string,
 ): string =>
   designatedTimestamp
-    ? `SELECT * FROM ${quoteTable(name)} ORDER BY ${quoteTable(designatedTimestamp)} DESC`
+    ? `SELECT * FROM ${quoteTable(name)} ORDER BY ${quoteColumn(designatedTimestamp)} DESC`
     : `SELECT * FROM ${quoteTable(name)}`
 
 export const buildTablePreviewCell = (

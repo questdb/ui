@@ -23,6 +23,18 @@ describe("tablePreviewSql", () => {
       "SELECT * FROM 'sys.metrics' ORDER BY ts DESC",
     )
   })
+
+  it("double-quotes a designated timestamp that is not a plain identifier", () => {
+    expect(tablePreviewSql("t", "my ts")).toBe(
+      'SELECT * FROM t ORDER BY "my ts" DESC',
+    )
+    expect(tablePreviewSql("t", "zeit_ü")).toBe(
+      'SELECT * FROM t ORDER BY "zeit_ü" DESC',
+    )
+    expect(tablePreviewSql("t", 'a"b')).toBe(
+      'SELECT * FROM t ORDER BY "a""b" DESC',
+    )
+  })
 })
 
 describe("buildTablePreviewCell", () => {

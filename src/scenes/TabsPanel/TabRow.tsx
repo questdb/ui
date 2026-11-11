@@ -38,6 +38,18 @@ const Actions = styled.div`
   transition: opacity 0.1s ease;
 `
 
+// The activatable part of the row: icon, label and meta. It is the row's
+// button; the Close/Delete/Reopen actions are its siblings, so each stays a
+// separate control for assistive technology.
+const Main = styled.div`
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+`
+
 const Root = styled.div<{ $active: boolean }>`
   position: relative;
   display: flex;
@@ -89,9 +101,10 @@ const Meta = styled.span`
   color: ${({ theme }) => theme.color.contentMuted};
 `
 
-// One row of the Tabs panel. The row itself is the primary action (button);
-// callers wrap it in the list item so nested Close/Delete buttons keep their
-// own semantics.
+// One row of the Tabs panel. The icon, label and meta form the row's button
+// (it takes focus and `onKeyDown`); the actions sit next to it, not inside it,
+// since a button cannot contain other controls. A click anywhere on the row
+// except an action activates it, as the mouse expects.
 export const TabRow = ({
   label,
   icon,
@@ -101,12 +114,11 @@ export const TabRow = ({
   actions,
   leading,
   leadingVisibility = "auto",
+  onKeyDown,
   ...rest
 }: Props) => (
   <Root
     $active={active}
-    role="button"
-    tabIndex={0}
     data-hook="tabs-panel-row"
     data-active={active ? "true" : undefined}
     {...rest}
@@ -119,11 +131,19 @@ export const TabRow = ({
         {leading}
       </Leading>
     )}
-    {icon}
-    <Label color={dimmed ? "contentSecondary" : "contentPrimary"}>
-      {label}
-    </Label>
-    {meta && <Meta>{meta}</Meta>}
+    <Main
+      role="button"
+      tabIndex={0}
+      aria-current={active ? "page" : undefined}
+      data-hook="tabs-panel-row-button"
+      onKeyDown={onKeyDown}
+    >
+      {icon}
+      <Label color={dimmed ? "contentSecondary" : "contentPrimary"}>
+        {label}
+      </Label>
+      {meta && <Meta>{meta}</Meta>}
+    </Main>
     {actions && (
       <Actions onClick={(event) => event.stopPropagation()}>{actions}</Actions>
     )}

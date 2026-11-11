@@ -444,6 +444,37 @@ export const Tabs = () => {
 
   const close = (id: string) => closeBuffer(parseInt(id))
 
+  // `keepFocus`: the keyboard path keeps focus in the menu, so the editor
+  // must not take it back. Only a previewed (active) entry needs a new
+  // active tab.
+  const deleteFromHistory = (buffer: Buffer, keepFocus = false) => {
+    void trackEvent(ConsoleEvent.TAB_HISTORY_DELETE)
+    void deleteBuffer(
+      buffer.id as number,
+      keepFocus ? buffer.isTemporary === true : true,
+    )
+  }
+
+  // Keyboard users delete a history entry with Delete/Backspace on the entry
+  // itself (the menu's arrow keys never reach the trash button). Focus moves
+  // to the next entry, or the previous one, or "Clear history", before the
+  // deleted entry unmounts, so the menu keeps keyboard focus.
+  const focusNeighbourHistoryItem = (item: HTMLElement) => {
+    const menu = item.closest('[role="menu"]')
+    if (!menu) return
+    const items = Array.from(
+      menu.querySelectorAll<HTMLElement>(
+        '[data-hook="editor-tabs-history-item"]',
+      ),
+    )
+    const index = items.indexOf(item)
+    const neighbour =
+      items[index + 1] ??
+      items[index - 1] ??
+      menu.querySelector<HTMLElement>('[data-hook="editor-tabs-history-clear"]')
+    neighbour?.focus()
+  }
+
   const reorder = (tabId: string, _fromIndex: number, toIndex: number) =>
     reorderBuffer(parseInt(tabId), toIndex)
 
@@ -565,9 +596,17 @@ export const Tabs = () => {
                     <DropdownMenu.Item
                       data-hook="editor-tabs-history-item"
                       title={buffer.label}
+                      aria-keyshortcuts="Delete"
                       onClick={() => {
                         void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
                         void restoreBuffer(buffer.id as number)
+                      }}
+                      onKeyDown={(event: React.KeyboardEvent<HTMLElement>) => {
+                        if (event.key !== "Delete" && event.key !== "Backspace")
+                          return
+                        event.preventDefault()
+                        focusNeighbourHistoryItem(event.currentTarget)
+                        deleteFromHistory(buffer, true)
                       }}
                       icon={
                         buffer.metricsViewState ? (
@@ -614,8 +653,7 @@ export const Tabs = () => {
                       onClick={(event: React.MouseEvent) => {
                         event.stopPropagation()
                         if (!acceptDeleteClick()) return
-                        void trackEvent(ConsoleEvent.TAB_HISTORY_DELETE)
-                        void deleteBuffer(buffer.id as number)
+                        deleteFromHistory(buffer)
                       }}
                     >
                       <Trash size="14px" />

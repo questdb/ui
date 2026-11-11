@@ -26,8 +26,12 @@ const REVEAL_FALLBACK_MS = 300
 
 type Overflow = { left: boolean; right: boolean; rightOffset: number }
 
-const isTemporary = (tab: TabProperties) =>
-  tab.className?.includes("temporary-tab") === true
+// The preview of a closed tab and the AI diff tab sit after the user's tabs:
+// they cannot be dragged, no tab can be dropped past them, and they do not
+// count as the last open tab.
+const isTrailing = (tab: TabProperties) =>
+  tab.className?.includes("temporary-tab") === true ||
+  tab.className?.includes("preview-tab") === true
 
 const scrollTabIntoView = (container: HTMLElement, tabEl: HTMLElement) => {
   const tabRect = tabEl.getBoundingClientRect()
@@ -95,7 +99,7 @@ export const TabBar = ({
   const totalWidth = positions.length
     ? positions[positions.length - 1] + widths[widths.length - 1]
     : 0
-  const pinnedCount = displayedTabs.filter((tab) => !isTemporary(tab)).length
+  const pinnedCount = displayedTabs.filter((tab) => !isTrailing(tab)).length
   const lastReorderableIndex = pinnedCount - 1
   const activeId = tabs.find((tab) => tab.active)?.id
   const layoutKey = displayedTabs.map((tab) => tab.id).join(",")
@@ -364,13 +368,13 @@ export const TabBar = ({
             tab={tab}
             style={tabStyle(index)}
             className={tabClassName(tab)}
-            closable={isTemporary(tab) || pinnedCount > 1}
+            closable={isTrailing(tab) || pinnedCount > 1}
             onActivate={onTabActive}
             onClose={onTabClose}
             onRename={onTabRename}
             onContextMenu={(id, event) => onContextMenu?.(id, event)}
             onHandlePointerDown={(event) => {
-              if (!isTemporary(tab)) startDrag(tab.id, index, event)
+              if (!isTrailing(tab)) startDrag(tab.id, index, event)
             }}
           />
         ))}

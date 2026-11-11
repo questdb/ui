@@ -44,6 +44,87 @@ const createTab = (label, sql) => {
   cy.getEditorTabByTitle(label).should("have.attr", "active")
 }
 
+// Open tabs as [label, position] pairs read from IndexedDB, polled until they
+// match: deletes compact the positions after the tab bar has updated.
+const waitForOpenPositions = (expected) =>
+  cy.window().then((win) => {
+    const deadline = Date.now() + 8000
+    const read = () =>
+      new Cypress.Promise((resolve, reject) => {
+        const request = win.indexedDB.open("web-console")
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const database = request.result
+          const transaction = database.transaction("buffers", "readonly")
+          const rows = transaction.objectStore("buffers").getAll()
+          transaction.onerror = () => {
+            database.close()
+            reject(transaction.error)
+          }
+          transaction.oncomplete = () => {
+            database.close()
+            resolve(
+              rows.result
+                .filter((buffer) => !buffer.archived)
+                .sort((left, right) => left.position - right.position)
+                .map((buffer) => [buffer.label, buffer.position]),
+            )
+          }
+        }
+      })
+    const poll = () =>
+      read().then((actual) => {
+        if (JSON.stringify(actual) === JSON.stringify(expected)) return
+        if (Date.now() >= deadline) {
+          throw new Error(
+            `Open tab positions ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`,
+          )
+        }
+        return new Cypress.Promise((resolve) =>
+          win.setTimeout(resolve, 50),
+        ).then(poll)
+      })
+    return poll()
+  })
+
+const {
+  installFakeWebSocket,
+  TEST_BRIDGE_TOKEN,
+  TEST_BRIDGE_URL,
+} = require("../utils/mcpFakeWebSocket")
+
+const mcpDeepLinkSuffix = () =>
+  `?mcp-pair=1&mcp-ws=${encodeURIComponent(TEST_BRIDGE_URL)}` +
+  `&mcp-token=${encodeURIComponent(TEST_BRIDGE_TOKEN)}`
+
+const waitForMcpPaired = () => {
+  cy.window({ timeout: 10000 }).its("__mcpFakeWS").should("exist")
+  cy.window({ timeout: 10000 }).should((win) => {
+    expect(win.__mcpFakeWS.framesOfType("hello").length).to.be.greaterThan(0)
+  })
+  cy.window().then((win) => win.__mcpFakeWS.helloAck())
+  cy.getByDataHook("mcp-status-pill", { timeout: 10000 }).should(
+    "contain",
+    "MCP connected",
+  )
+}
+
+// The text of a tool result, once it arrives.
+const awaitMcpToolResult = (requestId) => {
+  const resultOf = (win) =>
+    win.__mcpFakeWS
+      .framesOfType("tool_result")
+      .find((frame) => frame.requestId === requestId)
+  cy.window({ timeout: 10000 }).should((win) => {
+    expect(resultOf(win), `result for ${requestId}`).to.exist
+  })
+  return cy.window().then((win) => {
+    const result = resultOf(win)
+    expect(result.isError, `tool ${requestId} errored`).to.not.equal(true)
+    return result.content[0].text
+  })
+}
+
 const closeFromPanel = (label) => {
   openRow(label).find('[data-hook="tabs-panel-close"]').click()
   cy.getEditorTabByTitle(label).should("not.exist")
@@ -230,11 +311,12 @@ describe("tabs panel", () => {
   })
 
   it("deletes open and closed tabs from their rows, and a new tab still lands last", () => {
-    // Given one closed tab and two extra open tabs
+    // Given one closed tab and three extra open tabs
     createTab("Alpha", "select 1;")
     closeFromPanel("Alpha")
     createTab("Beta", "select 2;")
     createTab("Gamma", "select 3;")
+    createTab("Delta", "select 4;")
     includeClosed()
 
     // When the user deletes the closed tab
@@ -243,17 +325,26 @@ describe("tabs panel", () => {
     // Then it is gone for good
     cy.get('[data-hook="tabs-panel-closed-row"]').should("not.exist")
 
-    // When the user deletes an open tab in the middle
+    // When the user deletes two open tabs in the middle
     cy.wait(600)
     openRow("Beta").find('[data-hook="tabs-panel-delete"]').click()
-
-    // Then it is gone from the tab bar and is not listed as closed
     cy.getEditorTabByTitle("Beta").should("not.exist")
+    cy.wait(600)
+    openRow("Gamma").find('[data-hook="tabs-panel-delete"]').click()
+
+    // Then they are gone from the tab bar and are not listed as closed
+    cy.getEditorTabByTitle("Gamma").should("not.exist")
     editors()
       .find('[data-hook="tabs-panel-section-count"]')
       .should("have.text", "2 open · 0 closed")
 
-    // And a new tab is appended, not inserted into the gap
+    // And the remaining open tabs keep contiguous positions
+    waitForOpenPositions([
+      ["SQL", 0],
+      ["Delta", 1],
+    ])
+
+    // And a new tab is appended, not inserted into a gap
     cy.addEditorTab()
     cy.getEditorTabs().should("have.length", 3)
     cy.getEditorTabs().last().should("have.attr", "data-tab-title", "SQL 1")
@@ -708,6 +799,90 @@ describe("tabs panel example dashboards", () => {
     cy.getEditorTabByTitle("Trades overview").should("have.attr", "active")
   })
 
+  it("decides the auto-open once: a visitor who already has tabs never gets it later", () => {
+    // Given a returning visitor with their own tab and no auto-open decision yet
+    cy.loadConsoleWithAuth(false, {}, { buffers: [{ value: "select 1;" }] })
+    cy.getEditorContent().should("be.visible")
+
+    // Then the example is not opened, and the decision is stored
+    cy.window().should((win) => {
+      expect(win.localStorage.getItem("tabs.panel.exampleAutoOpened")).to.eq(
+        "true",
+      )
+    })
+    cy.getEditorTabs().should("have.length", 1)
+
+    // When the visitor empties the workspace and comes back
+    cy.clearEditor()
+    cy.waitForActiveBufferValue("")
+    cy.reload()
+    cy.getEditorContent().should("be.visible")
+
+    // Then the example still does not open on its own
+    cy.wait(1500)
+    cy.getEditorTabs().should("have.length", 1)
+    cy.getEditorTabByTitle("SQL").should("have.attr", "active")
+  })
+
+  it("lists an example notebook closed by an agent with the closed notebooks", () => {
+    // Given an MCP client paired with the console and an open example notebook
+    cy.loadConsoleWithAuth(
+      false,
+      {
+        "tabs.panel.exampleAutoOpened": "true",
+        "mcp:permissions": JSON.stringify({
+          grantSchemaAccess: true,
+          read: true,
+          write: true,
+        }),
+      },
+      {
+        url: `${baseUrl}/${mcpDeepLinkSuffix()}`,
+        onBeforeLoad: installFakeWebSocket,
+      },
+    )
+    cy.getByDataHook("mcp-pair-consent-connect").click()
+    waitForMcpPaired()
+    openTabsPanel()
+    cy.getByDataHook("tabs-panel-example-list")
+      .contains(ROW, "Trades overview")
+      .click()
+    cy.getEditorTabByTitle("Trades overview").should("have.attr", "active")
+
+    // When the agent closes it
+    cy.getEditorTabByTitle("Trades overview")
+      .invoke("attr", "data-tab-id")
+      .then((id) =>
+        cy.window().then((win) =>
+          awaitMcpToolResult(
+            win.__mcpFakeWS.toolCall("archive_tab", {
+              buffer_id: Number(id),
+            }),
+          ),
+        ),
+      )
+    cy.getEditorTabByTitle("Trades overview").should("not.exist")
+
+    // Then it is listed as a closed notebook in the Tabs panel, like in the
+    // history, and the example row is not marked open
+    includeClosed()
+    notebooks()
+      .find('[data-hook="tabs-panel-section-count"]')
+      .should("have.text", "0 open · 1 closed")
+    notebooks().find('[role="button"][aria-expanded="false"]').click()
+    notebooks()
+      .find('[data-hook="tabs-panel-closed-row"]')
+      .should("contain", "Trades overview")
+    cy.getByDataHook("tabs-panel-example-list")
+      .contains(ROW, "Trades overview")
+      .should("not.have.attr", "data-active")
+    cy.getByDataHook("editor-tabs-history-button").click()
+    cy.getByDataHook("editor-tabs-history-item").should(
+      "contain",
+      "Trades overview",
+    )
+  })
+
   it("reports an example that cannot be loaded", () => {
     cy.getByDataHook("tabs-panel-example-list").contains(ROW, "Weather").click()
     cy.get(".Toastify").should(
@@ -778,5 +953,218 @@ describe("tab history dropdown", () => {
     cy.getByDataHook("editor-tabs-history-item").should("have.length", 1)
     cy.wait(700)
     cy.getByDataHook("editor-tabs-history-item").should("have.length", 1)
+  })
+  it("deletes a history entry from the keyboard and keeps focus in the menu", () => {
+    // Given three closed tabs
+    for (const [label, sql] of [
+      ["Alpha", "select 1;"],
+      ["Beta", "select 2;"],
+      ["Gamma", "select 3;"],
+    ]) {
+      createTab(label, sql)
+      cy.getEditorTabByTitle(label).find(".chrome-tab-close").click()
+      cy.getEditorTabByTitle(label).should("not.exist")
+    }
+
+    // When the user opens the history with the keyboard: focus lands on the
+    // first entry (newest first: Gamma)
+    cy.getByDataHook("editor-tabs-history-button").focus()
+    cy.realPress("Enter")
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 3)
+    cy.focused()
+      .should("have.attr", "data-hook", "editor-tabs-history-item")
+      .and("contain", "Gamma")
+      .and("have.attr", "aria-keyshortcuts", "Delete")
+
+    // And presses Delete
+    cy.realPress("Delete")
+
+    // Then that entry is gone and focus moves to the next one
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 2)
+    cy.getByDataHook("editor-tabs-history").should("not.contain", "Gamma")
+    cy.focused()
+      .should("have.attr", "data-hook", "editor-tabs-history-item")
+      .and("contain", "Beta")
+
+    // When the user presses Backspace (the Mac delete key) on it
+    cy.realPress("Backspace")
+
+    // Then it is deleted as well, and the remaining entry keeps focus
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 1)
+    cy.focused()
+      .should("have.attr", "data-hook", "editor-tabs-history-item")
+      .and("contain", "Alpha")
+  })
+})
+
+describe("AI diff tab", () => {
+  const tabTitles = () =>
+    cy
+      .get(".chrome-tab")
+      .then(($tabs) =>
+        [...$tabs].map((tab) => tab.getAttribute("data-tab-title")),
+      )
+
+  const panelLabels = () =>
+    cy
+      .getByDataHook("tabs-panel-open")
+      .find(ROW)
+      .then(($rows) => [...$rows].map((row) => row.textContent))
+
+  const dragTabOnto = (source, target) => {
+    const handle = (title) =>
+      `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`
+    cy.get(".chrome-tabs-ready").should("be.visible")
+    cy.get(handle(target)).then(($target) => {
+      const { x, y, width, height } = $target[0].getBoundingClientRect()
+      const destination = { x: x + width - 4, y: y + height / 2 }
+      cy.get(handle(source)).realMouseDown({
+        position: "center",
+        scrollBehavior: false,
+      })
+      cy.get(handle(source)).realMouseMove(10, 0, {
+        position: "center",
+        keepMouseDownButton: "left",
+        scrollBehavior: false,
+      })
+      cy.get(".chrome-tab-is-dragging").should("exist")
+      cy.get("body").realMouseMove(destination.x, destination.y, {
+        position: "topLeft",
+        keepMouseDownButton: "left",
+        scrollBehavior: false,
+      })
+      cy.get("body").realMouseUp({ ...destination, scrollBehavior: false })
+    })
+    cy.get(".chrome-tabs-is-sorting").should("not.exist")
+  }
+
+  beforeEach(() => {
+    // Given an AI suggestion tab stored between two of the user's tabs, and an
+    // MCP client paired with the console
+    cy.loadConsoleWithAuth(
+      false,
+      {
+        "mcp:permissions": JSON.stringify({
+          grantSchemaAccess: true,
+          read: true,
+          write: true,
+        }),
+      },
+      {
+        url: `${baseUrl}/${mcpDeepLinkSuffix()}`,
+        onBeforeLoad: installFakeWebSocket,
+        activeBufferId: 1,
+        buffers: [
+          { label: "SQL", value: "select 1;" },
+          {
+            label: "AI Suggestion",
+            value: "",
+            isPreviewBuffer: true,
+            previewContent: {
+              type: "diff",
+              original: "select 1;",
+              modified: "select 2;",
+            },
+          },
+          { label: "Beta", value: "select 2;" },
+        ],
+      },
+    )
+    cy.getByDataHook("mcp-pair-consent-connect").click()
+    waitForMcpPaired()
+    cy.getEditorContent().should("be.visible")
+  })
+
+  it("stays after every tab, is not listed in the Tabs panel, and does not shift a reorder", () => {
+    // Then the diff tab is last in the tab bar
+    tabTitles().should("deep.equal", ["SQL", "Beta", "AI Suggestion"])
+
+    // And the Tabs panel lists only the user's tabs, in both modes
+    openTabsPanel()
+    editors().find(ROW).should("have.length", 2)
+    cy.getByDataHook("tabs-panel").should("not.contain", "AI Suggestion")
+    setViewMode("list")
+    panelLabels().should("deep.equal", ["SQL", "Beta"])
+
+    // When the user moves SQL down from the keyboard in the list
+    openRow("SQL").find('[data-hook="tabs-panel-row-button"]').focus()
+    cy.realPress(["Alt", "ArrowDown"])
+
+    // Then the list and the tab bar agree, and the diff tab is still last
+    panelLabels().should("deep.equal", ["Beta", "SQL"])
+    tabTitles().should("deep.equal", ["Beta", "SQL", "AI Suggestion"])
+    cy.wait(500)
+    panelLabels().should("deep.equal", ["Beta", "SQL"])
+    setViewMode("groups")
+
+    // When the user drags a tab onto the diff tab
+    dragTabOnto("Beta", "AI Suggestion")
+
+    // Then it lands last among the user's tabs, never after the diff tab
+    tabTitles().should("deep.equal", ["SQL", "Beta", "AI Suggestion"])
+
+    // And the diff tab itself cannot be dragged
+    cy.get(
+      '.chrome-tab[data-tab-title="AI Suggestion"] .chrome-tab-drag-handle',
+    )
+      .realMouseDown({ position: "center", scrollBehavior: false })
+      .realMouseMove(-200, 0, {
+        position: "center",
+        keepMouseDownButton: "left",
+        scrollBehavior: false,
+      })
+    cy.get(".chrome-tab-is-dragging").should("not.exist")
+    cy.get("body").realMouseUp({ scrollBehavior: false })
+    tabTitles().should("deep.equal", ["SQL", "Beta", "AI Suggestion"])
+  })
+
+  it("closes next to a single tab and is not reported to the agent as a user deletion", () => {
+    // Given only one of the user's tabs left next to the diff tab
+    cy.getEditorTabByTitle("Beta").find(".chrome-tab-close").click()
+    cy.getEditorTabByTitle("Beta").should("not.exist")
+    cy.window().then((win) =>
+      awaitMcpToolResult(
+        win.__mcpFakeWS.toolCall("get_recent_user_actions", {}),
+      ),
+    )
+
+    // When the user closes the diff tab with its X
+    cy.getEditorTabByTitle("AI Suggestion")
+      .find(".chrome-tab-close")
+      .should("be.visible")
+      .click()
+
+    // Then it is gone, and the user's tab remains
+    cy.getEditorTabByTitle("AI Suggestion").should("not.exist")
+    tabTitles().should("deep.equal", ["SQL"])
+
+    // And the agent's digest does not report a deleted tab
+    cy.window()
+      .then((win) =>
+        awaitMcpToolResult(
+          win.__mcpFakeWS.toolCall("get_recent_user_actions", {}),
+        ),
+      )
+      .then((text) => {
+        expect(text).not.to.contain("tabs_deleted")
+        expect(text).not.to.contain("AI Suggestion")
+      })
+
+    // While deleting one of the user's tabs is reported (control)
+    createTab("Gamma", "select 3;")
+    openTabsPanel()
+    cy.wait(600)
+    openRow("Gamma").find('[data-hook="tabs-panel-delete"]').click()
+    cy.getEditorTabByTitle("Gamma").should("not.exist")
+    cy.window()
+      .then((win) =>
+        awaitMcpToolResult(
+          win.__mcpFakeWS.toolCall("get_recent_user_actions", {}),
+        ),
+      )
+      .then((text) => {
+        expect(text).to.contain("tabs_deleted")
+        expect(text).to.contain("Gamma")
+      })
   })
 })

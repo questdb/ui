@@ -23,7 +23,7 @@ export const notebookErrorHint = (code: NotebookToolErrorCode): string => {
     case "last_tab":
       return "This is the only open tab and cannot be closed or deleted. Call create_notebook first, then retry."
     case "tab_limit":
-      return "The tab limit is reached. Call delete_tab on closed tabs (archived: true in <workspace>) to free space, then retry."
+      return "The tab limit is reached. Tell the user and offer to delete closed tabs (archived: true in <workspace>). Call delete_tab only for tabs the user explicitly agrees to remove, then retry."
     case "last_cell":
       return "A notebook must keep at least one cell. Use update_cell to clear or replace it instead of deleting the last cell."
     case "mounted_mid_edit":

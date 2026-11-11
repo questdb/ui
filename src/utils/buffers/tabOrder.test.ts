@@ -8,6 +8,7 @@ import {
   positionsWithout,
   sortClosedBuffers,
   sortOpenBuffers,
+  sortPinnedBuffers,
 } from "./tabOrder"
 
 const buffer = (id: number, overrides: Partial<Buffer> = {}): Buffer =>
@@ -36,6 +37,41 @@ describe("tabOrder", () => {
 
       // Then
       expect(ids).toEqual([1, 2, 3, 9])
+    })
+
+    it("places the AI diff tab after every other tab, whatever its position", () => {
+      // Given: the diff tab sits between user tabs by position
+      const buffers = [
+        buffer(1, { position: 0 }),
+        buffer(7, { isPreviewBuffer: true, position: 1 }),
+        buffer(2, { position: 2 }),
+        buffer(9, { archived: true, isTemporary: true, position: -1 }),
+        buffer(3, { position: 3 }),
+      ]
+
+      // When
+      const ids = sortOpenBuffers(buffers).map((b) => b.id)
+
+      // Then
+      expect(ids).toEqual([1, 2, 3, 9, 7])
+    })
+  })
+
+  describe("sortPinnedBuffers", () => {
+    it("lists only the user's open tabs, without the closed-tab preview and the AI diff tab", () => {
+      // Given
+      const buffers = [
+        buffer(7, { isPreviewBuffer: true, position: 0 }),
+        buffer(2, { position: 2 }),
+        buffer(1, { position: 1 }),
+        buffer(9, { archived: true, isTemporary: true, position: -1 }),
+      ]
+
+      // When
+      const ids = sortPinnedBuffers(buffers).map((b) => b.id)
+
+      // Then
+      expect(ids).toEqual([1, 2])
     })
   })
 
@@ -184,6 +220,20 @@ describe("tabOrder", () => {
       expect(position).toBe(2)
     })
 
+    it("ignores the AI diff tab", () => {
+      // Given
+      const buffers = [
+        buffer(1, { position: 0 }),
+        buffer(7, { isPreviewBuffer: true, position: 5 }),
+      ]
+
+      // When
+      const position = nextOpenPosition(buffers)
+
+      // Then
+      expect(position).toBe(1)
+    })
+
     it("returns 0 when no tab is open", () => {
       // Given
       const buffers = [buffer(1, { archived: true, position: -1 })]
@@ -241,6 +291,58 @@ describe("tabOrder", () => {
         { id: 1, position: 1 },
         { id: 2, position: 2 },
       ])
+    })
+
+    it("indexes the user's tabs only, so the AI diff tab between them does not shift the drop", () => {
+      // Given: A, AI Suggestion, B, C by position
+      const buffers = [
+        buffer(1, { position: 0 }),
+        buffer(7, { isPreviewBuffer: true, position: 1 }),
+        buffer(2, { position: 2 }),
+        buffer(3, { position: 3 }),
+      ]
+
+      // When A is dropped at the end of the list [A, B, C]
+      const positions = positionsAfterMove(buffers, 1, 2)
+
+      // Then A is last among the user's tabs and the diff tab is untouched
+      expect(positions).toEqual([
+        { id: 2, position: 0 },
+        { id: 3, position: 1 },
+        { id: 1, position: 2 },
+      ])
+    })
+
+    it("clamps a drop past the user's tabs to the last user slot", () => {
+      // Given
+      const buffers = [
+        buffer(1, { position: 0 }),
+        buffer(2, { position: 1 }),
+        buffer(7, { isPreviewBuffer: true, position: 2 }),
+      ]
+
+      // When
+      const positions = positionsAfterMove(buffers, 1, 5)
+
+      // Then
+      expect(positions).toEqual([
+        { id: 2, position: 0 },
+        { id: 1, position: 1 },
+      ])
+    })
+
+    it("never moves the AI diff tab", () => {
+      // Given
+      const buffers = [
+        buffer(1, { position: 0 }),
+        buffer(7, { isPreviewBuffer: true, position: 1 }),
+      ]
+
+      // When
+      const positions = positionsAfterMove(buffers, 7, 0)
+
+      // Then
+      expect(positions).toEqual([])
     })
 
     it("returns no positions for an unknown buffer", () => {
