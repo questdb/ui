@@ -3,15 +3,20 @@ import React from "react"
 import { act, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../test/component"
-import type { NotebookCell } from "../../../store/notebook"
+import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
+import type { NotebookResultSnapshot } from "../../../store/notebookResults"
+import { useCellResultHydrationEngine } from "./resultHydration/CellResultHydrationContext"
+import { useCellVirtualizationEngine } from "./cellVirtualization/CellVirtualizationContext"
 import {
   NotebookProvider,
   useNotebookActions,
   useNotebookState,
   type NotebookActions,
 } from "./NotebookProvider"
+import { saveNotebookColumnLayout } from "./notebookColumnLayoutStore"
 import {
   __resetNotebookUndoHistoryForTests,
+  peekUndoEntry,
   recordUndoEntry,
 } from "./undo/notebookUndoHistory"
 
@@ -19,6 +24,7 @@ import {
 // snapshot index, the document writes and the column layouts.
 const storage = vi.hoisted(() => ({
   snapshotCellIds: [] as string[],
+  snapshots: new Map<string, NotebookResultSnapshot>(),
   deleteCellSnapshot: vi.fn(() => Promise.resolve()),
   removeNotebookCellLayouts: vi.fn(),
 }))
@@ -26,7 +32,8 @@ const storage = vi.hoisted(() => ({
 vi.mock("../../../store/notebookResults", () => ({
   loadSnapshotCellIds: () => Promise.resolve(storage.snapshotCellIds),
   deleteCellSnapshot: storage.deleteCellSnapshot,
-  loadCellSnapshot: () => Promise.resolve(undefined),
+  loadCellSnapshot: (_bufferId: number, cellId: string) =>
+    Promise.resolve(storage.snapshots.get(cellId)),
   copyNotebookSnapshots: () => Promise.resolve(0),
   pinNotebookSnapshots: vi.fn(),
   pruneToRecentNotebooks: () => Promise.resolve(),
@@ -51,32 +58,65 @@ const cell = (id: string): NotebookCell => ({
   value: `SELECT '${id}'`,
 })
 
-const probe: { actions?: NotebookActions; cellIds?: string[] } = {}
+const probe: {
+  actions?: NotebookActions
+  cellIds?: string[]
+  cells?: NotebookCell[]
+  hydration?: ReturnType<typeof useCellResultHydrationEngine>
+  virtualization?: ReturnType<typeof useCellVirtualizationEngine>
+} = {}
 
 const Probe = () => {
   probe.actions = useNotebookActions()
-  probe.cellIds = useNotebookState().cells.map((c) => c.id)
+  probe.cells = useNotebookState().cells
+  probe.cellIds = probe.cells.map((c) => c.id)
+  // Stand in for a cell entering the viewport, which loads its result.
+  probe.hydration = useCellResultHydrationEngine()
+  probe.virtualization = useCellVirtualizationEngine()
   return null
 }
 
-const mountNotebook = (cells: NotebookCell[]) =>
+const storedRows = (query: string): SingleQueryResult => ({
+  type: "dql",
+  query,
+  columns: [{ name: "x", type: "INT" }],
+  dataset: [[42]],
+  count: 1,
+  fetchedAt: 500,
+})
+
+const mountNotebook = (cells: NotebookCell[], preview = false) =>
   renderComponent(
-    <NotebookProvider bufferId={BUFFER_ID} initialState={{ cells }}>
+    <NotebookProvider
+      bufferId={BUFFER_ID}
+      initialState={{ cells }}
+      preview={preview}
+    >
       <Probe />
     </NotebookProvider>,
   )
 
 beforeEach(() => {
   __resetNotebookUndoHistoryForTests()
+  localStorage.clear()
   storage.snapshotCellIds = []
+  storage.snapshots.clear()
   storage.deleteCellSnapshot.mockClear()
   storage.removeNotebookCellLayouts.mockClear()
 })
 
 describe("NotebookProvider undo wiring", () => {
-  it("brings a deleted cell back with the same id and its stored result", () => {
-    // Given a notebook with three cells
-    mountNotebook([cell("a"), cell("b"), cell("c")])
+  it("brings a deleted cell back with the same id and its stored result", async () => {
+    // Given a notebook whose middle cell has run and has stored rows
+    const ran: NotebookCell = { ...cell("b"), lastRunStatus: "success" }
+    storage.snapshots.set("b", {
+      bufferId: BUFFER_ID,
+      cellId: "b",
+      results: [storedRows(ran.value)],
+      savedAt: 1000,
+    })
+    storage.snapshotCellIds = ["b"]
+    mountNotebook([cell("a"), ran, cell("c")])
 
     // When the user deletes the middle cell
     act(() => probe.actions?.deleteCell("b"))
@@ -93,9 +133,21 @@ describe("NotebookProvider undo wiring", () => {
       step = probe.actions?.undo()
     })
 
-    // Then the same cell is back in its place, so its result loads again
+    // Then the same cell is back in its place
     expect(step).toEqual({ kind: "inserted", cellIds: ["b"] })
     expect(probe.cellIds).toEqual(["a", "b", "c"])
+
+    // And once it is on screen, its stored rows load again
+    act(() => {
+      probe.virtualization?.reportMountBand("b", true, 0)
+      probe.virtualization?.reportRetainBand("b", true)
+      probe.hydration?.request("b")
+    })
+    await waitFor(() =>
+      expect(probe.cells?.find((c) => c.id === "b")?.result?.results).toEqual([
+        expect.objectContaining({ dataset: [[42]] }),
+      ]),
+    )
   })
 
   it("keeps the stored results of a cell the undo history holds on mount", async () => {
@@ -126,5 +178,78 @@ describe("NotebookProvider undo wiring", () => {
       BUFFER_ID,
       "held",
     )
+  })
+
+  it("records nothing in the preview of an archived notebook", () => {
+    // Given an archived notebook shown as a preview, which is never saved
+    mountNotebook([cell("a"), cell("b"), cell("c")], true)
+
+    // When a cell is deleted and moved there
+    act(() => probe.actions?.deleteCell("b"))
+    act(() => probe.actions?.moveCellDown("a"))
+
+    // Then the undo history stays empty, so nothing carries over to the
+    // notebook once it is restored, and undo has nothing to step
+    expect(peekUndoEntry(BUFFER_ID)).toBeUndefined()
+    let step: ReturnType<NotebookActions["undo"]> | undefined
+    act(() => {
+      step = probe.actions?.undo()
+    })
+    expect(step).toEqual({ kind: "empty" })
+    expect(probe.cellIds).toEqual(["c", "a"])
+  })
+
+  it("keeps the stored results of a cell an outdated undo expects gone", () => {
+    // Given an undo entry for the removal of "b", while "b" is in the
+    // notebook, e.g. the document changed without the history knowing
+    mountNotebook([cell("a"), cell("b")])
+    recordUndoEntry(BUFFER_ID, {
+      change: "remove",
+      placements: [{ cell: cell("b"), index: 1, afterCellId: "a" }],
+      variables: [],
+    })
+
+    // When the user undoes it
+    let step: ReturnType<NotebookActions["undo"]> | undefined
+    act(() => {
+      step = probe.actions?.undo()
+    })
+
+    // Then the undo reports it cannot apply, and the live cell keeps its
+    // stored result and column layout
+    expect(step).toEqual({ kind: "stale" })
+    expect(peekUndoEntry(BUFFER_ID)).toBeUndefined()
+    expect(probe.cellIds).toEqual(["a", "b"])
+    expect(storage.deleteCellSnapshot).not.toHaveBeenCalledWith(BUFFER_ID, "b")
+    expect(storage.removeNotebookCellLayouts).not.toHaveBeenCalledWith(
+      BUFFER_ID,
+      "b",
+    )
+  })
+
+  it("drops on mount the column layout of a deleted cell without stored results", () => {
+    // Given column layouts for a live cell "a", a cell "held" that undo can
+    // still bring back, and a cell "gone" deleted before a reload whose
+    // results were closed, so it has no stored results
+    recordUndoEntry(BUFFER_ID, {
+      change: "remove",
+      placements: [{ cell: cell("held"), index: 1, afterCellId: "a" }],
+      variables: [],
+    })
+    for (const cellId of ["a", "held", "gone"]) {
+      saveNotebookColumnLayout(BUFFER_ID, cellId, "q:select", {
+        columnSizing: { col_0: 100 },
+      })
+    }
+
+    // When the notebook mounts
+    mountNotebook([cell("a")])
+
+    // Then only the layout nothing refers to is removed
+    expect(storage.removeNotebookCellLayouts).toHaveBeenCalledWith(
+      BUFFER_ID,
+      "gone",
+    )
+    expect(storage.removeNotebookCellLayouts).toHaveBeenCalledTimes(1)
   })
 })

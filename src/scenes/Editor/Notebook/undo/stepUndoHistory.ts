@@ -7,6 +7,7 @@ import {
   peekUndoEntry,
   settleRedo,
   settleUndo,
+  type UndoEntry,
 } from "./notebookUndoHistory"
 
 // What an undo or redo did, so the UI can select and announce it.
@@ -61,11 +62,15 @@ export const stepUndoHistory = (
   const entry =
     from === "undo" ? peekUndoEntry(bufferId) : peekRedoEntry(bufferId)
   if (!entry) return { kind: "empty" }
-  const settle = from === "undo" ? settleUndo : settleRedo
+  const settleStack = from === "undo" ? settleUndo : settleRedo
+  // An entry that does not apply leaves the document as it is now.
+  const presentCellIds = new Set(cells.map((cell) => cell.id))
+  const settle = (applied: UndoEntry | undefined) =>
+    settleStack(bufferId, applied, presentCellIds)
   if (entry.change === "arrange") {
     const arrangement = from === "undo" ? entry.before : entry.after
     const arranged = arrange(arrangement)
-    settle(bufferId, arranged ? entry : undefined)
+    settle(arranged ? entry : undefined)
     return arranged
       ? { kind: "arranged", cellIds: entry.cellIds, arrangement }
       : { kind: "stale" }
@@ -78,12 +83,12 @@ export const stepUndoHistory = (
       cellIds,
       variablesOnlyUsedBy(deps, entry.variables, cellIds),
     )
-    settle(bufferId, placements && { ...entry, placements })
+    settle(placements && { ...entry, placements })
     return placements
       ? { kind: "removed", cellIds, neighbourId }
       : { kind: "stale" }
   }
   const attached = attach(entry.placements, entry.variables)
-  settle(bufferId, attached && entry)
+  settle(attached && entry)
   return attached ? { kind: "inserted", cellIds } : { kind: "stale" }
 }

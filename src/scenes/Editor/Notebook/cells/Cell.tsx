@@ -643,6 +643,7 @@ const CellInner: React.FC<Props> = ({
               view={view}
               paneLayout={paneLayout}
               isCellBusy={isCellBusy}
+              onClosedWhileFocused={focusCellToolbar}
             />
           )}
         </BottomSlot>

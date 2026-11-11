@@ -106,6 +106,7 @@ const settle = (
   bufferId: number,
   from: "undo" | "redo",
   applied: UndoEntry | undefined,
+  presentCellIds: ReadonlySet<string>,
 ) => {
   const history = historyOf(bufferId)
   const to = from === "undo" ? "redo" : "undo"
@@ -113,7 +114,13 @@ const settle = (
   history.lastRecord = undefined
   if (!entry) return
   if (!applied) {
-    dropEntries(bufferId, history, [entry], from)
+    // The entry did not fit the document, e.g. it expected a cell to be
+    // gone that is there. A cell in the document keeps its stored rows.
+    releaseCells(
+      bufferId,
+      history,
+      absentCellIds(entry, from).filter((id) => !presentCellIds.has(id)),
+    )
     return
   }
   // Cells back in the document own their rows again.
@@ -191,12 +198,19 @@ export const peekRedoEntry = (bufferId: number): UndoEntry | undefined =>
   topOf(histories.get(bufferId)?.redo)
 
 // Moves the top undo entry to the redo stack once it is applied, with the
-// placements read at that time. An entry that could not be applied is dropped.
-export const settleUndo = (bufferId: number, applied?: UndoEntry): void =>
-  settle(bufferId, "undo", applied)
+// placements read at that time. An entry that could not be applied is dropped;
+// it lets go of the stored rows of its cells that are not in the document.
+export const settleUndo = (
+  bufferId: number,
+  applied: UndoEntry | undefined,
+  presentCellIds: ReadonlySet<string>,
+): void => settle(bufferId, "undo", applied, presentCellIds)
 
-export const settleRedo = (bufferId: number, applied?: UndoEntry): void =>
-  settle(bufferId, "redo", applied)
+export const settleRedo = (
+  bufferId: number,
+  applied: UndoEntry | undefined,
+  presentCellIds: ReadonlySet<string>,
+): void => settle(bufferId, "redo", applied, presentCellIds)
 
 const clearListeners = new Map<number, Set<() => void>>()
 

@@ -68,6 +68,12 @@ export const removeNotebookColumnLayout = (
   writeStore(store)
 }
 
+// The cells of a notebook that have a saved column layout.
+export const listNotebookCellLayoutIds = (
+  bufferId: number | undefined,
+): string[] =>
+  bufferId === undefined ? [] : Object.keys(readStore()[bufferId] ?? {})
+
 export const removeNotebookCellLayouts = (
   bufferId: number | undefined,
   cellId: string,

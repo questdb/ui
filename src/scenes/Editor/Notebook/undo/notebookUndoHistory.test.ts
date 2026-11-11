@@ -77,7 +77,7 @@ describe("notebookUndoHistory", () => {
     // Given a paste that was undone, so its cell waits in the redo stack
     const paste = entry("insert", "pasted")
     recordUndoEntry(BUFFER_ID, paste)
-    settleUndo(BUFFER_ID, paste)
+    settleUndo(BUFFER_ID, paste, new Set())
     expect(isCellHeldByUndo(BUFFER_ID, "pasted")).toBe(true)
 
     // When the user makes another change
@@ -91,7 +91,7 @@ describe("notebookUndoHistory", () => {
     // Given a delete that was undone
     const removal = entry("remove", "restored")
     recordUndoEntry(BUFFER_ID, removal)
-    settleUndo(BUFFER_ID, removal)
+    settleUndo(BUFFER_ID, removal, new Set())
 
     // When the history is cleared, e.g. after an agent edit
     clearNotebookUndoHistory(BUFFER_ID)
@@ -114,7 +114,7 @@ describe("notebookUndoHistory", () => {
         top = peekUndoEntry(BUFFER_ID)
       ) {
         undone.push(top)
-        settleUndo(BUFFER_ID)
+        settleUndo(BUFFER_ID, undefined, new Set())
       }
       return undone
     }
@@ -175,7 +175,7 @@ describe("notebookUndoHistory", () => {
       // Given a move of cell "a" that was undone
       vi.spyOn(Date, "now").mockReturnValue(0)
       recordUndoEntry(BUFFER_ID, firstMove, "move:a")
-      settleUndo(BUFFER_ID, firstMove)
+      settleUndo(BUFFER_ID, firstMove, new Set())
 
       // When the user moves the cell again at once
       recordUndoEntry(BUFFER_ID, secondMove, "move:a")

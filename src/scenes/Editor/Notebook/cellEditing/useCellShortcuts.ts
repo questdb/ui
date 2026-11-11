@@ -4,13 +4,13 @@ import {
   parseCellClipboardPayload,
 } from "./cellClipboardPayload"
 import {
-  cellShortcutOf,
   hasOpenModalIn,
-  isCellShortcutHandledElsewhere,
+  unhandledCellShortcutOf,
   type CellShortcut,
 } from "./cellShortcut"
 import { isPasteSink, redirectNextPaste } from "./systemClipboard"
 import { useCellEditActions } from "./useCellEditActions"
+import { useNotebookPreview } from "../NotebookProvider"
 
 const NOTEBOOK_ROOT_SELECTOR = "[data-notebook-root]"
 
@@ -59,32 +59,17 @@ const useLastInteractionInNotebook = () => {
 export const useCellShortcuts = (
   focusedCellId: string | null,
 ): { enterNotebook: () => void } => {
-  const {
-    copyCell,
-    cutCell,
-    duplicateCell,
-    deleteCell,
-    pasteCells,
-    undo,
-    redo,
-  } = useCellEditActions()
+  const { pasteCells, undo, redo, runCellShortcut } = useCellEditActions()
   const lastInteractionInNotebookRef = useLastInteractionInNotebook()
+  const preview = useNotebookPreview()
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const shortcut = cellShortcutOf(event)
+      const shortcut = unhandledCellShortcutOf(event)
       if (!shortcut || !lastInteractionInNotebookRef.current) return
-      if (
-        isBlockedByDrawer(shortcut, focusedCellId) ||
-        isCellShortcutHandledElsewhere(
-          event,
-          shortcut,
-          document.activeElement,
-          window.getSelection(),
-        )
-      ) {
-        return
-      }
+      // A preview is never saved: only a copy, which changes nothing, works.
+      if (preview && shortcut !== "copy") return
+      if (isBlockedByDrawer(shortcut, focusedCellId)) return
       if (shortcut === "undo" || shortcut === "redo") {
         event.preventDefault()
         if (shortcut === "undo") undo("shortcut")
@@ -104,26 +89,18 @@ export const useCellShortcuts = (
       }
       if (!focusedCellId) return
       event.preventDefault()
-      const actOnCell = {
-        copy: copyCell,
-        cut: cutCell,
-        duplicate: duplicateCell,
-        delete: deleteCell,
-      }
-      void actOnCell[shortcut](focusedCellId, "shortcut")
+      runCellShortcut(shortcut, focusedCellId)
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [
     focusedCellId,
-    copyCell,
-    cutCell,
-    duplicateCell,
-    deleteCell,
     pasteCells,
     undo,
     redo,
+    runCellShortcut,
     lastInteractionInNotebookRef,
+    preview,
   ])
 
   const enterNotebook = useCallback(() => {

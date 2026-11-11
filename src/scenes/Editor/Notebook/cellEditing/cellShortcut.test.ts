@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from "vitest"
-import { cellShortcutOf, isCellShortcutHandledElsewhere } from "./cellShortcut"
+import {
+  cellShortcutOf,
+  isCellActionShortcut,
+  isCellShortcutHandledElsewhere,
+  unhandledCellShortcutOf,
+} from "./cellShortcut"
 
 const keydown = (init: KeyboardEventInit) =>
   new KeyboardEvent("keydown", { cancelable: true, ...init })
@@ -26,7 +31,7 @@ describe("cellShortcutOf", () => {
   it.each([
     ["Delete", { key: "Delete" }],
     ["Cmd+Backspace", { key: "Backspace", metaKey: true }],
-  ])("reads %s as delete", (_, init) => {
+  ])("reads %s as delete on every platform", (_, init) => {
     expect(cellShortcutOf(keydown(init))).toBe("delete")
   })
 
@@ -143,5 +148,56 @@ describe("isCellShortcutHandledElsewhere", () => {
     // Then the selection owns copy, and the cell still takes paste
     expect(copyHandled).toBe(true)
     expect(pasteHandled).toBe(false)
+  })
+})
+
+describe("unhandledCellShortcutOf", () => {
+  it("reads the shortcut when nothing else owns the key", () => {
+    // Given focus on a cell
+    mount(`<div tabindex="-1" data-target></div>`).focus()
+
+    // Then Cmd+X is a cut
+    expect(unhandledCellShortcutOf(keydown({ key: "x", metaKey: true }))).toBe(
+      "cut",
+    )
+  })
+
+  it.each([
+    ["a focused text field", `<textarea data-target></textarea>`],
+    [
+      "a focused result grid",
+      `<div role="grid"><button data-target></button></div>`,
+    ],
+  ])("leaves the key to %s", (_, html) => {
+    // Given focus on an element that owns the key
+    mount(html).focus()
+
+    // Then the key is not a cell shortcut
+    expect(
+      unhandledCellShortcutOf(keydown({ key: "x", metaKey: true })),
+    ).toBeNull()
+  })
+
+  it("leaves a key another handler took", () => {
+    // Given a keydown already handled
+    const event = keydown({ key: "Delete" })
+    event.preventDefault()
+
+    // Then it is not a cell shortcut
+    expect(unhandledCellShortcutOf(event)).toBeNull()
+  })
+})
+
+describe("isCellActionShortcut", () => {
+  it.each([
+    ["copy", true],
+    ["cut", true],
+    ["duplicate", true],
+    ["delete", true],
+    ["paste", false],
+    ["undo", false],
+    ["redo", false],
+  ] as const)("reads %s as acting on one cell: %s", (shortcut, expected) => {
+    expect(isCellActionShortcut(shortcut)).toBe(expected)
   })
 })

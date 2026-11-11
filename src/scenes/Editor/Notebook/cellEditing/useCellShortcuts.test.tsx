@@ -25,11 +25,13 @@ import {
 const notebook = vi.hoisted(() => ({
   actions: null as Partial<NotebookActions> | null,
   enterNotebook: null as (() => void) | null,
+  preview: false,
 }))
 
 vi.mock("../NotebookProvider", () => ({
   useNotebookActions: () => notebook.actions,
   useNotebookBufferId: () => 1,
+  useNotebookPreview: () => notebook.preview,
 }))
 vi.mock("../../../../modules/ConsoleEventTracker", () => ({
   trackEvent: vi.fn(),
@@ -154,6 +156,7 @@ const pasteCopiedCells = () => {
 
 beforeEach(() => {
   __resetNotebookUndoHistoryForTests()
+  notebook.preview = false
   Object.defineProperty(document, "execCommand", {
     value: vi.fn(() => true),
     configurable: true,
@@ -475,5 +478,89 @@ describe("useCellShortcuts", () => {
 
     // Then cell "b" is copied
     expect(getCopiedCells()?.cells[0].cell.id).toBe("b")
+  })
+
+  describe("in the preview of an archived notebook", () => {
+    beforeEach(() => {
+      notebook.preview = true
+    })
+
+    it.each([
+      ["Delete", { key: "Delete" }],
+      ["Cmd+Backspace", { key: "Backspace", metaKey: true }],
+      ["Cmd+X", { key: "x", metaKey: true }],
+    ])(
+      "keeps the selected cell on %s, as nothing there is saved",
+      (_, init) => {
+        // Given a preview with cell "a" selected
+        renderComponent(<FakeNotebook selectedCellId="a" />)
+
+        // When the user presses the key
+        const notHandled = fireEvent.keyDown(document.body, init)
+
+        // Then the preview keeps the cell and leaves the key alone
+        expect(screen.getByText("More actions a")).toBeInTheDocument()
+        expect(notHandled).toBe(true)
+      },
+    )
+
+    it("neither duplicates, pastes nor undoes", () => {
+      // Given a preview with cell "a" selected and a copied cell
+      const onPaste = vi.fn()
+      const onUndo = vi.fn(nothingToStep)
+      renderComponent(
+        <FakeNotebook selectedCellId="a" onPaste={onPaste} onUndo={onUndo} />,
+      )
+      fireEvent.keyDown(document.body, { key: "c", metaKey: true })
+
+      // When the user presses Cmd+D, Cmd+V and Cmd+Z
+      fireEvent.keyDown(document.body, { key: "d", metaKey: true })
+      fireEvent.keyDown(document.body, { key: "v", metaKey: true })
+      fireEvent.keyDown(document.body, { key: "z", metaKey: true })
+
+      // Then the cells stay as they are
+      expect(screen.queryByText("More actions a-copy")).toBeNull()
+      expect(document.querySelector("[data-clipboard-paste-sink]")).toBeNull()
+      expect(onPaste).not.toHaveBeenCalled()
+      expect(onUndo).not.toHaveBeenCalled()
+    })
+
+    it("still copies the selected cell", () => {
+      // Given a preview with cell "b" selected
+      renderComponent(<FakeNotebook selectedCellId="b" />)
+
+      // When the user presses Cmd+C
+      fireEvent.keyDown(document.body, { key: "c", metaKey: true })
+
+      // Then cell "b" is copied
+      expect(getCopiedCells()?.cells[0].cell.id).toBe("b")
+    })
+
+    it("offers only the copy in the cell menu, also by shortcut", async () => {
+      // Given a copied cell, and the menu of cell "a" open in a preview
+      const onPaste = vi.fn()
+      renderComponent(<FakeNotebook selectedCellId="b" onPaste={onPaste} />)
+      fireEvent.keyDown(document.body, { key: "c", metaKey: true })
+      await userEvent.click(screen.getByText("More actions a"))
+
+      // Then the menu has no item that changes the cells
+      expect(
+        screen.getAllByRole("menuitem").map((item) => item.textContent),
+      ).toEqual([expect.stringMatching(/^Copy cell/)])
+
+      // And when the user presses Cmd+Backspace or Cmd+V in the menu
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        key: "Backspace",
+        metaKey: true,
+      })
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        key: "v",
+        metaKey: true,
+      })
+
+      // Then cell "a" stays and nothing is pasted
+      expect(screen.getByText("More actions a")).toBeInTheDocument()
+      expect(onPaste).not.toHaveBeenCalled()
+    })
   })
 })

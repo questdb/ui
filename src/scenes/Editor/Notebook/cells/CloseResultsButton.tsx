@@ -89,6 +89,9 @@ type Props = {
   view: CellView
   paneLayout: CellPaneLayout
   isCellBusy: boolean
+  // Closing removes the button. When it had focus, e.g. Enter on it, focus
+  // moves here instead of falling to the page body.
+  onClosedWhileFocused: () => void
 }
 
 export const CloseResultsButton: React.FC<Props> = ({
@@ -96,6 +99,7 @@ export const CloseResultsButton: React.FC<Props> = ({
   view,
   paneLayout,
   isCellBusy,
+  onClosedWhileFocused,
 }) => {
   const { closeResults } = useCellViewActions({
     cellId,
@@ -116,7 +120,8 @@ export const CloseResultsButton: React.FC<Props> = ({
           data-hook="cell-close-results"
           onClick={(e) => {
             e.stopPropagation()
-            closeResults()
+            const hadFocus = e.currentTarget === document.activeElement
+            if (closeResults() && hadFocus) onClosedWhileFocused()
           }}
         >
           <XIcon size={16} />

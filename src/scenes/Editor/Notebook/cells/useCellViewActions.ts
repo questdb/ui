@@ -59,8 +59,9 @@ export const useCellViewActions = ({
 
   // Drops the rows and the stored result, so the cell shows its editor only.
   // A chart goes through the draw toggle, which also leaves chart mode.
-  const closeResults = () => {
-    if (isCellBusy || view === "none") return
+  // Returns whether the results closed.
+  const closeResults = (): boolean => {
+    if (isCellBusy || view === "none") return false
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
       to: "none",
       method,
@@ -71,6 +72,7 @@ export const useCellViewActions = ({
     } else {
       clearCellResult(cellId)
     }
+    return true
   }
 
   const toggleEditor = () => {

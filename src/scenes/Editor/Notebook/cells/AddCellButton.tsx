@@ -12,6 +12,7 @@ import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
 import {
   useNotebookActions,
   useNotebookBufferId,
+  useNotebookPreview,
   useNotebookState,
 } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
@@ -219,8 +220,9 @@ const PasteCellAction: React.FC<PasteCellActionProps> = ({
 }) => {
   const copiedCells = useCopiedCells()
   const { pasteCells } = useCellEditActions()
+  const preview = useNotebookPreview()
 
-  if (!copiedCells) return null
+  if (!copiedCells || preview) return null
 
   return (
     <AddAction

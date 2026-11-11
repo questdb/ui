@@ -49,7 +49,9 @@ const SHORTCUT_OWNER_SELECTOR = [
   "[role='grid']",
 ].join(", ")
 
-// Delete on Windows and Linux; macOS keyboards have only Backspace, so ⌘⌫.
+// The Delete key works on every platform, so also fn+⌫ or ⌦ on macOS, and so
+// does Meta+Backspace (⌘⌫), as most Mac keyboards have no Delete key. The
+// labels show the key every keyboard of the platform has: ⌘⌫ or Del.
 const isDeleteShortcut = (event: KeyboardEvent): boolean => {
   if (event.altKey || event.shiftKey || event.ctrlKey) return false
   return event.metaKey ? event.key === "Backspace" : event.key === "Delete"
@@ -94,3 +96,38 @@ export const isCellShortcutHandledElsewhere = (
   event.defaultPrevented ||
   activeElement?.closest(SHORTCUT_OWNER_SELECTOR) != null ||
   (SELECTION_SHORTCUTS.includes(shortcut) && hasTextSelection(selection))
+
+// The keydown as a cell shortcut, unless the focused element or a text
+// selection owns the key. Both the notebook and an open cell menu read keys
+// this way.
+export const unhandledCellShortcutOf = (
+  event: KeyboardEvent,
+): CellShortcut | null => {
+  const shortcut = cellShortcutOf(event)
+  if (
+    !shortcut ||
+    isCellShortcutHandledElsewhere(
+      event,
+      shortcut,
+      document.activeElement,
+      window.getSelection(),
+    )
+  ) {
+    return null
+  }
+  return shortcut
+}
+
+// The shortcuts that act on one cell; useCellEditActions runs them.
+export type CellActionShortcut = Extract<
+  CellShortcut,
+  "copy" | "cut" | "duplicate" | "delete"
+>
+
+export const isCellActionShortcut = (
+  shortcut: CellShortcut,
+): shortcut is CellActionShortcut =>
+  shortcut === "copy" ||
+  shortcut === "cut" ||
+  shortcut === "duplicate" ||
+  shortcut === "delete"

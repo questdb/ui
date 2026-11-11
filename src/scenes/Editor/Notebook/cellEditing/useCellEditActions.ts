@@ -16,7 +16,7 @@ import {
   shouldRunAfterPaste,
   type CellClipboardPayload,
 } from "./cellClipboardPayload"
-import { CELL_SHORTCUT_LABELS } from "./cellShortcut"
+import { CELL_SHORTCUT_LABELS, type CellActionShortcut } from "./cellShortcut"
 import { setCopiedCells } from "./copiedCellsStore"
 import { showUndoToast } from "./undoToast"
 import { peekUndoEntry } from "../undo/notebookUndoHistory"
@@ -346,6 +346,20 @@ export const useCellEditActions = () => {
     [getCellsSnapshot, pasteCellsAt, announceInserted, fetchPastedCell],
   )
 
+  // A shortcut on one cell, from the notebook or from the cell's open menu.
+  const runCellShortcut = useCallback(
+    (shortcut: CellActionShortcut, cellId: string) => {
+      const actOnCell = {
+        copy: copyCell,
+        cut: cutCell,
+        duplicate: duplicateCell,
+        delete: deleteCell,
+      }
+      void actOnCell[shortcut](cellId, "shortcut")
+    },
+    [copyCell, cutCell, duplicateCell, deleteCell],
+  )
+
   return {
     copyCell,
     cutCell,
@@ -354,5 +368,6 @@ export const useCellEditActions = () => {
     pasteCells,
     undo,
     redo,
+    runCellShortcut,
   }
 }

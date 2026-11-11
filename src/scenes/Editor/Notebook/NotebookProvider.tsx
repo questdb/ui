@@ -94,7 +94,10 @@ import {
   pinNotebookSnapshots,
   pruneToRecentNotebooks,
 } from "../../../store/notebookResults"
-import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
+import {
+  listNotebookCellLayoutIds,
+  removeNotebookCellLayouts,
+} from "./notebookColumnLayoutStore"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import type { QueryKey } from "../../../store/Query/types"
 import { createValidateWithGlobals } from "./declareUtils"
@@ -274,10 +277,14 @@ const createNotebookScopeKey = (bufferId: number, cellId: string): string =>
 const NotebookStateContext = createContext<NotebookState>(EMPTY_STATE)
 const NotebookActionsContext = createContext<NotebookActions>(NOOP_ACTIONS)
 const NotebookBufferIdContext = createContext<number>(0)
+const NotebookPreviewContext = createContext<boolean>(false)
 
 export const useNotebookState = () => useContext(NotebookStateContext)
 export const useNotebookActions = () => useContext(NotebookActionsContext)
 export const useNotebookBufferId = () => useContext(NotebookBufferIdContext)
+// An archived notebook shown as a preview is never saved, so the cell edit
+// actions (shortcuts, menu items, Paste Cell) stay off in it.
+export const useNotebookPreview = () => useContext(NotebookPreviewContext)
 
 export const NotebookProvider: React.FC<{
   initialState: NotebookViewState
@@ -397,33 +404,34 @@ export const NotebookProvider: React.FC<{
     resultHydration.sync(store.cells)
   }, [store.cells])
 
-  // Reconcile live cells against the persisted snapshot index on mount:
-  //   - snapshots whose cell no longer exists (out-of-band divergence, e.g. an
-  //     applied external state, or a user delete the undo history let go of
-  //     with a reload) are deleted with the cell's column layout — index-only
-  //     read, payloads untouched. A cell the undo history still holds keeps
-  //     both.
+  // Reconcile live cells against the persisted snapshot index and the column
+  // layout store on mount:
+  //   - snapshots and column layouts whose cell no longer exists (out-of-band
+  //     divergence, e.g. an applied external state, or a user delete the undo
+  //     history let go of with a reload) are deleted — index-only read,
+  //     payloads untouched. The layouts are swept on their own, as a deleted
+  //     cell can have a layout but no snapshot (e.g. its results were closed).
+  //     A cell the undo history still holds keeps both.
   //   - a run-marked, resultless cell with no snapshot (e.g. a duplicate whose
   //     stale source snapshot was skipped) is marked missing now, so its
   //     reserved result pane collapses on mount instead of shimmering until it
   //     independently enters the hydration band.
   useEffect(() => {
+    const isOrphan = (cellId: string) =>
+      !cellsRef.current.some((c) => c.id === cellId) &&
+      !isCellHeldByUndo(bufferId, cellId)
+    listNotebookCellLayoutIds(bufferId)
+      .filter(isOrphan)
+      .forEach((cellId) => removeNotebookCellLayouts(bufferId, cellId))
     let cancelled = false
     loadSnapshotCellIds(bufferId)
       .then((snapshotCellIds) => {
         if (cancelled) return
         const snapshotIds = new Set(snapshotCellIds)
         const cells = cellsRef.current
-        const liveCellIds = new Set(cells.map((c) => c.id))
         snapshotCellIds
-          .filter(
-            (cellId) =>
-              !liveCellIds.has(cellId) && !isCellHeldByUndo(bufferId, cellId),
-          )
-          .forEach((cellId) => {
-            void deleteCellSnapshot(bufferId, cellId)
-            removeNotebookCellLayouts(bufferId, cellId)
-          })
+          .filter(isOrphan)
+          .forEach((cellId) => void deleteCellSnapshot(bufferId, cellId))
         cells
           .filter(
             (cell) =>
@@ -633,9 +641,11 @@ export const NotebookProvider: React.FC<{
 
   // User changes to the cell list go on the notebook's undo history. Reads
   // the document after the change, which commitTransition has already synced.
+  // A preview is never saved, so it records nothing: its entries would
+  // outlive it and act on the restored notebook.
   const recordInsertedCells = useCallback(
     (cellIds: string[], variables: NotebookVariable[]) => {
-      if (cellIds.length === 0) return
+      if (preview || cellIds.length === 0) return
       recordUndoEntry(bufferId, {
         change: "insert",
         placements: cellPlacementsOf(
@@ -646,7 +656,7 @@ export const NotebookProvider: React.FC<{
         variables,
       })
     },
-    [bufferId, store.cellsRef],
+    [bufferId, preview, store.cellsRef],
   )
 
   const detachCells = useCallback(
@@ -684,17 +694,19 @@ export const NotebookProvider: React.FC<{
 
   const arrange = useCallback(
     (cellIds: string[], apply: () => void, options?: ArrangeOptions) =>
-      recordArrangement(
-        bufferId,
-        () => ({
-          cells: store.cellsRef.current,
-          layout: settingsRef.current.layout,
-        }),
-        cellIds,
-        apply,
-        options,
-      ),
-    [bufferId, store.cellsRef],
+      preview
+        ? apply()
+        : recordArrangement(
+            bufferId,
+            () => ({
+              cells: store.cellsRef.current,
+              layout: settingsRef.current.layout,
+            }),
+            cellIds,
+            apply,
+            options,
+          ),
+    [bufferId, preview, store.cellsRef],
   )
 
   const applyArrangement = useCallback(
@@ -709,14 +721,23 @@ export const NotebookProvider: React.FC<{
 
   const stepHistory = useCallback(
     (from: "undo" | "redo"): HistoryStep =>
-      stepUndoHistory(bufferId, from, {
-        cells: store.cellsRef.current,
-        variables: settingsRef.current.variables ?? [],
-        detach: detachCells,
-        attach: attachCells,
-        arrange: applyArrangement,
-      }),
-    [bufferId, store.cellsRef, detachCells, attachCells, applyArrangement],
+      preview
+        ? { kind: "empty" }
+        : stepUndoHistory(bufferId, from, {
+            cells: store.cellsRef.current,
+            variables: settingsRef.current.variables ?? [],
+            detach: detachCells,
+            attach: attachCells,
+            arrange: applyArrangement,
+          }),
+    [
+      bufferId,
+      preview,
+      store.cellsRef,
+      detachCells,
+      attachCells,
+      applyArrangement,
+    ],
   )
 
   const addCell = useCallback(
@@ -929,7 +950,7 @@ export const NotebookProvider: React.FC<{
   const deleteCell = useCallback(
     (cellId: string) => {
       const placements = detachCells([cellId], [])
-      if (placements) {
+      if (placements && !preview) {
         recordUndoEntry(bufferId, {
           change: "remove",
           placements,
@@ -937,7 +958,7 @@ export const NotebookProvider: React.FC<{
         })
       }
     },
-    [detachCells, bufferId],
+    [detachCells, bufferId, preview],
   )
 
   const duplicateCell = useCallback(
@@ -1182,19 +1203,21 @@ export const NotebookProvider: React.FC<{
 
   return (
     <NotebookBufferIdContext.Provider value={bufferId}>
-      <NotebookActionsContext.Provider value={actionsValue}>
-        <NotebookStateContext.Provider value={stateValue}>
-          <CellRefreshProvider value={cellRefreshEngine}>
-            <CellVirtualizationProvider value={cellVirtualizationEngine}>
-              <CellResultHydrationProvider value={resultHydration}>
-                <ResultTrendProvider value={resultTrendStore}>
-                  {children}
-                </ResultTrendProvider>
-              </CellResultHydrationProvider>
-            </CellVirtualizationProvider>
-          </CellRefreshProvider>
-        </NotebookStateContext.Provider>
-      </NotebookActionsContext.Provider>
+      <NotebookPreviewContext.Provider value={preview}>
+        <NotebookActionsContext.Provider value={actionsValue}>
+          <NotebookStateContext.Provider value={stateValue}>
+            <CellRefreshProvider value={cellRefreshEngine}>
+              <CellVirtualizationProvider value={cellVirtualizationEngine}>
+                <CellResultHydrationProvider value={resultHydration}>
+                  <ResultTrendProvider value={resultTrendStore}>
+                    {children}
+                  </ResultTrendProvider>
+                </CellResultHydrationProvider>
+              </CellVirtualizationProvider>
+            </CellRefreshProvider>
+          </NotebookStateContext.Provider>
+        </NotebookActionsContext.Provider>
+      </NotebookPreviewContext.Provider>
     </NotebookBufferIdContext.Provider>
   )
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import {
+  listNotebookCellLayoutIds,
   loadNotebookColumnLayout,
   saveNotebookColumnLayout,
   removeNotebookColumnLayout,
@@ -214,5 +215,20 @@ describe("notebookColumnLayoutStore", () => {
     expect(loadNotebookColumnLayout(1, OTHER_CELL, q(0))).toEqual({
       columnSizing: { col_0: 7 },
     })
+  })
+
+  it("lists the cells of a buffer that have a layout", () => {
+    // Given layouts for two cells of buffer 1 and one of buffer 2
+    saveNotebookColumnLayout(1, CELL, q(0), { columnSizing: { col_0: 1 } })
+    saveNotebookColumnLayout(1, OTHER_CELL, q(0), {
+      columnSizing: { col_0: 2 },
+    })
+    saveNotebookColumnLayout(2, "cell-c", q(0), { columnSizing: { col_0: 3 } })
+
+    // Then each buffer lists only its own cells
+    expect(listNotebookCellLayoutIds(1)).toEqual([CELL, OTHER_CELL])
+    expect(listNotebookCellLayoutIds(2)).toEqual(["cell-c"])
+    expect(listNotebookCellLayoutIds(3)).toEqual([])
+    expect(listNotebookCellLayoutIds(undefined)).toEqual([])
   })
 })
