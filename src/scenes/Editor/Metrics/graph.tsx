@@ -1,6 +1,13 @@
 import { Error } from "../../../components/icons"
 import { Information } from "../../../components/icons"
-import React, { useContext, useEffect, useRef, useState, useMemo } from "react"
+import React, {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useMemo,
+} from "react"
 import styled, { ThemeContext } from "styled-components"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
@@ -46,6 +53,10 @@ const Header = styled(Box)`
 `
 
 const HeaderMeta = styled(Box)`
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
   align-items: center;
   flex: 1 1 auto;
   min-width: 0;
@@ -53,8 +64,6 @@ const HeaderMeta = styled(Box)`
 `
 
 const BeforeLabel = styled.div`
-  flex: 0 1 12rem;
-  width: 12rem;
   min-width: 0;
   overflow: hidden;
 `
@@ -63,7 +72,6 @@ const TitleInfo = styled(Box).attrs({
   align: "center",
   gap: "0.8rem",
 })`
-  flex: 1 1 auto;
   min-width: 0;
   margin-left: 0.6rem;
 `
@@ -88,6 +96,12 @@ const GraphWrapper = styled(Box).attrs({
   padding: 0.4rem 0 0;
   overflow: hidden;
   background: ${({ theme }) => theme.color.surfaceInset};
+`
+
+const PLOT_HEIGHT_PX = 200
+
+const PlotContainer = styled.div`
+  min-height: ${PLOT_HEIGHT_PX}px;
 `
 
 const GraphOverlay = styled(Box).attrs({
@@ -129,6 +143,7 @@ type Props = DateRange & {
   onZoomToData?: () => void
   widgetConfig: Widget
   hasError?: boolean
+  scrollIntoViewOnMount: boolean
 }
 
 export const Graph = ({
@@ -145,6 +160,7 @@ export const Graph = ({
   onZoomToData,
   widgetConfig,
   hasError,
+  scrollIntoViewOnMount,
 }: Props) => {
   const theme = useContext(ThemeContext)
   const timeRef = useRef(null)
@@ -168,7 +184,7 @@ export const Graph = ({
         if (entries[0] && uPlotRef.current) {
           uPlotRef.current.setSize({
             width: entries[0].contentRect.width,
-            height: 200,
+            height: PLOT_HEIGHT_PX,
           })
         }
       }),
@@ -196,6 +212,12 @@ export const Graph = ({
   }, [data, colorsString, theme])
 
   const graphRootRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (scrollIntoViewOnMount) {
+      graphRootRef.current?.scrollIntoView({ block: "center" })
+    }
+  }, [scrollIntoViewOnMount])
 
   useEffect(() => {
     if (graphRootRef.current) {
@@ -282,12 +304,12 @@ export const Graph = ({
             )}
           </GraphOverlay>
         )}
-        <div ref={graphRootRef}>
+        <PlotContainer>
           {uplotOptions && (
             <UplotReact
               options={{
                 ...uplotOptions,
-                height: 200,
+                height: PLOT_HEIGHT_PX,
                 width: graphRootRef.current?.clientWidth ?? 0,
               }}
               data={data}
@@ -296,7 +318,7 @@ export const Graph = ({
               }}
             />
           )}
-        </div>
+        </PlotContainer>
         <Label>
           <span ref={timeRef} />
           <LabelValue ref={valueRef} />
