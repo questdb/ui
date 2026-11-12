@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeAll, describe, expect, it, vi } from "vitest"
 
 // Same stubs as importTabs.test.ts: keep React and Monaco out of a pure test.
 vi.mock("../../store/buffers", () => ({
@@ -12,6 +12,13 @@ import {
   fetchExampleDashboard,
   parseExampleDashboard,
 } from "./exampleDashboards"
+
+// parseExampleDashboard loads importTabs on demand. The first, cold import
+// takes seconds under a full parallel run; load it once up front, with its own
+// timeout, so no test pays for it within the default 5 s.
+beforeAll(async () => {
+  await import("../../scenes/Editor/Monaco/importTabs")
+}, 30_000)
 
 const notebookRow = (extra: Record<string, unknown> = {}) => ({
   label: "Trades",

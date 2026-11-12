@@ -132,14 +132,18 @@ describe("TabGroupList delete double-click guard", () => {
     const click = (index: number) =>
       act(() => {
         ;(
-          buttons("tabs-panel-delete")[index].props as { onClick: () => void }
-        ).onClick()
+          buttons("tabs-panel-delete")[index].props as {
+            onClick: (event: unknown) => void
+          }
+        ).onClick({ currentTarget: { closest: () => null } })
       })
     click(0)
     // The list re-rendered and the next row is now under the pointer.
     click(1)
 
     expect(mocks.editor.deleteBuffer).toHaveBeenCalledTimes(1)
-    expect(mocks.editor.deleteBuffer).toHaveBeenCalledWith(1)
+    expect(mocks.editor.deleteBuffer).toHaveBeenCalledWith(1, true, "user", {
+      focusEditor: false,
+    })
   })
 })

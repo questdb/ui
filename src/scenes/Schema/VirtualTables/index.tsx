@@ -11,7 +11,7 @@ import { Virtuoso, VirtuosoHandle, ListRange } from "react-virtuoso"
 import styled from "styled-components"
 import { Loader3, FileCopy, Restart } from "../../../components/icons"
 import { MaterializedViewIcon } from "../table-icon"
-import { InfoIcon } from "@phosphor-icons/react"
+import { InfoIcon, PlayIcon } from "@phosphor-icons/react"
 import { spinAnimation, toast } from "../../../components"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
@@ -200,6 +200,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   const { handleExplainSchema } = useAIQuickActions()
   const { appendQuery, openTableNotebook } = useEditor()
+  // renderRow is memoized on schema state only; read the provider callback
+  // through a ref so a row never calls a stale openTableNotebook (and with it a
+  // stale tab list for the new tab's position and the tab limit).
+  const openTableNotebookRef = useRef(openTableNotebook)
+  openTableNotebookRef.current = openTableNotebook
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
@@ -590,6 +595,15 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         item.kind === "view" ||
         item.kind === "liveview"
       ) {
+        const queryTable = () => {
+          void trackEvent(ConsoleEvent.SCHEMA_QUERY_TABLE, {
+            kind: item.kind,
+          })
+          void openTableNotebookRef.current({
+            name: item.name,
+            designatedTimestamp: item.designatedTimestamp,
+          })
+        }
         // A view's WAL can suspend (its ALTER VIEW ... AS definition change is
         // a WAL transaction), but no ALTER grammar can resume it
         const suspendableKind = item.kind === "view" ? null : item.kind
@@ -638,15 +652,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                     expanded={item.isExpanded}
                     onExpandCollapse={() => toggleNodeExpansion(item.id)}
                     onOpenDetailsDrawer={handleOpenDetailsDrawer}
-                    onQuery={() => {
-                      void trackEvent(ConsoleEvent.SCHEMA_QUERY_TABLE, {
-                        kind: item.kind,
-                      })
-                      void openTableNotebook({
-                        name: item.name,
-                        designatedTimestamp: item.designatedTimestamp,
-                      })
-                    }}
+                    onQuery={queryTable}
                     navigateInTree={navigateInTree}
                     partitionBy={item.partitionBy}
                     walEnabled={item.walEnabled}
@@ -680,6 +686,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 </>
               </ContextMenuTrigger>
               <ContextMenuContent>
+                <MenuItem
+                  data-hook="table-context-menu-query"
+                  onClick={queryTable}
+                  icon={<PlayIcon size={16} />}
+                >
+                  Query in a notebook
+                </MenuItem>
                 <MenuItem
                   data-hook="table-context-menu-view-details"
                   onClick={handleOpenDetailsDrawer}

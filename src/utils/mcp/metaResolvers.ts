@@ -17,6 +17,9 @@ export type MetaToolContext = {
   consumeDigest?: () => UserActionDigest | null
 }
 
+// The workspace is listed whenever it has tabs: the tab tools (archive_tab,
+// restore_tab, activate_tab, rename_tab, delete_tab) act on SQL and metrics
+// tabs too and take their buffer_id from here.
 const noNotebookOpenPayload = (ws: WorkspaceInfo | null): ToolContent[] => {
   const hasNotebooks = !!ws && ws.tabs.some((tab) => tab.kind === "notebook")
   const status = JSON.stringify({
@@ -28,7 +31,8 @@ const noNotebookOpenPayload = (ws: WorkspaceInfo | null): ToolContent[] => {
       : "Call create_notebook to start a new notebook, or ask the user to " +
         "open an existing one.",
   })
-  const parts = hasNotebooks ? [formatWorkspace(ws), status] : [status]
+  const parts =
+    ws && ws.tabs.length > 0 ? [formatWorkspace(ws), status] : [status]
   return [{ type: "text", text: parts.join("\n") }]
 }
 

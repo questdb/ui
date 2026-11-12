@@ -50,8 +50,9 @@ export const pinnedBuffersWithout = (buffers: Buffer[], removedId: number) =>
   )
 
 // Position that places a tab after every pinned open tab. Uses max + 1, not
-// the open-tab count: deletes that skip compaction (Alt+W, Tabs panel Delete)
-// leave gaps, and a count would tie with the last tab's position.
+// the open-tab count: positions can still have gaps (a delete compacts against
+// a render-time list, and a closed tab's row may keep a stale position), and a
+// count would then tie with the last tab's position.
 export const nextOpenPosition = (buffers: Buffer[]) =>
   buffers
     .filter(isPinnedBuffer)

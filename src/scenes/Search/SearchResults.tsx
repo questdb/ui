@@ -17,6 +17,7 @@ import {
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { requestCellReveal } from "../Editor/Notebook/cellReveal"
+import { focusPreviewKeepOpen } from "../Editor/PreviewBar"
 import { waitForController } from "../../utils/notebooks/notebookController"
 
 const ResultsContainer = styled.div`
@@ -395,8 +396,19 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     if (!item) {
       return
     }
+    const bufferId = getBufferIdFromItem(item)
+    const previewing =
+      buffers.find((buffer) => buffer.id === bufferId)?.archived === true
     await openBufferFromItem(item, true)
     positionEditorForItem(item)
+
+    // A closed tab opens as a read-only preview, which takes no focus; hand it
+    // to "Keep open", the preview's one action, so the keyboard user is not
+    // left on the page body.
+    if (previewing) {
+      focusPreviewKeepOpen()
+      return
+    }
 
     if (item.isMetricsMatch || item.isNotebookMatch) {
       setFocusedIndex(null)

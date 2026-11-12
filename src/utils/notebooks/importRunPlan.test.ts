@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import {
   cellsShowingResults,
   heldCellsNote,
+  importHoldNote,
   planImportRuns,
 } from "./importRunPlan"
 import { clearStatementClassCache } from "../tools/permissions"
@@ -56,14 +57,36 @@ describe("planImportRuns", () => {
       ["a", "b", "c", "e"],
       validate,
     )
-    expect(plan).toEqual({ run: ["a"], held: ["b", "c"] })
+    expect(plan).toEqual({ run: ["a"], held: ["b", "c"], unchecked: [] })
   })
 
-  it("holds a cell whose statements cannot be classified", async () => {
-    const plan = await planImportRuns([cell("a", "select 1;")], ["a"], () =>
-      Promise.reject(new Error("offline")),
+  it("runs a cell whose statement validate rejects as invalid", async () => {
+    // Given a DQL statement next to one the server reports as invalid
+    const plan = await planImportRuns(
+      [cell("a", "select 1; selec 2;")],
+      ["a"],
+      (sql) =>
+        /^\s*selec\s/i.test(sql)
+          ? Promise.resolve({
+              error: "Invalid column",
+              position: 0,
+            } as unknown as ValidateQueryResult)
+          : validate(sql),
     )
-    expect(plan).toEqual({ run: [], held: ["a"] })
+    // Then it runs, as the auto-run gate lets it: the invalid statement is
+    // reported by the run, never executed
+    expect(plan).toEqual({ run: ["a"], held: [], unchecked: [] })
+  })
+
+  it("holds a cell that could not be checked, apart from DDL/DML", async () => {
+    // Given the validate request fails (server unreachable, 5xx, 401)
+    const plan = await planImportRuns(
+      [cell("a", "select 1;"), cell("b", "select 2; select 3;")],
+      ["a", "b"],
+      () => Promise.reject(new Error("offline")),
+    )
+    // Then the cells are held as unchecked, not as DDL/DML
+    expect(plan).toEqual({ run: [], held: [], unchecked: ["a", "b"] })
   })
 })
 
@@ -74,6 +97,22 @@ describe("heldCellsNote", () => {
     )
     expect(heldCellsNote(3)).toBe(
       "3 cells containing DDL/DML were not run automatically.",
+    )
+  })
+})
+
+describe("importHoldNote", () => {
+  it("names DDL/DML and unchecked cells separately", () => {
+    expect(importHoldNote({ held: 0, unchecked: 0 })).toBe("")
+    expect(importHoldNote({ held: 2, unchecked: 0 })).toBe(
+      "2 cells containing DDL/DML were not run automatically.",
+    )
+    expect(importHoldNote({ held: 0, unchecked: 1 })).toBe(
+      "1 cell could not be checked for DDL/DML and was not run automatically.",
+    )
+    expect(importHoldNote({ held: 1, unchecked: 3 })).toBe(
+      "1 cell containing DDL/DML was not run automatically. " +
+        "3 cells could not be checked for DDL/DML and were not run automatically.",
     )
   })
 })

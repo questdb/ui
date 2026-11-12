@@ -24,7 +24,7 @@ import { importInto, peakImportFile } from "dexie-export-import"
 import { exportBuffers } from "./exportTabs"
 import {
   cellsShowingResults,
-  heldCellsNote,
+  importHoldNote,
   planImportRuns,
 } from "../../../utils/notebooks/importRunPlan"
 import { createValidateWithGlobals } from "../Notebook/declareUtils"
@@ -376,9 +376,11 @@ export const Tabs = () => {
         }
 
         // Give imported notebooks back the results they were showing: each
-        // read-only cell runs again; cells with DDL/DML are held and noted.
+        // read-only cell runs again; cells with DDL/DML, or that could not be
+        // checked, are held and noted.
         const runs: Array<{ bufferId: number; cellIds: string[] }> = []
         let heldCount = 0
+        let uncheckedCount = 0
         for (const b of allBuffersAfterImport) {
           if (b.id === undefined || existingIds.has(b.id)) continue
           if (idsToDelete.includes(b.id) || b.archived || !b.notebookViewState)
@@ -392,20 +394,24 @@ export const Tabs = () => {
             createValidateWithGlobals(quest, () => variables),
           )
           heldCount += plan.held.length
+          uncheckedCount += plan.unchecked.length
           if (plan.run.length > 0)
             runs.push({ bufferId: b.id, cellIds: plan.run })
         }
-        const heldNote = heldCount > 0 ? ` ${heldCellsNote(heldCount)}` : ""
+        const holdNote = importHoldNote({
+          held: heldCount,
+          unchecked: uncheckedCount,
+        })
 
         // Show dialog only if there are skipped tabs, otherwise show toast
         if (skipped.length > 0) {
           setImportedCount(importedCount)
           setSkippedTabs(skipped)
           setImportSummaryOpen(true)
-          if (heldCount > 0) toast.info(heldCellsNote(heldCount))
+          if (holdNote) toast.info(holdNote)
         } else if (importedCount > 0) {
           toast.success(
-            `Imported ${importedCount} tab${importedCount === 1 ? "" : "s"} successfully.${heldNote}`,
+            `Imported ${importedCount} tab${importedCount === 1 ? "" : "s"} successfully.${holdNote ? ` ${holdNote}` : ""}`,
           )
         } else {
           toast.info("All tabs already exist. Nothing imported.")

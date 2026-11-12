@@ -51,7 +51,7 @@ import {
 } from "../../../components"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
-import { color, copyToClipboard } from "../../../utils"
+import { color, copyToClipboard, ctrlCmd } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
 import { Tooltip } from "../../../components/Tooltip"
@@ -557,6 +557,14 @@ const Row = ({
       onDoubleClick={handleExpandCollapse}
       onClick={handleClick}
       onKeyDown={(e) => {
+        // Enter/Space on the focused Query button activate it natively
+        if (
+          (e.key === "Enter" || e.key === " ") &&
+          e.target instanceof Element &&
+          e.target.closest('[data-hook="table-query-button"]')
+        ) {
+          return
+        }
         e.preventDefault()
 
         if (
@@ -589,7 +597,12 @@ const Row = ({
         }
 
         if (e.key === "Enter") {
-          onOpenDetailsDrawer?.()
+          // Ctrl/Cmd+Enter is the keyboard path to the Query button
+          if ((e.metaKey || e.ctrlKey) && onQuery) {
+            onQuery()
+          } else {
+            onOpenDetailsDrawer?.()
+          }
         }
 
         const shouldGoToParent =
@@ -727,9 +740,13 @@ const Row = ({
         </FlexRow>
       </Box>
       {!selectOpen && onQuery && (
-        <Tooltip content="Query in a notebook" placement="right">
+        <Tooltip
+          content={`Query in a notebook (${ctrlCmd}+Enter)`}
+          placement="bottom"
+        >
           <QueryButton
             aria-label={`Query ${name}`}
+            aria-keyshortcuts="Control+Enter Meta+Enter"
             size="sm"
             className="table-menu-button"
             data-hook="table-query-button"
@@ -739,7 +756,7 @@ const Row = ({
             }}
             onDoubleClick={(e: React.MouseEvent) => e.stopPropagation()}
           >
-            <PlayIcon size={16} weight="fill" color={theme.color.statusInfo} />
+            <PlayIcon size={16} color={theme.color.statusInfo} />
           </QueryButton>
         </Tooltip>
       )}

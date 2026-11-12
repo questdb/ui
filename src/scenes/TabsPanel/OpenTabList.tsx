@@ -9,7 +9,7 @@ import { TabRow, type LeadingVisibility } from "./TabRow"
 import { BufferIcon } from "./bufferIcon"
 import { DeleteRowButton, ROW_ICON_SIZE, RowIconButton } from "./rowActions"
 import { useRowDrag, type RowDragState } from "./useRowDrag"
-import { isOwnActivationKey } from "./keyboard"
+import { focusNeighbourRow, isOwnActivationKey } from "./keyboard"
 import { displayedIndexDuringDrag } from "../../components/TabBar/tabLayout"
 import { useOptimisticOrder } from "../../hooks/useOptimisticOrder"
 import { eventBus } from "../../modules/EventBus"
@@ -112,15 +112,21 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
     await reorderBuffer(buffer.id as number, toIndex)
   }
 
-  const close = async (buffer: Buffer) => {
+  // The panel keeps keyboard focus: the neighbouring row takes it, and the
+  // editor is not focused when the tab goes away.
+  const close = async (buffer: Buffer, action: Element) => {
     void trackEvent(ConsoleEvent.TAB_PANEL_CLOSE)
-    await closeBuffer(buffer.id as number)
+    focusNeighbourRow(action)
+    await closeBuffer(buffer.id as number, { focusEditor: false })
   }
 
-  const remove = async (buffer: Buffer) => {
+  const remove = async (buffer: Buffer, action: Element) => {
     if (!acceptDeleteClick()) return
     void trackEvent(ConsoleEvent.TAB_PANEL_DELETE)
-    await deleteBuffer(buffer.id as number)
+    focusNeighbourRow(action)
+    await deleteBuffer(buffer.id as number, true, "user", {
+      focusEditor: false,
+    })
   }
 
   const actionsFor = (buffer: Buffer) => (
@@ -129,7 +135,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
         label="Close tab"
         disabled={!canRemove || buffer.isPreviewBuffer}
         data-hook="tabs-panel-close"
-        onClick={() => void close(buffer)}
+        onClick={(event) => void close(buffer, event.currentTarget)}
       >
         <XIcon size={ROW_ICON_SIZE} />
       </RowIconButton>
@@ -137,7 +143,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
         label="Delete tab"
         disabled={!canRemove}
         data-hook="tabs-panel-delete"
-        onClick={() => void remove(buffer)}
+        onClick={(event) => void remove(buffer, event.currentTarget)}
       >
         <TrashIcon size={ROW_ICON_SIZE} />
       </DeleteRowButton>

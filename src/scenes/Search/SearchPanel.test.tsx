@@ -13,8 +13,7 @@ vi.mock("../../providers", () => ({
     buffers: [],
     editorRef: { current: null },
     setActiveBuffer: vi.fn(),
-    setTemporaryBuffer: vi.fn(),
-    updateBuffer: vi.fn(),
+    previewBuffer: vi.fn(),
   }),
 }))
 vi.mock("../../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))

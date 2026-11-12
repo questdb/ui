@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { buildTablePreviewCell, tablePreviewSql } from "./tablePreviewCell"
+import {
+  buildTablePreviewCell,
+  TABLE_PREVIEW_AUTO_REFRESH,
+  tablePreviewSql,
+} from "./tablePreviewCell"
 
 describe("tablePreviewSql", () => {
   it("reads newest rows first when the table has a designated timestamp", () => {
@@ -12,15 +16,15 @@ describe("tablePreviewSql", () => {
     expect(tablePreviewSql("lookup")).toBe("SELECT * FROM lookup")
   })
 
-  it("quotes names that are not plain identifiers", () => {
+  it("double-quotes table names that are not plain identifiers", () => {
     expect(tablePreviewSql("my table", "ts")).toBe(
-      "SELECT * FROM 'my table' ORDER BY ts DESC",
+      'SELECT * FROM "my table" ORDER BY ts DESC',
     )
     expect(tablePreviewSql("it's", "ts")).toBe(
-      "SELECT * FROM 'it''s' ORDER BY ts DESC",
+      `SELECT * FROM "it's" ORDER BY ts DESC`,
     )
     expect(tablePreviewSql("sys.metrics", "ts")).toBe(
-      "SELECT * FROM 'sys.metrics' ORDER BY ts DESC",
+      'SELECT * FROM "sys.metrics" ORDER BY ts DESC',
     )
   })
 
@@ -35,12 +39,31 @@ describe("tablePreviewSql", () => {
       'SELECT * FROM t ORDER BY "a""b" DESC',
     )
   })
+
+  it("double-quotes names that are SQL keywords", () => {
+    // QuestDB rejects `SELECT * FROM order`; keywords must be quoted
+    expect(tablePreviewSql("order", "ts")).toBe(
+      'SELECT * FROM "order" ORDER BY ts DESC',
+    )
+    expect(tablePreviewSql("Select")).toBe('SELECT * FROM "Select"')
+    expect(tablePreviewSql("t", "limit")).toBe(
+      'SELECT * FROM t ORDER BY "limit" DESC',
+    )
+  })
+
+  it("leaves names that are only data type words bare", () => {
+    expect(tablePreviewSql("trades", "timestamp")).toBe(
+      "SELECT * FROM trades ORDER BY timestamp DESC",
+    )
+  })
 })
 
 describe("buildTablePreviewCell", () => {
-  it("refreshes every second, shows the SQL, and colours rows by side", () => {
+  it("leaves refresh to the notebook, shows the SQL, and colours rows by side", () => {
     const cell = buildTablePreviewCell("trades", "timestamp")
-    expect(cell.autoRefresh).toBe("1s")
+    // Auto comes from the notebook default, so the cell is no override
+    expect(cell.autoRefresh).toBeUndefined()
+    expect(TABLE_PREVIEW_AUTO_REFRESH).toBe(true)
     expect(cell.paneView).toBe("editor_result")
     expect(cell.name).toBe("Latest rows of trades")
     expect(cell.highlightConfig?.identityColumns).toEqual(["timestamp"])

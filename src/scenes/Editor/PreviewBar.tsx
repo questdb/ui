@@ -24,6 +24,21 @@ const Message = styled(Box).attrs({ align: "center", gap: "0.8rem" })`
   color: ${({ theme }) => theme.color.statusInfo};
 `
 
+const KEEP_OPEN_HOOK = "tab-preview-keep-open"
+
+// Moves focus to the preview's "Keep open" button. The bar renders with the
+// preview, so it is there once the preview is active; a frame later at most.
+export const focusPreviewKeepOpen = () => {
+  const focus = () => {
+    const button = document.querySelector<HTMLElement>(
+      `[data-hook="${KEEP_OPEN_HOOK}"]`,
+    )
+    button?.focus()
+    return button !== null
+  }
+  if (!focus()) requestAnimationFrame(focus)
+}
+
 export const PreviewBar = () => {
   const { activeBuffer, keepBufferOpen, discardPreview } = useEditor()
 
@@ -50,7 +65,7 @@ export const PreviewBar = () => {
           size="sm"
           variant="primary"
           prefixIcon={<PushPinIcon size={14} />}
-          data-hook="tab-preview-keep-open"
+          data-hook={KEEP_OPEN_HOOK}
           onClick={keepOpen}
         >
           Keep open

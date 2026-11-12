@@ -1,6 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 import { NotebookIcon } from "@phosphor-icons/react"
+import { LoadingSpinner } from "../../components"
 import { useEditor } from "../../providers"
 import type { ExampleDashboard } from "../../providers/SettingsProvider/types"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -22,7 +23,8 @@ const Icon = styled.span`
 // dashboard; the row stands for the opened notebook, so it is the one shown as
 // active while that notebook is the active tab.
 export const ExampleList = ({ examples }: Props) => {
-  const { activeBuffer, buffers, openExampleDashboard } = useEditor()
+  const { activeBuffer, buffers, openExampleDashboard, openingExampleIds } =
+    useEditor()
   // Read the link from the live rows: a rename detaches the notebook from its
   // example at once, and the cached activeBuffer would lag behind.
   const activeTemplateId = buffers.find(
@@ -30,34 +32,44 @@ export const ExampleList = ({ examples }: Props) => {
   )?.templateId
 
   const open = (example: ExampleDashboard) => {
+    if (openingExampleIds.includes(example.id)) return
     void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, { id: example.id })
     void openExampleDashboard(example)
   }
 
   return (
     <div role="list" data-hook="tabs-panel-example-list">
-      {examples.map((example) => (
-        <div key={example.id} role="listitem">
-          <TabRow
-            label={example.title}
-            icon={
-              <Icon>
-                <NotebookIcon size={16} />
-              </Icon>
-            }
-            active={activeTemplateId === example.id}
-            dimmed={false}
-            data-example-id={example.id}
-            onClick={() => open(example)}
-            onKeyDown={(event) => {
-              if (isOwnActivationKey(event)) {
-                event.preventDefault()
-                open(example)
+      {examples.map((example) => {
+        const opening = openingExampleIds.includes(example.id)
+        return (
+          <div key={example.id} role="listitem">
+            <TabRow
+              label={example.title}
+              icon={
+                <Icon>
+                  <NotebookIcon size={16} />
+                </Icon>
               }
-            }}
-          />
-        </div>
-      ))}
+              active={activeTemplateId === example.id}
+              dimmed={false}
+              meta={
+                opening && (
+                  <LoadingSpinner size="1.4rem" color="contentSecondary" />
+                )
+              }
+              aria-busy={opening || undefined}
+              data-example-id={example.id}
+              onClick={() => open(example)}
+              onKeyDown={(event) => {
+                if (isOwnActivationKey(event)) {
+                  event.preventDefault()
+                  open(example)
+                }
+              }}
+            />
+          </div>
+        )
+      })}
     </div>
   )
 }

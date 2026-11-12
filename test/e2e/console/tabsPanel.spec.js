@@ -350,6 +350,34 @@ describe("tabs panel", () => {
     cy.getEditorTabs().last().should("have.attr", "data-tab-title", "SQL 1")
   })
 
+  it("keeps keyboard focus in the panel when a tab is closed or deleted", () => {
+    // Given three editor tabs, the last one active
+    createTab("Alpha", "select 1;")
+    createTab("Beta", "select 2;")
+
+    // When a keyboard user closes another tab from its row
+    openRow("Alpha").find('[data-hook="tabs-panel-close"]').focus()
+    cy.realPress("Enter")
+    cy.getEditorTabByTitle("Alpha").should("not.exist")
+
+    // Then focus stays in the panel, on a neighbouring row, and typing does
+    // not reach the active tab's SQL
+    cy.focused().should("have.attr", "data-hook", "tabs-panel-row-button")
+    cy.focused().closest('[data-hook="tabs-panel"]').should("exist")
+    cy.realType("x")
+    cy.waitForActiveBufferValue("select 2;")
+
+    // When the user deletes the active tab from its row
+    cy.wait(600)
+    openRow("Beta").find('[data-hook="tabs-panel-delete"]').focus()
+    cy.realPress("Enter")
+    cy.getEditorTabByTitle("Beta").should("not.exist")
+
+    // Then the panel keeps focus while another tab becomes active
+    cy.getEditorTabByTitle("SQL").should("have.attr", "active")
+    cy.focused().should("have.attr", "data-hook", "tabs-panel-row-button")
+  })
+
   it("ignores the second click of a double-click on Delete", () => {
     // Given two closed tabs
     createTab("Alpha", "select 1;")
@@ -612,6 +640,90 @@ describe("tabs panel example dashboards", () => {
     cy.wait(1500)
     cy.getEditorTabs().should("have.length", 1)
     cy.getEditorTabByTitle("SQL").should("have.attr", "active")
+  })
+
+  it("shows a spinner while a first visitor's example loads", () => {
+    cy.on("uncaught:exception", (err) =>
+      err.message.includes("importScripts") ? false : undefined,
+    )
+    // Given a slow example file
+    cy.readFile("test/e2e/fixtures/example-dashboard.json").then((body) => {
+      cy.intercept(
+        { method: "GET", url: `${baseUrl}/assets/examples/trades.json` },
+        { body, delay: 2000 },
+      ).as("getSlowTradesExample")
+    })
+
+    // When a first-time visitor loads the console and logs in
+    // (loginWithUserAndPassword would wait for the editor, past the spinner)
+    cy.handleStorageAndVisit(baseUrl, true, {})
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.get("input[name='username']").type("admin")
+    cy.get("input[type='password']").type("quest")
+    cy.get("button[type='submit']").click()
+
+    // Then a spinner stands in for the console until the example opens
+    cy.getByDataHook("example-dashboard-loading").should("be.visible")
+    cy.wait("@getSlowTradesExample")
+    cy.getEditorTabByTitle("Trades overview").should("have.attr", "active")
+    cy.getByDataHook("example-dashboard-loading").should("not.exist")
+  })
+
+  it("reports a first visitor's example that cannot be loaded, once", () => {
+    // Given an example file that is missing
+    cy.intercept(
+      { method: "GET", url: `${baseUrl}/assets/examples/trades.json` },
+      { statusCode: 404, body: "" },
+    )
+
+    // When a first-time visitor loads the console
+    cy.handleStorageAndVisit(baseUrl, true, {})
+    cy.loginWithUserAndPassword()
+
+    // Then the stored tab opens and the failure is reported
+    cy.getEditorContent().should("be.visible")
+    cy.getEditorTabByTitle("SQL").should("have.attr", "active")
+    cy.get(".Toastify").should(
+      "contain",
+      'Could not open the example dashboard "Trades overview"',
+    )
+
+    // And a reload does not try again
+    cy.reload()
+    cy.getEditorContent().should("be.visible")
+    cy.wait(1000)
+    cy.get(".Toastify").should("not.contain", "Could not open")
+  })
+
+  it("opens one copy when an example row is double-clicked while it loads", () => {
+    // Given a slow example file
+    cy.readFile("test/e2e/fixtures/example-dashboard.json").then((body) => {
+      cy.intercept(
+        { method: "GET", url: `${baseUrl}/assets/examples/trades.json` },
+        { body, delay: 1500 },
+      ).as("getSlowTradesExample")
+    })
+
+    // When the user double-clicks the example row
+    cy.getByDataHook("tabs-panel-example-list")
+      .contains(ROW, "Trades overview")
+      .dblclick()
+
+    // Then the row shows it is loading
+    cy.getByDataHook("tabs-panel-example-list")
+      .contains(ROW, "Trades overview")
+      .should("have.attr", "aria-busy", "true")
+      .find('[data-hook="loading-spinner"]')
+      .should("be.visible")
+
+    // And one notebook opens
+    cy.wait("@getSlowTradesExample")
+    cy.getEditorTabByTitle("Trades overview").should("have.attr", "active")
+    cy.wait(1000)
+    cy.getEditorTabs().should("have.length", 2)
+    cy.getByDataHook("tabs-panel-example-list")
+      .contains(ROW, "Trades overview")
+      .should("not.have.attr", "aria-busy")
   })
 
   it("does not show the notebook onboarding modal when examples are configured", () => {

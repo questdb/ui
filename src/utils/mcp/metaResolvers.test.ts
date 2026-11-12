@@ -72,6 +72,32 @@ describe("resolveGetWorkspaceState", () => {
     expect(out[0].text).toMatch(/buffer_id/)
   })
 
+  it("lists SQL and metrics tabs when the workspace has no notebook", async () => {
+    // Given only SQL and metrics tabs, one of them closed
+    const ctx: MetaToolContext = {
+      getActiveBufferId: () => null,
+      getWorkspace: () => ({
+        tabs: [
+          { buffer_id: 11, label: "Query A", kind: "sql", archived: false },
+          { buffer_id: 12, label: "Latency", kind: "metrics", archived: false },
+          { buffer_id: 13, label: "Old query", kind: "sql", archived: true },
+        ],
+        active: { buffer_id: 11, label: "Query A", kind: "sql" },
+      }),
+      getDigest: () => null,
+    }
+
+    // When workspace state is resolved
+    const out = await resolveGetWorkspaceState(undefined, ctx)
+
+    // Then every tab is listed, so the tab tools can target it by buffer_id
+    expect(out[0].text).toMatch(/no_notebook_open/)
+    expect(out[0].text).toContain("<workspace>")
+    expect(out[0].text).toContain("buffer_id: 11")
+    expect(out[0].text).toContain("buffer_id: 12")
+    expect(out[0].text).toContain("buffer_id: 13")
+  })
+
   it("returns workspace + notebook_context when buffer is active", async () => {
     await seedNotebookBuffer(1)
     const ctx: MetaToolContext = {

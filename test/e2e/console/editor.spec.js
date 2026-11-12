@@ -1595,7 +1595,8 @@ describe("editor settings", () => {
       )
     const runCellAtCursor = () =>
       cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
-    const cellResultTabs = () => cy.get("[role='tablist'] [role='tab']")
+    const cellResultTabs = () =>
+      cy.get("[data-notebook-root] [role='tablist'] [role='tab']")
 
     // And a resolved notebook whose focused cell holds two statements
     cy.loadConsoleWithAuth(false, {}, { buffers: [createNotebookBuffer(sql)] })
@@ -1668,11 +1669,9 @@ describe("editor settings", () => {
       "have.length",
       1,
     )
-    cy.get("[role='tablist'] [role='tab'][aria-selected='true']").should(
-      "have.attr",
-      "title",
-      "select 33",
-    )
+    cy.get(
+      "[data-notebook-root] [role='tablist'] [role='tab'][aria-selected='true']",
+    ).should("have.attr", "title", "select 33")
     cy.get("[data-hook='grid-header-name']:visible")
       .should("have.length", 1)
       .and("contain", "33")
@@ -1721,8 +1720,10 @@ describe("editor settings", () => {
     })
 
     // And Cmd+Shift+Enter runs the whole cell even from the result area
-    cy.get("[role='tablist'] [role='tab']").eq(1).click()
-    cy.get("[role='tablist'] [role='tab']").eq(1).should("have.focus")
+    cy.get("[data-notebook-root] [role='tablist'] [role='tab']").eq(1).click()
+    cy.get("[data-notebook-root] [role='tablist'] [role='tab']")
+      .eq(1)
+      .should("have.focus")
     cy.then(() => {
       execQueries.length = 0
     })
@@ -1826,8 +1827,8 @@ describe("editor settings", () => {
     })
 
     // When the second result tab has focus and Cmd+Enter is pressed
-    cy.get("[role='tablist'] [role='tab']").eq(1).click()
-    cy.get("[role='tablist'] [role='tab']")
+    cy.get("[data-notebook-root] [role='tablist'] [role='tab']").eq(1).click()
+    cy.get("[data-notebook-root] [role='tablist'] [role='tab']")
       .eq(1)
       .should("have.focus")
       .and("have.attr", "title", "select 2")

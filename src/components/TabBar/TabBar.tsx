@@ -349,6 +349,8 @@ export const TabBar = ({
       <div
         ref={containerRef}
         className="chrome-tabs-content"
+        role="tablist"
+        aria-label="Editor tabs"
         style={{ width: totalWidth }}
       >
         <div

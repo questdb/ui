@@ -197,6 +197,25 @@ describe("search panel", () => {
       cy.getEditor().should("contain", "XYZ")
     })
 
+    it("moves focus to Keep open when a closed match is opened with Enter", () => {
+      // Given a match in a closed tab, selected in the results
+      cy.searchFor("DROP")
+      cy.getSearchResults().contains("DROP").click()
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
+
+      // When the user presses Enter on it
+      cy.realPress("Enter")
+
+      // Then the read-only preview hands focus to its Keep open button
+      cy.getByDataHook("tab-preview-bar").should("be.visible")
+      cy.focused().should("have.attr", "data-hook", "tab-preview-keep-open")
+
+      // And Enter keeps the tab open
+      cy.realPress("Enter")
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
+      cy.getEditorTabByTitle("SQL 1").should("not.have.class", "temporary-tab")
+    })
+
     it("should close the preview from the preview bar", () => {
       cy.searchFor("DROP")
 

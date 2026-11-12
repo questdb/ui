@@ -26,6 +26,7 @@ import {
   cloneNotebookViewStateWithCellIdMap,
   generateId,
   nextCopyLabel,
+  resolveAutoRefresh,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
 import { createCell, type NotebookCell } from "../../store/notebook"
@@ -58,7 +59,10 @@ import { isFreshWorkspace } from "../../utils/examples/isFreshWorkspace"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { tabKindOf } from "../../utils/ai/workspaceInfo"
-import { buildTablePreviewCell } from "../../utils/notebooks/tablePreviewCell"
+import {
+  buildTablePreviewCell,
+  TABLE_PREVIEW_AUTO_REFRESH,
+} from "../../utils/notebooks/tablePreviewCell"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
@@ -69,6 +73,7 @@ import {
   makeFallbackBuffer,
 } from "../../store/buffers"
 import { toast } from "../../components/Toast"
+import { ExampleDashboardLoading } from "./ExampleDashboardLoading"
 import { db } from "../../store/db"
 import {
   copyNotebookSnapshots,
@@ -132,6 +137,12 @@ export type ApplyAISQLChangeResult = {
   queryStartOffset?: number
 }
 
+export type RemoveBufferOptions = {
+  // Whether the SQL editor takes focus once the tab is gone. Off for callers
+  // that keep keyboard focus themselves (the Tabs panel).
+  focusEditor?: boolean
+}
+
 export type EditorContext = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null>
   monacoRef: MutableRefObject<Monaco | null>
@@ -158,8 +169,13 @@ export type EditorContext = {
     id: number,
     setActiveBuffer?: boolean,
     initiator?: "user" | "agent",
+    options?: RemoveBufferOptions,
   ) => Promise<void>
-  archiveBuffer: (id: number, initiator?: "user" | "agent") => Promise<void>
+  archiveBuffer: (
+    id: number,
+    initiator?: "user" | "agent",
+    options?: RemoveBufferOptions,
+  ) => Promise<void>
   duplicateNotebook: (
     id: number,
     options?: { activate?: boolean; signal?: AbortSignal },
@@ -172,12 +188,14 @@ export type EditorContext = {
   updateBuffersPositions: (
     positions: { id: number; position: number }[],
   ) => Promise<void>
-  closeBuffer: (id: number) => Promise<void>
+  closeBuffer: (id: number, options?: RemoveBufferOptions) => Promise<void>
   restoreBuffer: (id: number) => Promise<void>
   keepBufferOpen: (id: number) => Promise<void>
   reorderBuffer: (id: number, toIndex: number) => Promise<void>
   clearArchivedBuffers: () => Promise<void>
   openExampleDashboard: (example: ExampleDashboard) => Promise<void>
+  // Ids of the example dashboards whose file is being fetched.
+  openingExampleIds: string[]
   runImportedNotebookCells: (
     bufferId: number,
     cellIds: string[],
@@ -221,6 +239,7 @@ const defaultValues = {
   reorderBuffer: () => Promise.resolve(),
   clearArchivedBuffers: () => Promise.resolve(),
   openExampleDashboard: () => Promise.resolve(),
+  openingExampleIds: [],
   runImportedNotebookCells: () => Promise.resolve(),
   openTableNotebook: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
@@ -235,6 +254,31 @@ const defaultValues = {
   cleanupExecutionRefs: () => undefined,
   highlightQuery: () => Promise.resolve(false),
 }
+
+// Runs `run` once per key at a time; a call for a key that is still in flight
+// gets the pending promise instead of starting another run.
+const singleFlight = (
+  requests: Map<string, Promise<void>>,
+  key: string,
+  run: () => Promise<void>,
+): Promise<void> => {
+  const pending = requests.get(key)
+  if (pending) return pending
+  const request = run().finally(() => {
+    requests.delete(key)
+  })
+  requests.set(key, request)
+  return request
+}
+
+type ExampleFetchResult =
+  | { ok: true; content: ExampleDashboardContent }
+  | { ok: false; error: unknown }
+
+const exampleErrorMessage = (title: string, error: unknown) =>
+  error instanceof Error
+    ? `Could not open the example dashboard "${title}": ${error.message}`
+    : `Could not open the example dashboard "${title}"`
 
 const isPendingImportDeletion = (buffer: Buffer) =>
   (buffer as Record<string, unknown>)._markedForDeletion === true
@@ -285,22 +329,61 @@ export const EditorProvider: React.FC = ({ children }) => {
   const firstExample = hasExampleDashboards(consoleConfig)
     ? consoleConfig.exampleDashboards![0]
     : undefined
-  const autoOpenRef = useRef<Promise<ExampleDashboardContent | null> | null>(
-    null,
-  )
+  const autoOpenRef = useRef<Promise<ExampleFetchResult> | null>(null)
   if (
     autoOpenRef.current === null &&
     firstExample &&
     getValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED) === ""
   ) {
-    autoOpenRef.current = fetchExampleDashboard(firstExample.path).catch(
-      (error: unknown) => {
-        console.error("Could not preload the example dashboard:", error)
-        return null
-      },
+    autoOpenRef.current = fetchExampleDashboard(firstExample.path).then(
+      (content): ExampleFetchResult => ({ ok: true, content }),
+      (error: unknown): ExampleFetchResult => ({ ok: false, error }),
     )
   }
   const [autoOpenedId, setAutoOpenedId] = useState<number | null>(null)
+  // The first example is being fetched for a first-time visitor: a spinner
+  // stands in for the console until the tab exists or the fetch fails.
+  const [loadingFirstExample, setLoadingFirstExample] = useState(false)
+
+  // One request per example or table at a time: a double-click must not create
+  // two tabs while the first is still being fetched or written.
+  const exampleRequestsRef = useRef(new Map<string, Promise<void>>())
+  const [openingExampleIds, setOpeningExampleIds] = useState<string[]>([])
+  const tableNotebookRequestsRef = useRef(new Map<string, Promise<void>>())
+
+  // A notebook whose example is no longer configured (the operator removed or
+  // renamed it) becomes a regular notebook: listed with the user's tabs and
+  // kept in history when closed.
+  const exampleIds = useMemo(
+    () =>
+      new Set(
+        hasExampleDashboards(consoleConfig)
+          ? consoleConfig.exampleDashboards?.map((example) => example.id)
+          : [],
+      ),
+    [consoleConfig],
+  )
+  useEffect(() => {
+    if (!rawBuffers) return
+    const stale = rawBuffers.filter(
+      (buffer) =>
+        typeof buffer.id === "number" &&
+        buffer.templateId !== undefined &&
+        !exampleIds.has(buffer.templateId),
+    )
+    if (stale.length === 0) return
+    void db
+      .transaction("rw", db.buffers, async () => {
+        for (const buffer of stale) {
+          await db.buffers.update(buffer.id as number, {
+            templateId: undefined,
+          })
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("Could not detach removed example dashboards:", error)
+      })
+  }, [rawBuffers, exampleIds])
 
   useSchemaCompletionProvider(loadedMonaco)
 
@@ -633,16 +716,22 @@ export const EditorProvider: React.FC = ({ children }) => {
       return
     }
     // First visit on a showcase deployment: create the example tab and make it
-    // the active one before anything is painted.
-    void pending.then(async (content) => {
-      if (!content) {
+    // the active one. A spinner shows while the file is fetched; a file that
+    // cannot be loaded is reported once and the visitor gets the stored tab.
+    setLoadingFirstExample(true)
+    void pending.then(async (result) => {
+      if (!result.ok) {
+        console.error("Could not load the example dashboard:", result.error)
+        toast.error(exampleErrorMessage(firstExample.title, result.error))
+        setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
         activateStored()
+        setLoadingFirstExample(false)
         return
       }
       try {
         const buffer = makeBuffer({
           label: firstExample.title,
-          notebookViewState: content.notebookViewState,
+          notebookViewState: result.content.notebookViewState,
           templateId: firstExample.id,
           position: nextOpenPosition(buffers),
         })
@@ -659,18 +748,31 @@ export const EditorProvider: React.FC = ({ children }) => {
         setAutoOpenedId(id)
       } catch (error) {
         console.error("Could not open the example dashboard:", error)
+        toast.error(exampleErrorMessage(firstExample.title, error))
         activateStored()
       }
+      setLoadingFirstExample(false)
     })
   }, [buffers, activeBufferId])
 
   // The notebook has to be mounted (the provider renders children only once an
-  // active buffer exists) before its cells can be run.
+  // active buffer exists and the loading spinner is gone) before its cells can
+  // be run.
   useEffect(() => {
-    if (autoOpenedId === null || activeBuffer.id !== autoOpenedId) return
+    if (
+      loadingFirstExample ||
+      autoOpenedId === null ||
+      activeBuffer.id !== autoOpenedId
+    ) {
+      return
+    }
     void runNotebookCells(autoOpenedId)
     setAutoOpenedId(null)
-  }, [autoOpenedId, activeBuffer.id])
+  }, [autoOpenedId, activeBuffer.id, loadingFirstExample])
+
+  if (loadingFirstExample && firstExample) {
+    return <ExampleDashboardLoading title={firstExample.title} />
+  }
 
   if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
@@ -762,7 +864,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
-  const setActiveBufferOnRemoved = async (id: number) => {
+  const setActiveBufferOnRemoved = async (id: number, focusEditor = true) => {
     const activeBufferId = (await bufferStore.getActiveId())?.value
     recentBufferIdsRef.current = recentBufferIdsRef.current.filter(
       (recentId) => recentId !== id,
@@ -778,8 +880,10 @@ export const EditorProvider: React.FC = ({ children }) => {
         recentIds: recentBufferIdsRef.current,
         previewId: temporaryBufferId,
       })
-      await setActiveBuffer(nextActive ?? fallbackBuffer)
-    } else {
+      await setActiveBuffer(nextActive ?? fallbackBuffer, {
+        focus: focusEditor,
+      })
+    } else if (focusEditor) {
       editorRef.current?.focus()
     }
   }
@@ -787,6 +891,7 @@ export const EditorProvider: React.FC = ({ children }) => {
   const archiveBuffer: EditorContext["archiveBuffer"] = async (
     id,
     initiator = "user",
+    options = {},
   ) => {
     // Snapshot before write — live query refresh makes post-update read unreliable.
     const target = buffers.find((b) => b.id === id)
@@ -800,7 +905,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       // archive must stay reversible.)
       ...(target?.templateId !== undefined ? { templateId: undefined } : {}),
     })
-    await setActiveBufferOnRemoved(id)
+    await setActiveBufferOnRemoved(id, options.focusEditor)
     eventBus.publish(EventType.BUFFERS_UPDATED, {
       type: "archive",
       bufferId: id,
@@ -883,6 +988,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     id,
     setActiveBuffer = true,
     initiator = "user",
+    options = {},
   ) => {
     const target = buffers.find((b) => b.id === id)
     await bufferStore.delete(id)
@@ -893,7 +999,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       setTemporaryBufferId(null)
     }
     if (setActiveBuffer) {
-      await setActiveBufferOnRemoved(id)
+      await setActiveBufferOnRemoved(id, options.focusEditor)
     }
     eventBus.publish(EventType.BUFFERS_UPDATED, {
       type: "delete",
@@ -955,7 +1061,10 @@ export const EditorProvider: React.FC = ({ children }) => {
     (buffer.metricsViewState?.metrics?.length ?? 0) > 0 ||
     buffer.notebookViewState != null
 
-  const closeBuffer: EditorContext["closeBuffer"] = async (id) => {
+  const closeBuffer: EditorContext["closeBuffer"] = async (
+    id,
+    options = {},
+  ) => {
     const buffer = buffers.find((b) => b.id === id)
     if (!buffer) return
 
@@ -967,24 +1076,25 @@ export const EditorProvider: React.FC = ({ children }) => {
     // The AI diff tab is not a user tab: it closes even next to a single tab,
     // and its removal is never reported to an agent as a user deletion.
     if (buffer.isPreviewBuffer) {
-      await deleteBuffer(id, true, "agent")
+      await deleteBuffer(id, true, "agent", options)
       return
     }
 
     if (sortPinnedBuffers(buffers).length === 1) return
 
-    // Notebooks opened from an example dashboard are not kept in history: the
-    // example row recreates its notebook on demand.
-    if (buffer.templateId !== undefined) {
-      await deleteBuffer(id, true)
+    // Notebooks opened from a configured example dashboard are not kept in
+    // history: the example row recreates its notebook on demand. One whose
+    // example is gone is a regular notebook.
+    if (buffer.templateId !== undefined && exampleIds.has(buffer.templateId)) {
+      await deleteBuffer(id, true, "user", options)
       return
     }
 
     if (hasContent(buffer)) {
       void trackEvent(ConsoleEvent.TAB_ARCHIVE, { type: bufferTypeOf(buffer) })
-      await archiveBuffer(id)
+      await archiveBuffer(id, "user", options)
     } else {
-      await deleteBuffer(id)
+      await deleteBuffer(id, true, "user", options)
     }
     await updateBuffersPositions(positionsWithout(buffers, id))
   }
@@ -1077,9 +1187,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       }
     }
 
-  const openExampleDashboard: EditorContext["openExampleDashboard"] = async (
-    example,
-  ) => {
+  const openExampleDashboardNow = async (example: ExampleDashboard) => {
     const open = buffers.find(
       (b) => b.templateId === example.id && !b.archived && !b.isTemporary,
     )
@@ -1099,27 +1207,48 @@ export const EditorProvider: React.FC = ({ children }) => {
       }
     } catch (error) {
       console.error(error)
-      toast.error(
-        error instanceof Error
-          ? `Could not open the example dashboard: ${error.message}`
-          : "Could not open the example dashboard",
-      )
+      toast.error(exampleErrorMessage(example.title, error))
     }
   }
 
+  // A second activation while the file is still being fetched joins the first
+  // one instead of creating another copy; the row shows a spinner meanwhile.
+  const openExampleDashboard: EditorContext["openExampleDashboard"] = (
+    example,
+  ) =>
+    singleFlight(exampleRequestsRef.current, example.id, async () => {
+      setOpeningExampleIds((ids) => [...ids, example.id])
+      try {
+        await openExampleDashboardNow(example)
+      } finally {
+        setOpeningExampleIds((ids) => ids.filter((id) => id !== example.id))
+      }
+    })
+
   // Schema tree "Query": a notebook named after the table with a cell reading
-  // its newest rows every second. A notebook with that name is reused: the
+  // its newest rows, refreshing on Auto. A notebook with that name is reused: the
   // cell holding this query is focused, or, without one, the cell is appended
   // and run. A user notebook that happens to share the name keeps its cells.
-  const openTableNotebook: EditorContext["openTableNotebook"] = async ({
+  const openTableNotebook: EditorContext["openTableNotebook"] = (table) =>
+    singleFlight(tableNotebookRequestsRef.current, table.name, () =>
+      openTableNotebookNow(table),
+    )
+
+  const openTableNotebookNow = async ({
     name,
     designatedTimestamp,
+  }: {
+    name: string
+    designatedTimestamp?: string
   }) => {
     const cell = buildTablePreviewCell(name, designatedTimestamp)
     const createTableNotebook = async () => {
       const created = await addBuffer({
         label: name,
-        notebookViewState: { cells: [cell] },
+        notebookViewState: {
+          cells: [cell],
+          settings: { autoRefreshDefault: TABLE_PREVIEW_AUTO_REFRESH },
+        },
       })
       if (created?.id !== undefined) {
         void runNotebookCells(created.id)
@@ -1164,9 +1293,14 @@ export const EditorProvider: React.FC = ({ children }) => {
     const bufferId = target.id as number
     const cellId = cell.id
     // The table query's own name, refresh and colouring ride on the new cell.
+    // It refreshes on Auto; only a notebook whose default is something else
+    // gets that as a cell override.
+    const inheritsRefresh =
+      resolveAutoRefresh(undefined, views[0].settings?.autoRefreshDefault) ===
+      TABLE_PREVIEW_AUTO_REFRESH
     const presentation: Partial<NotebookCell> = {
       name: cell.name,
-      autoRefresh: cell.autoRefresh,
+      ...(inheritsRefresh ? {} : { autoRefresh: TABLE_PREVIEW_AUTO_REFRESH }),
       paneView: cell.paneView,
       highlightConfig: cell.highlightConfig,
     }
@@ -1457,6 +1591,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         reorderBuffer,
         clearArchivedBuffers,
         openExampleDashboard,
+        openingExampleIds,
         openTableNotebook,
         runImportedNotebookCells,
         previewBuffer,

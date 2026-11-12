@@ -38,6 +38,11 @@ describe("schema tree: Query action", () => {
       'CREATE TABLE query_action_spaced (v INT, "my ts" TIMESTAMP) timestamp("my ts") PARTITION BY DAY BYPASS WAL;',
     )
     cy.executeSQL("INSERT INTO query_action_spaced VALUES (7, now());")
+    cy.executeSQL('DROP TABLE IF EXISTS "limit";')
+    cy.executeSQL(
+      'CREATE TABLE "limit" (v INT, ts TIMESTAMP) timestamp(ts) PARTITION BY DAY BYPASS WAL;',
+    )
+    cy.executeSQL('INSERT INTO "limit" VALUES (3, now());')
   })
 
   after(() => {
@@ -46,6 +51,7 @@ describe("schema tree: Query action", () => {
     cy.getEditorContent().should("be.visible")
     cy.executeSQL("DROP TABLE IF EXISTS query_action_trades;")
     cy.executeSQL("DROP TABLE IF EXISTS query_action_spaced;")
+    cy.executeSQL('DROP TABLE IF EXISTS "limit";')
   })
 
   it("opens a live notebook reading the table's newest rows, and reuses it on a second click", () => {
@@ -73,6 +79,9 @@ describe("schema tree: Query action", () => {
       "SELECT * FROM query_action_trades ORDER BY timestamp DESC",
     )
     cy.get("[data-notebook-root]").should("contain", "2 rows")
+
+    // And it refreshes on Auto as the notebook default, with no cell override
+    cy.get('[aria-label="Notebook auto-refresh: Auto"]').should("be.visible")
 
     // When the user clicks it again
     cy.getEditorTabByTitle("SQL").find(".chrome-tab-drag-handle").click()
@@ -146,5 +155,119 @@ describe("schema tree: Query action", () => {
     cy.getEditorTabs().should("have.length", 2)
     notebookCells().should("have.length", 2)
     notebookCells().last().find(".monaco-editor textarea").should("have.focus")
+  })
+  it("double-quotes a table name that is an SQL keyword", () => {
+    // Given a table named like a keyword
+    cy.getEditorTabByTitle("SQL").find(".chrome-tab-drag-handle").click()
+    cy.refreshSchema()
+    cy.expandTables()
+
+    // When the user clicks its Query action
+    clickQuery("limit")
+
+    // Then the query quotes the name and returns the row
+    cy.getEditorTabByTitle("limit").should("have.attr", "active")
+    shouldContainText(
+      cy.get("[data-notebook-root]"),
+      'SELECT * FROM "limit" ORDER BY ts DESC',
+    )
+    cy.get("[data-notebook-root]").should("contain", "1 row")
+  })
+
+  it("creates one notebook when the Query button is double-clicked", () => {
+    // Given no notebook for the table yet
+    cy.getEditorTabByTitle("SQL").find(".chrome-tab-drag-handle").click()
+    cy.getEditorTabs().each(($tab) => {
+      if ($tab.text().trim() === "query_action_spaced") {
+        cy.wrap($tab).find(".chrome-tab-close").click({ force: true })
+      }
+    })
+    cy.refreshSchema()
+    cy.expandTables()
+
+    // When the user double-clicks the button
+    tableRow("query_action_spaced")
+      .find('[data-hook="table-query-button"]')
+      .dblclick({ force: true })
+
+    // Then one notebook opens
+    cy.getEditorTabByTitle("query_action_spaced").should("have.attr", "active")
+    cy.wait(1000)
+    cy.get(".chrome-tab")
+      .filter(':contains("query_action_spaced")')
+      .should("have.length", 1)
+  })
+
+  it("places the new notebook after tabs opened since the schema rendered", () => {
+    // Given the schema tree is rendered and then two tabs are added
+    cy.loadConsoleWithAuth()
+    cy.getEditorContent().should("be.visible")
+    cy.refreshSchema()
+    cy.expandTables()
+    tableRow("query_action_trades").should("be.visible")
+    cy.addEditorTab()
+    cy.getEditorTabs().should("have.length", 2)
+    cy.addEditorTab()
+    cy.getEditorTabs().should("have.length", 3)
+
+    // When the user queries a table from the tree
+    clickQuery("query_action_trades")
+
+    // Then its notebook is the last tab
+    cy.getEditorTabByTitle("query_action_trades").should("have.attr", "active")
+    cy.getEditorTabs().should("have.length", 4)
+    cy.getEditorTabs().last().should("contain", "query_action_trades")
+  })
+
+  it("queries a table from the keyboard and from the context menu", () => {
+    cy.loadConsoleWithAuth()
+    cy.getEditorContent().should("be.visible")
+    cy.refreshSchema()
+    cy.expandTables()
+
+    // When the user presses Ctrl/Cmd+Enter on a focused table row
+    tableRow("query_action_spaced").click()
+    tableRow("query_action_spaced").should("be.focused")
+    cy.realPress([Cypress.platform === "darwin" ? "Meta" : "Control", "Enter"])
+
+    // Then the table's notebook opens, and the details drawer does not
+    cy.getEditorTabByTitle("query_action_spaced").should("have.attr", "active")
+    cy.getByDataHook("table-details-drawer").should("not.exist")
+
+    // When the user picks "Query in a notebook" from the context menu
+    cy.getEditorTabByTitle("SQL").find(".chrome-tab-drag-handle").click()
+    tableRow("query_action_trades").rightclick()
+    cy.getByDataHook("table-context-menu-query").click()
+
+    // Then that table's notebook opens
+    cy.getEditorTabByTitle("query_action_trades").should("have.attr", "active")
+  })
+
+  it("keeps the details button clickable while the Query tooltip shows", () => {
+    cy.loadConsoleWithAuth()
+    cy.getEditorContent().should("be.visible")
+    cy.refreshSchema()
+    cy.expandTables()
+
+    // Given the Query tooltip is showing
+    tableRow("query_action_trades").realHover()
+    cy.hoverForTooltip(() =>
+      tableRow("query_action_trades").find('[data-hook="table-query-button"]'),
+    )
+    cy.getByDataHook("tooltip").should("contain", "Query in a notebook")
+
+    // Then nothing covers the details button next to it
+    tableRow("query_action_trades")
+      .find('[data-hook="table-menu-button"]')
+      .then(($info) => {
+        const rect = $info[0].getBoundingClientRect()
+        const top = $info[0].ownerDocument.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        )
+        expect($info[0].contains(top), "details button is on top").to.equal(
+          true,
+        )
+      })
   })
 })
