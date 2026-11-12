@@ -43,7 +43,8 @@ export const buildWorkspaceInfo = (
       archived: b.archived === true,
       ...(b.id === boundBufferId ? { bound_to_this_chat: true } : {}),
     }))
-  const hasActive = typeof activeBuffer.id === "number"
+  const hasActive =
+    typeof activeBuffer.id === "number" && !activeBuffer.isPreviewBuffer
   if (tabs.length === 0 && !hasActive) return undefined
   return {
     tabs,

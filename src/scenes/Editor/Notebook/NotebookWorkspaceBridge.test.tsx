@@ -44,6 +44,12 @@ const mountBridge = (initial: Buffer[], activeId: number) => {
   const patch = (id: number, fields: Partial<Buffer>) => {
     buffers = buffers.map((b) => (b.id === id ? { ...b, ...fields } : b))
   }
+  // The provider compacts the open tabs' positions when one is removed.
+  const compactOpenPositions = () => {
+    sortPinnedBuffers(buffers).forEach((b, position) =>
+      patch(b.id as number, { position }),
+    )
+  }
 
   const fns = {
     addBuffer: vi.fn(() => Promise.resolve(undefined)),
@@ -55,11 +61,13 @@ const mountBridge = (initial: Buffer[], activeId: number) => {
     }),
     archiveBuffer: vi.fn((id: number) => {
       patch(id, { archived: true, archivedAt: Date.now(), position: -1 })
+      compactOpenPositions()
       rerender()
       return Promise.resolve()
     }),
     deleteBuffer: vi.fn((id: number) => {
       buffers = buffers.filter((b) => b.id !== id)
+      compactOpenPositions()
       rerender()
       return Promise.resolve()
     }),
@@ -68,13 +76,6 @@ const mountBridge = (initial: Buffer[], activeId: number) => {
       rerender()
       return Promise.resolve()
     }),
-    updateBuffersPositions: vi.fn(
-      (positions: { id: number; position: number }[]) => {
-        for (const { id, position } of positions) patch(id, { position })
-        rerender()
-        return Promise.resolve()
-      },
-    ),
   }
 
   function snapshot() {
@@ -126,14 +127,14 @@ afterEach(() => {
 })
 
 describe("NotebookWorkspaceBridge — archiveTab", () => {
-  it("closes an open tab as the agent and compacts the remaining order", async () => {
+  it("closes an open tab on the agent's behalf", async () => {
     // Given three open tabs
     const editor = mountBridge([tab(1, 0), tab(2, 1), tab(3, 2)], 1)
 
     // When the agent closes the middle one
     await requireWorkspace().archiveTab(2)
 
-    // Then it is archived on the agent's behalf and the others close the gap
+    // Then it is archived on the agent's behalf
     expect(editor.archiveBuffer).toHaveBeenCalledTimes(1)
     expect(editor.archiveBuffer.mock.calls[0]).toEqual([2, "agent"])
     expect(editor.buffers.find((b) => b.id === 2)?.archived).toBe(true)
@@ -183,7 +184,6 @@ describe("NotebookWorkspaceBridge — archiveTab", () => {
 
     // Then nothing is written
     expect(editor.archiveBuffer).not.toHaveBeenCalled()
-    expect(editor.updateBuffersPositions).not.toHaveBeenCalled()
   })
 
   it("reports an unknown tab as deleted", async () => {
@@ -195,6 +195,38 @@ describe("NotebookWorkspaceBridge — archiveTab", () => {
 
     // Then the agent learns it is gone
     expect(code).toBe("deleted")
+  })
+})
+
+describe("NotebookWorkspaceBridge — AI suggestion tab", () => {
+  it("is not a target for any tab tool", async () => {
+    // Given two open tabs and the AI suggestion tab, which is active
+    const editor = mountBridge(
+      [tab(1, 0), tab(2, 1), tab(3, 2, { isPreviewBuffer: true })],
+      3,
+    )
+    const workspace = requireWorkspace()
+
+    // When the agent targets the suggestion tab with each tab tool
+    const codes = await Promise.all([
+      toolCode(workspace.archiveTab(3)),
+      toolCode(workspace.deleteTab(3)),
+      toolCode(workspace.restoreTab(3)),
+      toolCode(workspace.activateTab(3)),
+      toolCode(workspace.renameTab(3, "Mine")),
+    ])
+
+    // Then every call is rejected and the tab is left as it was
+    expect(codes).toEqual([
+      "deleted",
+      "deleted",
+      "deleted",
+      "deleted",
+      "deleted",
+    ])
+    expect(editor.archiveBuffer).not.toHaveBeenCalled()
+    expect(editor.deleteBuffer).not.toHaveBeenCalled()
+    expect(editor.updateBuffer).not.toHaveBeenCalled()
   })
 })
 
@@ -293,7 +325,7 @@ describe("NotebookWorkspaceBridge — renameTab", () => {
 })
 
 describe("NotebookWorkspaceBridge — deleteTab", () => {
-  it("deletes an open tab and compacts the remaining order", async () => {
+  it("deletes an open tab on the agent's behalf", async () => {
     // Given three open tabs
     const editor = mountBridge([tab(1, 0), tab(2, 1), tab(3, 2)], 1)
 
@@ -301,11 +333,10 @@ describe("NotebookWorkspaceBridge — deleteTab", () => {
     await requireWorkspace().deleteTab(1)
 
     // Then it is deleted on the agent's behalf (not reported as a user
-    // deletion) and the others close the gap
+    // deletion)
     expect(editor.deleteBuffer).toHaveBeenCalledTimes(1)
     expect(editor.deleteBuffer.mock.calls[0]).toEqual([1, true, "agent"])
     expect(editor.buffers.map((b) => b.id)).toEqual([2, 3])
-    expect(editor.buffers.map((b) => b.position)).toEqual([0, 1])
   })
 
   it("deletes a closed tab without touching the open order", async () => {
@@ -318,7 +349,6 @@ describe("NotebookWorkspaceBridge — deleteTab", () => {
     // Then only the closed tab is removed, on the agent's behalf
     expect(editor.deleteBuffer.mock.calls[0]).toEqual([2, true, "agent"])
     expect(editor.buffers.map((b) => b.id)).toEqual([1])
-    expect(editor.updateBuffersPositions).not.toHaveBeenCalled()
   })
 
   it("refuses to delete the only open tab", async () => {

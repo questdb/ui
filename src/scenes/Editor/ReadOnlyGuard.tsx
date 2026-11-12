@@ -1,5 +1,6 @@
 import React from "react"
 import styled from "styled-components"
+import { focusPast } from "../../utils/focusPast"
 
 type Props = {
   active: boolean
@@ -15,7 +16,13 @@ const block = (event: React.SyntheticEvent) => {
   event.stopPropagation()
 }
 
-const blurTarget = (event: React.FocusEvent) => {
+// Tab and Shift+Tab move past the read-only content instead of leaving focus
+// on the page body.
+const keepFocusOut = (event: React.FocusEvent<HTMLElement>) => {
+  const cameFrom = event.relatedTarget
+  if (cameFrom instanceof Element && focusPast(event.currentTarget, cameFrom)) {
+    return
+  }
   if (event.target instanceof HTMLElement) event.target.blur()
 }
 
@@ -24,7 +31,7 @@ const guardHandlers = {
   onPasteCapture: block,
   onCutCapture: block,
   onDropCapture: block,
-  onFocusCapture: blurTarget,
+  onFocusCapture: keepFocusOut,
 }
 
 export const ReadOnlyGuard = ({ active, children }: Props) => (

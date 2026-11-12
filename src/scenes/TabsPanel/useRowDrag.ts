@@ -15,6 +15,9 @@ export type RowDragState = {
 
 type Options = {
   listRef: React.RefObject<HTMLElement>
+  // Changes when the rows change. A drag in progress is cancelled then: its
+  // indices no longer match the rows.
+  rowsKey: string
   rowCount: number
   onReorder: (id: number, fromIndex: number, toIndex: number) => void
 }
@@ -38,7 +41,12 @@ const scrollParentOf = (element: HTMLElement): HTMLElement | null => {
   return null
 }
 
-export const useRowDrag = ({ listRef, rowCount, onReorder }: Options) => {
+export const useRowDrag = ({
+  listRef,
+  rowsKey,
+  rowCount,
+  onReorder,
+}: Options) => {
   const [drag, setDrag] = useState<RowDragState | null>(null)
   const pendingRef = useRef<PendingDrag | null>(null)
   const dragRef = useRef<RowDragState | null>(null)
@@ -47,18 +55,26 @@ export const useRowDrag = ({ listRef, rowCount, onReorder }: Options) => {
   const scrollFrameRef = useRef<number | null>(null)
   const optionsRef = useRef({ rowCount, onReorder })
 
+  const stopAutoScroll = () => {
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current)
+      scrollFrameRef.current = null
+    }
+  }
+
   useEffect(() => {
     optionsRef.current = { rowCount, onReorder }
   }, [rowCount, onReorder])
 
   useEffect(() => {
-    const stopAutoScroll = () => {
-      if (scrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(scrollFrameRef.current)
-        scrollFrameRef.current = null
-      }
-    }
+    if (!pendingRef.current) return
+    stopAutoScroll()
+    pendingRef.current = null
+    dragRef.current = null
+    setDrag(null)
+  }, [rowsKey])
 
+  useEffect(() => {
     const positionRow = () => {
       const pending = pendingRef.current
       const list = listRef.current

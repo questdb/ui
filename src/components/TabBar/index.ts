@@ -1,2 +1,2 @@
-export { TabBar } from "./TabBar"
+export { TabBar, focusTab } from "./TabBar"
 export type { TabBarProps, TabProperties } from "./types"

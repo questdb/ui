@@ -9,13 +9,12 @@ import { TabRow, type LeadingVisibility } from "./TabRow"
 import { BufferIcon } from "./bufferIcon"
 import { DeleteRowButton, ROW_ICON_SIZE, RowIconButton } from "./rowActions"
 import { useRowDrag, type RowDragState } from "./useRowDrag"
-import { focusNeighbourRow, isOwnActivationKey } from "./keyboard"
+import { isOwnActivationKey } from "./keyboard"
+import { useRowActions } from "./useRowActions"
 import { displayedIndexDuringDrag } from "../../components/TabBar/tabLayout"
 import { useOptimisticOrder } from "../../hooks/useOptimisticOrder"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { sortPinnedBuffers } from "../../utils/buffers/tabOrder"
-import { acceptDeleteClick } from "../../utils/buffers/deleteClickGuard"
 
 type Props = {
   buffers: Buffer[]
@@ -68,14 +67,8 @@ const slotStyleFor = (
 }
 
 export const OpenTabList = ({ buffers, reorderable }: Props) => {
-  const {
-    buffers: allBuffers,
-    activeBuffer,
-    setActiveBuffer,
-    closeBuffer,
-    deleteBuffer,
-    reorderBuffer,
-  } = useEditor()
+  const { activeBuffer, setActiveBuffer, reorderBuffer } = useEditor()
+  const { canRemove, close, remove } = useRowActions()
   const listRef = useRef<HTMLDivElement>(null)
   const { displayedItems: rows, applyMove } = useOptimisticOrder(
     buffers,
@@ -83,6 +76,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
   )
   const { drag, startDrag, consumeDrop } = useRowDrag({
     listRef,
+    rowsKey: buffers.map((buffer) => buffer.id).join(","),
     rowCount: rows.length,
     onReorder: (id, fromIndex, toIndex) => {
       void trackEvent(ConsoleEvent.TAB_PANEL_REORDER)
@@ -92,10 +86,6 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
       )
     },
   })
-
-  // `buffers` may be filtered; gate on every open tab so a filter that hides
-  // the other tabs does not disable Close/Delete (same rule as closeBuffer).
-  const canRemove = sortPinnedBuffers(allBuffers).length > 1
 
   const activate = (buffer: Buffer) => {
     if (consumeDrop()) return
@@ -110,23 +100,6 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
     void trackEvent(ConsoleEvent.TAB_PANEL_REORDER)
     applyMove(fromIndex, toIndex)
     await reorderBuffer(buffer.id as number, toIndex)
-  }
-
-  // The panel keeps keyboard focus: the neighbouring row takes it, and the
-  // editor is not focused when the tab goes away.
-  const close = async (buffer: Buffer, action: Element) => {
-    void trackEvent(ConsoleEvent.TAB_PANEL_CLOSE)
-    focusNeighbourRow(action)
-    await closeBuffer(buffer.id as number, { focusEditor: false })
-  }
-
-  const remove = async (buffer: Buffer, action: Element) => {
-    if (!acceptDeleteClick()) return
-    void trackEvent(ConsoleEvent.TAB_PANEL_DELETE)
-    focusNeighbourRow(action)
-    await deleteBuffer(buffer.id as number, true, "user", {
-      focusEditor: false,
-    })
   }
 
   const actionsFor = (buffer: Buffer) => (

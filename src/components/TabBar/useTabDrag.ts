@@ -28,6 +28,9 @@ type Callbacks = {
 type Options = Layout &
   Callbacks & {
     containerRef: React.RefObject<HTMLElement>
+    // Changes when the reorderable tabs change. A drag in progress is
+    // cancelled then: its indices no longer match the tabs.
+    tabsKey: string
   }
 
 type PendingDrag = {
@@ -69,6 +72,12 @@ class TabDragSession {
     this.detach()
     this.pending = null
     this.drag = null
+  }
+
+  cancel() {
+    if (!this.pending) return
+    this.dispose()
+    this.publish(null)
   }
 
   private detach() {
@@ -180,6 +189,7 @@ class TabDragSession {
 
 export const useTabDrag = ({
   containerRef,
+  tabsKey,
   positions,
   widths,
   totalWidth,
@@ -218,6 +228,10 @@ export const useTabDrag = ({
       sessionRef.current = null
     }
   }, [containerRef])
+
+  useEffect(() => {
+    sessionRef.current?.cancel()
+  }, [tabsKey])
 
   const startDrag = (
     id: string,

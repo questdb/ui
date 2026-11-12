@@ -9,7 +9,6 @@ type Props = {
   onActivate: (id: string) => void
   onClose: (id: string) => void
   onRename: (id: string, title: string) => void
-  onContextMenu: (id: string, event: React.MouseEvent) => void
   onHandlePointerDown: (event: React.PointerEvent<HTMLElement>) => void
 }
 
@@ -30,14 +29,11 @@ export const Tab = ({
   onActivate,
   onClose,
   onRename,
-  onContextMenu,
   onHandlePointerDown,
 }: Props) => {
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(tab.title)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  const showFavicon = Boolean(tab.favicon || tab.faviconClass)
 
   const startRename = () => {
     if (!isRenameable(tab)) return
@@ -74,17 +70,11 @@ export const Tab = ({
       data-tab-title={tab.title}
       {...(tab.active ? { active: "" } : {})}
       {...(renaming ? { "is-renaming": "" } : {})}
-      onContextMenu={(event) => onContextMenu(tab.id, event)}
     >
       <div className="chrome-tab-content">
         <div
           className={faviconClassName(tab)}
-          style={
-            typeof tab.favicon === "string"
-              ? { backgroundImage: `url('${tab.favicon}')` }
-              : undefined
-          }
-          {...(showFavicon ? {} : { hidden: true })}
+          {...(tab.faviconClass ? {} : { hidden: true })}
         />
         <div
           className="chrome-tab-title"

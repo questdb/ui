@@ -33,6 +33,13 @@ const isTrailing = (tab: TabProperties) =>
   tab.className?.includes("temporary-tab") === true ||
   tab.className?.includes("preview-tab") === true
 
+// Gives keyboard focus to a tab, e.g. when the control that held focus for it
+// has just unmounted.
+export const focusTab = (id: string) =>
+  document
+    .querySelector<HTMLElement>(`.chrome-tabs .chrome-tab[data-tab-id="${id}"]`)
+    ?.focus()
+
 const scrollTabIntoView = (container: HTMLElement, tabEl: HTMLElement) => {
   const tabRect = tabEl.getBoundingClientRect()
   const containerRect = container.getBoundingClientRect()
@@ -49,7 +56,6 @@ const scrollTabIntoView = (container: HTMLElement, tabEl: HTMLElement) => {
 
 export const TabBar = ({
   tabs,
-  className,
   darkMode,
   limit,
   onTabActive,
@@ -57,7 +63,6 @@ export const TabBar = ({
   onTabRename,
   onTabReorder,
   onNewTab,
-  onContextMenu,
 }: TabBarProps) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -100,6 +105,10 @@ export const TabBar = ({
     ? positions[positions.length - 1] + widths[widths.length - 1]
     : 0
   const pinnedCount = displayedTabs.filter((tab) => !isTrailing(tab)).length
+  const pinnedTabsKey = tabs
+    .filter((tab) => !isTrailing(tab))
+    .map((tab) => tab.id)
+    .join(",")
   const lastReorderableIndex = pinnedCount - 1
   const activeId = tabs.find((tab) => tab.active)?.id
   const layoutKey = displayedTabs.map((tab) => tab.id).join(",")
@@ -107,6 +116,7 @@ export const TabBar = ({
 
   const { drag, startDrag } = useTabDrag({
     containerRef,
+    tabsKey: pinnedTabsKey,
     positions,
     widths,
     totalWidth,
@@ -181,7 +191,6 @@ export const TabBar = ({
     darkMode && "chrome-tabs-dark-theme",
     ready && "chrome-tabs-ready",
     drag && "chrome-tabs-is-sorting",
-    className,
   ]
     .filter(Boolean)
     .join(" ")
@@ -374,7 +383,6 @@ export const TabBar = ({
             onActivate={onTabActive}
             onClose={onTabClose}
             onRename={onTabRename}
-            onContextMenu={(id, event) => onContextMenu?.(id, event)}
             onHandlePointerDown={(event) => {
               if (!isTrailing(tab)) startDrag(tab.id, index, event)
             }}

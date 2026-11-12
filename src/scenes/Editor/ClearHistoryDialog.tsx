@@ -5,6 +5,9 @@ import { AlertDialog, Button, ForwardRef, Overlay } from "../../components"
 type Props = {
   open: boolean
   count: number
+  // The dialog opens from a menu item that is gone once it closes: focus goes
+  // back here instead of the page body.
+  returnFocusRef: React.RefObject<HTMLElement>
   onDismiss: () => void
   onConfirm: () => void
 }
@@ -17,6 +20,7 @@ const DialogHeader = styled.div`
 export const ClearHistoryDialog = ({
   open,
   count,
+  returnFocusRef,
   onDismiss,
   onConfirm,
 }: Props) => (
@@ -30,7 +34,14 @@ export const ClearHistoryDialog = ({
       <ForwardRef>
         <Overlay primitive={AlertDialog.Overlay} />
       </ForwardRef>
-      <AlertDialog.Content maxwidth="44rem" data-hook="clear-history-dialog">
+      <AlertDialog.Content
+        maxwidth="44rem"
+        data-hook="clear-history-dialog"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          returnFocusRef.current?.focus()
+        }}
+      >
         <DialogHeader>
           <AlertDialog.Title>Delete all closed tabs?</AlertDialog.Title>
         </DialogHeader>

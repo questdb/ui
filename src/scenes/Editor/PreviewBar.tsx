@@ -3,6 +3,7 @@ import styled from "styled-components"
 import { EyeIcon, PushPinIcon, XIcon } from "@phosphor-icons/react"
 import { Box, Button, Text } from "../../components"
 import { useEditor } from "../../providers"
+import { focusTab } from "../../components/TabBar"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
@@ -42,9 +43,14 @@ export const focusPreviewKeepOpen = () => {
 export const PreviewBar = () => {
   const { activeBuffer, keepBufferOpen, discardPreview } = useEditor()
 
-  const keepOpen = () => {
+  // A kept SQL tab focuses its editor. Other kinds have no single input, so
+  // focus goes to their tab rather than the page body: this bar, which held
+  // it, unmounts with the preview.
+  const keepOpen = async () => {
+    const id = activeBuffer.id as number
     void trackEvent(ConsoleEvent.TAB_PREVIEW_KEEP_OPEN)
-    void keepBufferOpen(activeBuffer.id as number)
+    await keepBufferOpen(id)
+    if (document.activeElement === document.body) focusTab(String(id))
   }
 
   const close = () => {
@@ -66,7 +72,7 @@ export const PreviewBar = () => {
           variant="primary"
           prefixIcon={<PushPinIcon size={14} />}
           data-hook={KEEP_OPEN_HOOK}
-          onClick={keepOpen}
+          onClick={() => void keepOpen()}
         >
           Keep open
         </Button>

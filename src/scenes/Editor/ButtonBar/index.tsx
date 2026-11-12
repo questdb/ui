@@ -16,7 +16,6 @@ type ButtonBarProps = {
   onRunQuery: () => void
   onTriggerRunScript: (runAll?: boolean) => void
   onCopyLinkAllQueries: () => void
-  isTemporary: boolean | undefined
 }
 
 const ButtonBarWrapper = styled.div<{
@@ -182,7 +181,6 @@ const ButtonBar = ({
   onRunQuery,
   onTriggerRunScript,
   onCopyLinkAllQueries,
-  isTemporary,
 }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
@@ -295,11 +293,7 @@ const ButtonBar = ({
         data-hook="button-run-script"
         title={shortcutTitles[RunningType.SCRIPT]}
         onClick={handleClickScriptButton}
-        disabled={
-          running !== RunningType.NONE ||
-          activeQueryExecution !== null ||
-          isTemporary
-        }
+        disabled={running !== RunningType.NONE || activeQueryExecution !== null}
         {...menuProps}
       >
         Run all queries
@@ -349,8 +343,7 @@ const ButtonBar = ({
           disabled={
             running !== RunningType.NONE ||
             activeQueryExecution !== null ||
-            queriesToRun.length === 0 ||
-            isTemporary
+            queriesToRun.length === 0
           }
         >
           {getQueryButtonText()}
@@ -391,7 +384,6 @@ const ButtonBar = ({
               data-hook="button-copy-query-link"
               title={copyLinkShortcutTitle}
               onClick={handleClickCopyLink}
-              disabled={isTemporary}
               {...{ role: "menuitem" as const }}
             >
               Copy link to all queries

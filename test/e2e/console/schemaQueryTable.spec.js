@@ -23,36 +23,54 @@ const shouldContainText = (cell, text) =>
 const notebookCells = () => cy.get("[data-notebook-root] [data-notebook-cell]")
 
 describe("schema tree: Query action", () => {
+  // Through the HTTP API, not the editor: a statement run from the editor may
+  // still be running when the next one starts, which opens the "Cancel
+  // current query?" dialog.
+  const dropTables = () => {
+    cy.execAdminQuery("DROP TABLE IF EXISTS query_action_trades")
+    cy.execAdminQuery("DROP TABLE IF EXISTS query_action_spaced")
+    cy.execAdminQuery('DROP TABLE IF EXISTS "limit"')
+  }
+
+  // WAL rows become visible once applied, a moment after the insert.
+  const waitForRowCount = (table, count) => {
+    const poll = (attempt) =>
+      cy
+        .execAdminQuery(`SELECT count() FROM ${table}`)
+        .its("body.dataset")
+        .then((dataset) => {
+          if (dataset[0][0] === count) return
+          if (attempt >= 50) {
+            throw new Error(`${table} has ${dataset[0][0]} rows, not ${count}`)
+          }
+          cy.wait(200)
+          poll(attempt + 1)
+        })
+    poll(0)
+  }
+
   before(() => {
+    dropTables()
+    cy.execAdminQuery(
+      "CREATE TABLE query_action_trades (symbol SYMBOL, price DOUBLE, timestamp TIMESTAMP) timestamp(timestamp) PARTITION BY DAY WAL",
+    )
+    cy.execAdminQuery(
+      "INSERT INTO query_action_trades VALUES ('BTC-USD', 1.0, now()), ('ETH-USD', 2.0, now())",
+    )
+    cy.execAdminQuery(
+      'CREATE TABLE query_action_spaced (v INT, "my ts" TIMESTAMP) timestamp("my ts") PARTITION BY DAY BYPASS WAL',
+    )
+    cy.execAdminQuery("INSERT INTO query_action_spaced VALUES (7, now())")
+    cy.execAdminQuery(
+      'CREATE TABLE "limit" (v INT, ts TIMESTAMP) timestamp(ts) PARTITION BY DAY BYPASS WAL',
+    )
+    cy.execAdminQuery('INSERT INTO "limit" VALUES (3, now())')
+    waitForRowCount("query_action_trades", 2)
     cy.loadConsoleWithAuth()
     cy.getEditorContent().should("be.visible")
-    cy.executeSQL("DROP TABLE IF EXISTS query_action_trades;")
-    cy.executeSQL(
-      "CREATE TABLE IF NOT EXISTS query_action_trades (symbol SYMBOL, price DOUBLE, timestamp TIMESTAMP) timestamp(timestamp) PARTITION BY DAY WAL;",
-    )
-    cy.executeSQL(
-      "INSERT INTO query_action_trades VALUES ('BTC-USD', 1.0, now()), ('ETH-USD', 2.0, now());",
-    )
-    cy.executeSQL("DROP TABLE IF EXISTS query_action_spaced;")
-    cy.executeSQL(
-      'CREATE TABLE query_action_spaced (v INT, "my ts" TIMESTAMP) timestamp("my ts") PARTITION BY DAY BYPASS WAL;',
-    )
-    cy.executeSQL("INSERT INTO query_action_spaced VALUES (7, now());")
-    cy.executeSQL('DROP TABLE IF EXISTS "limit";')
-    cy.executeSQL(
-      'CREATE TABLE "limit" (v INT, ts TIMESTAMP) timestamp(ts) PARTITION BY DAY BYPASS WAL;',
-    )
-    cy.executeSQL('INSERT INTO "limit" VALUES (3, now());')
   })
 
-  after(() => {
-    // executeSQL needs the SQL editor tab active
-    cy.getEditorTabByTitle("SQL").find(".chrome-tab-drag-handle").click()
-    cy.getEditorContent().should("be.visible")
-    cy.executeSQL("DROP TABLE IF EXISTS query_action_trades;")
-    cy.executeSQL("DROP TABLE IF EXISTS query_action_spaced;")
-    cy.executeSQL('DROP TABLE IF EXISTS "limit";')
-  })
+  after(dropTables)
 
   it("opens a live notebook reading the table's newest rows, and reuses it on a second click", () => {
     cy.refreshSchema()

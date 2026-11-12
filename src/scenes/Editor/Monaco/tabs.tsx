@@ -1,4 +1,10 @@
-import React, { useContext, useLayoutEffect, useState, useMemo } from "react"
+import React, {
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled, { css } from "styled-components"
 import { TabBar, type TabProperties } from "../../../components/TabBar"
 import { QuestContext, useEditor, MAX_TABS } from "../../../providers"
@@ -181,6 +187,7 @@ export const Tabs = () => {
   const [importSummaryOpen, setImportSummaryOpen] = useState(false)
   const [importedCount, setImportedCount] = useState(0)
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
+  const historyButtonRef = useRef<HTMLButtonElement>(null)
 
   const handleExportTabs = async () => {
     void trackEvent(ConsoleEvent.TAB_EXPORT)
@@ -458,6 +465,8 @@ export const Tabs = () => {
     void deleteBuffer(
       buffer.id as number,
       keepFocus ? buffer.isTemporary === true : true,
+      "user",
+      { focusEditor: !keepFocus },
     )
   }
 
@@ -579,6 +588,7 @@ export const Tabs = () => {
         <DropdownMenu.Trigger asChild>
           <ForwardRef>
             <HistoryButton
+              ref={historyButtonRef}
               label="Tab history"
               variant="ghost"
               aria-pressed={historyOpen}
@@ -651,10 +661,14 @@ export const Tabs = () => {
                         {buffer.label.length > 30 ? "..." : ""}
                       </Text>
                     </DropdownMenu.Item>
+                    {/* Mouse only: Delete on the entry is the keyboard path,
+                        and a menu cannot own a plain button. */}
                     <IconButton
                       label="Delete from history"
                       size="sm"
                       variant="dangerQuiet"
+                      tabIndex={-1}
+                      aria-hidden="true"
                       data-hook="editor-tabs-history-item-delete"
                       onClick={(event: React.MouseEvent) => {
                         event.stopPropagation()
@@ -728,6 +742,7 @@ export const Tabs = () => {
       <ClearHistoryDialog
         open={clearHistoryOpen}
         count={closedBuffers.length}
+        returnFocusRef={historyButtonRef}
         onDismiss={() => setClearHistoryOpen(false)}
         onConfirm={() => {
           void trackEvent(ConsoleEvent.TAB_HISTORY_CLEAR)

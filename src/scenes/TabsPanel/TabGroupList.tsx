@@ -9,14 +9,11 @@ import { Tooltip } from "../../components"
 import { useEditor } from "../../providers"
 import type { Buffer } from "../../store/buffers"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../utils"
-import { sortPinnedBuffers } from "../../utils/buffers/tabOrder"
-import { acceptDeleteClick } from "../../utils/buffers/deleteClickGuard"
-import { trackEvent } from "../../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { TabRow } from "./TabRow"
 import { BufferIcon } from "./bufferIcon"
 import { DeleteRowButton, ROW_ICON_SIZE, RowIconButton } from "./rowActions"
-import { focusNeighbourRow, isOwnActivationKey } from "./keyboard"
+import { isOwnActivationKey } from "./keyboard"
+import { useRowActions } from "./useRowActions"
 
 type Props = {
   // Open tabs first, then closed ones (see buildTabGroups).
@@ -24,47 +21,14 @@ type Props = {
 }
 
 export const TabGroupList = ({ rows }: Props) => {
-  const {
-    buffers,
-    activeBuffer,
-    setActiveBuffer,
-    closeBuffer,
-    deleteBuffer,
-    previewBuffer,
-    restoreBuffer,
-  } = useEditor()
+  const { activeBuffer, setActiveBuffer, previewBuffer } = useEditor()
+  const { canRemove, close, remove, reopen } = useRowActions()
   const locale = useMemo(() => getLocaleFromLanguage(fetchUserLocale()), [])
-
-  // Gate on every open tab, not the rows shown: a filter that hides the other
-  // tabs must not disable Close/Delete (same rule as closeBuffer).
-  const canRemove = sortPinnedBuffers(buffers).length > 1
 
   const activate = (buffer: Buffer) =>
     buffer.archived
       ? previewBuffer(buffer.id as number)
       : setActiveBuffer(buffer)
-
-  // The panel keeps keyboard focus: the neighbouring row takes it, and the
-  // editor is not focused when the tab goes away.
-  const close = async (buffer: Buffer, action: Element) => {
-    void trackEvent(ConsoleEvent.TAB_PANEL_CLOSE)
-    focusNeighbourRow(action)
-    await closeBuffer(buffer.id as number, { focusEditor: false })
-  }
-
-  const reopen = async (buffer: Buffer) => {
-    void trackEvent(ConsoleEvent.TAB_PANEL_RESTORE)
-    await restoreBuffer(buffer.id as number)
-  }
-
-  const remove = async (buffer: Buffer, action: Element) => {
-    if (!acceptDeleteClick()) return
-    void trackEvent(ConsoleEvent.TAB_PANEL_DELETE)
-    focusNeighbourRow(action)
-    await deleteBuffer(buffer.id as number, true, "user", {
-      focusEditor: false,
-    })
-  }
 
   const closedAgo = (buffer: Buffer) =>
     buffer.archived && buffer.archivedAt ? (
@@ -80,7 +44,7 @@ export const TabGroupList = ({ rows }: Props) => {
           <RowIconButton
             label="Reopen tab"
             data-hook="tabs-panel-reopen"
-            onClick={() => void reopen(buffer)}
+            onClick={(event) => void reopen(buffer, event.currentTarget)}
           >
             <ArrowCounterClockwiseIcon size={ROW_ICON_SIZE} />
           </RowIconButton>

@@ -55,6 +55,19 @@ describe("buildWorkspaceInfo", () => {
     expect(ws?.tabs.map((tab) => tab.buffer_id)).toEqual([1])
   })
 
+  it("does not report the AI preview buffer as the active tab", () => {
+    // Given the diff preview buffer is the active tab
+    const preview = buffer(9, { isPreviewBuffer: true })
+    const sql = buffer(1)
+
+    // When the workspace is built
+    const ws = buildWorkspaceInfo([preview, sql], preview)
+
+    // Then no active tab is reported, so the agent never learns its id
+    expect(ws?.active).toBeUndefined()
+    expect(ws?.tabs.map((tab) => tab.buffer_id)).toEqual([1])
+  })
+
   it("returns nothing when there are no tabs and no active buffer", () => {
     expect(buildWorkspaceInfo([], {} as Buffer)).toBeUndefined()
   })

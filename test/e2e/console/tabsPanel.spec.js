@@ -130,6 +130,19 @@ const closeFromPanel = (label) => {
   cy.getEditorTabByTitle(label).should("not.exist")
 }
 
+// A person's double-click: two clicks on the same spot, slow enough for the
+// list to re-render between them, so the second one lands on the row that
+// slid up under the pointer. Cypress' dblclick() sends both clicks at once.
+const doubleClickLikeAPerson = (target) => {
+  target().realClick()
+  cy.wait(150)
+  target().realClick()
+}
+
+const LONG_SQL = Array.from({ length: 300 }, (_, i) => `select ${i + 1};`).join(
+  "\n",
+)
+
 describe("tabs panel", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth()
@@ -388,13 +401,69 @@ describe("tabs panel", () => {
     cy.get('[data-hook="tabs-panel-closed-row"]').should("have.length", 2)
 
     // When the user double-clicks Delete on the first closed row
-    closedRow("Beta").find('[data-hook="tabs-panel-delete"]').dblclick()
+    doubleClickLikeAPerson(() =>
+      cy
+        .get('[data-hook="tabs-panel-closed-row"]')
+        .first()
+        .find('[data-hook="tabs-panel-delete"]'),
+    )
 
     // Then only that tab is deleted; the row that slid up is untouched
     cy.get('[data-hook="tabs-panel-closed-row"]').should("have.length", 1)
     closedRow("Alpha").should("be.visible")
     cy.wait(700)
     cy.get('[data-hook="tabs-panel-closed-row"]').should("have.length", 1)
+  })
+
+  it("moves keyboard focus past the content of a previewed tab", () => {
+    // Given a previewed closed tab, with focus on the preview bar's Close
+    createTab("Alpha", "alpha_query;")
+    closeFromPanel("Alpha")
+    includeClosed()
+    closedRow("Alpha").click()
+    cy.getByDataHook("tab-preview-close").focus()
+
+    // When the user presses Tab
+    cy.realPress("Tab")
+
+    // Then focus skips the read-only content and lands on a visible control
+    cy.focused().should(($focused) => {
+      expect($focused[0].tagName).not.to.equal("BODY")
+      expect($focused.closest('[data-hook="read-only-guard"]')).to.have.length(
+        0,
+      )
+    })
+
+    // When the user presses Shift+Tab
+    cy.realPress(["Shift", "Tab"])
+
+    // Then focus skips the content again, back to Close
+    cy.focused().should("have.attr", "data-hook", "tab-preview-close")
+  })
+
+  it("scrolls a long previewed tab with the mouse wheel", () => {
+    // Given a previewed closed tab longer than the editor
+    createTab("Long", LONG_SQL)
+    closeFromPanel("Long")
+    includeClosed()
+    closedRow("Long").click()
+    cy.getByDataHook("read-only-overlay").should("exist")
+    cy.window().then((win) =>
+      expect(win.monaco.editor.getEditors()[0].getScrollTop()).to.equal(0),
+    )
+
+    // When the user scrolls over the read-only content
+    cy.getByDataHook("read-only-overlay").realMouseWheel({
+      deltaY: 400,
+      position: "center",
+    })
+
+    // Then the editor scrolls
+    cy.window().should((win) =>
+      expect(
+        win.monaco.editor.getEditors()[0].getScrollTop(),
+      ).to.be.greaterThan(0),
+    )
   })
 
   it("filters every folder by label", () => {
@@ -562,6 +631,88 @@ describe("tabs panel", () => {
     editors().should("be.visible")
     cy.getByDataHook("tabs-panel-open").should("not.exist")
     cy.getByDataHook("tabs-panel-include-closed").should("exist")
+  })
+})
+
+describe("tabs panel closed notebook", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth(
+      false,
+      {},
+      {
+        buffers: [
+          { label: "SQL", value: "select 1;" },
+          {
+            label: "Trades",
+            value: "",
+            archived: true,
+            archivedAt: Date.now(),
+            position: -1,
+            notebookViewState: {
+              cells: [
+                {
+                  id: "c1",
+                  position: 0,
+                  value: "select 'preview_marker'",
+                  paneView: "editor",
+                },
+              ],
+            },
+          },
+        ],
+        activeBufferId: 1,
+      },
+    )
+    cy.getEditorContent().should("be.visible")
+    openTabsPanel()
+    includeClosed()
+  })
+
+  it("previews it read-only, then keeps it open as a live notebook", () => {
+    // When the user previews the closed notebook and types into its cell
+    closedRow("Trades").click()
+    cy.getByDataHook("tab-preview-bar").should("be.visible")
+    cy.get("[data-notebook-cell]").should("contain", "preview_marker")
+    cy.get("[data-notebook-cell]").first().realClick()
+    cy.realType("XYZ")
+
+    // Then the cell is unchanged
+    cy.get("[data-notebook-cell]").should("not.contain", "XYZ")
+
+    // When a keyboard user keeps it open
+    cy.get("[data-notebook-root]").then(($previewed) => {
+      cy.getByDataHook("tab-preview-keep-open").focus()
+      cy.realPress("Enter")
+
+      // Then the read-only layers are gone and the notebook is mounted again,
+      // live
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
+      cy.getByDataHook("read-only-guard").should("not.exist")
+      cy.getByDataHook("read-only-overlay").should("not.exist")
+      cy.wrap(null).should(() =>
+        expect(Cypress.dom.isDetached($previewed[0])).to.equal(true),
+      )
+    })
+    cy.get("[data-notebook-cell]").should("contain", "preview_marker")
+
+    // And focus is on the notebook's tab, not lost on the page
+    cy.focused()
+      .should("have.class", "chrome-tab")
+      .and("have.attr", "data-tab-title", "Trades")
+  })
+
+  it("keeps keyboard focus in the panel when it is reopened from its row", () => {
+    // When a keyboard user reopens the closed notebook from its row
+    closedRow("Trades").find('[data-hook="tabs-panel-reopen"]').focus()
+    cy.realPress("Enter")
+
+    // Then it is open and focus stays on a row of the panel
+    cy.getEditorTabByTitle("Trades").should("have.attr", "active")
+    openRow("Trades").should("be.visible")
+    cy.focused()
+      .should("have.attr", "data-hook", "tabs-panel-row-button")
+      .closest('[data-hook="tabs-panel"]')
+      .should("exist")
   })
 })
 
@@ -1059,7 +1210,9 @@ describe("tab history dropdown", () => {
     cy.getByDataHook("editor-tabs-history-item-delete").should("have.length", 2)
 
     // When the user double-clicks the first row's Delete
-    cy.getByDataHook("editor-tabs-history-item-delete").first().dblclick()
+    doubleClickLikeAPerson(() =>
+      cy.getByDataHook("editor-tabs-history-item-delete").first(),
+    )
 
     // Then one tab is deleted, not two
     cy.getByDataHook("editor-tabs-history-item").should("have.length", 1)
@@ -1106,6 +1259,57 @@ describe("tab history dropdown", () => {
     cy.focused()
       .should("have.attr", "data-hook", "editor-tabs-history-item")
       .and("contain", "Alpha")
+  })
+
+  it("keeps focus in the menu when the previewed entry is deleted from the keyboard", () => {
+    // Given two closed tabs, the newest one previewed
+    for (const [label, sql] of [
+      ["Alpha", "select 1;"],
+      ["Beta", "select 2;"],
+    ]) {
+      createTab(label, sql)
+      cy.getEditorTabByTitle(label).find(".chrome-tab-close").click()
+      cy.getEditorTabByTitle(label).should("not.exist")
+    }
+    openTabsPanel()
+    includeClosed()
+    closedRow("Beta").click()
+    cy.getEditorTabByTitle("Beta").should("have.class", "temporary-tab")
+
+    // When the user opens the history with the keyboard and deletes the
+    // previewed entry, which has focus first
+    cy.getByDataHook("editor-tabs-history-button").focus()
+    cy.realPress("Enter")
+    cy.focused().should("contain", "Beta")
+    cy.realPress("Delete")
+
+    // Then the preview ends, an open tab is shown, and focus stays on the
+    // remaining entry
+    cy.getEditorTabByTitle("Beta").should("not.exist")
+    cy.getEditorTabByTitle("SQL").should("have.attr", "active")
+    cy.getByDataHook("editor-tabs-history").should("be.visible")
+    cy.focused()
+      .should("have.attr", "data-hook", "editor-tabs-history-item")
+      .and("contain", "Alpha")
+  })
+
+  it("returns focus to the history button when Clear history is dismissed", () => {
+    // Given a closed tab
+    createTab("Alpha", "select 1;")
+    cy.getEditorTabByTitle("Alpha").find(".chrome-tab-close").click()
+    cy.getEditorTabByTitle("Alpha").should("not.exist")
+
+    // When a keyboard user opens Clear history and dismisses it
+    cy.getByDataHook("editor-tabs-history-button").focus()
+    cy.realPress("Enter")
+    cy.getByDataHook("editor-tabs-history-clear").focus()
+    cy.realPress("Enter")
+    cy.getByDataHook("clear-history-dialog").should("be.visible")
+    cy.realPress("Escape")
+
+    // Then focus is back on the history button
+    cy.getByDataHook("clear-history-dialog").should("not.exist")
+    cy.focused().should("have.attr", "data-hook", "editor-tabs-history-button")
   })
 })
 

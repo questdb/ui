@@ -1,9 +1,10 @@
 import React from "react"
 import { ThemeProvider } from "styled-components"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../theme"
 import type { Buffer } from "../../store/buffers"
+import { resetDeleteClickGuard } from "../../utils/buffers/deleteClickGuard"
 
 const mocks = vi.hoisted(() => ({
   editor: {
@@ -54,6 +55,11 @@ const buffer = (id: number, label: string, extra: Partial<Buffer> = {}) =>
 
 let renderer: ReactTestRenderer | undefined
 
+beforeEach(() => {
+  resetDeleteClickGuard()
+  mocks.editor.deleteBuffer.mockReset()
+})
+
 afterEach(() => {
   act(() => renderer?.unmount())
   renderer = undefined
@@ -70,12 +76,13 @@ const renderList = (allBuffers: Buffer[], shown: Buffer[]) => {
   })
 }
 
-const buttonDisabled = (hook: string) =>
-  Boolean(
-    renderer!.root.find(
-      (node) => node.type === "span" && node.props["data-hook"] === hook,
-    ).props.disabled,
+const buttons = (hook: string) =>
+  renderer!.root.findAll(
+    (node) => node.type === "span" && node.props["data-hook"] === hook,
   )
+
+const buttonDisabled = (hook: string) =>
+  Boolean(buttons(hook)[0].props.disabled)
 
 describe("OpenTabList remove gating", () => {
   it("enables Close/Delete when a filter shows one row but other tabs are open", () => {
@@ -147,5 +154,34 @@ describe("OpenTabList row semantics", () => {
           String(node.props["aria-label"] ?? node.props["data-hook"]),
         ),
     ).toEqual(["tabs-panel-row-button", "Close tab", "Delete tab"])
+  })
+})
+
+describe("OpenTabList delete double-click guard", () => {
+  it("ignores a second Delete click inside the guard window", () => {
+    // Given three open tabs
+    const a = buffer(1, "alpha")
+    const b = buffer(2, "beta")
+    const c = buffer(3, "gamma")
+    renderList([a, b, c], [a, b, c])
+    const clickDelete = (index: number) =>
+      act(() => {
+        ;(
+          buttons("tabs-panel-delete")[index].props as {
+            onClick: (event: unknown) => void
+          }
+        ).onClick({ currentTarget: { closest: () => null } })
+      })
+
+    // When Delete is clicked on the first row, then on the row that slid up
+    // under the pointer, as the second click of a double-click
+    clickDelete(0)
+    clickDelete(1)
+
+    // Then only the first tab is deleted
+    expect(mocks.editor.deleteBuffer).toHaveBeenCalledTimes(1)
+    expect(mocks.editor.deleteBuffer).toHaveBeenCalledWith(1, true, "user", {
+      focusEditor: false,
+    })
   })
 })

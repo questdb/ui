@@ -44,7 +44,6 @@ export const NotebookWorkspaceBridge: React.FC = () => {
     deleteBuffer,
     updateBuffer,
     duplicateNotebook: duplicateNotebookBuffer,
-    updateBuffersPositions,
   } = useEditor()
   const { quest } = useContext(QuestContext)
 
@@ -64,12 +63,15 @@ export const NotebookWorkspaceBridge: React.FC = () => {
     return () => unregisterNotebookAgentDeps()
   }, [])
 
+  // The AI suggestion tab is not in <workspace>: tab tools cannot target it.
   const findTab = (bufferId: number) => {
-    const target = buffersRef.current.find((b) => b.id === bufferId)
+    const target = buffersRef.current.find(
+      (b) => b.id === bufferId && !b.isPreviewBuffer,
+    )
     if (!target) {
       throw new NotebookToolError(
         "deleted",
-        `Tab ${bufferId} no longer exists.`,
+        `Tab ${bufferId} is not in the workspace.`,
       )
     }
     return target
@@ -146,12 +148,6 @@ export const NotebookWorkspaceBridge: React.FC = () => {
           )
         }
         await archiveBuffer(bufferId, "agent")
-        await updateBuffersPositions(
-          remaining.map((b, index) => ({
-            id: b.id as number,
-            position: index,
-          })),
-        )
       },
       async restoreTab(bufferId) {
         const target = findTab(bufferId)
@@ -196,14 +192,6 @@ export const NotebookWorkspaceBridge: React.FC = () => {
           )
         }
         await deleteBuffer(bufferId, true, "agent")
-        if (!target.archived) {
-          await updateBuffersPositions(
-            remaining.map((b, index) => ({
-              id: b.id as number,
-              position: index,
-            })),
-          )
-        }
       },
       async activateNotebook(bufferId, cellToFocus) {
         // The buffer is claimed by the live side (it is, or is becoming, the
@@ -285,7 +273,6 @@ export const NotebookWorkspaceBridge: React.FC = () => {
     deleteBuffer,
     updateBuffer,
     duplicateNotebookBuffer,
-    updateBuffersPositions,
   ])
 
   return null

@@ -34,8 +34,6 @@ const Actions = styled.div`
   align-items: center;
   gap: 0.6rem;
   flex-shrink: 0;
-  opacity: 0.55;
-  transition: opacity 0.1s ease;
 `
 
 // The activatable part of the row: icon, label and meta. It is the row's
@@ -64,8 +62,6 @@ const Root = styled.div<{ $active: boolean }>`
     background: ${({ theme }) => theme.color.interactionHover};
   }
 
-  &:hover ${Actions},
-  &:focus-within ${Actions},
   &:hover ${Leading}[data-visibility="auto"],
   &:focus-within ${Leading}[data-visibility="auto"] {
     opacity: 1;
@@ -78,10 +74,6 @@ const Root = styled.div<{ $active: boolean }>`
       &:hover {
         background: ${theme.color.interactionNeutral};
         box-shadow: inset 0 0 0 1px ${theme.color.borderDefault};
-      }
-
-      ${Actions} {
-        opacity: 1;
       }
     `}
 `

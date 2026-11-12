@@ -36,6 +36,7 @@ import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/formatSql"
 import type { Buffer, PreviewContent } from "../../store/buffers"
 import {
+  type BufferPosition,
   closedBuffersToDelete,
   nextOpenPosition,
   positionsAfterMove,
@@ -185,9 +186,6 @@ export type EditorContext = {
     buffer?: Partial<Buffer>,
     setNewActiveBuffer?: boolean,
   ) => Promise<void>
-  updateBuffersPositions: (
-    positions: { id: number; position: number }[],
-  ) => Promise<void>
   closeBuffer: (id: number, options?: RemoveBufferOptions) => Promise<void>
   restoreBuffer: (id: number) => Promise<void>
   keepBufferOpen: (id: number) => Promise<void>
@@ -232,7 +230,6 @@ const defaultValues = {
   archiveBuffer: () => Promise.resolve(),
   duplicateNotebook: () => Promise.resolve(undefined),
   updateBuffer: () => Promise.resolve(),
-  updateBuffersPositions: () => Promise.resolve(),
   closeBuffer: () => Promise.resolve(),
   restoreBuffer: () => Promise.resolve(),
   keepBufferOpen: () => Promise.resolve(),
@@ -906,6 +903,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       ...(target?.templateId !== undefined ? { templateId: undefined } : {}),
     })
     await setActiveBufferOnRemoved(id, options.focusEditor)
+    await compactPositionsAfterRemoval(target)
     eventBus.publish(EventType.BUFFERS_UPDATED, {
       type: "archive",
       bufferId: id,
@@ -1020,11 +1018,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       removeNotebookBufferLayouts(id)
     }
     forgetBuffer(id)
-    // Deleting an open tab leaves a gap in the positions; a new tab would
-    // land in the middle of the bar because addBuffer positions by count.
-    if (target && !target.archived && !target.isTemporary) {
-      await updateBuffersPositions(positionsWithout(buffers, id))
-    }
+    await compactPositionsAfterRemoval(target)
   }
 
   const previewBuffer: EditorContext["previewBuffer"] = async (id) => {
@@ -1047,14 +1041,22 @@ export const EditorProvider: React.FC = ({ children }) => {
     await updateBuffer(temporaryBufferId, { isTemporary: false }, true)
   }
 
-  const updateBuffersPositions: EditorContext["updateBuffersPositions"] =
-    async (positions) => {
-      await db.transaction("rw", db.buffers, async () => {
-        for (const { id, position } of positions) {
-          await db.buffers.update(id, { position })
-        }
-      })
-    }
+  const updateBuffersPositions = async (positions: BufferPosition[]) => {
+    await db.transaction("rw", db.buffers, async () => {
+      for (const { id, position } of positions) {
+        await db.buffers.update(id, { position })
+      }
+    })
+  }
+
+  // Removing an open tab leaves a gap in the positions; a new tab would land
+  // in the middle of the bar because addBuffer positions by count.
+  const compactPositionsAfterRemoval = async (removed: Buffer | undefined) => {
+    if (!removed || removed.archived || removed.isTemporary) return
+    await updateBuffersPositions(
+      positionsWithout(buffers, removed.id as number),
+    )
+  }
 
   const hasContent = (buffer: Buffer) =>
     buffer.value !== "" ||
@@ -1096,7 +1098,6 @@ export const EditorProvider: React.FC = ({ children }) => {
     } else {
       await deleteBuffer(id, true, "user", options)
     }
-    await updateBuffersPositions(positionsWithout(buffers, id))
   }
 
   const keepBufferOpen: EditorContext["keepBufferOpen"] = async (id) => {
@@ -1584,7 +1585,6 @@ export const EditorProvider: React.FC = ({ children }) => {
         archiveBuffer,
         duplicateNotebook,
         updateBuffer,
-        updateBuffersPositions,
         closeBuffer,
         restoreBuffer,
         keepBufferOpen,

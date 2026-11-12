@@ -28,15 +28,9 @@ const HeaderRow = styled.div`
   padding: 0.5rem 1rem 0.5rem 2.8rem;
   user-select: none;
   cursor: pointer;
-  outline: none;
 
   &:hover {
     background: ${({ theme }) => theme.color.interactionHover};
-  }
-
-  &:focus-visible {
-    background: ${({ theme }) => theme.color.interactionNeutral};
-    box-shadow: inset 0 0 0 1px ${({ theme }) => theme.color.borderDefault};
   }
 `
 

@@ -1,13 +1,25 @@
 // @vitest-environment jsdom
 import React from "react"
 import { act, waitFor } from "@testing-library/react"
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import { findHook, queryHook, renderComponent } from "../../test/component"
 import { db } from "../../store/db"
 import { bufferStore, makeBuffer, type Buffer } from "../../store/buffers"
 import { SettingContext } from "../SettingsProvider/context"
 import type { ConsoleConfig } from "../SettingsProvider/types"
 import { StoreKey } from "../../utils/localStorage/types"
+import {
+  on,
+  type UserActionEvent,
+} from "../../utils/notebooks/notebookAIBridge"
 import { EditorProvider, useEditor, type EditorContext } from "./index"
 
 vi.mock("@monaco-editor/react", () => ({
@@ -77,6 +89,12 @@ const seed = async (rows: Array<Partial<Buffer>>, activeIndex = 0) => {
 const activeId = async () => (await bufferStore.getActiveId())?.value
 
 const waitForReady = () => findHook("editor-ready")
+
+const openPositions = async () =>
+  (await db.buffers.toArray())
+    .filter((buffer) => !buffer.archived)
+    .sort((left, right) => left.position - right.position)
+    .map((buffer) => [buffer.label, buffer.position])
 
 // Example files are parsed with importTabs, loaded on demand; a cold import
 // takes seconds, so load it once up front.
@@ -197,6 +215,114 @@ describe("EditorProvider: closed-tab preview", () => {
     expect((await db.buffers.get(closed))?.metricsViewState?.refreshRate).toBe(
       "1m",
     )
+  })
+})
+
+describe("EditorProvider: reopening the previewed tab", () => {
+  it("makes it a regular, editable tab", async () => {
+    // Given a closed SQL tab that is being previewed
+    const [, closed] = await seed([
+      { value: "select 1" },
+      {
+        label: "Closed",
+        value: "select 2",
+        archived: true,
+        archivedAt: 1,
+        position: -1,
+      },
+    ])
+    renderProvider()
+    await waitForReady()
+    await act(() => editor.previewBuffer(closed))
+    await waitFor(() => expect(editor.activeBuffer.id).toBe(closed))
+
+    // When it is reopened from the Tabs panel or the tab history
+    await act(() => editor.restoreBuffer(closed))
+
+    // Then it is open, no longer a preview, and edits are saved
+    await waitFor(() => expect(editor.activeBuffer.isTemporary).toBeFalsy())
+    expect((await db.buffers.get(closed))?.archived).toBe(false)
+    await act(() => editor.updateBuffer(closed, { value: "select 3" }))
+    expect((await db.buffers.get(closed))?.value).toBe("select 3")
+  })
+})
+
+describe("EditorProvider: removing a tab", () => {
+  it("closes the gap in the open tabs' positions", async () => {
+    // Given three open tabs
+    const [, b] = await seed([
+      { label: "A", value: "a" },
+      { label: "B", value: "b" },
+      { label: "C", value: "c" },
+    ])
+    renderProvider()
+    await waitForReady()
+
+    // When the middle tab is closed by an agent
+    await act(() => editor.archiveBuffer(b, "agent"))
+
+    // Then the remaining tabs keep consecutive positions
+    expect(await openPositions()).toEqual([
+      ["A", 0],
+      ["C", 1],
+    ])
+  })
+})
+
+describe("EditorProvider: user actions", () => {
+  let seen: UserActionEvent[] = []
+  let off: () => void = () => undefined
+
+  beforeEach(() => {
+    seen = []
+    off = on("user-action", (event) => seen.push(event))
+  })
+
+  afterEach(() => off())
+
+  const tabEvents = () =>
+    seen.filter(
+      (event) =>
+        event.kind === "user_archived_tab" || event.kind === "user_deleted_tab",
+    )
+
+  it("reports the user's closes and deletes of any tab kind", async () => {
+    // Given two SQL tabs next to the active one
+    const [, a, b] = await seed([
+      { value: "x" },
+      { label: "A", value: "a" },
+      { label: "B", value: "b" },
+    ])
+    renderProvider()
+    await waitForReady()
+
+    // When the user closes one and deletes the other
+    await act(() => editor.closeBuffer(a))
+    await act(() => editor.deleteBuffer(b))
+
+    // Then both are reported, with their kind and label
+    expect(tabEvents()).toEqual([
+      { kind: "user_archived_tab", bufferId: a, tabKind: "sql", label: "A" },
+      { kind: "user_deleted_tab", bufferId: b, tabKind: "sql", label: "B" },
+    ])
+  })
+
+  it("does not report the agent's own closes and deletes", async () => {
+    // Given two SQL tabs next to the active one
+    const [, a, b] = await seed([
+      { value: "x" },
+      { label: "A", value: "a" },
+      { label: "B", value: "b" },
+    ])
+    renderProvider()
+    await waitForReady()
+
+    // When an agent closes one and deletes the other
+    await act(() => editor.archiveBuffer(a, "agent"))
+    await act(() => editor.deleteBuffer(b, true, "agent"))
+
+    // Then nothing is reported back as a user action
+    expect(tabEvents()).toEqual([])
   })
 })
 

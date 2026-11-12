@@ -213,7 +213,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   const lastFocusedIndexRef = useRef<number | null>(null)
   const selectionDecorations = useRef<string[]>([])
   const virtualizedTreeRef = useRef<VirtualizedTreeHandle>(null)
-  const searchResultsRef = useRef<HTMLDivElement>(null)
 
   const flattenedItems = useMemo(() => {
     const items: FlattenedItem[] = []
@@ -648,7 +647,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
 
   return (
     <ResultsContainer
-      ref={searchResultsRef}
       tabIndex={-1}
       role="tree"
       aria-label={`Search results: ${groupedMatches.size} buffers found`}

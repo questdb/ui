@@ -2558,7 +2558,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             onRunQuery={handlePrimaryRun}
             onTriggerRunScript={handleTriggerRunScript}
             onCopyLinkAllQueries={handleCopyLinkAllQueries}
-            isTemporary={activeBuffer.isTemporary}
           />
         )}
         <EditorWrapper>
