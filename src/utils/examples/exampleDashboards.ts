@@ -1,25 +1,39 @@
 import type { NotebookViewState } from "../../store/notebook"
 
-// Example files come in the console's own tab-export format (dexie-export-import
-// envelope with a `buffers` table) or as a plain array of tab rows. The first
-// notebook row is the dashboard; everything else is ignored. Sanitizing runs
-// the same whitelist as an import, so persisted results and run markers never
-// reach the new tab and every cell starts fresh.
+// Example files are tab exports from the console (the dexie-export-import
+// envelope with a `buffers` table). The first notebook row is the dashboard;
+// everything else is ignored. The row goes through the same steps as a tab
+// import: it is migrated from the file's database version to the console's,
+// then validated and sanitized with the import's whitelist, so persisted
+// results and run markers never reach the new tab and every cell starts
+// fresh. Example files are never newer than the console that loads them.
 export type ExampleDashboardContent = {
   label: string
   notebookViewState: NotebookViewState
 }
 
 type DexieEnvelope = {
-  data?: { data?: Array<{ tableName?: string; rows?: unknown[] }> }
+  data?: {
+    databaseVersion?: unknown
+    data?: Array<{ tableName?: string; rows?: unknown[] }>
+  }
 }
 
-const rowsOf = (json: unknown): unknown[] => {
-  if (Array.isArray(json)) return json
-  const tables = (json as DexieEnvelope)?.data?.data
-  if (!Array.isArray(tables)) return []
-  const buffers = tables.find((table) => table?.tableName === "buffers")
-  return Array.isArray(buffers?.rows) ? buffers.rows : []
+// The export's buffer rows and the database version they were written with.
+// The version is required: without it the rows cannot be migrated.
+const readExport = (json: unknown): { rows: unknown[]; version: number } => {
+  const data = Array.isArray(json) ? undefined : (json as DexieEnvelope)?.data
+  const version = data?.databaseVersion
+  if (typeof version !== "number" || !Array.isArray(data?.data)) {
+    throw new Error(
+      "The example file is not a console tab export (no database version)",
+    )
+  }
+  const buffers = data.data.find((table) => table?.tableName === "buffers")
+  return {
+    rows: Array.isArray(buffers?.rows) ? buffers.rows : [],
+    version,
+  }
 }
 
 // dexie-export-import writes rows through typeson: an `undefined` field is
@@ -60,16 +74,28 @@ const withDefaults = (row: unknown): unknown => {
   }
 }
 
-// importTabs reaches into the Monaco scene; load it on demand so the provider
-// that opens examples does not drag the editor into its import graph.
+// importTabs reaches into the Monaco scene, and the migrations into the store;
+// load them on demand so the provider that opens examples does not drag them
+// into its import graph.
 const loadImportTabs = () => import("../../scenes/Editor/Monaco/importTabs")
+const loadMigrations = () => import("../../store/migrations")
 
 export const parseExampleDashboard = async (
   json: unknown,
 ): Promise<ExampleDashboardContent> => {
-  const { sanitizeBuffer, validateBufferItem } = await loadImportTabs()
-  const notebook = rowsOf(json)
+  const { rows, version } = readExport(json)
+  const [
+    { sanitizeBuffer, validateBufferItem },
+    { getCurrentDbVersion, migrateBuffer },
+  ] = await Promise.all([loadImportTabs(), loadMigrations()])
+  const currentVersion = getCurrentDbVersion()
+  const notebook = rows
     .map(withDefaults)
+    .map((row) =>
+      typeof row === "object" && row !== null && version < currentVersion
+        ? migrateBuffer(row as Record<string, unknown>, version, currentVersion)
+        : row,
+    )
     .find(
       (row) =>
         typeof row === "object" &&

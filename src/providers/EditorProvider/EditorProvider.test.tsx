@@ -45,14 +45,28 @@ const Probe = () => {
   return <div data-hook="editor-ready">{editor.activeBuffer.label}</div>
 }
 
-const exampleFile = (label: string) => [
-  {
-    label,
-    notebookViewState: {
-      cells: [{ id: "c1", position: 0, value: "select 1" }],
-    },
+// A console tab export holding one notebook, at the console's database version.
+const exampleFile = (label: string) => ({
+  formatName: "dexie",
+  data: {
+    databaseVersion: db.verno,
+    data: [
+      {
+        tableName: "buffers",
+        rows: [
+          {
+            label,
+            value: "",
+            position: 0,
+            notebookViewState: {
+              cells: [{ id: "c1", position: 0, value: "select 1" }],
+            },
+          },
+        ],
+      },
+    ],
   },
-]
+})
 
 const renderProvider = (consoleConfig: ConsoleConfig = {}) =>
   renderComponent(

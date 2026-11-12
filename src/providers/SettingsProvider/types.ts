@@ -23,8 +23,9 @@ export type Settings = Partial<{
 
 // A ready-made notebook listed in the Tabs panel's "Example dashboards"
 // folder. `path` is fetched relative to the console root (like
-// `assets/console-configuration.json`) and holds a tab export: either the
-// console's export file or a plain array of tab rows, with one notebook tab.
+// `assets/console-configuration.json`) and holds a tab export file from the
+// console (Export tabs) with one notebook tab. The file must not be newer than
+// the console: older files are migrated like a tab import.
 // See hasExampleDashboards() for what the list switches on.
 export type ExampleDashboard = {
   id: string
