@@ -11,6 +11,7 @@ import { useCellEditActions } from "./useCellEditActions"
 const notebook = vi.hoisted(() => ({
   runCell: vi.fn(),
   pasteCells: vi.fn(),
+  variables: [] as { name: string; value: string }[],
 }))
 const toast = vi.hoisted(() => ({
   info: vi.fn(),
@@ -22,6 +23,7 @@ const toast = vi.hoisted(() => ({
 vi.mock("../NotebookProvider", () => ({
   useNotebookActions: (): Partial<NotebookActions> => ({
     getCellsSnapshot: () => [{ id: "a", position: 0, value: "SELECT 1" }],
+    getSettings: () => ({ variables: notebook.variables }),
     pasteCells: notebook.pasteCells,
     runCell: notebook.runCell,
     setFocusedCell: () => undefined,
@@ -42,7 +44,6 @@ const Probe = () => {
 
 const payloadOf = (cell: Partial<NotebookCell>): CellClipboardPayload => ({
   cells: [{ cell: { id: "copied", position: 0, value: "", ...cell } }],
-  variables: [],
 })
 
 const paste = (payload: CellClipboardPayload) =>
@@ -51,6 +52,7 @@ const paste = (payload: CellClipboardPayload) =>
 describe("useCellEditActions paste", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    notebook.variables = []
     notebook.pasteCells.mockReturnValue(["pasted"])
     notebook.runCell.mockResolvedValue({ ok: true, superseded: false })
     renderComponent(<Probe />)
@@ -95,6 +97,49 @@ describe("useCellEditActions paste", () => {
         "The pasted cell has DDL/DML statements, so it was not run.",
         expect.anything(),
       ),
+    )
+  })
+
+  it("pastes a cell with missing variables, names them, and does not run it", () => {
+    paste(payloadOf({ value: "SELECT @missing", lastRunStatus: "success" }))
+    expect(notebook.pasteCells).toHaveBeenCalled()
+    expect(notebook.runCell).not.toHaveBeenCalled()
+    expect(toast.warning).toHaveBeenCalledWith(
+      expect.stringContaining("@missing"),
+      expect.anything(),
+    )
+  })
+
+  it("matches destination variables ignoring case and keeps local declarations", () => {
+    notebook.variables = [{ name: "Since", value: "1" }]
+    paste(
+      payloadOf({
+        value:
+          "DECLARE @local := @SINCE SELECT @LOCAL, '@not_a_variable' -- @comment",
+        lastRunStatus: "success",
+      }),
+    )
+    expect(notebook.runCell).toHaveBeenCalledTimes(1)
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
+
+  it("runs only the cells whose variables are available in a mixed paste", () => {
+    notebook.pasteCells.mockReturnValue(["missing", "ready"])
+    const payload = payloadOf({
+      value: "SELECT @absent",
+      lastRunStatus: "success",
+    })
+    payload.cells.push(
+      ...payloadOf({ value: "SELECT 1", lastRunStatus: "success" }).cells,
+    )
+    paste(payload)
+    expect(notebook.runCell).toHaveBeenCalledTimes(1)
+    expect(notebook.runCell).toHaveBeenCalledWith(
+      "ready",
+      undefined,
+      undefined,
+      false,
+      { kind: "autoRun" },
     )
   })
 

@@ -27,7 +27,6 @@ describe("copiedCellsStore", () => {
     // When a cell is copied from a keyboard shortcut, outside a React event
     setCopiedCells({
       cells: [],
-      variables: [],
     } as unknown as CellClipboardPayload)
 
     // Then the buttons update together, in one commit

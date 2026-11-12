@@ -671,28 +671,6 @@ export const insertCellsLayout = (
   return next
 }
 
-export const mergeMissingVariables = (
-  existing: NotebookVariable[] | undefined,
-  incoming: NotebookVariable[],
-): NotebookVariable[] | undefined => {
-  const existingNames = new Set((existing ?? []).map((v) => v.name))
-  const missing = incoming.filter((v) => !existingNames.has(v.name))
-  return missing.length > 0 ? [...(existing ?? []), ...missing] : existing
-}
-
-export const removeExactVariables = (
-  existing: NotebookVariable[] | undefined,
-  removed: NotebookVariable[],
-): NotebookVariable[] | undefined => {
-  const isRemoved = (variable: NotebookVariable) =>
-    removed.some(
-      ({ name, value }) => name === variable.name && value === variable.value,
-    )
-  return existing?.some(isRemoved)
-    ? existing.filter((variable) => !isRemoved(variable))
-    : existing
-}
-
 // Where a cell sits in the document, kept so the cell can return to the same
 // place. The cell keeps its id and run history but not its rows: those stay in
 // the stored snapshot and load again on return.

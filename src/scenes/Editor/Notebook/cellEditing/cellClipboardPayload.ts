@@ -1,11 +1,6 @@
-import type {
-  NotebookCell,
-  NotebookSettings,
-  NotebookVariable,
-} from "../../../../store/notebook"
+import type { NotebookCell, NotebookSettings } from "../../../../store/notebook"
 import type { PastedCell } from "../../../../utils/notebooks/notebookController"
 import type { RunStatus } from "../../../../utils/ai/runStatus"
-import { isValidVariableName, normalizeVariables } from "../declareUtils"
 import { hasRunMarker } from "../resultHydration/cellResultHydration"
 import { carriedRunError, carriedRunStatus } from "../runHistory"
 import {
@@ -20,30 +15,6 @@ const PAYLOAD_VERSION = 1
 
 export type CellClipboardPayload = {
   cells: PastedCell[]
-  variables: NotebookVariable[]
-}
-
-const referencesVariable = (text: string, name: string): boolean =>
-  new RegExp(`@${name}(?![a-zA-Z0-9\\u0080-\\uFFFF_])`).test(text)
-
-// Declaration order matters, as a variable can reference an earlier one.
-export const collectReferencedVariables = (
-  texts: string[],
-  variables: NotebookVariable[],
-): NotebookVariable[] => {
-  const declared = variables.filter(({ name }) => isValidVariableName(name))
-  const referenced = new Set<NotebookVariable>()
-  let pendingTexts = texts
-  while (pendingTexts.length > 0) {
-    const found = declared.filter(
-      (variable) =>
-        !referenced.has(variable) &&
-        pendingTexts.some((text) => referencesVariable(text, variable.name)),
-    )
-    found.forEach((variable) => referenced.add(variable))
-    pendingTexts = found.map((variable) => variable.value)
-  }
-  return declared.filter((variable) => referenced.has(variable))
 }
 
 // The run history stays, as in a page reload: it tells the paste to fetch
@@ -68,15 +39,11 @@ export const buildCellClipboardPayload = (
     settings.layoutMode === "grid"
       ? settings.layout?.find((item) => item.i === cellId)?.w
       : undefined
-  const sqlTexts = cells
-    .filter((cell) => cell.type !== "markdown")
-    .map((cell) => cell.value)
   return {
     cells: cells.map((cell) => ({
       cell: toCopiedCell(cell),
       gridWidth: gridWidthOf(cell.id),
     })),
-    variables: collectReferencedVariables(sqlTexts, settings.variables ?? []),
   }
 }
 
@@ -86,7 +53,7 @@ export const serializeCellClipboardPayload = (
   JSON.stringify({
     format: PAYLOAD_FORMAT,
     version: PAYLOAD_VERSION,
-    ...payload,
+    cells: payload.cells,
   })
 
 export const cellClipboardPlainText = (payload: CellClipboardPayload): string =>
@@ -133,18 +100,12 @@ export const parseCellClipboardPayload = (
 ): CellClipboardPayload | null => {
   const parsed = parseJson(raw)
   if (typeof parsed !== "object" || parsed === null) return null
-  const { format, version, cells, variables } = parsed as Record<
-    string,
-    unknown
-  >
+  const { format, version, cells } = parsed as Record<string, unknown>
   if (format !== PAYLOAD_FORMAT || version !== PAYLOAD_VERSION) return null
   if (!Array.isArray(cells) || cells.length === 0) return null
   const pastedCells = cells.map(parsePastedCell)
   if (pastedCells.some((cell) => cell === null)) return null
   return {
     cells: pastedCells as PastedCell[],
-    variables: normalizeVariables(variables).filter(({ name }) =>
-      isValidVariableName(name),
-    ),
   }
 }

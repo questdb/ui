@@ -40,24 +40,20 @@ const createNotebook = (cells: NotebookCell[], settings: NotebookSettings) => {
   }
   const deps = () => ({
     cells: parts.cells,
-    variables: parts.settings.variables ?? [],
-    detach: (cellIds: string[], variables: NotebookSettings["variables"]) =>
+    detach: (cellIds: string[]) =>
       silently(() => {
         const out = detachCellsTransition(parts, BUFFER_ID, {
           cellIds,
-          variables: variables ?? [],
         })
         parts = out.parts
         return out.result
       }),
     attach: (
       placements: Parameters<typeof attachCellsTransition>[2]["placements"],
-      variables: NotebookSettings["variables"],
     ) =>
       silently(() => {
         const out = attachCellsTransition(parts, BUFFER_ID, {
           placements,
-          variables: variables ?? [],
         })
         parts = out.parts
         return out.result
@@ -92,14 +88,13 @@ const createNotebook = (cells: NotebookCell[], settings: NotebookSettings) => {
     parts: () => parts,
     undo: () => stepUndoHistory(BUFFER_ID, "undo", deps()),
     redo: () => stepUndoHistory(BUFFER_ID, "redo", deps()),
-    removeWithoutHistory: (cellId: string) => deps().detach([cellId], []),
+    removeWithoutHistory: (cellId: string) => deps().detach([cellId]),
     deleteCell: (cellId: string) => {
-      const placements = deps().detach([cellId], [])
+      const placements = deps().detach([cellId])
       if (placements) {
         recordUndoEntry(BUFFER_ID, {
           change: "remove",
           placements,
-          variables: [],
         })
       }
     },
@@ -145,9 +140,8 @@ describe("stepUndoHistory", () => {
     expect(idsOf(notebook.parts())).toEqual(["a", "c"])
   })
 
-  it("takes away the variables a paste added, unless a cell still uses one", () => {
-    // Given a paste that added @from, @days and @start, and a cell that uses
-    // @start, whose value uses @days
+  it("leaves variables unchanged when undoing and redoing a paste", () => {
+    // Given destination variables used by existing and pasted cells
     const variables = [
       { name: "days", value: "7" },
       { name: "start", value: "dateadd('d', -@days, now())" },
@@ -162,21 +156,20 @@ describe("stepUndoHistory", () => {
       placements: cellPlacementsOf(notebook.parts().cells, undefined, [
         "pasted",
       ]),
-      variables,
     })
 
     // When the paste is undone
     notebook.undo()
 
-    // Then only @from leaves with the pasted cell
+    // Then only the pasted cell leaves; the settings keep their identity
     expect(idsOf(notebook.parts())).toEqual(["a"])
-    expect(notebook.parts().settings.variables).toEqual(variables.slice(0, 2))
+    expect(notebook.parts().settings.variables).toBe(variables)
 
     // When it is redone
     notebook.redo()
 
-    // Then @from comes back with the cell
-    expect(notebook.parts().settings.variables).toEqual(variables)
+    // Then the cell returns without changing the variables
+    expect(notebook.parts().settings.variables).toBe(variables)
   })
 
   it("drops a change that no longer fits the notebook", () => {
@@ -190,7 +183,6 @@ describe("stepUndoHistory", () => {
       placements: cellPlacementsOf(notebook.parts().cells, undefined, [
         "added",
       ]),
-      variables: [],
     })
     notebook.removeWithoutHistory("added")
 

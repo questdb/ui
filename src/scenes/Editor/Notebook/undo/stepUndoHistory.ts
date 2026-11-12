@@ -1,5 +1,4 @@
-import type { NotebookCell, NotebookVariable } from "../../../../store/notebook"
-import { collectReferencedVariables } from "../cellEditing/cellClipboardPayload"
+import type { NotebookCell } from "../../../../store/notebook"
 import { neighbourOfRemovedCells, type CellPlacement } from "../notebookUtils"
 import type { Arrangement } from "./cellArrangement"
 import {
@@ -20,34 +19,9 @@ export type HistoryStep =
 
 export type HistoryStepDeps = {
   cells: NotebookCell[]
-  variables: NotebookVariable[]
-  detach: (
-    cellIds: string[],
-    variables: NotebookVariable[],
-  ) => CellPlacement[] | undefined
-  attach: (
-    placements: CellPlacement[],
-    variables: NotebookVariable[],
-  ) => string[] | undefined
+  detach: (cellIds: string[]) => CellPlacement[] | undefined
+  attach: (placements: CellPlacement[]) => string[] | undefined
   arrange: (arrangement: Arrangement) => boolean
-}
-
-// Variables an insert brought in leave with its cells, unless a remaining
-// cell still uses them, directly or through another variable's value.
-const variablesOnlyUsedBy = (
-  { cells, variables: notebookVariables }: HistoryStepDeps,
-  added: NotebookVariable[],
-  cellIds: string[],
-): NotebookVariable[] => {
-  const remainingSql = cells
-    .filter((cell) => !cellIds.includes(cell.id) && cell.type !== "markdown")
-    .map((cell) => cell.value)
-  const stillUsed = new Set(
-    collectReferencedVariables(remainingSql, notebookVariables).map(
-      ({ name }) => name,
-    ),
-  )
-  return added.filter(({ name }) => !stillUsed.has(name))
 }
 
 // Undo does the opposite of the entry's change and redo does it again. A
@@ -79,16 +53,15 @@ export const stepUndoHistory = (
   const removes = (entry.change === "insert") === (from === "undo")
   if (removes) {
     const neighbourId = neighbourOfRemovedCells(cells, cellIds)
-    const placements = detach(
-      cellIds,
-      variablesOnlyUsedBy(deps, entry.variables, cellIds),
-    )
-    settle(placements && { ...entry, placements })
+    const placements = detach(cellIds)
+    // Keep the entry identity used by the Undo toast through a round trip.
+    if (placements) entry.placements = placements
+    settle(placements ? entry : undefined)
     return placements
       ? { kind: "removed", cellIds, neighbourId }
       : { kind: "stale" }
   }
-  const attached = attach(entry.placements, entry.variables)
+  const attached = attach(entry.placements)
   settle(attached && entry)
   return attached ? { kind: "inserted", cellIds } : { kind: "stale" }
 }

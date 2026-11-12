@@ -54,7 +54,6 @@ import {
   notebookErrorHint,
 } from "../notebooks/notebookToolMessages"
 import { captureReadSeq } from "../notebooks/notebookFreshness"
-import { clearNotebookUndoHistory } from "../../scenes/Editor/Notebook/undo/notebookUndoHistory"
 
 type ToolResult = { content: string; is_error?: boolean }
 
@@ -503,16 +502,16 @@ export const dispatchApplyNotebookState = async (
     committed = await withBoundNotebook(
       buffer_id,
       (ctrl) =>
-        ctrl.mutateWithResultStatus((parts, resultStatusOf) =>
-          applyNotebookStateTransition(
+        ctrl.mutateWithResultStatus((parts, resultStatusOf) => ({
+          ...applyNotebookStateTransition(
             parts,
             withHighlightConfigs(parts.cells),
             resultStatusOf,
           ),
-        ),
+          clearUndoHistory: true,
+        })),
       signal,
     )
-    clearNotebookUndoHistory(buffer_id)
     const out = committed
     // New-cell ids arrive in request order via `applied.added`.
     const resolved: ResolvedRun[] = []

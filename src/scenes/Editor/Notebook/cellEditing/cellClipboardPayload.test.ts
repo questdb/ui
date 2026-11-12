@@ -105,7 +105,7 @@ describe("cell clipboard payload", () => {
     expect(fromList?.cells[0].gridWidth).toBeUndefined()
   })
 
-  it("carries the variables the SQL needs, in declaration order", () => {
+  it("leaves variable definitions and values out of the clipboard", () => {
     // Given a cell that uses @to, and @to depends on @from
     const cell = sqlCell({ value: "SELECT * FROM trades WHERE ts < @to" })
     const settings: NotebookSettings = {
@@ -120,11 +120,14 @@ describe("cell clipboard payload", () => {
     // When the cell goes through the clipboard
     const payload = roundTrip([cell], settings)
 
-    // Then both variables travel in their original order, and nothing else
-    expect(payload?.variables).toEqual([
-      { name: "from", value: "now()" },
-      { name: "to", value: "@from + 1d" },
-    ])
+    // Then only the cell travels, with its references unchanged
+    expect(payload).not.toHaveProperty("variables")
+    expect(payload?.cells[0].cell.value).toBe(cell.value)
+    const serialized = serializeCellClipboardPayload(
+      buildCellClipboardPayload([cell], settings),
+    )
+    expect(serialized).not.toContain("now()")
+    expect(serialized).not.toContain("variables")
   })
 
   it("does not take variables for a markdown cell", () => {
@@ -136,7 +139,21 @@ describe("cell clipboard payload", () => {
     const payload = roundTrip([cell], settings)
 
     // Then no variable travels with it
-    expect(payload?.variables).toEqual([])
+    expect(payload).not.toHaveProperty("variables")
+  })
+
+  it("ignores variables in an older clipboard payload", () => {
+    const serialized = serializeCellClipboardPayload(
+      buildCellClipboardPayload([sqlCell()], {}),
+    )
+    const payload = parseCellClipboardPayload(
+      JSON.stringify({
+        ...JSON.parse(serialized),
+        variables: [{ name: "bad", value: "(SELECT * FROM missing_table)" }],
+      }),
+    )
+    expect(payload?.cells).toHaveLength(1)
+    expect(payload).not.toHaveProperty("variables")
   })
 
   it.each([

@@ -56,7 +56,11 @@ import {
   countAutoRefreshOverrides,
   generateId,
 } from "./notebookUtils"
-import { isCellHeldByUndo, recordUndoEntry } from "./undo/notebookUndoHistory"
+import {
+  clearNotebookUndoHistory,
+  isCellHeldByUndo,
+  recordUndoEntry,
+} from "./undo/notebookUndoHistory"
 import { stepUndoHistory, type HistoryStep } from "./undo/stepUndoHistory"
 import type { Arrangement } from "./undo/cellArrangement"
 import {
@@ -152,11 +156,7 @@ export type NotebookActions = {
     options?: ArrangeOptions,
   ) => void
   duplicateCell: (cellId: string) => Promise<string>
-  pasteCells: (
-    afterCellId: string | undefined,
-    cells: PastedCell[],
-    variables: NotebookVariable[],
-  ) => string[]
+  pasteCells: (afterCellId: string | undefined, cells: PastedCell[]) => string[]
   undo: () => HistoryStep
   redo: () => HistoryStep
   runCell: (
@@ -564,6 +564,9 @@ export const NotebookProvider: React.FC<{
         setMaximizedCellIdState(parts.maximizedCellId)
         setFocusedCellState(parts.focusedCellId)
       })
+      // Clear only the history preceding an agent edit. Later gestures must
+      // survive while its storage write is pending.
+      if (out.clearUndoHistory) clearNotebookUndoHistory(bufferId)
       const persisted = persistImmediately(parts.cells, true)
       // A deleted cell's in-flight run is discarded, not cancelled: superseding
       // it makes a late completion report the deletion instead of a cleared
@@ -612,7 +615,7 @@ export const NotebookProvider: React.FC<{
     [commitTransition, warnPersistFailure],
   )
 
-  // The agent route reports success only once the document is durable, and a
+  // The controller reports success only once the document is durable, and a
   // failed write as a typed error the agent can act on.
   const applyTransitionPersisted = useCallback(
     <T,>(
@@ -644,7 +647,7 @@ export const NotebookProvider: React.FC<{
   // A preview is never saved, so it records nothing: its entries would
   // outlive it and act on the restored notebook.
   const recordInsertedCells = useCallback(
-    (cellIds: string[], variables: NotebookVariable[]) => {
+    (cellIds: string[]) => {
       if (preview || cellIds.length === 0) return
       recordUndoEntry(bufferId, {
         change: "insert",
@@ -653,20 +656,16 @@ export const NotebookProvider: React.FC<{
           settingsRef.current.layout,
           cellIds,
         ),
-        variables,
       })
     },
     [bufferId, preview, store.cellsRef],
   )
 
   const detachCells = useCallback(
-    (
-      cellIds: string[],
-      variables: NotebookVariable[],
-    ): CellPlacement[] | undefined => {
+    (cellIds: string[]): CellPlacement[] | undefined => {
       const placements = silently(() =>
         applyTransition((parts) =>
-          detachCellsTransition(parts, bufferId, { cellIds, variables }),
+          detachCellsTransition(parts, bufferId, { cellIds }),
         ),
       )
       if (!placements) return undefined
@@ -680,13 +679,10 @@ export const NotebookProvider: React.FC<{
   )
 
   const attachCells = useCallback(
-    (
-      placements: CellPlacement[],
-      variables: NotebookVariable[],
-    ): string[] | undefined =>
+    (placements: CellPlacement[]): string[] | undefined =>
       silently(() =>
         applyTransition((parts) =>
-          attachCellsTransition(parts, bufferId, { placements, variables }),
+          attachCellsTransition(parts, bufferId, { placements }),
         ),
       ),
     [applyTransition, bufferId],
@@ -725,7 +721,6 @@ export const NotebookProvider: React.FC<{
         ? { kind: "empty" }
         : stepUndoHistory(bufferId, from, {
             cells: store.cellsRef.current,
-            variables: settingsRef.current.variables ?? [],
             detach: detachCells,
             attach: attachCells,
             arrange: applyArrangement,
@@ -753,7 +748,7 @@ export const NotebookProvider: React.FC<{
             }),
           ),
         ) ?? ""
-      if (cellId) recordInsertedCells([cellId], [])
+      if (cellId) recordInsertedCells([cellId])
       return cellId
     },
     [applyTransition, bufferId, recordInsertedCells],
@@ -949,12 +944,11 @@ export const NotebookProvider: React.FC<{
   // the history lets them go when it drops the entry.
   const deleteCell = useCallback(
     (cellId: string) => {
-      const placements = detachCells([cellId], [])
+      const placements = detachCells([cellId])
       if (placements && !preview) {
         recordUndoEntry(bufferId, {
           change: "remove",
           placements,
-          variables: [],
         })
       }
     },
@@ -1006,7 +1000,7 @@ export const NotebookProvider: React.FC<{
         return ""
       }
       if (snapshotsCopied === 0) resultHydration.noteMissing(newId)
-      recordInsertedCells([applied], [])
+      recordInsertedCells([applied])
       return applied
     },
     [
@@ -1020,14 +1014,7 @@ export const NotebookProvider: React.FC<{
   )
 
   const pasteCells = useCallback(
-    (
-      afterCellId: string | undefined,
-      cells: PastedCell[],
-      variables: NotebookVariable[],
-    ): string[] => {
-      const namesBefore = new Set(
-        (settingsRef.current.variables ?? []).map(({ name }) => name),
-      )
+    (afterCellId: string | undefined, cells: PastedCell[]): string[] => {
       const cellIds =
         silently(() =>
           applyTransition((parts) =>
@@ -1037,14 +1024,10 @@ export const NotebookProvider: React.FC<{
                 cell: { ...cell, id: generateId() },
                 gridWidth,
               })),
-              variables,
             }),
           ),
         ) ?? []
-      const addedVariables = (settingsRef.current.variables ?? []).filter(
-        ({ name }) => !namesBefore.has(name),
-      )
-      recordInsertedCells(cellIds, addedVariables)
+      recordInsertedCells(cellIds)
       return cellIds
     },
     [applyTransition, bufferId, recordInsertedCells],

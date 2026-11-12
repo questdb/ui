@@ -5,7 +5,6 @@ import {
   type CellPaneView,
   type CellType,
   type NotebookCell,
-  type NotebookVariable,
 } from "../../../store/notebook"
 import { NotebookToolError } from "../notebookToolError"
 import type { ViewParts } from "../notebookDexieView"
@@ -23,9 +22,7 @@ import {
   insertCellsAfter,
   insertCellsLayout,
   insertPlacedCells,
-  mergeMissingVariables,
   reindexCells,
-  removeExactVariables,
   type CellPlacement,
   nextGridSeedPosition,
   removeCell,
@@ -80,6 +77,8 @@ import type { Arrangement } from "../../../scenes/Editor/Notebook/undo/cellArran
 //                            each shell checks the snapshots of its SQL edits
 //                            after the commit and passes the cells whose new
 //                            SQL kept none of their statements.
+//   - `clearUndoHistory` — an agent edit invalidates the earlier user history
+//                            at commit, before any later user gesture.
 //
 // Identity contract: untouched cells keep object identity (the composed
 // notebookUtils helpers guarantee it), and `parts.settings` is returned by
@@ -94,6 +93,7 @@ export type NotebookTransitionResult<T = void> = {
   cancelRuns?: { cellIds: string[]; reason: RunCancelReason }
   deleteSnapshots?: { cellIds: string[] }
   withSnapshotsCleared?: (cellIds: string[]) => T
+  clearUndoHistory?: boolean
 }
 
 const requireCellCapacity = (cells: NotebookCell[], bufferId: number): void => {
@@ -274,7 +274,6 @@ export const pasteCellsTransition = (
   args: {
     afterCellId?: string
     cells: PastedCell[]
-    variables: NotebookVariable[]
   },
 ): NotebookTransitionResult<string[]> => {
   if (args.afterCellId !== undefined) {
@@ -294,10 +293,6 @@ export const pasteCellsTransition = (
   insertedCells
     .filter((cell) => cell.type !== "markdown")
     .forEach((cell) => requireCellWithinLineLimit(cell.value))
-  const variables = mergeMissingVariables(
-    parts.settings.variables,
-    args.variables,
-  )
   const layout =
     parts.settings.layoutMode === "grid"
       ? insertCellsLayout(
@@ -307,9 +302,9 @@ export const pasteCellsTransition = (
         )
       : parts.settings.layout
   const settings =
-    variables === parts.settings.variables && layout === parts.settings.layout
+    layout === parts.settings.layout
       ? parts.settings
-      : { ...parts.settings, variables, layout }
+      : { ...parts.settings, layout }
   return {
     parts: {
       ...parts,
@@ -323,12 +318,11 @@ export const pasteCellsTransition = (
 }
 
 // Removes cells so an undo can return them: their runs stop, but their stored
-// results stay, unlike deleteCellTransition. Variables that came in with the
-// cells can leave with them.
+// results stay, unlike deleteCellTransition.
 export const detachCellsTransition = (
   parts: ViewParts,
   bufferId: number,
-  args: { cellIds: string[]; variables: NotebookVariable[] },
+  args: { cellIds: string[] },
 ): NotebookTransitionResult<CellPlacement[]> => {
   args.cellIds.forEach((cellId) => requireCellIn(parts.cells, cellId, bufferId))
   if (parts.cells.length - args.cellIds.length < 1) {
@@ -338,18 +332,10 @@ export const detachCellsTransition = (
     )
   }
   const detached = new Set(args.cellIds)
-  const variables = removeExactVariables(
-    parts.settings.variables,
-    args.variables,
-  )
   return {
     parts: {
       ...parts,
       cells: reindexCells(parts.cells.filter((cell) => !detached.has(cell.id))),
-      settings:
-        variables === parts.settings.variables
-          ? parts.settings
-          : { ...parts.settings, variables },
       maximizedCellId:
         parts.maximizedCellId && detached.has(parts.maximizedCellId)
           ? null
@@ -371,7 +357,7 @@ export const detachCellsTransition = (
 export const attachCellsTransition = (
   parts: ViewParts,
   bufferId: number,
-  args: { placements: CellPlacement[]; variables: NotebookVariable[] },
+  args: { placements: CellPlacement[] },
 ): NotebookTransitionResult<string[]> => {
   if (parts.cells.length + args.placements.length > MAX_NOTEBOOK_CELLS) {
     throw new NotebookToolError(
@@ -396,14 +382,8 @@ export const attachCellsTransition = (
           savedLayout,
         )
       : savedLayout
-  const variables = mergeMissingVariables(
-    parts.settings.variables,
-    args.variables,
-  )
   const settings =
-    layout === savedLayout && variables === parts.settings.variables
-      ? parts.settings
-      : { ...parts.settings, layout, variables }
+    layout === savedLayout ? parts.settings : { ...parts.settings, layout }
   const cellIds = args.placements.map(({ cell }) => cell.id)
   return {
     parts: {

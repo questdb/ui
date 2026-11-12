@@ -54,6 +54,7 @@ import {
 } from "../notebookHeadlessRun"
 import type { RunCellGate } from "../../tools/permissions"
 import type { NotebookTransitionResult } from "./notebookTransitions"
+import { clearNotebookUndoHistory } from "../../../scenes/Editor/Notebook/undo/notebookUndoHistory"
 
 // The two NotebookController implementations, side by side. Both expose the same
 // tiny interface — `mutate` runs a transition, `readView` reads the document,
@@ -416,6 +417,7 @@ export const createDexieNotebookController = (
         if (commit === "archived") {
           throw notebookArchivedMidEdit(bufferId)
         }
+        if (out.clearUndoHistory) clearNotebookUndoHistory(bufferId)
         // Invalidate only after the document commit succeeds. Because this is
         // still inside the per-buffer queue, a completed headless request
         // cannot interleave its result commit between this mutation and the

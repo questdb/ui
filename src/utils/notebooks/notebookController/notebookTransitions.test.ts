@@ -964,7 +964,6 @@ describe("pasteCellsTransition", () => {
     const out = pasteCellsTransition(parts, BUFFER_ID, {
       afterCellId: "a",
       cells: [pasted("p1"), pasted("p2")],
-      variables: [],
     })
 
     // Then they sit between "a" and "b" in order, and every cell is visible
@@ -974,26 +973,15 @@ describe("pasteCellsTransition", () => {
     expect(out.result).toEqual(["p1", "p2"])
   })
 
-  it("adds only the variables the notebook does not declare", () => {
-    // Given a notebook that already declares @from with its own value
+  it("leaves the destination's variables and settings unchanged", () => {
     const parts = partsOf([cell("a")], {
       settings: { variables: [{ name: "from", value: "'2024-01-01'" }] },
     })
-
-    // When a cell that needs @from and @to is pasted
     const out = pasteCellsTransition(parts, BUFFER_ID, {
-      cells: [pasted("p1")],
-      variables: [
-        { name: "from", value: "now()" },
-        { name: "to", value: "@from + 1d" },
-      ],
+      cells: [{ cell: cell("p1", "SELECT @from, @missing") }],
     })
-
-    // Then the existing value wins and the missing variable is appended
-    expect(out.parts.settings.variables).toEqual([
-      { name: "from", value: "'2024-01-01'" },
-      { name: "to", value: "@from + 1d" },
-    ])
+    expect(out.parts.settings).toBe(parts.settings)
+    expect(out.parts.cells[1].value).toBe("SELECT @from, @missing")
   })
 
   // The grid renders the merged layout after vertical compaction.
@@ -1029,7 +1017,6 @@ describe("pasteCellsTransition", () => {
     const out = pasteCellsTransition(parts, BUFFER_ID, {
       afterCellId: "t",
       cells: [pasted("p1", 8)],
-      variables: [],
     })
 
     // Then the target keeps its place and the pasted cell renders below it
@@ -1057,7 +1044,6 @@ describe("pasteCellsTransition", () => {
     // When a cell copied at width 6 is pasted with no cell selected
     const out = pasteCellsTransition(parts, BUFFER_ID, {
       cells: [pasted("p1", 6)],
-      variables: [],
     })
 
     // Then it goes below the lowest cell, not below the last one in the list
@@ -1081,7 +1067,6 @@ describe("pasteCellsTransition", () => {
     const out = pasteCellsTransition(parts, BUFFER_ID, {
       afterCellId: "a",
       cells: [pasted("p1", 6)],
-      variables: [],
     })
 
     // Then no layout is written, so the default layout keeps the order a, p1, b
@@ -1099,7 +1084,6 @@ describe("pasteCellsTransition", () => {
     const paste = () =>
       pasteCellsTransition(partsOf(cells), BUFFER_ID, {
         cells: [pasted("p1"), pasted("p2")],
-        variables: [],
       })
 
     // Then the notebook refuses them
@@ -1128,11 +1112,9 @@ describe("detachCellsTransition and attachCellsTransition", () => {
     // When "b" is detached and attached back
     const detached = detachCellsTransition(parts, BUFFER_ID, {
       cellIds: ["b"],
-      variables: [],
     })
     const attached = attachCellsTransition(detached.parts, BUFFER_ID, {
       placements: detached.result,
-      variables: [],
     })
 
     // Then its run stops but its stored results stay, and it returns in
@@ -1163,17 +1145,15 @@ describe("detachCellsTransition and attachCellsTransition", () => {
     const detached = detachCellsTransition(
       partsOf([cell("a"), cell("b"), cell("c"), cell("d")]),
       BUFFER_ID,
-      { cellIds: ["c"], variables: [] },
+      { cellIds: ["c"] },
     )
     const withoutB = detachCellsTransition(detached.parts, BUFFER_ID, {
       cellIds: ["b"],
-      variables: [],
     })
 
     // When "c" is attached back
     const attached = attachCellsTransition(withoutB.parts, BUFFER_ID, {
       placements: detached.result,
-      variables: [],
     })
 
     // Then it takes its old index in the shorter list
@@ -1184,7 +1164,6 @@ describe("detachCellsTransition and attachCellsTransition", () => {
     expect(() =>
       detachCellsTransition(partsOf([cell("a")]), BUFFER_ID, {
         cellIds: ["a"],
-        variables: [],
       }),
     ).toThrow(NotebookToolError)
   })

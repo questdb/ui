@@ -106,7 +106,6 @@ import {
   copyNotebookSnapshots,
   deleteCellSnapshot,
 } from "../../store/notebookResults"
-import { clearNotebookUndoHistory } from "../../scenes/Editor/Notebook/undo/notebookUndoHistory"
 
 // Runs a transition on the bound notebook (live or passive) — the one path
 // every mutation takes. The transition validates and throws typed errors
@@ -126,33 +125,22 @@ const requireUnchangedSince = (
   }
 }
 
-// An agent edit can break what the user's undo history expects to find, so
-// the history of the notebook goes once the edit is in.
-const clearUndoHistoryAfter = async <T>(
-  bufferId: number,
-  edit: Promise<T>,
-): Promise<T> => {
-  const result = await edit
-  clearNotebookUndoHistory(bufferId)
-  return result
-}
-
 const runTransition = <T>(
   bufferId: number,
   transition: (parts: ViewParts) => NotebookTransitionResult<T>,
   signal?: AbortSignal,
   expectedActionSeq?: number,
 ): Promise<T> =>
-  clearUndoHistoryAfter(
+  withBoundNotebook(
     bufferId,
-    withBoundNotebook(
-      bufferId,
-      (ctrl) => {
-        requireUnchangedSince(bufferId, expectedActionSeq)
-        return ctrl.mutate(transition)
-      },
-      signal,
-    ),
+    (ctrl) => {
+      requireUnchangedSince(bufferId, expectedActionSeq)
+      return ctrl.mutate((parts) => ({
+        ...transition(parts),
+        clearUndoHistory: true,
+      }))
+    },
+    signal,
   )
 
 const runTransitionWithResultStatus = <T>(
@@ -163,13 +151,14 @@ const runTransitionWithResultStatus = <T>(
   ) => NotebookTransitionResult<T>,
   signal?: AbortSignal,
 ): Promise<T> =>
-  clearUndoHistoryAfter(
+  withBoundNotebook(
     bufferId,
-    withBoundNotebook(
-      bufferId,
-      (ctrl) => ctrl.mutateWithResultStatus(transition),
-      signal,
-    ),
+    (ctrl) =>
+      ctrl.mutateWithResultStatus((parts, resultStatusOf) => ({
+        ...transition(parts, resultStatusOf),
+        clearUndoHistory: true,
+      })),
+    signal,
   )
 
 // Reads the bound notebook's cells without moving the user's tab.

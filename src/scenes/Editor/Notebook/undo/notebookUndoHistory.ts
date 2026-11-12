@@ -1,4 +1,3 @@
-import type { NotebookVariable } from "../../../../store/notebook"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { removeNotebookCellLayouts } from "../notebookColumnLayoutStore"
 import type { CellPlacement } from "../notebookUtils"
@@ -15,12 +14,10 @@ export const MAX_RETAINED_CELLS = 20
 export const MERGE_WINDOW_MS = 1000
 
 // One user change to the cell list. `change` is what the change did: undo
-// does the opposite, redo does it again. An insert also records the
-// variables it added, so undoing it can take them away.
+// does the opposite, redo does it again.
 export type CellListEntry = {
   change: "insert" | "remove"
   placements: CellPlacement[]
-  variables: NotebookVariable[]
 }
 
 // A move or resize: undo puts back `before`, redo puts back `after`.

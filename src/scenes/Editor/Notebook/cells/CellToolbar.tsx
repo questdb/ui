@@ -262,7 +262,23 @@ export const CellToolbar: React.FC<Props> = ({
             </DropdownMenu.Trigger>
           </Tooltip>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" sideOffset={4}>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={4}
+              onCloseAutoFocus={(event) => {
+                // Paste, duplicate and undo can focus another cell before
+                // Radix's deferred trigger restore. Keep that selection.
+                const focusedCell = document.activeElement?.closest(
+                  "[data-notebook-cell]",
+                )
+                if (
+                  focusedCell &&
+                  focusedCell.getAttribute("data-cell-id") !== cellId
+                ) {
+                  event.preventDefault()
+                }
+              }}
+            >
               {showViewTable &&
                 (isNoneView ? (
                   <DropdownMenu.Item

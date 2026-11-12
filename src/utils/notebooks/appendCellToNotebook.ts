@@ -35,6 +35,6 @@ export const appendCellToNotebook = async (
         }
       }),
   )
-  recordUndoEntry(bufferId, { change: "insert", placements, variables: [] })
+  recordUndoEntry(bufferId, { change: "insert", placements })
   return cellId
 }

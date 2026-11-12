@@ -23,6 +23,7 @@ import { peekUndoEntry } from "../undo/notebookUndoHistory"
 import { neighbourOfRemovedCells, resolveCellView } from "../notebookUtils"
 import type { Arrangement } from "../undo/cellArrangement"
 import { writeClipboardData } from "./systemClipboard"
+import { findMissingVariables } from "./missingVariables"
 
 export type CellEditMethod = "shortcut" | "menu" | "button" | "toast"
 
@@ -328,22 +329,43 @@ export const useCellEditActions = () => {
         warnCellLimit()
         return
       }
-      const pastedIds = pasteCellsAt(
-        afterCellId,
-        payload.cells,
-        payload.variables,
-      )
+      const pastedIds = pasteCellsAt(afterCellId, payload.cells)
       if (pastedIds.length === 0) return
       void trackEvent(ConsoleEvent.NOTEBOOK_CELL_PASTE, {
         count: pastedIds.length,
         method,
       })
       announceInserted(pastedIds)
-      pastedIds
-        .filter((_, index) => shouldRunAfterPaste(payload.cells[index].cell))
-        .forEach(fetchPastedCell)
+      const availableNames = (getSettings().variables ?? []).map(
+        ({ name }) => name,
+      )
+      const missing = new Set<string>()
+      pastedIds.forEach((cellId, index) => {
+        const cell = payload.cells[index].cell
+        const missingNames =
+          cell.type === "markdown"
+            ? []
+            : findMissingVariables(cell.value, availableNames)
+        missingNames.forEach((name) => missing.add(name))
+        if (missingNames.length === 0 && shouldRunAfterPaste(cell)) {
+          fetchPastedCell(cellId)
+        }
+      })
+      if (missing.size > 0) {
+        const names = [...missing].map((name) => `@${name}`).join(", ")
+        toast.warning(
+          `Pasted cells use variables this notebook does not declare: ${names}. Cells with missing variables were not run.`,
+          { toastId: "notebook-cell-paste-missing-variables" },
+        )
+      }
     },
-    [getCellsSnapshot, pasteCellsAt, announceInserted, fetchPastedCell],
+    [
+      getCellsSnapshot,
+      getSettings,
+      pasteCellsAt,
+      announceInserted,
+      fetchPastedCell,
+    ],
   )
 
   // A shortcut on one cell, from the notebook or from the cell's open menu.

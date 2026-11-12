@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react"
-import { act, waitFor } from "@testing-library/react"
+import { act, fireEvent, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../test/component"
 import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
@@ -19,6 +19,17 @@ import {
   peekUndoEntry,
   recordUndoEntry,
 } from "./undo/notebookUndoHistory"
+import { useCellEditActions } from "./cellEditing/useCellEditActions"
+import { dismissUndoToast } from "./cellEditing/undoToast"
+import { dispatchTool } from "../../../utils/tools/dispatch"
+import { appendCellToNotebook } from "../../../utils/notebooks/appendCellToNotebook"
+
+const toast = vi.hoisted(() => ({
+  success: vi.fn((_content: React.ReactNode) => "undo-toast"),
+  warning: vi.fn(),
+  dismiss: vi.fn(),
+}))
+vi.mock("../../../components/Toast", () => ({ toast }))
 
 // The provider's own wiring of delete and undo, with storage replaced: the
 // snapshot index, the document writes and the column layouts.
@@ -27,6 +38,7 @@ const storage = vi.hoisted(() => ({
   snapshots: new Map<string, NotebookResultSnapshot>(),
   deleteCellSnapshot: vi.fn(() => Promise.resolve()),
   removeNotebookCellLayouts: vi.fn(),
+  persisted: undefined as Promise<void> | undefined,
 }))
 
 vi.mock("../../../store/notebookResults", () => ({
@@ -41,7 +53,8 @@ vi.mock("../../../store/notebookResults", () => ({
 vi.mock("./useNotebookPersistence", () => ({
   useNotebookPersistence: () => ({
     persistCells: () => Promise.resolve(),
-    persistImmediately: () => Promise.resolve(),
+    persistImmediately: () =>
+      storage.persisted === undefined ? Promise.resolve() : storage.persisted,
     persistDebounced: () => undefined,
   }),
 }))
@@ -64,10 +77,12 @@ const probe: {
   cells?: NotebookCell[]
   hydration?: ReturnType<typeof useCellResultHydrationEngine>
   virtualization?: ReturnType<typeof useCellVirtualizationEngine>
+  edits?: ReturnType<typeof useCellEditActions>
 } = {}
 
 const Probe = () => {
   probe.actions = useNotebookActions()
+  probe.edits = useCellEditActions()
   probe.cells = useNotebookState().cells
   probe.cellIds = probe.cells.map((c) => c.id)
   // Stand in for a cell entering the viewport, which loads its result.
@@ -97,6 +112,9 @@ const mountNotebook = (cells: NotebookCell[], preview = false) =>
   )
 
 beforeEach(() => {
+  dismissUndoToast(BUFFER_ID)
+  vi.clearAllMocks()
+  storage.persisted = undefined
   __resetNotebookUndoHistoryForTests()
   localStorage.clear()
   storage.snapshotCellIds = []
@@ -106,6 +124,119 @@ beforeEach(() => {
 })
 
 describe("NotebookProvider undo wiring", () => {
+  it("keeps earlier user history when the Query Picker appends a cell", async () => {
+    mountNotebook([cell("a"), cell("b"), cell("c")])
+    act(() => probe.actions?.deleteCell("b"))
+    const deletion = peekUndoEntry(BUFFER_ID)
+    let added!: string
+    await act(async () => {
+      added = await appendCellToNotebook(BUFFER_ID, "SELECT 42")
+    })
+    act(() => {
+      probe.actions?.undo()
+    })
+    expect(probe.cellIds).not.toContain(added)
+    expect(peekUndoEntry(BUFFER_ID)).toBe(deletion)
+    act(() => {
+      probe.actions?.undo()
+    })
+    expect(probe.cellIds).toEqual(["a", "b", "c"])
+  })
+
+  it("lets the delete toast undo its change after keyboard undo and redo", () => {
+    mountNotebook([cell("a"), cell("b"), cell("c")])
+    act(() => probe.edits?.deleteCell("b", "shortcut"))
+    const content = toast.success.mock.calls[0][0]
+    act(() => probe.edits?.undo("shortcut"))
+    act(() => probe.actions?.updateCell("b", { value: "SELECT 'edited'" }))
+    act(() => probe.edits?.redo("shortcut"))
+    const shown = renderComponent(<>{content}</>)
+    fireEvent.click(shown.getByText("Undo"))
+    expect(probe.cellIds).toEqual(["a", "b", "c"])
+    expect(probe.cells?.find((cell) => cell.id === "b")?.value).toBe(
+      "SELECT 'edited'",
+    )
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
+
+  it("refuses toast Undo when a different change is on top", () => {
+    mountNotebook([cell("a"), cell("b"), cell("c")])
+    act(() => probe.edits?.deleteCell("b", "shortcut"))
+    const content = toast.success.mock.calls[0][0]
+    act(() => {
+      probe.actions?.addCell()
+    })
+    const shown = renderComponent(<>{content}</>)
+    fireEvent.click(shown.getByText("Undo"))
+    expect(probe.cellIds).not.toContain("b")
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Cannot undo this change.",
+      expect.anything(),
+    )
+  })
+
+  it.each([
+    ["move_cell_down", { buffer_id: BUFFER_ID, cell_id: "a" }],
+    [
+      "apply_notebook_state",
+      {
+        buffer_id: BUFFER_ID,
+        cells: ["b", "a", "c"].map((id) => ({
+          id,
+          preserve_value: true,
+        })),
+      },
+    ],
+  ])(
+    "preserves a user delete made while %s is still saving",
+    async (tool, input) => {
+      // Empty SQL keeps the full-state tool's post-apply auto-run out of
+      // this persistence race, without requesting a result discard.
+      mountNotebook(["a", "b", "c"].map((id) => ({ ...cell(id), value: "" })))
+      act(() => {
+        probe.actions?.addCell()
+      })
+      let finishSave!: () => void
+      storage.persisted = new Promise<void>((resolve) => {
+        finishSave = resolve
+      })
+      let pending!: ReturnType<typeof dispatchTool>
+      await act(async () => {
+        pending = dispatchTool(
+          tool,
+          input,
+          {} as Parameters<typeof dispatchTool>[2],
+          () => undefined,
+          { grantSchemaAccess: true, read: true, write: true },
+          () => Promise.resolve({ query: "", columns: [], timestamp: 0 }),
+        )
+        await Promise.resolve()
+      })
+      expect(probe.cellIds?.slice(0, 3)).toEqual(["b", "a", "c"])
+      expect(peekUndoEntry(BUFFER_ID)).toBeUndefined()
+      act(() => probe.edits?.deleteCell("b", "shortcut"))
+      const userEntry = peekUndoEntry(BUFFER_ID)
+      const dismissed = toast.dismiss.mock.calls.length
+      storage.persisted = undefined
+      await act(async () => {
+        finishSave()
+        expect((await pending).is_error).toBeFalsy()
+      })
+      expect(peekUndoEntry(BUFFER_ID)).toBe(userEntry)
+      expect(toast.dismiss).toHaveBeenCalledTimes(dismissed)
+      expect(storage.deleteCellSnapshot).not.toHaveBeenCalledWith(
+        BUFFER_ID,
+        "b",
+      )
+      expect(storage.removeNotebookCellLayouts).not.toHaveBeenCalledWith(
+        BUFFER_ID,
+        "b",
+      )
+      act(() => probe.edits?.undo("shortcut"))
+      expect(probe.cellIds).toContain("b")
+    },
+  )
+
   it("brings a deleted cell back with the same id and its stored result", async () => {
     // Given a notebook whose middle cell has run and has stored rows
     const ran: NotebookCell = { ...cell("b"), lastRunStatus: "success" }
@@ -156,7 +287,6 @@ describe("NotebookProvider undo wiring", () => {
     recordUndoEntry(BUFFER_ID, {
       change: "remove",
       placements: [{ cell: cell("held"), index: 1, afterCellId: "a" }],
-      variables: [],
     })
     storage.snapshotCellIds = ["a", "held", "gone"]
 
@@ -206,7 +336,6 @@ describe("NotebookProvider undo wiring", () => {
     recordUndoEntry(BUFFER_ID, {
       change: "remove",
       placements: [{ cell: cell("b"), index: 1, afterCellId: "a" }],
-      variables: [],
     })
 
     // When the user undoes it
@@ -234,7 +363,6 @@ describe("NotebookProvider undo wiring", () => {
     recordUndoEntry(BUFFER_ID, {
       change: "remove",
       placements: [{ cell: cell("held"), index: 1, afterCellId: "a" }],
-      variables: [],
     })
     for (const cellId of ["a", "held", "gone"]) {
       saveNotebookColumnLayout(BUFFER_ID, cellId, "q:select", {

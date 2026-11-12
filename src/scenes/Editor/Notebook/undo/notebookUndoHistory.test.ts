@@ -33,7 +33,6 @@ const entry = (change: CellListEntry["change"], cellId: string): UndoEntry => ({
       afterCellId: null,
     },
   ],
-  variables: [],
 })
 
 const move = (from: string[], to: string[]): ArrangementEntry => ({
@@ -99,7 +98,31 @@ describe("notebookUndoHistory", () => {
     // Then the restored cell keeps its results
     expect(isCellHeldByUndo(BUFFER_ID, "restored")).toBe(false)
     expect(releasedCellIds()).toEqual([])
+    expect(removeNotebookCellLayouts).not.toHaveBeenCalled()
     expect(peekUndoEntry(BUFFER_ID)).toBeUndefined()
+  })
+
+  it("releases held rows and layouts from both stacks when cleared", () => {
+    recordUndoEntry(BUFFER_ID, entry("remove", "deleted"))
+    const paste = entry("insert", "undone-paste")
+    recordUndoEntry(BUFFER_ID, paste)
+    settleUndo(BUFFER_ID, paste, new Set())
+    recordUndoEntry(BUFFER_ID + 1, entry("remove", "other-notebook"))
+
+    clearNotebookUndoHistory(BUFFER_ID)
+    clearNotebookUndoHistory(BUFFER_ID)
+
+    expect(releasedCellIds()).toEqual(["deleted", "undone-paste"])
+    expect(removeNotebookCellLayouts).toHaveBeenCalledTimes(2)
+    expect(removeNotebookCellLayouts).toHaveBeenCalledWith(BUFFER_ID, "deleted")
+    expect(removeNotebookCellLayouts).toHaveBeenCalledWith(
+      BUFFER_ID,
+      "undone-paste",
+    )
+    expect(peekUndoEntry(BUFFER_ID)).toBeUndefined()
+    expect(isCellHeldByUndo(BUFFER_ID, "deleted")).toBe(false)
+    expect(isCellHeldByUndo(BUFFER_ID, "undone-paste")).toBe(false)
+    expect(isCellHeldByUndo(BUFFER_ID + 1, "other-notebook")).toBe(true)
   })
 
   describe("joining repeated moves", () => {

@@ -359,7 +359,7 @@ describe("useCellShortcuts", () => {
     fireEvent.keyDown(document.body, { key: "Delete" })
     const undoButton = await screen.findByRole("button", { name: "Undo" })
     if (laterChange) {
-      recordUndoEntry(1, { change: "insert", placements: [], variables: [] })
+      recordUndoEntry(1, { change: "insert", placements: [] })
     }
 
     // When the user clicks Undo on the toast
