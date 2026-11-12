@@ -117,14 +117,12 @@ const CellItem = styled.div<{ $maximized?: boolean }>`
 
 type GridCellWrapperProps = React.HTMLAttributes<HTMLDivElement> & {
   cellId: string
-  focused?: boolean
 }
 const GridCellWrapper = React.forwardRef<HTMLDivElement, GridCellWrapperProps>(
-  ({ children, style, className, cellId, focused, ...rest }, ref) => (
+  ({ children, style, className, cellId, ...rest }, ref) => (
     <div
       ref={ref}
       data-cell-id={cellId}
-      data-cell-focused={focused ? "true" : undefined}
       style={{
         ...style,
         display: "flex",
@@ -159,11 +157,6 @@ const GridScrollContainer = styled.div<{ $suppressTransitions: boolean }>`
 
   .react-grid-item {
     border-radius: 0.4rem;
-  }
-
-  /* A selected cell keeps its corner resize handles visible without hover. */
-  [data-cell-focused="true"] .edge-handle--corner {
-    opacity: 1;
   }
 
   /* Height is excluded: a pane switch mounts its content in the same commit
@@ -665,11 +658,7 @@ const GridLayout: React.FC = () => {
           positionStrategy={absoluteStrategy}
         >
           {cells.map((cell, index) => (
-            <GridCellWrapper
-              key={cell.id}
-              cellId={cell.id}
-              focused={focusedCellId === cell.id}
-            >
+            <GridCellWrapper key={cell.id} cellId={cell.id}>
               <CellView
                 cell={cell}
                 index={index}

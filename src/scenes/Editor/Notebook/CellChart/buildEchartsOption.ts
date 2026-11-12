@@ -341,7 +341,7 @@ const buildScatterChartOption = (
     legend,
     grid: {
       left: 24,
-      right: 24,
+      right: 34,
       top: 40,
       bottom: 48,
       containLabel: true,
@@ -465,7 +465,7 @@ export const buildEchartsOption = (
       ? (rightQueries[0].name ?? rightQueries[0].yColumns[0] ?? "")
       : "")
 
-  const rightPadding = 36
+  const rightPadding = 46
 
   const grid: EChartsOption["grid"] = {
     left: 24,

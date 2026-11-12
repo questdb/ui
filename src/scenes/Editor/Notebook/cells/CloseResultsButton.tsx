@@ -1,5 +1,5 @@
 import React from "react"
-import styled, { css } from "styled-components"
+import styled from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import { IconButton, Tooltip } from "../../../../components"
 import { color } from "../../../../utils"
@@ -22,20 +22,17 @@ const BUTTON_SIZE_REM = 2.2
 // from the right, and this button keeps 2.7rem minus half its size on its
 // right.
 //
-// Down, over a table, the box has the top row's geometry, so the icon
-// centres on the row:
-// both rows are 4rem high with a 1px top border. A tab also has a 2px bottom
-// border (the active-tab line) under its title, so over the tabs the box
-// keeps the same 2px free at its bottom. The result table marks which row is
-// on top with data-top-row, and the result table comes before this box in
-// the bottom slot.
+// Down, the button has one position in every view, so it does not move when
+// the cell switches between table and chart. The box covers the status
+// line's content (4rem high with a 1px border on each side), so the icon
+// centres on it, and the button stays on whole pixels.
 //
-// Over a chart, the button sits near the top edge, in the chart's top margin
-// (ECharts grid.top, 40px). The top tick labels reach about 7px above the
-// plot's top line, so the button ends well above them.
+// Over a chart, the same box sits in the chart's top margin (ECharts grid.top,
+// 40px). The top tick labels reach about 7px above the plot's top line, so
+// the button ends above them.
 const Placement = styled.div<{ $view: CellView }>`
   position: absolute;
-  top: 1px;
+  top: 2px;
   right: 0;
   z-index: 3;
   display: flex;
@@ -44,38 +41,12 @@ const Placement = styled.div<{ $view: CellView }>`
   box-sizing: border-box;
   width: ${CLOSE_RESULTS_RESERVED_WIDTH};
   padding-right: ${2.7 - BUTTON_SIZE_REM / 2}rem;
-  height: calc(4rem - 1px);
+  height: calc(4rem - 2px);
   background: ${({ $view }) =>
     $view === "chart" ? "transparent" : color("surfaceRaised")};
-
-  ${({ $view }) =>
-    $view === "chart" &&
-    css`
-      top: 0.4rem;
-      height: auto;
-    `}
-
-  [data-top-row="tabs"] ~ & {
-    padding-bottom: 2px;
-  }
 `
 
-// Two skins. Over a table, the bordered, filled secondary skin (as the
-// toolbar's Refresh button) stands out against the status text and the tabs.
-// Over a chart, a box looks heavy, so the button is a ghost with the cell
-// toolbar's hover background: only the icon shows until the pointer is on it.
 const CloseButton = styled(IconButton)`
-  ${({ variant }) =>
-    variant === "ghost" &&
-    css`
-      &&:hover:not(:disabled):not([aria-disabled="true"]) {
-        background: ${({ theme }) =>
-          theme.mode === "light"
-            ? theme.color.surfaceBase
-            : theme.color.surfaceRaised};
-      }
-    `}
-
   && {
     width: ${BUTTON_SIZE_REM}rem;
     min-width: ${BUTTON_SIZE_REM}rem;
@@ -114,7 +85,7 @@ export const CloseResultsButton: React.FC<Props> = ({
       <Tooltip content="Close results">
         <CloseButton
           label="Close results"
-          variant={view === "chart" ? "ghost" : "secondary"}
+          variant="secondary"
           size="sm"
           aria-disabled={isCellBusy}
           data-hook="cell-close-results"

@@ -65,7 +65,7 @@ export const InlineResultTable: React.FC<Props> = ({
   }
 
   return (
-    <ResultWrapper data-top-row={isMultiQuery ? "tabs" : "status"}>
+    <ResultWrapper>
       {isMultiQuery && (
         <TabBar
           slots={slots}
