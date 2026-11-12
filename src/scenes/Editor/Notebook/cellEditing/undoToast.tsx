@@ -13,6 +13,11 @@ const Content = styled.div`
   gap: 1.2rem;
 `
 
+const UndoButton = styled(TextButton)`
+  flex-shrink: 0;
+  white-space: nowrap;
+`
+
 // One undo toast per notebook: a newer change replaces it, and a closing
 // notebook takes it away, as its undo would act on an unmounted notebook. A
 // cleared history (an agent edit) also takes it away: its Undo would have
@@ -43,7 +48,7 @@ export const showUndoToast = (
   const toastId = toast.success(
     <Content>
       <span>{message}</span>
-      <TextButton onClick={handleUndo}>Undo</TextButton>
+      <UndoButton onClick={handleUndo}>Undo</UndoButton>
     </Content>,
     { closeOnClick: false },
   )

@@ -26,7 +26,7 @@ import { writeClipboardData } from "./systemClipboard"
 
 export type CellEditMethod = "shortcut" | "menu" | "button" | "toast"
 
-const PASTE_HINT = `Press ${CELL_SHORTCUT_LABELS.paste} to paste.`
+const PASTE_HINT = `${CELL_SHORTCUT_LABELS.paste} to paste.`
 
 // Confirmations and warnings close sooner than the default. The cut and
 // delete toasts keep the default, to leave time for their Undo button.
