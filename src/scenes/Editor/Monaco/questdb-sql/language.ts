@@ -71,16 +71,46 @@ export const language: languages.IMonarchLanguage = {
   pseudoColumns: ["$ACTION", "$IDENTITY", "$ROWGUID", "$PARTITION"],
   tokenizer: {
     root: [
-      [/\[/, { token: "@brackets", next: "@squareBrackets" }],
+      [/\[/, { token: "@brackets", next: "@arrayOperand" }],
+      [/\(/, { token: "@brackets", next: "@parenthesizedExpression" }],
       { include: "@bindVariables" },
       { include: "@expression" },
     ],
-    // Inside [...] (array literals, subscripts, slices) the usual expression
-    // rules apply; a `:` there is a slice separator, not a bind variable.
+    arrayOperand: [
+      { include: "@comments" },
+      { include: "@whitespace" },
+      [
+        /:[a-z0-9_\u0080-\uFFFF][\w$\u0080-\uFFFF]*/,
+        { token: "variable", switchTo: "@squareBrackets" },
+      ],
+      [/./, { token: "@rematch", switchTo: "@squareBrackets" }],
+    ],
+    // A colon after an operand is a slice; after an opening bracket or
+    // operator it can begin a bind. Parentheses and CASE have their own scope.
     squareBrackets: [
-      [/\[/, { token: "@brackets", next: "@squareBrackets" }],
+      { include: "@comments" },
+      { include: "@whitespace" },
+      [/\[/, { token: "@brackets", next: "@arrayOperand" }],
       [/\]/, { token: "@brackets", next: "@pop" }],
+      [/\(/, { token: "@brackets", next: "@parenthesizedExpression" }],
+      [
+        /CASE(?![\w$\u0080-\uFFFF])/,
+        { token: "keyword.block", next: "@arrayCase" },
+      ],
+      [/::/, "operator"],
+      [/,/, { token: "delimiter", switchTo: "@arrayOperand" }],
+      [/[<>=!%&+\-*/|~^]/, { token: "operator", switchTo: "@arrayOperand" }],
+      [/[a-z_\u0080-\uFFFF][\w$\u0080-\uFFFF]*(?=\s*:)/, "identifier"],
       { include: "@expression" },
+    ],
+    parenthesizedExpression: [
+      [/\)/, { token: "@brackets", next: "@pop" }],
+      { include: "@root" },
+    ],
+    arrayCase: [
+      [/CASE(?![\w$\u0080-\uFFFF])/, { token: "keyword.block", next: "@push" }],
+      [/END(?![\w$\u0080-\uFFFF])/, { token: "keyword.block", next: "@pop" }],
+      { include: "@root" },
     ],
     expression: [
       { include: "@comments" },
@@ -162,10 +192,10 @@ export const language: languages.IMonarchLanguage = {
       [/@[\w.$]+/, "variable"],
       [/@(["'`])(?:\\[\s\S]|(?!\1)[^\\])+\1/, "variable"],
     ],
-    // Named bind variable :name (outside [...]). `::` is the cast operator.
+    // `::` is a cast; a bind name can also start with a digit or Unicode.
     bindVariables: [
       [/::/, "operator"],
-      [/:[a-z_][\w$]*/, "variable"],
+      [/:[a-z0-9_\u0080-\uFFFF][\w$\u0080-\uFFFF]*/, "variable"],
     ],
     complexIdentifiers: [
       [/"/, { token: "identifier.quote", next: "@quotedIdentifier" }],
@@ -192,6 +222,6 @@ export const language: languages.IMonarchLanguage = {
       [/WHEN\b/i, { token: "keyword.choice" }],
       [/THEN\b/i, { token: "keyword.choice" }],
     ],
-    array: [[/ARRAY\s*\[/, { token: "keyword", next: "@squareBrackets" }]],
+    array: [[/ARRAY\s*\[/, { token: "keyword", next: "@arrayOperand" }]],
   },
 }

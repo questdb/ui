@@ -120,6 +120,63 @@ describe("questdb-sql highlighting", () => {
     ])
   })
 
+  it("distinguishes array binds from slice bounds", () => {
+    const result = tokens(
+      "select arr[:1], arr[: 5], arr[i:j], arr[f(:a)] from t",
+    )
+    expect(result).toContain(":1|variable")
+    expect(result).toContain(":a|variable")
+    expect(result).toContain("5|number")
+    expect(result).toContain("i|identifier")
+    expect(result).toContain("j|identifier")
+    expect(result.filter((t) => t === ":|operator")).toHaveLength(2)
+  })
+
+  it("colors CASE binds inside brackets and the slice after END", () => {
+    const result = tokens(
+      "select arr[CASE WHEN x THEN :lo ELSE :hi END:n] from t",
+    )
+    expect(result).toContain(":lo|variable")
+    expect(result).toContain(":hi|variable")
+    expect(result).toContain(":|operator")
+    expect(result).toContain("n|identifier")
+  })
+
+  it("colors keyword-named slice bounds as identifiers", () => {
+    const result = tokens(
+      "select arr[when:n], arr[then:n], arr[else :n], arr[window :n] from t",
+    )
+    for (const name of ["when", "then", "else", "window"])
+      expect(result).toContain(`${name}|identifier`)
+    expect(result.filter((t) => t.endsWith("|variable"))).toEqual([])
+  })
+
+  it("keeps binds in nested delimiters and after array operators", () => {
+    const result = tokens(
+      "select ARRAY[row_number() OVER (PARTITION BY :k), :x + :y], arr[(f(:z)):n] from t",
+    )
+    for (const name of ["k", "x", "y", "z"])
+      expect(result).toContain(`:${name}|variable`)
+    expect(result).toContain(":|operator")
+  })
+
+  it("keeps quoted and dollar-containing names as identifiers", () => {
+    const result = tokens(
+      "select `order`, `BTC-USD_buy`, a1$_, _a1$, select$x from `my--table` where `a/*b` > 1",
+    )
+    for (const name of [
+      "order",
+      "BTC-USD_buy",
+      "a1$_",
+      "_a1$",
+      "select$x",
+      "my--table",
+      "a/*b",
+    ])
+      expect(result).toContain(`${name}|identifier`)
+    expect(result.some((t) => t.endsWith("|comment"))).toBe(false)
+  })
+
   it("colors expressions inside ARRAY[...]", () => {
     expect(
       tokens("select ARRAY[abs(x), CASE WHEN a THEN 1 END, [y + 1]] z"),
