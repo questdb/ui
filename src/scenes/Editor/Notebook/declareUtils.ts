@@ -1,4 +1,5 @@
 import { parse, tokenize } from "@questdb/sql-parser"
+import { maskSqlComments } from "../Monaco/sqlLexical"
 import type { CstNode, IToken } from "@chevrotain/types"
 import type { NotebookVariable } from "../../../store/notebook"
 import type { Client } from "../../../utils/questdb/client"
@@ -102,7 +103,7 @@ type LeadingDeclareInfo = {
 }
 
 const extractLeadingDeclare = (text: string): LeadingDeclareInfo | null => {
-  const { cst } = parse(text)
+  const { cst } = parse(maskSqlComments(text))
   if (!cst) return null
 
   const decl = findFirstNode(cst, "declareClause")
@@ -262,7 +263,7 @@ type StatementShape =
   | { kind: "skip" }
 
 const analyzeStatement = (text: string): StatementShape => {
-  const r = parse(text)
+  const r = parse(maskSqlComments(text))
   // Any parse error or recovery-induced multi-statement shape: refuse to
   // rewrite. The user's broken SQL surfaces server errors directly.
   if (r.parseErrors.length > 0) return { kind: "skip" }
@@ -304,7 +305,7 @@ export const prependGlobalsDeclare = (
 ): PreparedSql => {
   if (globals.length === 0) return NO_OP(sql)
 
-  const { tokens } = tokenize(sql)
+  const { tokens } = tokenize(maskSqlComments(sql))
   if (tokens.length === 0) return NO_OP(sql)
 
   const first = tokens[0]

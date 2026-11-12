@@ -23,6 +23,7 @@
  ******************************************************************************/
 import type { editor, IPosition, IRange } from "monaco-editor"
 import { appendQueryEdit } from "./appendQueryEdit"
+import { sqlTokens } from "./sqlLexical"
 import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 import { hashString } from "../../../utils"
@@ -98,17 +99,13 @@ type SqlTextItem = {
   limit: number
 }
 
-export const stripSQLComments = (text: string): string =>
-  text.replace(/(?<!["'`])(--\s?.*$)/gm, (match, group: string) => {
-    if (group) {
-      const groupLines = group.split("\n")
-      if (group.startsWith("--") && groupLines.length > 1) {
-        return "\n" + stripSQLComments(groupLines[1])
-      }
-      return ""
-    }
-    return match
-  })
+export const stripSQLComments = (text: string): string => {
+  const parts: string[] = []
+  for (const token of sqlTokens(text)) {
+    if (token.kind !== "comment") parts.push(text.slice(token.start, token.end))
+  }
+  return parts.join("")
+}
 
 export const hasRunnableSelectionContent = (text: string): boolean =>
   /[^\s;]/.test(stripSQLComments(text))
@@ -281,254 +278,63 @@ export const getQueriesFromPositionInText = (
     }
   }
 
-  let row = start.row
-  let column = start.column
-  const sqlTextStack = []
-  let startRow = start.row
-  let startCol = start.column
-  let startPos = startCharIndex - 1
-  let nextSql = null
-  let inSingleQuote = false
-  let inDoubleQuote = false
-  let singleLineCommentStack: number[] = []
-  let multiLineCommentStack: number[] = []
-  let inSingleLineComment = false
-  let inMultiLineComment = false
+  let row = 0
+  let column = 1
+  let statementStart: { row: number; col: number; position: number } | null =
+    null
+  const sqlTextStack: SqlTextItem[] = []
+  let nextSql: SqlTextItem | null = null
 
-  while (
-    startCharIndex < text.length &&
-    (text[startCharIndex] === "\n" || text[startCharIndex] === " ")
-  ) {
-    if (text[startCharIndex] === "\n") {
-      row++
-      startRow++
-      column = 1
-      startCol = 1
-    } else {
-      column++
-      startCol++
-    }
-    startCharIndex++
-  }
-  startPos = startCharIndex
-
-  let i = startCharIndex
-  for (; i < text.length; i++) {
-    if (nextSql !== null) {
-      break
-    }
-
-    const char = text[i]
-
-    switch (char) {
-      case ";": {
-        if (
-          inSingleQuote ||
-          inDoubleQuote ||
-          inSingleLineComment ||
-          inMultiLineComment
-        ) {
-          column++
-          break
-        }
-
-        if (
-          row < position.row ||
-          (row === position.row && column < position.column)
-        ) {
-          sqlTextStack.push({
-            row: startRow,
-            col: startCol,
-            position: startPos,
+  for (const token of sqlTokens(text)) {
+    if (token.end > startCharIndex) {
+      if (token.kind === "semicolon") {
+        if (statementStart) {
+          const statement = {
+            ...statementStart,
             endRow: row,
             endCol: column,
-            limit: i,
-          })
-          startRow = row
-          startCol = column + 1
-          startPos = i + 1
-          column++
-        } else {
-          nextSql = {
-            row: startRow,
-            col: startCol,
-            position: startPos,
-            endRow: row,
-            endCol: column,
-            limit: i,
+            limit: token.start,
           }
-        }
-        break
-      }
-
-      case " ":
-      case "\t": {
-        if (startPos === i) {
-          startRow = row
-          startCol = column + 1
-          startPos = i + 1
-        }
-
-        column++
-        break
-      }
-
-      case "\n": {
-        if (inSingleLineComment) {
-          inSingleLineComment = false
-          if (startPos === i - 1) {
-            startPos = i
-            startRow = row
-            startCol = column
+          if (
+            row < position.row ||
+            (row === position.row && column < position.column)
+          ) {
+            sqlTextStack.push(statement)
+          } else {
+            nextSql = statement
+            break
           }
+          statementStart = null
         }
+      } else if (
+        !statementStart &&
+        token.kind !== "comment" &&
+        token.kind !== "space"
+      ) {
+        statementStart = { row, col: column, position: token.start }
+      }
+    }
+
+    for (let i = token.start; i < token.end; i++) {
+      if (text[i] === "\n") {
         row++
         column = 1
-        if (startPos === i) {
-          startRow = row
-          startCol = column
-          startPos = i + 1
-        }
-        break
-      }
-
-      case "'": {
-        if (!inMultiLineComment && !inSingleLineComment && !inDoubleQuote) {
-          inSingleQuote = !inSingleQuote
-        }
+      } else {
         column++
-        break
-      }
-
-      case '"': {
-        if (!inMultiLineComment && !inSingleLineComment && !inSingleQuote) {
-          inDoubleQuote = !inDoubleQuote
-        }
-        column++
-        break
-      }
-
-      case "-": {
-        if (!inMultiLineComment && !inSingleQuote && !inDoubleQuote) {
-          singleLineCommentStack.push(i)
-          if (singleLineCommentStack.length === 2) {
-            if (singleLineCommentStack[0] + 1 === singleLineCommentStack[1]) {
-              if (startPos === i - 1) {
-                startPos = i
-                startRow = row
-                startCol = column
-              }
-              singleLineCommentStack = []
-              inSingleLineComment = true
-            } else {
-              singleLineCommentStack.shift()
-            }
-          }
-        }
-        column++
-        break
-      }
-
-      case "/": {
-        if (
-          !inMultiLineComment &&
-          !inSingleLineComment &&
-          !inSingleQuote &&
-          !inDoubleQuote
-        ) {
-          if (multiLineCommentStack.length === 0) {
-            multiLineCommentStack.push(i)
-          } else {
-            multiLineCommentStack = [i]
-          }
-        }
-        if (inMultiLineComment) {
-          if (
-            multiLineCommentStack.length === 1 &&
-            multiLineCommentStack[0] + 1 === i
-          ) {
-            if (startPos === i - 1) {
-              startPos = i + 1
-              startRow = row
-              startCol = column + 1
-            }
-            multiLineCommentStack = []
-            inMultiLineComment = false
-          }
-        }
-        column++
-        break
-      }
-
-      case "*": {
-        if (
-          !inMultiLineComment &&
-          !inSingleLineComment &&
-          !inSingleQuote &&
-          !inDoubleQuote
-        ) {
-          if (
-            multiLineCommentStack.length === 1 &&
-            multiLineCommentStack[0] + 1 === i
-          ) {
-            if (startPos === i - 1) {
-              startPos = i
-              startRow = row
-              startCol = column
-            }
-            multiLineCommentStack = []
-            inMultiLineComment = true
-          } else if (multiLineCommentStack.length > 0) {
-            multiLineCommentStack = []
-          }
-        }
-        if (inMultiLineComment) {
-          multiLineCommentStack = [i]
-        }
-        column++
-        break
-      }
-
-      default: {
-        column++
-        break
-      }
-    }
-    if ((inSingleLineComment || inMultiLineComment) && startPos === i - 1) {
-      startPos = i
-      startRow = row
-      startCol = column
-    }
-  }
-
-  if (!nextSql) {
-    const sqlText =
-      startPos === -1
-        ? text.substring(startCharIndex)
-        : text.substring(startPos)
-    if (sqlText.length > 0) {
-      nextSql = {
-        row: startRow,
-        col: startCol,
-        position: startPos === -1 ? startCharIndex : startPos,
-        endRow: row,
-        endCol: column,
-        limit: i,
       }
     }
   }
 
-  const filteredSqlTextStack = sqlTextStack.filter((item) => {
-    return item.row !== item.endRow || item.col !== item.endCol
-  })
+  if (!nextSql && statementStart) {
+    nextSql = {
+      ...statementStart,
+      endRow: row,
+      endCol: column,
+      limit: text.length,
+    }
+  }
 
-  const filteredNextSql =
-    nextSql &&
-    (nextSql.row !== nextSql.endRow || nextSql.col !== nextSql.endCol)
-      ? nextSql
-      : null
-
-  return { sqlTextStack: filteredSqlTextStack, nextSql: filteredNextSql }
+  return { sqlTextStack, nextSql }
 }
 
 export const getQueriesFromPosition = (
@@ -1533,53 +1339,12 @@ export const createSchemaQueryKey = (
   return `schema:${tableName}:${ddlHash}@0-0` as QueryKey
 }
 
-// Returns the offset just past the `*/` that closes the block comment opened at
-// `start`, or -1 when it is not closed before `limit`. Block comments nest like
-// on the server: every `/*` inside needs its own `*/`.
-function skipBlockComment(text: string, start: number, limit: number): number {
-  let depth = 0
-  let i = start
-  while (i < limit) {
-    if (text[i] === "/" && text[i + 1] === "*") {
-      depth++
-      i += 2
-    } else if (text[i] === "*" && text[i + 1] === "/") {
-      depth--
-      i += 2
-      if (depth === 0) return i
-    } else {
-      i++
-    }
-  }
-  return -1
-}
-
 export function isCursorInComment(text: string, cursorOffset: number): boolean {
-  let i = 0
-  const end = Math.min(cursorOffset, text.length)
-  while (i < end) {
-    const ch = text[i]
-    const next = text[i + 1]
-    if (ch === "-" && next === "-") {
-      i += 2
-      while (i < end && text[i] !== "\n") i++
-      if (i >= cursorOffset) return true
-      continue
+  for (const token of sqlTokens(text)) {
+    if (token.start >= cursorOffset) break
+    if (token.kind === "comment" && token.end >= cursorOffset) {
+      return token.end > cursorOffset || !token.closed
     }
-    if (ch === "/" && next === "*") {
-      // Inside unless the comment closes at or before the cursor.
-      i = skipBlockComment(text, i, text.length)
-      if (i < 0 || i > cursorOffset) return true
-      continue
-    }
-    // Strings and quoted identifiers ("..." or `...`) hide `--` and `/*`.
-    if (ch === "'" || ch === '"' || ch === "`") {
-      i++
-      while (i < text.length && text[i] !== ch) i++
-      i++
-      continue
-    }
-    i++
   }
   return false
 }
@@ -1606,9 +1371,8 @@ export function isCursorInQuotedIdentifier(
       i += 2
       while (i < cursorOffset && text[i] !== "\n") i++
     } else if (ch === "/" && next === "*") {
-      // (unclosed before the cursor cannot happen: checked above)
-      const close = skipBlockComment(text, i, cursorOffset)
-      i = close < 0 ? cursorOffset : close - 1
+      const comment = sqlTokens(text.slice(i)).next().value
+      i = comment ? Math.min(cursorOffset, i + comment.end) - 1 : cursorOffset
     } else if (ch === '"' || ch === "`" || ch === "'") {
       quote = ch
       openQuoteOffset = i

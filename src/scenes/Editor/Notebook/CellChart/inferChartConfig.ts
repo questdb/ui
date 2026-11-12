@@ -1,4 +1,5 @@
 import { parseToAst } from "@questdb/sql-parser"
+import { maskSqlComments } from "../../Monaco/sqlLexical"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartType, ColumnRole, QueryChart } from "./chartTypes"
 
@@ -79,7 +80,7 @@ type QueryHints = {
 // don't false-positive. `LATEST BY <col>` (legacy) also maps to latestOn.
 const parseQueryHints = (query: string): QueryHints => {
   try {
-    const { ast } = parseToAst(query)
+    const { ast } = parseToAst(maskSqlComments(query))
     const topSelect = ast.find((s) => s?.type === "select")
     if (topSelect?.type !== "select") return {}
     return {

@@ -164,6 +164,23 @@ describe("createSchemaCompletionProvider", () => {
   )
 
   describe("basic keyword suggestions", () => {
+    it.each([
+      "TABLE",
+      "ATOMIC TABLE",
+      "VIEW",
+      "MATERIALIZED VIEW",
+      "LIVE VIEW",
+    ])("suggests only NOT after CREATE %s IF", (kind) => {
+      // Given / When
+      const { model, position } = cursorInput(`CREATE ${kind} IF |`)
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+      // Then
+      expect(getLabels(result)).toEqual(["NOT"])
+    })
+
     it("suggests keywords and columns after SELECT", () => {
       const { model, position } = cursorInput("SELECT |")
       const result = provider.provideCompletionItems(
@@ -594,6 +611,43 @@ describe("createSchemaCompletionProvider", () => {
       )
     })
 
+    it.each(["`", '"'])(
+      "preserves following SQL after an unmatched %s",
+      (quote) => {
+        // Given
+        const sql = `SELECT * FROM trades WHERE ${quote}pr| > 1 AND ${quote}ts${quote} > 0`
+        // When / Then
+        expect(accept(sql, "price")).toBe(
+          `SELECT * FROM trades WHERE ${quote}price${quote}  > 1 AND ${quote}ts${quote} > 0`,
+        )
+      },
+    )
+
+    it.each(["`", '"'])(
+      "preserves operators without spaces before a later %s",
+      (quote) => {
+        // Given / When / Then
+        expect(
+          accept(
+            `SELECT * FROM trades WHERE ${quote}pr|>1 AND ${quote}ts${quote}>0`,
+            "price",
+          ),
+        ).toBe(
+          `SELECT * FROM trades WHERE ${quote}price${quote} >1 AND ${quote}ts${quote}>0`,
+        )
+      },
+    )
+
+    it.each(["`", '"'])(
+      "completes a name containing spaces inside %s",
+      (quote) => {
+        // Given / When / Then
+        expect(accept(`SELECT * FROM ${quote}my| ta${quote}`, "my table")).toBe(
+          `SELECT * FROM ${quote}my table${quote} `,
+        )
+      },
+    )
+
     it.each([
       ['SELECT * FROM "quoted-t|"', 'SELECT * FROM "quoted-table.1" '],
       ["SELECT * FROM `quoted-t|`", "SELECT * FROM `quoted-table.1` "],
@@ -603,6 +657,35 @@ describe("createSchemaCompletionProvider", () => {
         expect(accept(sql, "quoted-table.1")).toBe(expected)
       },
     )
+  })
+
+  describe("comment boundaries from the server lexer", () => {
+    it.each(["'", '"', "`"])(
+      "suppresses comments after an earlier unmatched %s",
+      (quote) => {
+        // Given
+        const { model, position } = cursorInput(
+          `SELECT ${quote}x;\nSELECT * FROM trades /* zz p|`,
+        )
+        // When / Then
+        expect(provider.provideCompletionItems(model, position)).toBeNull()
+      },
+    )
+
+    it.each([
+      "/* disabled:\nSELECT 1 -- see /* below\n*/\nSELECT * FROM |",
+      "/* -- */\nSELECT 1;\n*/\nSELECT * FROM |",
+      "/* '*/' */ SELECT * FROM |",
+    ])("offers completions after server-valid comments in %s", (sql) => {
+      // Given / When
+      const { model, position } = cursorInput(sql)
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+      // Then
+      expect(getLabels(result)).toContain("trades")
+    })
   })
 
   describe("quoted identifier support", () => {

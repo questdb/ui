@@ -238,6 +238,20 @@ describe("renderDeclareBlock", () => {
 })
 
 describe("prependGlobalsDeclare", () => {
+  it.each([
+    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
+    "/* -- */\nSELECT 1;\n*/\n",
+    "/* '*/' */ ",
+  ])("expands globals after server-valid comments in %s", (prefix) => {
+    // Given
+    const sql = prefix + "SELECT @g"
+    // When
+    const prepared = prependGlobalsDeclare(sql, vars({ g: "42" }))
+    // Then the original SQL stays intact outside the inserted declaration
+    expect(prepared.sql).toBe(prefix + "DECLARE\n  @g := 42\nSELECT @g")
+    expect(prepared.insertedRange?.start).toBe(prefix.length)
+  })
+
   it("is a no-op when globals are empty", () => {
     const sql = "SELECT @x FROM t"
     expect(prependGlobalsDeclare(sql, [])).toEqual({

@@ -34,6 +34,46 @@ describe("questdb-sql highlighting", () => {
     ])
   })
 
+  it.each([
+    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
+    "/* -- */\nSELECT 1;\n*/\n",
+    "/* '*/' */\n",
+    '/* "/*" */\n',
+    "/* `*/` */\n",
+  ])("highlights code after a server-valid block comment %s", (prefix) => {
+    // Given
+    const sql = prefix + "SELECT 42"
+    // When
+    const lines = monaco.editor.tokenize(sql, "questdb-sql-highlight-test")
+    // Then
+    expect(lines[lines.length - 1][0].type).toBe("keyword.sql")
+  })
+
+  it.each(["arr[1", "arr[CASE WHEN true THEN (1", "ARRAY[1,2"])(
+    "recovers highlighting after the incomplete expression %s",
+    (expression) => {
+      // Given
+      const sql = `SELECT ${expression};\nSELECT NULL::int, TRUE::boolean`
+      // When
+      const [, line] = monaco.editor.tokenize(sql, "questdb-sql-highlight-test")
+      // Then
+      const constants = line.filter(
+        (token) => token.type === "constant.language.sql",
+      )
+      expect(constants).toHaveLength(2)
+    },
+  )
+
+  it("preserves valid multiline arrays and comments with semicolons", () => {
+    // Given
+    const sql = "SELECT ARRAY[1, /* ; */\n2, 3][1: 3]"
+    // When
+    const [, line] = monaco.editor.tokenize(sql, "questdb-sql-highlight-test")
+    // Then
+    expect(line[0].type).toBe("number.sql")
+    expect(line.some((token) => token.type === "comment.sql")).toBe(false)
+  })
+
   it("colors a backtick-quoted name as an identifier", () => {
     expect(tokens("select * from `order`")).toEqual([
       "select|keyword",

@@ -330,22 +330,15 @@ describe("isCursorInComment", () => {
     expect(isCursorInComment("", 0)).toBe(false)
   })
 
-  it("handles unclosed single-quoted string before a real comment", () => {
-    // An unclosed string could swallow a subsequent comment marker
-    // if quote handling scans past cursorOffset.
-    const text = "SELECT 'unclosed -- real comment?"
-    // cursor inside -- area, which is inside the unclosed string
-    // so it should NOT be a comment
-    const cursor = text.indexOf("-- real") + 3
-    expect(isCursorInComment(text, cursor)).toBe(false)
-  })
-
-  it("handles unclosed double-quoted identifier before a real comment", () => {
-    const text = 'SELECT "unclosed -- real comment?'
-    const cursor = text.indexOf("-- real") + 3
-    // -- is inside the unclosed identifier, not a comment
-    expect(isCursorInComment(text, cursor)).toBe(false)
-  })
+  it.each(["'", '"', "`"])(
+    "recognizes comments after an unmatched %s",
+    (quote) => {
+      // Given an unmatched quote, which the server lexer emits separately
+      const text = `SELECT ${quote}unclosed -- real comment?`
+      // When / Then
+      expect(isCursorInComment(text, text.length)).toBe(true)
+    },
+  )
 })
 
 describe("isCursorInComment: nesting and backticks", () => {
@@ -388,6 +381,10 @@ describe("isCursorInQuotedIdentifier", () => {
 
   it("backticks have no escape: `a``b` closes after a", () => {
     const text = "SELECT `a``b` FROM t"
+    // When the cursor follows the second backtick, it opens a new identifier.
+    expect(isCursorInQuotedIdentifier(text, 0, text.indexOf("``") + 2)).toBe(
+      text.indexOf("``") + 1,
+    )
     expect(isCursorInQuotedIdentifier(text, 0, text.indexOf(" FROM"))).toBe(-1)
   })
 
@@ -1404,6 +1401,38 @@ describe("query keys for SQL containing @", () => {
 describe("statement boundaries around comments", () => {
   it.each([
     [
+      "nested destructive SQL",
+      "/*\nSELECT 1; /* old */\nDROP TABLE trades;\n*/\nSELECT 2;",
+      ["SELECT 2"],
+    ],
+    [
+      "a line comment hiding an opener",
+      "/* disabled:\nSELECT 1 -- see /* below\n*/\nSELECT 42",
+      ["SELECT 42"],
+    ],
+    [
+      "a line comment hiding a closer",
+      "/* disabled -- */\nSELECT 1;\n*/ SELECT 42",
+      ["SELECT 42"],
+    ],
+    [
+      "quotes hiding block delimiters",
+      "/* '*/' \"/*\" `*/` */ SELECT 42",
+      ["SELECT 42"],
+    ],
+    ["quotes spanning block delimiters", "/* ' */ SELECT 42; SELECT 'ok'", []],
+    [
+      "semicolons inside backticks",
+      "SELECT `a;b` FROM t; SELECT 2",
+      ["SELECT `a;b` FROM t", "SELECT 2"],
+    ],
+  ])("matches server boundaries for %s", (_, source, expected) => {
+    // Given / When / Then
+    expect(getQueriesFromText(source)).toEqual(expected)
+  })
+
+  it.each([
+    [
       "leading line comments",
       "-- comment\n-- comment\nselect x from long_sequence(1);",
       ["select x from long_sequence(1)"],
@@ -1484,6 +1513,19 @@ describe("cursor decorations and run glyphs around comments", () => {
 
   it.each<[string, string, Glyph[], DecoratedLines[]]>([
     [
+      "nested comments containing destructive SQL",
+      "/*\nSELECT 1; /* old */\nDROP TABLE trades;\n*/\nSELECT 2;",
+      [[5, 1, "SELECT 2"]],
+      [null, null, null, null, [5, 5]],
+    ],
+    [
+      "line comments hiding nested delimiters",
+      "/* disabled:\nSELECT 1 -- see /* below\n*/\nSELECT 42;",
+      [[4, 1, "SELECT 42"]],
+      [null, null, null, [4, 4]],
+    ],
+
+    [
       "leading line comments",
       "-- comment\n-- comment\nselect x from long_sequence(1);",
       [[3, 1, "select x from long_sequence(1)"]],
@@ -1542,11 +1584,11 @@ describe("cursor decorations and run glyphs around comments", () => {
     ],
     [
       "mixed comments, quotes and semicolons",
-      "/* Comment with semicolon; and single quote ' */\n-- Line comment with quote ' and semicolon;\nSELECT 'another;test' AS col2;\n/* Multi\nline;\ncomment;\nwith ' quote */\nSELECT 1 AS col3;\nSELECT 'text'/* inline; ' */ AS col5;",
+      "/* Comment with semicolon; */\n-- Line comment with quote ' and semicolon;\nSELECT 'another;test' AS col2;\n/* Multi\nline;\ncomment;\nwithout quotes */\nSELECT 1 AS col3;\nSELECT 'text'/* inline; */ AS col5;",
       [
         [3, 1, "SELECT 'another;test' AS col2"],
         [8, 1, "SELECT 1 AS col3"],
-        [9, 1, "SELECT 'text'/* inline; ' */ AS col5"],
+        [9, 1, "SELECT 'text'/* inline; */ AS col5"],
       ],
       [null, null, [3, 3], null, null, null, null, [8, 8], [9, 9]],
     ],

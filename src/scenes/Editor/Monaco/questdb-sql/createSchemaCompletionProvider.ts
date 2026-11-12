@@ -10,6 +10,7 @@ import {
   type Suggestion,
 } from "@questdb/sql-parser"
 import { isCursorInComment, isCursorInQuotedIdentifier } from "../utils"
+import { maskSqlComments } from "../sqlLexical"
 
 /**
  * Map parser's SuggestionKind to Monaco's CompletionItemKind
@@ -158,7 +159,8 @@ export const createSchemaCompletionProvider = (
       // the parser's statement splitting (getQueryFromCursor), which can
       // break incomplete SQL into separate statements — e.g., "select * F"
       // gets split into "select *" and "F", losing context for autocomplete.
-      const tokens = tokenize(fullText).tokens
+      const completionText = maskSqlComments(fullText)
+      const tokens = tokenize(completionText).tokens
 
       let queryStartOffset = 0
       let queryEndOffset = fullText.length
@@ -189,7 +191,7 @@ export const createSchemaCompletionProvider = (
 
       // Pass the full statement (including text after cursor) so the parser
       // can detect when the cursor is inside a string literal or comment.
-      const query = fullText.substring(queryStartOffset, queryEndOffset)
+      const query = completionText.substring(queryStartOffset, queryEndOffset)
 
       const openQuoteOffset = isCursorInQuotedIdentifier(
         fullText,
@@ -213,6 +215,10 @@ export const createSchemaCompletionProvider = (
         query,
         relativeCursorOffset,
       )
+      const expectsNot =
+        /^\s*CREATE\s+(?:ATOMIC\s+)?(?:TABLE|(?:MATERIALIZED\s+|LIVE\s+)?VIEW)\s+IF\s*$/i.test(
+          query.slice(0, relativeCursorOffset),
+        )
 
       // When the "word" at cursor is an operator (e.g. :: from type cast),
       // don't replace it — insert after it instead.
@@ -238,12 +244,28 @@ export const createSchemaCompletionProvider = (
           openQuote as string,
           position.column - 1,
         )
+        const suffix = lineContent.slice(position.column - 1, closingIdx)
+        const identifier = lineContent.slice(
+          contentStart.column - 1,
+          closingIdx,
+        )
+        const matchesKnownName = [
+          ...tables.map((table) => table.table_name),
+          ...Object.values(informationSchemaColumns).flatMap((columns) =>
+            columns.map((column) => column.column_name),
+          ),
+        ].some((name) =>
+          name.toLowerCase().startsWith(identifier.toLowerCase()),
+        )
+        const closesCurrentWord =
+          closingIdx >= 0 &&
+          (/^[\w$.\-\u0080-\uFFFF]*$/.test(suffix) || matchesKnownName)
         range = {
           startLineNumber: contentStart.lineNumber,
           startColumn: contentStart.column,
           endLineNumber: position.lineNumber,
           // Include the closing quote if found, otherwise end at cursor
-          endColumn: closingIdx >= 0 ? closingIdx + 2 : position.column,
+          endColumn: closesCurrentWord ? closingIdx + 2 : word.endColumn,
         }
       } else {
         const startColumn = isOperatorWord
@@ -270,7 +292,9 @@ export const createSchemaCompletionProvider = (
             : word.word
 
       const filtered = suggestions.filter(
-        (s) => s.insertText.toUpperCase() !== currentWord.toUpperCase(),
+        (s) =>
+          (!expectsNot || s.insertText.toUpperCase() === "NOT") &&
+          s.insertText.toUpperCase() !== currentWord.toUpperCase(),
       )
 
       return {

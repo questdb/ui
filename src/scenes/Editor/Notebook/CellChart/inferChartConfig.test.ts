@@ -227,6 +227,27 @@ describe("inferChartConfig", () => {
     expect(config.chart.type).toBe("bar")
   })
 
+  it.each([
+    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
+    "/* -- */\nSELECT 1;\n*/\n",
+    "/* '*/' */ ",
+  ])("recognizes LATEST ON after server-valid comments in %s", (prefix) => {
+    // Given
+    const columns = [col("symbol", "SYMBOL"), col("price", "DOUBLE")]
+    // When
+    const config = inferChartConfig(
+      columns,
+      [
+        ["BTC", 2],
+        ["ETH", 3],
+      ],
+      prefix +
+        "SELECT symbol, price FROM trades LATEST ON ts PARTITION BY symbol",
+    )
+    // Then the comment does not change the chart inferred for the live query
+    expect(config.chart.type).toBe("bar")
+  })
+
   it("picks bar for LATEST ON snapshot", () => {
     const columns = [col("symbol", "SYMBOL"), col("price", "DOUBLE")]
     const config = inferChartConfig(

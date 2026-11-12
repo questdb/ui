@@ -71,6 +71,7 @@ export const language: languages.IMonarchLanguage = {
   pseudoColumns: ["$ACTION", "$IDENTITY", "$ROWGUID", "$PARTITION"],
   tokenizer: {
     root: [
+      [/;/, { token: "delimiter", next: "@popall" }],
       [/\[/, { token: "@brackets", next: "@arrayOperand" }],
       [/\(/, { token: "@brackets", next: "@parenthesizedExpression" }],
       { include: "@bindVariables" },
@@ -88,6 +89,7 @@ export const language: languages.IMonarchLanguage = {
     // A colon after an operand is a slice; after an opening bracket or
     // operator it can begin a bind. Parentheses and CASE have their own scope.
     squareBrackets: [
+      [/;/, { token: "delimiter", next: "@popall" }],
       { include: "@comments" },
       { include: "@whitespace" },
       [/\[/, { token: "@brackets", next: "@arrayOperand" }],
@@ -146,8 +148,11 @@ export const language: languages.IMonarchLanguage = {
       [/\/\*/, { token: "comment.quote", next: "@comment" }],
     ],
     comment: [
-      [/[^*/]+/, "comment"],
-      // Block comments nest in QuestDB: every /* inside needs its own */
+      [/--.*$/, "comment"],
+      [/'(?:[^']|'')*'/, "comment"],
+      [/"(?:[^"]|"")*"/, "comment"],
+      [/`[^`]*`/, "comment"],
+      [/[^*/\-'"`]+/, "comment"],
       [/\/\*/, { token: "comment.quote", next: "@push" }],
       [/\*\//, { token: "comment.quote", next: "@pop" }],
       [/./, "comment"],
