@@ -599,6 +599,18 @@ describe("createSchemaCompletionProvider", () => {
       expect(accept(sql, label)).toBe(expected)
     })
 
+    it.each([
+      ["SELECT t.| FROM trades t", "SELECT t.price  FROM trades t"],
+      ['SELECT t."pr|" FROM trades t', 'SELECT t."price"  FROM trades t'],
+      ["SELECT t.`pr|` FROM trades t", "SELECT t.`price`  FROM trades t"],
+    ])("completes an alias-qualified column in %s", (sql, expected) => {
+      // Given / When
+      const completed = accept(sql, "price")
+
+      // Then
+      expect(completed).toBe(expected)
+    })
+
     it("inserts the full function name when its namespace was not typed", () => {
       expect(accept("SELECT * FROM pg_c|", "pg_catalog.pg_class")).toBe(
         "SELECT * FROM pg_catalog.pg_class()",
@@ -644,6 +656,50 @@ describe("createSchemaCompletionProvider", () => {
         // Given / When / Then
         expect(accept(`SELECT * FROM ${quote}my| ta${quote}`, "my table")).toBe(
           `SELECT * FROM ${quote}my table${quote} `,
+        )
+      },
+    )
+
+    it.each([
+      ["`", ""],
+      ['"', ""],
+      ["`", " WHERE 1 = 1"],
+      ['"', " WHERE 1 = 1"],
+    ])(
+      "replaces a misspelled name containing spaces inside %s",
+      (quote, followingSql) => {
+        // Given
+        const sql = `SELECT * FROM ${quote}my| tqble${quote}${followingSql}`
+
+        // When
+        const completed = accept(sql, "my table")
+
+        // Then
+        expect(completed).toBe(
+          `SELECT * FROM ${quote}my table${quote} ${followingSql}`,
+        )
+      },
+    )
+
+    it.each([
+      ["`", "value"],
+      ['"', "value"],
+      ["`", "-value"],
+      ['"', "-value"],
+      ["`", " value"],
+      ['"', " value"],
+    ])(
+      "preserves a following %s-quoted alias named %j after an unmatched quote",
+      (quote, alias) => {
+        // Given
+        const sql = `SELECT ${quote}pr| AS ${quote}${alias}${quote} FROM trades`
+
+        // When
+        const completed = accept(sql, "price")
+
+        // Then
+        expect(completed).toBe(
+          `SELECT ${quote}price${quote}  AS ${quote}${alias}${quote} FROM trades`,
         )
       },
     )
@@ -774,15 +830,44 @@ describe("createSchemaCompletionProvider", () => {
       expect((item!.range as IRange).endColumn).toBe(text.length + 1)
     })
 
-    it("does not trigger inside single-quoted strings", () => {
-      const { model, position } = cursorInput("SELECT 'tra|' FROM trades")
+    it.each([
+      "SELECT 'tra|' FROM trades",
+      "SELECT 'tra|",
+      "SELECT 'tra;|",
+      "SELECT 'tra\n; -- text /* still a string |",
+      "SELECT 'it''s tra|' FROM trades",
+      "SELECT E'tra|' FROM trades",
+      "SELECT N'tra|' FROM trades",
+      "SELECT * FROM 'tra|'",
+    ])("suppresses SQL completions inside single quotes in %s", (sql) => {
+      // Given
+      const { model, position } = cursorInput(sql)
+
+      // When
       const result = provider.provideCompletionItems(
         model,
         position,
       ) as CompletionResult
-      const items = getSuggestions(result)
-      const insertTexts = items.map((s) => s.insertText)
-      expect(insertTexts.every((t) => !t.endsWith('" '))).toBe(true)
+
+      // Then
+      expect(getSuggestions(result)).toEqual([])
+    })
+
+    it.each([
+      "SELECT 'text' FROM tra|",
+      "SELECT 'it''s -- /* text' AS message FROM tra|",
+    ])("resumes completion after a closed string in %s", (sql) => {
+      // Given
+      const { model, position } = cursorInput(sql)
+
+      // When
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+
+      // Then
+      expect(getLabels(result)).toContain("trades")
     })
 
     it("range ends at cursor when quote is unclosed", () => {

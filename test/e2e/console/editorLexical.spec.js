@@ -1,8 +1,9 @@
 /// <reference types="cypress" />
 
-const { ctrlOrCmd } = require("../utils")
+const { ctrlOrCmd, escapeRegExp } = require("../utils")
 const baseUrl = Cypress.config("baseUrl") || "http://localhost:9999"
 const table = `zz_console_lexical_${Date.now()}`
+const spacedTable = `${table} spaced table`
 const editorExecution = { url: "**/exec*", query: { explain: "true" } }
 
 const exec = (query) =>
@@ -41,10 +42,101 @@ describe("editor SQL agrees with /exec", () => {
     exec(`INSERT INTO ${table} VALUES (2, 3)`)
       .its("body.dml")
       .should("eq", "OK")
+    exec(`CREATE TABLE "${spacedTable}" (price DOUBLE, ts LONG)`)
+      .its("body.ddl")
+      .should("eq", "OK")
   })
 
   after(() => {
+    exec(`DROP TABLE IF EXISTS "${spacedTable}"`)
+      .its("body.ddl")
+      .should("eq", "OK")
     exec(`DROP TABLE IF EXISTS ${table}`).its("body.ddl").should("eq", "OK")
+  })
+
+  it("accepts dot and quoted completions without changing surrounding SQL", () => {
+    // Given a console with both ordinary and space-containing table names
+    cy.loadConsoleWithAuth(false, {}, { buffers: [{ value: "SELECT 1" }] })
+    const cases = [
+      [
+        `SELECT t.pr| FROM ${table} t`,
+        "price",
+        `SELECT t.price  FROM ${table} t`,
+      ],
+      [
+        `SELECT t.| FROM ${table} t`,
+        "price",
+        `SELECT t.price  FROM ${table} t`,
+      ],
+      [
+        "SELECT * FROM pg_catalog.|",
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        "SELECT * FROM pg_catalog.pg_cla|",
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+    ]
+    for (const quote of ["`", '"']) {
+      cases.push(
+        [
+          `SELECT t.${quote}pr|${quote} FROM ${table} t`,
+          "price",
+          `SELECT t.${quote}price${quote}  FROM ${table} t`,
+        ],
+        [
+          `SELECT * FROM ${quote}${table}|`,
+          spacedTable,
+          `SELECT * FROM ${quote}${spacedTable}${quote} `,
+        ],
+        [
+          `SELECT * FROM ${quote}${table}| spaced tqble${quote} WHERE 1 = 1`,
+          spacedTable,
+          `SELECT * FROM ${quote}${spacedTable}${quote}  WHERE 1 = 1`,
+        ],
+      )
+    }
+
+    for (const [input, label, expected] of cases) {
+      // When accepting the intended suggestion in the real editor
+      setEditor(input.replace("|", ""), input.indexOf("|"))
+      suggest()
+      cy.getAutocomplete()
+        .should("be.visible")
+        .contains(
+          ".monaco-highlighted-label",
+          new RegExp(`^${escapeRegExp(label)}$`),
+        )
+        .click()
+
+      // Then the complete edit preserves its namespace, quotes, and suffix
+      expectValue(expected)
+    }
+  })
+
+  it("suppresses suggestions inside open and closed single-quoted strings", () => {
+    // Given an active editor
+    cy.loadConsoleWithAuth(false, {}, { buffers: [{ value: "SELECT 1" }] })
+    for (const input of [
+      `SELECT 'pr|' FROM ${table}`,
+      "SELECT 'pr|",
+      "SELECT 'it''s pr|",
+      "SELECT 'pr; -- text /* |",
+    ]) {
+      // When requesting suggestions inside the string
+      setEditor(input.replace("|", ""), input.indexOf("|"))
+      suggest()
+
+      // Then the editor leaves the string intact and shows no popup
+      expectValue(input.replace("|", ""))
+      cy.get("body").should((body) => {
+        expect(
+          body.find('[widgetid="editor.widget.suggestWidget"]:visible'),
+        ).to.have.length(0)
+      })
+    }
   })
 
   it("runs only live SQL after nested comments and preserves the table", () => {

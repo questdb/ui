@@ -9,7 +9,11 @@ import {
   type SchemaInfo,
   type Suggestion,
 } from "@questdb/sql-parser"
-import { isCursorInComment, isCursorInQuotedIdentifier } from "../utils"
+import {
+  getOpenQuoteOffset,
+  isCursorInComment,
+  isCursorInQuotedIdentifier,
+} from "../utils"
 import { maskSqlComments } from "../sqlLexical"
 
 /**
@@ -143,8 +147,13 @@ export const createSchemaCompletionProvider = (
       const cursorOffset = model.getOffsetAt(position)
       const fullText = model.getValue()
 
-      // Suppress suggestions inside comments (the parser handles strings itself)
+      // Suppress suggestions inside comments and single-quoted strings.
       if (isCursorInComment(fullText, cursorOffset)) {
+        return null
+      }
+
+      const quoteOffset = getOpenQuoteOffset(fullText, 0, cursorOffset)
+      if (quoteOffset >= 0 && fullText[quoteOffset] === "'") {
         return null
       }
 
@@ -257,9 +266,19 @@ export const createSchemaCompletionProvider = (
         ].some((name) =>
           name.toLowerCase().startsWith(identifier.toLowerCase()),
         )
+        const suffixTokens = tokenize(suffix).tokens
+        const closesSpacedIdentifier =
+          /^[\w$.\-\u0080-\uFFFF \t]*$/.test(suffix) &&
+          suffixTokens.length > 0 &&
+          suffixTokens.every(
+            (token) => token.tokenType.name === "Identifier",
+          ) &&
+          !/[\w$\u0080-\uFFFF]/.test(lineContent[closingIdx + 1] ?? "")
         const closesCurrentWord =
           closingIdx >= 0 &&
-          (/^[\w$.\-\u0080-\uFFFF]*$/.test(suffix) || matchesKnownName)
+          (/^[\w$.\-\u0080-\uFFFF]*$/.test(suffix) ||
+            closesSpacedIdentifier ||
+            matchesKnownName)
         range = {
           startLineNumber: contentStart.lineNumber,
           startColumn: contentStart.column,

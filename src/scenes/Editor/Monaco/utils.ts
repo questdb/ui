@@ -1349,9 +1349,7 @@ export function isCursorInComment(text: string, cursorOffset: number): boolean {
   return false
 }
 
-// Returns the offset of the opening `"` or `` ` `` if the cursor is inside a
-// quoted identifier, else -1.
-export function isCursorInQuotedIdentifier(
+export function getOpenQuoteOffset(
   text: string,
   startOffset: number,
   cursorOffset: number,
@@ -1379,7 +1377,18 @@ export function isCursorInQuotedIdentifier(
     }
   }
 
-  return quote === '"' || quote === "`" ? openQuoteOffset : -1
+  return quote === null ? -1 : openQuoteOffset
+}
+
+// Returns the offset of the opening `"` or `` ` `` if the cursor is inside a
+// quoted identifier, else -1.
+export function isCursorInQuotedIdentifier(
+  text: string,
+  startOffset: number,
+  cursorOffset: number,
+): number {
+  const offset = getOpenQuoteOffset(text, startOffset, cursorOffset)
+  return text[offset] === '"' || text[offset] === "`" ? offset : -1
 }
 
 export const pinMonacoContextMenu = (
