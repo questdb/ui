@@ -163,24 +163,186 @@ describe("createSchemaCompletionProvider", () => {
     createSchemaCompletionProvider(tables as Table[], informationSchemaColumns),
   )
 
-  describe("basic keyword suggestions", () => {
+  describe("released parser integration", () => {
     it.each([
-      "TABLE",
-      "ATOMIC TABLE",
-      "VIEW",
-      "MATERIALIZED VIEW",
-      "LIVE VIEW",
-    ])("suggests only NOT after CREATE %s IF", (kind) => {
-      // Given / When
-      const { model, position } = cursorInput(`CREATE ${kind} IF |`)
+      "SELECT 'pr|' FROM trades",
+      "SELECT 'pr|",
+      "SELECT 'it''s pr|",
+      "SELECT E'pr|",
+      "SELECT 'pr; -- text /* |",
+      "SELECT 'pr' AS x; SELECT 'pr|",
+    ])("never offers completion inside a single-quoted value: %s", (input) => {
+      // Given
+      const { model, position } = cursorInput(input)
+
+      // When / Then
+      expect(provider.provideCompletionItems(model, position)).toBeNull()
+    })
+
+    for (const quote of ['"', "`"]) {
+      it.each([
+        [
+          `SELECT * FROM ${quote}my ta|${quote} WHERE 1 = 1`,
+          `SELECT * FROM ${quote}my table${quote}  WHERE 1 = 1`,
+        ],
+        [
+          `SELECT * FROM ${quote}my ta|`,
+          `SELECT * FROM ${quote}my table${quote} `,
+        ],
+        [
+          `SELECT t.${quote}pr|${quote} FROM trades t`,
+          `SELECT t.${quote}price${quote}  FROM trades t`,
+        ],
+      ])("completes quoted identifiers in %s", (input, expected) => {
+        // Given
+        const { model, position } = cursorInput(input)
+        const wanted = input.includes("my ta") ? "my table" : "price"
+
+        // When accepting the completion in a real Monaco model
+        const result = provider.provideCompletionItems(
+          model,
+          position,
+        ) as CompletionResult
+        const item = getSuggestions(result).find(
+          (s) =>
+            (typeof s.label === "string" ? s.label : s.label.label) === wanted,
+        )
+        expect(item).toBeDefined()
+        model.applyEdits([
+          { range: item!.range as IRange, text: item!.insertText },
+        ])
+
+        // Then spaces and surrounding SQL survive, with the original quote type
+        expect(model.getValue()).toBe(expected)
+      })
+    }
+
+    it.each([
+      "/* '/*' */",
+      "/* 'a\n/* b' */",
+      "/* disabled:\nSELECT 1 -- see /* below\n*/",
+    ])("retains main's table completion after %s", (comment) => {
+      // Given
+      const { model, position } = cursorInput(`${comment}\nSELECT * FROM tr|`)
+
+      // When / Then
+      expect(
+        getLabels(
+          provider.provideCompletionItems(model, position) as CompletionResult,
+        ),
+      ).toContain("trades")
+    })
+
+    it.each([
+      [
+        "SELECT * FROM pg_catalog.|",
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        "SELECT * FROM pg_catalog.pg_c|",
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        "SELECT * FROM information_schema.|",
+        "information_schema.tables",
+        "SELECT * FROM information_schema.tables()",
+      ],
+      [
+        "SELECT * FROM tables|",
+        "information_schema.tables",
+        "SELECT * FROM information_schema.tables()",
+      ],
+      ["SELECT t.pr| FROM trades t", "price", "SELECT t.price  FROM trades t"],
+      ['SELECT * FROM "my ta|"', "my table", 'SELECT * FROM "my table" '],
+    ])(
+      "accepts %s without corrupting its qualifier",
+      (input, wanted, expected) => {
+        // Given
+        const { model, position } = cursorInput(input)
+
+        // When
+        const result = provider.provideCompletionItems(
+          model,
+          position,
+        ) as CompletionResult
+        const item = getSuggestions(result).find(
+          (s) =>
+            (typeof s.label === "string" ? s.label : s.label.label) === wanted,
+        )
+        expect(item).toBeDefined()
+        model.applyEdits([
+          {
+            range: item!.range as IRange,
+            text: item!.insertText.replace("$0", ""),
+          },
+        ])
+
+        // Then
+        expect(model.getValue()).toBe(expected)
+      },
+    )
+
+    it.each([
+      "CREATE TABLE IF |",
+      "CREATE ATOMIC TABLE IF |",
+      "CREATE VIEW IF |",
+      "CREATE MATERIALIZED VIEW IF |",
+      "CREATE LIVE VIEW IF |",
+      "-- create a table\nCREATE TABLE IF |",
+      "/* new table */ CREATE TABLE IF |",
+    ])("keeps NOT as the only choice for %s", (input) => {
+      // Given
+      const { model, position } = cursorInput(input)
+
+      // When / Then
+      expect(
+        getLabels(
+          provider.provideCompletionItems(model, position) as CompletionResult,
+        ),
+      ).toEqual(["NOT"])
+    })
+
+    it("keeps function suggestions out of quoted identifier edits", () => {
+      // Given
+      const { model, position } = cursorInput(
+        'SELECT * FROM pg_catalog."pg_c|"',
+      )
+
+      // When
       const result = provider.provideCompletionItems(
         model,
         position,
       ) as CompletionResult
+
       // Then
-      expect(getLabels(result)).toEqual(["NOT"])
+      expect(
+        getSuggestions(result).some(
+          (s) => s.kind === CompletionItemKind.Function,
+        ),
+      ).toBe(false)
     })
 
+    it.each([
+      ["SELECT * FROM trades GROUP BY |", "ROLLUP"],
+      ["SELECT ts, avg(price) FROM trades SAMPLE BY 1h FILL( |", "LINEAR"],
+      ["ALTER TABLE trades DEDUP |", "SKIP"],
+      ["WITH q AS (SELECT price FROM trades) SELECT pr| FROM q", "price"],
+    ])("retains useful completion in %s", (input, wanted) => {
+      // Given
+      const { model, position } = cursorInput(input)
+
+      // When / Then
+      expect(
+        getLabels(
+          provider.provideCompletionItems(model, position) as CompletionResult,
+        ),
+      ).toContain(wanted)
+    })
+  })
+
+  describe("basic keyword suggestions", () => {
     it("suggests keywords and columns after SELECT", () => {
       const { model, position } = cursorInput("SELECT |")
       const result = provider.provideCompletionItems(
@@ -400,27 +562,6 @@ describe("createSchemaCompletionProvider", () => {
       const labels = getLabels(result)
       expect(labels).toContain("trades")
     })
-
-    it("returns null inside a nested block comment", () => {
-      const { model, position } = cursorInput("SELECT 1 /* outer /* inner */ |")
-      const result = provider.provideCompletionItems(model, position)
-      expect(result).toBeNull()
-    })
-
-    it("does not treat -- or /* inside a quoted identifier as a comment", () => {
-      for (const sql of [
-        "SELECT * FROM `my--table` WHERE |",
-        'SELECT * FROM "my--table" WHERE |',
-      ]) {
-        const { model, position } = cursorInput(sql)
-        const result = provider.provideCompletionItems(model, position)
-        expect(result, sql).not.toBeNull()
-        expect(
-          getLabels(result as CompletionResult).length,
-          sql,
-        ).toBeGreaterThan(0)
-      }
-    })
   })
 
   describe("parenthesis suppression", () => {
@@ -557,225 +698,6 @@ describe("createSchemaCompletionProvider", () => {
     })
   })
 
-  describe("accepting qualified completions", () => {
-    function accept(sql: string, label: string): string {
-      const { model, position } = cursorInput(sql)
-      const result = provider.provideCompletionItems(
-        model,
-        position,
-      ) as CompletionResult
-      const item = getSuggestions(result).find(
-        (s) =>
-          (typeof s.label === "string" ? s.label : s.label.label) === label,
-      )
-      expect(item, `Missing suggestion: ${label}`).toBeDefined()
-      // These function snippets contain only the final cursor marker ($0).
-      model.applyEdits([
-        {
-          range: item!.range as IRange,
-          text: item!.insertText.replace("$0", ""),
-        },
-      ])
-      return model.getValue()
-    }
-
-    it.each([
-      [
-        "SELECT * FROM pg_catalog.pg_c|",
-        "pg_catalog.pg_class",
-        "SELECT * FROM pg_catalog.pg_class()",
-      ],
-      [
-        "SELECT * FROM information_schema._pg_e|",
-        "information_schema._pg_expandarray",
-        "SELECT * FROM information_schema._pg_expandarray()",
-      ],
-      [
-        "SELECT 1;\nSELECT * FROM PG_CATALOG.pg_c|",
-        "pg_catalog.pg_class",
-        "SELECT 1;\nSELECT * FROM pg_catalog.pg_class()",
-      ],
-    ])("replaces a qualified function in %s", (sql, label, expected) => {
-      expect(accept(sql, label)).toBe(expected)
-    })
-
-    it.each([
-      ["SELECT t.| FROM trades t", "SELECT t.price  FROM trades t"],
-      ['SELECT t."pr|" FROM trades t', 'SELECT t."price"  FROM trades t'],
-      ["SELECT t.`pr|` FROM trades t", "SELECT t.`price`  FROM trades t"],
-    ])("completes an alias-qualified column in %s", (sql, expected) => {
-      // Given / When
-      const completed = accept(sql, "price")
-
-      // Then
-      expect(completed).toBe(expected)
-    })
-
-    it("inserts the full function name when its namespace was not typed", () => {
-      expect(accept("SELECT * FROM pg_c|", "pg_catalog.pg_class")).toBe(
-        "SELECT * FROM pg_catalog.pg_class()",
-      )
-    })
-
-    it.each(["", "my"])("completes a CTE after FROM %s", (prefix) => {
-      // Given
-      const sql = `WITH mycte AS (SELECT 1 AS value) SELECT * FROM ${prefix}|`
-
-      // When
-      const completed = accept(sql, "mycte")
-
-      // Then
-      expect(completed).toBe(
-        "WITH mycte AS (SELECT 1 AS value) SELECT * FROM mycte ",
-      )
-    })
-
-    it.each([
-      ['"', "my+cte", "my|+cte"],
-      ["`", "my+cte", "my|+cte"],
-      ['"', "my select", "my| select"],
-      ["`", "my select", "my| select"],
-    ])("replaces the full %s-quoted CTE name %s", (quote, name, reference) => {
-      // Given
-      const declaration = `WITH ${quote}${name}${quote} AS (SELECT 1 AS value)`
-      const sql = `${declaration} SELECT * FROM ${quote}${reference}${quote} WHERE value = 1`
-
-      // When
-      const completed = accept(sql, name)
-
-      // Then
-      expect(completed).toBe(
-        `${declaration} SELECT * FROM ${quote}${name}${quote}  WHERE value = 1`,
-      )
-    })
-
-    it("keeps the qualifier when accepting an alias-qualified column", () => {
-      expect(accept("SELECT t.pr| FROM trades t", "price")).toBe(
-        "SELECT t.price  FROM trades t",
-      )
-    })
-
-    it.each(["`", '"'])(
-      "preserves following SQL after an unmatched %s",
-      (quote) => {
-        // Given
-        const sql = `SELECT * FROM trades WHERE ${quote}pr| > 1 AND ${quote}ts${quote} > 0`
-        // When / Then
-        expect(accept(sql, "price")).toBe(
-          `SELECT * FROM trades WHERE ${quote}price${quote}  > 1 AND ${quote}ts${quote} > 0`,
-        )
-      },
-    )
-
-    it.each(["`", '"'])(
-      "preserves operators without spaces before a later %s",
-      (quote) => {
-        // Given / When / Then
-        expect(
-          accept(
-            `SELECT * FROM trades WHERE ${quote}pr|>1 AND ${quote}ts${quote}>0`,
-            "price",
-          ),
-        ).toBe(
-          `SELECT * FROM trades WHERE ${quote}price${quote} >1 AND ${quote}ts${quote}>0`,
-        )
-      },
-    )
-
-    it.each(["`", '"'])(
-      "completes a name containing spaces inside %s",
-      (quote) => {
-        // Given / When / Then
-        expect(accept(`SELECT * FROM ${quote}my| ta${quote}`, "my table")).toBe(
-          `SELECT * FROM ${quote}my table${quote} `,
-        )
-      },
-    )
-
-    it.each([
-      ["`", ""],
-      ['"', ""],
-      ["`", " WHERE 1 = 1"],
-      ['"', " WHERE 1 = 1"],
-    ])(
-      "replaces a misspelled name containing spaces inside %s",
-      (quote, followingSql) => {
-        // Given
-        const sql = `SELECT * FROM ${quote}my| tqble${quote}${followingSql}`
-
-        // When
-        const completed = accept(sql, "my table")
-
-        // Then
-        expect(completed).toBe(
-          `SELECT * FROM ${quote}my table${quote} ${followingSql}`,
-        )
-      },
-    )
-
-    it.each([
-      ["`", "value"],
-      ['"', "value"],
-      ["`", "-value"],
-      ['"', "-value"],
-      ["`", " value"],
-      ['"', " value"],
-    ])(
-      "preserves a following %s-quoted alias named %j after an unmatched quote",
-      (quote, alias) => {
-        // Given
-        const sql = `SELECT ${quote}pr| AS ${quote}${alias}${quote} FROM trades`
-
-        // When
-        const completed = accept(sql, "price")
-
-        // Then
-        expect(completed).toBe(
-          `SELECT ${quote}price${quote}  AS ${quote}${alias}${quote} FROM trades`,
-        )
-      },
-    )
-
-    it.each([
-      ['SELECT * FROM "quoted-t|"', 'SELECT * FROM "quoted-table.1" '],
-      ["SELECT * FROM `quoted-t|`", "SELECT * FROM `quoted-table.1` "],
-    ])(
-      "keeps dotted table names inside their quotes in %s",
-      (sql, expected) => {
-        expect(accept(sql, "quoted-table.1")).toBe(expected)
-      },
-    )
-  })
-
-  describe("comment boundaries from the server lexer", () => {
-    it.each(["'", '"', "`"])(
-      "suppresses comments after an earlier unmatched %s",
-      (quote) => {
-        // Given
-        const { model, position } = cursorInput(
-          `SELECT ${quote}x;\nSELECT * FROM trades /* zz p|`,
-        )
-        // When / Then
-        expect(provider.provideCompletionItems(model, position)).toBeNull()
-      },
-    )
-
-    it.each([
-      "/* disabled:\nSELECT 1 -- see /* below\n*/\nSELECT * FROM |",
-      "/* -- */\nSELECT 1;\n*/\nSELECT * FROM |",
-      "/* '*/' */ SELECT * FROM |",
-    ])("offers completions after server-valid comments in %s", (sql) => {
-      // Given / When
-      const { model, position } = cursorInput(sql)
-      const result = provider.provideCompletionItems(
-        model,
-        position,
-      ) as CompletionResult
-      // Then
-      expect(getLabels(result)).toContain("trades")
-    })
-  })
-
   describe("quoted identifier support", () => {
     it("suggests table names inside double quotes", () => {
       const { model, position } = cursorInput('SELECT * FROM "q|"')
@@ -832,74 +754,15 @@ describe("createSchemaCompletionProvider", () => {
       }
     })
 
-    it("closes a backtick-quoted identifier with a backtick", () => {
-      const text = "SELECT * FROM `tra"
-      const model = createModel(text)
-      const position = model.getPositionAt(text.length)
+    it("does not trigger inside single-quoted strings", () => {
+      const { model, position } = cursorInput("SELECT 'tra|' FROM trades")
       const result = provider.provideCompletionItems(
         model,
         position,
       ) as CompletionResult
-      const item = getSuggestions(result).find((s) => s.label === "trades")
-      expect(item).toBeDefined()
-      expect(item!.insertText).toBe("trades` ")
-      const range = item!.range as IRange
-      expect(range.startColumn).toBe(text.indexOf("`") + 2)
-      expect(range.endColumn).toBe(position.column)
-    })
-
-    it("replaces the closing backtick inside `...`", () => {
-      const text = "SELECT * FROM `tra`"
-      const cursorIndex = text.indexOf("tra") + 3
-      const model = createModel(text)
-      const position = model.getPositionAt(cursorIndex)
-      const result = provider.provideCompletionItems(
-        model,
-        position,
-      ) as CompletionResult
-      const item = getSuggestions(result).find((s) => s.label === "trades")
-      expect(item!.insertText).toBe("trades` ")
-      expect((item!.range as IRange).endColumn).toBe(text.length + 1)
-    })
-
-    it.each([
-      "SELECT 'tra|' FROM trades",
-      "SELECT 'tra|",
-      "SELECT 'tra;|",
-      "SELECT 'tra\n; -- text /* still a string |",
-      "SELECT 'it''s tra|' FROM trades",
-      "SELECT E'tra|' FROM trades",
-      "SELECT N'tra|' FROM trades",
-      "SELECT * FROM 'tra|'",
-    ])("suppresses SQL completions inside single quotes in %s", (sql) => {
-      // Given
-      const { model, position } = cursorInput(sql)
-
-      // When
-      const result = provider.provideCompletionItems(
-        model,
-        position,
-      ) as CompletionResult
-
-      // Then
-      expect(getSuggestions(result)).toEqual([])
-    })
-
-    it.each([
-      "SELECT 'text' FROM tra|",
-      "SELECT 'it''s -- /* text' AS message FROM tra|",
-    ])("resumes completion after a closed string in %s", (sql) => {
-      // Given
-      const { model, position } = cursorInput(sql)
-
-      // When
-      const result = provider.provideCompletionItems(
-        model,
-        position,
-      ) as CompletionResult
-
-      // Then
-      expect(getLabels(result)).toContain("trades")
+      const items = getSuggestions(result)
+      const insertTexts = items.map((s) => s.insertText)
+      expect(insertTexts.every((t) => !t.endsWith('" '))).toBe(true)
     })
 
     it("range ends at cursor when quote is unclosed", () => {

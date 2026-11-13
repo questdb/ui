@@ -71,50 +71,6 @@ export const language: languages.IMonarchLanguage = {
   pseudoColumns: ["$ACTION", "$IDENTITY", "$ROWGUID", "$PARTITION"],
   tokenizer: {
     root: [
-      [/;/, { token: "delimiter", next: "@popall" }],
-      [/\[/, { token: "@brackets", next: "@arrayOperand" }],
-      [/\(/, { token: "@brackets", next: "@parenthesizedExpression" }],
-      { include: "@bindVariables" },
-      { include: "@expression" },
-    ],
-    arrayOperand: [
-      { include: "@comments" },
-      { include: "@whitespace" },
-      [
-        /:[a-z0-9_\u0080-\uFFFF][\w$\u0080-\uFFFF]*/,
-        { token: "variable", switchTo: "@squareBrackets" },
-      ],
-      [/./, { token: "@rematch", switchTo: "@squareBrackets" }],
-    ],
-    // A colon after an operand is a slice; after an opening bracket or
-    // operator it can begin a bind. Parentheses and CASE have their own scope.
-    squareBrackets: [
-      [/;/, { token: "delimiter", next: "@popall" }],
-      { include: "@comments" },
-      { include: "@whitespace" },
-      [/\[/, { token: "@brackets", next: "@arrayOperand" }],
-      [/\]/, { token: "@brackets", next: "@pop" }],
-      [/\(/, { token: "@brackets", next: "@parenthesizedExpression" }],
-      [
-        /CASE(?![\w$\u0080-\uFFFF])/,
-        { token: "keyword.block", next: "@arrayCase" },
-      ],
-      [/::/, "operator"],
-      [/,/, { token: "delimiter", switchTo: "@arrayOperand" }],
-      [/[<>=!%&+\-*/|~^]/, { token: "operator", switchTo: "@arrayOperand" }],
-      [/[a-z_\u0080-\uFFFF][\w$\u0080-\uFFFF]*(?=\s*:)/, "identifier"],
-      { include: "@expression" },
-    ],
-    parenthesizedExpression: [
-      [/\)/, { token: "@brackets", next: "@pop" }],
-      { include: "@root" },
-    ],
-    arrayCase: [
-      [/CASE(?![\w$\u0080-\uFFFF])/, { token: "keyword.block", next: "@push" }],
-      [/END(?![\w$\u0080-\uFFFF])/, { token: "keyword.block", next: "@pop" }],
-      { include: "@root" },
-    ],
-    expression: [
       { include: "@comments" },
       { include: "@whitespace" },
       { include: "@pseudoColumns" },
@@ -148,12 +104,10 @@ export const language: languages.IMonarchLanguage = {
       [/\/\*/, { token: "comment.quote", next: "@comment" }],
     ],
     comment: [
-      [/--.*$/, "comment"],
-      [/'(?:[^']|'')*'/, "comment"],
-      [/"(?:[^"]|"")*"/, "comment"],
-      [/`[^`]*`/, "comment"],
-      [/[^*/\-'"`]+/, "comment"],
-      [/\/\*/, { token: "comment.quote", next: "@push" }],
+      [/[^*/]+/, "comment"],
+      // Not supporting nested comments, as nested comments seem to not be standard?
+      // i.e. http://stackoverflow.com/questions/728172/are-there-multiline-comment-delimiters-in-sql-that-are-vendor-agnostic
+      // [/\/\*/, { token: 'comment.quote', next: '@push' }],    // nested comment not allowed :-(
       [/\*\//, { token: "comment.quote", next: "@pop" }],
       [/./, "comment"],
     ],
@@ -168,23 +122,20 @@ export const language: languages.IMonarchLanguage = {
         },
       ],
     ],
-    // Same literal forms as the @questdb/sql-parser lexer, so that each is
-    // colored as one number: 0x1F, 1.5f, 1e36d, 10L, 10.5m, 1.5e3m, 100ns,
-    // 1.5d, 1_000, .5, 1e-3. The sign is a separate operator, as in the parser.
     numbers: [
-      [/0[xX][0-9a-fA-F]+\b/, "number"], // hex / long256
+      [/0[xX][0-9a-fA-F]+\b/, "number"],
       [
         /(\d[\d_]*\.?[\d_]*|\.\d[\d_]*)(([eE][+-]?\d[\d_]*)?f|[eE][+-]?\d[\d_]*d)\b/,
         "number",
-      ], // float / double suffix
-      [/\d[\d_]*l\b/, "number"], // long suffix
-      [/\d[\d_]*(\.\d[\d_]*m|(\.[\d_]*)?e[+-]?\d[\d_]*m)\b/, "number"], // decimal
-      [/\d[\d_]*(\.\d[\d_]*)?(ms|us|ns|[smhdwyntu])\b/, "number"], // durations
+      ],
+      [/\d[\d_]*l\b/, "number"],
+      [/\d[\d_]*(\.\d[\d_]*m|(\.[\d_]*)?e[+-]?\d[\d_]*m)\b/, "number"],
+      [/\d[\d_]*(\.\d[\d_]*)?(ms|us|ns|[smhdwyntu])\b/, "number"],
       [/(\d[\d_]*\.?[\d_]*|\.\d[\d_]*)(e[+-]?\d[\d_]*)?/, "number"],
     ],
     strings: [
       [/N'/, { token: "string", next: "@string" }],
-      [/E'/, { token: "string", next: "@string" }], // escape string E'...'
+      [/E'/, { token: "string", next: "@string" }],
       [/'/, { token: "string", next: "@string" }],
     ],
     string: [
@@ -193,20 +144,14 @@ export const language: languages.IMonarchLanguage = {
       [/'/, { token: "string", next: "@pop" }],
     ],
     variable: [
-      [/\$\d+/, "variable"], // positional bind variable
+      [/\$\d+/, "variable"],
       [/@[\w.$]+/, "variable"],
       [/@(["'`])(?:\\[\s\S]|(?!\1)[^\\])+\1/, "variable"],
-    ],
-    // `::` is a cast; a bind name can also start with a digit or Unicode.
-    bindVariables: [
-      [/::/, "operator"],
-      [/:[a-z0-9_\u0080-\uFFFF][\w$\u0080-\uFFFF]*/, "variable"],
     ],
     complexIdentifiers: [
       [/"/, { token: "identifier.quote", next: "@quotedIdentifier" }],
       [/`/, { token: "identifier.quote", next: "@backtickIdentifier" }],
     ],
-    // `name` has no escapes: it ends at the next backtick
     backtickIdentifier: [
       [/[^`]+/, "identifier"],
       [/`/, { token: "identifier.quote", next: "@pop" }],
@@ -227,6 +172,15 @@ export const language: languages.IMonarchLanguage = {
       [/WHEN\b/i, { token: "keyword.choice" }],
       [/THEN\b/i, { token: "keyword.choice" }],
     ],
-    array: [[/ARRAY\s*\[/, { token: "keyword", next: "@arrayOperand" }]],
+    array: [[/ARRAY\s*\[/, { token: "keyword", next: "@arrayArguments" }]],
+    arrayArguments: [
+      { include: "@comments" },
+      { include: "@whitespace" },
+      { include: "@numbers" },
+      { include: "@strings" },
+      [/\[/, { token: "delimiter.square", next: "@arrayArguments" }],
+      [/\]/, { token: "delimiter.square", next: "@pop" }],
+      [/,/, "delimiter"],
+    ],
   },
 }

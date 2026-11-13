@@ -238,20 +238,6 @@ describe("renderDeclareBlock", () => {
 })
 
 describe("prependGlobalsDeclare", () => {
-  it.each([
-    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
-    "/* -- */\nSELECT 1;\n*/\n",
-    "/* '*/' */ ",
-  ])("expands globals after server-valid comments in %s", (prefix) => {
-    // Given
-    const sql = prefix + "SELECT @g"
-    // When
-    const prepared = prependGlobalsDeclare(sql, vars({ g: "42" }))
-    // Then the original SQL stays intact outside the inserted declaration
-    expect(prepared.sql).toBe(prefix + "DECLARE\n  @g := 42\nSELECT @g")
-    expect(prepared.insertedRange?.start).toBe(prefix.length)
-  })
-
   it("is a no-op when globals are empty", () => {
     const sql = "SELECT @x FROM t"
     expect(prependGlobalsDeclare(sql, [])).toEqual({
@@ -312,6 +298,36 @@ describe("prependGlobalsDeclare", () => {
       vars({ x: "1" }),
     )
     expect(sql).toBe("/* header */ DECLARE\n  @x := 1\nSELECT @x")
+  })
+
+  it.each([
+    "/* '/*' */\n",
+    "/* 'a\n/* b' */\n",
+    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
+  ])("preserves globals and original SQL after %s", (prefix) => {
+    // Given / When
+    const prepared = prependGlobalsDeclare(
+      `${prefix}SELECT @x`,
+      vars({ x: "1" }),
+    )
+
+    // Then the original comment and SQL survive, with insertion at SELECT
+    expect(prepared.sql).toBe(`${prefix}DECLARE\n  @x := 1\nSELECT @x`)
+    expect(prepared.insertedRange?.start).toBe(prefix.length)
+  })
+
+  it("merges a user's DECLARE after a legacy comment without losing text", () => {
+    // Given / When
+    const prefix = "/* '/*' */\n"
+    const prepared = prependGlobalsDeclare(
+      `${prefix}DECLARE @y := '/* value */' SELECT @x, @y`,
+      vars({ x: "1" }),
+    )
+
+    // Then
+    expect(prepared.sql).toBe(
+      `${prefix}DECLARE\n  @x := 1,\n  @y := '/* value */' SELECT @x, @y`,
+    )
   })
 
   it("no-ops when every global is shadowed by a user local", () => {

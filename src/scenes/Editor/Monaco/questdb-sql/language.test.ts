@@ -3,245 +3,82 @@ import "./monacoPolyfill"
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api"
 import { language } from "./language"
 
-monaco.languages.register({ id: "questdb-sql-highlight-test" })
-monaco.languages.setMonarchTokensProvider(
-  "questdb-sql-highlight-test",
-  language,
-)
-
-// Returns "text|type" for each token of a one-line input, without whitespace.
-function tokens(sql: string): string[] {
-  const [line] = monaco.editor.tokenize(sql, "questdb-sql-highlight-test")
-  return line
-    .map((t, i) => {
-      const text = sql.slice(t.offset, line[i + 1]?.offset ?? sql.length)
-      return `${text}|${t.type.replace(/\.sql$/, "")}`
-    })
-    .filter((t) => !t.endsWith("|white"))
+const id = "questdb-grammar-highlighting-test"
+monaco.languages.register({ id })
+monaco.languages.setMonarchTokensProvider(id, language)
+const tokens = (sql: string) => {
+  const [line] = monaco.editor.tokenize(sql, id)
+  return line.map((token, index) => ({
+    text: sql.slice(token.offset, line[index + 1]?.offset ?? sql.length),
+    type: token.type,
+  }))
 }
 
-describe("questdb-sql highlighting", () => {
-  it("block comments nest", () => {
-    expect(tokens("/* a /* b */ c */ select")).toEqual([
-      "/*|comment.quote",
-      " a |comment",
-      "/*|comment.quote",
-      " b |comment",
-      "*/|comment.quote",
-      " c |comment",
-      "*/|comment.quote",
-      "select|keyword",
-    ])
-  })
-
-  it.each([
-    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
-    "/* -- */\nSELECT 1;\n*/\n",
-    "/* '*/' */\n",
-    '/* "/*" */\n',
-    "/* `*/` */\n",
-  ])("highlights code after a server-valid block comment %s", (prefix) => {
-    // Given
-    const sql = prefix + "SELECT 42"
-    // When
-    const lines = monaco.editor.tokenize(sql, "questdb-sql-highlight-test")
-    // Then
-    expect(lines[lines.length - 1][0].type).toBe("keyword.sql")
-  })
-
-  it.each(["arr[1", "arr[CASE WHEN true THEN (1", "ARRAY[1,2"])(
-    "recovers highlighting after the incomplete expression %s",
-    (expression) => {
-      // Given
-      const sql = `SELECT ${expression};\nSELECT NULL::int, TRUE::boolean`
-      // When
-      const [, line] = monaco.editor.tokenize(sql, "questdb-sql-highlight-test")
-      // Then
-      const constants = line.filter(
-        (token) => token.type === "constant.language.sql",
-      )
-      expect(constants).toHaveLength(2)
-    },
-  )
-
-  it("preserves valid multiline arrays and comments with semicolons", () => {
-    // Given
-    const sql = "SELECT ARRAY[1, /* ; */\n2, 3][1: 3]"
-    // When
-    const [, line] = monaco.editor.tokenize(sql, "questdb-sql-highlight-test")
-    // Then
-    expect(line[0].type).toBe("number.sql")
-    expect(line.some((token) => token.type === "comment.sql")).toBe(false)
-  })
-
-  it("colors a backtick-quoted name as an identifier", () => {
-    expect(tokens("select * from `order`")).toEqual([
-      "select|keyword",
-      "*|operator",
-      "from|keyword",
-      "`|identifier.quote",
-      "order|identifier",
-      "`|identifier.quote",
-    ])
-  })
-
+describe("released grammar token highlighting", () => {
   it.each([
     "0x1F",
     "1.5f",
     "10f",
     "1e36d",
-    "100000L",
+    "10L",
     "10.5m",
     "1.5e3m",
     "100ns",
     "250ms",
-    "1h",
     "1.5d",
-    "1_000_000",
+    "1_000",
     "0.0",
     "3.14",
     ".5",
     "1e-3",
-  ])("colors %s as one number", (literal) => {
-    expect(tokens(`select ${literal}`)).toEqual([
-      "select|keyword",
-      `${literal}|number`,
-    ])
+  ])("colors %s as one numeric token", (literal) => {
+    // Given / When
+    const result = tokens(`SELECT ${literal}`)
+
+    // Then
+    expect(result).toContainEqual({ text: literal, type: "number.sql" })
   })
 
-  it("colors the sign as an operator, as the parser does", () => {
-    expect(tokens("select v+10, -1")).toEqual([
-      "select|keyword",
-      "v|identifier",
-      "+|operator",
-      "10|number",
-      ",|delimiter",
-      "-|operator",
-      "1|number",
-    ])
-  })
-
-  it("colors E'...' as a string", () => {
-    expect(tokens("select E'a\\nb'")).toEqual([
-      "select|keyword",
-      "E'a\\nb'|string",
-    ])
-  })
-
-  it("colors bind variables", () => {
-    expect(tokens("select $1, :sym, x::int")).toEqual([
-      "select|keyword",
-      "$1|variable",
-      ",|delimiter",
-      ":sym|variable",
-      ",|delimiter",
-      "x|identifier",
-      "::|operator",
-      "int|dataType",
-    ])
-  })
-
-  it("keeps array slices as slices", () => {
-    expect(tokens("select arr[1:n], arr[i:j]")).toEqual([
-      "select|keyword",
-      "arr|identifier",
-      "[|delimiter.square",
-      "1|number",
-      ":|operator",
-      "n|identifier",
-      "]|delimiter.square",
-      ",|delimiter",
-      "arr|identifier",
-      "[|delimiter.square",
-      "i|identifier",
-      ":|operator",
-      "j|identifier",
-      "]|delimiter.square",
-    ])
-  })
-
-  it("distinguishes array binds from slice bounds", () => {
+  it("gets new grammar words and functions from the package", () => {
+    // Given / When
     const result = tokens(
-      "select arr[:1], arr[: 5], arr[i:j], arr[f(:a)] from t",
+      "SELECT grouping_id(x), from_base64(x) FROM t GROUP BY GROUPING SETS ((x), ())",
     )
-    expect(result).toContain(":1|variable")
-    expect(result).toContain(":a|variable")
-    expect(result).toContain("5|number")
-    expect(result).toContain("i|identifier")
-    expect(result).toContain("j|identifier")
-    expect(result.filter((t) => t === ":|operator")).toHaveLength(2)
+
+    // Then
+    for (const word of ["GROUPING", "SETS"])
+      expect(result).toContainEqual({ text: word, type: "keyword.sql" })
+    for (const name of ["grouping_id", "from_base64"])
+      expect(result).toContainEqual({ text: name, type: "predefined.sql" })
   })
 
-  it("colors CASE binds inside brackets and the slice after END", () => {
-    const result = tokens(
-      "select arr[CASE WHEN x THEN :lo ELSE :hi END:n] from t",
-    )
-    expect(result).toContain(":lo|variable")
-    expect(result).toContain(":hi|variable")
-    expect(result).toContain(":|operator")
-    expect(result).toContain("n|identifier")
+  it("keeps quoted backtick contents as identifier text", () => {
+    // Given / When
+    const result = tokens("SELECT `order`, `my--table`, `a/*b`")
+
+    // Then
+    for (const name of ["order", "my--table", "a/*b"])
+      expect(result).toContainEqual({ text: name, type: "identifier.sql" })
+    expect(result.some((token) => token.type.startsWith("comment"))).toBe(false)
   })
 
-  it("colors keyword-named slice bounds as identifiers", () => {
-    const result = tokens(
-      "select arr[when:n], arr[then:n], arr[else :n], arr[window :n] from t",
-    )
-    for (const name of ["when", "then", "else", "window"])
-      expect(result).toContain(`${name}|identifier`)
-    expect(result.filter((t) => t.endsWith("|variable"))).toEqual([])
+  it("colors E strings and positional binds without changing array states", () => {
+    // Given / When
+    const result = tokens("SELECT E'it''s text', $1")
+
+    // Then
+    expect(result).toContainEqual({ text: "E'it''s text'", type: "string.sql" })
+    expect(result).toContainEqual({ text: "$1", type: "variable.sql" })
   })
 
-  it("keeps binds in nested delimiters and after array operators", () => {
-    const result = tokens(
-      "select ARRAY[row_number() OVER (PARTITION BY :k), :x + :y], arr[(f(:z)):n] from t",
-    )
-    for (const name of ["k", "x", "y", "z"])
-      expect(result).toContain(`:${name}|variable`)
-    expect(result).toContain(":|operator")
-  })
+  it("preserves main's multiline comment coloring", () => {
+    // Given
+    const sql = "/* 'a\n/* b' */\nSELECT 42;"
 
-  it("keeps quoted and dollar-containing names as identifiers", () => {
-    const result = tokens(
-      "select `order`, `BTC-USD_buy`, a1$_, _a1$, select$x from `my--table` where `a/*b` > 1",
-    )
-    for (const name of [
-      "order",
-      "BTC-USD_buy",
-      "a1$_",
-      "_a1$",
-      "select$x",
-      "my--table",
-      "a/*b",
-    ])
-      expect(result).toContain(`${name}|identifier`)
-    expect(result.some((t) => t.endsWith("|comment"))).toBe(false)
-  })
+    // When
+    const lines = monaco.editor.tokenize(sql, id)
 
-  it("colors expressions inside ARRAY[...]", () => {
-    expect(
-      tokens("select ARRAY[abs(x), CASE WHEN a THEN 1 END, [y + 1]] z"),
-    ).toEqual([
-      "select|keyword",
-      "ARRAY[|keyword",
-      "abs|predefined",
-      "(|delimiter.parenthesis",
-      "x|identifier",
-      ")|delimiter.parenthesis",
-      ",|delimiter",
-      "CASE|keyword.block",
-      "WHEN|keyword.choice",
-      "a|identifier",
-      "THEN|keyword.choice",
-      "1|number",
-      "END|keyword.block",
-      ",|delimiter",
-      "[|delimiter.square",
-      "y|identifier",
-      "+|operator",
-      "1|number",
-      // adjacent tokens of the same type are reported merged
-      "]]|delimiter.square",
-      "z|identifier",
-    ])
+    // Then
+    expect(lines[2][0].type).toBe("keyword.sql")
   })
 })

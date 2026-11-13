@@ -227,27 +227,6 @@ describe("inferChartConfig", () => {
     expect(config.chart.type).toBe("bar")
   })
 
-  it.each([
-    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
-    "/* -- */\nSELECT 1;\n*/\n",
-    "/* '*/' */ ",
-  ])("recognizes LATEST ON after server-valid comments in %s", (prefix) => {
-    // Given
-    const columns = [col("symbol", "SYMBOL"), col("price", "DOUBLE")]
-    // When
-    const config = inferChartConfig(
-      columns,
-      [
-        ["BTC", 2],
-        ["ETH", 3],
-      ],
-      prefix +
-        "SELECT symbol, price FROM trades LATEST ON ts PARTITION BY symbol",
-    )
-    // Then the comment does not change the chart inferred for the live query
-    expect(config.chart.type).toBe("bar")
-  })
-
   it("picks bar for LATEST ON snapshot", () => {
     const columns = [col("symbol", "SYMBOL"), col("price", "DOUBLE")]
     const config = inferChartConfig(
@@ -258,6 +237,26 @@ describe("inferChartConfig", () => {
       ],
       "SELECT symbol, price FROM trades LATEST ON ts PARTITION BY symbol",
     )
+    expect(config.chart.type).toBe("bar")
+    expect(config.xColumn).toBe("symbol")
+  })
+
+  it.each([
+    "/* '/*' */",
+    "/* 'a\n/* b' */",
+    "/* disabled:\nSELECT 1 -- see /* below\n*/",
+  ])("preserves the LATEST chart hint after %s", (prefix) => {
+    // Given / When
+    const config = inferChartConfig(
+      [col("symbol", "SYMBOL"), col("price", "DOUBLE")],
+      [
+        ["BTC", 1],
+        ["ETH", 2],
+      ],
+      `${prefix}\nSELECT symbol, price FROM trades LATEST ON ts PARTITION BY symbol`,
+    )
+
+    // Then LATEST remains a bar snapshot instead of the pie fallback
     expect(config.chart.type).toBe("bar")
     expect(config.xColumn).toBe("symbol")
   })

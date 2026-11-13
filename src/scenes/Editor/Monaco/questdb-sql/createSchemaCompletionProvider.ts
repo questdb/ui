@@ -9,12 +9,11 @@ import {
   type SchemaInfo,
   type Suggestion,
 } from "@questdb/sql-parser"
+import { isCursorInComment } from "../utils"
 import {
-  getOpenQuoteOffset,
-  isCursorInComment,
-  isCursorInQuotedIdentifier,
-} from "../utils"
-import { maskSqlComments } from "../sqlLexical"
+  getParserQuoteAtCursor,
+  maskParserBlockComments,
+} from "../../../../utils/parserSql"
 
 /**
  * Map parser's SuggestionKind to Monaco's CompletionItemKind
@@ -76,7 +75,6 @@ const UPPERCASE_KINDS = new Set([
 const toCompletionItem = (
   suggestion: Suggestion,
   range: languages.CompletionItem["range"],
-  // The quote (`"` or `` ` ``) that opened the identifier the cursor is in
   openQuote?: string,
 ): languages.CompletionItem => {
   const isInsideQuotedIdentifier = openQuote !== undefined
@@ -99,7 +97,7 @@ const toCompletionItem = (
   const quotedInsertText = shouldAutoQuote ? '"' + insertText + '"' : insertText
 
   // Inside a quoted identifier, the range covers content + closing quote,
-  // so we append the same quote to close the identifier, plus a space.
+  // so we append the matching quote and a trailing space.
   const suffix = isFunction
     ? "($0)"
     : isInsideQuotedIdentifier
@@ -147,15 +145,13 @@ export const createSchemaCompletionProvider = (
       const cursorOffset = model.getOffsetAt(position)
       const fullText = model.getValue()
 
-      // Suppress suggestions inside comments and single-quoted strings.
+      // Suppress comments and quoted values before requesting parser suggestions.
       if (isCursorInComment(fullText, cursorOffset)) {
         return null
       }
 
-      const quoteOffset = getOpenQuoteOffset(fullText, 0, cursorOffset)
-      if (quoteOffset >= 0 && fullText[quoteOffset] === "'") {
-        return null
-      }
+      const quoteContext = getParserQuoteAtCursor(fullText, cursorOffset)
+      if (quoteContext?.quote === "'") return null
 
       const charBeforeCursor =
         cursorOffset > 0 ? fullText[cursorOffset - 1] : ""
@@ -168,8 +164,8 @@ export const createSchemaCompletionProvider = (
       // the parser's statement splitting (getQueryFromCursor), which can
       // break incomplete SQL into separate statements — e.g., "select * F"
       // gets split into "select *" and "F", losing context for autocomplete.
-      const completionText = maskSqlComments(fullText)
-      const tokens = tokenize(completionText).tokens
+      const parserText = maskParserBlockComments(fullText)
+      const tokens = tokenize(parserText).tokens
 
       let queryStartOffset = 0
       let queryEndOffset = fullText.length
@@ -200,22 +196,15 @@ export const createSchemaCompletionProvider = (
 
       // Pass the full statement (including text after cursor) so the parser
       // can detect when the cursor is inside a string literal or comment.
-      const query = completionText.substring(queryStartOffset, queryEndOffset)
+      const query = parserText.substring(queryStartOffset, queryEndOffset)
 
-      const openQuoteOffset = isCursorInQuotedIdentifier(
-        fullText,
-        queryStartOffset,
-        cursorOffset,
-      )
+      const openQuoteOffset = quoteContext?.startOffset ?? -1
+      const openQuote = quoteContext?.quote
       const isInsideQuotedIdentifier = openQuoteOffset >= 0
-      const openQuote = isInsideQuotedIdentifier
-        ? fullText[openQuoteOffset]
-        : undefined
 
       // When inside a quoted identifier, the parser suppresses suggestions.
       // Work around this by positioning the cursor at the opening " so the
       // parser sees e.g. "SELECT * FROM" and returns table suggestions.
-      // The same applies to backtick-quoted identifiers.
       const relativeCursorOffset = isInsideQuotedIdentifier
         ? openQuoteOffset - queryStartOffset
         : cursorOffset - queryStartOffset
@@ -224,9 +213,17 @@ export const createSchemaCompletionProvider = (
         query,
         relativeCursorOffset,
       )
+      const prefix = tokens
+        .filter(
+          (token) =>
+            token.startOffset >= queryStartOffset &&
+            token.startOffset < cursorOffset,
+        )
+        .map((token) => token.image)
+        .join(" ")
       const expectsNot =
-        /^\s*CREATE\s+(?:ATOMIC\s+)?(?:TABLE|(?:MATERIALIZED\s+|LIVE\s+)?VIEW)\s+IF\s*$/i.test(
-          query.slice(0, relativeCursorOffset),
+        /^CREATE\s+(?:ATOMIC\s+)?(?:TABLE|(?:MATERIALIZED\s+|LIVE\s+)?VIEW)\s+IF$/i.test(
+          prefix,
         )
 
       // When the "word" at cursor is an operator (e.g. :: from type cast),
@@ -246,46 +243,16 @@ export const createSchemaCompletionProvider = (
 
       if (isInsideQuotedIdentifier) {
         // Range covers content between quotes AND the closing quote,
-        // so we can replace it all and append the quote + a space.
+        // so we can replace it all and append '" ' (close quote + space).
         const contentStart = model.getPositionAt(openQuoteOffset + 1)
         const lineContent = model.getLineContent(position.lineNumber)
-        const closingIdx = lineContent.indexOf(
-          openQuote as string,
-          position.column - 1,
-        )
-        const suffix = lineContent.slice(position.column - 1, closingIdx)
-        const identifier = lineContent.slice(
-          contentStart.column - 1,
-          closingIdx,
-        )
-        const matchesKnownName = [
-          ...suggestions.map((suggestion) => suggestion.insertText),
-          ...tables.map((table) => table.table_name),
-          ...Object.values(informationSchemaColumns).flatMap((columns) =>
-            columns.map((column) => column.column_name),
-          ),
-        ].some((name) =>
-          name.toLowerCase().startsWith(identifier.toLowerCase()),
-        )
-        const suffixTokens = tokenize(suffix).tokens
-        const closesSpacedIdentifier =
-          /^[\w$.\-\u0080-\uFFFF \t]*$/.test(suffix) &&
-          suffixTokens.length > 0 &&
-          suffixTokens.every(
-            (token) => token.tokenType.name === "Identifier",
-          ) &&
-          !/[\w$\u0080-\uFFFF]/.test(lineContent[closingIdx + 1] ?? "")
-        const closesCurrentWord =
-          closingIdx >= 0 &&
-          (/^[\w$.\-\u0080-\uFFFF]*$/.test(suffix) ||
-            closesSpacedIdentifier ||
-            matchesKnownName)
+        const closingIdx = lineContent.indexOf(openQuote!, position.column - 1)
         range = {
           startLineNumber: contentStart.lineNumber,
           startColumn: contentStart.column,
           endLineNumber: position.lineNumber,
-          // Include the closing quote if found, otherwise end at cursor
-          endColumn: closesCurrentWord ? closingIdx + 2 : word.endColumn,
+          // Include the closing " if found, otherwise end at cursor
+          endColumn: closingIdx >= 0 ? closingIdx + 2 : position.column,
         }
       } else {
         const startColumn = isOperatorWord
@@ -314,25 +281,26 @@ export const createSchemaCompletionProvider = (
       const filtered = suggestions.filter(
         (s) =>
           (!expectsNot || s.insertText.toUpperCase() === "NOT") &&
+          (!isInsideQuotedIdentifier || s.kind !== SuggestionKind.Function) &&
           s.insertText.toUpperCase() !== currentWord.toUpperCase(),
       )
 
       return {
         incomplete: true,
-        suggestions: filtered.map((s) => {
-          // A qualified function already includes its namespace. Replace the
-          // whole word so `pg_catalog.pg_c` becomes `pg_catalog.pg_class()`.
-          // Column completions still replace only the part after `t.`.
-          const replacesQualifiedFunction =
+        suggestions: filtered.map((suggestion) => {
+          const replacesNamespace =
             !isInsideQuotedIdentifier &&
             !isOperatorWord &&
             dotIndex >= 0 &&
-            s.kind === SuggestionKind.Function &&
-            s.insertText.includes(".")
-          const itemRange = replacesQualifiedFunction
-            ? { ...range, startColumn: word.startColumn }
-            : range
-          return toCompletionItem(s, itemRange, openQuote)
+            suggestion.kind === SuggestionKind.Function &&
+            suggestion.insertText.includes(".")
+          return toCompletionItem(
+            suggestion,
+            replacesNamespace
+              ? { ...range, startColumn: word.startColumn }
+              : range,
+            openQuote,
+          )
         }),
       }
     },
