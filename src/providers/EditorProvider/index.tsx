@@ -541,24 +541,18 @@ export const EditorProvider: React.FC = ({ children }) => {
       if (signal?.aborted) {
         throw new DOMException("Aborted", "AbortError")
       }
-      if (buffers && buffers.length >= MAX_TABS) {
-        toast.error(
-          `Tab limit reached (${MAX_TABS}). Delete closed tabs from the Tabs panel to free up space.`,
-        )
-        return undefined
-      }
-
       const bufferType = bufferTypeOf(newBuffer ?? {})
-
-      void trackEvent(ConsoleEvent.TAB_ADD, {
-        type: bufferType,
-        count: (buffers?.length ?? 0) + 1,
-      })
-
       const fallback = makeFallbackBuffer(bufferType)
+      const created = await db.transaction("rw", db.buffers, async () => {
+        const storedBuffers = (await bufferStore.getAll()).filter(
+          (buffer) => !isPendingImportDeletion(buffer),
+        )
+        if (signal?.aborted) {
+          throw new DOMException("Aborted", "AbortError")
+        }
+        if (storedBuffers.length >= MAX_TABS) return undefined
 
-      const currentDefaultTabNumbers = (
-        await db.buffers
+        const currentDefaultTabNumbers = storedBuffers
           .filter((buffer) => {
             if (!buffer.label.startsWith(fallback.label)) return false
             if (newBuffer?.notebookViewState)
@@ -567,43 +561,39 @@ export const EditorProvider: React.FC = ({ children }) => {
               return buffer.metricsViewState !== undefined
             return true
           })
-          .toArray()
-      )
-        .map((buffer) => buffer.label.slice(fallback.label.length + 1))
-        .filter(Boolean)
-        .map((n) => parseInt(n, 10))
-        .sort()
+          .map((buffer) => buffer.label.slice(fallback.label.length + 1))
+          .filter(Boolean)
+          .map((n) => parseInt(n, 10))
+          .sort()
 
-      const nextNumber = () => {
-        for (let i = 0; i <= currentDefaultTabNumbers.length; i++) {
-          const next = i + 1
-          if (!currentDefaultTabNumbers.includes(next)) {
-            return next
+        const nextNumber = () => {
+          for (let i = 0; i <= currentDefaultTabNumbers.length; i++) {
+            const next = i + 1
+            if (!currentDefaultTabNumbers.includes(next)) {
+              return next
+            }
           }
         }
-      }
 
-      const activeBuffers = buffers ? sortPinnedBuffers(buffers) : []
-      const insertAfter =
-        afterBufferId !== undefined
-          ? activeBuffers.find((b) => b.id === afterBufferId)
-          : undefined
-      const position = insertAfter
-        ? insertAfter.position + 1
-        : activeBuffers.length
+        const activeBuffers = sortPinnedBuffers(storedBuffers)
+        const insertAfter =
+          afterBufferId !== undefined
+            ? activeBuffers.find((b) => b.id === afterBufferId)
+            : undefined
+        const position = insertAfter
+          ? insertAfter.position + 1
+          : nextOpenPosition(storedBuffers)
 
-      const buffer = makeBuffer({
-        ...newBuffer,
-        label: newBuffer?.label ?? `${fallback.label} ${nextNumber()}`,
-        position,
-      })
+        const buffer = makeBuffer({
+          ...newBuffer,
+          label: newBuffer?.label ?? `${fallback.label} ${nextNumber()}`,
+          position,
+        })
 
-      let id: number
-      if (insertAfter) {
-        const toShift = activeBuffers.filter(
-          (b) => typeof b.id === "number" && b.position >= position,
-        )
-        id = await db.transaction("rw", db.buffers, async () => {
+        if (insertAfter) {
+          const toShift = activeBuffers.filter(
+            (b) => typeof b.id === "number" && b.position >= position,
+          )
           for (const b of toShift) {
             if (signal?.aborted) {
               throw new DOMException("Aborted", "AbortError")
@@ -612,17 +602,22 @@ export const EditorProvider: React.FC = ({ children }) => {
               position: b.position + 1,
             })
           }
-          if (signal?.aborted) {
-            throw new DOMException("Aborted", "AbortError")
-          }
-          return db.buffers.add(buffer)
-        })
-      } else {
+        }
         if (signal?.aborted) {
           throw new DOMException("Aborted", "AbortError")
         }
-        id = await db.buffers.add(buffer)
+        const id = await db.buffers.add(buffer)
+        return { buffer: { ...buffer, id }, count: storedBuffers.length + 1 }
+      })
+      if (!created) {
+        toast.error(
+          `Tab limit reached (${MAX_TABS}). Delete closed tabs from the Tabs panel to free up space.`,
+        )
+        return undefined
       }
+
+      const { buffer, count } = created
+      void trackEvent(ConsoleEvent.TAB_ADD, { type: bufferType, count })
 
       if (activate) {
         await setActiveBuffer(buffer, { focus: true })
@@ -640,9 +635,9 @@ export const EditorProvider: React.FC = ({ children }) => {
         }
       }
 
-      return { id, ...buffer }
+      return buffer
     },
-    [buffers, setActiveBuffer],
+    [setActiveBuffer],
   )
 
   const showPreviewBuffer: EditorContext["showPreviewBuffer"] = useCallback(

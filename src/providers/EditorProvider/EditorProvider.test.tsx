@@ -22,7 +22,12 @@ import {
   type UserActionEvent,
 } from "../../utils/notebooks/notebookAIBridge"
 import { NotebookWorkspaceBridge } from "../../scenes/Editor/Notebook/NotebookWorkspaceBridge"
-import { EditorProvider, useEditor, type EditorContext } from "./index"
+import {
+  EditorProvider,
+  MAX_TABS,
+  useEditor,
+  type EditorContext,
+} from "./index"
 
 vi.mock("@monaco-editor/react", () => ({
   loader: { init: () => new Promise(() => undefined), config: () => undefined },
@@ -358,6 +363,115 @@ describe("EditorProvider: next active tab", () => {
     // Then A opens with its saved content, not the stale snapshot
     await waitFor(() => expect(editor.activeBuffer.id).toBe(a))
     expect(editor.activeBuffer.value).toBe("new a")
+  })
+})
+
+describe("EditorProvider: workspace activation", () => {
+  it.each([
+    { label: "SQL", value: "select 2" },
+    { label: "Metrics", metricsViewState: { metrics: [] } },
+    { label: "Notebook", notebookViewState: { cells: [] } },
+  ])(
+    "activates a restored $label tab without waiting for a render",
+    async (tab) => {
+      // Given a closed tab and the agent's workspace controller
+      const [, closed] = await seed([
+        { label: "Open", value: "select 1" },
+        { ...tab, archived: true, archivedAt: 1, position: -1 },
+      ])
+      renderProvider({}, true)
+      await waitForReady()
+
+      // When the agent restores and activates it in the same tool batch
+      await act(async () => {
+        const workspace = requireWorkspace()
+        await workspace.restoreTab(closed)
+        await workspace.activateTab(closed)
+      })
+
+      // Then the restored tab becomes active with its saved content
+      expect(await activeId()).toBe(closed)
+      expect(editor.activeBuffer).toMatchObject({ ...tab, archived: false })
+    },
+  )
+})
+
+describe("EditorProvider: adding tabs", () => {
+  it("assigns distinct positions and default names to concurrent creations", async () => {
+    // Given one open tab and the same creation callback for both requests
+    await seed([{ label: "Initial" }])
+    renderProvider()
+    await waitForReady()
+    const addBuffer = editor.addBuffer
+
+    // When two tabs are created before the live query refreshes
+    await act(async () => {
+      await Promise.all([
+        addBuffer(undefined, { activate: false }),
+        addBuffer(undefined, { activate: false }),
+      ])
+    })
+
+    // Then both names and positions are distinct
+    expect(await openPositions()).toEqual([
+      ["Initial", 0],
+      ["SQL 1", 1],
+      ["SQL 2", 2],
+    ])
+  })
+
+  it("inserts concurrent tabs after an anchor without overlapping positions", async () => {
+    // Given two tabs and the same insertion anchor for both requests
+    const [anchor] = await seed([{ label: "A" }, { label: "B" }])
+    renderProvider()
+    await waitForReady()
+    const addBuffer = editor.addBuffer
+
+    // When both requests insert after A
+    await act(async () => {
+      await Promise.all([
+        addBuffer(
+          { label: "First" },
+          { afterBufferId: anchor, activate: false },
+        ),
+        addBuffer(
+          { label: "Second" },
+          { afterBufferId: anchor, activate: false },
+        ),
+      ])
+    })
+
+    // Then each insertion shifts the current stored tabs
+    expect(await openPositions()).toEqual([
+      ["A", 0],
+      ["Second", 1],
+      ["First", 2],
+      ["B", 3],
+    ])
+  })
+
+  it("enforces the tab limit across concurrent creations", async () => {
+    // Given one remaining slot and two requests using the same callback
+    await seed(Array.from({ length: MAX_TABS - 1 }, () => ({})))
+    renderProvider()
+    await waitForReady()
+    const addBuffer = editor.addBuffer
+    let created: Array<Buffer | undefined> = []
+
+    // When both requests try to use the final slot
+    await act(async () => {
+      created = await Promise.all([
+        addBuffer({ label: "First" }, { activate: false }),
+        addBuffer({ label: "Second" }, { activate: false }),
+      ])
+    })
+
+    // Then only one request creates a tab
+    expect(created.filter(Boolean)).toHaveLength(1)
+    expect(await db.buffers.count()).toBe(MAX_TABS)
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining("Tab limit reached"),
+    )
   })
 })
 
@@ -708,6 +822,45 @@ describe("EditorProvider: example dashboards", () => {
     )
     expect(copies).toHaveLength(1)
     expect(editor.openingExampleIds).toEqual([])
+  })
+
+  it("places a delayed example after tabs created while its file loads", async () => {
+    // Given an example whose file is still being fetched
+    await seed([{ label: "Initial", value: "select 1" }])
+    localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+    let respond: (response: Response) => void = () => undefined
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((resolve) => (respond = resolve))),
+    )
+    const example = { id: "trades", title: "Trades", path: "t.json" }
+    renderProvider({ exampleDashboards: [example] })
+    await waitForReady()
+    let opening = Promise.resolve()
+    act(() => {
+      opening = editor.openExampleDashboard(example)
+    })
+
+    // When two other tabs open before the response arrives
+    await act(async () => {
+      await editor.addBuffer({ label: "First" })
+    })
+    await act(async () => {
+      await editor.addBuffer({ label: "Second" })
+    })
+    await act(async () => {
+      respond(new Response(JSON.stringify(exampleFile("Trades"))))
+      await opening
+    })
+
+    // Then the example receives the next free position
+    expect(await openPositions()).toEqual([
+      ["Initial", 0],
+      ["First", 1],
+      ["Second", 2],
+      ["Trades", 3],
+    ])
+    expect(editor.activeBuffer.templateId).toBe("trades")
   })
 
   it("shows a spinner while a first visitor's example loads", async () => {

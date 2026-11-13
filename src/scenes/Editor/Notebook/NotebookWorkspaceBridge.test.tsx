@@ -1,7 +1,8 @@
 import { createElement } from "react"
+import Dexie from "dexie"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { Buffer } from "../../../store/buffers"
+import { bufferStore, type Buffer } from "../../../store/buffers"
 import type { Client } from "../../../utils/questdb/client"
 import {
   __resetNotebookAIBridgeForTests,
@@ -34,6 +35,9 @@ let renderer: ReactTestRenderer | undefined
 const mountBridge = (initial: Buffer[], activeId: number) => {
   let buffers = initial
   let activeBufferId = activeId
+  vi.spyOn(bufferStore, "getById").mockImplementation((id) =>
+    Dexie.Promise.resolve(buffers.find((buffer) => buffer.id === id)),
+  )
 
   const rerender = () => {
     holder.editor = snapshot()
@@ -124,6 +128,7 @@ afterEach(() => {
   act(() => renderer?.unmount())
   renderer = undefined
   holder.editor = undefined
+  vi.restoreAllMocks()
 })
 
 describe("NotebookWorkspaceBridge — archiveTab", () => {

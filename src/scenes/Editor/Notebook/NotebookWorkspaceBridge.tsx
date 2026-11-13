@@ -160,7 +160,13 @@ export const NotebookWorkspaceBridge: React.FC = () => {
         })
       },
       async activateTab(bufferId) {
-        const target = findTab(bufferId)
+        const target = await bufferStore.getById(bufferId)
+        if (!target || target.isPreviewBuffer) {
+          throw new NotebookToolError(
+            "deleted",
+            `Tab ${bufferId} is not in the workspace.`,
+          )
+        }
         if (target.archived) {
           throw new NotebookToolError(
             "archived",
