@@ -1,8 +1,8 @@
 ---
 name: review-pr
 description: Review a code change against QuestDB Web Console coding standards
-argument-hint: [PR number, PR URL, commit hash, unstaged changes, staged changes] [--level=0..3]
-allowed-tools: Bash(gh *), Bash(git diff*), Bash(git show*), Bash(git log*), Bash(git blame*), Bash(git rev-parse*), Bash(git merge-base*), Bash(git status*), Bash(yarn test:unit), Bash(yarn vitest*), Bash(yarn lint), Bash(yarn typecheck), Bash(yarn build), Bash(yarn cypress*), Bash(env -u ELECTRON_RUN_AS_NODE yarn cypress*), Read, Write, Grep, Glob, Agent
+argument-hint: "[PR number, PR URL, commit hash, unstaged changes, staged changes] [--level=0..3]"
+allowed-tools: Bash(gh *), Bash(git diff*), Bash(git show*), Bash(git log*), Bash(git blame*), Bash(git rev-parse*), Bash(git merge-base*), Bash(git status*), Bash(yarn test), Bash(yarn test:*), Bash(yarn vitest*), Bash(yarn lint), Bash(yarn typecheck), Bash(yarn build), Bash(yarn cypress*), Bash(env -u ELECTRON_RUN_AS_NODE yarn cypress*), Read, Write, Grep, Glob, Agent
 ---
 
 Review `$ARGUMENTS`
@@ -184,7 +184,7 @@ Use the following as a role catalog. Select only the roles whose domain the diff
 
 **Agent 8: Code structure, readability & types:** Unnecessarily long component definitions without splitting into subcomponents (flag growth in already-large files), defining the same function/styled component in multiple places, complex logic inside a component instead of a `utils` file, creating a new component while an existing one under `src/components` could be reused, plain button/flex div where `Button`/`Box` apply; ambiguous naming, missing early returns, discouraged regex where a clearer approach exists, unnecessary comments for trivial logic, unnecessary IIFEs, unnecessary `!` non-null assertions, unnecessary `?.` optional chains, unnecessary optional fields (`?:`) that cannot be null/undefined, overly broad types that should be discriminated unions.
 
-**Agent 9: Test review & coverage:** Build a **private coverage map**: one row per behavioral change from 2.5a, recording the exercising test (found via real Grep/Glob searches over `e2e/tests/**/*.spec.js` and the unit test tree — citing a test without a recorded search is a skill violation), a failure link (what the assertion observes and why it fails if this change regresses — "the test renders the component" is not a failure link), the reachable population, the credible regression consequence, and the least fragile meaningful test for uncovered rows. Disposition per row: **COVERED / CRITICAL GAP / MODERATE GAP / ACCEPTED GAP / EXEMPT**. Missing tests alone never make a row Critical: a Critical gap requires a supported, reachable user population and a credible regression with material consequence (wrong/lost data, broken flow, security). A fix with no regression test defaults to a Moderate gap. Gaps that would require DOM/component tests are **ACCEPTED GAPS by project policy** (no jsdom/happy-dom in this repo) — note them as skipped; demand e2e coverage only for critical user flows. Cross-reference 2.5d and record missing cross-context tests as map rows, not pre-severitied findings. The map is required input for the Step 4 test gate; publish only admitted gaps, keep the rest private.
+**Agent 9: Test review & coverage:** Build a **private coverage map**: one row per behavioral change from 2.5a, recording the exercising test (found via real Grep/Glob searches over `test/e2e/**/*.spec.js`, `test/integration/**`, and the `src/**/*.test.*` files beside the source — citing a test without a recorded search is a skill violation), a failure link (what the assertion observes and why it fails if this change regresses — "the test renders the component" is not a failure link), the reachable population, the credible regression consequence, and the least fragile meaningful test for uncovered rows. Disposition per row: **COVERED / CRITICAL GAP / MODERATE GAP / ACCEPTED GAP / EXEMPT**. Missing tests alone never make a row Critical: a Critical gap requires a supported, reachable user population and a credible regression with material consequence (wrong/lost data, broken flow, security). A fix with no regression test defaults to a Moderate gap. Component and hook behavior is testable in Vitest with React Testing Library and jsdom (`// @vitest-environment jsdom`, shared helpers in `src/test`), so a gap a component test can close is a normal gap, not an accepted one. Prefer the cheapest stable layer that observes the behavior — unit, component, `test/integration/<feature>`, then a `test/e2e/<feature>` browser journey — and demand e2e coverage only for critical user flows that need a real browser. Cross-reference 2.5d and record missing cross-context tests as map rows, not pre-severitied findings. The map is required input for the Step 4 test gate; publish only admitted gaps, keep the rest private.
 
 **Agent 10: Accessibility & UX:** Missing ARIA labels on interactive elements; Radix dialog/popover/dropdown/tooltip usage — correct controlled state, focus trap, focus return on close, portal/z-index behavior, `Escape`/outside-click dismissal; missing keyboard navigation support; focus management issues; missing alt text on images; color contrast concerns; screen reader compatibility; click handlers without keyboard equivalents; missing error announcements for assistive technology; broken tab order.
 
@@ -216,7 +216,7 @@ While the subagents are scanning the code for their tasks, you will perform pred
 - Type errors: `yarn typecheck`
 - Build failure: `yarn build`
 - Lint errors: `yarn lint`
-- Unit test failures: `yarn test:unit`
+- Test failures: `yarn test` (unit, component, and integration Vitest suites — the same command CI runs; `yarn test:unit` alone skips component and integration tests)
 
 At level 0, run only `yarn typecheck` and `yarn lint`. At levels 1-3, run all four.
 
@@ -254,10 +254,11 @@ For findings fully proved by source — type errors, direct standards violations
 
 Use the cheapest sufficient rung; name the rung in the finding's Evidence entry.
 
-1. **Step 3b gate output** — `typecheck`/`build`/`lint`/`test:unit` results are already executed artifacts. Free.
-2. **Scratch vitest test on extracted logic** — parsers, query construction, migrations, compression round-trips, reducers, selectors, utils. Write the test to a temp/scratch directory, run it with `yarn vitest run <file>`, never commit it. For a regression-test claim, run it at head (must pass) and against the reverted production hunk (must fail); admission requires both artifacts.
+1. **Step 3b gate output** — `typecheck`/`build`/`lint`/`test` results are already executed artifacts. Free.
+2. **Scratch vitest test on extracted logic** — parsers, query construction, migrations, compression round-trips, reducers, selectors, utils. Write the test to a temporary `src/**/*.test.ts` file (Vitest only runs files matching its include globs, so a file under `/tmp` is not found), run it with `yarn vitest run <file>`, and delete it before finishing — never commit it. For a regression-test claim, run it at head (must pass) and against the reverted production hunk (must fail); admission requires both artifacts.
 3. **Scratch vitest test for async orchestration** — epics and client logic. RxJS races (`switchMap` vs `mergeMap`, missing `takeUntil`, error-kills-the-stream) and promise-ordering claims reproduce deterministically with `TestScheduler`/marble tests or mocked promises resolved in a forced order. Use fake timers; never sleeps.
-4. **Targeted Cypress spec — level 3 only** — for claims whose load-bearing step genuinely needs a real browser: Monaco lifecycle, focus management, IndexedDB behavior in the browser, interleaving through the UI. Reuse the existing harness (`e2e/commands.js`, fixtures) and run only the one spec, through yarn with `ELECTRON_RUN_AS_NODE` unset — Claude Code sets that variable, and it breaks Cypress's Electron binary:
+4. **Scratch component test (React Testing Library + jsdom)** — rendered-component and hook claims that do not depend on layout or a real browser engine: conditional rendering, controlled/uncontrolled state, event handlers, effect cleanup on unmount, stale responses landing after a re-render. Start the file with `// @vitest-environment jsdom`, use `renderComponent` and the helpers in `src/test/component.tsx`, write it to a scratch path the Vitest include glob matches (a temporary `src/**/*.test.tsx`), run it with `yarn vitest run <file>`, and delete it before finishing — never commit it. jsdom has no layout: claims about geometry, scrolling, virtualization windows, or Monaco need rung 5.
+5. **Targeted Cypress spec — level 3 only** — for claims whose load-bearing step genuinely needs a real browser: Monaco lifecycle, focus management, IndexedDB behavior in the browser, layout, interleaving through the UI. Reuse the existing harness (`test/e2e/commands.js`, `test/e2e/fixtures`) and run only the one spec, through yarn with `ELECTRON_RUN_AS_NODE` unset — Claude Code sets that variable, and it breaks Cypress's Electron binary:
 
    ```bash
    env -u ELECTRON_RUN_AS_NODE yarn cypress run --spec <file>
@@ -265,7 +266,7 @@ Use the cheapest sufficient rung; name the rung in the finding's Evidence entry.
 
    **Do not build state through the UI:** seed `localStorage` and IndexedDB (Dexie) directly — persisted buffers, saved queries, editor settings, auth/session state — via `cy.window()` / existing commands before the page interaction, and jump straight to the interaction under test. Logging in and hand-creating data through clicks wastes the browser mount; one mount per review, not per candidate.
 
-A DOM-bound runtime claim below level 3 has no affordable artifact: omit it and record the validation limitation in the private ledger. When its static skeleton is itself a concrete defect (an effect that creates a timer/listener/model and never disposes it), file that static finding at the severity static evidence earns — without asserting the unexecuted runtime symptom. Never fall back from failed or unavailable execution to confident prose.
+A runtime claim that needs a real browser (rung 5) has no affordable artifact below level 3: omit it and record the validation limitation in the private ledger. When its static skeleton is itself a concrete defect (an effect that creates a timer/listener/model and never disposes it), file that static finding at the severity static evidence earns — without asserting the unexecuted runtime symptom. Never fall back from failed or unavailable execution to confident prose.
 
 After a candidate satisfies the admission schema, apply the domain-specific checks:
 
@@ -308,7 +309,7 @@ Present only **ADMITTED** findings. Omitted candidates, disproofs, retractions, 
 
 Severity is what the user loses, not which checklist produced the finding. **"The user" is a Web Console user** — an analyst or operator running queries in the browser — never CI, or the release process. Do not classify up "to be safe": an inflated Critical costs what a real one costs.
 
-**Quality-gate exception.** A failing Step 3b check is the one finding class judged by the gate, not by user population: every failing check — `typecheck`, `build`, `test:unit`, and `lint` — is Critical, exactly as Step 3b states. A red gate blocks the merge for every user, so it needs no producer, trigger, or observable symptom. Every other finding is judged by what a Web Console user loses.
+**Quality-gate exception.** A failing Step 3b check is the one finding class judged by the gate, not by user population: every failing check — `typecheck`, `build`, `test`, and `lint` — is Critical, exactly as Step 3b states. A red gate blocks the merge for every user, so it needs no producer, trigger, or observable symptom. Every other finding is judged by what a Web Console user loses.
 
 **The Critical test — name the symptom.** Apart from a failing Step 3b quality gate, a finding is Critical only if you can complete: *"Because of this, the user sees ___"* with one of:
 

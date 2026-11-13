@@ -6,7 +6,7 @@ import type { ThemeMode } from "../types"
 
 loader.config({
   paths: {
-    vs: "assets/vs",
+    vs: new URL("assets/vs", window.location.href).href,
   },
 })
 

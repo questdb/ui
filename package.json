@@ -15,21 +15,25 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18.18.0"
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
   "scripts": {
     "build": "cross-env COMMIT_HASH=$(git rev-parse --short HEAD) vite build",
     "start": "COMMIT_HASH=$(git rev-parse --short HEAD) vite",
     "preview": "vite preview",
-    "test:unit": "TZ=UTC vitest run",
-    "test:e2e": "cypress run --spec 'e2e/tests/console/*.spec.js'",
-    "test:e2e:auth": "cypress run --spec 'e2e/tests/auth/*.spec.js'",
-    "test:e2e:enterprise": "cypress run --spec 'e2e/tests/enterprise/*.spec.js'",
+    "test": "TZ=UTC vitest run",
+    "test:unit": "TZ=UTC TEST_SUITE=unit vitest run",
+    "test:component": "TZ=UTC TEST_SUITE=component vitest run",
+    "test:integration": "TZ=UTC TEST_SUITE=integration vitest run",
+    "test:e2e": "cypress run --browser electron --spec 'test/e2e/console/*.spec.js'",
+    "test:e2e:context": "cypress run --browser electron --spec 'test/e2e/contextPath.spec.js'",
+    "test:e2e:auth": "cypress run --browser electron --spec 'test/e2e/auth/*.spec.js'",
+    "test:e2e:enterprise": "cypress run --browser electron --spec 'test/e2e/enterprise/*.spec.js'",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ e2e/tests/ && npm run lint:colors",
+    "lint": "eslint src/ test/integration/ 'test/e2e/**/*.spec.js' && npm run lint:colors",
     "lint:colors": "node scripts/check-color-literals.mjs",
-    "lint:fix": "eslint src/ e2e/tests/ --fix",
-    "sync:questdb": "git submodule update --init --remote --checkout e2e/questdb && git add e2e/questdb && git --no-pager -C e2e/questdb log -1 --oneline",
+    "lint:fix": "eslint src/ test/integration/ 'test/e2e/**/*.spec.js' --fix",
+    "sync:questdb": "git submodule update --init --remote --checkout test/e2e/questdb && git add test/e2e/questdb && git --no-pager -C test/e2e/questdb log -1 --oneline",
     "prepare": "husky"
   },
   "dependencies": {
@@ -112,6 +116,10 @@
     "@babel/preset-react": "^7.17.12",
     "@babel/preset-typescript": "^7.18.6",
     "@eslint/js": "^9.13.0",
+    "@testing-library/dom": "8",
+    "@testing-library/jest-dom": "6",
+    "@testing-library/react": "12",
+    "@testing-library/user-event": "14",
     "@types/babel__core": "^7",
     "@types/draggabilly": "^2.1.6",
     "@types/jquery": "3.5.1",
@@ -132,8 +140,8 @@
     "babel-plugin-styled-components": "^2.0.7",
     "bundlewatch": "^0.3.3",
     "cross-env": "7.0.2",
-    "cypress": "^10.11.0",
-    "cypress-real-events": "^1.13.0",
+    "cypress": "^16.2.1",
+    "cypress-real-events": "^1.15.1",
     "eslint": "^9.13.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jsx-a11y": "^6.10.2",
@@ -144,6 +152,7 @@
     "globals": "^15.0.0",
     "husky": "^9.1.7",
     "jiti": "^2.6.1",
+    "jsdom": "26",
     "lint-staged": "^16.2.6",
     "prettier": "^3.3.0",
     "react-test-renderer": "17.0.2",
@@ -190,7 +199,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --max-warnings=0"
+      "eslint --max-warnings=0 --no-warn-ignored"
     ]
   }
 }

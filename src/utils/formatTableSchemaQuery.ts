@@ -1,5 +1,5 @@
 import { trim } from "ramda"
-import { formatSql } from "../utils"
+import { formatSql } from "."
 import { isTimestamp } from "../scenes/Import/ImportCSVFiles/utils"
 
 type Column = {

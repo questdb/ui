@@ -25,7 +25,7 @@
 import React from "react"
 import styled from "styled-components"
 
-import { Text } from "../../components/Text"
+import { Text } from "../Text"
 
 export const Root = styled.div<{ shadow?: boolean; $titleColor?: string }>`
   position: relative;

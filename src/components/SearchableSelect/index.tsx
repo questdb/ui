@@ -429,6 +429,12 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
               ) : (
                 <Virtuoso
                   ref={listRef}
+                  fixedItemHeight={
+                    ITEM_HEIGHT_REM *
+                    parseFloat(
+                      getComputedStyle(document.documentElement).fontSize,
+                    )
+                  }
                   data={filtered}
                   computeItemKey={(_index, item) =>
                     `${item.option === null ? "custom" : "option"}:${item.value}`

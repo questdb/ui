@@ -2,8 +2,8 @@ import React from "react"
 import styled from "styled-components"
 import { ErrorWarning } from "../../icons"
 import { useFormContext } from "react-hook-form"
-import { Box } from "../../../components/Box"
-import { Text } from "../../../components/Text"
+import { Box } from "../../Box"
+import { Text } from "../../Text"
 
 type Props = {
   name: string

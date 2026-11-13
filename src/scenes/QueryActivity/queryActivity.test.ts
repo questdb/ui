@@ -185,6 +185,7 @@ describe("classifyQuery", () => {
     const cancelled = row({
       state: "cancelled",
       memoryUsed: BigInt(4096) * MIB,
+      memoryLimit: BigInt(1024) * MIB,
     })
 
     // When / Then

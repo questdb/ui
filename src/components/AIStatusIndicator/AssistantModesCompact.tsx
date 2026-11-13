@@ -20,7 +20,7 @@ import {
   getSectionDuration,
   type OperationSection,
 } from "./AssistantModes"
-import { slideAnimation } from "../../components/Animation"
+import { slideAnimation } from "../Animation"
 import { Box } from "../Box"
 
 const Container = styled.div`

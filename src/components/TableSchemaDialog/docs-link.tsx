@@ -1,6 +1,6 @@
 import React from "react"
 import { Information } from "../icons"
-import { Button, Tooltip } from "../../components"
+import { Button, Tooltip } from ".."
 
 export const DocsLink = ({
   url,

@@ -58,7 +58,7 @@ import { Tooltip } from "../../../components/Tooltip"
 import {
   isTimestamp,
   mapColumnTypeToUI,
-} from "../../../scenes/Import/ImportCSVFiles/utils"
+} from "../../Import/ImportCSVFiles/utils"
 import {
   LIVEVIEWS_GROUP_KEY,
   MATVIEWS_GROUP_KEY,

@@ -1,58 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import {
-  ApplyNotebookStateError,
-  buildAppliedNotebookState,
-  attachScriptSummary,
-  autoRefreshIntervalMs,
-  parseAutoRefreshInterval,
-  autoRefreshLabel,
-  AUTO_REFRESH_OPTIONS,
-  isAutoRefresh,
-  resolveCellView,
-  hasActiveResultGrid,
-  resolveRunAction,
-  buildAppliedCells,
-  buildAppliedLayout,
-  buildInitialScriptResults,
-  buildPersistPayload,
-  capResultBytes,
-  cellToolbarMenuFlags,
-  cellToolbarTier,
-  clearCellAutoRefresh,
-  cloneNotebookViewState,
-  countActiveAutoRefreshOverrides,
-  countAutoRefreshOverrides,
-  resolveAutoRefresh,
-  cloneNotebookViewStateWithCellIdMap,
-  duplicateCellAt,
-  generateDefaultLayout,
-  insertCell,
-  isUnverifiableExecError,
-  mergeCellLayout,
-  nextCopyLabel,
-  nextGridSeedPosition,
-  removeCell,
-  resolveRunCompletion,
-  setResultAt,
-  singleResultFromExec,
-  summarizeCellResults,
-  sqlHash,
-  stripCellResults,
-  swapCellDown,
-  swapCellUp,
-  upsertCellLayout,
-} from "./notebookUtils"
-import {
-  paneHeightsFromGridRows,
-  cellModeChangePatch,
-  computeCellGridBounds,
-  computeResultBottomHeight,
-  DEFAULT_CHART_BOTTOM_HEIGHT,
-  releaseCellResultPatch,
-  topHeightForSql,
-  snapMarkdownTopHeight,
-} from "./cellSizing"
+import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import type {
+  CellResult,
   NotebookCell,
   NotebookViewState,
   SingleQueryResult,
@@ -61,9 +10,56 @@ import {
   createDefaultNotebookViewState,
   MAX_NOTEBOOK_CELLS,
 } from "../../../store/notebook"
-import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import type { CellResultStatusReader } from "./cellSizing"
-import { getCellRunStatus } from "../../../utils/ai/runStatus"
+import {
+  cellModeChangePatch,
+  computeResultBottomHeight,
+  DEFAULT_CHART_BOTTOM_HEIGHT,
+  topHeightForSql,
+} from "./cellSizing"
+import {
+  ApplyNotebookStateError,
+  attachScriptSummary,
+  AUTO_REFRESH_OPTIONS,
+  autoRefreshIntervalMs,
+  autoRefreshLabel,
+  buildAppliedCells,
+  buildAppliedLayout,
+  buildAppliedNotebookState,
+  buildInitialScriptResults,
+  buildPersistPayload,
+  capResultBytes,
+  cellToolbarMenuFlags,
+  cellToolbarTier,
+  clearCellAutoRefresh,
+  cloneNotebookViewState,
+  cloneNotebookViewStateWithCellIdMap,
+  countActiveAutoRefreshOverrides,
+  countAutoRefreshOverrides,
+  duplicateCellAt,
+  generateDefaultLayout,
+  hasActiveResultGrid,
+  insertCell,
+  isAutoRefresh,
+  isUnverifiableExecError,
+  mergeCellLayout,
+  nextCopyLabel,
+  nextGridSeedPosition,
+  parseAutoRefreshInterval,
+  removeCell,
+  resolveAutoRefresh,
+  resolveCellView,
+  resolveRunAction,
+  resolveRunCompletion,
+  setResultAt,
+  singleResultFromExec,
+  sqlHash,
+  stripCellResults,
+  summarizeCellResults,
+  swapCellDown,
+  swapCellUp,
+  upsertCellLayout,
+} from "./notebookUtils"
 
 const cell = (
   id: string,
@@ -1950,26 +1946,6 @@ describe("lastRunError carry chain", () => {
     expect(clone.cells[0].lastRunError).toBe("table does not exist")
   })
 
-  it("releaseCellResultPatch carries the error when the result leaves memory", () => {
-    // When an errored result is released to IndexedDB-only
-    const patch = releaseCellResultPatch(errored("a"))
-
-    // Then the failure marker and message survive the release
-    expect(patch.lastRunStatus).toBe("error")
-    expect(patch.lastRunError).toBe("table does not exist")
-  })
-
-  it("getCellRunStatus surfaces the carried error after a strip", () => {
-    // Given an errored cell whose result blob was stripped
-    const [stripped] = stripCellResults([errored("a")])
-
-    // Then the agent-facing status still reports the error message
-    expect(getCellRunStatus(stripped)).toEqual({
-      status: "error",
-      error: "table does not exist",
-    })
-  })
-
   it("buildAppliedCells keeps a stripped cell's carried error across a value change", () => {
     // Given a stripped errored cell carrying status + error markers
     const [stripped] = stripCellResults([errored("a")])
@@ -3109,14 +3085,6 @@ describe("topHeight stamping", () => {
     "\n",
   )
 
-  it("floors topHeightForSql at the default editor height for short SQL", () => {
-    expect(topHeightForSql("SELECT 1")).toBe(72)
-  })
-
-  it("computes lines × lineHeight + padding beyond the floor", () => {
-    expect(topHeightForSql(tenLines)).toBe(10 * 24 + 8)
-  })
-
   it("insertCell stamps topHeight so never-mounted cells keep exact heights", () => {
     // Given an insert of a ten-line SQL cell
     const out = insertCell([], undefined, undefined, { value: tenLines })
@@ -3175,63 +3143,6 @@ describe("topHeight stamping", () => {
 })
 
 describe("pane height ceiling", () => {
-  const withResult: NotebookCell = {
-    id: "x",
-    position: 0,
-    value: "SELECT 1",
-    topHeight: 100,
-    topResized: true,
-    result: { results: [], activeResultIndex: 0, timestamp: 0 },
-  }
-
-  it("caps the editor estimate for a huge pasted query", () => {
-    // Given a query with 100,000 lines
-    // When the editor height is estimated
-    // Then it stops at the pane ceiling
-    expect(topHeightForSql(Array(100_000).fill("x").join("\n"))).toBe(2400)
-  })
-
-  it("caps the markdown auto-height snap", () => {
-    // Given a markdown height far above the ceiling
-    // When it snaps
-    // Then it stops at the pane ceiling
-    expect(snapMarkdownTopHeight(9_999)).toBe(2400)
-  })
-
-  it("caps a south-edge drag that asks for more rows than the ceiling", () => {
-    // Given a result-only cell
-    // When a drag asks for 500 rows
-    // Then the result pane stops at the ceiling
-    expect(
-      paneHeightsFromGridRows(
-        { ...withResult, paneView: "result" },
-        500,
-        10,
-        20,
-        false,
-      ),
-    ).toEqual({ bottomHeight: 2400, bottomResized: true })
-  })
-
-  it("limits grid rows to the pane the south edge owns at the ceiling", () => {
-    // Given a cell with a 100px editor and a result
-    // When the grid bounds are computed for the result-only and split layouts
-    // Then maxH covers the ceiling of the pane the edge owns
-    // Rounded UP like h, so maxH can never land below the rendered height;
-    // the save path clamps any overshoot back to the 2400px pane ceiling.
-    // result-only: 2400 + 44 chrome = 2444px → 83 rows
-    expect(
-      computeCellGridBounds(
-        { ...withResult, paneView: "result" },
-        10,
-        20,
-        false,
-      ).maxH,
-    ).toBe(83)
-    // split keeps the 100px editor: 100 + 2400 + 50 = 2550px → 86 rows
-    expect(computeCellGridBounds(withResult, 10, 20, false).maxH).toBe(86)
-  })
-
   it("rejects agent heights above the ceiling in apply", () => {
     // Given cell requests with an editor or a result height above the ceiling
     // When applied
@@ -3291,5 +3202,100 @@ describe("hasActiveResultGrid", () => {
     expect(failedHasGrid).toBe(false)
     expect(onErrorTabHasGrid).toBe(false)
     expect(hasActiveResultGrid({ ...grid, mode: "draw" })).toBe(false)
+  })
+})
+
+describe("summarizeCellResults", () => {
+  const cellWith = (results: CellResult["results"]): NotebookCell =>
+    ({
+      id: "c1",
+      value: "select 1",
+      mode: "run",
+      result: { results, activeResultIndex: 0, timestamp: 0 },
+    }) as unknown as NotebookCell
+
+  it("reports success only when all entries are terminal-success", () => {
+    expect(
+      summarizeCellResults(
+        cellWith([{ type: "dql" } as never, { type: "ddl" } as never]),
+      ),
+    ).toEqual({ success: true, queryCount: 2, results: ["success", "success"] })
+  })
+
+  it("reports a non-terminal running/queued entry as pending, without success", () => {
+    // Reachable via a superseded agent run, or the notebook backgrounded mid-run.
+    // The agent isn't told success and sees `pending` verbatim; it is NOT flagged
+    // unverified — only an unverifiable-error marker does that.
+    const running = summarizeCellResults(
+      cellWith([{ type: "running" } as never]),
+    )
+    expect(running.success).toBe(false)
+    expect(running.results).toEqual(["pending"])
+    expect(running.unverified).toBeUndefined()
+    expect(
+      summarizeCellResults(cellWith([{ type: "queued" } as never])).unverified,
+    ).toBeUndefined()
+  })
+
+  it("does NOT mark a success/error-only result unverified", () => {
+    expect(
+      summarizeCellResults(
+        cellWith([{ type: "dml" } as never, { type: "dml" } as never]),
+      ).unverified,
+    ).toBeUndefined()
+    expect(
+      summarizeCellResults(
+        cellWith([
+          { type: "dml" } as never,
+          { type: "error", error: "x" },
+        ] as never),
+      ).unverified,
+    ).toBeUndefined()
+  })
+
+  // An unverifiable-error entry (the write may have committed server-side) is
+  // flagged unverified so the agent verifies instead of re-running a duplicate.
+  // A user cancel surfaces verbatim as `error: "Cancelled by user"`, a marker.
+  it("marks an unverifiable-error entry (Cancelled by user) unverified", () => {
+    const r = summarizeCellResults(
+      cellWith([
+        { type: "dml" } as never,
+        { type: "error", error: "Cancelled by user" } as never,
+      ]),
+    )
+    expect(r.success).toBe(false)
+    expect(r.unverified).toBe(true)
+    expect(typeof r.note).toBe("string")
+  })
+
+  it("flags a transport-dropped error (QuestDB is not reachable) unverified", () => {
+    const r = summarizeCellResults(
+      cellWith([
+        { type: "error", error: "QuestDB is not reachable [504]" } as never,
+      ]),
+    )
+    expect(r.unverified).toBe(true)
+    expect(typeof r.note).toBe("string")
+  })
+
+  it("surfaces cancelled (skipped) and plain-error entries verbatim, not unverified", () => {
+    const r = summarizeCellResults(
+      cellWith([
+        { type: "cancelled" } as never,
+        { type: "error", error: "boom" } as never,
+      ]),
+    )
+    expect(r.success).toBe(false)
+    expect(r.queryCount).toBe(2)
+    expect(r.results).toEqual(["cancelled", "ERROR: boom"])
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it("reports failure for a cell with no result", () => {
+    expect(summarizeCellResults(undefined)).toEqual({
+      success: false,
+      queryCount: 0,
+      results: [],
+    })
   })
 })

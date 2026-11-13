@@ -31,30 +31,41 @@ export PATH="$JAVA_HOME/bin:$PATH"
 rm -rf tmp/dbroot
 rm -rf tmp/questdb-*
 
+# Keep in sync with the submodule path in .gitmodules.
+QUESTDB_DIR=test/e2e/questdb
+
 # Build server
 if [[ $1 = "-skipQuestDBBuild" ]]
 then
   echo "Skipping QuestDB build"
 else
-  CLIENT_VERSION=$(grep -m1 -oE '<questdb\.client\.version>[^<]+' e2e/questdb/core/pom.xml | sed 's/.*>//')
+  if [ ! -f "$QUESTDB_DIR/core/pom.xml" ]; then
+    git submodule update --init --recursive "$QUESTDB_DIR"
+  fi
+  CLIENT_VERSION=$(grep -m1 -oE '<questdb\.client\.version>[^<]+' "$QUESTDB_DIR/core/pom.xml" | sed 's/.*>//')
   PROFILES=build-binaries
   if [[ "$CLIENT_VERSION" == *-SNAPSHOT ]]; then
-    git submodule update --init --recursive e2e/questdb
+    git submodule update --init --recursive "$QUESTDB_DIR"
     PROFILES=$PROFILES,local-client
   fi
-  mvn clean package -e -f e2e/questdb/pom.xml -DskipTests -P "$PROFILES" 2>&1
+  mvn clean package -e -f "$QUESTDB_DIR/pom.xml" -DskipTests -P "$PROFILES" 2>&1
 fi
 
-# Unpack server
-tar xzf e2e/questdb/core/target/questdb-*-rt-*.tar.gz -C tmp/
+# Unpack server. Stop here if there is no build: the tests need a server.
+if ! ls "$QUESTDB_DIR"/core/target/questdb-*-rt-*.tar.gz > /dev/null 2>&1; then
+  echo "Error: no QuestDB archive in $QUESTDB_DIR/core/target. Check the build output above, or run without -skipQuestDBBuild." >&2
+  exit 1
+fi
+tar xzf "$QUESTDB_DIR"/core/target/questdb-*-rt-*.tar.gz -C tmp/
 mkdir tmp/dbroot
 
 # Build web console
 yarn install --immutable
 yarn build
 
-# Start proxy
-yarn preview &
+# Start proxy. Run vite directly: with `yarn preview`, $! is the yarn wrapper
+# and killing it leaves the server holding port 9999.
+node_modules/.bin/vite preview &
 PID1="$!"
 echo "Proxy started, PID=$PID1"
 
@@ -83,21 +94,18 @@ yarn test:e2e
 
 read -p "Press any key to continue... " -n1 -s
 
-# Set context path
-export QDB_HTTP_CONTEXT_WEB_CONSOLE=/context1
-
-# Restart proxy to pickup context path
+# The context-path check runs without the proxy: QuestDB serves the built
+# console itself, so a request that drops the prefix fails. Matches CI.
 kill -SIGTERM $PID1
-sleep 1
-yarn preview &
-PID2="$!"
-echo "Proxy started, PID=$PID2"
+
+CONTEXT_PATH=/ci/console
+export QDB_HTTP_CONTEXT_WEB_CONSOLE=$CONTEXT_PATH
+export QDB_HTTP_STATIC_PUBLIC_DIRECTORY="$UI_DIR/dist"
 
 # Running tests with context path
 rm -rf tmp/dbroot/*
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
-yarn test:e2e
+curl --retry 30 --retry-connrefused --retry-delay 1 --fail --silent --show-error \
+  --output /dev/null "http://localhost:9000$CONTEXT_PATH/settings"
+CYPRESS_BASE_URL="http://localhost:9000$CONTEXT_PATH" yarn test:e2e:context
 ./tmp/questdb-*/bin/questdb.sh stop
-
-# Stop proxy
-kill -SIGTERM $PID2
