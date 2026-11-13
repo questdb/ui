@@ -9,6 +9,7 @@ type Props = React.ComponentPropsWithoutRef<"div"> & {
   icon: React.ReactNode
   active: boolean
   dimmed: boolean
+  disabled: boolean
   meta?: React.ReactNode
   actions?: React.ReactNode
   // Optional handle in the left gutter (e.g. a drag grip), shown on hover
@@ -48,14 +49,15 @@ const Main = styled.div`
   gap: 0.8rem;
 `
 
-const Root = styled.div<{ $active: boolean }>`
+const Root = styled.div<{ $active: boolean; $disabled: boolean }>`
   position: relative;
   display: flex;
   align-items: center;
   gap: 0.8rem;
   min-height: 3.2rem;
   padding: 0.3rem 1rem 0.3rem 2.5rem;
-  cursor: pointer;
+  cursor: ${({ $disabled }) => ($disabled ? "default" : "pointer")};
+  opacity: ${({ $disabled }) => ($disabled ? 0.5 : 1)};
   user-select: none;
 
   &:hover {
@@ -102,17 +104,23 @@ export const TabRow = ({
   icon,
   active,
   dimmed,
+  disabled,
   meta,
   actions,
   leading,
   leadingVisibility = "auto",
   onKeyDown,
+  onClick,
+  onPointerDown,
   ...rest
 }: Props) => (
   <Root
     $active={active}
+    $disabled={disabled}
     data-hook="tabs-panel-row"
     data-active={active ? "true" : undefined}
+    onClick={disabled ? undefined : onClick}
+    onPointerDown={disabled ? undefined : onPointerDown}
     {...rest}
   >
     {leading && (
@@ -125,10 +133,11 @@ export const TabRow = ({
     )}
     <Main
       role="button"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
       aria-current={active ? "page" : undefined}
       data-hook="tabs-panel-row-button"
-      onKeyDown={onKeyDown}
+      onKeyDown={disabled ? undefined : onKeyDown}
     >
       {icon}
       <Label color={dimmed ? "contentSecondary" : "contentPrimary"}>

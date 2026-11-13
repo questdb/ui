@@ -23,8 +23,13 @@ const Icon = styled.span`
 // dashboard; the row stands for the opened notebook, so it is the one shown as
 // active while that notebook is the active tab.
 export const ExampleList = ({ examples }: Props) => {
-  const { activeBuffer, buffers, openExampleDashboard, openingExampleIds } =
-    useEditor()
+  const {
+    activeBuffer,
+    buffers,
+    openExampleDashboard,
+    openingExampleIds,
+    tabsDisabled,
+  } = useEditor()
   // Read the link from the live rows: a rename detaches the notebook from its
   // example at once, and the cached activeBuffer would lag behind.
   const activeTemplateId = buffers.find(
@@ -51,6 +56,7 @@ export const ExampleList = ({ examples }: Props) => {
                 </Icon>
               }
               active={activeTemplateId === example.id}
+              disabled={tabsDisabled}
               dimmed={false}
               meta={
                 opening && (

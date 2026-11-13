@@ -187,8 +187,8 @@ export type EditorContext = {
     setNewActiveBuffer?: boolean,
   ) => Promise<void>
   closeBuffer: (id: number, options?: RemoveBufferOptions) => Promise<void>
-  restoreBuffer: (id: number) => Promise<void>
-  keepBufferOpen: (id: number) => Promise<void>
+  restoreBuffer: (id: number, options?: { focus?: boolean }) => Promise<void>
+  keepBufferOpen: (id: number, options?: { focus?: boolean }) => Promise<void>
   reorderBuffer: (id: number, toIndex: number) => Promise<void>
   clearArchivedBuffers: () => Promise<void>
   openExampleDashboard: (example: ExampleDashboard) => Promise<void>
@@ -309,6 +309,7 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const activeBufferRef = useRef(activeBuffer)
+  const focusEditorOnMountRef = useRef(true)
   const recentBufferIdsRef = useRef<number[]>([])
   const bufferSwitchQueueRef = useRef<Promise<void>>(Promise.resolve())
   const bufferRemovalQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -427,6 +428,7 @@ export const EditorProvider: React.FC = ({ children }) => {
               ? pushRecentBuffer(recentIds, previousBuffer.id as number)
               : recentIds
           activeBufferRef.current = buffer
+          focusEditorOnMountRef.current = options?.focus !== false
           setActiveBufferState(buffer)
 
           if (options?.fromSearch) {
@@ -1148,7 +1150,10 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
-  const keepBufferOpen: EditorContext["keepBufferOpen"] = async (id) => {
+  const keepBufferOpen: EditorContext["keepBufferOpen"] = async (
+    id,
+    { focus = true } = {},
+  ) => {
     const buffer = buffers.find((b) => b.id === id)
     if (!buffer) return
     const keptFields = {
@@ -1158,18 +1163,21 @@ export const EditorProvider: React.FC = ({ children }) => {
       position: nextOpenPosition(buffers),
     }
     await updateBuffer(id, keptFields)
-    await setActiveBuffer({ ...buffer, ...keptFields }, { focus: true })
+    await setActiveBuffer({ ...buffer, ...keptFields }, { focus })
     // The kept tab is usually already active, so setActiveBuffer returned early
     // without focusing. Focus explicitly: the "Keep open" button that held focus
     // has just unmounted, and the first keystrokes would otherwise be lost.
-    if (!buffer.notebookViewState && !buffer.metricsViewState) {
+    if (focus && !buffer.notebookViewState && !buffer.metricsViewState) {
       editorRef.current?.focus()
     }
   }
 
-  const restoreBuffer: EditorContext["restoreBuffer"] = async (id) => {
+  const restoreBuffer: EditorContext["restoreBuffer"] = async (
+    id,
+    { focus = true } = {},
+  ) => {
     if (id === temporaryBufferId) {
-      await keepBufferOpen(id)
+      await keepBufferOpen(id, { focus })
       return
     }
     const buffer = buffers.find((b) => b.id === id)
@@ -1181,7 +1189,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       position: nextOpenPosition(await bufferStore.getAll()),
     }
     await updateBuffer(id, restoredFields)
-    await setActiveBuffer({ ...buffer, ...restoredFields })
+    await setActiveBuffer({ ...buffer, ...restoredFields }, { focus })
   }
 
   const reorderBuffer: EditorContext["reorderBuffer"] = async (id, toIndex) => {
@@ -1653,7 +1661,11 @@ export const EditorProvider: React.FC = ({ children }) => {
         cleanupExecutionRefs,
         highlightQuery,
         editorReadyTrigger: (editor) => {
-          if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
+          if (
+            focusEditorOnMountRef.current &&
+            !activeBuffer.isTemporary &&
+            !isNavigatingFromSearchRef.current
+          ) {
             editor.focus()
           }
 

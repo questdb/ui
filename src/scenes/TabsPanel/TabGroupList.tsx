@@ -21,7 +21,8 @@ type Props = {
 }
 
 export const TabGroupList = ({ rows }: Props) => {
-  const { activeBuffer, setActiveBuffer, previewBuffer } = useEditor()
+  const { activeBuffer, setActiveBuffer, previewBuffer, tabsDisabled } =
+    useEditor()
   const { canRemove, close, remove, reopen } = useRowActions()
   const locale = useMemo(() => getLocaleFromLanguage(fetchUserLocale()), [])
 
@@ -43,6 +44,7 @@ export const TabGroupList = ({ rows }: Props) => {
         <Tooltip content="Reopen" placement="right">
           <RowIconButton
             label="Reopen tab"
+            disabled={tabsDisabled}
             data-hook="tabs-panel-reopen"
             onClick={(event) => void reopen(buffer, event.currentTarget)}
           >
@@ -61,7 +63,7 @@ export const TabGroupList = ({ rows }: Props) => {
       )}
       <DeleteRowButton
         label="Delete tab"
-        disabled={!buffer.archived && !canRemove}
+        disabled={tabsDisabled || (!buffer.archived && !canRemove)}
         data-hook="tabs-panel-delete"
         onClick={(event) => void remove(buffer, event.currentTarget)}
       >
@@ -84,6 +86,7 @@ export const TabGroupList = ({ rows }: Props) => {
             label={buffer.label}
             icon={<BufferIcon buffer={buffer} />}
             active={activeBuffer.id === buffer.id}
+            disabled={tabsDisabled}
             dimmed={buffer.archived === true && !buffer.isTemporary}
             meta={closedAgo(buffer)}
             data-buffer-id={buffer.id}

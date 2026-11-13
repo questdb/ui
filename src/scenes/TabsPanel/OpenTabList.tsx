@@ -67,7 +67,8 @@ const slotStyleFor = (
 }
 
 export const OpenTabList = ({ buffers, reorderable }: Props) => {
-  const { activeBuffer, setActiveBuffer, reorderBuffer } = useEditor()
+  const { activeBuffer, setActiveBuffer, reorderBuffer, tabsDisabled } =
+    useEditor()
   const { canRemove, close, remove } = useRowActions()
   const listRef = useRef<HTMLDivElement>(null)
   const { displayedItems: rows, applyMove } = useOptimisticOrder(
@@ -79,6 +80,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
     rowsKey: buffers.map((buffer) => buffer.id).join(","),
     rowCount: rows.length,
     onReorder: (id, fromIndex, toIndex) => {
+      if (tabsDisabled) return
       void trackEvent(ConsoleEvent.TAB_PANEL_REORDER)
       applyMove(fromIndex, toIndex)
       void reorderBuffer(id, toIndex).then(() =>
@@ -139,6 +141,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
             icon={<BufferIcon buffer={buffer} />}
             data-buffer-id={buffer.id}
             active={activeBuffer.id === buffer.id}
+            disabled={tabsDisabled}
             dimmed={false}
             onPointerDown={(event) => {
               const onButton = (event.target as Element).closest("button")

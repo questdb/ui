@@ -10,19 +10,22 @@ import { focusNeighbourRow } from "./keyboard"
 // focus: the neighbouring row takes it before the row goes away, and the
 // editor is not focused when a tab is removed.
 export const useRowActions = () => {
-  const { buffers, closeBuffer, deleteBuffer, restoreBuffer } = useEditor()
+  const { buffers, closeBuffer, deleteBuffer, restoreBuffer, tabsDisabled } =
+    useEditor()
 
   // Gate on every open tab, not the rows shown: a filter that hides the other
   // tabs must not disable Close/Delete (same rule as closeBuffer).
-  const canRemove = sortPinnedBuffers(buffers).length > 1
+  const canRemove = !tabsDisabled && sortPinnedBuffers(buffers).length > 1
 
   const close = async (buffer: Buffer, action: Element) => {
+    if (tabsDisabled) return
     void trackEvent(ConsoleEvent.TAB_PANEL_CLOSE)
     focusNeighbourRow(action)
     await closeBuffer(buffer.id as number, { focusEditor: false })
   }
 
   const remove = async (buffer: Buffer, action: Element) => {
+    if (tabsDisabled) return
     if (!acceptDeleteClick()) return
     void trackEvent(ConsoleEvent.TAB_PANEL_DELETE)
     focusNeighbourRow(action)
@@ -32,9 +35,10 @@ export const useRowActions = () => {
   }
 
   const reopen = async (buffer: Buffer, action: Element) => {
+    if (tabsDisabled) return
     void trackEvent(ConsoleEvent.TAB_PANEL_RESTORE)
     focusNeighbourRow(action)
-    await restoreBuffer(buffer.id as number)
+    await restoreBuffer(buffer.id as number, { focus: false })
   }
 
   return { canRemove, close, remove, reopen }
