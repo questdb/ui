@@ -310,6 +310,8 @@ export const EditorProvider: React.FC = ({ children }) => {
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const activeBufferRef = useRef(activeBuffer)
   const recentBufferIdsRef = useRef<number[]>([])
+  const bufferSwitchQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const bufferRemovalQueueRef = useRef<Promise<void>>(Promise.resolve())
   const searchUpdateTimeoutRef = useRef<number | null>(null)
   const queryParamProcessedRef = useRef(false)
   const isNavigatingFromSearchRef = useRef(false)
@@ -395,61 +397,74 @@ export const EditorProvider: React.FC = ({ children }) => {
   }, [])
 
   const setActiveBuffer = useCallback(
-    async (
-      buffer: Buffer,
-      options?: { focus?: boolean; fromSearch?: boolean },
-    ) => {
-      try {
-        const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+    (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => {
+      const switchBuffer = async () => {
+        try {
+          const currentActiveBufferId = (await bufferStore.getActiveId())?.value
 
-        if (currentActiveBufferId) {
-          if (buffer.id === currentActiveBufferId) {
-            activeBufferRef.current = buffer
-            setActiveBufferState(buffer)
-            return
-          }
-        }
-
-        await bufferStore.setActiveId(buffer.id as number)
-        activeBufferRef.current = buffer
-        setActiveBufferState(buffer)
-        recentBufferIdsRef.current = pushRecentBuffer(
-          recentBufferIdsRef.current,
-          buffer.id as number,
-        )
-
-        if (options?.fromSearch) {
-          isNavigatingFromSearchRef.current = true
-        }
-
-        if (
-          editorRef.current &&
-          monacoRef.current &&
-          !buffer.notebookViewState
-        ) {
-          const currentModel = editorRef.current.getModel()
-          if (currentModel) {
-            currentModel.dispose()
+          if (currentActiveBufferId) {
+            if (buffer.id === currentActiveBufferId) {
+              activeBufferRef.current = buffer
+              setActiveBufferState(buffer)
+              return
+            }
           }
 
-          const model = monacoRef.current.editor.createModel(
-            buffer.value,
-            QuestDBLanguageName,
+          const previousBufferId = activeBufferRef.current.id
+          const previousBuffer =
+            typeof previousBufferId === "number"
+              ? await bufferStore.getById(previousBufferId)
+              : undefined
+
+          await bufferStore.setActiveId(buffer.id as number)
+          const recentIds = recentBufferIdsRef.current.filter(
+            (id) => id !== buffer.id,
           )
-          editorRef.current.setModel(model)
-          clearModelMarkers(monacoRef.current, editorRef.current)
+          recentBufferIdsRef.current =
+            previousBuffer &&
+            !previousBuffer.archived &&
+            !previousBuffer.isTemporary
+              ? pushRecentBuffer(recentIds, previousBuffer.id as number)
+              : recentIds
+          activeBufferRef.current = buffer
+          setActiveBufferState(buffer)
 
-          if (buffer.editorViewState) {
-            editorRef.current.restoreViewState(buffer.editorViewState)
+          if (options?.fromSearch) {
+            isNavigatingFromSearchRef.current = true
           }
 
-          if (options?.focus !== false) {
-            editorRef.current.focus()
+          if (
+            editorRef.current &&
+            monacoRef.current &&
+            !buffer.notebookViewState
+          ) {
+            const currentModel = editorRef.current.getModel()
+            if (currentModel) {
+              currentModel.dispose()
+            }
+
+            const model = monacoRef.current.editor.createModel(
+              buffer.value,
+              QuestDBLanguageName,
+            )
+            editorRef.current.setModel(model)
+            clearModelMarkers(monacoRef.current, editorRef.current)
+
+            if (buffer.editorViewState) {
+              editorRef.current.restoreViewState(buffer.editorViewState)
+            }
+
+            if (options?.focus !== false) {
+              editorRef.current.focus()
+            }
           }
+        } catch (e) {
+          console.warn("Error setting active buffer:", e)
         }
-      } catch (e) {
-        console.warn("Error setting active buffer:", e)
       }
+      const request = bufferSwitchQueueRef.current.then(switchBuffer)
+      bufferSwitchQueueRef.current = request
+      return request
     },
     [],
   )
@@ -738,10 +753,6 @@ export const EditorProvider: React.FC = ({ children }) => {
         const created = { ...buffer, id }
         activeBufferRef.current = created
         setActiveBufferState(created)
-        recentBufferIdsRef.current = pushRecentBuffer(
-          recentBufferIdsRef.current,
-          id,
-        )
         setAutoOpenedId(id)
       } catch (error) {
         console.error("Could not open the example dashboard:", error)
@@ -861,14 +872,18 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
-  const setActiveBufferOnRemoved = async (id: number, focusEditor = true) => {
+  const setActiveBufferOnRemoved = async (
+    id: number,
+    focusEditor = true,
+    snapshot: Buffer[] = buffers,
+  ) => {
     const activeBufferId = (await bufferStore.getActiveId())?.value
     recentBufferIdsRef.current = recentBufferIdsRef.current.filter(
       (recentId) => recentId !== id,
     )
     if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
       const nextActive = await resolveNextActiveBuffer({
-        snapshot: buffers,
+        snapshot,
         loadStored: async () =>
           (await bufferStore.getAll()).filter(
             (buffer) => !isPendingImportDeletion(buffer),
@@ -885,41 +900,76 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
-  const archiveBuffer: EditorContext["archiveBuffer"] = async (
+  const enqueueBufferRemoval = (
+    id: number,
+    initiator: "user" | "agent",
+    remove: (target: Buffer, snapshot: Buffer[]) => Promise<void>,
+  ) => {
+    const result = bufferRemovalQueueRef.current.then(async () => {
+      const stored = (await bufferStore.getAll()).filter(
+        (buffer) => !isPendingImportDeletion(buffer),
+      )
+      const target = stored.find((buffer) => buffer.id === id)
+      if (!target) {
+        if (initiator === "agent") {
+          throw new NotebookToolError("deleted", `Tab ${id} no longer exists.`)
+        }
+        return
+      }
+      if (
+        !target.archived &&
+        !target.isPreviewBuffer &&
+        sortPinnedBuffers(stored).length <= 1
+      ) {
+        const error = new NotebookToolError(
+          "last_tab",
+          "Cannot close or delete the only open tab. Create another tab first.",
+        )
+        if (initiator === "agent") throw error
+        toast.error(error.message)
+        return
+      }
+      await remove(target, stored)
+    })
+    bufferRemovalQueueRef.current = result.catch(() => undefined)
+    return result
+  }
+
+  const archiveBuffer: EditorContext["archiveBuffer"] = (
     id,
     initiator = "user",
     options = {},
-  ) => {
-    // Snapshot before write — live query refresh makes post-update read unreliable.
-    const target = buffers.find((b) => b.id === id)
-    await updateBuffer(id, {
-      archived: true,
-      archivedAt: new Date().getTime(),
-      position: -1,
-      // A closed example notebook is the user's own from now on: it is listed
-      // with the other closed notebooks and can be reopened, while the example
-      // row opens a fresh copy. (A user's close deletes it instead; an agent's
-      // archive must stay reversible.)
-      ...(target?.templateId !== undefined ? { templateId: undefined } : {}),
-    })
-    await setActiveBufferOnRemoved(id, options.focusEditor)
-    await compactPositionsAfterRemoval(target)
-    eventBus.publish(EventType.BUFFERS_UPDATED, {
-      type: "archive",
-      bufferId: id,
-    })
-    if (target && initiator === "user") {
-      emitUserAction({
-        kind: "user_archived_tab",
-        bufferId: id,
-        tabKind: tabKindOf(target),
-        label: target.label,
+  ) =>
+    enqueueBufferRemoval(id, initiator, async (target, snapshot) => {
+      if (target.archived) return
+      await updateBuffer(id, {
+        archived: true,
+        archivedAt: new Date().getTime(),
+        position: -1,
+        // A closed example notebook is the user's own from now on: it is listed
+        // with the other closed notebooks and can be reopened, while the example
+        // row opens a fresh copy. (A user's close deletes it instead; an agent's
+        // archive must stay reversible.)
+        ...(target.templateId !== undefined ? { templateId: undefined } : {}),
       })
-    }
-    if (target?.notebookViewState) {
-      releaseArchivedBuffer(id)
-    }
-  }
+      await setActiveBufferOnRemoved(id, options.focusEditor, snapshot)
+      await compactPositionsAfterRemoval(target, snapshot)
+      eventBus.publish(EventType.BUFFERS_UPDATED, {
+        type: "archive",
+        bufferId: id,
+      })
+      if (initiator === "user") {
+        emitUserAction({
+          kind: "user_archived_tab",
+          bufferId: id,
+          tabKind: tabKindOf(target),
+          label: target.label,
+        })
+      }
+      if (target.notebookViewState) {
+        releaseArchivedBuffer(id)
+      }
+    })
 
   const duplicateNotebook: EditorContext["duplicateNotebook"] = async (
     id,
@@ -982,44 +1032,44 @@ export const EditorProvider: React.FC = ({ children }) => {
     return duplicate
   }
 
-  const deleteBuffer: EditorContext["deleteBuffer"] = async (
+  const deleteBuffer: EditorContext["deleteBuffer"] = (
     id,
     setActiveBuffer = true,
     initiator = "user",
     options = {},
-  ) => {
-    const target = buffers.find((b) => b.id === id)
-    await bufferStore.delete(id)
-    cleanupExecutionRefs(id)
-    // Deleting the previewed tab ends the preview; don't keep pointing at a
-    // row that no longer exists.
-    if (id === temporaryBufferId) {
-      setTemporaryBufferId(null)
-    }
-    if (setActiveBuffer) {
-      await setActiveBufferOnRemoved(id, options.focusEditor)
-    }
-    eventBus.publish(EventType.BUFFERS_UPDATED, {
-      type: "delete",
-      bufferId: id,
-    })
-    // The AI diff tab is not a user tab and agents never see it in
-    // <workspace>: its removal is not a user deletion, whatever path closed it.
-    if (target && initiator === "user" && !target.isPreviewBuffer) {
-      emitUserAction({
-        kind: "user_deleted_tab",
+  ) =>
+    enqueueBufferRemoval(id, initiator, async (target, snapshot) => {
+      await bufferStore.delete(id)
+      cleanupExecutionRefs(id)
+      // Deleting the previewed tab ends the preview; don't keep pointing at a
+      // row that no longer exists.
+      if (id === temporaryBufferId) {
+        setTemporaryBufferId(null)
+      }
+      if (setActiveBuffer) {
+        await setActiveBufferOnRemoved(id, options.focusEditor, snapshot)
+      }
+      eventBus.publish(EventType.BUFFERS_UPDATED, {
+        type: "delete",
         bufferId: id,
-        tabKind: tabKindOf(target),
-        label: target.label,
       })
-    }
-    if (target?.notebookViewState) {
-      void deleteNotebookSnapshots(id)
-      removeNotebookBufferLayouts(id)
-    }
-    forgetBuffer(id)
-    await compactPositionsAfterRemoval(target)
-  }
+      // The AI diff tab is not a user tab and agents never see it in
+      // <workspace>: its removal is not a user deletion, whatever path closed it.
+      if (initiator === "user" && !target.isPreviewBuffer) {
+        emitUserAction({
+          kind: "user_deleted_tab",
+          bufferId: id,
+          tabKind: tabKindOf(target),
+          label: target.label,
+        })
+      }
+      if (target.notebookViewState) {
+        void deleteNotebookSnapshots(id)
+        removeNotebookBufferLayouts(id)
+      }
+      forgetBuffer(id)
+      await compactPositionsAfterRemoval(target, snapshot)
+    })
 
   const previewBuffer: EditorContext["previewBuffer"] = async (id) => {
     const buffer = buffers.find((b) => b.id === id)
@@ -1051,10 +1101,13 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   // Removing an open tab leaves a gap in the positions; a new tab would land
   // in the middle of the bar because addBuffer positions by count.
-  const compactPositionsAfterRemoval = async (removed: Buffer | undefined) => {
-    if (!removed || removed.archived || removed.isTemporary) return
+  const compactPositionsAfterRemoval = async (
+    removed: Buffer,
+    snapshot: Buffer[],
+  ) => {
+    if (removed.archived || removed.isTemporary) return
     await updateBuffersPositions(
-      positionsWithout(buffers, removed.id as number),
+      positionsWithout(snapshot, removed.id as number),
     )
   }
 

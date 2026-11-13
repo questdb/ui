@@ -18,8 +18,10 @@ import type { ConsoleConfig } from "../SettingsProvider/types"
 import { StoreKey } from "../../utils/localStorage/types"
 import {
   on,
+  requireWorkspace,
   type UserActionEvent,
 } from "../../utils/notebooks/notebookAIBridge"
+import { NotebookWorkspaceBridge } from "../../scenes/Editor/Notebook/NotebookWorkspaceBridge"
 import { EditorProvider, useEditor, type EditorContext } from "./index"
 
 vi.mock("@monaco-editor/react", () => ({
@@ -68,7 +70,10 @@ const exampleFile = (label: string) => ({
   },
 })
 
-const renderProvider = (consoleConfig: ConsoleConfig = {}) =>
+const renderProvider = (
+  consoleConfig: ConsoleConfig = {},
+  withWorkspace = false,
+) =>
   renderComponent(
     <SettingContext.Provider
       value={{
@@ -81,6 +86,7 @@ const renderProvider = (consoleConfig: ConsoleConfig = {}) =>
       }}
     >
       <EditorProvider>
+        {withWorkspace && <NotebookWorkspaceBridge />}
         <Probe />
       </EditorProvider>
     </SettingContext.Provider>,
@@ -136,6 +142,181 @@ beforeEach(async () => {
 })
 
 describe("EditorProvider: next active tab", () => {
+  it.each(["closeBuffer", "deleteBuffer"] as const)(
+    "returns to the startup tab after switching and calling %s",
+    async (remove) => {
+      // Given tabs B, C, A with A restored as the active tab
+      const [b, , a] = await seed(
+        [
+          { label: "B", value: "select 1" },
+          { label: "C", value: "select 2" },
+          { label: "A", value: "select 3" },
+        ],
+        2,
+      )
+      renderProvider()
+      await waitForReady()
+      expect(editor.activeBuffer.id).toBe(a)
+
+      // When the user switches to B and then removes B
+      await act(() =>
+        editor.setActiveBuffer(
+          editor.buffers.find((x) => x.id === b) as Buffer,
+        ),
+      )
+      await act(() => editor[remove](b))
+
+      // Then the startup tab A becomes active instead of the neighbour C
+      expect(editor.activeBuffer.id).toBe(a)
+      expect(await activeId()).toBe(a)
+    },
+  )
+
+  it("keeps earlier visits in order when a tab is revisited or activated again", async () => {
+    // Given D at startup, followed by visits to A, B and A again
+    const [a, b, , d] = await seed(
+      [
+        { label: "A", value: "select 1" },
+        { label: "B", value: "select 2" },
+        { label: "C", value: "select 3" },
+        { label: "D", value: "select 4" },
+      ],
+      3,
+    )
+    renderProvider()
+    await waitForReady()
+    for (const id of [a, b, a, a]) {
+      await act(() =>
+        editor.setActiveBuffer(
+          editor.buffers.find((x) => x.id === id) as Buffer,
+        ),
+      )
+    }
+
+    // When the revisited A is closed, followed by B
+    await act(() => editor.closeBuffer(a))
+    expect(editor.activeBuffer.id).toBe(b)
+    await act(() => editor.closeBuffer(b))
+
+    // Then the earlier startup visit to D wins over the unvisited neighbour C
+    expect(editor.activeBuffer.id).toBe(d)
+  })
+
+  it("records the visible startup tab when the stored active tab is closed", async () => {
+    // Given a closed stored active tab and A selected as the startup fallback
+    const [a, b] = await seed(
+      [
+        { label: "A", position: 2, value: "select 1" },
+        { label: "B", position: 0, value: "select 2" },
+        { label: "C", position: 1, value: "select 3" },
+        { archived: true, position: -1, value: "select 4" },
+      ],
+      3,
+    )
+    renderProvider()
+    await waitForReady()
+    expect(editor.activeBuffer.id).toBe(a)
+
+    // When the user switches to B and closes it
+    await act(() =>
+      editor.setActiveBuffer(editor.buffers.find((x) => x.id === b) as Buffer),
+    )
+    await act(() => editor.closeBuffer(b))
+
+    // Then A was the actual outgoing tab and becomes active again
+    expect(editor.activeBuffer.id).toBe(a)
+  })
+
+  it("records each outgoing tab when switch requests overlap", async () => {
+    // Given A at startup and two requests to switch to B and then C
+    const [b, c, a] = await seed(
+      [
+        { label: "B", value: "select 1" },
+        { label: "C", value: "select 2" },
+        { label: "A", value: "select 3" },
+      ],
+      2,
+    )
+    renderProvider()
+    await waitForReady()
+    const originalEditor = editor
+
+    // When the requests overlap and the user then closes C
+    await act(async () => {
+      await Promise.all(
+        [b, c].map((id) =>
+          originalEditor.setActiveBuffer(
+            originalEditor.buffers.find((x) => x.id === id) as Buffer,
+          ),
+        ),
+      )
+    })
+    expect(editor.activeBuffer.id).toBe(c)
+    await act(() => editor.closeBuffer(c))
+
+    // Then B was the last tab left and becomes active before A
+    expect(editor.activeBuffer.id).toBe(b)
+    await act(() => editor.closeBuffer(b))
+    expect(editor.activeBuffer.id).toBe(a)
+  })
+
+  it("does not record a closed tab again when activating its replacement", async () => {
+    // Given A at startup, then a visit to B
+    const [c, a, b] = await seed(
+      [
+        { label: "C", value: "select 1" },
+        { label: "A", value: "select 2" },
+        { label: "B", value: "select 3" },
+      ],
+      1,
+    )
+    renderProvider({}, true)
+    await waitForReady()
+    await act(() =>
+      editor.setActiveBuffer(editor.buffers.find((x) => x.id === b) as Buffer),
+    )
+
+    // When B is closed and an agent reopens it in the background
+    await act(() => editor.closeBuffer(b))
+    expect(editor.activeBuffer.id).toBe(a)
+    await waitFor(() =>
+      expect(editor.buffers.find((x) => x.id === b)?.archived).toBe(true),
+    )
+    await act(() => requireWorkspace().restoreTab(b))
+    await waitFor(() =>
+      expect(editor.buffers.find((x) => x.id === b)?.archived).toBe(false),
+    )
+    await act(() => editor.closeBuffer(a))
+
+    // Then the neighbour C wins because B has no remaining visit in history
+    expect(editor.activeBuffer.id).toBe(c)
+  })
+
+  it("does not record a closed-tab preview as an open-tab visit", async () => {
+    // Given A at startup, a closed tab and an unvisited C
+    const [a, closed, c] = await seed([
+      { label: "A", value: "select 1" },
+      { archived: true, position: -1, value: "select 2" },
+      { label: "C", value: "select 3" },
+    ])
+    renderProvider({}, true)
+    await waitForReady()
+
+    // When the user previews the closed tab, switches to C and reopens the preview in the background
+    await act(() => editor.previewBuffer(closed))
+    await act(() =>
+      editor.setActiveBuffer(editor.buffers.find((x) => x.id === c) as Buffer),
+    )
+    await act(() => requireWorkspace().restoreTab(closed))
+    await waitFor(() =>
+      expect(editor.buffers.find((x) => x.id === closed)?.archived).toBe(false),
+    )
+    await act(() => editor.closeBuffer(c))
+
+    // Then the earlier visit to A wins over the reopened preview
+    expect(editor.activeBuffer.id).toBe(a)
+  })
+
   it("activates the most recently used tab, not the left neighbour", async () => {
     // Given four open tabs, of which B and then D were used last
     const [, b, , d] = await seed(
@@ -262,6 +443,107 @@ describe("EditorProvider: reopening the previewed tab", () => {
 })
 
 describe("EditorProvider: removing a tab", () => {
+  it.each([
+    ["archiveTab", "archiveTab"],
+    ["archiveTab", "deleteTab"],
+    ["deleteTab", "archiveTab"],
+    ["deleteTab", "deleteTab"],
+  ] as const)(
+    "serializes %s followed by %s and rejects removal of the last open tab",
+    async (first, second) => {
+      // Given two open SQL tabs and the agent's workspace controller
+      const [a, b] = await seed([
+        { label: "A", value: "select 1" },
+        { label: "B", value: "select 2" },
+      ])
+      renderProvider({}, true)
+      await waitForReady()
+      const workspace = requireWorkspace()
+      let outcomes: PromiseSettledResult<void>[] = []
+
+      // When two removal requests arrive before either finishes
+      await act(async () => {
+        outcomes = await Promise.allSettled([
+          workspace[first](a),
+          workspace[second](b),
+        ])
+      })
+
+      // Then the first completes and the second preserves the last open tab
+      expect(outcomes[0]).toEqual({ status: "fulfilled", value: undefined })
+      expect(outcomes[1]).toMatchObject({
+        status: "rejected",
+        reason: { code: "last_tab" },
+      })
+      expect(await openPositions()).toEqual([["B", 0]])
+      expect((await db.buffers.get(b))?.value).toBe("select 2")
+      expect(editor.activeBuffer.id).toBe(b)
+      expect(queryHook("editor-ready")).not.toBeNull()
+      if (first === "archiveTab") {
+        expect((await db.buffers.get(a))?.archived).toBe(true)
+      } else {
+        expect(await db.buffers.get(a)).toBeUndefined()
+      }
+
+      // When another tab is created after the rejected request
+      await act(async () => {
+        await editor.addBuffer({ label: "C", value: "select 3" })
+      })
+      await act(() => editor.deleteBuffer(b, true, "agent"))
+
+      // Then the rejection has not blocked later removals
+      expect(await openPositions()).toEqual([["C", 0]])
+    },
+  )
+
+  it("preserves the last open tab when user removals overlap", async () => {
+    // Given two open tabs and a caller holding the current provider callbacks
+    const [a, b] = await seed([
+      { label: "A", value: "select 1" },
+      { label: "B", value: "select 2" },
+    ])
+    renderProvider()
+    await waitForReady()
+    const originalEditor = editor
+
+    // When a user closes one tab and deletes the other before either finishes
+    await act(async () => {
+      await Promise.all([
+        originalEditor.closeBuffer(a),
+        originalEditor.deleteBuffer(b),
+      ])
+    })
+
+    // Then the last open tab survives and the user sees why deletion stopped
+    expect(await openPositions()).toEqual([["B", 0]])
+    expect(toastError).toHaveBeenCalledWith(
+      "Cannot close or delete the only open tab. Create another tab first.",
+    )
+  })
+
+  it("allows deleting history and the AI diff beside the last open tab", async () => {
+    // Given one open user tab, a closed tab and the internal AI diff
+    const [, closed, diff] = await seed([
+      { label: "A", value: "select 1" },
+      { archived: true, position: -1, value: "select 2" },
+      { isPreviewBuffer: true },
+    ])
+    renderProvider()
+    await waitForReady()
+
+    // When the closed tab and internal diff are deleted
+    await act(async () => {
+      await Promise.all([
+        editor.deleteBuffer(closed),
+        editor.deleteBuffer(diff, true, "agent"),
+      ])
+    })
+
+    // Then only the user's open tab remains
+    expect(await openPositions()).toEqual([["A", 0]])
+    expect(await db.buffers.count()).toBe(1)
+  })
+
   it("closes the gap in the open tabs' positions", async () => {
     // Given three open tabs
     const [, b] = await seed([
