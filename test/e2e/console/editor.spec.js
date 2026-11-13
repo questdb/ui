@@ -1108,59 +1108,96 @@ describe.skip("editor tabs history", () => {
 })
 
 describe("handling comments", () => {
-  it("should handle comprehensive edge cases: multiline comments, single line comments, quotes, and semicolons", () => {
-    loadEditorWithQuery(
-      "/* Comment with semicolon; and single quote ' */\n-- Line comment with quote ' and semicolon;\nSELECT 'another;test' AS col2;\n/* Multi\nline;\ncomment;\nwith ' quote */\nSELECT 1 AS col3;\nSELECT 'text'/* inline; ' */ AS col5;",
-    )
+  it("runs only the three live statements among nested comments and quotes", () => {
+    // Given comments and quoted values that contain SQL delimiters
+    const sql = `/* Outer block comment:
+   '/* quoted opener */' and "*/" are quoted tokens.
+   /* Nested block:
+      SELECT 999; -- ignored SQL; /* and */ stay on this line
+      'nested; -- /* quoted text */'
+   */
+   -- Hidden delimiters: */ /* ; ' " \`
+*/
+-- Top-level line comment: ' " \` /* */ ; SELECT 888;
+SELECT 'it''s text; -- /* literal */' AS "value;--/*one*/";
 
+/* Between statements:
+   /* Nested '*/' token does not close this comment. */
+   -- Hidden closer */ and opener /*
+*/
+SELECT 1 /* outer inline /* nested */ still outer */ + 2 AS \`sum;--/*two*/\`;
+
+SELECT 'quote: "double" and \`backtick\`; /* text */ -- text' AS message; -- trailing ' " \` /* */ ;
+`
+    loadEditorWithQuery(sql)
     cy.intercept(editorExecution).as("commentQuery")
+
+    // Then only live statements have run glyphs
     cy.getCursorQueryGlyph().should("have.length", 3)
-    cy.getCursorQueryDecoration().should("have.length", 0)
+    for (const line of [2, 4, 7, 9, 13, 14]) {
+      cy.clickLine(line)
+      cy.getCursorQueryDecoration().should("have.length", 0)
+    }
 
-    cy.clickLine(2)
-    cy.getCursorQueryDecoration().should("have.length", 0)
+    const statements = [
+      {
+        line: 10,
+        query: "SELECT 'it''s text; -- /* literal */' AS \"value;--/*one*/\"",
+        column: "value;--/*one*/",
+        value: "it's text; -- /* literal */",
+      },
+      {
+        line: 16,
+        query:
+          "SELECT 1 /* outer inline /* nested */ still outer */ + 2 AS `sum;--/*two*/`",
+        column: "sum;--/*two*/",
+        value: 3,
+      },
+      {
+        line: 18,
+        query:
+          "SELECT 'quote: \"double\" and `backtick`; /* text */ -- text' AS message",
+        column: "message",
+        value: 'quote: "double" and `backtick`; /* text */ -- text',
+      },
+    ]
 
-    cy.clickLine(3)
-    cy.getCursorQueryDecoration().should("have.length", 1)
-    cy.clickRunIconInLine(3)
-    cy.wait("@commentQuery")
-      .its("request.query.query")
-      .should("eq", "SELECT 'another;test' AS col2")
-    cy.getGridRow(0).should("contain", "another;test")
-    cy.getByDataHook("success-notification").should(
-      "contain",
-      "SELECT 'another;test' AS col2",
-    )
+    for (const statement of statements) {
+      // When running each live statement from its glyph
+      cy.clickLine(statement.line)
+      cy.getCursorQueryDecoration().should("have.length", 1)
+      cy.clickRunIconInLine(statement.line)
 
-    cy.clickLine(4)
-    cy.getCursorQueryDecoration().should("have.length", 0)
+      // Then the outgoing SQL and server results match the intended statement
+      cy.wait("@commentQuery").then(({ request, response }) => {
+        expect(request.query.query).to.equal(statement.query)
+        expect(response.body.columns[0].name).to.equal(statement.column)
+        expect(response.body.dataset).to.deep.equal([[statement.value]])
+      })
+      cy.getGridRow(0).should("contain", String(statement.value))
+      cy.getByDataHook("success-notification").should(
+        "contain",
+        statement.query,
+      )
+    }
+  })
 
-    cy.clickLine(7)
-    cy.getCursorQueryDecoration().should("have.length", 0)
+  it("does not expose queries hidden by quotes spanning comment delimiters", () => {
+    // Given the original fixture, which the server treats as an empty query
+    const sql =
+      "/* Comment with semicolon; and single quote ' */\n-- Line comment with quote ' and semicolon;\nSELECT 'another;test' AS col2;\n/* Multi\nline;\ncomment;\nwith ' quote */\nSELECT 1 AS col3;\nSELECT 'text'/* inline; ' */ AS col5;"
+    cy.execAdminQuery(sql).its("body.error").should("eq", "empty query")
 
-    cy.clickLine(8)
-    cy.getCursorQueryDecoration().should("have.length", 1)
-    cy.clickRunIconInLine(8)
-    cy.wait("@commentQuery")
-      .its("request.query.query")
-      .should("eq", "SELECT 1 AS col3")
-    cy.getGridRow(0).should("contain", "1")
-    cy.getByDataHook("success-notification").should(
-      "contain",
-      "SELECT 1 AS col3",
-    )
+    // When the same buffer opens in the editor
+    loadEditorWithQuery(sql)
 
-    cy.clickLine(9)
-    cy.getCursorQueryDecoration().should("have.length", 1)
-    cy.clickRunIconInLine(9)
-    cy.wait("@commentQuery")
-      .its("request.query.query")
-      .should("eq", "SELECT 'text'/* inline; ' */ AS col5")
-    cy.getGridRow(0).should("contain", "text")
-    cy.getByDataHook("success-notification").should(
-      "contain",
-      "SELECT 'text'/* inline; ' */ AS col5",
-    )
+    // Then no SQL is offered for execution
+    cy.getCursorQueryGlyph().should("have.length", 0)
+    for (const line of [3, 8, 9]) {
+      cy.clickLine(line)
+      cy.getCursorQueryDecoration().should("have.length", 0)
+    }
+    cy.getByDataHook("button-run-query").should("be.disabled")
   })
 })
 

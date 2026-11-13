@@ -1481,6 +1481,26 @@ describe("statement boundaries around comments", () => {
 })
 
 describe("cursor decorations and run glyphs around comments", () => {
+  const complexCommentsSql = `/* Outer block comment:
+   '/* quoted opener */' and "*/" are quoted tokens.
+   /* Nested block:
+      SELECT 999; -- ignored SQL; /* and */ stay on this line
+      'nested; -- /* quoted text */'
+   */
+   -- Hidden delimiters: */ /* ; ' " \`
+*/
+-- Top-level line comment: ' " \` /* */ ; SELECT 888;
+SELECT 'it''s text; -- /* literal */' AS "value;--/*one*/";
+
+/* Between statements:
+   /* Nested '*/' token does not close this comment. */
+   -- Hidden closer */ and opener /*
+*/
+SELECT 1 /* outer inline /* nested */ still outer */ + 2 AS \`sum;--/*two*/\`;
+
+SELECT 'quote: "double" and \`backtick\`; /* text */ -- text' AS message; -- trailing ' " \` /* */ ;
+`
+
   type Glyph = [line: number, column: number, sql: string]
   type DecoratedLines = [startLine: number, endLine: number] | null
 
@@ -1512,6 +1532,28 @@ describe("cursor decorations and run glyphs around comments", () => {
   }
 
   it.each<[string, string, Glyph[], DecoratedLines[]]>([
+    [
+      "complex nested comments and quoted SQL delimiters",
+      complexCommentsSql,
+      [
+        [10, 1, "SELECT 'it''s text; -- /* literal */' AS \"value;--/*one*/\""],
+        [
+          16,
+          1,
+          "SELECT 1 /* outer inline /* nested */ still outer */ + 2 AS `sum;--/*two*/`",
+        ],
+        [
+          18,
+          1,
+          "SELECT 'quote: \"double\" and `backtick`; /* text */ -- text' AS message",
+        ],
+      ],
+      complexCommentsSql.split("\n").map((_line, index): DecoratedLines => {
+        const line = index + 1
+        return [10, 16, 18].includes(line) ? [line, line] : null
+      }),
+    ],
+
     [
       "nested comments containing destructive SQL",
       "/*\nSELECT 1; /* old */\nDROP TABLE trades;\n*/\nSELECT 2;",
