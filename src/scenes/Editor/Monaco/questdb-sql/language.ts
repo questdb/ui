@@ -123,13 +123,19 @@ export const language: languages.IMonarchLanguage = {
       ],
     ],
     numbers: [
-      [/[+-]?\d+[utsmhdwyn]\b/i, "number"], // sampling rate/ horizons
-      [/([+-]?\d+\.\d+[eE]?[+-]?\d+)/, "number"], // floating point number
-      [/0[xX][0-9a-fA-F]*/, "number"], // hex integers
-      [/[+-]?\d+((_)?\d+)*[Ll]?/, "number"], // integers
+      [/0[xX][0-9a-fA-F]+\b/, "number"],
+      [
+        /(\d[\d_]*\.?[\d_]*|\.\d[\d_]*)(([eE][+-]?\d[\d_]*)?f|[eE][+-]?\d[\d_]*d)\b/,
+        "number",
+      ],
+      [/\d[\d_]*l\b/, "number"],
+      [/\d[\d_]*(\.\d[\d_]*m|(\.[\d_]*)?e[+-]?\d[\d_]*m)\b/, "number"],
+      [/\d[\d_]*(\.\d[\d_]*)?(ms|us|ns|[smhdwyntu])\b/, "number"],
+      [/(\d[\d_]*\.?[\d_]*|\.\d[\d_]*)(e[+-]?\d[\d_]*)?/, "number"],
     ],
     strings: [
       [/N'/, { token: "string", next: "@string" }],
+      [/E'/, { token: "string", next: "@string" }],
       [/'/, { token: "string", next: "@string" }],
     ],
     string: [
@@ -138,11 +144,17 @@ export const language: languages.IMonarchLanguage = {
       [/'/, { token: "string", next: "@pop" }],
     ],
     variable: [
+      [/\$\d+/, "variable"],
       [/@[\w.$]+/, "variable"],
       [/@(["'`])(?:\\[\s\S]|(?!\1)[^\\])+\1/, "variable"],
     ],
     complexIdentifiers: [
       [/"/, { token: "identifier.quote", next: "@quotedIdentifier" }],
+      [/`/, { token: "identifier.quote", next: "@backtickIdentifier" }],
+    ],
+    backtickIdentifier: [
+      [/[^`]+/, "identifier"],
+      [/`/, { token: "identifier.quote", next: "@pop" }],
     ],
     quotedIdentifier: [
       [/[^"]+/, "identifier"],

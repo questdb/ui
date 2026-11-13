@@ -163,6 +163,221 @@ describe("createSchemaCompletionProvider", () => {
     createSchemaCompletionProvider(tables as Table[], informationSchemaColumns),
   )
 
+  describe("released parser integration", () => {
+    it.each([
+      "SELECT 'pr|' FROM trades",
+      "SELECT 'pr|",
+      "SELECT 'it''s pr|",
+      "SELECT E'pr|",
+      "SELECT 'pr; -- text /* |",
+      "SELECT 'pr' AS x; SELECT 'pr|",
+    ])("never offers completion inside a single-quoted value: %s", (input) => {
+      // Given
+      const { model, position } = cursorInput(input)
+
+      // When / Then
+      expect(provider.provideCompletionItems(model, position)).toBeNull()
+    })
+
+    for (const quote of ['"', "`"]) {
+      it.each([
+        [
+          `SELECT * FROM ${quote}my ta|${quote} WHERE 1 = 1`,
+          `SELECT * FROM ${quote}my table${quote}  WHERE 1 = 1`,
+        ],
+        [
+          `SELECT * FROM ${quote}my ta|`,
+          `SELECT * FROM ${quote}my table${quote} `,
+        ],
+        [
+          `SELECT t.${quote}pr|${quote} FROM trades t`,
+          `SELECT t.${quote}price${quote}  FROM trades t`,
+        ],
+      ])("completes quoted identifiers in %s", (input, expected) => {
+        // Given
+        const { model, position } = cursorInput(input)
+        const wanted = input.includes("my ta") ? "my table" : "price"
+
+        // When accepting the completion in a real Monaco model
+        const result = provider.provideCompletionItems(
+          model,
+          position,
+        ) as CompletionResult
+        const item = getSuggestions(result).find(
+          (s) =>
+            (typeof s.label === "string" ? s.label : s.label.label) === wanted,
+        )
+        expect(item).toBeDefined()
+        model.applyEdits([
+          { range: item!.range as IRange, text: item!.insertText },
+        ])
+
+        // Then spaces and surrounding SQL survive, with the original quote type
+        expect(model.getValue()).toBe(expected)
+      })
+    }
+
+    it.each([
+      "/* '/*' */",
+      "/* 'a\n/* b' */",
+      "/* disabled:\nSELECT 1 -- see /* below\n*/",
+    ])("retains main's table completion after %s", (comment) => {
+      // Given
+      const { model, position } = cursorInput(`${comment}\nSELECT * FROM tr|`)
+
+      // When / Then
+      expect(
+        getLabels(
+          provider.provideCompletionItems(model, position) as CompletionResult,
+        ),
+      ).toContain("trades")
+    })
+
+    it.each([
+      [
+        "SELECT * FROM pg_catalog.|",
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        "SELECT * FROM pg_catalog.pg_c|",
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        'SELECT * FROM "pg_catalog.|',
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        'SELECT * FROM "pg_catalog.pg_c|"',
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        "SELECT * FROM information_schema.|",
+        "information_schema.tables",
+        "SELECT * FROM information_schema.tables()",
+      ],
+      [
+        'SELECT * FROM "information_schema.|"',
+        "information_schema.tables",
+        "SELECT * FROM information_schema.tables()",
+      ],
+      [
+        "SELECT * FROM tables|",
+        "information_schema.tables",
+        "SELECT * FROM information_schema.tables()",
+      ],
+      ["SELECT t.pr| FROM trades t", "price", "SELECT t.price  FROM trades t"],
+      ['SELECT * FROM "my ta|"', "my table", 'SELECT * FROM "my table" '],
+    ])(
+      "accepts %s without corrupting its qualifier",
+      (input, wanted, expected) => {
+        // Given
+        const { model, position } = cursorInput(input)
+
+        // When
+        const result = provider.provideCompletionItems(
+          model,
+          position,
+        ) as CompletionResult
+        const item = getSuggestions(result).find(
+          (s) =>
+            (typeof s.label === "string" ? s.label : s.label.label) === wanted,
+        )
+        expect(item).toBeDefined()
+        model.applyEdits([
+          {
+            range: item!.range as IRange,
+            text: item!.insertText.replace("$0", ""),
+          },
+        ])
+
+        // Then
+        expect(model.getValue()).toBe(expected)
+      },
+    )
+
+    it.each([
+      'SELECT * FROM "pg_catalog"|',
+      'SELECT * FROM "pg_catalog."|',
+      'SELECT * FROM "pg_catalog".|',
+      'SELECT * FROM "pg_catalog".pg_c|',
+      'SELECT * FROM "information_schema".|',
+      'SELECT * FROM "information_schema."|',
+    ])("does not complete a closed catalog identifier in %s", (input) => {
+      // Given
+      const { model, position } = cursorInput(input)
+
+      // When
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+
+      // Then
+      expect(getSuggestions(result)).toEqual([])
+    })
+
+    it.each([
+      "CREATE TABLE IF |",
+      "CREATE ATOMIC TABLE IF |",
+      "CREATE VIEW IF |",
+      "CREATE MATERIALIZED VIEW IF |",
+      "CREATE LIVE VIEW IF |",
+      "-- create a table\nCREATE TABLE IF |",
+      "/* new table */ CREATE TABLE IF |",
+    ])("keeps NOT as the only choice for %s", (input) => {
+      // Given
+      const { model, position } = cursorInput(input)
+
+      // When / Then
+      expect(
+        getLabels(
+          provider.provideCompletionItems(model, position) as CompletionResult,
+        ),
+      ).toEqual(["NOT"])
+    })
+
+    it("keeps function suggestions out of quoted identifier edits", () => {
+      // Given
+      const { model, position } = cursorInput(
+        'SELECT * FROM pg_catalog."pg_c|"',
+      )
+
+      // When
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+
+      // Then
+      expect(
+        getSuggestions(result).some(
+          (s) => s.kind === CompletionItemKind.Function,
+        ),
+      ).toBe(false)
+    })
+
+    it.each([
+      ["SELECT * FROM trades GROUP BY |", "ROLLUP"],
+      ["SELECT ts, avg(price) FROM trades SAMPLE BY 1h FILL( |", "LINEAR"],
+      ["ALTER TABLE trades DEDUP |", "SKIP"],
+      ["WITH q AS (SELECT price FROM trades) SELECT pr| FROM q", "price"],
+    ])("retains useful completion in %s", (input, wanted) => {
+      // Given
+      const { model, position } = cursorInput(input)
+
+      // When / Then
+      expect(
+        getLabels(
+          provider.provideCompletionItems(model, position) as CompletionResult,
+        ),
+      ).toContain(wanted)
+    })
+  })
+
   describe("basic keyword suggestions", () => {
     it("suggests keywords and columns after SELECT", () => {
       const { model, position } = cursorInput("SELECT |")

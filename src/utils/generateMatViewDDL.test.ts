@@ -8,6 +8,17 @@ import {
 import { generateMatViewDDL } from "./generateMatViewDDL"
 
 describe("generateMatViewDDL", () => {
+  it("preserves generation after a main-compatible block comment", () => {
+    // Given / When
+    const result = generateMatViewDDL(
+      "/* '/*' */ CREATE TABLE trades (price DOUBLE, ts TIMESTAMP) TIMESTAMP(ts) PARTITION BY DAY",
+    )
+
+    // Then
+    expect(result).toMatch(/CREATE MATERIALIZED VIEW/i)
+    expect(result).toMatch(/\btrades_1h\b/)
+  })
+
   it("handles a simple trades table (DAY partition, DOUBLE price/amount)", () => {
     const ddl = `CREATE TABLE 'trades' (
       symbol SYMBOL,
