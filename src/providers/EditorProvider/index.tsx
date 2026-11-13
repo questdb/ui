@@ -1286,10 +1286,12 @@ export const EditorProvider: React.FC = ({ children }) => {
   // its newest rows, refreshing on Auto. A notebook with that name is reused: the
   // cell holding this query is focused, or, without one, the cell is appended
   // and run. A user notebook that happens to share the name keeps its cells.
-  const openTableNotebook: EditorContext["openTableNotebook"] = (table) =>
-    singleFlight(tableNotebookRequestsRef.current, table.name, () =>
+  const openTableNotebook: EditorContext["openTableNotebook"] = (table) => {
+    if (tabsDisabled) return Promise.resolve()
+    return singleFlight(tableNotebookRequestsRef.current, table.name, () =>
       openTableNotebookNow(table),
     )
+  }
 
   const openTableNotebookNow = async ({
     name,

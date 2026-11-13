@@ -103,6 +103,7 @@ type Props = Readonly<{
   onExpandCollapse: () => void | Promise<void>
   onOpenDetailsDrawer?: () => void
   onQuery?: () => void
+  queryDisabled?: boolean
   navigateInTree: (options: TreeNavigationOptions) => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
@@ -434,6 +435,7 @@ const Row = ({
   onExpandCollapse,
   onOpenDetailsDrawer,
   onQuery,
+  queryDisabled,
   navigateInTree,
   "data-hook": dataHook,
   isLoading,
@@ -599,7 +601,7 @@ const Row = ({
         if (e.key === "Enter") {
           // Ctrl/Cmd+Enter is the keyboard path to the Query button
           if ((e.metaKey || e.ctrlKey) && onQuery) {
-            onQuery()
+            if (!queryDisabled) onQuery()
           } else {
             onOpenDetailsDrawer?.()
           }
@@ -750,13 +752,21 @@ const Row = ({
             size="sm"
             className="table-menu-button"
             data-hook="table-query-button"
+            disabled={queryDisabled}
             onClick={(e: React.MouseEvent) => {
               e.stopPropagation()
               onQuery()
             }}
             onDoubleClick={(e: React.MouseEvent) => e.stopPropagation()}
           >
-            <PlayIcon size={16} color={theme.color.statusInfo} />
+            <PlayIcon
+              size={16}
+              color={
+                queryDisabled
+                  ? theme.color.contentDisabled
+                  : theme.color.statusInfo
+              }
+            />
           </QueryButton>
         </Tooltip>
       )}

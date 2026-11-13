@@ -199,7 +199,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   } = useAIStatus()
 
   const { handleExplainSchema } = useAIQuickActions()
-  const { appendQuery, openTableNotebook } = useEditor()
+  const { appendQuery, openTableNotebook, tabsDisabled } = useEditor()
   // renderRow is memoized on schema state only; read the provider callback
   // through a ref so a row never calls a stale openTableNotebook (and with it a
   // stale tab list for the new tab's position and the tab limit).
@@ -653,6 +653,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                     onExpandCollapse={() => toggleNodeExpansion(item.id)}
                     onOpenDetailsDrawer={handleOpenDetailsDrawer}
                     onQuery={queryTable}
+                    queryDisabled={tabsDisabled}
                     navigateInTree={navigateInTree}
                     partitionBy={item.partitionBy}
                     walEnabled={item.walEnabled}
@@ -687,13 +688,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               </ContextMenuTrigger>
               <ContextMenuContent>
                 <MenuItem
-                  data-hook="table-context-menu-query"
-                  onClick={queryTable}
-                  icon={<PlayIcon size={16} />}
-                >
-                  Query in a notebook
-                </MenuItem>
-                <MenuItem
                   data-hook="table-context-menu-view-details"
                   onClick={handleOpenDetailsDrawer}
                   icon={<InfoIcon size={16} />}
@@ -708,6 +702,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   icon={<FileCopy size={16} />}
                 >
                   Copy schema
+                </MenuItem>
+                <MenuItem
+                  data-hook="table-context-menu-query"
+                  disabled={tabsDisabled}
+                  onClick={queryTable}
+                  icon={<PlayIcon size={16} />}
+                >
+                  Query in a notebook
                 </MenuItem>
                 {(item.kind === "table" || item.kind === "matview") && (
                   <span
@@ -843,6 +845,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       openedSuspensionDialog,
       navigateInTree,
       getOrFetchSymbolDetails,
+      tabsDisabled,
     ],
   )
 

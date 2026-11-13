@@ -288,4 +288,109 @@ describe("schema tree: Query action", () => {
         )
       })
   })
+
+  for (const existing of [false, true]) {
+    it(`preserves a running script when Query targets ${existing ? "an existing" : "a new"} notebook`, () => {
+      // Given a script with its first statement pending
+      cy.intercept("GET", "**/assets/console-configuration.json", {
+        ctaBanner: false,
+        readOnly: false,
+      })
+      cy.loadConsoleWithAuth(
+        false,
+        {},
+        {
+          buffers: [
+            {
+              label: "Script",
+              value: "select 1 as first;\nselect 2 as second;",
+            },
+            ...(existing
+              ? [
+                  {
+                    ...createNotebookBuffer("SELECT 'unrelated analysis'"),
+                    label: "query_action_trades",
+                  },
+                ]
+              : []),
+          ],
+          activeBufferId: 1,
+        },
+      )
+      cy.ensureDataSourcesPanel()
+      cy.expandTables()
+      tableRow("query_action_trades").should("be.visible")
+      let release
+      let requestPending = false
+      cy.intercept("GET", "**/exec*", (request) => {
+        const query = new URL(request.url).searchParams.get("query")
+        if (query?.toLowerCase() !== "select 1 as first") return
+        requestPending = true
+        return new Promise((resolve) => {
+          release = () => {
+            request.reply({
+              query,
+              columns: [{ name: "first", type: "INT" }],
+              dataset: [[1]],
+              count: 1,
+            })
+            resolve()
+          }
+        })
+      })
+      cy.clickRunScript()
+      cy.wrap(null).should(() => expect(requestPending).to.equal(true))
+      cy.getByDataHook("editor-tabs-disabled").should("exist")
+
+      // When the user tries the button, keyboard shortcut and context menu
+      tableRow("query_action_trades").realHover()
+      tableRow("query_action_trades")
+        .find('[data-hook="table-query-button"]')
+        .should("be.disabled")
+        .click({ force: true })
+      tableRow("query_action_trades").focus()
+      cy.realPress([
+        Cypress.platform === "darwin" ? "Meta" : "Control",
+        "Enter",
+      ])
+      tableRow("query_action_trades").rightclick()
+      cy.getByDataHook("table-context-menu-query").should(
+        "have.attr",
+        "data-disabled",
+      )
+      cy.realPress("Escape")
+
+      // Then the script stays active and both statements finish
+      cy.get(".chrome-tab[active]").should(
+        "have.attr",
+        "data-tab-title",
+        "Script",
+      )
+      cy.getEditorTabs().should("have.length", existing ? 2 : 1)
+      cy.then(() => release())
+      cy.getByDataHook("editor-tabs").should("exist")
+      cy.getByDataHook("notifications-collapsed").should(
+        "contain",
+        "2 successful",
+      )
+
+      // And Query works again once the script finishes
+      tableRow("query_action_trades")
+        .find('[data-hook="table-query-button"]')
+        .should("be.enabled")
+      tableRow("query_action_trades").rightclick()
+      cy.getByDataHook("table-context-menu-query").should(
+        "not.have.attr",
+        "data-disabled",
+      )
+      cy.realPress("Escape")
+      clickQuery("query_action_trades")
+      cy.getEditorTabByTitle("query_action_trades").should(
+        "have.attr",
+        "active",
+      )
+      cy.getEditorTabs().should("have.length", 2)
+      notebookCells().last().should("contain", "2 rows")
+    })
+  }
 })

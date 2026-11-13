@@ -916,6 +916,40 @@ describe("EditorProvider: example dashboards", () => {
 })
 
 describe("EditorProvider: schema Query", () => {
+  it.each([false, true])(
+    "preserves the running tab when Query targets a notebook (existing: %s)",
+    async (existing) => {
+      // Given a script locks tab changes, with or without a matching notebook
+      const [scriptId] = await seed([
+        { label: "Script", value: "select 1; select 2;" },
+        ...(existing
+          ? [
+              {
+                label: "trades",
+                notebookViewState: {
+                  cells: [{ id: "analysis", position: 0, value: "select 99" }],
+                },
+              },
+            ]
+          : []),
+      ])
+      renderProvider()
+      await waitForReady()
+      act(() => editor.setTabsDisabled(true))
+      const stored = await bufferStore.getAll()
+
+      // When the schema requests a table notebook
+      await act(() =>
+        editor.openTableNotebook({ name: "trades", designatedTimestamp: "ts" }),
+      )
+
+      // Then neither the active tab nor the stored tabs change
+      expect(editor.activeBuffer.id).toBe(scriptId)
+      expect(await activeId()).toBe(scriptId)
+      expect(await bufferStore.getAll()).toEqual(stored)
+    },
+  )
+
   it("creates one notebook for a table however often Query is clicked", async () => {
     await seed([{ value: "select 1" }])
     renderProvider()
