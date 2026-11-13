@@ -4,6 +4,7 @@ export type NotebookToolErrorCode =
   | "archived"
   | "not_a_notebook"
   | "activation_failed"
+  | "tabs_locked"
   | "unknown_cell"
   | "workspace_unavailable"
   | "mounted_mid_edit"

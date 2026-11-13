@@ -824,6 +824,48 @@ describe("EditorProvider: example dashboards", () => {
     expect(editor.openingExampleIds).toEqual([])
   })
 
+  it("loads a delayed example in the background when a script locks tabs", async () => {
+    // Given an example starts loading while the SQL tab is active
+    const [scriptId] = await seed([
+      { label: "Script", value: "select 1; select 2;" },
+    ])
+    localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+    let respond: (response: Response) => void = () => undefined
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((resolve) => (respond = resolve))),
+    )
+    const example = { id: "trades", title: "Trades", path: "t.json" }
+    renderProvider({ exampleDashboards: [example] })
+    await waitForReady()
+    let opening = Promise.resolve()
+    act(() => {
+      opening = editor.openExampleDashboard(example)
+    })
+
+    // When the file arrives after a script locks tab changes
+    act(() => editor.setTabsDisabled(true))
+    await act(async () => {
+      respond(new Response(JSON.stringify(exampleFile("Trades"))))
+      await opening
+    })
+
+    // Then the example loads without replacing the running SQL tab
+    const examples = (await bufferStore.getAll()).filter(
+      (buffer) => buffer.templateId === example.id,
+    )
+    expect(examples).toHaveLength(1)
+    expect(editor.tabsDisabled).toBe(true)
+    expect(editor.activeBuffer.id).toBe(scriptId)
+    expect(await activeId()).toBe(scriptId)
+    expect(editor.openingExampleIds).toEqual([])
+
+    // And the user can activate the loaded example after the script finishes
+    act(() => editor.setTabsDisabled(false))
+    await act(() => editor.openExampleDashboard(example))
+    expect(editor.activeBuffer.id).toBe(examples[0].id)
+  })
+
   it("places a delayed example after tabs created while its file loads", async () => {
     // Given an example whose file is still being fetched
     await seed([{ label: "Initial", value: "select 1" }])

@@ -1909,7 +1909,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     dispatch(
       actions.query.addNotification(
         {
-          query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
+          query: `${activeBuffer.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
           content: (
             <Text color="contentPrimary">
               {!completedGracefully && individualQueryResults.length === 0 ? (
@@ -1933,7 +1933,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             ? NotificationType.SUCCESS
             : NotificationType.ERROR,
         },
-        activeBufferRef.current.id,
+        activeBufferId,
       ),
     )
     setTabsDisabled(false)

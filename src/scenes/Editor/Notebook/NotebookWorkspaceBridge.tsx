@@ -38,6 +38,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
   const {
     buffers,
     activeBuffer,
+    tabsDisabled,
     addBuffer,
     setActiveBuffer,
     archiveBuffer,
@@ -51,6 +52,10 @@ export const NotebookWorkspaceBridge: React.FC = () => {
   buffersRef.current = buffers
   const activeBufferRef = useRef(activeBuffer)
   activeBufferRef.current = activeBuffer
+  const tabsDisabledRef = useRef(tabsDisabled)
+  useEffect(() => {
+    tabsDisabledRef.current = tabsDisabled
+  }, [tabsDisabled])
   // Ref so the deps registration stays stable ([] deps) while the quest client
   // is swapped on reconnect.
   const questRef = useRef(quest)
@@ -174,6 +179,12 @@ export const NotebookWorkspaceBridge: React.FC = () => {
           )
         }
         if (activeBufferRef.current.id !== bufferId) {
+          if (tabsDisabledRef.current) {
+            throw new NotebookToolError(
+              "tabs_locked",
+              "Cannot switch tabs while a script is running. Wait for it to finish, then retry.",
+            )
+          }
           await setActiveBuffer(target)
         }
       },

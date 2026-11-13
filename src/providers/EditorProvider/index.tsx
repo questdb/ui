@@ -290,7 +290,12 @@ export const EditorProvider: React.FC = ({ children }) => {
   const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
     null,
   )
-  const [tabsDisabled, setTabsDisabled] = useState(false)
+  const [tabsDisabled, setTabsDisabledState] = useState(false)
+  const tabsDisabledRef = useRef(false)
+  const setTabsDisabled = useCallback((disabled: boolean) => {
+    tabsDisabledRef.current = disabled
+    setTabsDisabledState(disabled)
+  }, [])
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
     if (!rawBuffers) return undefined
@@ -621,12 +626,13 @@ export const EditorProvider: React.FC = ({ children }) => {
       const { buffer, count } = created
       void trackEvent(ConsoleEvent.TAB_ADD, { type: bufferType, count })
 
-      if (activate) {
+      const shouldActivate = activate && !tabsDisabledRef.current
+      if (shouldActivate) {
         await setActiveBuffer(buffer, { focus: true })
       }
 
       if (
-        activate &&
+        shouldActivate &&
         shouldSelectAll &&
         editorRef.current &&
         !newBuffer?.notebookViewState

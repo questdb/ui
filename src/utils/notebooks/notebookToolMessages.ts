@@ -16,6 +16,8 @@ export const notebookErrorHint = (code: NotebookToolErrorCode): string => {
       return "The buffer is not a notebook. Use create_notebook to scaffold one."
     case "activation_failed":
       return "Could not switch to the notebook tab. Ask the user to reopen it."
+    case "tabs_locked":
+      return "A script is running. Wait for it to finish before switching tabs, then retry."
     case "unknown_cell":
       return "The cell id is not in the notebook. Call list_cells to resync, then retry."
     case "workspace_unavailable":

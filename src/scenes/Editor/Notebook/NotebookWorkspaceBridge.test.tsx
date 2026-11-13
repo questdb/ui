@@ -35,6 +35,7 @@ let renderer: ReactTestRenderer | undefined
 const mountBridge = (initial: Buffer[], activeId: number) => {
   let buffers = initial
   let activeBufferId = activeId
+  let tabsDisabled = false
   vi.spyOn(bufferStore, "getById").mockImplementation((id) =>
     Dexie.Promise.resolve(buffers.find((buffer) => buffer.id === id)),
   )
@@ -86,6 +87,7 @@ const mountBridge = (initial: Buffer[], activeId: number) => {
     return {
       ...fns,
       buffers,
+      tabsDisabled,
       activeBuffer: buffers.find((b) => b.id === activeBufferId) as Buffer,
     }
   }
@@ -97,6 +99,10 @@ const mountBridge = (initial: Buffer[], activeId: number) => {
 
   return {
     ...fns,
+    setTabsDisabled(disabled: boolean) {
+      tabsDisabled = disabled
+      rerender()
+    },
     get buffers() {
       return buffers
     },
@@ -265,6 +271,32 @@ describe("NotebookWorkspaceBridge — restoreTab", () => {
 })
 
 describe("NotebookWorkspaceBridge — activateTab", () => {
+  it("rejects a switch when a script starts during the tab lookup, then allows a retry", async () => {
+    // Given an agent activation is waiting for the target tab
+    const target = tab(2, 1)
+    const editor = mountBridge([tab(1, 0), target], 1)
+    let resolveTarget: (buffer: Buffer) => void = () => undefined
+    vi.mocked(bufferStore.getById).mockImplementationOnce(
+      () => new Dexie.Promise((resolve) => (resolveTarget = resolve)),
+    )
+    const workspace = requireWorkspace()
+    const activation = toolCode(workspace.activateTab(2))
+
+    // When a script locks tabs before the lookup finishes
+    editor.setTabsDisabled(true)
+    resolveTarget(target)
+
+    // Then the tool rejects the switch and preserves the running tab
+    expect(await activation).toBe("tabs_locked")
+    expect(editor.activeBufferId).toBe(1)
+    expect(editor.setActiveBuffer).not.toHaveBeenCalled()
+
+    // And the same tool can switch after the script finishes
+    editor.setTabsDisabled(false)
+    await workspace.activateTab(2)
+    expect(editor.activeBufferId).toBe(2)
+  })
+
   it("switches to an open tab", async () => {
     // Given two open tabs with the first active
     const editor = mountBridge([tab(1, 0), tab(2, 1)], 1)
@@ -378,6 +410,35 @@ describe("NotebookWorkspaceBridge — through the tool dispatcher", () => {
   const dqlValidator = () =>
     Promise.resolve({ query: "", columns: [], timestamp: 0 })
   const client = () => createModelToolsClient({} as Client, undefined, {})
+
+  it("returns the tab lock and retry guidance to the agent", async () => {
+    // Given a script locks the active SQL tab
+    const editor = mountBridge([tab(1, 0), tab(2, 1)], 1)
+    editor.setTabsDisabled(true)
+
+    // When the agent requests a different tab
+    const result = await dispatchTool(
+      "activate_tab",
+      { buffer_id: 2 },
+      client(),
+      () => undefined,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the error explains how to retry and the active tab stays unchanged
+    expect(result.is_error).toBe(true)
+    const error = JSON.parse(result.content) as {
+      error_code: string
+      message: string
+      hint: string
+    }
+    expect(error.error_code).toBe("tabs_locked")
+    expect(error.message).toContain("Wait for it to finish")
+    expect(error.hint).toContain("then retry")
+    expect(editor.setActiveBuffer).not.toHaveBeenCalled()
+    expect(editor.activeBufferId).toBe(1)
+  })
 
   it("returns the last_tab guard to the agent as a tool error", async () => {
     // Given the mounted bridge with a single open tab

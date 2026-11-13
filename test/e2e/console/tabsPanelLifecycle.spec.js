@@ -25,6 +25,89 @@ const buffers = [
 ]
 
 describe("Tabs panel lifecycle", () => {
+  it("keeps a script running when a delayed example finishes loading", () => {
+    // Given an example starts loading while a SQL script tab is active
+    let releaseExample
+    let releaseQuery
+    let examplePending = false
+    let queryPending = false
+    const queries = []
+    cy.intercept("GET", "**/assets/console-configuration.json", {
+      ctaBanner: false,
+      readOnly: false,
+      exampleDashboards: [
+        {
+          id: "delayed",
+          title: "Delayed example",
+          path: "assets/delayed-example.json",
+        },
+      ],
+    })
+    cy.intercept("GET", "**/assets/delayed-example.json", (request) => {
+      examplePending = true
+      return new Promise((resolve) => {
+        releaseExample = () => {
+          request.reply({ fixture: "example-dashboard.json" })
+          resolve()
+        }
+      })
+    })
+    cy.loadConsoleWithAuth(
+      false,
+      { "tabs.panel.exampleAutoOpened": "true" },
+      { buffers, activeBufferId: 1 },
+    )
+    openPanel()
+    row("Delayed example").click()
+    cy.wrap(null).should(() => expect(examplePending).to.equal(true))
+
+    // When the example arrives while the script's first statement is pending
+    cy.intercept("GET", "**/exec*", (request) => {
+      const query = new URL(request.url).searchParams.get("query")
+      if (!/^select [12] as (first|second)$/i.test(query || "")) return
+      queries.push(query)
+      const first = /first/i.test(query)
+      const reply = () =>
+        request.reply({
+          query,
+          columns: [{ name: first ? "first" : "second", type: "INT" }],
+          dataset: [[first ? 1 : 2]],
+          count: 1,
+        })
+      if (!first) {
+        reply()
+        return
+      }
+      queryPending = true
+      return new Promise((resolve) => {
+        releaseQuery = () => {
+          reply()
+          resolve()
+        }
+      })
+    })
+    cy.clickRunScript()
+    cy.wrap(null).should(() => expect(queryPending).to.equal(true))
+    cy.getByDataHook("editor-tabs-disabled").should("exist")
+    cy.then(() => releaseExample())
+
+    // Then the example loads in the background and both script statements finish
+    cy.getEditorTabByTitle("Delayed example").should("exist")
+    cy.getEditorTabByTitle("Script A").should("have.attr", "active")
+    cy.then(() => releaseQuery())
+    cy.getByDataHook("editor-tabs").should("exist")
+    cy.getByDataHook("notifications-collapsed")
+      .should("contain", "Running completed")
+      .and("contain", "2 successful")
+    cy.then(() => {
+      expect(queries).to.deep.equal(["select 1 as first", "select 2 as second"])
+    })
+
+    // And the loaded example can be opened after the script finishes
+    row("Delayed example").click()
+    cy.getEditorTabByTitle("Delayed example").should("have.attr", "active")
+  })
+
   it("keeps panel activation and row actions locked until a script finishes", () => {
     // Given open and closed tabs, an example, and a pending script request
     let release
