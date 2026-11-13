@@ -245,7 +245,22 @@ describe("createSchemaCompletionProvider", () => {
         "SELECT * FROM pg_catalog.pg_class()",
       ],
       [
+        'SELECT * FROM "pg_catalog.|',
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
+        'SELECT * FROM "pg_catalog.pg_c|"',
+        "pg_catalog.pg_class",
+        "SELECT * FROM pg_catalog.pg_class()",
+      ],
+      [
         "SELECT * FROM information_schema.|",
+        "information_schema.tables",
+        "SELECT * FROM information_schema.tables()",
+      ],
+      [
+        'SELECT * FROM "information_schema.|"',
         "information_schema.tables",
         "SELECT * FROM information_schema.tables()",
       ],
@@ -283,6 +298,27 @@ describe("createSchemaCompletionProvider", () => {
         expect(model.getValue()).toBe(expected)
       },
     )
+
+    it.each([
+      'SELECT * FROM "pg_catalog"|',
+      'SELECT * FROM "pg_catalog."|',
+      'SELECT * FROM "pg_catalog".|',
+      'SELECT * FROM "pg_catalog".pg_c|',
+      'SELECT * FROM "information_schema".|',
+      'SELECT * FROM "information_schema."|',
+    ])("does not complete a closed catalog identifier in %s", (input) => {
+      // Given
+      const { model, position } = cursorInput(input)
+
+      // When
+      const result = provider.provideCompletionItems(
+        model,
+        position,
+      ) as CompletionResult
+
+      // Then
+      expect(getSuggestions(result)).toEqual([])
+    })
 
     it.each([
       "CREATE TABLE IF |",

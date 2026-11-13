@@ -5,6 +5,7 @@ import {
   createAutocompleteProvider,
   SuggestionKind,
   SuggestionPriority,
+  functions,
   tokenize,
   type SchemaInfo,
   type Suggestion,
@@ -60,6 +61,11 @@ const convertToSchemaInfo = (
 })
 
 const QUOTABLE_KINDS = new Set([SuggestionKind.Table, SuggestionKind.Column])
+const FUNCTION_NAMESPACES = new Set(
+  functions
+    .filter((name) => name.includes("."))
+    .map((name) => name.slice(0, name.indexOf("."))),
+)
 
 // Standalone identifiers must start with a letter or '_', followed by letters, digits, '_' or '$'.
 function needsQuoting(name: string): boolean {
@@ -166,6 +172,26 @@ export const createSchemaCompletionProvider = (
       // gets split into "select *" and "F", losing context for autocomplete.
       const parserText = maskParserBlockComments(fullText)
       const tokens = tokenize(parserText).tokens
+      const cursorTokens = tokens.filter((t) => t.startOffset < cursorOffset)
+      const lastToken = cursorTokens[cursorTokens.length - 1]
+      const dotIndexBeforeCursor =
+        lastToken?.image === "."
+          ? cursorTokens.length - 1
+          : cursorTokens.length - 2
+      const qualifier = cursorTokens[dotIndexBeforeCursor - 1]
+
+      if (
+        !quoteContext &&
+        ((lastToken?.tokenType.name === "QuotedIdentifier" &&
+          lastToken.endOffset === cursorOffset - 1) ||
+          (cursorTokens[dotIndexBeforeCursor]?.image === "." &&
+            qualifier?.tokenType.name === "QuotedIdentifier" &&
+            FUNCTION_NAMESPACES.has(
+              qualifier.image.slice(1, -1).toLowerCase(),
+            )))
+      ) {
+        return null
+      }
 
       let queryStartOffset = 0
       let queryEndOffset = fullText.length
@@ -201,16 +227,30 @@ export const createSchemaCompletionProvider = (
       const openQuoteOffset = quoteContext?.startOffset ?? -1
       const openQuote = quoteContext?.quote
       const isInsideQuotedIdentifier = openQuoteOffset >= 0
+      const quotedPrefix = isInsideQuotedIdentifier
+        ? fullText.substring(openQuoteOffset + 1, cursorOffset)
+        : ""
+      const quotedDotIndex = quotedPrefix.indexOf(".")
+      const isQuotedNamespace =
+        quotedDotIndex >= 0 &&
+        FUNCTION_NAMESPACES.has(
+          quotedPrefix.slice(0, quotedDotIndex).toLowerCase(),
+        )
+      const completionQuery = isQuotedNamespace
+        ? query.slice(0, openQuoteOffset - queryStartOffset) + quotedPrefix
+        : query
 
       // When inside a quoted identifier, the parser suppresses suggestions.
       // Work around this by positioning the cursor at the opening " so the
       // parser sees e.g. "SELECT * FROM" and returns table suggestions.
-      const relativeCursorOffset = isInsideQuotedIdentifier
-        ? openQuoteOffset - queryStartOffset
-        : cursorOffset - queryStartOffset
+      const relativeCursorOffset = isQuotedNamespace
+        ? completionQuery.length
+        : isInsideQuotedIdentifier
+          ? openQuoteOffset - queryStartOffset
+          : cursorOffset - queryStartOffset
 
       const suggestions = autocompleteProvider.getSuggestions(
-        query,
+        completionQuery,
         relativeCursorOffset,
       )
       const prefix = tokens
@@ -281,26 +321,36 @@ export const createSchemaCompletionProvider = (
       const filtered = suggestions.filter(
         (s) =>
           (!expectsNot || s.insertText.toUpperCase() === "NOT") &&
-          (!isInsideQuotedIdentifier || s.kind !== SuggestionKind.Function) &&
+          (!isInsideQuotedIdentifier ||
+            isQuotedNamespace ||
+            s.kind !== SuggestionKind.Function) &&
           s.insertText.toUpperCase() !== currentWord.toUpperCase(),
       )
 
       return {
         incomplete: true,
         suggestions: filtered.map((suggestion) => {
+          const isQuotedFunction =
+            isQuotedNamespace && suggestion.kind === SuggestionKind.Function
           const replacesNamespace =
             !isInsideQuotedIdentifier &&
             !isOperatorWord &&
             dotIndex >= 0 &&
             suggestion.kind === SuggestionKind.Function &&
             suggestion.insertText.includes(".")
-          return toCompletionItem(
+          const item = toCompletionItem(
             suggestion,
-            replacesNamespace
-              ? { ...range, startColumn: word.startColumn }
-              : range,
-            openQuote,
+            isQuotedFunction
+              ? { ...range, startColumn: range.startColumn - 1 }
+              : replacesNamespace
+                ? { ...range, startColumn: word.startColumn }
+                : range,
+            isQuotedFunction ? undefined : openQuote,
           )
+          if (isQuotedFunction) {
+            item.filterText = openQuote + suggestion.insertText
+          }
+          return item
         }),
       }
     },

@@ -100,22 +100,52 @@ describe("released SQL parser integration", () => {
       ["pg_catalog", "pg_class"],
       ["information_schema", "tables"],
     ]) {
-      for (const suffix of ["", name.slice(0, 3)]) {
-        // Given a function namespace, with or without a member prefix
-        setEditor(`SELECT * FROM ${namespace}.${suffix}|`)
+      for (const [opening, closing] of [
+        ["", ""],
+        ['"', ""],
+        ['"', '"'],
+      ]) {
+        for (const suffix of ["", name.slice(0, 3)]) {
+          // Given a function namespace, with or without a member prefix
+          setEditor(`SELECT * FROM ${opening}${namespace}.${suffix}|${closing}`)
 
-        // When its newly offered function is accepted
-        accept(`${namespace}.${name}`)
+          // When its newly offered function is accepted
+          accept(`${namespace}.${name}`)
 
-        // Then there is one namespace and the query executes
-        expectValue(`SELECT * FROM ${namespace}.${name}()`)
-        cy.intercept(editorExecution).as("functionQuery")
-        cy.getEditorContent().type(`${ctrlOrCmd}{enter}`)
-        cy.wait("@functionQuery").then(({ response }) => {
-          expect(response.statusCode).to.equal(200)
-          expect(response.body.dataset).to.be.an("array")
-        })
+          // Then there is one namespace and the query executes
+          expectValue(`SELECT * FROM ${namespace}.${name}()`)
+          cy.intercept(editorExecution).as("functionQuery")
+          cy.getEditorContent().type(`${ctrlOrCmd}{enter}`)
+          cy.wait("@functionQuery").then(({ response }) => {
+            expect(response.statusCode).to.equal(200)
+            expect(response.body.dataset).to.be.an("array")
+          })
+        }
       }
+    }
+  })
+
+  it("does not offer completion after a closed catalog quote", () => {
+    for (const input of [
+      'SELECT * FROM "pg_catalog"|',
+      'SELECT * FROM "pg_catalog."|',
+      'SELECT * FROM "pg_catalog".|',
+      'SELECT * FROM "pg_catalog".pg_c|',
+      'SELECT * FROM "information_schema".|',
+    ]) {
+      // Given a closed quoted identifier
+      setEditor(input)
+
+      // When requesting completion after its closing quote
+      suggest()
+
+      // Then the editor retains the SQL without a completion popup
+      expectValue(input.replace("|", ""))
+      cy.get("body").should((body) => {
+        expect(
+          body.find('[widgetid="editor.widget.suggestWidget"]:visible'),
+        ).to.have.length(0)
+      })
     }
   })
 
