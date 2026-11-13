@@ -4,8 +4,6 @@ import { NotebookIcon } from "@phosphor-icons/react"
 import { LoadingSpinner } from "../../components"
 import { useEditor } from "../../providers"
 import type { ExampleDashboard } from "../../providers/SettingsProvider/types"
-import { trackEvent } from "../../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { TabRow } from "./TabRow"
 import { isOwnActivationKey } from "./keyboard"
 
@@ -38,7 +36,6 @@ export const ExampleList = ({ examples }: Props) => {
 
   const open = (example: ExampleDashboard) => {
     if (openingExampleIds.includes(example.id)) return
-    void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, { id: example.id })
     void openExampleDashboard(example)
   }
 

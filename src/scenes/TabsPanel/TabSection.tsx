@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useLayoutEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { CaretRightIcon } from "@phosphor-icons/react"
 import { Text } from "../../components"
@@ -9,6 +9,9 @@ type Props = {
   // Rendered as-is next to the title, e.g. "3" or "2 open · 1 closed".
   count: string
   defaultExpanded?: boolean
+  // Set only on the section containing the visible active row. The tab id,
+  // rather than a boolean, also catches switches within a collapsed folder.
+  activeTabId?: number
   children: React.ReactNode
   "data-hook": string
 }
@@ -63,15 +66,40 @@ export const TabSection = ({
   title,
   count,
   defaultExpanded = true,
+  activeTabId,
   children,
   "data-hook": dataHook,
 }: Props) => {
-  const [expanded, setExpanded] = useState(defaultExpanded)
+  const rootRef = useRef<HTMLElement>(null)
+  const [expanded, setExpanded] = useState(
+    defaultExpanded || activeTabId !== undefined,
+  )
+
+  // A manual collapse survives ordinary renders. Only a new active tab (or
+  // its arrival in this section) opens the folder again.
+  useLayoutEffect(() => {
+    if (activeTabId !== undefined) setExpanded(true)
+  }, [activeTabId])
+
+  // A collapsed section mounts its rows after expanding. Scroll after that
+  // commit, before paint, without moving keyboard focus from the editor.
+  useLayoutEffect(() => {
+    if (!expanded || activeTabId === undefined) return
+    rootRef.current
+      ?.querySelector<HTMLElement>(
+        '[data-hook="tabs-panel-row"][data-active="true"]',
+      )
+      ?.scrollIntoView({
+        behavior: "instant",
+        block: "center",
+        inline: "nearest",
+      })
+  }, [activeTabId, expanded])
 
   const toggle = () => setExpanded((value) => !value)
 
   return (
-    <Root data-hook={dataHook}>
+    <Root ref={rootRef} data-hook={dataHook}>
       <HeaderRow
         role="button"
         tabIndex={0}

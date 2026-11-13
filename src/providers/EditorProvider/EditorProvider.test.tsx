@@ -12,7 +12,19 @@ import {
 } from "vitest"
 import { findHook, queryHook, renderComponent } from "../../test/component"
 import { db } from "../../store/db"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { bufferStore, makeBuffer, type Buffer } from "../../store/buffers"
+import type { NotebookViewState } from "../../store/notebook"
+import {
+  enqueueBufferTask,
+  bufferQueueDepth,
+} from "../../utils/notebooks/notebookBufferQueue"
+import {
+  registerController,
+  unregisterController,
+} from "../../utils/notebooks/notebookController"
+import * as notebookControllers from "../../utils/notebooks/notebookController"
 import { SettingContext } from "../SettingsProvider/context"
 import type { ConsoleConfig } from "../SettingsProvider/types"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -37,7 +49,7 @@ vi.mock(
   () => ({ useSchemaCompletionProvider: () => undefined }),
 )
 vi.mock("../../modules/ConsoleEventTracker", () => ({
-  trackEvent: () => Promise.resolve(),
+  trackEvent: vi.fn(() => Promise.resolve()),
 }))
 
 const toastError = vi.hoisted(() => vi.fn())
@@ -129,6 +141,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   toastError.mockReset()
+  vi.mocked(trackEvent).mockClear()
   vi.stubGlobal(
     "matchMedia",
     () =>
@@ -737,6 +750,278 @@ describe("EditorProvider: user actions", () => {
 })
 
 describe("EditorProvider: example dashboards", () => {
+  const example = { id: "trades", title: "Trades", path: "t.json" }
+  const initial: NotebookViewState = {
+    cells: [{ id: "c1", position: 0, value: "select 1" }],
+  }
+  const openExample = async () => {
+    const [, notebook] = await seed(
+      [
+        { value: "select 1" },
+        { label: "Trades", templateId: example.id, notebookViewState: initial },
+      ],
+      1,
+    )
+    localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+    renderProvider({ exampleDashboards: [example] })
+    await waitForReady()
+    return notebook
+  }
+  const withLiveView = async (
+    notebook: number,
+    readView: () => Promise<NotebookViewState>,
+    run: () => Promise<void>,
+  ) => {
+    registerController({
+      bufferId: notebook,
+      kind: "live",
+      readView,
+      mutate: vi.fn(),
+      mutateWithResultStatus: vi.fn(),
+      runCell: vi.fn(),
+    })
+    try {
+      await run()
+    } finally {
+      unregisterController(notebook)
+    }
+  }
+
+  it.each(["menu", "startup", "link"] as const)(
+    "uses the autoRun guard when opening an example from %s",
+    async (source) => {
+      // Given a new example and an observable notebook execution boundary
+      await seed(source === "startup" ? [{}] : [{ value: "select 42" }])
+      if (source !== "startup")
+        localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+      if (source === "link")
+        history.replaceState(null, "", "/?templateId=trades")
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(new Response(JSON.stringify(exampleFile("Trades")))),
+        ),
+      )
+      const runCell = vi.fn(() =>
+        Promise.resolve({ success: true, queryCount: 1, results: ["OK"] }),
+      )
+      const bound = vi
+        .spyOn(notebookControllers, "withBoundNotebook")
+        .mockImplementation(async (bufferId, run) =>
+          run({
+            bufferId,
+            kind: "live",
+            readView: () => Promise.resolve(initial),
+            mutate: vi.fn(),
+            mutateWithResultStatus: vi.fn(),
+            runCell,
+          }),
+        )
+      try {
+        // When the menu or startup flow opens the example
+        renderProvider({ exampleDashboards: [example] })
+        await waitForReady()
+        if (source === "menu")
+          await act(() => editor.openExampleDashboard(example))
+
+        // Then automatic execution cannot fall back to manual-run semantics
+        await waitFor(() =>
+          expect(runCell).toHaveBeenCalledWith("c1", undefined, undefined, {
+            kind: "autoRun",
+          }),
+        )
+        expect(runCell).toHaveBeenCalledTimes(1)
+      } finally {
+        bound.mockRestore()
+      }
+    },
+  )
+
+  it("deletes an unchanged example on close and opens a fresh linked copy from the menu", async () => {
+    const notebook = await openExample()
+    await act(() => editor.closeBuffer(notebook))
+    expect(await db.buffers.get(notebook)).toBeUndefined()
+    expect(editor.activeBuffer.id).not.toBe(notebook)
+    expect(trackEvent).not.toHaveBeenCalledWith(
+      ConsoleEvent.TAB_ARCHIVE,
+      expect.anything(),
+    )
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify(exampleFile("Trades")))),
+      ),
+    )
+    await act(() => editor.openExampleDashboard(example))
+    const copies = (await bufferStore.getAll()).filter(
+      (b) => b.templateId === example.id,
+    )
+    expect(copies).toHaveLength(1)
+    expect(copies[0].id).not.toBe(notebook)
+    expect(copies[0].archived).toBeFalsy()
+    expect(editor.activeBuffer.id).toBe(copies[0].id)
+    expect(editor.activeBuffer.templateId).toBe(example.id)
+  })
+
+  it("archives a personal copy after editing and restores its content", async () => {
+    const notebook = await openExample()
+    await act(() => editor.updateBuffer(notebook, { label: "My trades" }))
+    await act(() => editor.closeBuffer(notebook))
+    expect(await db.buffers.get(notebook)).toMatchObject({
+      archived: true,
+      label: "My trades",
+    })
+    expect((await db.buffers.get(notebook))?.templateId).toBeUndefined()
+    await act(() => editor.keepBufferOpen(notebook))
+    expect(editor.activeBuffer.label).toBe("My trades")
+    expect(editor.activeBuffer.archived).toBe(false)
+  })
+
+  it("preserves a live edit closed before the persistence debounce fires", async () => {
+    const notebook = await openExample()
+    const edited: NotebookViewState = {
+      cells: [
+        {
+          ...initial.cells[0],
+          value: "select 42",
+          result: { results: [], activeResultIndex: 0, timestamp: 123 },
+        },
+      ],
+    }
+    await withLiveView(
+      notebook,
+      () => Promise.resolve(edited),
+      async () => {
+        await act(() => editor.closeBuffer(notebook))
+      },
+    )
+    const stored = await db.buffers.get(notebook)
+    expect(stored?.archived).toBe(true)
+    expect(stored?.templateId).toBeUndefined()
+    expect(stored?.notebookViewState?.cells[0].value).toBe("select 42")
+    expect(stored?.notebookViewState?.cells[0].result).toBeUndefined()
+  })
+
+  it("deletes an example after execution-only changes", async () => {
+    const notebook = await openExample()
+    const executed: NotebookViewState = {
+      cells: [
+        {
+          ...initial.cells[0],
+          lastRunStatus: "success",
+          result: { results: [], activeResultIndex: 0, timestamp: 123 },
+        },
+      ],
+      focusedCellId: "c1",
+    }
+    await withLiveView(
+      notebook,
+      () => Promise.resolve(executed),
+      async () => {
+        await act(() => editor.closeBuffer(notebook))
+      },
+    )
+    expect(await db.buffers.get(notebook)).toBeUndefined()
+  })
+
+  it("waits for queued document edits before deciding whether to delete", async () => {
+    const notebook = await openExample()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const write = enqueueBufferTask(notebook, async () => {
+      await gate
+      await bufferStore.update(notebook, {
+        notebookViewState: {
+          cells: [{ ...initial.cells[0], value: "select 42" }],
+        },
+      })
+    })
+    await act(async () => {
+      const closing = editor.closeBuffer(notebook)
+      try {
+        await waitFor(() => expect(bufferQueueDepth(notebook)).toBe(2))
+      } finally {
+        release()
+        await Promise.all([write, closing])
+      }
+    })
+    const stored = await db.buffers.get(notebook)
+    expect(stored?.archived).toBe(true)
+    expect(stored?.templateId).toBeUndefined()
+    expect(stored?.notebookViewState?.cells[0].value).toBe("select 42")
+  })
+
+  it("keeps an example recoverable if its live document cannot be read", async () => {
+    const notebook = await openExample()
+    await withLiveView(
+      notebook,
+      () => Promise.reject(new Error("Unavailable")),
+      async () => {
+        await act(() => editor.closeBuffer(notebook))
+      },
+    )
+    expect((await db.buffers.get(notebook))?.archived).toBe(true)
+  })
+
+  it("keeps the last open tab even when it is an unchanged example", async () => {
+    const [notebook] = await seed([
+      { label: "Trades", templateId: example.id, notebookViewState: initial },
+    ])
+    localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+    renderProvider({ exampleDashboards: [example] })
+    await waitForReady()
+    await act(() => editor.closeBuffer(notebook))
+    expect((await db.buffers.get(notebook))?.templateId).toBe(example.id)
+    expect(editor.activeBuffer.id).toBe(notebook)
+  })
+
+  it("keeps explicit archive operations reversible for examples", async () => {
+    const notebook = await openExample()
+    await act(() => editor.archiveBuffer(notebook, "agent"))
+    expect((await db.buffers.get(notebook))?.archived).toBe(true)
+    expect((await db.buffers.get(notebook))?.templateId).toBeUndefined()
+  })
+
+  it("detaches an edited example through the shared store but leaves result writes linked", async () => {
+    const initial = { cells: [{ id: "c1", position: 0, value: "select 1" }] }
+    const [, notebook] = await seed([
+      { value: "select 1" },
+      { label: "Example", templateId: "trades", notebookViewState: initial },
+    ])
+    await bufferStore.update(notebook, {
+      notebookViewState: {
+        cells: [{ ...initial.cells[0], lastRunStatus: "success" }],
+      },
+    })
+    expect((await db.buffers.get(notebook))?.templateId).toBe("trades")
+    await bufferStore.update(notebook, {
+      notebookViewState: {
+        cells: [{ ...initial.cells[0], value: "select 42" }],
+      },
+    })
+    expect((await db.buffers.get(notebook))?.templateId).toBeUndefined()
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_EXAMPLE_PERSONALIZE,
+      {
+        templateId: "trades",
+        reason: "content",
+      },
+    )
+    await db.transaction("rw", db.buffers, () =>
+      bufferStore.update(notebook, { label: "Personal notebook" }),
+    )
+    expect(
+      vi
+        .mocked(trackEvent)
+        .mock.calls.filter(
+          ([name]) => name === ConsoleEvent.NOTEBOOK_EXAMPLE_PERSONALIZE,
+        ),
+    ).toHaveLength(1)
+  })
+
   it("turns a notebook whose example was removed into a regular notebook", async () => {
     // Given an open notebook linked to an example that is no longer configured
     const [, notebook] = await seed([
@@ -860,10 +1145,34 @@ describe("EditorProvider: example dashboards", () => {
     expect(await activeId()).toBe(scriptId)
     expect(editor.openingExampleIds).toEqual([])
 
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN,
+      {
+        id: example.id,
+        source: "manual",
+        reused: false,
+      },
+    )
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD,
+      {
+        templateId: example.id,
+        source: "manual",
+        outcome: "success",
+      },
+    )
     // And the user can activate the loaded example after the script finishes
     act(() => editor.setTabsDisabled(false))
     await act(() => editor.openExampleDashboard(example))
     expect(editor.activeBuffer.id).toBe(examples[0].id)
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN,
+      {
+        id: example.id,
+        source: "manual",
+        reused: true,
+      },
+    )
   })
 
   it("places a delayed example after tabs created while its file loads", async () => {
@@ -929,6 +1238,14 @@ describe("EditorProvider: example dashboards", () => {
     // When the file arrives, the example opens as the active tab
     respond(new Response(JSON.stringify(exampleFile("Trades"))))
     await waitFor(() => expect(editor.activeBuffer.templateId).toBe("trades"))
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN,
+      {
+        id: "trades",
+        source: "automatic",
+        reused: false,
+      },
+    )
     await waitFor(() =>
       expect(queryHook("example-dashboard-loading")).toBeNull(),
     )
@@ -1010,5 +1327,134 @@ describe("EditorProvider: schema Query", () => {
       (b) => b.label === "trades" && b.notebookViewState,
     )
     expect(notebooks).toHaveLength(1)
+  })
+})
+
+describe("EditorProvider: example links", () => {
+  const examples = [
+    { id: "default", title: "Default", path: "default.json" },
+    { id: "linked", title: "Linked", path: "linked.json" },
+  ]
+
+  it("opens the requested example in an existing workspace and consumes only its parameters", async () => {
+    // Given an existing SQL tab and a link to a non-default example
+    const [sqlId] = await seed([{ label: "My SQL", value: "select 42" }])
+    localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+    history.replaceState(
+      null,
+      "",
+      "/?cellName=missing&templateId=linked&cellId=c1&keep=yes#anchor",
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify(exampleFile("Linked")))),
+      ),
+    )
+    // When startup resolves the link
+    renderProvider({ exampleDashboards: examples })
+    await waitForReady()
+    // Then the requested notebook opens without replacing the user's tab
+    expect(editor.activeBuffer.templateId).toBe("linked")
+    expect(await bufferStore.getById(sqlId)).toMatchObject({
+      value: "select 42",
+    })
+    expect(location.search + location.hash).toBe(
+      "?cellName=missing&cellId=c1&keep=yes#anchor",
+    )
+    const { getPendingReveal, clearPendingReveal } = await import(
+      "../../scenes/Editor/Notebook/cellReveal"
+    )
+    expect(getPendingReveal()).toBeNull()
+    clearPendingReveal()
+  })
+
+  it("reuses an open example instead of creating a duplicate", async () => {
+    // Given an existing linked notebook and a different active tab
+    const [sqlId, notebookId] = await seed([
+      { value: "select 42" },
+      {
+        label: "Linked",
+        templateId: "linked",
+        notebookViewState: {
+          cells: [{ id: "c1", position: 0, value: "select 1" }],
+        },
+      },
+    ])
+    history.replaceState(null, "", "/?templateId=linked")
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify(exampleFile("Linked")))),
+      ),
+    )
+    // When the link opens
+    renderProvider({ exampleDashboards: examples })
+    await waitForReady()
+    // Then the existing notebook is selected and both tabs remain
+    expect(editor.activeBuffer.id).toBe(notebookId)
+    expect(editor.activeBuffer.id).not.toBe(sqlId)
+    await waitFor(async () => expect(await activeId()).toBe(notebookId))
+    expect(await db.buffers.count()).toBe(2)
+  })
+
+  it.each(["?cellName=anything", "?templateId=missing", "?templateId="])(
+    "preserves the workspace for %s",
+    async (search) => {
+      // Given an existing workspace and an incomplete or invalid link
+      const [id] = await seed([{ value: "select 42" }])
+      history.replaceState(null, "", search)
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(new Response(JSON.stringify(exampleFile("Default")))),
+        ),
+      )
+      // When startup handles the parameters
+      renderProvider({ exampleDashboards: examples })
+      await waitForReady()
+      // Then the existing tab remains active
+      expect(editor.activeBuffer.id).toBe(id)
+      expect(await db.buffers.count()).toBe(1)
+      expect(location.search).toBe(
+        search === "?cellName=anything" ? search : "",
+      )
+    },
+  )
+
+  it("gives SQL share links priority and skips the default example fetch", async () => {
+    // Given a fresh workspace with both a query and a template link
+    await seed([{}])
+    history.replaceState(
+      null,
+      "",
+      "/?templateId=linked&cellId=c1&query=select+7&executeQuery=true",
+    )
+    const fetch = vi.fn()
+    vi.stubGlobal("fetch", fetch)
+    // When startup handles the link
+    renderProvider({ exampleDashboards: examples })
+    await waitForReady()
+    // Then Monaco can consume the query without a competing example opening
+    expect(editor.activeBuffer.notebookViewState).toBeUndefined()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(location.search).toBe("?cellId=c1&query=select+7&executeQuery=true")
+  })
+
+  it("falls back to the stored tab when the linked export fails to load", async () => {
+    // Given a broken example file
+    const [id] = await seed([{ value: "select 42" }])
+    history.replaceState(null, "", "/?templateId=linked&cellId=c1")
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("missing", { status: 404 }))),
+    )
+    // When startup opens the link
+    renderProvider({ exampleDashboards: examples })
+    await waitForReady()
+    // Then the user keeps their workspace and sees the load error
+    expect(editor.activeBuffer.id).toBe(id)
+    expect(toastError).toHaveBeenCalled()
+    expect(location.search).toBe("?cellId=c1")
   })
 })

@@ -144,7 +144,6 @@ const SectionHeader = styled(Row)<{ $disabled: boolean }>`
 `
 
 const TableRow = styled(Row)<{ $contextMenuOpen: boolean }>`
-  padding-right: 3rem;
   ${({ $contextMenuOpen, theme }) =>
     $contextMenuOpen &&
     `

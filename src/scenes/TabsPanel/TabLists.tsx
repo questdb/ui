@@ -30,7 +30,10 @@ const Empty = styled.div`
 `
 
 export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
-  const { buffers } = useEditor()
+  const { buffers, activeBuffer } = useEditor()
+  const activeTemplateId = buffers.find(
+    (buffer) => buffer.id === activeBuffer.id,
+  )?.templateId
   const { consoleConfig } = useSettings()
 
   const hasExamples = hasExampleDashboards(consoleConfig)
@@ -58,6 +61,11 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
             <TabSection
               title="Example dashboards"
               count={String(examples.length)}
+              activeTabId={
+                examples.some((example) => example.id === activeTemplateId)
+                  ? activeBuffer.id
+                  : undefined
+              }
               data-hook="tabs-panel-examples"
             >
               {examples.length === 0 ? (
@@ -74,6 +82,11 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
               key={group.type}
               title={group.title}
               count={groupCountLabel(group, includeClosed)}
+              activeTabId={
+                group.rows.some((buffer) => buffer.id === activeBuffer.id)
+                  ? activeBuffer.id
+                  : undefined
+              }
               // With examples configured the panel is a showcase: keep
               // the visitor's eye on the examples and fold the rest.
               defaultExpanded={!hasExamples}
@@ -95,6 +108,11 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
           <TabSection
             title="Open"
             count={String(openTabs.length)}
+            activeTabId={
+              openTabs.some((buffer) => buffer.id === activeBuffer.id)
+                ? activeBuffer.id
+                : undefined
+            }
             data-hook="tabs-panel-open"
           >
             {openTabs.length === 0 ? (
@@ -111,6 +129,11 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
           <TabSection
             title="Closed"
             count={String(closedTabs.length)}
+            activeTabId={
+              closedTabs.some((buffer) => buffer.id === activeBuffer.id)
+                ? activeBuffer.id
+                : undefined
+            }
             data-hook="tabs-panel-closed"
           >
             {closedTabs.length === 0 ? (

@@ -34,6 +34,7 @@ const selectSlotChannel = (
     slotFetching: state.slotFetching,
     slotErrors: state.slotErrors,
     slotVerifiedAt: state.slotVerifiedAt,
+    slotVerifiedTimings: state.slotVerifiedTimings,
   }
 
 // A chart draws its own frame, so a draw cell selects nothing here.

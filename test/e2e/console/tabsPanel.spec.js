@@ -1035,8 +1035,8 @@ describe("tabs panel example dashboards", () => {
       .contains(ROW, "Trades overview")
       .should("not.have.attr", "data-active")
     cy.getByDataHook("tabs-panel-group-notebook")
-      .find('[role="button"][aria-expanded="false"]')
-      .click()
+      .find('[role="button"][aria-expanded]')
+      .should("have.attr", "aria-expanded", "true")
     cy.getByDataHook("tabs-panel-group-notebook")
       .find(ROW)
       .should("have.length", 1)
@@ -1049,10 +1049,12 @@ describe("tabs panel example dashboards", () => {
       .click({ force: true })
     cy.getEditorTabByTitle("My trades").should("not.exist")
     cy.getByDataHook("tabs-panel-include-closed").click({ force: true })
-    // The folder re-mounted empty while closed tabs were hidden, so it is folded
+    // Show the archived notebook even if the folder remounted collapsed.
     cy.getByDataHook("tabs-panel-group-notebook")
-      .find('[role="button"][aria-expanded="false"]')
-      .click()
+      .find('[role="button"][aria-expanded]')
+      .then(($header) => {
+        if ($header.attr("aria-expanded") === "false") cy.wrap($header).click()
+      })
     cy.get('[data-hook="tabs-panel-closed-row"]').should("contain", "My trades")
 
     // And the example opens a fresh copy again

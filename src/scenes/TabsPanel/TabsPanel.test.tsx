@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react"
 import { fireEvent } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../test/component"
 
 const mocks = vi.hoisted(() => ({
@@ -45,7 +45,36 @@ const switchTo = (mode: "groups" | "list") =>
     document.querySelector(`[data-hook="tabs-panel-view-${mode}"]`)!,
   )
 
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  Element.prototype,
+  "scrollIntoView",
+)
+const scrollIntoView = vi.fn()
+
+afterEach(() => {
+  if (originalScrollIntoView) {
+    Object.defineProperty(
+      Element.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    )
+  } else {
+    Reflect.deleteProperty(Element.prototype, "scrollIntoView")
+  }
+})
+
 beforeEach(() => {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    writable: true,
+    value: scrollIntoView,
+  })
+  scrollIntoView.mockClear()
+  mocks.editor.buffers = [
+    { id: 1, label: "SQL 1", value: "", position: 0 },
+    { id: 2, label: "SQL 2", value: "", position: 1 },
+  ]
+  mocks.editor.activeBuffer = { id: 1 }
   localStorage.clear()
   mocks.useEditor.mockReset()
   mocks.useEditor.mockImplementation(() => mocks.editor)
@@ -97,5 +126,117 @@ describe("TabsPanel", () => {
     expect(
       sectionHeader("tabs-panel-examples")?.getAttribute("aria-expanded"),
     ).toBe("true")
+  })
+})
+
+describe("TabsPanel active tab reveal", () => {
+  const expectRevealed = (section: string, rowSelector: string) => {
+    expect(sectionHeader(section)).toHaveAttribute("aria-expanded", "true")
+    const row = document.querySelector(rowSelector)
+    expect(row).not.toBeNull()
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      behavior: "instant",
+      block: "center",
+      inline: "nearest",
+    })
+    expect(scrollIntoView.mock.instances.at(-1)).toBe(row)
+  }
+
+  it("centers the active row after opening its group and preserves keyboard focus", () => {
+    const { rerender } = renderComponent(<TabsPanel open />)
+    fireEvent.click(sectionHeader("tabs-panel-group-sql")!)
+    const filter = document.querySelector<HTMLInputElement>(
+      '[data-hook="tabs-panel-filter"]',
+    )!
+    filter.focus()
+    scrollIntoView.mockClear()
+    mocks.editor.activeBuffer = { id: 2 }
+    rerender(<TabsPanel open />)
+    expectRevealed("tabs-panel-group-sql", '[data-buffer-id="2"]')
+    expect(document.activeElement).toBe(filter)
+  })
+
+  it("does not reopen or scroll on an unrelated buffer update", () => {
+    const { rerender } = renderComponent(<TabsPanel open />)
+    fireEvent.click(sectionHeader("tabs-panel-group-sql")!)
+    scrollIntoView.mockClear()
+    mocks.editor.buffers = [
+      { id: 1, label: "Renamed", value: "select 42", position: 0 },
+      { id: 2, label: "SQL 2", value: "", position: 1 },
+    ]
+    rerender(<TabsPanel open />)
+    expect(sectionHeader("tabs-panel-group-sql")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    )
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it("reveals an example, then its personal notebook when the link is detached", () => {
+    const notebook = {
+      id: 3,
+      label: "Example One",
+      value: "",
+      position: 2,
+      notebookViewState: { cells: [] },
+    }
+    mocks.editor.buffers.push({ ...notebook, templateId: "ex1" })
+    const { rerender } = renderComponent(<TabsPanel open />)
+    fireEvent.click(sectionHeader("tabs-panel-examples")!)
+    mocks.editor.activeBuffer = { id: 3 }
+    rerender(<TabsPanel open />)
+    expectRevealed("tabs-panel-examples", '[data-example-id="ex1"]')
+    mocks.editor.buffers = [...mocks.editor.buffers.slice(0, 2), notebook]
+    rerender(<TabsPanel open />)
+    expectRevealed("tabs-panel-group-notebook", '[data-buffer-id="3"]')
+  })
+
+  it("expands Open and Closed in List mode when their active tab changes", () => {
+    mocks.editor.buffers.push({
+      id: 3,
+      label: "Closed SQL",
+      value: "select 3",
+      position: -1,
+      archived: true,
+      isTemporary: true,
+    })
+    const { rerender } = renderComponent(<TabsPanel open />)
+    switchTo("list")
+    fireEvent.click(sectionHeader("tabs-panel-open")!)
+    fireEvent.click(sectionHeader("tabs-panel-closed")!)
+    mocks.editor.activeBuffer = { id: 2 }
+    rerender(<TabsPanel open />)
+    expectRevealed("tabs-panel-open", '[data-buffer-id="2"]')
+    expect(sectionHeader("tabs-panel-closed")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    )
+    mocks.editor.activeBuffer = { id: 3 }
+    rerender(<TabsPanel open />)
+    expectRevealed("tabs-panel-closed", '[data-buffer-id="3"]')
+  })
+
+  it("reveals the current tab when the panel opens and the view mode changes", () => {
+    const { rerender } = renderComponent(<TabsPanel open={false} />)
+    mocks.editor.activeBuffer = { id: 2 }
+    rerender(<TabsPanel open />)
+    expectRevealed("tabs-panel-group-sql", '[data-buffer-id="2"]')
+    switchTo("list")
+    expectRevealed("tabs-panel-open", '[data-buffer-id="2"]')
+  })
+
+  it("respects the filter and reveals the active tab when it becomes visible", () => {
+    const { rerender } = renderComponent(<TabsPanel open />)
+    const filter = document.querySelector<HTMLInputElement>(
+      '[data-hook="tabs-panel-filter"]',
+    )!
+    fireEvent.change(filter, { target: { value: "SQL 1" } })
+    scrollIntoView.mockClear()
+    mocks.editor.activeBuffer = { id: 2 }
+    rerender(<TabsPanel open />)
+    expect(filter.value).toBe("SQL 1")
+    expect(scrollIntoView).not.toHaveBeenCalled()
+    fireEvent.change(filter, { target: { value: "" } })
+    expectRevealed("tabs-panel-group-sql", '[data-buffer-id="2"]')
   })
 })
