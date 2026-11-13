@@ -138,7 +138,11 @@ export const FilesToUpload = ({
             <FiletypeCsv size="46px" />
             <Box gap="1rem" align="flex-4tart" flexDirection="column">
               {data.fileObject.name.length > 20 && (
-                <Tooltip placement="top" content={data.fileObject.name}>
+                <Tooltip
+                  hoverableContent
+                  placement="top"
+                  content={data.fileObject.name}
+                >
                   {file}
                 </Tooltip>
               )}
@@ -213,6 +217,7 @@ export const FilesToUpload = ({
     columns.push({
       header: (
         <Tooltip
+          hoverableContent
           placement="top"
           content="Required for external (non-database) users."
         >
@@ -252,6 +257,7 @@ export const FilesToUpload = ({
     {
       header: (
         <Tooltip
+          hoverableContent
           placement="top"
           content="Optional. By default, QuestDB will infer schema from the CSV file structure"
         >
@@ -303,6 +309,7 @@ export const FilesToUpload = ({
     {
       header: (
         <Tooltip
+          hoverableContent
           placement="top"
           content={
             <>

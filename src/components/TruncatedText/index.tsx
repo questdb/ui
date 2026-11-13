@@ -46,6 +46,7 @@ export const TruncatedText = ({ children, ...props }: Props) => {
 
   return (
     <Tooltip
+      hoverableContent
       content={
         <Box gap="1rem" align="center">
           <FullText>{children}</FullText>

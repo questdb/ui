@@ -595,7 +595,7 @@ export const upsertCellLayout = (
 
 // Identity-preserving so React.memo'd siblings skip re-render when one
 // cell is added or removed.
-const reindex = (cells: NotebookCell[]): NotebookCell[] =>
+export const reindexCells = (cells: NotebookCell[]): NotebookCell[] =>
   cells.map((c, i) => (c.position === i ? c : { ...c, position: i }))
 
 export const insertCell = (
@@ -622,7 +622,119 @@ export const insertCell = (
       : { ...created, topHeight: topHeightForSql(created.value) }
   const next = [...cells]
   next.splice(insertIndex, 0, newCell)
-  return reindex(next)
+  return reindexCells(next)
+}
+
+export const insertCellsAfter = (
+  cells: NotebookCell[],
+  afterCellId: string | undefined,
+  inserted: NotebookCell[],
+): NotebookCell[] => {
+  const insertIndex =
+    afterCellId !== undefined
+      ? cells.findIndex((c) => c.id === afterCellId) + 1
+      : cells.length
+  const next = [...cells]
+  next.splice(insertIndex, 0, ...inserted)
+  return reindexCells(next)
+}
+
+// An inserted item starts one row into the cell it follows. Vertical
+// compaction places items by row, so it keeps that cell in place and drops
+// the item right below it, whatever the item's column. With no such cell, the
+// first item goes to the bottom of the grid. An unsaved layout stays unsaved,
+// as the default layout already follows the cell order.
+export const insertCellsLayout = (
+  layout: CellLayoutItem[] | undefined,
+  afterCellId: string | undefined,
+  inserted: { id: string; gridWidth?: number }[],
+): CellLayoutItem[] | undefined => {
+  if (!layout || layout.length === 0) return layout
+  let next = layout
+  let anchor = layout.find((l) => l.i === afterCellId)
+  for (const { id, gridWidth } of inserted) {
+    const w = Math.min(
+      gridWidth ?? anchor?.w ?? NOTEBOOK_GRID_COLS,
+      NOTEBOOK_GRID_COLS,
+    )
+    const position = anchor
+      ? {
+          x: Math.min(anchor.x, NOTEBOOK_GRID_COLS - w),
+          y: anchor.y + 1,
+          w,
+          h: anchor.h,
+        }
+      : { ...nextGridSeedPosition(next), w }
+    next = upsertCellLayout(next, id, position)
+    anchor = { i: id, ...position }
+  }
+  return next
+}
+
+// Where a cell sits in the document, kept so the cell can return to the same
+// place. The cell keeps its id and run history but not its rows: those stay in
+// the stored snapshot and load again on return.
+export type CellPlacement = {
+  cell: NotebookCell
+  index: number
+  afterCellId: string | null
+  layoutItem?: CellLayoutItem
+}
+
+export const cellPlacementsOf = (
+  cells: NotebookCell[],
+  layout: CellLayoutItem[] | undefined,
+  cellIds: string[],
+): CellPlacement[] =>
+  cells.flatMap((cell, index) => {
+    if (!cellIds.includes(cell.id)) return []
+    const { result: _result, ...definition } = cell
+    const layoutItem = layout?.find((item) => item.i === cell.id)
+    return [
+      {
+        cell: definition,
+        index,
+        afterCellId: index > 0 ? cells[index - 1].id : null,
+        ...(layoutItem ? { layoutItem } : {}),
+      },
+    ]
+  })
+
+// Placements in document order: each one lands after its recorded neighbour
+// when that cell is present, else at its recorded index.
+export const insertPlacedCells = (
+  cells: NotebookCell[],
+  placements: CellPlacement[],
+): NotebookCell[] => {
+  const next = [...cells]
+  for (const { cell, index, afterCellId } of placements) {
+    const afterIndex =
+      afterCellId === null ? -1 : next.findIndex((c) => c.id === afterCellId)
+    const insertIndex =
+      afterIndex >= 0 || afterCellId === null
+        ? afterIndex + 1
+        : Math.min(index, next.length)
+    next.splice(insertIndex, 0, cell)
+  }
+  return reindexCells(next)
+}
+
+// The cell that takes the place of the removed ones: the first one after
+// them, else the last one before them.
+export const neighbourOfRemovedCells = (
+  cells: NotebookCell[],
+  cellIds: string[],
+): string | undefined => {
+  const lastIndex = cells.reduce(
+    (last, cell, index) => (cellIds.includes(cell.id) ? index : last),
+    -1,
+  )
+  if (lastIndex < 0) return undefined
+  const remaining = (cell: NotebookCell) => !cellIds.includes(cell.id)
+  return (
+    cells.slice(lastIndex + 1).find(remaining) ??
+    cells.slice(0, lastIndex).reverse().find(remaining)
+  )?.id
 }
 
 export const removeCell = (
@@ -632,7 +744,7 @@ export const removeCell = (
   if (cells.length <= 1) return cells
   const found = cells.some((c) => c.id === cellId)
   if (!found) return cells
-  return reindex(cells.filter((c) => c.id !== cellId))
+  return reindexCells(cells.filter((c) => c.id !== cellId))
 }
 
 export const swapCellUp = (
@@ -643,7 +755,7 @@ export const swapCellUp = (
   if (idx <= 0) return cells
   const next = [...cells]
   ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
-  return reindex(next)
+  return reindexCells(next)
 }
 
 export const swapCellDown = (
@@ -654,7 +766,7 @@ export const swapCellDown = (
   if (idx < 0 || idx >= cells.length - 1) return cells
   const next = [...cells]
   ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
-  return reindex(next)
+  return reindexCells(next)
 }
 
 export const duplicateCellAt = (
@@ -675,7 +787,7 @@ export const duplicateCellAt = (
   }
   const next = [...cells]
   next.splice(idx + 1, 0, copy)
-  return reindex(next)
+  return reindexCells(next)
 }
 
 export const setResultAt = (

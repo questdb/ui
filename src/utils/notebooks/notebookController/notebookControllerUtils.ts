@@ -8,6 +8,7 @@ import {
 import { cancelHeadlessBufferRuns } from "../notebookHeadlessRun"
 import { forgetBufferSeq } from "../notebookAIBridge"
 import { pinNotebookSnapshots } from "../../../store/notebookResults"
+import { clearNotebookUndoHistory } from "../../../scenes/Editor/Notebook/undo/notebookUndoHistory"
 import type { NotebookController } from "./notebookController"
 import {
   claimLive,
@@ -104,6 +105,7 @@ export const cancelNotebookMount = (bufferId: number): void => {
 }
 
 export const forgetBuffer = (bufferId: number): void => {
+  clearNotebookUndoHistory(bufferId)
   releaseMountPin(bufferId)
   forgetBufferSeq(bufferId)
   forgetBufferOwnership(bufferId)
@@ -113,6 +115,7 @@ export const forgetBuffer = (bufferId: number): void => {
 }
 
 export const releaseArchivedBuffer = (bufferId: number): void => {
+  clearNotebookUndoHistory(bufferId)
   releaseMountPin(bufferId)
   releaseBufferEpoch(bufferId)
   rejectWaiters(bufferId, new MountClaimReleasedError(bufferId))

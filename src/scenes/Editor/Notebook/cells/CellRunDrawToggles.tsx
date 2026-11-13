@@ -41,7 +41,6 @@ type Props = {
   autoRefreshOn: boolean
   showLabels: boolean
   onRun: () => void
-  onHideResult: () => void
   onDraw: () => void
 }
 
@@ -54,18 +53,15 @@ export const CellRunDrawToggles: React.FC<Props> = ({
   autoRefreshOn,
   showLabels,
   onRun,
-  onHideResult,
   onDraw,
 }) => {
   const runLocked = isCellBusy || (!runActive && !canRun)
   const drawLocked = isCellBusy || !canRun
   return (
     <NotebookViewToggle role="group" aria-label="Cell execution mode">
-      <Tooltip
-        content={
-          runActive ? "Hide result" : `Run cell (${ctrlCmd}+Shift+Enter)`
-        }
-      >
+      {/* Run only runs, like Draw only draws. Pressed shows the table mode;
+          the results close with their own button. */}
+      <Tooltip content={`Run cell (${ctrlCmd}+Shift+Enter)`}>
         <ToggleButton
           type="button"
           $size="md"
@@ -77,13 +73,9 @@ export const CellRunDrawToggles: React.FC<Props> = ({
           onClick={(e) => {
             e.stopPropagation()
             if (runLocked) return
-            if (runActive) {
-              onHideResult()
-              return
-            }
             onRun()
           }}
-          aria-label={runActive ? "Hide result" : "Run cell"}
+          aria-label="Run cell"
         >
           <PlayIcon weight="fill" />
           {showLabels && "Run"}

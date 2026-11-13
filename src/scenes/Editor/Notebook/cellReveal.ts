@@ -11,6 +11,9 @@ export type CellRevealRequest = {
   notebookField: "cell" | "chartName"
   cellType: "sql" | "markdown"
   mode: CellRevealMode
+  // A search result the user picked. Picking it counts as going into the
+  // notebook, so the cell shortcuts act on the revealed cell.
+  fromSearch?: boolean
   token: number
 }
 

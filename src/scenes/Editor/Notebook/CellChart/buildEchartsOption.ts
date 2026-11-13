@@ -341,7 +341,7 @@ const buildScatterChartOption = (
     legend,
     grid: {
       left: 24,
-      right: 24,
+      right: 34,
       top: 40,
       bottom: 48,
       containLabel: true,
@@ -465,7 +465,7 @@ export const buildEchartsOption = (
       ? (rightQueries[0].name ?? rightQueries[0].yColumns[0] ?? "")
       : "")
 
-  const rightPadding = 36
+  const rightPadding = 46
 
   const grid: EChartsOption["grid"] = {
     left: 24,
@@ -489,7 +489,10 @@ export const buildEchartsOption = (
           scale: true,
           position: "right",
           name: rightTitle,
-          nameTextStyle: axisName,
+          // The name ends at the axis line and grows to the left. Centred,
+          // it ran past the chart's right edge and under the cell's Close
+          // results button, which floats over the top-right corner.
+          nameTextStyle: { ...axisName, align: "right" },
           axisLabel,
           splitLine: { show: false },
           // Keep both keys even when unset: chart updates merge into the prior

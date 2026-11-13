@@ -6,8 +6,8 @@ import {
   DownloadSimpleIcon,
   NotebookIcon,
   PencilSimpleLineIcon,
+  SelectionBackgroundIcon,
 } from "@phosphor-icons/react"
-import { CopyAlt } from "../../../components/icons"
 import { color } from "../../../utils"
 import { toast } from "../../../components/Toast"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -320,7 +320,7 @@ export const NotebookToolbar: React.FC = () => {
             {isDuplicating ? (
               <Spinner size={18} style={{ opacity: 0.5 }} />
             ) : (
-              <CopyAlt size={18} />
+              <SelectionBackgroundIcon size={18} />
             )}
           </Button>
         </TooltipButton>

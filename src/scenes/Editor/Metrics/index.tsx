@@ -142,6 +142,9 @@ export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers, isNavigatingFromSearchRef } =
     useEditor()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [addedMetricPosition, setAddedMetricPosition] = useState<number | null>(
+    null,
+  )
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const telemetryEnabled = telemetryConfig && telemetryConfig.enabled
   const metricsFilteredRef = useRef<boolean>(false)
@@ -211,6 +214,7 @@ export const Metrics = () => {
   const handleRemoveMetric = useCallback(
     (metric: Metric) => {
       if (buffer?.id && buffer?.metricsViewState?.metrics) {
+        setAddedMetricPosition(null)
         updateMetrics(
           buffer?.metricsViewState?.metrics
             .filter((m: Metric) => m.position !== metric.position)
@@ -386,7 +390,11 @@ export const Metrics = () => {
       ) : (
         <>
           <Toolbar>
-            <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+            <AddMetricDialog
+              open={dialogOpen}
+              onOpenChange={setDialogOpen}
+              onMetricAdded={setAddedMetricPosition}
+            />
             <Box align="center" gap="0.8rem">
               <EditorRefreshControlGroup>
                 <Tooltip content="Refresh all widgets">
@@ -477,6 +485,7 @@ export const Metrics = () => {
                       dateTo={dateTo}
                       key={`${metric.position}-${metric.metricType}`}
                       metric={metric}
+                      isNewlyAdded={metric.position === addedMetricPosition}
                       onRemove={handleRemoveMetric}
                       onTableChange={handleTableChange}
                       onColorChange={handleColorChange}

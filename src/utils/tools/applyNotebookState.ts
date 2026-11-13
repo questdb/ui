@@ -502,13 +502,14 @@ export const dispatchApplyNotebookState = async (
     committed = await withBoundNotebook(
       buffer_id,
       (ctrl) =>
-        ctrl.mutateWithResultStatus((parts, resultStatusOf) =>
-          applyNotebookStateTransition(
+        ctrl.mutateWithResultStatus((parts, resultStatusOf) => ({
+          ...applyNotebookStateTransition(
             parts,
             withHighlightConfigs(parts.cells),
             resultStatusOf,
           ),
-        ),
+          clearUndoHistory: true,
+        })),
       signal,
     )
     const out = committed
