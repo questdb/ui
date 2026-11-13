@@ -259,6 +259,7 @@ export const createSchemaCompletionProvider = (
           closingIdx,
         )
         const matchesKnownName = [
+          ...suggestions.map((suggestion) => suggestion.insertText),
           ...tables.map((table) => table.table_name),
           ...Object.values(informationSchemaColumns).flatMap((columns) =>
             columns.map((column) => column.column_name),

@@ -617,6 +617,38 @@ describe("createSchemaCompletionProvider", () => {
       )
     })
 
+    it.each(["", "my"])("completes a CTE after FROM %s", (prefix) => {
+      // Given
+      const sql = `WITH mycte AS (SELECT 1 AS value) SELECT * FROM ${prefix}|`
+
+      // When
+      const completed = accept(sql, "mycte")
+
+      // Then
+      expect(completed).toBe(
+        "WITH mycte AS (SELECT 1 AS value) SELECT * FROM mycte ",
+      )
+    })
+
+    it.each([
+      ['"', "my+cte", "my|+cte"],
+      ["`", "my+cte", "my|+cte"],
+      ['"', "my select", "my| select"],
+      ["`", "my select", "my| select"],
+    ])("replaces the full %s-quoted CTE name %s", (quote, name, reference) => {
+      // Given
+      const declaration = `WITH ${quote}${name}${quote} AS (SELECT 1 AS value)`
+      const sql = `${declaration} SELECT * FROM ${quote}${reference}${quote} WHERE value = 1`
+
+      // When
+      const completed = accept(sql, name)
+
+      // Then
+      expect(completed).toBe(
+        `${declaration} SELECT * FROM ${quote}${name}${quote}  WHERE value = 1`,
+      )
+    })
+
     it("keeps the qualifier when accepting an alias-qualified column", () => {
       expect(accept("SELECT t.pr| FROM trades t", "price")).toBe(
         "SELECT t.price  FROM trades t",
