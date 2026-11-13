@@ -53,8 +53,8 @@ describe("useCellExecution at session end", () => {
       runCell = useCellExecution({
         bufferId: 1,
         cellsRef,
-        executeSingle,
-        validateWithGlobals: vi.fn(),
+        captureExecution: () =>
+          Promise.resolve({ executeSingle, validateWithGlobals: vi.fn() }),
         updateCellResult: vi.fn(),
         updateCell,
         updateCells: vi.fn(),

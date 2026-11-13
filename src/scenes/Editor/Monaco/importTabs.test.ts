@@ -27,6 +27,7 @@ import {
   sanitizeBuffer,
   DEFAULT_METRIC_COLOR,
   createBufferContentKey,
+  importNotebookVariables,
 } from "./importTabs"
 
 describe("validateBufferSchema", () => {
@@ -647,7 +648,7 @@ describe("sanitizeBuffer", () => {
         position: 5,
         editorViewState: {},
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.label).toBe("Test Tab")
       expect(result.value).toBe("SELECT 1")
       expect(result.position).toBe(5)
@@ -660,7 +661,7 @@ describe("sanitizeBuffer", () => {
         position: 0,
         editorViewState: { malicious: "data" },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.editorViewState).toBeDefined()
       expect(
         (result.editorViewState as unknown as Record<string, unknown>)
@@ -678,7 +679,7 @@ describe("sanitizeBuffer", () => {
         editorViewState: {},
         archived: true,
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.archived).toBe(true)
     })
 
@@ -690,7 +691,7 @@ describe("sanitizeBuffer", () => {
         editorViewState: {},
         archived: false,
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.archived).toBeUndefined()
     })
 
@@ -703,7 +704,7 @@ describe("sanitizeBuffer", () => {
         editorViewState: {},
         archivedAt: timestamp,
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.archivedAt).toBe(timestamp)
     })
 
@@ -715,7 +716,7 @@ describe("sanitizeBuffer", () => {
         editorViewState: {},
         archivedAt: "2024-01-01",
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.archivedAt).toBeUndefined()
     })
   })
@@ -729,7 +730,7 @@ describe("sanitizeBuffer", () => {
         editorViewState: {},
         isTemporary: true,
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.isTemporary).toBeUndefined()
     })
 
@@ -741,7 +742,7 @@ describe("sanitizeBuffer", () => {
         editorViewState: {},
         isPreviewBuffer: true,
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.isPreviewBuffer).toBeUndefined()
     })
 
@@ -753,7 +754,7 @@ describe("sanitizeBuffer", () => {
         editorViewState: {},
         previewContent: { type: "diff", original: "", modified: "" },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.previewContent).toBeUndefined()
     })
   })
@@ -768,7 +769,7 @@ describe("sanitizeBuffer", () => {
         maliciousField: "evil",
         anotherField: { nested: "data" },
       }
-      const result = sanitizeBuffer(input) as Record<string, unknown>
+      const result = sanitizeBuffer(input, []).buffer as Record<string, unknown>
       expect(result.maliciousField).toBeUndefined()
       expect(result.anotherField).toBeUndefined()
     })
@@ -798,7 +799,7 @@ describe("sanitizeBuffer", () => {
       }
 
       // When the buffer is sanitized
-      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      const cells = sanitizeBuffer(input, []).buffer.notebookViewState?.cells
 
       // Then each cell carries one preferred view and the legacy boolean is gone
       expect(cells?.map((cell) => cell.paneView)).toEqual([
@@ -846,7 +847,7 @@ describe("sanitizeBuffer", () => {
       }
 
       // When it is imported
-      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      const cells = sanitizeBuffer(input, []).buffer.notebookViewState?.cells
 
       // Then only the legacy cells keep their former size — a chart with no
       // stored result height folds its default; a head export with a stored
@@ -876,7 +877,7 @@ describe("sanitizeBuffer", () => {
       }
 
       // When it is imported
-      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      const cells = sanitizeBuffer(input, []).buffer.notebookViewState?.cells
 
       // Then the fold sums the raw heights and the floor applies once
       expect(cells?.[0].bottomHeight).toBe(296)
@@ -903,7 +904,7 @@ describe("sanitizeBuffer", () => {
         },
       }
       // When the buffer is sanitized
-      const cell = sanitizeBuffer(input).notebookViewState?.cells[0]
+      const cell = sanitizeBuffer(input, []).buffer.notebookViewState?.cells[0]
       // Then the legacy chart name still becomes the cell name, but the
       // run/draw sub-state apply_notebook_state would reject is gone
       expect(cell).toMatchObject({ type: "markdown", name: "Legacy title" })
@@ -928,7 +929,7 @@ describe("sanitizeBuffer", () => {
       }
 
       // When the buffer is sanitized
-      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      const cells = sanitizeBuffer(input, []).buffer.notebookViewState?.cells
 
       // Then run mode is dropped and draw mode is preserved
       expect(cells?.[0].mode).toBeUndefined()
@@ -959,7 +960,7 @@ describe("sanitizeBuffer", () => {
         },
       }
       // When the buffer is sanitized
-      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      const cells = sanitizeBuffer(input, []).buffer.notebookViewState?.cells
       // Then every height lands inside its pane's floor and ceiling, and
       // in-range values pass through untouched
       expect(cells?.[0]).toMatchObject({ topHeight: 72, bottomHeight: 100 })
@@ -1004,7 +1005,7 @@ describe("sanitizeBuffer", () => {
           },
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       const state = result.notebookViewState
       expect(state).toBeDefined()
       expect(state?.cells.map((c) => [c.id, c.position, c.value])).toEqual([
@@ -1023,7 +1024,62 @@ describe("sanitizeBuffer", () => {
       expect(state?.settings?.layout).toEqual([
         { i: "c1", x: 0, y: 0, w: 6, h: 4 },
       ])
-      expect(state?.settings?.variables).toEqual([{ name: "v", value: "1" }])
+      expect(state?.settings?.variables).toMatchObject([
+        { name: "v", kind: "expression", value: "1" },
+      ])
+    })
+
+    it("keeps a cell's time override and shift, drops invalid ones, and strips them from markdown", () => {
+      // Given
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "c1",
+              position: 0,
+              value: "SELECT 1",
+              timeRange: { from: "now-15m", to: "now" },
+              timeShift: "-1d",
+              showTimeRange: true,
+            },
+            {
+              id: "c2",
+              position: 1,
+              value: "SELECT 2",
+              timeRange: { from: "yesterday", to: "now" },
+              timeShift: "1d",
+            },
+            {
+              id: "c3",
+              position: 2,
+              value: "# note",
+              type: "markdown",
+              timeRange: { from: "now-15m", to: "now" },
+              timeShift: "-1d",
+              showTimeRange: true,
+            },
+          ],
+        },
+      }
+
+      // When
+      const { buffer } = sanitizeBuffer(input, [])
+      const cells = buffer.notebookViewState?.cells ?? []
+
+      // Then
+      expect(cells[0]).toMatchObject({
+        timeRange: { from: "now-15m", to: "now" },
+        timeShift: "-1d",
+        showTimeRange: true,
+      })
+      expect(cells[1].timeRange).toBeUndefined()
+      expect(cells[1].timeShift).toBeUndefined()
+      expect(cells[2].timeRange).toBeUndefined()
+      expect(cells[2].timeShift).toBeUndefined()
+      expect(cells[2].showTimeRange).toBeUndefined()
     })
 
     it("round-trips settings.autoRefreshDefault and drops an invalid token", () => {
@@ -1038,17 +1094,20 @@ describe("sanitizeBuffer", () => {
       }
       // A valid token survives import…
       expect(
-        sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
+        sanitizeBuffer(input, []).buffer.notebookViewState?.settings
+          ?.autoRefreshDefault,
       ).toBe("30s")
       // …Off (false) is a valid value, not an absent one…
       input.notebookViewState.settings = { autoRefreshDefault: false as never }
       expect(
-        sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
+        sanitizeBuffer(input, []).buffer.notebookViewState?.settings
+          ?.autoRefreshDefault,
       ).toBe(false)
       // …and an unknown token is dropped.
       input.notebookViewState.settings = { autoRefreshDefault: "10ms" }
       expect(
-        sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
+        sanitizeBuffer(input, []).buffer.notebookViewState?.settings
+          ?.autoRefreshDefault,
       ).toBeUndefined()
     })
 
@@ -1070,7 +1129,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       const cells = result.notebookViewState?.cells
       // A valid interval token survives the round-trip…
       expect(cells?.[0].autoRefresh).toBe("5s")
@@ -1097,16 +1156,18 @@ describe("sanitizeBuffer", () => {
               value: "SELECT 2",
               chartConfig: {
                 xColumn: "ts",
+                leftAxis: { min: 0, max: 100 },
                 queries: [{ type: "line", yColumns: ["price"] }, "junk"],
               },
             },
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.notebookViewState?.cells[0].chartConfig).toBeUndefined()
       expect(result.notebookViewState?.cells[1].chartConfig).toEqual({
         xColumn: "ts",
+        leftAxis: { min: 0, max: 100 },
         queries: [{ type: "line", yColumns: ["price"] }, null],
       })
     })
@@ -1155,7 +1216,7 @@ describe("sanitizeBuffer", () => {
       }
 
       // When the buffer is sanitized
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
 
       // Then the rules survive alongside migrated dimensions, and malformed rules drop
       expect(result.notebookViewState?.cells[0].highlightConfig).toEqual(valid)
@@ -1189,7 +1250,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       const cells = result.notebookViewState?.cells
       // Legacy chart title becomes the cell name; chartConfig keeps no name.
       expect(cells?.[0].name).toBe("BTC price")
@@ -1211,7 +1272,7 @@ describe("sanitizeBuffer", () => {
         },
       }
       // When sanitized
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       // Then the name is capped to 100 characters (the UI/MCP limit)
       expect(result.notebookViewState?.cells?.[0].name).toBe("a".repeat(100))
     })
@@ -1232,7 +1293,7 @@ describe("sanitizeBuffer", () => {
           extraField: "should not be copied",
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState).toBeDefined()
       expect(result.metricsViewState?.dateFrom).toBe("now-1h")
       expect(result.metricsViewState?.dateTo).toBe("now")
@@ -1265,7 +1326,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState?.metrics?.[0].color).toBe(
         DEFAULT_METRIC_COLOR,
       )
@@ -1290,7 +1351,7 @@ describe("sanitizeBuffer", () => {
       }
 
       // When the buffer is sanitized
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
 
       // Then the hex resolves to the series slot it came from
       expect(result.metricsViewState?.metrics?.[0].color).toBe("dataSeries1")
@@ -1315,7 +1376,7 @@ describe("sanitizeBuffer", () => {
       }
 
       // When the buffer is sanitized
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
 
       // Then no arbitrary value survives into the persisted metric
       expect(result.metricsViewState?.metrics?.[0].color).toBe(
@@ -1339,7 +1400,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState?.metrics?.[0].color).toBe(
         DEFAULT_METRIC_COLOR,
       )
@@ -1361,7 +1422,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState?.metrics?.[0].color).toBe(
         DEFAULT_METRIC_COLOR,
       )
@@ -1383,7 +1444,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState?.metrics?.[0].color).toBe(
         DEFAULT_METRIC_COLOR,
       )
@@ -1405,7 +1466,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState?.metrics?.[0].color).toBe(
         DEFAULT_METRIC_COLOR,
       )
@@ -1427,7 +1488,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState?.metrics?.[0].color).toBe(
         DEFAULT_METRIC_COLOR,
       )
@@ -1452,7 +1513,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState?.metrics?.[0].tableId).toBe(123)
     })
 
@@ -1471,7 +1532,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(result.metricsViewState?.metrics?.[0].removed).toBe(false)
     })
 
@@ -1492,7 +1553,7 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
-      const result = sanitizeBuffer(input)
+      const { buffer: result } = sanitizeBuffer(input, [])
       expect(
         (result.metricsViewState?.metrics?.[0] as Record<string, unknown>)
           .extraField,
@@ -1563,5 +1624,73 @@ describe("deduplication", () => {
       } as unknown as Parameters<typeof createBufferContentKey>[0]
       expect(createBufferContentKey(buffer)).toBe("Hybrid|[]")
     })
+  })
+})
+
+describe("importNotebookVariables", () => {
+  const venue = { name: "venue", kind: "text", value: "'LSE'" }
+  const side = { name: "side", kind: "text", value: "'BUY'" }
+  const pair = { name: "pair", kind: "expression", value: "'EURUSD'" }
+
+  it("reuses a console global with the same name and kind and keeps the rest as notebook variables", () => {
+    // Given
+    const globals = [
+      { name: "venue", kind: "text" as const, value: "'NYSE'" },
+      { name: "side", kind: "expression" as const, value: "'SELL'" },
+    ]
+
+    // When
+    const result = importNotebookVariables(
+      { globals: [venue, side], variables: [pair] },
+      globals,
+    )
+
+    // Then
+    expect(result.variables.map((v) => v.name)).toEqual(["side", "pair"])
+    expect(result.reusedGlobals).toEqual(["venue"])
+    expect(result.localizedGlobals).toEqual(["side"])
+    expect(result.dropped).toEqual([])
+  })
+
+  it("reuses a console global whose name differs only by case", () => {
+    // Given
+    const globals = [{ name: "venue", kind: "text" as const, value: "'NYSE'" }]
+
+    // When
+    const result = importNotebookVariables(
+      { globals: [{ ...venue, name: "Venue" }], variables: [pair] },
+      globals,
+    )
+
+    // Then
+    expect(result.variables.map((v) => v.name)).toEqual(["pair"])
+    expect(result.reusedGlobals).toEqual(["Venue"])
+    expect(result.localizedGlobals).toEqual([])
+  })
+
+  it("reports the entries it cannot read", () => {
+    // When
+    const result = importNotebookVariables(
+      {
+        globals: [{ name: "bad", kind: "list", source: { type: "query" } }],
+        variables: [pair, { kind: "text" }, 42],
+      },
+      [],
+    )
+
+    // Then
+    expect(result.variables.map((v) => v.name)).toEqual(["pair"])
+    expect(result.dropped).toEqual(["bad", "unnamed", "unnamed"])
+  })
+
+  it("still reads an older file that inlined globals into the notebook variables", () => {
+    // When
+    const result = importNotebookVariables({ variables: [venue, pair] }, [
+      { name: "venue", kind: "text" as const, value: "'NYSE'" },
+    ])
+
+    // Then
+    expect(result.variables.map((v) => v.name)).toEqual(["venue", "pair"])
+    expect(result.reusedGlobals).toEqual([])
   })
 })

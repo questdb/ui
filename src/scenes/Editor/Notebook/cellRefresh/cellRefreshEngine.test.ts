@@ -221,6 +221,83 @@ describe("CellRefreshEngine", () => {
     vi.clearAllMocks()
   })
 
+  it("uses one captured variable snapshot for every statement in a refresh round", async () => {
+    // Given
+    const executeSingle = vi.fn((sql: string) =>
+      Promise.resolve(dqlResult(sql)),
+    )
+    const validateWithGlobals = vi.fn().mockResolvedValue(dqlValidation)
+    const captureExecution = vi
+      .fn()
+      .mockResolvedValue({ executeSingle, validateWithGlobals })
+    Object.assign(deps, { captureExecution })
+    // When
+    syncOnScreen([drawCell("c1", "select @a; select @a + 1", false)])
+    await flushAsync()
+    // Then
+    expect(captureExecution).toHaveBeenCalledTimes(1)
+    expect(captureExecution).toHaveBeenCalledWith("c1", expect.anything())
+    expect(executeSingle).toHaveBeenCalledTimes(2)
+    // A refresh is a background read through the captured execution too.
+    for (const call of executeSingle.mock.calls) {
+      expect(call).toEqual([
+        expect.any(String),
+        expect.any(AbortSignal),
+        10_000,
+        { background: true },
+      ])
+    }
+    expect(validateWithGlobals).toHaveBeenCalledTimes(2)
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    expect(deps.validateWithGlobals).not.toHaveBeenCalled()
+  })
+
+  it("settles a round stopped while its variables load instead of rejecting", async () => {
+    // Given a draw cell whose variables never finish loading
+    const captureExecution = vi.fn(
+      (_cellId: string, signal: AbortSignal) =>
+        new Promise<never>((_, reject) =>
+          signal.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          ),
+        ),
+    )
+    Object.assign(deps, { captureExecution })
+    syncOnScreen([drawCell("c1", "select @a", false)])
+    await flushAsync()
+    expect(engine.getState("c1")?.fetching).toBe(true)
+    // When the user stops the fetch
+    engine.cancelChartFetch("c1")
+    await flushAsync()
+    // Then the round is over and nothing ran
+    expect(engine.getState("c1")?.fetching).toBe(false)
+    expect(engine.getState("c1")?.fetchCancelled).toBe(true)
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+  })
+
+  it("a manual refresh stopped while its variables load resolves", async () => {
+    // Given a draw cell with data whose variables never finish loading
+    const captureExecution = vi.fn(
+      (_cellId: string, signal: AbortSignal) =>
+        new Promise<never>((_, reject) =>
+          signal.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          ),
+        ),
+    )
+    Object.assign(deps, { captureExecution })
+    syncOnScreen([drawCell("c1", "select @a", false)])
+    await flushAsync()
+    engine.cancelChartFetch("c1")
+    await flushAsync()
+    // When a manual refresh starts and is stopped the same way
+    const refresh = engine.refresh("c1")
+    await flushAsync()
+    engine.cancelChartFetch("c1")
+    // Then the refresh promise resolves instead of rejecting
+    await expect(refresh).resolves.toBeUndefined()
+  })
+
   it("fetches once for a draw cell with auto-refresh off", async () => {
     // Given a draw cell with auto-refresh disabled and no prior data
     const cell = drawCell("c1", "select 1", false)

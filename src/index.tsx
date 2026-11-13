@@ -55,6 +55,7 @@ import { StoreAction, StoreShape } from "./types"
 
 import Layout from "./scenes/Layout"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
+import { GlobalVariablesProvider } from "./scenes/Editor/Notebook/variables/globals/GlobalVariablesProvider"
 import {
   AuthProvider,
   QuestProvider,
@@ -95,11 +96,13 @@ ReactDOM.render(
               <AuthProvider>
                 {ReactDOM.createPortal(<ToastContainer />, document.body)}
                 <QuestProvider>
-                  <LocalStorageProvider>
-                    <FadeSlow />
-                    <FadeReg />
-                    <Layout />
-                  </LocalStorageProvider>
+                  <GlobalVariablesProvider>
+                    <LocalStorageProvider>
+                      <FadeSlow />
+                      <FadeReg />
+                      <Layout />
+                    </LocalStorageProvider>
+                  </GlobalVariablesProvider>
                 </QuestProvider>
               </AuthProvider>
             </PosthogProviderWrapper>

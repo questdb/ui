@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import styled from "styled-components"
+import styled, { useTheme } from "styled-components"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import { buildEchartsOption } from "../CellChart/buildEchartsOption"
+import { candlePalette } from "../CellChart/questdbTheme"
 import {
   ChartRenderer,
   type ChartRendererHandle,
@@ -204,9 +205,17 @@ export const DrawCanvas: React.FC<Props> = ({
     eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
   }
 
+  const theme = useTheme()
+  const [chartHeight, setChartHeight] = useState(0)
   const option = useMemo(
-    () => buildEchartsOption(resolution.chart, resolution.renderQueries),
-    [resolution],
+    () =>
+      buildEchartsOption(
+        resolution.chart,
+        resolution.renderQueries,
+        candlePalette(theme.color),
+        { height: chartHeight },
+      ),
+    [resolution, theme, chartHeight],
   )
 
   const empty =
@@ -271,6 +280,7 @@ export const DrawCanvas: React.FC<Props> = ({
             ref={chartRendererRef}
             option={option}
             onZoomChange={handleZoomChange}
+            onHeightChange={setChartHeight}
             isFocused={isFocused}
             animate={animatesAt(refreshIntervalMs)}
             zoomWindow={{ start: zoomStart, end: zoomEnd }}

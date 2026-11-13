@@ -1,4 +1,11 @@
 import type { ColorShape } from "../../../../types"
+import type { CandlePalette } from "./chartTypes"
+
+export const candlePalette = (colors: ColorShape): CandlePalette => ({
+  up: colors.statusSuccess,
+  down: colors.statusDanger,
+  neutral: colors.contentSecondary,
+})
 
 export const createQuestdbTheme = (colors: ColorShape) => {
   const seriesPalette = [

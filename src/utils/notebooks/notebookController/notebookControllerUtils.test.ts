@@ -24,6 +24,8 @@ const makeController = (
 ): NotebookController => ({
   bufferId,
   kind: "live",
+  syncVariableOptions: () => Promise.resolve([]),
+  waitForVariableOptions: () => Promise.resolve([]),
   mutate: (transition) =>
     Promise.resolve(
       transition({

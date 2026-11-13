@@ -17,6 +17,8 @@ import {
   refreshRatesInSeconds,
   MetricViewMode,
   getAutoRefreshRate,
+  metricDurations,
+  MAX_DATE_RANGE,
 } from "./utils"
 import type { MetricsRefreshPayload } from "./types"
 import { ArrowClockwiseIcon } from "@phosphor-icons/react"
@@ -30,7 +32,7 @@ import { AddChart } from "../../../components/icons"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { formatISO } from "date-fns"
-import { DateTimePicker } from "./date-time-picker"
+import { TimeRangePicker } from "../TimeRangePicker"
 import useElementVisibility from "../../../hooks/useElementVisibility"
 import { widgets } from "./widgets"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -431,10 +433,12 @@ export const Metrics = () => {
               <IconWithTooltip
                 icon={
                   <ForwardRef>
-                    <DateTimePicker
+                    <TimeRangePicker
                       dateFrom={dateFrom}
                       dateTo={dateTo}
-                      onDateFromToChange={handleDateFromToChange}
+                      presets={metricDurations}
+                      maxRangeSeconds={MAX_DATE_RANGE}
+                      onApply={handleDateFromToChange}
                     />
                   </ForwardRef>
                 }

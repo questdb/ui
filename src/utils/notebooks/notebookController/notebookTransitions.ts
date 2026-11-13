@@ -1,3 +1,4 @@
+import type { PreparedNotebookVariables } from "../notebookVariableOptions"
 import {
   MAX_NOTEBOOK_CELLS,
   type AutoRefresh,
@@ -11,6 +12,11 @@ import type { ViewParts } from "../notebookDexieView"
 import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import { sameTimeRange } from "../../../scenes/Editor/Notebook/variables/timeRange"
+import {
+  changedVariableNames,
+  redefinedVariableNames,
+} from "../../../scenes/Editor/Notebook/variables/variableChanges"
 import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
 import { withHighlightConfig } from "../../../scenes/Editor/Notebook/result-table/highlightConfig"
 import {
@@ -70,11 +76,22 @@ import { reconcileCellResultForValue } from "../../../scenes/Editor/Notebook/sta
 //                            each shell checks the snapshots of its SQL edits
 //                            after the commit and passes the cells whose new
 //                            SQL kept none of their statements.
+//   - `variables`          — the variable/time-range diff; when present the
+//                            shell prepares variable values and commits them
+//                            together with the document.
+//   - `preparedVariables`  — values the caller already prepared, so the shell
+//                            does not fetch them again.
 //
 // Identity contract: untouched cells keep object identity (the composed
 // notebookUtils helpers guarantee it), and `parts.settings` is returned by
 // reference when unchanged, so shells can `!==` a slice to decide whether to
 // write it.
+
+export type VariableSettingsDiff = {
+  changed: string[]
+  redefined: string[]
+  timeRangeChanged: boolean
+}
 
 export type NotebookTransitionResult<T = void> = {
   parts: ViewParts
@@ -84,7 +101,21 @@ export type NotebookTransitionResult<T = void> = {
   cancelRuns?: { cellIds: string[]; reason: RunCancelReason }
   deleteSnapshots?: { cellIds: string[] }
   withSnapshotsCleared?: (cellIds: string[]) => T
+  variables?: VariableSettingsDiff
+  preparedVariables?: PreparedNotebookVariables
 }
+
+const variableSettingsDiff = (
+  before: ViewParts["settings"],
+  after: ViewParts["settings"],
+): VariableSettingsDiff => ({
+  changed: changedVariableNames(before.variables ?? [], after.variables ?? []),
+  redefined: redefinedVariableNames(
+    before.variables ?? [],
+    after.variables ?? [],
+  ),
+  timeRangeChanged: !sameTimeRange(before.timeRange, after.timeRange),
+})
 
 const requireCellCapacity = (cells: NotebookCell[], bufferId: number): void => {
   if (cells.length >= MAX_NOTEBOOK_CELLS) {
@@ -555,6 +586,7 @@ export const applyNotebookStateTransition = (
   resultStatusOf: CellResultStatusReader,
 ): NotebookTransitionResult<AppliedNotebookState> => {
   const next = buildAppliedNotebookState(parts, request, resultStatusOf)
+  const variables = variableSettingsDiff(parts.settings, next.settings)
   const appliedWith = (snapshotsCleared: string[]): AppliedNotebookState => ({
     applied: next.diff,
     resultsCleared: [...new Set([...next.resultsCleared, ...snapshotsCleared])],
@@ -594,6 +626,7 @@ export const applyNotebookStateTransition = (
     result: appliedWith([]),
     withSnapshotsCleared: appliedWith,
     cleanup: { cellIds: next.diff.deleted },
+    variables,
     ...(invalidatedResultIds.size > 0
       ? {
           cancelRuns: {

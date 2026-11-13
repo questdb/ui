@@ -126,6 +126,44 @@ describe("inferChartConfig", () => {
       low: "low",
       close: "close",
     })
+    expect(config.chart.volume).toBeUndefined()
+  })
+
+  it("maps a volume column next to OHLC on the first draw", () => {
+    // Given
+    const ohlcv = (extra: string) => [
+      col("ts", "TIMESTAMP"),
+      col("open", "DOUBLE"),
+      col("high", "DOUBLE"),
+      col("low", "DOUBLE"),
+      col("close", "DOUBLE"),
+      col(extra, "DOUBLE"),
+    ]
+    const infer = (extra: string) =>
+      inferChartConfig(ohlcv(extra), [], "SELECT * FROM t SAMPLE BY 15m").chart
+    // When / Then: common names are picked, case-insensitively
+    expect(infer("total_volume").volume).toBe("total_volume")
+    expect(infer("Volume").volume).toBe("Volume")
+    expect(infer("amount").volume).toBe("amount")
+    // and an unrelated numeric column is not
+    expect(infer("vwap").volume).toBeUndefined()
+  })
+
+  it("prefers a column named volume over a weaker match", () => {
+    // Given
+    const columns = [
+      col("ts", "TIMESTAMP"),
+      col("open", "DOUBLE"),
+      col("high", "DOUBLE"),
+      col("low", "DOUBLE"),
+      col("close", "DOUBLE"),
+      col("amount", "DOUBLE"),
+      col("volume", "DOUBLE"),
+    ]
+    // When
+    const config = inferChartConfig(columns, [], "SELECT * FROM t")
+    // Then
+    expect(config.chart.volume).toBe("volume")
   })
 
   it("OHLC detection is case-insensitive", () => {

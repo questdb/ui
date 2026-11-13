@@ -1,31 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Input, SelectMenuControl, TabButton } from "../../../../components"
+import { SelectMenuControl, TabButton } from "../../../../components"
 import type { ChartConfig, QueryChart } from "./chartTypes"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-  IncompatibleIcon,
-} from "./chartSettingsStyles"
+import { Field, FieldLabel, IncompatibleIcon } from "./chartSettingsStyles"
 import { QueryControls } from "./QueryControls"
+import { axisBoundsError, candlestickMissingOhlc } from "./chartSettingsRules"
+import { AxisBoundsRow } from "./AxisBoundsRow"
 import {
   SettingsDrawerShell,
   type SettingsDismissMethod,
   type SettingsPresentation,
 } from "../settingsDrawer/SettingsDrawerShell"
-
-const Row = styled.div`
-  display: flex;
-  gap: 0.8rem;
-  & > * {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-`
 
 const Divider = styled.div`
   border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
@@ -46,18 +34,6 @@ const Tab = styled(TabButton)`
     margin-bottom: -1px;
   }
 `
-
-const parseBound = (v: string): number | undefined => {
-  const n = Number(v)
-  return v === "" || !Number.isFinite(n) ? undefined : n
-}
-
-const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
-  if (!q || q.type !== "candlestick" || q.enabled === false) return false
-  const o = q.ohlc
-  if (!o || !o.open || !o.high || !o.low || !o.close) return true
-  return new Set([o.open, o.high, o.low, o.close]).size !== 4
-}
 
 type SharedProps = {
   tabs: QueryTab[]
@@ -157,6 +133,8 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ? (draft.queries[activeTab.index] ?? undefined)
       : undefined
 
+  const hasAxes =
+    anchorTab != null && draft.queries[anchorTab.index]?.type !== "pie"
   const hasRight = draft.queries.some((q) => q?.axis === "right")
 
   const updateQuery = (index: number, patch: Partial<QueryChart>) =>
@@ -190,6 +168,11 @@ const ChartSettings: React.FC<SettingsProps> = ({
       telemetry?.onSaveBlocked?.("ohlc_incomplete")
       setSaveAttempted(true)
       setActiveIndex(badIdx)
+      return
+    }
+    if (axisBoundsError(draft.leftAxis) || axisBoundsError(draft.rightAxis)) {
+      telemetry?.onSaveBlocked?.("axis_bounds_invalid")
+      setSaveAttempted(true)
       return
     }
     const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
@@ -231,53 +214,24 @@ const ChartSettings: React.FC<SettingsProps> = ({
         />
       </Field>
 
-      {hasRight && (
-        <FieldGroup>
-          <FieldLabel>Right axis</FieldLabel>
-          <Input
-            name="right-axis-name"
-            placeholder="Name (e.g. RSI)"
-            value={draft.rightAxis?.name ?? ""}
-            onChange={(e) =>
-              updateDraft({
-                ...draft,
-                rightAxis: { ...draft.rightAxis, name: e.target.value },
-              })
-            }
-          />
-          <Row>
-            <Input
-              name="right-axis-min"
-              type="number"
-              placeholder="min"
-              value={draft.rightAxis?.min ?? ""}
-              onChange={(e) =>
-                updateDraft({
-                  ...draft,
-                  rightAxis: {
-                    ...draft.rightAxis,
-                    min: parseBound(e.target.value),
-                  },
-                })
-              }
-            />
-            <Input
-              name="right-axis-max"
-              type="number"
-              placeholder="max"
-              value={draft.rightAxis?.max ?? ""}
-              onChange={(e) =>
-                updateDraft({
-                  ...draft,
-                  rightAxis: {
-                    ...draft.rightAxis,
-                    max: parseBound(e.target.value),
-                  },
-                })
-              }
-            />
-          </Row>
-        </FieldGroup>
+      {hasAxes && (
+        <AxisBoundsRow
+          side="left"
+          namePlaceholder="Name"
+          value={draft.leftAxis}
+          showError={saveAttempted}
+          onChange={(leftAxis) => updateDraft({ ...draft, leftAxis })}
+        />
+      )}
+
+      {hasAxes && hasRight && (
+        <AxisBoundsRow
+          side="right"
+          namePlaceholder="Name (e.g. RSI)"
+          value={draft.rightAxis}
+          showError={saveAttempted}
+          onChange={(rightAxis) => updateDraft({ ...draft, rightAxis })}
+        />
       )}
 
       {tabs.length > 1 && (

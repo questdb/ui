@@ -18,6 +18,7 @@ import type {
   NotebookCell,
   NotebookSettings,
   NotebookVariable,
+  TimeRange,
   NotebookViewState,
   SingleQueryResult,
 } from "../../../store/notebook"
@@ -36,6 +37,7 @@ import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 export type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText } from "../Monaco/utils"
 import type { RunCancellation } from "./runCancellation"
+import { normalizeVariables } from "./variables/normalizeVariables"
 import {
   derivePositionalFrame,
   deriveStatementFrame,
@@ -713,6 +715,9 @@ type ApplyCellRequest = {
   type?: CellType | null
   mode?: CellMode | null
   autoRefresh?: AutoRefresh | null
+  timeRange?: TimeRange | null
+  timeShift?: string | null
+  showTimeRange?: boolean | null
   editorHeight?: number | "auto" | null
   resultHeight?: number | "auto" | null
   view?: AgentCellView | null
@@ -726,6 +731,7 @@ type ApplyRequest = {
   autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
+  timeRange?: TimeRange | null
   cells: ApplyCellRequest[]
 }
 
@@ -800,7 +806,7 @@ export const cloneNotebookViewStateWithCellIdMap = (
         .map((item) => ({ ...item, i: idMap.get(item.i) as string }))
     }
     if (source.settings.variables) {
-      settings.variables = source.settings.variables.map((v) => ({ ...v }))
+      settings.variables = normalizeVariables(source.settings.variables)
     }
     next.settings = settings
   }
@@ -824,6 +830,7 @@ export const cloneNotebookViewState = (
 const normalizeQueryChart = (q: QueryChart): QueryChart => {
   const next: QueryChart = { type: q.type, yColumns: q.yColumns ?? [] }
   if (q.ohlc) next.ohlc = q.ohlc
+  if (q.volume) next.volume = q.volume
   if (q.partitionByColumn) next.partitionByColumn = q.partitionByColumn
   if (q.axis) next.axis = q.axis
   if (q.enabled === false) next.enabled = false
@@ -839,6 +846,7 @@ const normalizeChartConfig = (
     xColumn: cfg.xColumn ?? null,
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
+  if (cfg.leftAxis) next.leftAxis = cfg.leftAxis
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
   return next
 }
@@ -1061,6 +1069,17 @@ export const buildAppliedCells = (
       req.autoRefresh != null && resolvedType !== "markdown"
         ? req.autoRefresh
         : undefined
+    const timeRange =
+      req.timeRange != null && resolvedType !== "markdown"
+        ? req.timeRange
+        : undefined
+    const timeShift =
+      req.timeShift != null && resolvedType !== "markdown"
+        ? req.timeShift
+        : undefined
+    const showTimeRange =
+      req.showTimeRange === true &&
+      (timeRange !== undefined || timeShift !== undefined)
 
     if (req.grid) {
       const gridError = cellGridBoundsError(req.grid)
@@ -1111,6 +1130,12 @@ export const buildAppliedCells = (
       else delete next.highlightConfig
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
+      if (timeRange !== undefined) next.timeRange = timeRange
+      else delete next.timeRange
+      if (timeShift !== undefined) next.timeShift = timeShift
+      else delete next.timeShift
+      if (showTimeRange) next.showTimeRange = true
+      else delete next.showTimeRange
       if (req.view === "editor" && cellHasRunOutcome(existing)) {
         next = discardCellResult(next)
         if (!resultsCleared.includes(existing.id)) {
@@ -1153,6 +1178,9 @@ export const buildAppliedCells = (
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (highlightConfig !== undefined) created.highlightConfig = highlightConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
+    if (timeRange !== undefined) created.timeRange = timeRange
+    if (timeShift !== undefined) created.timeShift = timeShift
+    if (showTimeRange) created.showTimeRange = true
     // Draw cells are double-view from creation (chart visible immediately),
     // so seed bottomHeight with the chart default. Run cells stay single-
     // view (no bottomHeight) until the user runs them.
@@ -1278,6 +1306,12 @@ export const buildAppliedNotebookState = (
   }
   if (request.variables !== undefined) {
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }
+  }
+  if (request.timeRange !== undefined) {
+    const { timeRange: _timeRange, ...withoutTimeRange } = nextSettings
+    nextSettings = request.timeRange
+      ? { ...withoutTimeRange, timeRange: request.timeRange }
+      : withoutTimeRange
   }
 
   let nextMaximizedCellId = current.maximizedCellId

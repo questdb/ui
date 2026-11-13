@@ -17,12 +17,14 @@ import { db } from "../../../store/db"
 import {
   validateBufferItem,
   sanitizeBuffer,
+  type VariableImportReport,
   createBufferContentKey,
 } from "./importTabs"
 import { migrateBuffer, getCurrentDbVersion } from "../../../store/migrations"
-import { importInto, peakImportFile } from "dexie-export-import"
 import { exportBuffers } from "./exportTabs"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
+import { getNotebookGlobals } from "../../../store/notebookGlobals"
+import { normalizeVariables } from "../Notebook/variables/normalizeVariables"
 import { EditorSettingsModal } from "../../../components/EditorSettingsModal"
 import {
   Box,
@@ -160,6 +162,9 @@ export const Tabs = () => {
   const [importSummaryOpen, setImportSummaryOpen] = useState(false)
   const [importedCount, setImportedCount] = useState(0)
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
+  const [variableReports, setVariableReports] = useState<
+    VariableImportReport[]
+  >([])
 
   const handleExportTabs = async () => {
     void trackEvent(ConsoleEvent.TAB_EXPORT)
@@ -186,6 +191,9 @@ export const Tabs = () => {
 
       try {
         const blob = new Blob([await file.arrayBuffer()])
+        const { importInto, peakImportFile } = await import(
+          "dexie-export-import"
+        )
 
         let importVersion: number
         try {
@@ -243,7 +251,11 @@ export const Tabs = () => {
 
         let importedCount = 0
         const skipped: SkippedTab[] = []
+        const variableNotes: VariableImportReport[] = []
         const idsToDelete: number[] = []
+        const globals = normalizeVariables(
+          (await getNotebookGlobals())?.variables,
+        )
 
         await importInto(db, blob, {
           acceptVersionDiff: true,
@@ -296,8 +308,9 @@ export const Tabs = () => {
               }
             }
 
-            const sanitized = sanitizeBuffer(
+            const { buffer: sanitized, variables } = sanitizeBuffer(
               migratedValue as Record<string, unknown>,
+              globals,
             )
 
             // Duplicate detection on post-migration, post-sanitization data
@@ -326,6 +339,7 @@ export const Tabs = () => {
             if (!isArchived) {
               importedCount++
             }
+            if (variables) variableNotes.push(variables)
 
             return { value: sanitized }
           },
@@ -343,9 +357,10 @@ export const Tabs = () => {
         }
 
         // Show dialog only if there are skipped tabs, otherwise show toast
-        if (skipped.length > 0) {
+        if (skipped.length > 0 || variableNotes.length > 0) {
           setImportedCount(importedCount)
           setSkippedTabs(skipped)
+          setVariableReports(variableNotes)
           setImportSummaryOpen(true)
         } else if (importedCount > 0) {
           toast.success(
@@ -729,6 +744,7 @@ export const Tabs = () => {
         onOpenChange={setImportSummaryOpen}
         importedCount={importedCount}
         skippedTabs={skippedTabs}
+        variableReports={variableReports}
       />
       <DropdownMenu.Root open={newTabMenuOpen} onOpenChange={setNewTabMenuOpen}>
         <NewTabAnchor

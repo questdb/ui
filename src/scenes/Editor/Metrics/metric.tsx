@@ -106,8 +106,8 @@ export const Metric = ({
     setLoading(true)
     setHasError(false)
     try {
-      const from = durationTokenToDate(dateFromRef.current)
-      const to = durationTokenToDate(dateToRef.current)
+      const from = durationTokenToDate(dateFromRef.current, "from")
+      const to = durationTokenToDate(dateToRef.current, "to")
       const fromIso = formatToISOIfNeeded(from)
       const toIso = formatToISOIfNeeded(to)
 

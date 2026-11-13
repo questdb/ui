@@ -25,14 +25,20 @@ export type QueryChart = {
     low: string
     close: string
   }
+  volume?: string
   partitionByColumn?: string
   axis?: SeriesAxis
   enabled?: boolean
   name?: string
 }
 
+export type AxisBounds = { name?: string; min?: number; max?: number }
+
+export type CandlePalette = { up: string; down: string; neutral: string }
+
 export type ChartConfig = {
   xColumn: string | null
   queries: (QueryChart | null)[]
-  rightAxis?: { name?: string; min?: number; max?: number }
+  leftAxis?: AxisBounds
+  rightAxis?: AxisBounds
 }

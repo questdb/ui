@@ -14,10 +14,12 @@ export type ChartSettingsSavePayload = {
   partitioned: boolean
 }
 
+export type ChartSettingsBlockReason = "ohlc_incomplete" | "axis_bounds_invalid"
+
 export type ChartSettingsTelemetry = {
   onCancel?: (method: ChartSettingsCancelMethod) => void
   onSave?: (payload: ChartSettingsSavePayload) => void
-  onSaveBlocked?: (reason: "ohlc_incomplete") => void
+  onSaveBlocked?: (reason: ChartSettingsBlockReason) => void
   onTypeChange?: (from: ChartType, to: ChartType) => void
   onResetAuto?: (chartType: ChartType) => void
 }

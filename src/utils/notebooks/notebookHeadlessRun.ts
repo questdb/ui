@@ -7,7 +7,7 @@ import {
 import { SESSION_ENDED_MESSAGE } from "../../modules/OAuth2/session"
 import type {
   CellResult,
-  NotebookVariable,
+  DeclareEntry,
   NotebookViewState,
   SingleQueryResult,
 } from "../../store/notebook"
@@ -53,6 +53,10 @@ import {
 } from "../../scenes/Editor/Notebook/runCancellation"
 import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
 import { pruneToRecentNotebooks } from "../../store/notebookResults"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { resolveHeadlessDeclareEntries } from "./notebookVariableOptions"
+import { withCellTime } from "../../scenes/Editor/Notebook/variables/cellTime"
+import { getNotebookGlobals } from "../../store/notebookGlobals"
 import {
   commitView,
   partsOf,
@@ -252,7 +256,7 @@ const executeInSession = (
   session: AuthSession,
   quest: Client,
   query: string,
-  variables: NotebookVariable[] | undefined,
+  variables: DeclareEntry[] | undefined,
   signal: AbortSignal,
 ): Promise<QueryExecResult> =>
   session.isCurrent()
@@ -277,7 +281,7 @@ const emptySummary = (): RunCellSummary => ({
 const executeCellQueries = async (args: {
   queries: string[]
   queryText: string
-  variables: NotebookVariable[] | undefined
+  variables: DeclareEntry[] | undefined
   quest: Client
   session: AuthSession
   signal?: AbortSignal
@@ -373,7 +377,7 @@ const executeCellQueries = async (args: {
 const executeCellQueriesParallel = async (args: {
   queries: string[]
   classified: ClassifiedStatement[]
-  variables: NotebookVariable[] | undefined
+  variables: DeclareEntry[] | undefined
   quest: Client
   session: AuthSession
   signal?: AbortSignal
@@ -474,7 +478,8 @@ export const runHeadlessCell = async (
     const view = await readNotebookView(bufferId)
     return {
       cell: requireCellIn(view.cells, cellId, bufferId),
-      variables: view.settings?.variables,
+      settings: view.settings ?? {},
+      globals: normalizeVariables((await getNotebookGlobals())?.variables),
       seqAtPrep: deps.getBufferSeq(),
       mountEpochAtPrep: getMountEpoch(bufferId),
     }
@@ -506,7 +511,30 @@ export const runHeadlessCell = async (
   // phase here, so a concurrent transition can stop it before it launches.
   const claim = claimHeadlessRun(bufferId, cellId, session, signal)
   try {
-    const validate = createValidateWithGlobals(quest, () => prep.variables)
+    // Resolved under the claim, so a transition that lands while list values
+    // load still cancels the run. Failed lists are not surfaced here on
+    // purpose: a cell may DECLARE the name itself, so QuestDB decides
+    // (undeclared-variable error vs. shadowed list).
+    let variables: DeclareEntry[]
+    try {
+      const { entries } = await resolveHeadlessDeclareEntries({
+        bufferId,
+        quest,
+        settings: prep.settings,
+        globals: prep.globals,
+        signal: claim.signal,
+      })
+      variables = withCellTime(entries, prep.settings.timeRange, prep.cell)
+    } catch (error) {
+      if (claim.signal.aborted) {
+        return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
+      }
+      throw error
+    }
+    if (claim.signal.aborted) {
+      return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
+    }
+    const validate = createValidateWithGlobals(quest, () => variables)
     const barrier = await resolveRunBarrier(
       queryText,
       queries.length,
@@ -542,7 +570,7 @@ export const runHeadlessCell = async (
         ? await executeCellQueriesParallel({
             queries,
             classified: readOnlyStatements,
-            variables: prep.variables,
+            variables,
             quest,
             session,
             signal,
@@ -551,7 +579,7 @@ export const runHeadlessCell = async (
         : await executeCellQueries({
             queries,
             queryText,
-            variables: prep.variables,
+            variables,
             quest,
             session,
             signal,

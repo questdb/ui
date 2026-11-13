@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChartLineIcon, WarningIcon } from "@phosphor-icons/react"
-import styled from "styled-components"
+import styled, { useTheme } from "styled-components"
 import { AIStopButton } from "../../../components/AIStopButton"
 import { Button } from "../../../components/Button"
 import { IconButton } from "../../../components/IconButton"
@@ -9,6 +9,7 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
 import { buildEchartsOption } from "../../Editor/Notebook/CellChart/buildEchartsOption"
+import { candlePalette } from "../../Editor/Notebook/CellChart/questdbTheme"
 import {
   ChartRenderer,
   type ChartRendererHandle,
@@ -174,12 +175,19 @@ export const ResultChart: React.FC<Props> = ({
     [chartResult, config],
   )
 
+  const theme = useTheme()
+  const [chartHeight, setChartHeight] = useState(0)
   const option = useMemo(
     () =>
       resolution
-        ? buildEchartsOption(resolution.chart, resolution.renderQueries)
+        ? buildEchartsOption(
+            resolution.chart,
+            resolution.renderQueries,
+            candlePalette(theme.color),
+            { height: chartHeight },
+          )
         : null,
-    [resolution],
+    [resolution, theme, chartHeight],
   )
 
   const hasChartableColumns =
@@ -310,6 +318,7 @@ export const ResultChart: React.FC<Props> = ({
             ref={chartRendererRef}
             option={option}
             onZoomChange={handleZoomChange}
+            onHeightChange={setChartHeight}
             animateEntry={false}
             zoomWindow={{ start: zoomStart, end: zoomEnd }}
           />

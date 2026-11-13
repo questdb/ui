@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react"
+import React, { useMemo, useRef, useState } from "react"
 import styled, { css } from "styled-components"
 import {
   ChevronUp,
@@ -8,6 +8,7 @@ import {
   Reset,
 } from "../../../../components/icons"
 import {
+  ClockIcon,
   DotsThreeVerticalIcon,
   CornersOutIcon,
   CornersInIcon,
@@ -91,6 +92,7 @@ type Props = {
   toolbarTier?: CellToolbarTier
   paneLayout?: CellPaneLayout
   chartZoomed?: boolean
+  onOpenTimeRange?: () => void
 }
 
 export const CellToolbar: React.FC<Props> = ({
@@ -106,6 +108,7 @@ export const CellToolbar: React.FC<Props> = ({
   toolbarTier,
   paneLayout,
   chartZoomed = false,
+  onOpenTimeRange,
 }) => {
   const {
     moveCellUp,
@@ -134,6 +137,9 @@ export const CellToolbar: React.FC<Props> = ({
   // engine would ignore — same gate the inline selector applies.
   const autoRefreshBlocked = useCellFetchSelector(cellId, selectWriteBlocked)
   const [menuOpen, setMenuOpen] = useState(false)
+  // The menu refocuses its trigger as it closes; a popover opened before that
+  // reads the focus move as an outside interaction. Open it from the close hook.
+  const openTimeRangeOnCloseRef = useRef(false)
   const moreActionsTooltip = useTriggerTooltip()
   const {
     viewTable: handleViewTable,
@@ -297,7 +303,16 @@ export const CellToolbar: React.FC<Props> = ({
             </DropdownMenu.Trigger>
           </Tooltip>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" sideOffset={4}>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={4}
+              onCloseAutoFocus={(event) => {
+                if (!openTimeRangeOnCloseRef.current) return
+                openTimeRangeOnCloseRef.current = false
+                event.preventDefault()
+                onOpenTimeRange?.()
+              }}
+            >
               {showViewTable &&
                 (isNoneView ? (
                   <DropdownMenu.Item
@@ -348,14 +363,6 @@ export const CellToolbar: React.FC<Props> = ({
 
               {groupAHasItems && <DropdownMenu.Divider />}
 
-              {showResetZoom && (
-                <DropdownMenu.Item
-                  onSelect={handleResetZoom}
-                  icon={<Reset size={16} />}
-                >
-                  Reset zoom
-                </DropdownMenu.Item>
-              )}
               {showAutoRefreshItem && (
                 <DropdownMenu.Sub>
                   <DropdownMenu.SubTrigger disabled={autoRefreshBlocked}>
@@ -400,6 +407,26 @@ export const CellToolbar: React.FC<Props> = ({
                   icon={<GearIcon size={16} />}
                 >
                   Highlight rules
+                </DropdownMenu.Item>
+              )}
+              {!isMarkdown && onOpenTimeRange && (
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    openTimeRangeOnCloseRef.current = true
+                  }}
+                  icon={<ClockIcon size={16} />}
+                  data-hook="cell-time-range-item"
+                >
+                  Cell time range
+                </DropdownMenu.Item>
+              )}
+
+              {showResetZoom && (
+                <DropdownMenu.Item
+                  onSelect={handleResetZoom}
+                  icon={<Reset size={16} />}
+                >
+                  Reset zoom
                 </DropdownMenu.Item>
               )}
 

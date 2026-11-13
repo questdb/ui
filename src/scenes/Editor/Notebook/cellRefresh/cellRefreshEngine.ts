@@ -1,3 +1,4 @@
+import type { CapturedExecution } from "../variables/captureExecution"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import { runAdaptivePollLoop } from "../../../../hooks/useAdaptivePoll"
 import { runFixedIntervalPollLoop } from "../../../../utils/runFixedIntervalPollLoop"
@@ -102,6 +103,10 @@ export type CellFetchState = {
 const REFRESH_READ = { background: true }
 
 export type CellRefreshDeps = {
+  captureExecution?: (
+    cellId: string,
+    signal?: AbortSignal,
+  ) => Promise<CapturedExecution>
   executeSingle: (
     sql: string,
     signal?: AbortSignal,
@@ -1208,13 +1213,26 @@ export class CellRefreshEngine {
   // for the write gate and slot exclusion. Validation requests are ROUND-owned
   // (a slot cancel never aborts them — the barrier needs every class);
   // execution requests are SLOT-owned.
+  // The round's variables are captured once, so validation and every
+  // statement of the round see the same values.
+  private captureForRound(
+    entry: Entry,
+    round: AbortController,
+  ): Promise<CapturedExecution> {
+    const deps = this.getDeps()
+    return deps.captureExecution
+      ? deps.captureExecution(entry.cellId, round.signal)
+      : Promise.resolve(deps)
+  }
+
   private classifyForRound(
     entry: Entry,
     round: AbortController,
+    execution: CapturedExecution,
   ): Promise<ClassifiedStatement[]> {
     return classifyStatements(entry.sql, (sql) =>
       this.limitRequest(
-        () => this.getDeps().validateWithGlobals(sql, round.signal),
+        () => execution.validateWithGlobals(sql, round.signal),
         round.signal,
       ),
     )
@@ -1233,9 +1251,11 @@ export class CellRefreshEngine {
       // validation is never executed — re-validating it every tick means an
       // INSERT whose missing table appears later classifies as a write and
       // gets blocked, instead of silently running.
+      let execution: CapturedExecution
       let classified: ClassifiedStatement[]
       try {
-        classified = await this.classifyForRound(entry, ac)
+        execution = await this.captureForRound(entry, ac)
+        classified = await this.classifyForRound(entry, ac, execution)
       } catch (e) {
         if (ac.signal.aborted) return
         const message = e instanceof Error ? e.message : "validate failed"
@@ -1283,7 +1303,12 @@ export class CellRefreshEngine {
           if (previous) return Promise.resolve(toExecResult(previous))
           return this.limitRequest(
             () =>
-              deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP, REFRESH_READ),
+              execution.executeSingle(
+                q,
+                ac.signal,
+                NOTEBOOK_ROW_CAP,
+                REFRESH_READ,
+              ),
             ac.signal,
           ).catch((e) => errorExecResult(q, e))
         }),
@@ -1369,12 +1394,13 @@ export class CellRefreshEngine {
     round: AbortController,
     manual: boolean,
   ) {
-    const deps = this.getDeps()
     const { queries, queriesKey } = entry.state
     try {
+      let execution: CapturedExecution
       let classified: ClassifiedStatement[]
       try {
-        classified = await this.classifyForRound(entry, round)
+        execution = await this.captureForRound(entry, round)
+        classified = await this.classifyForRound(entry, round, execution)
       } catch (e) {
         if (round.signal.aborted) return
         const message = e instanceof Error ? e.message : "validate failed"
@@ -1437,7 +1463,7 @@ export class CellRefreshEngine {
           try {
             const exec = await this.limitRequest(
               () =>
-                deps.executeSingle(
+                execution.executeSingle(
                   queries[index],
                   slotAbort.signal,
                   NOTEBOOK_ROW_CAP,

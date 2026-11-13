@@ -7,7 +7,8 @@ import { useTriggerTooltip } from "./cells/useTriggerTooltip"
 import {
   useNotebookActions,
   useNotebookBufferId,
-  useNotebookState,
+  useNotebookCellsState,
+  useNotebookVariablesState,
 } from "./NotebookProvider"
 import { useCellRefresh } from "./cellRefresh/CellRefreshContext"
 import {
@@ -43,7 +44,8 @@ const MenuHint = styled.div`
 `
 
 export const NotebookRefreshControl: React.FC = () => {
-  const { cells, settings } = useNotebookState()
+  const { cells } = useNotebookCellsState()
+  const { settings } = useNotebookVariablesState()
   const { refreshAllCells, resetAutoRefreshOverrides, updateSettings } =
     useNotebookActions()
   const bufferId = useNotebookBufferId()
