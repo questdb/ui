@@ -65,20 +65,9 @@ export const buildNotebookFreshness = (
   return createNotebookFreshness(seed)
 }
 
-export type WorkspaceInfo = {
-  notebooks: Array<{
-    buffer_id: number
-    label: string
-    archived: boolean
-    bound_to_this_chat?: boolean
-  }>
-  active?: {
-    buffer_id: number
-    label: string
-    kind: "notebook" | "sql" | "metrics" | "other"
-    archived?: boolean
-  }
-}
+import type { WorkspaceInfo } from "./workspaceInfo"
+
+export type { WorkspaceInfo } from "./workspaceInfo"
 
 type BaseFlowConfig = {
   conversationId: ConversationId

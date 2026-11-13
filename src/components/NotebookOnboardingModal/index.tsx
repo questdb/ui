@@ -8,6 +8,7 @@ import { ForwardRef } from "../ForwardRef"
 import { IconButton } from "../IconButton"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
+import { useSettings } from "../../providers/SettingsProvider"
 import { createDefaultNotebookViewState } from "../../store/notebook"
 import { shouldShowNotebookModal } from "../../utils/notebookOnboarding"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -122,9 +123,10 @@ const HiddenTitle = styled(RadixDialog.Title)`
 export const NotebookOnboardingModal = () => {
   const theme = useTheme()
   const { notebookOnboarding, updateNotebookOnboarding } = useLocalStorage()
+  const { consoleConfig } = useSettings()
   const { addBuffer } = useEditor()
   const [open, setOpen] = useState(() =>
-    shouldShowNotebookModal(notebookOnboarding),
+    shouldShowNotebookModal(notebookOnboarding, consoleConfig),
   )
   const [step, setStep] = useState<0 | 1>(0)
   const contentRef = useRef<HTMLDivElement>(null)

@@ -72,6 +72,7 @@ type BaseButtonProps = {
   trailingIcon?: React.ReactNode
   dataHook?: string
   id?: string
+  tabIndex?: number
   href?: string
   target?: string
   rel?: string

@@ -114,14 +114,21 @@ describe("formatDigest", () => {
     d.edited.add("e1")
     d.ran.set("r1", "error")
     d.layoutModeTo = "grid"
-    d.notebookStatusChange = "archived"
+    d.tabChanges.push({
+      bufferId: 7,
+      kind: "notebook",
+      label: "Old",
+      status: "closed",
+    })
     const out = formatDigest(d)
     expect(out).toContain("added: [a1]")
     expect(out).toContain("deleted: [d1]")
     expect(out).toContain("edited: [e1]")
     expect(out).toContain("ran: { r1: error }")
     expect(out).toContain("layout_mode: grid")
-    expect(out).toContain("notebook_status: archived")
+    expect(out).toContain(
+      'tabs_closed: [{ buffer_id: 7, label: "Old", kind: notebook }]',
+    )
   })
 
   it("prints an Off autorefresh default — false is a value, not an absence", () => {
@@ -170,10 +177,11 @@ describe("formatNotebookContextPrefix", () => {
     const digest = createEmptyDigest()
     digest.added.add("a")
     const prefix = formatNotebookContextPrefix(snap, digest, {
-      notebooks: [
+      tabs: [
         {
           buffer_id: 2,
           label: "Notebook 1",
+          kind: "notebook",
           archived: false,
           bound_to_this_chat: true,
         },
@@ -190,9 +198,9 @@ describe("formatNotebookContextPrefix", () => {
 
   it("emits <workspace> alone for unbound chats with notebook tabs", () => {
     const prefix = formatNotebookContextPrefix(null, undefined, {
-      notebooks: [
-        { buffer_id: 5, label: "Sales", archived: false },
-        { buffer_id: 9, label: "Old", archived: true },
+      tabs: [
+        { buffer_id: 5, label: "Sales", kind: "notebook", archived: false },
+        { buffer_id: 9, label: "Old", kind: "notebook", archived: true },
       ],
       active: { buffer_id: 5, label: "Sales", kind: "notebook" },
     })
@@ -206,7 +214,9 @@ describe("formatNotebookContextPrefix", () => {
 
   it("workspace block quotes labels and exposes buffer_id / kind", () => {
     const prefix = formatNotebookContextPrefix(null, undefined, {
-      notebooks: [{ buffer_id: 42, label: "Trades", archived: false }],
+      tabs: [
+        { buffer_id: 42, label: "Trades", kind: "notebook", archived: false },
+      ],
       active: { buffer_id: 3, label: "Query 1", kind: "sql" },
     })
     expect(prefix).toContain(
@@ -218,7 +228,7 @@ describe("formatNotebookContextPrefix", () => {
 
   it("flags the active buffer as archived when previewing an archived notebook", () => {
     const prefix = formatNotebookContextPrefix(null, undefined, {
-      notebooks: [{ buffer_id: 7, label: "Old", archived: true }],
+      tabs: [{ buffer_id: 7, label: "Old", kind: "notebook", archived: true }],
       active: { buffer_id: 7, label: "Old", kind: "notebook", archived: true },
     })
     expect(prefix).toContain(

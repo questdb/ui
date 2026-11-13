@@ -14,7 +14,11 @@ const makeWorkspace = (
     Promise.resolve({ bufferId: 1, label: label ?? "Notebook" }),
   duplicateNotebook: ({ bufferId }) =>
     Promise.resolve({ bufferId, label: "copy" }),
-  deleteNotebook: () => Promise.resolve(),
+  archiveTab: () => Promise.resolve(),
+  restoreTab: () => Promise.resolve(),
+  activateTab: () => Promise.resolve(),
+  renameTab: () => Promise.resolve(),
+  deleteTab: () => Promise.resolve(),
   activateNotebook: () => Promise.resolve(true),
   listNotebookBuffers: () => [],
   ...overrides,

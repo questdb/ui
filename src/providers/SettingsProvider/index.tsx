@@ -1,14 +1,8 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useReducer,
-  useState,
-} from "react"
+import React, { useCallback, useEffect, useReducer, useState } from "react"
 import isEqual from "lodash.isequal"
 import styled from "styled-components"
 import { ConsoleConfig, Settings, Warning } from "./types"
+import { SettingContext } from "./context"
 import { CenteredLayout } from "../../components/CenteredLayout"
 import { Box } from "../../components/Box"
 import { Text } from "../../components/Text"
@@ -37,26 +31,7 @@ const initialState = { view: View.loading }
 
 const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
 
-const SettingContext = createContext<{
-  settings: Settings
-  preferences: Preferences
-  consoleConfig: ConsoleConfig
-  warnings: Warning[]
-  refreshSettingsAndPreferences: () => Promise<{
-    settings: Settings
-    preferences: Preferences
-  }>
-}>({
-  settings: {},
-  preferences: {},
-  consoleConfig: {},
-  warnings: [],
-  refreshSettingsAndPreferences: () =>
-    Promise.resolve({
-      settings: {},
-      preferences: {},
-    }),
-})
+export { useSettings } from "./context"
 
 const TextContainer = styled.div`
   display: flex;
@@ -349,5 +324,3 @@ export const SettingsProvider = ({
 
   return <>{views[state.view]()}</>
 }
-
-export const useSettings = () => useContext(SettingContext)

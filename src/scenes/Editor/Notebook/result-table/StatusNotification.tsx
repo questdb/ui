@@ -178,7 +178,7 @@ export const StatusNotification: React.FC<Props> = ({
         type={NotificationType.ERROR}
       />
     )
-  } else if (activeResult.type === "dql" && activeResult.timings) {
+  } else if (activeResult.type === "dql" && slot.timings) {
     body = (
       <Notification
         {...baseProps}
@@ -186,11 +186,11 @@ export const StatusNotification: React.FC<Props> = ({
           <QueryResult
             rowCount={activeResult.dataset.length}
             totalRowCount={activeResult.count}
-            count={activeResult.timings.count}
-            compiler={activeResult.timings.compiler}
-            authentication={activeResult.timings.authentication}
-            execute={activeResult.timings.execute}
-            fetch={activeResult.timings.fetch}
+            count={slot.timings.count}
+            compiler={slot.timings.compiler}
+            authentication={slot.timings.authentication}
+            execute={slot.timings.execute}
+            fetch={slot.timings.fetch}
           />
         }
         type={

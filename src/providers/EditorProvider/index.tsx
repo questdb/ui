@@ -26,14 +26,51 @@ import {
   cloneNotebookViewStateWithCellIdMap,
   generateId,
   nextCopyLabel,
+  resolveAutoRefresh,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
-import { createCell } from "../../store/notebook"
+import { createCell, type NotebookCell } from "../../store/notebook"
 import { NotebookToolError } from "../../utils/notebooks/notebookToolError"
 import { requestCellReveal } from "../../scenes/Editor/Notebook/cellReveal"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/formatSql"
 import type { Buffer, PreviewContent } from "../../store/buffers"
+import {
+  type BufferPosition,
+  closedBuffersToDelete,
+  nextOpenPosition,
+  positionsAfterMove,
+  positionsWithout,
+  sortPinnedBuffers,
+} from "../../utils/buffers/tabOrder"
+import {
+  resolveNextActiveBuffer,
+  pushRecentBuffer,
+} from "../../utils/buffers/nextActiveBuffer"
+import { promoteActivePreview } from "../../utils/buffers/previewPromotion"
+import { appendQueryTarget } from "../../utils/buffers/appendQueryTarget"
+import {
+  fetchExampleDashboard,
+  type ExampleDashboardContent,
+} from "../../utils/examples/exampleDashboards"
+import type { ExampleDashboard } from "../SettingsProvider/types"
+import { useSettings } from "../SettingsProvider/context"
+import { hasExampleDashboards } from "../../utils/examples/hasExampleDashboards"
+import { isFreshWorkspace } from "../../utils/examples/isFreshWorkspace"
+import {
+  readExampleLink,
+  clearExampleLinkParams,
+} from "../../utils/examples/exampleLink"
+import { exampleAutoRunCellIds } from "../../utils/examples/exampleAutoRun"
+import { examplePersonalizationReason } from "../../utils/examples/examplePersonalization"
+import { stripCellResults } from "../../scenes/Editor/Notebook/notebookUtils"
+import { getValue, setValue } from "../../utils/localStorage"
+import { StoreKey } from "../../utils/localStorage/types"
+import { tabKindOf } from "../../utils/ai/workspaceInfo"
+import {
+  buildTablePreviewCell,
+  TABLE_PREVIEW_AUTO_REFRESH,
+} from "../../utils/notebooks/tablePreviewCell"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
@@ -44,6 +81,7 @@ import {
   makeFallbackBuffer,
 } from "../../store/buffers"
 import { toast } from "../../components/Toast"
+import { ExampleDashboardLoading } from "./ExampleDashboardLoading"
 import { db } from "../../store/db"
 import {
   copyNotebookSnapshots,
@@ -53,9 +91,13 @@ import {
 import { removeNotebookBufferLayouts } from "../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { emitUserAction } from "../../utils/notebooks/notebookAIBridge"
+import {
+  emitUserAction,
+  getBufferActionSeq,
+} from "../../utils/notebooks/notebookAIBridge"
 import {
   addCellTransition,
+  getController,
   forgetBuffer,
   releaseArchivedBuffer,
   withBoundNotebook,
@@ -107,6 +149,12 @@ export type ApplyAISQLChangeResult = {
   queryStartOffset?: number
 }
 
+export type RemoveBufferOptions = {
+  // Whether the SQL editor takes focus once the tab is gone. Off for callers
+  // that keep keyboard focus themselves (the Tabs panel).
+  focusEditor?: boolean
+}
+
 export type EditorContext = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null>
   monacoRef: MutableRefObject<Monaco | null>
@@ -129,8 +177,17 @@ export type EditorContext = {
       signal?: AbortSignal
     },
   ) => Promise<Buffer | undefined>
-  deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
-  archiveBuffer: (id: number, initiator?: "user" | "agent") => Promise<void>
+  deleteBuffer: (
+    id: number,
+    setActiveBuffer?: boolean,
+    initiator?: "user" | "agent",
+    options?: RemoveBufferOptions,
+  ) => Promise<void>
+  archiveBuffer: (
+    id: number,
+    initiator?: "user" | "agent",
+    options?: RemoveBufferOptions,
+  ) => Promise<void>
   duplicateNotebook: (
     id: number,
     options?: { activate?: boolean; signal?: AbortSignal },
@@ -140,12 +197,25 @@ export type EditorContext = {
     buffer?: Partial<Buffer>,
     setNewActiveBuffer?: boolean,
   ) => Promise<void>
-  updateBuffersPositions: (
-    positions: { id: number; position: number }[],
+  closeBuffer: (id: number, options?: RemoveBufferOptions) => Promise<void>
+  restoreBuffer: (id: number, options?: { focus?: boolean }) => Promise<void>
+  keepBufferOpen: (id: number, options?: { focus?: boolean }) => Promise<void>
+  reorderBuffer: (id: number, toIndex: number) => Promise<void>
+  clearArchivedBuffers: () => Promise<void>
+  openExampleDashboard: (example: ExampleDashboard) => Promise<void>
+  // Ids of the example dashboards whose file is being fetched.
+  openingExampleIds: string[]
+  runImportedNotebookCells: (
+    bufferId: number,
+    cellIds: string[],
   ) => Promise<void>
+  openTableNotebook: (table: {
+    name: string
+    designatedTimestamp?: string
+  }) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
-  setTemporaryBuffer: (buffer: Buffer) => Promise<void>
-  temporaryBufferId: number | null
+  previewBuffer: (id: number) => Promise<void>
+  discardPreview: () => Promise<void>
   queryParamProcessedRef: MutableRefObject<boolean>
   isNavigatingFromSearchRef: MutableRefObject<boolean>
   showPreviewBuffer: (content: PreviewBufferContent) => Promise<void>
@@ -171,10 +241,18 @@ const defaultValues = {
   archiveBuffer: () => Promise.resolve(),
   duplicateNotebook: () => Promise.resolve(undefined),
   updateBuffer: () => Promise.resolve(),
-  updateBuffersPositions: () => Promise.resolve(),
+  closeBuffer: () => Promise.resolve(),
+  restoreBuffer: () => Promise.resolve(),
+  keepBufferOpen: () => Promise.resolve(),
+  reorderBuffer: () => Promise.resolve(),
+  clearArchivedBuffers: () => Promise.resolve(),
+  openExampleDashboard: () => Promise.resolve(),
+  openingExampleIds: [],
+  runImportedNotebookCells: () => Promise.resolve(),
+  openTableNotebook: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
-  setTemporaryBuffer: () => Promise.resolve(),
-  temporaryBufferId: null,
+  previewBuffer: () => Promise.resolve(),
+  discardPreview: () => Promise.resolve(),
   queryParamProcessedRef: { current: false },
   isNavigatingFromSearchRef: { current: false },
   showPreviewBuffer: () => Promise.resolve(),
@@ -184,6 +262,34 @@ const defaultValues = {
   cleanupExecutionRefs: () => undefined,
   highlightQuery: () => Promise.resolve(false),
 }
+
+// Runs `run` once per key at a time; a call for a key that is still in flight
+// gets the pending promise instead of starting another run.
+const singleFlight = (
+  requests: Map<string, Promise<void>>,
+  key: string,
+  run: () => Promise<void>,
+): Promise<void> => {
+  const pending = requests.get(key)
+  if (pending) return pending
+  const request = run().finally(() => {
+    requests.delete(key)
+  })
+  requests.set(key, request)
+  return request
+}
+
+type ExampleFetchResult =
+  | { ok: true; content: ExampleDashboardContent }
+  | { ok: false; error: unknown }
+
+const exampleErrorMessage = (title: string, error: unknown) =>
+  error instanceof Error
+    ? `Could not open the example dashboard "${title}": ${error.message}`
+    : `Could not open the example dashboard "${title}"`
+
+const isPendingImportDeletion = (buffer: Buffer) =>
+  (buffer as Record<string, unknown>)._markedForDeletion === true
 
 const EditorContext = createContext<EditorContext>(defaultValues)
 
@@ -195,14 +301,21 @@ export const EditorProvider: React.FC = ({ children }) => {
   const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
     null,
   )
-  const [tabsDisabled, setTabsDisabled] = useState(false)
+  const [tabsDisabled, setTabsDisabledState] = useState(false)
+  const tabsDisabledRef = useRef(false)
+  const setTabsDisabled = useCallback((disabled: boolean) => {
+    tabsDisabledRef.current = disabled
+    setTabsDisabledState(disabled)
+  }, [])
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
     if (!rawBuffers) return undefined
-    return rawBuffers.map((buffer) => ({
-      ...buffer,
-      isTemporary: buffer.id === temporaryBufferId,
-    }))
+    return rawBuffers
+      .filter((buffer) => !isPendingImportDeletion(buffer))
+      .map((buffer) => ({
+        ...buffer,
+        isTemporary: buffer.id === temporaryBufferId,
+      }))
   }, [rawBuffers, temporaryBufferId])
 
   const activeBufferId = useLiveQuery(
@@ -212,11 +325,91 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const activeBufferRef = useRef(activeBuffer)
+  const focusEditorOnMountRef = useRef(true)
+  const recentBufferIdsRef = useRef<number[]>([])
+  const bufferSwitchQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const bufferRemovalQueueRef = useRef<Promise<void>>(Promise.resolve())
   const searchUpdateTimeoutRef = useRef<number | null>(null)
   const queryParamProcessedRef = useRef(false)
   const isNavigatingFromSearchRef = useRef(false)
 
   const ranOnce = useRef(false)
+
+  // Showcase deployments open the first example dashboard for a first-time
+  // visitor, so the first paint is live charts rather than an empty editor.
+  // The file is fetched the moment the provider mounts, in parallel with the
+  // IndexedDB read, and the tab is created before the first render below.
+  // Decided once per browser, on the first load: after that the visitor's own
+  // tabs decide.
+  const { consoleConfig } = useSettings()
+  const [exampleLink] = useState(() => readExampleLink(window.location.search))
+  const linkedExample = exampleLink.hasQuery
+    ? undefined
+    : consoleConfig.exampleDashboards?.find(
+        (example) => example.id === exampleLink.templateId,
+      )
+  const firstExample = hasExampleDashboards(consoleConfig)
+    ? consoleConfig.exampleDashboards![0]
+    : undefined
+  const startupExample = linkedExample ?? firstExample
+  const autoOpenRef = useRef<Promise<ExampleFetchResult> | null>(null)
+  if (
+    autoOpenRef.current === null &&
+    startupExample &&
+    !exampleLink.hasQuery &&
+    (linkedExample ||
+      (!exampleLink.templateId &&
+        getValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED) === ""))
+  ) {
+    autoOpenRef.current = fetchExampleDashboard(startupExample.path).then(
+      (content): ExampleFetchResult => ({ ok: true, content }),
+      (error: unknown): ExampleFetchResult => ({ ok: false, error }),
+    )
+  }
+  const [autoOpenedId, setAutoOpenedId] = useState<number | null>(null)
+  // The first example is being fetched for a first-time visitor: a spinner
+  // stands in for the console until the tab exists or the fetch fails.
+  const [loadingFirstExample, setLoadingFirstExample] = useState(false)
+
+  // One request per example or table at a time: a double-click must not create
+  // two tabs while the first is still being fetched or written.
+  const exampleRequestsRef = useRef(new Map<string, Promise<void>>())
+  const [openingExampleIds, setOpeningExampleIds] = useState<string[]>([])
+  const tableNotebookRequestsRef = useRef(new Map<string, Promise<void>>())
+
+  // A notebook whose example is no longer configured (the operator removed or
+  // renamed it) becomes a regular notebook: listed with the user's tabs and
+  // kept in history when closed.
+  const exampleIds = useMemo(
+    () =>
+      new Set(
+        hasExampleDashboards(consoleConfig)
+          ? consoleConfig.exampleDashboards?.map((example) => example.id)
+          : [],
+      ),
+    [consoleConfig],
+  )
+  useEffect(() => {
+    if (!rawBuffers) return
+    const stale = rawBuffers.filter(
+      (buffer) =>
+        typeof buffer.id === "number" &&
+        buffer.templateId !== undefined &&
+        !exampleIds.has(buffer.templateId),
+    )
+    if (stale.length === 0) return
+    void db
+      .transaction("rw", db.buffers, async () => {
+        for (const buffer of stale) {
+          await db.buffers.update(buffer.id as number, {
+            templateId: undefined,
+          })
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("Could not detach removed example dashboards:", error)
+      })
+  }, [rawBuffers, exampleIds])
 
   useSchemaCompletionProvider(loadedMonaco)
 
@@ -231,57 +424,75 @@ export const EditorProvider: React.FC = ({ children }) => {
   }, [])
 
   const setActiveBuffer = useCallback(
-    async (
-      buffer: Buffer,
-      options?: { focus?: boolean; fromSearch?: boolean },
-    ) => {
-      try {
-        const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+    (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => {
+      const switchBuffer = async () => {
+        try {
+          const currentActiveBufferId = (await bufferStore.getActiveId())?.value
 
-        if (currentActiveBufferId) {
-          if (buffer.id === currentActiveBufferId) {
-            activeBufferRef.current = buffer
-            setActiveBufferState(buffer)
-            return
-          }
-        }
-
-        await bufferStore.setActiveId(buffer.id as number)
-        activeBufferRef.current = buffer
-        setActiveBufferState(buffer)
-
-        if (options?.fromSearch) {
-          isNavigatingFromSearchRef.current = true
-        }
-
-        if (
-          editorRef.current &&
-          monacoRef.current &&
-          !buffer.notebookViewState
-        ) {
-          const currentModel = editorRef.current.getModel()
-          if (currentModel) {
-            currentModel.dispose()
+          if (currentActiveBufferId) {
+            if (buffer.id === currentActiveBufferId) {
+              activeBufferRef.current = buffer
+              setActiveBufferState(buffer)
+              return
+            }
           }
 
-          const model = monacoRef.current.editor.createModel(
-            buffer.value,
-            QuestDBLanguageName,
+          const previousBufferId = activeBufferRef.current.id
+          const previousBuffer =
+            typeof previousBufferId === "number"
+              ? await bufferStore.getById(previousBufferId)
+              : undefined
+
+          await bufferStore.setActiveId(buffer.id as number)
+          const recentIds = recentBufferIdsRef.current.filter(
+            (id) => id !== buffer.id,
           )
-          editorRef.current.setModel(model)
-          clearModelMarkers(monacoRef.current, editorRef.current)
+          recentBufferIdsRef.current =
+            previousBuffer &&
+            !previousBuffer.archived &&
+            !previousBuffer.isTemporary
+              ? pushRecentBuffer(recentIds, previousBuffer.id as number)
+              : recentIds
+          activeBufferRef.current = buffer
+          focusEditorOnMountRef.current = options?.focus !== false
+          setActiveBufferState(buffer)
 
-          if (buffer.editorViewState) {
-            editorRef.current.restoreViewState(buffer.editorViewState)
+          if (options?.fromSearch) {
+            isNavigatingFromSearchRef.current = true
           }
 
-          if (options?.focus !== false) {
-            editorRef.current.focus()
+          if (
+            editorRef.current &&
+            monacoRef.current &&
+            !buffer.notebookViewState
+          ) {
+            const currentModel = editorRef.current.getModel()
+            if (currentModel) {
+              currentModel.dispose()
+            }
+
+            const model = monacoRef.current.editor.createModel(
+              buffer.value,
+              QuestDBLanguageName,
+            )
+            editorRef.current.setModel(model)
+            clearModelMarkers(monacoRef.current, editorRef.current)
+
+            if (buffer.editorViewState) {
+              editorRef.current.restoreViewState(buffer.editorViewState)
+            }
+
+            if (options?.focus !== false) {
+              editorRef.current.focus()
+            }
           }
+        } catch (e) {
+          console.warn("Error setting active buffer:", e)
         }
-      } catch (e) {
-        console.warn("Error setting active buffer:", e)
       }
+      const request = bufferSwitchQueueRef.current.then(switchBuffer)
+      bufferSwitchQueueRef.current = request
+      return request
     },
     [],
   )
@@ -358,24 +569,18 @@ export const EditorProvider: React.FC = ({ children }) => {
       if (signal?.aborted) {
         throw new DOMException("Aborted", "AbortError")
       }
-      if (buffers && buffers.length >= MAX_TABS) {
-        toast.error(
-          `Tab limit reached (${MAX_TABS}). Please clear history to free up space.`,
-        )
-        return undefined
-      }
-
       const bufferType = bufferTypeOf(newBuffer ?? {})
-
-      void trackEvent(ConsoleEvent.TAB_ADD, {
-        type: bufferType,
-        count: (buffers?.length ?? 0) + 1,
-      })
-
       const fallback = makeFallbackBuffer(bufferType)
+      const created = await db.transaction("rw", db.buffers, async () => {
+        const storedBuffers = (await bufferStore.getAll()).filter(
+          (buffer) => !isPendingImportDeletion(buffer),
+        )
+        if (signal?.aborted) {
+          throw new DOMException("Aborted", "AbortError")
+        }
+        if (storedBuffers.length >= MAX_TABS) return undefined
 
-      const currentDefaultTabNumbers = (
-        await db.buffers
+        const currentDefaultTabNumbers = storedBuffers
           .filter((buffer) => {
             if (!buffer.label.startsWith(fallback.label)) return false
             if (newBuffer?.notebookViewState)
@@ -384,45 +589,39 @@ export const EditorProvider: React.FC = ({ children }) => {
               return buffer.metricsViewState !== undefined
             return true
           })
-          .toArray()
-      )
-        .map((buffer) => buffer.label.slice(fallback.label.length + 1))
-        .filter(Boolean)
-        .map((n) => parseInt(n, 10))
-        .sort()
+          .map((buffer) => buffer.label.slice(fallback.label.length + 1))
+          .filter(Boolean)
+          .map((n) => parseInt(n, 10))
+          .sort()
 
-      const nextNumber = () => {
-        for (let i = 0; i <= currentDefaultTabNumbers.length; i++) {
-          const next = i + 1
-          if (!currentDefaultTabNumbers.includes(next)) {
-            return next
+        const nextNumber = () => {
+          for (let i = 0; i <= currentDefaultTabNumbers.length; i++) {
+            const next = i + 1
+            if (!currentDefaultTabNumbers.includes(next)) {
+              return next
+            }
           }
         }
-      }
 
-      const activeBuffers = buffers
-        ? buffers.filter((b) => !b.archived && !b.isTemporary)
-        : []
-      const insertAfter =
-        afterBufferId !== undefined
-          ? activeBuffers.find((b) => b.id === afterBufferId)
-          : undefined
-      const position = insertAfter
-        ? insertAfter.position + 1
-        : activeBuffers.length
+        const activeBuffers = sortPinnedBuffers(storedBuffers)
+        const insertAfter =
+          afterBufferId !== undefined
+            ? activeBuffers.find((b) => b.id === afterBufferId)
+            : undefined
+        const position = insertAfter
+          ? insertAfter.position + 1
+          : nextOpenPosition(storedBuffers)
 
-      const buffer = makeBuffer({
-        ...newBuffer,
-        label: newBuffer?.label ?? `${fallback.label} ${nextNumber()}`,
-        position,
-      })
+        const buffer = makeBuffer({
+          ...newBuffer,
+          label: newBuffer?.label ?? `${fallback.label} ${nextNumber()}`,
+          position,
+        })
 
-      let id: number
-      if (insertAfter) {
-        const toShift = activeBuffers.filter(
-          (b) => typeof b.id === "number" && b.position >= position,
-        )
-        id = await db.transaction("rw", db.buffers, async () => {
+        if (insertAfter) {
+          const toShift = activeBuffers.filter(
+            (b) => typeof b.id === "number" && b.position >= position,
+          )
           for (const b of toShift) {
             if (signal?.aborted) {
               throw new DOMException("Aborted", "AbortError")
@@ -431,24 +630,30 @@ export const EditorProvider: React.FC = ({ children }) => {
               position: b.position + 1,
             })
           }
-          if (signal?.aborted) {
-            throw new DOMException("Aborted", "AbortError")
-          }
-          return db.buffers.add(buffer)
-        })
-      } else {
+        }
         if (signal?.aborted) {
           throw new DOMException("Aborted", "AbortError")
         }
-        id = await db.buffers.add(buffer)
+        const id = await db.buffers.add(buffer)
+        return { buffer: { ...buffer, id }, count: storedBuffers.length + 1 }
+      })
+      if (!created) {
+        toast.error(
+          `Tab limit reached (${MAX_TABS}). Delete closed tabs from the Tabs panel to free up space.`,
+        )
+        return undefined
       }
 
-      if (activate) {
+      const { buffer, count } = created
+      void trackEvent(ConsoleEvent.TAB_ADD, { type: bufferType, count })
+
+      const shouldActivate = activate && !tabsDisabledRef.current
+      if (shouldActivate) {
         await setActiveBuffer(buffer, { focus: true })
       }
 
       if (
-        activate &&
+        shouldActivate &&
         shouldSelectAll &&
         editorRef.current &&
         !newBuffer?.notebookViewState
@@ -459,9 +664,9 @@ export const EditorProvider: React.FC = ({ children }) => {
         }
       }
 
-      return { id, ...buffer }
+      return buffer
     },
-    [buffers, setActiveBuffer],
+    [setActiveBuffer],
   )
 
   const showPreviewBuffer: EditorContext["showPreviewBuffer"] = useCallback(
@@ -523,18 +728,148 @@ export const EditorProvider: React.FC = ({ children }) => {
   }, [])
 
   useEffect(() => {
-    if (!ranOnce.current && buffers && activeBufferId) {
+    if (ranOnce.current || !buffers || !activeBufferId) return
+    ranOnce.current = true
+
+    const activateStored = () => {
       const buffer =
-        buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
+        buffers.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
       const activeBuffers = buffers.filter((b) => !b.archived)
       const nextBuffer = buffer.archived
         ? (activeBuffers[0] ?? fallbackBuffer)
         : buffer
       activeBufferRef.current = nextBuffer
       setActiveBufferState(nextBuffer)
-      ranOnce.current = true
     }
+
+    clearExampleLinkParams()
+    if (exampleLink.hasQuery) {
+      activateStored()
+      return
+    }
+    if (exampleLink.templateId && !linkedExample) {
+      toast.error(
+        `Example dashboard "${exampleLink.templateId}" was not found.`,
+      )
+      activateStored()
+      return
+    }
+    if (linkedExample) {
+      const open = buffers.find(
+        (buffer) =>
+          buffer.templateId === linkedExample.id &&
+          !buffer.archived &&
+          !buffer.isTemporary,
+      )
+      if (open) {
+        activeBufferRef.current = open
+        setActiveBufferState(open)
+        void bufferStore.setActiveId(open.id as number)
+        void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, {
+          id: linkedExample.id,
+          source: "link",
+          reused: true,
+        })
+        return
+      }
+      if (buffers.length >= MAX_TABS) {
+        toast.error(
+          `Tab limit reached (${MAX_TABS}). Delete closed tabs from the Tabs panel to free up space.`,
+        )
+        activateStored()
+        return
+      }
+    }
+    const pending = autoOpenRef.current
+    if (
+      !pending ||
+      !startupExample ||
+      (!linkedExample && !isFreshWorkspace(buffers))
+    ) {
+      // A visitor who already has tabs keeps them: the example is never opened
+      // for them, now or after they later empty the workspace, and later loads
+      // skip the fetch.
+      if (pending && !linkedExample)
+        setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+      activateStored()
+      return
+    }
+    // First visit on a showcase deployment: create the example tab and make it
+    // the active one. A spinner shows while the file is fetched; a file that
+    // cannot be loaded is reported once and the visitor gets the stored tab.
+    setLoadingFirstExample(true)
+    void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, {
+      id: startupExample.id,
+      source: linkedExample ? "link" : "automatic",
+      reused: false,
+    })
+    void pending.then(async (result) => {
+      if (!result.ok) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD, {
+          templateId: startupExample.id,
+          source: linkedExample ? "link" : "automatic",
+          outcome: "error",
+        })
+        console.error("Could not load the example dashboard:", result.error)
+        toast.error(exampleErrorMessage(startupExample.title, result.error))
+        if (!linkedExample)
+          setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+        activateStored()
+        setLoadingFirstExample(false)
+        return
+      }
+      try {
+        const buffer = makeBuffer({
+          label: startupExample.title,
+          notebookViewState: result.content.notebookViewState,
+          templateId: startupExample.id,
+          position: nextOpenPosition(buffers),
+        })
+        const id = await db.buffers.add(buffer)
+        await bufferStore.setActiveId(id)
+        if (!linkedExample)
+          setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+        const created = { ...buffer, id }
+        activeBufferRef.current = created
+        setActiveBufferState(created)
+        setAutoOpenedId(id)
+        void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD, {
+          templateId: startupExample.id,
+          source: linkedExample ? "link" : "automatic",
+          outcome: "success",
+        })
+      } catch (error) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD, {
+          templateId: startupExample.id,
+          source: linkedExample ? "link" : "automatic",
+          outcome: "error",
+        })
+        console.error("Could not open the example dashboard:", error)
+        toast.error(exampleErrorMessage(startupExample.title, error))
+        activateStored()
+      }
+      setLoadingFirstExample(false)
+    })
   }, [buffers, activeBufferId])
+
+  // The notebook has to be mounted (the provider renders children only once an
+  // active buffer exists and the loading spinner is gone) before its cells can
+  // be run.
+  useEffect(() => {
+    if (
+      loadingFirstExample ||
+      autoOpenedId === null ||
+      activeBuffer.id !== autoOpenedId
+    ) {
+      return
+    }
+    void runNotebookCells(autoOpenedId)
+    setAutoOpenedId(null)
+  }, [autoOpenedId, activeBuffer.id, loadingFirstExample])
+
+  if (loadingFirstExample && startupExample) {
+    return <ExampleDashboardLoading title={startupExample.title} />
+  }
 
   if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
@@ -563,8 +898,16 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
 
     const { isTemporary: _, ...dbPayload } = payload || {}
+    const isPreviewContentWrite =
+      id === temporaryBufferId && !(payload && "isTemporary" in payload)
+    const {
+      value: _value,
+      metricsViewState: _metrics,
+      notebookViewState: _notebook,
+      ...previewSafePayload
+    } = dbPayload
     const effectivePayload = {
-      ...dbPayload,
+      ...(isPreviewContentWrite ? previewSafePayload : dbPayload),
       ...(newPosition !== null ? { position: newPosition } : {}),
     }
 
@@ -575,6 +918,14 @@ export const EditorProvider: React.FC = ({ children }) => {
           ? { editorViewState }
           : {}),
       })
+    }
+    const promotedActive = promoteActivePreview(activeBufferRef.current, id, {
+      ...payload,
+      ...effectivePayload,
+    })
+    if (promotedActive) {
+      activeBufferRef.current = promotedActive
+      setActiveBufferState(promotedActive)
     }
     if (setNewActiveBuffer) {
       await setActiveBufferOnRemoved(id)
@@ -603,47 +954,102 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
-  const setActiveBufferOnRemoved = async (id: number) => {
+  const setActiveBufferOnRemoved = async (
+    id: number,
+    focusEditor = true,
+    snapshot: Buffer[] = buffers,
+  ) => {
     const activeBufferId = (await bufferStore.getActiveId())?.value
+    recentBufferIdsRef.current = recentBufferIdsRef.current.filter(
+      (recentId) => recentId !== id,
+    )
     if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
-      const nextActive = await db.buffers
-        .toCollection()
-        .filter((buffer) => {
-          return (
-            !buffer.archived &&
-            !(buffer.id === temporaryBufferId || buffer.id === id)
-          )
-        })
-        .last()
-      await setActiveBuffer(nextActive ?? fallbackBuffer)
-    } else {
+      const nextActive = await resolveNextActiveBuffer({
+        snapshot,
+        loadStored: async () =>
+          (await bufferStore.getAll()).filter(
+            (buffer) => !isPendingImportDeletion(buffer),
+          ),
+        removedId: id,
+        recentIds: recentBufferIdsRef.current,
+        previewId: temporaryBufferId,
+      })
+      await setActiveBuffer(nextActive ?? fallbackBuffer, {
+        focus: focusEditor,
+      })
+    } else if (focusEditor) {
       editorRef.current?.focus()
     }
   }
 
-  const archiveBuffer: EditorContext["archiveBuffer"] = async (
+  const enqueueBufferRemoval = (
+    id: number,
+    initiator: "user" | "agent",
+    remove: (target: Buffer, snapshot: Buffer[]) => Promise<void>,
+  ) => {
+    const result = bufferRemovalQueueRef.current.then(async () => {
+      const stored = (await bufferStore.getAll()).filter(
+        (buffer) => !isPendingImportDeletion(buffer),
+      )
+      const target = stored.find((buffer) => buffer.id === id)
+      if (!target) {
+        if (initiator === "agent") {
+          throw new NotebookToolError("deleted", `Tab ${id} no longer exists.`)
+        }
+        return
+      }
+      if (
+        !target.archived &&
+        !target.isPreviewBuffer &&
+        sortPinnedBuffers(stored).length <= 1
+      ) {
+        const error = new NotebookToolError(
+          "last_tab",
+          "Cannot close or delete the only open tab. Create another tab first.",
+        )
+        if (initiator === "agent") throw error
+        toast.error(error.message)
+        return
+      }
+      await remove(target, stored)
+    })
+    bufferRemovalQueueRef.current = result.catch(() => undefined)
+    return result
+  }
+
+  const archiveBuffer: EditorContext["archiveBuffer"] = (
     id,
     initiator = "user",
-  ) => {
-    // Snapshot before write — live query refresh makes post-update read unreliable.
-    const wasNotebook = !!buffers.find((b) => b.id === id)?.notebookViewState
-    await updateBuffer(id, {
-      archived: true,
-      archivedAt: new Date().getTime(),
-      position: -1,
-    })
-    await setActiveBufferOnRemoved(id)
-    eventBus.publish(EventType.BUFFERS_UPDATED, {
-      type: "archive",
-      bufferId: id,
-    })
-    if (wasNotebook) {
+    options = {},
+  ) =>
+    enqueueBufferRemoval(id, initiator, async (target, snapshot) => {
+      if (target.archived) return
+      await updateBuffer(id, {
+        archived: true,
+        archivedAt: new Date().getTime(),
+        position: -1,
+        // An explicitly archived example becomes a recoverable personal copy.
+        // The example menu can then open a fresh copy of the template.
+        ...(target.templateId !== undefined ? { templateId: undefined } : {}),
+      })
+      await setActiveBufferOnRemoved(id, options.focusEditor, snapshot)
+      await compactPositionsAfterRemoval(target, snapshot)
+      eventBus.publish(EventType.BUFFERS_UPDATED, {
+        type: "archive",
+        bufferId: id,
+      })
       if (initiator === "user") {
-        emitUserAction({ kind: "user_archived_notebook", bufferId: id })
+        emitUserAction({
+          kind: "user_archived_tab",
+          bufferId: id,
+          tabKind: tabKindOf(target),
+          label: target.label,
+        })
       }
-      releaseArchivedBuffer(id)
-    }
-  }
+      if (target.notebookViewState) {
+        releaseArchivedBuffer(id)
+      }
+    })
 
   const duplicateNotebook: EditorContext["duplicateNotebook"] = async (
     id,
@@ -682,6 +1088,11 @@ export const EditorProvider: React.FC = ({ children }) => {
     )
     if (!duplicate?.id) return undefined
     const duplicateId = duplicate.id
+    if (source.templateId !== undefined) {
+      void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_COPY, {
+        templateId: source.templateId,
+      })
+    }
 
     const resultsCopied = enqueueBufferTask(duplicateId, async () => {
       try {
@@ -706,57 +1117,458 @@ export const EditorProvider: React.FC = ({ children }) => {
     return duplicate
   }
 
-  const deleteBuffer: EditorContext["deleteBuffer"] = async (
-    id,
-    setActiveBuffer = true,
+  const deleteBufferNow = async (
+    target: Buffer,
+    snapshot: Buffer[],
+    setActiveBuffer: boolean,
+    initiator: "user" | "agent",
+    options: RemoveBufferOptions,
   ) => {
-    const wasNotebook = !!buffers.find((b) => b.id === id)?.notebookViewState
+    const id = target.id as number
     await bufferStore.delete(id)
     cleanupExecutionRefs(id)
+    // Deleting the previewed tab ends the preview; don't keep pointing at a
+    // row that no longer exists.
+    if (id === temporaryBufferId) {
+      setTemporaryBufferId(null)
+    }
     if (setActiveBuffer) {
-      await setActiveBufferOnRemoved(id)
+      await setActiveBufferOnRemoved(id, options.focusEditor, snapshot)
     }
     eventBus.publish(EventType.BUFFERS_UPDATED, {
       type: "delete",
       bufferId: id,
     })
-    if (wasNotebook) {
+    // The AI diff tab is not a user tab and agents never see it in
+    // <workspace>: its removal is not a user deletion, whatever path closed it.
+    if (initiator === "user" && !target.isPreviewBuffer) {
+      emitUserAction({
+        kind: "user_deleted_tab",
+        bufferId: id,
+        tabKind: tabKindOf(target),
+        label: target.label,
+      })
+    }
+    if (target.notebookViewState) {
       void deleteNotebookSnapshots(id)
       removeNotebookBufferLayouts(id)
-      emitUserAction({ kind: "user_deleted_notebook", bufferId: id })
     }
     forgetBuffer(id)
+    await compactPositionsAfterRemoval(target, snapshot)
   }
 
-  const setTemporaryBuffer: EditorContext["setTemporaryBuffer"] = async (
-    buffer,
-  ) => {
-    if (temporaryBufferId !== null && temporaryBufferId !== buffer.id) {
-      await updateBuffer(temporaryBufferId, { isTemporary: false })
-    }
-    await updateBuffer(buffer.id as number, {
-      isTemporary: true,
-    })
+  const deleteBuffer: EditorContext["deleteBuffer"] = (
+    id,
+    setActiveBuffer = true,
+    initiator = "user",
+    options = {},
+  ) =>
+    enqueueBufferRemoval(id, initiator, (target, snapshot) =>
+      deleteBufferNow(target, snapshot, setActiveBuffer, initiator, options),
+    )
 
+  const previewBuffer: EditorContext["previewBuffer"] = async (id) => {
+    const buffer = buffers.find((b) => b.id === id)
+    if (!buffer) return
+    if (temporaryBufferId !== id) {
+      if (temporaryBufferId !== null) {
+        await updateBuffer(temporaryBufferId, { isTemporary: false })
+      }
+      await updateBuffer(id, { isTemporary: true })
+    }
     await setActiveBuffer(
       { ...buffer, isTemporary: true },
       { focus: false, fromSearch: true },
     )
   }
 
-  const updateBuffersPositions: EditorContext["updateBuffersPositions"] =
-    async (positions) => {
-      await db.transaction("rw", db.buffers, async () => {
-        for (const { id, position } of positions) {
-          await db.buffers.update(id, { position })
-        }
-      })
+  const discardPreview: EditorContext["discardPreview"] = async () => {
+    if (temporaryBufferId === null) return
+    await updateBuffer(temporaryBufferId, { isTemporary: false }, true)
+  }
+
+  const updateBuffersPositions = async (positions: BufferPosition[]) => {
+    await db.transaction("rw", db.buffers, async () => {
+      for (const { id, position } of positions) {
+        await db.buffers.update(id, { position })
+      }
+    })
+  }
+
+  // Removing an open tab leaves a gap in the positions; a new tab would land
+  // in the middle of the bar because addBuffer positions by count.
+  const compactPositionsAfterRemoval = async (
+    removed: Buffer,
+    snapshot: Buffer[],
+  ) => {
+    if (removed.archived || removed.isTemporary) return
+    await updateBuffersPositions(
+      positionsWithout(snapshot, removed.id as number),
+    )
+  }
+
+  const hasContent = (buffer: Buffer) =>
+    buffer.value !== "" ||
+    (buffer.metricsViewState?.metrics?.length ?? 0) > 0 ||
+    buffer.notebookViewState != null
+
+  const closeBuffer: EditorContext["closeBuffer"] = async (
+    id,
+    options = {},
+  ) => {
+    const buffer = buffers.find((b) => b.id === id)
+    if (!buffer) return
+
+    if (buffer.isTemporary) {
+      await discardPreview()
+      return
     }
+
+    // The AI diff tab is not a user tab: it closes even next to a single tab,
+    // and its removal is never reported to an agent as a user deletion.
+    if (buffer.isPreviewBuffer) {
+      await deleteBuffer(id, true, "agent", options)
+      return
+    }
+
+    if (sortPinnedBuffers(buffers).length === 1) return
+
+    if (buffer.templateId !== undefined && exampleIds.has(buffer.templateId)) {
+      // Keep the live handle if a tab switch unmounts it while close waits for
+      // another removal. Its refs still contain any not-yet-persisted edit.
+      const liveAtClose = getController(id)
+      const actionSeq = getBufferActionSeq(id)
+      let archive = false
+      await enqueueBufferRemoval(id, "user", async (_target, snapshot) => {
+        await enqueueBufferTask(id, async () => {
+          // Pending document writes must settle before deciding: the render's
+          // buffer snapshot may still carry a link that an edit just removed.
+          const current = await bufferStore.getById(id)
+          if (!current || current.archived) return
+          if (
+            current.templateId === undefined ||
+            !exampleIds.has(current.templateId)
+          ) {
+            archive = true
+            return
+          }
+          try {
+            const live = getController(id) ?? liveAtClose
+            const view = await live?.readView()
+            if (
+              view &&
+              examplePersonalizationReason(current, { notebookViewState: view })
+            ) {
+              // Save the authoritative live document, without its result data,
+              // so closing before the debounce fires cannot discard an edit.
+              await bufferStore.update(id, {
+                notebookViewState: {
+                  ...view,
+                  cells: stripCellResults(view.cells),
+                },
+              })
+              archive = true
+              return
+            }
+            if (getBufferActionSeq(id) !== actionSeq) {
+              archive = true
+              return
+            }
+          } catch {
+            // If the live document cannot be checked, keep the tab recoverable.
+            archive = true
+            return
+          }
+          await deleteBufferNow(current, snapshot, true, "user", options)
+        })
+      })
+      if (!archive) return
+    }
+
+    if (hasContent(buffer)) {
+      void trackEvent(ConsoleEvent.TAB_ARCHIVE, { type: bufferTypeOf(buffer) })
+      await archiveBuffer(id, "user", options)
+    } else {
+      await deleteBuffer(id, true, "user", options)
+    }
+  }
+
+  const keepBufferOpen: EditorContext["keepBufferOpen"] = async (
+    id,
+    { focus = true } = {},
+  ) => {
+    const buffer = buffers.find((b) => b.id === id)
+    if (!buffer) return
+    const keptFields = {
+      archived: false,
+      archivedAt: undefined,
+      isTemporary: false,
+      position: nextOpenPosition(buffers),
+    }
+    await updateBuffer(id, keptFields)
+    await setActiveBuffer({ ...buffer, ...keptFields }, { focus })
+    // The kept tab is usually already active, so setActiveBuffer returned early
+    // without focusing. Focus explicitly: the "Keep open" button that held focus
+    // has just unmounted, and the first keystrokes would otherwise be lost.
+    if (focus && !buffer.notebookViewState && !buffer.metricsViewState) {
+      editorRef.current?.focus()
+    }
+  }
+
+  const restoreBuffer: EditorContext["restoreBuffer"] = async (
+    id,
+    { focus = true } = {},
+  ) => {
+    if (id === temporaryBufferId) {
+      await keepBufferOpen(id, { focus })
+      return
+    }
+    const buffer = buffers.find((b) => b.id === id)
+    if (!buffer) return
+    const restoredFields = {
+      archived: false,
+      archivedAt: undefined,
+      // Fresh read: the render-time list can miss a just-finished restore.
+      position: nextOpenPosition(await bufferStore.getAll()),
+    }
+    await updateBuffer(id, restoredFields)
+    await setActiveBuffer({ ...buffer, ...restoredFields }, { focus })
+  }
+
+  const reorderBuffer: EditorContext["reorderBuffer"] = async (id, toIndex) => {
+    const positions = positionsAfterMove(buffers, id, toIndex)
+    if (positions.length > 0) {
+      await updateBuffersPositions(positions)
+    }
+  }
+
+  const clearArchivedBuffers: EditorContext["clearArchivedBuffers"] =
+    async () => {
+      for (const buffer of closedBuffersToDelete(buffers)) {
+        await deleteBuffer(buffer.id as number)
+      }
+    }
+
+  // The template's cells start fresh (results are stripped on parse); charts
+  // bootstrap themselves on mount, grid cells are run here so the dashboard
+  // fills in without a click per cell.
+  const runNotebookCells = async (bufferId: number) => {
+    try {
+      const cells = await withBoundNotebook(
+        bufferId,
+        async (controller) => (await controller.readView()).cells,
+      )
+      for (const cellId of exampleAutoRunCellIds(cells)) {
+        await withBoundNotebook(bufferId, (controller) =>
+          controller.runCell(cellId, undefined, undefined, { kind: "autoRun" }),
+        )
+      }
+    } catch (error) {
+      console.error("Could not run the example dashboard:", error)
+    }
+  }
+
+  // First run of an imported notebook's cells: only the ones the import
+  // planned, through the auto-run gate so a write statement can never slip
+  // through even if the plan was stale.
+  const runImportedNotebookCells: EditorContext["runImportedNotebookCells"] =
+    async (bufferId, cellIds) => {
+      for (const cellId of cellIds) {
+        try {
+          await withBoundNotebook(bufferId, (controller) =>
+            controller.runCell(cellId, undefined, undefined, {
+              kind: "autoRun",
+            }),
+          )
+        } catch (error) {
+          console.error("Could not run an imported cell:", error)
+        }
+      }
+    }
+
+  const openExampleDashboardNow = async (example: ExampleDashboard) => {
+    const open = buffers.find(
+      (b) => b.templateId === example.id && !b.archived && !b.isTemporary,
+    )
+    void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, {
+      id: example.id,
+      source: "manual",
+      reused: !!open,
+    })
+    if (open) {
+      await setActiveBuffer(open)
+      return
+    }
+    try {
+      const { notebookViewState } = await fetchExampleDashboard(example.path)
+      const created = await addBuffer({
+        label: example.title,
+        notebookViewState,
+        templateId: example.id,
+      })
+      if (created?.id !== undefined) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD, {
+          templateId: example.id,
+          source: "manual",
+          outcome: "success",
+        })
+        void runNotebookCells(created.id)
+      }
+    } catch (error) {
+      console.error(error)
+      void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD, {
+        templateId: example.id,
+        source: "manual",
+        outcome: "error",
+      })
+      toast.error(exampleErrorMessage(example.title, error))
+    }
+  }
+
+  // A second activation while the file is still being fetched joins the first
+  // one instead of creating another copy; the row shows a spinner meanwhile.
+  const openExampleDashboard: EditorContext["openExampleDashboard"] = (
+    example,
+  ) =>
+    singleFlight(exampleRequestsRef.current, example.id, async () => {
+      setOpeningExampleIds((ids) => [...ids, example.id])
+      try {
+        await openExampleDashboardNow(example)
+      } finally {
+        setOpeningExampleIds((ids) => ids.filter((id) => id !== example.id))
+      }
+    })
+
+  // Schema tree "Query": a notebook named after the table with a cell reading
+  // its newest rows, refreshing on Auto. A notebook with that name is reused: the
+  // cell holding this query is focused, or, without one, the cell is appended
+  // and run. A user notebook that happens to share the name keeps its cells.
+  const openTableNotebook: EditorContext["openTableNotebook"] = (table) => {
+    if (tabsDisabled) return Promise.resolve()
+    return singleFlight(tableNotebookRequestsRef.current, table.name, () =>
+      openTableNotebookNow(table),
+    )
+  }
+
+  const openTableNotebookNow = async ({
+    name,
+    designatedTimestamp,
+  }: {
+    name: string
+    designatedTimestamp?: string
+  }) => {
+    const cell = buildTablePreviewCell(name, designatedTimestamp)
+    const createTableNotebook = async () => {
+      const created = await addBuffer({
+        label: name,
+        notebookViewState: {
+          cells: [cell],
+          settings: { autoRefreshDefault: TABLE_PREVIEW_AUTO_REFRESH },
+        },
+      })
+      if (created?.id !== undefined) {
+        void runNotebookCells(created.id)
+      }
+    }
+    // Fresh read: the schema rows are virtualized and may call in with a
+    // render snapshot that predates the tab created by the previous click.
+    const candidates = (await bufferStore.getAll()).filter(
+      (b) =>
+        b.label === name &&
+        b.notebookViewState != null &&
+        !b.archived &&
+        b.id !== temporaryBufferId &&
+        b.id !== undefined,
+    )
+    if (candidates.length === 0) {
+      await createTableNotebook()
+      return
+    }
+    const sql = cell.value.trim()
+    const isQueryCell = (c: NotebookCell) =>
+      c.type !== "markdown" && c.value.trim() === sql
+    const views = await Promise.all(
+      candidates.map((b) =>
+        withBoundNotebookReadOnly(b.id as number, (view) =>
+          Promise.resolve(view),
+        ),
+      ),
+    )
+    const withCellIndex = views.findIndex((view) =>
+      view.cells.some(isQueryCell),
+    )
+    if (withCellIndex !== -1) {
+      const target = candidates[withCellIndex]
+      const existing = views[withCellIndex].cells.find(isQueryCell)
+      await setActiveBuffer(target)
+      if (existing) revealCellForEditing(target.id as number, existing.id)
+      return
+    }
+
+    const target = candidates[0]
+    const bufferId = target.id as number
+    const cellId = cell.id
+    // The table query's own name, refresh and colouring ride on the new cell.
+    // It refreshes on Auto; only a notebook whose default is something else
+    // gets that as a cell override.
+    const inheritsRefresh =
+      resolveAutoRefresh(undefined, views[0].settings?.autoRefreshDefault) ===
+      TABLE_PREVIEW_AUTO_REFRESH
+    const presentation: Partial<NotebookCell> = {
+      name: cell.name,
+      ...(inheritsRefresh ? {} : { autoRefresh: TABLE_PREVIEW_AUTO_REFRESH }),
+      paneView: cell.paneView,
+      highlightConfig: cell.highlightConfig,
+    }
+    try {
+      await withBoundNotebook(bufferId, (controller) =>
+        controller.mutate((parts) => {
+          const added = addCellTransition(parts, bufferId, {
+            id: cellId,
+            value: cell.value,
+          })
+          return {
+            ...added,
+            parts: {
+              ...added.parts,
+              cells: added.parts.cells.map((c) =>
+                c.id === cellId ? { ...c, ...presentation } : c,
+              ),
+            },
+          }
+        }),
+      )
+    } catch (error) {
+      if (error instanceof NotebookToolError && error.code === "cell_limit") {
+        await createTableNotebook()
+        return
+      }
+      console.error(error)
+      toast.error(
+        error instanceof Error
+          ? `Failed to add cell: ${error.message}`
+          : "Failed to add cell",
+      )
+      return
+    }
+    emitUserAction({ kind: "user_added_cell", bufferId, cellId })
+    await setActiveBuffer(target)
+    revealCellForEditing(bufferId, cellId)
+    try {
+      await withBoundNotebook(bufferId, (controller) =>
+        controller.runCell(cellId),
+      )
+    } catch (error) {
+      console.error("Could not run the table query:", error)
+    }
+  }
 
   const closePreviewBuffer: EditorContext["closePreviewBuffer"] = async () => {
     const previewBuffer = buffers.find((b) => b.isPreviewBuffer && !b.archived)
     if (previewBuffer && previewBuffer.id) {
-      await deleteBuffer(previewBuffer.id, true)
+      // The diff buffer belongs to the AI suggestion flow, not to the user's
+      // tabs — never report its removal as a user deletion.
+      await deleteBuffer(previewBuffer.id, true, "agent")
     }
   }
 
@@ -960,19 +1772,22 @@ export const EditorProvider: React.FC = ({ children }) => {
         },
         appendQuery: (text) => {
           const targetBuffer = activeBufferRef.current
-          const bufferType = bufferTypeOf(targetBuffer)
-          if (bufferType === BufferType.NOTEBOOK) {
-            if (targetBuffer.id !== undefined) {
-              void appendNotebookCell(targetBuffer.id, text)
-            }
-            return
-          }
-          if (bufferType === BufferType.METRICS) {
-            void openNotebookWithCell(text)
-            return
-          }
-          if (editorRef?.current) {
-            appendQuery(editorRef.current, text)
+          switch (appendQueryTarget(targetBuffer)) {
+            case "notebook-cell":
+              if (targetBuffer.id !== undefined) {
+                void appendNotebookCell(targetBuffer.id, text)
+              }
+              return
+            case "new-notebook":
+              void openNotebookWithCell(text)
+              return
+            case "new-sql-tab":
+              void addBuffer({ value: text }, { shouldSelectAll: true })
+              return
+            case "editor":
+              if (editorRef?.current) {
+                appendQuery(editorRef.current, text)
+              }
           }
         },
         tabsDisabled,
@@ -985,9 +1800,17 @@ export const EditorProvider: React.FC = ({ children }) => {
         archiveBuffer,
         duplicateNotebook,
         updateBuffer,
-        updateBuffersPositions,
-        setTemporaryBuffer,
-        temporaryBufferId,
+        closeBuffer,
+        restoreBuffer,
+        keepBufferOpen,
+        reorderBuffer,
+        clearArchivedBuffers,
+        openExampleDashboard,
+        openingExampleIds,
+        openTableNotebook,
+        runImportedNotebookCells,
+        previewBuffer,
+        discardPreview,
         queryParamProcessedRef,
         isNavigatingFromSearchRef,
         showPreviewBuffer,
@@ -997,7 +1820,11 @@ export const EditorProvider: React.FC = ({ children }) => {
         cleanupExecutionRefs,
         highlightQuery,
         editorReadyTrigger: (editor) => {
-          if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
+          if (
+            focusEditorOnMountRef.current &&
+            !activeBuffer.isTemporary &&
+            !isNavigatingFromSearchRef.current
+          ) {
             editor.focus()
           }
 

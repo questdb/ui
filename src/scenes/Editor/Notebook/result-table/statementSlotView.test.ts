@@ -29,11 +29,52 @@ const fetchState = (over: Partial<CellFetchState> = {}): CellFetchState => ({
   slotErrors: new Map(),
   cancelledSlots: new Set(),
   slotVerifiedAt: new Map(),
+  slotVerifiedTimings: new Map(),
   fetchCancelled: false,
   ...over,
 })
 
 describe("buildStatementSlotViews", () => {
+  it("uses timing from the same response as its freshness stamp, without replacing rows", () => {
+    const old = {
+      compiler: 0,
+      authentication: 0,
+      count: 0,
+      execute: 7e9,
+      fetch: 8e9,
+    }
+    const fresh = { ...old, execute: 4e8, fetch: 5e8 }
+    const queries = ["select 1", "select 2", "select 3"]
+    const keys = statementKeysFor(queries)
+    const frame = deriveStatementFrame(queries, {
+      ...result(queries),
+      results: queries.map((query) => ({
+        ...dql(query),
+        fetchedAt: 2000,
+        timings: old,
+      })),
+    })!
+    const slots = buildStatementSlotViews(
+      frame,
+      fetchState({
+        slotVerifiedAt: new Map([
+          [keys[0], 3000],
+          [keys[1], 1500],
+          [keys[2], 3000],
+        ]),
+        slotVerifiedTimings: new Map([
+          [keys[0], fresh],
+          [keys[1], fresh],
+          [keys[2], undefined],
+        ]),
+      }),
+    )
+    expect(slots.map((slot) => slot.timings)).toEqual([fresh, old, undefined])
+    slots.forEach((slot, index) =>
+      expect(slot.result).toBe(frame.slots[index].result),
+    )
+  })
+
   it("attaches refresh state to slots by statement content", () => {
     // Given a two-statement frame where the second is refreshing and the
     // first failed its last round

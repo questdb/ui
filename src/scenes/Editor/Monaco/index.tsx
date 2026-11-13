@@ -286,6 +286,11 @@ const getDefaultLineNumbersMinChars = (canUseAI: boolean) => {
 const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const theme = useTheme()
   const editorContext = useEditor()
+  // Editor actions and legacy bus handlers are registered once in onMount; read
+  // the context through a ref so they always call the latest provider
+  // callbacks (current tab list, limit, positions), not mount-time ones.
+  const editorContextRef = useRef(editorContext)
+  editorContextRef.current = editorContext
   const { executionRefs, cleanupExecutionRefs } = editorContext
   const {
     tabsDisabled,
@@ -378,12 +383,32 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const isAIDropdownRef = useRef<boolean>(false)
   const cleanupActionsRef = useRef<(() => void)[]>([])
 
+  // A running script keeps the editor locked: its per-query glyphs and
+  // markers are keyed by line, so edits mid-run would shift them.
+  const syncReadOnly = (editor: editor.IStandaloneCodeEditor) => {
+    editor.updateOptions({
+      readOnly:
+        isRunningScriptRef.current ||
+        activeBufferRef.current.isTemporary === true,
+    })
+  }
+
+  const revertModelToBufferValue = () => {
+    if (editorRef.current && currentBufferValueRef.current !== undefined) {
+      editorRef.current.setValue(currentBufferValueRef.current)
+    }
+  }
+
   const handleBufferContentChange = (value: string | undefined) => {
+    if (activeBufferRef.current.isTemporary) {
+      if (value !== currentBufferValueRef.current) {
+        revertModelToBufferValue()
+      }
+      return
+    }
     const lineCount = editorRef.current?.getModel()?.getLineCount()
     if (lineCount && lineCount > LINE_NUMBER_HARD_LIMIT) {
-      if (editorRef.current && currentBufferValueRef.current !== undefined) {
-        editorRef.current.setValue(currentBufferValueRef.current)
-      }
+      revertModelToBufferValue()
       toast.error("Maximum line limit reached")
       return
     }
@@ -606,7 +631,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const handlePrimaryRun = () => {
     const editor = editorRef.current
-    if (!editor) return
+    if (!editor || activeBufferRef.current.isTemporary) return
 
     const selectionMode = runWithSelectionModeRef.current
     const selectedText = getSelectedText(editor)
@@ -1021,6 +1046,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         addExtraSpaceOnTop: false,
       },
     })
+    syncReadOnly(editor)
     editor.setModel(
       monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )
@@ -1033,6 +1059,20 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         editor,
         toggleRunning,
         getRunning: () => runningValueRef.current,
+        isPreviewing: () => activeBufferRef.current.isTemporary === true,
+        openQueryInNewTab: async (query) => {
+          try {
+            const created = await editorContextRef.current.addBuffer(
+              { value: query },
+              { shouldSelectAll: true },
+            )
+            return created !== undefined
+          } catch (error) {
+            console.error("Could not open the query in a new tab:", error)
+            toast.error("Could not open the query in a new tab.")
+            return false
+          }
+        },
       }),
     )
     cleanupActionsRef.current.push(
@@ -1051,10 +1091,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         copyQueriesLink: () => {
           handleCopyLinkAllQueries(true)
         },
-        deleteBuffer: (id: number) => editorContext.deleteBuffer(id),
+        deleteBuffer: (id: number) => editorContextRef.current.deleteBuffer(id),
         addBuffer: () => {
           if (tabsDisabledRef.current) return
-          void editorContext.addBuffer()
+          void editorContextRef.current.addBuffer()
         },
       }),
     )
@@ -1413,7 +1453,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         editor.updateOptions({ readOnly: true })
         const unlockEditor = () => {
           setTabsDisabled(false)
-          editorRef.current?.updateOptions({ readOnly: false })
+          if (editorRef.current) syncReadOnly(editorRef.current)
         }
         void Promise.all(statements.map((sql) => quest.validateQuery(sql)))
           .then((results) => {
@@ -1632,6 +1672,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     runAll?: boolean,
     selectedQueries?: readonly Request[],
   ) => {
+    if (activeBufferRef.current.isTemporary) return
     if (runningValueRef.current === RunningType.SCRIPT && runAll) {
       dispatch(actions.query.toggleRunning())
       return
@@ -1868,7 +1909,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     dispatch(
       actions.query.addNotification(
         {
-          query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
+          query: `${activeBuffer.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
           content: (
             <Text color="contentPrimary">
               {!completedGracefully && individualQueryResults.length === 0 ? (
@@ -1892,13 +1933,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             ? NotificationType.SUCCESS
             : NotificationType.ERROR,
         },
-        activeBufferRef.current.id,
+        activeBufferId,
       ),
     )
     setTabsDisabled(false)
     isRunningScriptRef.current = false
     stopAfterFailureRef.current = true
-    editor.updateOptions({ readOnly: false })
+    syncReadOnly(editor)
     if (scriptStopRef.current) {
       scriptStopRef.current = false
       if (!scriptConfirmationOpenRef.current) {
@@ -2385,6 +2426,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     activeBufferRef.current = activeBuffer
     currentBufferValueRef.current = activeBuffer.value
     if (monacoRef.current && editorRef.current) {
+      syncReadOnly(editorRef.current)
       clearModelMarkers(monacoRef.current, editorRef.current)
 
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -2511,12 +2553,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   return (
     <>
       <Content $hidden={hidden}>
-        {!hidden && (
+        {!hidden && !activeBuffer.isTemporary && (
           <ButtonBar
             onRunQuery={handlePrimaryRun}
             onTriggerRunScript={handleTriggerRunScript}
             onCopyLinkAllQueries={handleCopyLinkAllQueries}
-            isTemporary={activeBuffer.isTemporary}
           />
         )}
         <EditorWrapper>

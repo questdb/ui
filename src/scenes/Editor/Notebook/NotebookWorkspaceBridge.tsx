@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef } from "react"
-import { useEditor } from "../../../providers/EditorProvider"
+import { MAX_TABS, useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
 import {
   registerNotebookAgentDeps,
@@ -13,8 +13,16 @@ import {
   getController,
 } from "../../../utils/notebooks/notebookController"
 import { enqueueBufferTask } from "../../../utils/notebooks/notebookBufferQueue"
-import { bufferStore } from "../../../store/buffers"
+import {
+  bufferStore,
+  exceedsBufferNameLimit,
+  MAX_BUFFER_NAME_LENGTH,
+} from "../../../store/buffers"
 import { emitAgentEdit } from "../../../utils/notebooks/agentActivity"
+import {
+  nextOpenPosition,
+  pinnedBuffersWithout,
+} from "../../../utils/buffers/tabOrder"
 import { requestCellReveal } from "./cellReveal"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
@@ -30,11 +38,13 @@ export const NotebookWorkspaceBridge: React.FC = () => {
   const {
     buffers,
     activeBuffer,
+    tabsDisabled,
     addBuffer,
     setActiveBuffer,
     archiveBuffer,
+    deleteBuffer,
+    updateBuffer,
     duplicateNotebook: duplicateNotebookBuffer,
-    updateBuffersPositions,
   } = useEditor()
   const { quest } = useContext(QuestContext)
 
@@ -42,6 +52,10 @@ export const NotebookWorkspaceBridge: React.FC = () => {
   buffersRef.current = buffers
   const activeBufferRef = useRef(activeBuffer)
   activeBufferRef.current = activeBuffer
+  const tabsDisabledRef = useRef(tabsDisabled)
+  useEffect(() => {
+    tabsDisabledRef.current = tabsDisabled
+  }, [tabsDisabled])
   // Ref so the deps registration stays stable ([] deps) while the quest client
   // is swapped on reconnect.
   const questRef = useRef(quest)
@@ -53,6 +67,23 @@ export const NotebookWorkspaceBridge: React.FC = () => {
     registerNotebookAgentDeps({ getQuest: () => questRef.current })
     return () => unregisterNotebookAgentDeps()
   }, [])
+
+  // The AI suggestion tab is not in <workspace>: tab tools cannot target it.
+  const findTab = (bufferId: number) => {
+    const target = buffersRef.current.find(
+      (b) => b.id === bufferId && !b.isPreviewBuffer,
+    )
+    if (!target) {
+      throw new NotebookToolError(
+        "deleted",
+        `Tab ${bufferId} is not in the workspace.`,
+      )
+    }
+    return target
+  }
+
+  const remainingOpenTabs = (bufferId: number) =>
+    pinnedBuffersWithout(buffersRef.current, bufferId)
 
   useEffect(() => {
     registerWorkspace({
@@ -68,7 +99,10 @@ export const NotebookWorkspaceBridge: React.FC = () => {
           { activate: false, signal },
         )
         if (!buffer?.id) {
-          throw new Error("Failed to create notebook buffer")
+          throw new NotebookToolError(
+            "tab_limit",
+            `Could not create the notebook: the tab limit (${MAX_TABS}) is reached.`,
+          )
         }
         emitAgentEdit({ bufferId: buffer.id })
         return { bufferId: buffer.id, label: buffer.label }
@@ -99,8 +133,8 @@ export const NotebookWorkspaceBridge: React.FC = () => {
         })
         if (!created?.id) {
           throw new NotebookToolError(
-            "activation_failed",
-            "Could not create the duplicate (tab limit reached).",
+            "tab_limit",
+            `Could not create the duplicate: the tab limit (${MAX_TABS}) is reached.`,
           )
         }
         // A background duplicate is fully cloned already, so it mounts no
@@ -108,39 +142,73 @@ export const NotebookWorkspaceBridge: React.FC = () => {
         emitAgentEdit({ bufferId: created.id })
         return { bufferId: created.id, label: created.label }
       },
-      async deleteNotebook(bufferId) {
-        const target = buffersRef.current.find((b) => b.id === bufferId)
-        if (!target) {
-          throw new NotebookToolError(
-            "deleted",
-            `Notebook ${bufferId} no longer exists.`,
-          )
-        }
-        if (!target.notebookViewState) {
-          throw new NotebookToolError(
-            "not_a_notebook",
-            `Buffer ${bufferId} is not a notebook.`,
-          )
-        }
+      async archiveTab(bufferId) {
+        const target = findTab(bufferId)
         if (target.archived) return
-        const remaining = buffersRef.current.filter(
-          (b) =>
-            (!b.archived || b.isTemporary) &&
-            typeof b.id === "number" &&
-            b.id !== bufferId,
-        )
+        const remaining = remainingOpenTabs(bufferId)
         if (remaining.length === 0) {
           throw new NotebookToolError(
             "last_tab",
-            "Cannot delete the only open tab. Create another notebook first, then delete this one.",
+            "Cannot close the only open tab. Create another tab first, then close this one.",
           )
         }
         await archiveBuffer(bufferId, "agent")
-        await updateBuffersPositions(
-          remaining
-            .sort((a, b) => a.position - b.position)
-            .map((b, index) => ({ id: b.id as number, position: index })),
-        )
+      },
+      async restoreTab(bufferId) {
+        const target = findTab(bufferId)
+        if (!target.archived) return
+        await updateBuffer(bufferId, {
+          archived: false,
+          archivedAt: undefined,
+          isTemporary: false,
+          position: nextOpenPosition(buffersRef.current),
+        })
+      },
+      async activateTab(bufferId) {
+        const target = await bufferStore.getById(bufferId)
+        if (!target || target.isPreviewBuffer) {
+          throw new NotebookToolError(
+            "deleted",
+            `Tab ${bufferId} is not in the workspace.`,
+          )
+        }
+        if (target.archived) {
+          throw new NotebookToolError(
+            "archived",
+            `Tab ${bufferId} is closed. Call restore_tab first.`,
+          )
+        }
+        if (activeBufferRef.current.id !== bufferId) {
+          if (tabsDisabledRef.current) {
+            throw new NotebookToolError(
+              "tabs_locked",
+              "Cannot switch tabs while a script is running. Wait for it to finish, then retry.",
+            )
+          }
+          await setActiveBuffer(target)
+        }
+      },
+      async renameTab(bufferId, label) {
+        findTab(bufferId)
+        const trimmed = label.trim()
+        if (trimmed === "" || exceedsBufferNameLimit(trimmed)) {
+          throw new NotebookToolError(
+            "validation",
+            `label must be 1–${MAX_BUFFER_NAME_LENGTH} characters after trimming.`,
+          )
+        }
+        await updateBuffer(bufferId, { label: trimmed })
+      },
+      async deleteTab(bufferId) {
+        const target = findTab(bufferId)
+        const remaining = remainingOpenTabs(bufferId)
+        if (!target.archived && remaining.length === 0) {
+          throw new NotebookToolError(
+            "last_tab",
+            "Cannot delete the only open tab. Create another tab first, then delete this one.",
+          )
+        }
+        await deleteBuffer(bufferId, true, "agent")
       },
       async activateNotebook(bufferId, cellToFocus) {
         // The buffer is claimed by the live side (it is, or is becoming, the
@@ -219,8 +287,9 @@ export const NotebookWorkspaceBridge: React.FC = () => {
     addBuffer,
     setActiveBuffer,
     archiveBuffer,
+    deleteBuffer,
+    updateBuffer,
     duplicateNotebookBuffer,
-    updateBuffersPositions,
   ])
 
   return null

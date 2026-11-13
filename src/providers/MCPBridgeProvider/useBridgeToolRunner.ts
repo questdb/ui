@@ -5,7 +5,10 @@ import { QuestContext } from "../QuestProvider"
 import { createModelToolsClient } from "../../utils/ai/aiAssistant"
 import { useEditor } from "../EditorProvider"
 import type { MetaToolContext } from "../../utils/mcp/metaResolvers"
-import type { WorkspaceInfo } from "../../utils/ai/executeAIFlow"
+import {
+  buildWorkspaceInfo,
+  type WorkspaceInfo,
+} from "../../utils/ai/workspaceInfo"
 import type { UserActionDigest } from "../AIConversationProvider/types"
 
 export const useBridgeToolRunner = (
@@ -21,37 +24,10 @@ export const useBridgeToolRunner = (
     [quest, tables],
   )
 
-  const workspace: WorkspaceInfo | null = useMemo(() => {
-    const notebooks = buffers
-      .filter((b) => !!b.notebookViewState && typeof b.id === "number")
-      .map((b) => ({
-        buffer_id: b.id as number,
-        label: b.label,
-        archived: !!b.archived,
-      }))
-    if (notebooks.length === 0 && typeof activeBuffer.id !== "number") {
-      return null
-    }
-    return {
-      notebooks,
-      ...(typeof activeBuffer.id === "number"
-        ? {
-            active: {
-              buffer_id: activeBuffer.id,
-              label: activeBuffer.label,
-              kind: activeBuffer.notebookViewState
-                ? ("notebook" as const)
-                : activeBuffer.metricsViewState
-                  ? ("metrics" as const)
-                  : activeBuffer.editorViewState
-                    ? ("sql" as const)
-                    : ("other" as const),
-              archived: !!activeBuffer.archived,
-            },
-          }
-        : {}),
-    }
-  }, [buffers, activeBuffer])
+  const workspace: WorkspaceInfo | null = useMemo(
+    () => buildWorkspaceInfo(buffers, activeBuffer) ?? null,
+    [buffers, activeBuffer],
+  )
 
   const activeNotebookBufferId = useMemo<number | null>(
     () =>

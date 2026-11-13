@@ -53,7 +53,6 @@ import {
 import { actions } from "../../store"
 import { copyToClipboard, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
-import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -90,6 +89,24 @@ type Props = Readonly<{
 const loadingStyles = css`
   display: flex;
   justify-content: center;
+`
+
+// Same frame as the Search and Tabs panels, so the filter inputs of the three
+// left panels sit on the same line.
+const Header = styled.div`
+  position: relative;
+  z-index: 5;
+  padding: 1.2rem 1.4rem 1rem;
+  background: ${({ theme }) => theme.color.surfaceRaised};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+`
+
+const HeaderRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 4.5rem;
+  gap: 0.4rem;
 `
 
 const Wrapper = styled(PaneWrapper)<{
@@ -419,154 +436,145 @@ const Schema = ({
 
   return (
     <Wrapper ref={innerRef} {...rest}>
-      <Panel.Header
-        afterTitle={
-          <div
-            style={{
-              display: "flex",
-              marginRight: "0.4rem",
-              justifyContent: "space-between",
-              flex: 1,
-            }}
-          >
-            <Toolbar
-              suspendedTablesCount={suspendedTablesCount}
-              filterSuspendedOnly={filterSuspendedOnly}
-              setFilterSuspendedOnly={setFilterSuspendedOnly}
-            />
-            {tables && (
-              <Box align="center" gap="0.2rem">
-                {selectOpen && (
-                  <Tooltip
-                    delay={350}
-                    placement="bottom"
-                    content="Copy schemas to clipboard"
+      <Header>
+        <HeaderRow>
+          <Toolbar
+            suspendedTablesCount={suspendedTablesCount}
+            filterSuspendedOnly={filterSuspendedOnly}
+            setFilterSuspendedOnly={setFilterSuspendedOnly}
+          />
+          {tables && (
+            <Box align="center" gap="0.2rem">
+              {selectOpen && (
+                <Tooltip
+                  delay={350}
+                  placement="bottom"
+                  content="Copy schemas to clipboard"
+                >
+                  <Button
+                    aria-label="Add metrics"
+                    variant="ghost"
+                    data-hook="schema-copy-to-clipboard-button"
+                    disabled={selectedTables.length === 0}
+                    onClick={copySchemasToClipboard}
                   >
-                    <Button
-                      aria-label="Add metrics"
-                      variant="ghost"
-                      data-hook="schema-copy-to-clipboard-button"
-                      disabled={selectedTables.length === 0}
-                      onClick={copySchemasToClipboard}
-                    >
-                      <FileCopy size="18px" />
-                    </Button>
-                  </Tooltip>
-                )}
+                    <FileCopy size="18px" />
+                  </Button>
+                </Tooltip>
+              )}
 
-                {selectOpen && (
-                  <Tooltip
-                    delay={350}
-                    placement="bottom"
-                    content={
-                      <>
-                        {selectedTables.length === allSelectableTables.length
-                          ? "Deselect"
-                          : "Select"}{" "}
-                        all
-                      </>
-                    }
-                  >
-                    <Button
-                      variant="ghost"
-                      data-hook="schema-select-all-button"
-                      onClick={() => {
-                        if (
-                          selectedTables.length === allSelectableTables.length
-                        ) {
-                          setSelectedTables([])
-                        } else {
-                          setSelectedTables(allSelectableTables)
-                        }
-                      }}
-                    >
-                      <Checkbox
-                        visible
-                        checked={
-                          selectedTables.length === allSelectableTables.length
-                        }
-                      />
-                    </Button>
-                  </Tooltip>
-                )}
-
-                {selectOpen && (
-                  <Tooltip delay={350} placement="bottom" content="Cancel">
-                    <Button
-                      data-hook="schema-cancel-select-button"
-                      variant="ghost"
-                      onClick={() => {
+              {selectOpen && (
+                <Tooltip
+                  delay={350}
+                  placement="bottom"
+                  content={
+                    <>
+                      {selectedTables.length === allSelectableTables.length
+                        ? "Deselect"
+                        : "Select"}{" "}
+                      all
+                    </>
+                  }
+                >
+                  <Button
+                    variant="ghost"
+                    data-hook="schema-select-all-button"
+                    onClick={() => {
+                      if (
+                        selectedTables.length === allSelectableTables.length
+                      ) {
                         setSelectedTables([])
-                        setSelectOpen(false)
-                      }}
-                    >
-                      <Close size="18px" />
-                    </Button>
-                  </Tooltip>
-                )}
-
-                {!selectOpen && (
-                  <Tooltip delay={350} placement="bottom" content="Add metrics">
-                    <ToolbarToggleButton
-                      aria-label="Add metrics"
-                      data-hook="schema-add-metrics-button"
-                      onClick={handleAddMetricsBuffer}
-                      selected={false}
-                    >
-                      <AddChart size="20px" />
-                    </ToolbarToggleButton>
-                  </Tooltip>
-                )}
-                {!selectOpen && (
-                  <Tooltip delay={350} placement="right" content="Select">
-                    <ToolbarToggleButton
-                      aria-label="Select tables"
-                      data-hook="schema-select-button"
-                      onClick={() => {
-                        if (selectOpen) {
-                          setSelectedTables([])
-                        }
-                        setSelectOpen(!selectOpen)
-                      }}
-                      {...(selectOpen ? { className: "selected" } : {})}
-                      selected={selectOpen}
-                      disabled={tables?.length === 0}
-                    >
-                      <CheckboxCircle size="18px" />
-                    </ToolbarToggleButton>
-                  </Tooltip>
-                )}
-
-                {!selectOpen && (
-                  <Tooltip
-                    delay={350}
-                    placement="right"
-                    content={`Auto refresh ${autoRefreshTables ? "enabled" : "disabled"}`}
+                      } else {
+                        setSelectedTables(allSelectableTables)
+                      }
+                    }}
                   >
-                    <ToolbarToggleButton
-                      aria-label={`Auto refresh ${
-                        autoRefreshTables ? "enabled" : "disabled"
-                      }`}
-                      data-hook="schema-auto-refresh-button"
-                      onClick={() => {
-                        updateSettings(
-                          StoreKey.AUTO_REFRESH_TABLES,
-                          !autoRefreshTables,
-                        )
-                        void fetchTables()
-                        void fetchColumns()
-                      }}
-                      selected={autoRefreshTables}
-                    >
-                      <Refresh size="18px" />
-                    </ToolbarToggleButton>
-                  </Tooltip>
-                )}
-              </Box>
-            )}
-          </div>
-        }
-      />
+                    <Checkbox
+                      visible
+                      checked={
+                        selectedTables.length === allSelectableTables.length
+                      }
+                    />
+                  </Button>
+                </Tooltip>
+              )}
+
+              {selectOpen && (
+                <Tooltip delay={350} placement="bottom" content="Cancel">
+                  <Button
+                    data-hook="schema-cancel-select-button"
+                    variant="ghost"
+                    onClick={() => {
+                      setSelectedTables([])
+                      setSelectOpen(false)
+                    }}
+                  >
+                    <Close size="18px" />
+                  </Button>
+                </Tooltip>
+              )}
+
+              {!selectOpen && (
+                <Tooltip delay={350} placement="bottom" content="Add metrics">
+                  <ToolbarToggleButton
+                    aria-label="Add metrics"
+                    data-hook="schema-add-metrics-button"
+                    onClick={handleAddMetricsBuffer}
+                    selected={false}
+                  >
+                    <AddChart size="20px" />
+                  </ToolbarToggleButton>
+                </Tooltip>
+              )}
+              {!selectOpen && (
+                <Tooltip delay={350} placement="right" content="Select">
+                  <ToolbarToggleButton
+                    aria-label="Select tables"
+                    data-hook="schema-select-button"
+                    onClick={() => {
+                      if (selectOpen) {
+                        setSelectedTables([])
+                      }
+                      setSelectOpen(!selectOpen)
+                    }}
+                    {...(selectOpen ? { className: "selected" } : {})}
+                    selected={selectOpen}
+                    disabled={tables?.length === 0}
+                  >
+                    <CheckboxCircle size="18px" />
+                  </ToolbarToggleButton>
+                </Tooltip>
+              )}
+
+              {!selectOpen && (
+                <Tooltip
+                  delay={350}
+                  placement="right"
+                  content={`Auto refresh ${autoRefreshTables ? "enabled" : "disabled"}`}
+                >
+                  <ToolbarToggleButton
+                    aria-label={`Auto refresh ${
+                      autoRefreshTables ? "enabled" : "disabled"
+                    }`}
+                    data-hook="schema-auto-refresh-button"
+                    onClick={() => {
+                      updateSettings(
+                        StoreKey.AUTO_REFRESH_TABLES,
+                        !autoRefreshTables,
+                      )
+                      void fetchTables()
+                      void fetchColumns()
+                    }}
+                    selected={autoRefreshTables}
+                  >
+                    <Refresh size="18px" />
+                  </ToolbarToggleButton>
+                </Tooltip>
+              )}
+            </Box>
+          )}
+        </HeaderRow>
+      </Header>
 
       <Content _loading={state.view === View.loading}>
         <VirtualTables

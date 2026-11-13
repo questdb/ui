@@ -8,7 +8,10 @@ import type {
   NotebookCell,
   SingleQueryResult,
 } from "../../../../store/notebook"
-import type { ValidateQueryResult } from "../../../../utils/questdb/types"
+import type {
+  Timings,
+  ValidateQueryResult,
+} from "../../../../utils/questdb/types"
 import {
   classifyStatements,
   type ClassifiedStatement,
@@ -93,6 +96,9 @@ export type CellFetchState = {
   // seeded or carried — a reload or a new entry shows the rows' fetch time
   // until the next tick.
   slotVerifiedAt: ReadonlyMap<StatementKey, number>
+  // Timing of the verifying response, even when its rows are unchanged. An
+  // explicit undefined means the latest response supplied no timing data.
+  slotVerifiedTimings: ReadonlyMap<StatementKey, Timings | undefined>
   // The user stopped the in-flight round. Until the next round starts, a
   // chart with no data settles on a cancelled state instead of loading.
   fetchCancelled: boolean
@@ -146,6 +152,7 @@ const initialFetchState = (queries: string[]): CellFetchState => ({
   slotErrors: new Map(),
   cancelledSlots: new Set(),
   slotVerifiedAt: new Map(),
+  slotVerifiedTimings: new Map(),
   fetchCancelled: false,
 })
 
@@ -198,15 +205,17 @@ const verifiedSlots = (
   entry: Entry,
   out: QueryExecResult[],
   carriedResults: Array<SingleQueryResult | undefined>,
-): Map<StatementKey, number> => {
+): Pick<CellFetchState, "slotVerifiedAt" | "slotVerifiedTimings"> => {
   const now = Date.now()
   const slotKeys = statementKeysFor(entry.state.queries)
   const slotVerifiedAt = new Map(entry.state.slotVerifiedAt)
+  const slotVerifiedTimings = new Map(entry.state.slotVerifiedTimings)
   out.forEach((result, index) => {
     if (result.type === "error" || carriedResults[index]) return
     slotVerifiedAt.set(slotKeys[index], now)
+    slotVerifiedTimings.set(slotKeys[index], result.timings)
   })
-  return slotVerifiedAt
+  return { slotVerifiedAt, slotVerifiedTimings }
 }
 
 const errorMessage = (cause: unknown): string => {
@@ -685,6 +694,7 @@ export class CellRefreshEngine {
     this.setState(entry, {
       slotErrors: new Map(),
       slotVerifiedAt: new Map(),
+      slotVerifiedTimings: new Map(),
     })
   }
 
@@ -880,6 +890,11 @@ export class CellRefreshEngine {
     const slotVerifiedAt = new Map(
       [...entry.state.slotVerifiedAt].filter(([key]) => slotKeySet.has(key)),
     )
+    const slotVerifiedTimings = new Map(
+      [...entry.state.slotVerifiedTimings].filter(([key]) =>
+        slotKeySet.has(key),
+      ),
+    )
     this.setState(entry, {
       queries,
       queriesKey,
@@ -889,6 +904,7 @@ export class CellRefreshEngine {
       fetchCancelled: false,
       slotErrors,
       slotVerifiedAt,
+      slotVerifiedTimings,
       ...(sameQueries ? { settledKey: queriesKey } : {}),
     })
     if (entry.kind === "grid") this.ensureClassified(entry)
@@ -1313,7 +1329,7 @@ export class CellRefreshEngine {
       ) {
         this.setState(entry, {
           settledKey: queriesKey,
-          slotVerifiedAt: verifiedSlots(entry, out, carriedResults),
+          ...verifiedSlots(entry, out, carriedResults),
         })
         this.deriveChartSlotErrors(entry)
         // This round repeats the failure an earlier unexecuted round put on
@@ -1346,7 +1362,24 @@ export class CellRefreshEngine {
         activeResultIndex: 0,
         timestamp: Date.now(),
       })
-      this.setState(entry, { settledKey: queriesKey })
+      // Freshly written rows carry their own timings. Only carried slots may
+      // still need an overlay from an earlier verification of those rows.
+      const carriedKeys = new Set(
+        statementKeysFor(queries).filter((_, index) => carriedResults[index]),
+      )
+      this.setState(entry, {
+        settledKey: queriesKey,
+        slotVerifiedAt: new Map(
+          [...entry.state.slotVerifiedAt].filter(([key]) =>
+            carriedKeys.has(key),
+          ),
+        ),
+        slotVerifiedTimings: new Map(
+          [...entry.state.slotVerifiedTimings].filter(([key]) =>
+            carriedKeys.has(key),
+          ),
+        ),
+      })
       this.deriveChartSlotErrors(entry)
       if (notExecuted) return
       // The disk copy follows the frame on screen, carried rows included.
@@ -1465,7 +1498,7 @@ export class CellRefreshEngine {
                   previous !== undefined &&
                   resultsEquivalent([toExecResult(previous)], [exec])
                 if (!unchanged) this.commitSlotResult(entry, key, exec)
-                this.settleSlotSuccess(entry, key)
+                this.settleSlotSuccess(entry, key, exec.timings)
               }
             })
           } catch (e) {
@@ -1592,17 +1625,29 @@ export class CellRefreshEngine {
     if (!entry.state.slotVerifiedAt.has(key)) return
     const slotVerifiedAt = new Map(entry.state.slotVerifiedAt)
     slotVerifiedAt.delete(key)
-    this.setState(entry, { slotVerifiedAt })
+    const slotVerifiedTimings = new Map(entry.state.slotVerifiedTimings)
+    slotVerifiedTimings.delete(key)
+    this.setState(entry, { slotVerifiedAt, slotVerifiedTimings })
   }
 
   // A settle is one patch — overlay stamp, error clear and fetching flip land
   // in a single notify, so a round of S slots costs S renders, not 3S.
-  private settleSlotSuccess(entry: Entry, key: StatementKey) {
+  private settleSlotSuccess(
+    entry: Entry,
+    key: StatementKey,
+    timings: Timings | undefined,
+  ) {
     const slotVerifiedAt = new Map(entry.state.slotVerifiedAt)
     slotVerifiedAt.set(key, Date.now())
+    const slotVerifiedTimings = new Map(entry.state.slotVerifiedTimings)
+    slotVerifiedTimings.set(key, timings)
     const slotFetching = new Set(entry.state.slotFetching)
     slotFetching.delete(key)
-    const patch: Partial<CellFetchState> = { slotVerifiedAt, slotFetching }
+    const patch: Partial<CellFetchState> = {
+      slotVerifiedAt,
+      slotVerifiedTimings,
+      slotFetching,
+    }
     if (entry.state.slotErrors.has(key)) {
       const slotErrors = new Map(entry.state.slotErrors)
       slotErrors.delete(key)

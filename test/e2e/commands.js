@@ -422,16 +422,6 @@ Cypress.Commands.add("clearEditor", () => {
   })
 })
 
-Cypress.Commands.add("selectQuery", (n) =>
-  cy
-    .contains("Example queries")
-    .first()
-    .click()
-    .get('[class^="QueryPicker__Wrapper"] [class^="Row__Wrapper"]')
-    .eq(n)
-    .click(),
-)
-
 Cypress.Commands.add("getMountedEditor", () =>
   cy.get(".monaco-scrollable-element"),
 )

@@ -24,7 +24,11 @@ const makeWorkspace = (
     Promise.resolve({ bufferId: 1, label: label ?? "Notebook" }),
   duplicateNotebook: ({ bufferId }) =>
     Promise.resolve({ bufferId, label: "Notebook (copy)" }),
-  deleteNotebook: () => Promise.resolve(),
+  archiveTab: () => Promise.resolve(),
+  restoreTab: () => Promise.resolve(),
+  activateTab: () => Promise.resolve(),
+  renameTab: () => Promise.resolve(),
+  deleteTab: () => Promise.resolve(),
   activateNotebook: () => Promise.resolve(true),
   listNotebookBuffers: () => [],
   ...overrides,
@@ -123,8 +127,18 @@ describe("emitUserAction — freshness seq", () => {
         mode: "draw",
       },
       { kind: "user_changed_grid_layout", bufferId: 1 },
-      { kind: "user_archived_notebook", bufferId: 1 },
-      { kind: "user_deleted_notebook", bufferId: 1 },
+      {
+        kind: "user_archived_tab",
+        bufferId: 1,
+        tabKind: "notebook",
+        label: "N",
+      },
+      {
+        kind: "user_deleted_tab",
+        bufferId: 1,
+        tabKind: "notebook",
+        label: "N",
+      },
     ]
 
     // When / Then each action advances the seq

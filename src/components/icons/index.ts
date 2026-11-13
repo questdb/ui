@@ -46,7 +46,6 @@ export {
   ArrowSquareOut as ExternalLink,
   Eye,
   EyeSlash as EyeOff,
-  FileCode,
   Files,
   Copy as FileCopy,
   FileMagnifyingGlass as FileSearch,

@@ -62,10 +62,8 @@ import { Stop } from "../../../components/icons"
 import { CircleNotchSpinner } from "../Monaco/icons"
 import { getBufferActionSeq } from "../../../utils/notebooks/notebookAIBridge"
 import { buildSnapshot } from "../../../utils/ai/notebookSnapshot"
-import type {
-  NotebookFlowContext,
-  WorkspaceInfo,
-} from "../../../utils/ai/executeAIFlow"
+import type { NotebookFlowContext } from "../../../utils/ai/executeAIFlow"
+import { buildWorkspaceInfo } from "../../../utils/ai/workspaceInfo"
 import { QueryInNotification } from "../Monaco/query-in-notification"
 import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 import { getLastTurnWithUnactionedDiff } from "../../../utils/ai/turnView"
@@ -402,34 +400,7 @@ const AIChatWindow: React.FC = () => {
           })
         : null
       const digest = readUserActionDigest(conversationId)
-      const notebookBuffers = buffers.filter(
-        (b) => !!b.notebookViewState && typeof b.id === "number",
-      )
-      const workspace: WorkspaceInfo | undefined =
-        notebookBuffers.length > 0 || typeof activeBuffer.id === "number"
-          ? {
-              notebooks: notebookBuffers.map((b) => ({
-                buffer_id: b.id as number,
-                label: b.label,
-                archived: !!b.archived,
-                ...(b.id === bufferId ? { bound_to_this_chat: true } : {}),
-              })),
-              active:
-                typeof activeBuffer.id === "number"
-                  ? {
-                      buffer_id: activeBuffer.id,
-                      label: activeBuffer.label,
-                      kind: activeBuffer.notebookViewState
-                        ? "notebook"
-                        : activeBuffer.metricsViewState
-                          ? "metrics"
-                          : activeBuffer.editorViewState
-                            ? "sql"
-                            : "other",
-                    }
-                  : undefined,
-            }
-          : undefined
+      const workspace = buildWorkspaceInfo(buffers, activeBuffer, bufferId)
       if (!snapshot && !digest && !workspace) return undefined
       return { snapshot, digest, workspace, readSeq }
     },

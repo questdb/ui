@@ -1,7 +1,13 @@
-import React, { useLayoutEffect, useState, useMemo } from "react"
+import React, {
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled, { css } from "styled-components"
-import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
-import { useEditor, MAX_TABS } from "../../../providers"
+import { TabBar, type TabProperties } from "../../../components/TabBar"
+import { QuestContext, useEditor, MAX_TABS } from "../../../providers"
 import { History, LineChart, Trash } from "../../../components/icons"
 import {
   DotsThreeVerticalIcon,
@@ -22,7 +28,14 @@ import {
 import { migrateBuffer, getCurrentDbVersion } from "../../../store/migrations"
 import { importInto, peakImportFile } from "dexie-export-import"
 import { exportBuffers } from "./exportTabs"
+import {
+  cellsShowingResults,
+  importHoldNote,
+  planImportRuns,
+} from "../../../utils/notebooks/importRunPlan"
+import { createValidateWithGlobals } from "../Notebook/declareUtils"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
+import { ClearHistoryDialog } from "../ClearHistoryDialog"
 import { EditorSettingsModal } from "../../../components/EditorSettingsModal"
 import {
   Box,
@@ -38,16 +51,13 @@ import {
   bufferTypeOf,
   MAX_BUFFER_NAME_LENGTH,
 } from "../../../store/buffers"
+import {
+  sortClosedBuffers,
+  sortOpenBuffers,
+} from "../../../utils/buffers/tabOrder"
+import { acceptDeleteClick } from "../../../utils/buffers/deleteClickGuard"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
-
-type Tab = {
-  id: string
-  title: string
-  faviconClass: string
-  active: boolean
-  className?: string
-}
 
 const Root = styled(Box).attrs({
   align: "center",
@@ -111,6 +121,18 @@ const ArchivedBuffersList = styled.div`
   overflow-y: auto;
 `
 
+const ArchivedBufferRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-right: 0.4rem;
+
+  > [role="menuitem"] {
+    flex: 1;
+    min-width: 0;
+  }
+`
+
 // Invisible trigger we reposition to anchor Radix's menu at the chrome-tabs "+".
 const NewTabAnchor = styled(DropdownMenu.Trigger)`
   position: fixed;
@@ -142,11 +164,15 @@ export const Tabs = () => {
     setActiveBuffer,
     addBuffer,
     updateBuffer,
-    updateBuffersPositions,
     deleteBuffer,
-    archiveBuffer,
+    closeBuffer,
+    restoreBuffer,
+    reorderBuffer,
+    clearArchivedBuffers,
     tabsDisabled,
+    runImportedNotebookCells,
   } = useEditor()
+  const { quest } = useContext(QuestContext)
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -157,9 +183,11 @@ export const Tabs = () => {
     y: number
   } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false)
   const [importSummaryOpen, setImportSummaryOpen] = useState(false)
   const [importedCount, setImportedCount] = useState(0)
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
+  const historyButtonRef = useRef<HTMLButtonElement>(null)
 
   const handleExportTabs = async () => {
     void trackEvent(ConsoleEvent.TAB_EXPORT)
@@ -244,6 +272,10 @@ export const Tabs = () => {
         let importedCount = 0
         const skipped: SkippedTab[] = []
         const idsToDelete: number[] = []
+        // Cells that were showing a result in the source, per notebook; the
+        // sanitiser drops that marker, so it is read here, before it does.
+        const resultCellsByKey = new Map<string, string[]>()
+        const existingIds = new Set(existingBuffers.map((b) => b.id))
 
         await importInto(db, blob, {
           acceptVersionDiff: true,
@@ -318,6 +350,14 @@ export const Tabs = () => {
             }
             existingContentKeys.set(contentKey, sanitized.archived === true)
 
+            const rawNotebook = migratedValue.notebookViewState as
+              | { cells?: unknown }
+              | undefined
+            const resultCells = cellsShowingResults(rawNotebook?.cells)
+            if (resultCells.length > 0) {
+              resultCellsByKey.set(contentKey, resultCells)
+            }
+
             const isArchived = sanitized.archived === true
             sanitized.position = isArchived
               ? -1
@@ -342,17 +382,50 @@ export const Tabs = () => {
           await db.buffers.bulkDelete(idsToDelete)
         }
 
+        // Give imported notebooks back the results they were showing: each
+        // read-only cell runs again; cells with DDL/DML, or that could not be
+        // checked, are held and noted.
+        const runs: Array<{ bufferId: number; cellIds: string[] }> = []
+        let heldCount = 0
+        let uncheckedCount = 0
+        for (const b of allBuffersAfterImport) {
+          if (b.id === undefined || existingIds.has(b.id)) continue
+          if (idsToDelete.includes(b.id) || b.archived || !b.notebookViewState)
+            continue
+          const candidates = resultCellsByKey.get(createBufferContentKey(b))
+          if (!candidates) continue
+          const { variables } = b.notebookViewState.settings ?? {}
+          const plan = await planImportRuns(
+            b.notebookViewState.cells,
+            candidates,
+            createValidateWithGlobals(quest, () => variables),
+          )
+          heldCount += plan.held.length
+          uncheckedCount += plan.unchecked.length
+          if (plan.run.length > 0)
+            runs.push({ bufferId: b.id, cellIds: plan.run })
+        }
+        const holdNote = importHoldNote({
+          held: heldCount,
+          unchecked: uncheckedCount,
+        })
+
         // Show dialog only if there are skipped tabs, otherwise show toast
         if (skipped.length > 0) {
           setImportedCount(importedCount)
           setSkippedTabs(skipped)
           setImportSummaryOpen(true)
+          if (holdNote) toast.info(holdNote)
         } else if (importedCount > 0) {
           toast.success(
-            `Imported ${importedCount} tab${importedCount === 1 ? "" : "s"} successfully.`,
+            `Imported ${importedCount} tab${importedCount === 1 ? "" : "s"} successfully.${holdNote ? ` ${holdNote}` : ""}`,
           )
         } else {
           toast.info("All tabs already exist. Nothing imported.")
+        }
+
+        for (const { bufferId, cellIds } of runs) {
+          void runImportedNotebookCells(bufferId, cellIds)
         }
       } catch (err) {
         console.error("Import error:", err)
@@ -373,14 +446,7 @@ export const Tabs = () => {
     input.click()
   }
 
-  const archivedBuffers = buffers
-    .filter(
-      (buffer) =>
-        buffer.archived && buffer.archivedAt && buffer.position === -1,
-    )
-    .sort((a, b) =>
-      a.archivedAt && b.archivedAt ? b.archivedAt - a.archivedAt : 0,
-    )
+  const closedBuffers = sortClosedBuffers(buffers)
 
   const active = async (id: string) => {
     const activeBuffer = buffers.find((buffer) => buffer.id === parseInt(id))
@@ -389,95 +455,43 @@ export const Tabs = () => {
     }
   }
 
-  const repositionActiveBuffers = async (excludedId: string) => {
-    const sortedActiveBuffers = buffers
-      .filter(
-        (buffer) =>
-          (!buffer.archived || buffer.isTemporary) &&
-          buffer.id !== parseInt(excludedId),
-      )
-      .sort((a, b) => a.position - b.position)
+  const close = (id: string) => closeBuffer(parseInt(id))
 
-    const positions = sortedActiveBuffers
-      .map((buffer, index) => ({
-        id: buffer.id as number,
-        position: index,
-      }))
-      .filter((p) => p.id !== undefined)
-
-    if (positions.length > 0) {
-      await updateBuffersPositions(positions)
-    }
+  // `keepFocus`: the keyboard path keeps focus in the menu, so the editor
+  // must not take it back. Only a previewed (active) entry needs a new
+  // active tab.
+  const deleteFromHistory = (buffer: Buffer, keepFocus = false) => {
+    void trackEvent(ConsoleEvent.TAB_HISTORY_DELETE)
+    void deleteBuffer(
+      buffer.id as number,
+      keepFocus ? buffer.isTemporary === true : true,
+      "user",
+      { focusEditor: !keepFocus },
+    )
   }
 
-  const close = async (id: string) => {
-    const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
-    if (
-      !buffer ||
-      buffers.filter((buffer) => !buffer.archived || buffer.isTemporary)
-        .length === 1
-    ) {
-      return
-    }
-
-    if (buffer.isPreviewBuffer) {
-      await deleteBuffer(parseInt(id), true)
-      await repositionActiveBuffers(id)
-      return
-    }
-
-    if (buffer.isTemporary) {
-      await updateBuffer(parseInt(id), { isTemporary: false }, true)
-      return
-    }
-
-    if (
-      buffer?.value !== "" ||
-      (buffer.metricsViewState?.metrics &&
-        buffer.metricsViewState.metrics.length > 0) ||
-      buffer.notebookViewState != null
-    ) {
-      void trackEvent(ConsoleEvent.TAB_ARCHIVE, {
-        type: bufferTypeOf(buffer),
-      })
-      await archiveBuffer(parseInt(id))
-    } else {
-      await deleteBuffer(parseInt(id))
-    }
-    await repositionActiveBuffers(id)
+  // Keyboard users delete a history entry with Delete/Backspace on the entry
+  // itself (the menu's arrow keys never reach the trash button). Focus moves
+  // to the next entry, or the previous one, or "Clear history", before the
+  // deleted entry unmounts, so the menu keeps keyboard focus.
+  const focusNeighbourHistoryItem = (item: HTMLElement) => {
+    const menu = item.closest('[role="menu"]')
+    if (!menu) return
+    const items = Array.from(
+      menu.querySelectorAll<HTMLElement>(
+        '[data-hook="editor-tabs-history-item"]',
+      ),
+    )
+    const index = items.indexOf(item)
+    const neighbour =
+      items[index + 1] ??
+      items[index - 1] ??
+      menu.querySelector<HTMLElement>('[data-hook="editor-tabs-history-clear"]')
+    neighbour?.focus()
   }
 
-  const reorder = async (
-    tabId: string,
-    _fromIndex: number,
-    toIndex: number,
-  ) => {
-    const beforeTab = buffers.find((tab) => tab.id === parseInt(tabId))
-    if (!beforeTab) {
-      return
-    }
-    const newTabs = buffers
-      .filter(
-        (tab) =>
-          tab.id !== parseInt(tabId) && (!tab.archived || tab.isTemporary),
-      )
-      .sort((a, b) => {
-        if (a.isTemporary) {
-          return 1
-        }
-        if (b.isTemporary) {
-          return -1
-        }
-        return a.position - b.position
-      })
-    newTabs.splice(toIndex, 0, beforeTab)
-
-    const positions = newTabs.map((tab, index) => ({
-      id: tab.id as number,
-      position: index,
-    }))
-    await updateBuffersPositions(positions)
-  }
+  const reorder = (tabId: string, _fromIndex: number, toIndex: number) =>
+    reorderBuffer(parseInt(tabId), toIndex)
 
   const rename = async (id: string, title: string) => {
     const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
@@ -487,12 +501,6 @@ export const Tabs = () => {
     await updateBuffer(parseInt(id), {
       label: title.slice(0, MAX_BUFFER_NAME_LENGTH),
     })
-  }
-
-  const removeAllArchived = async () => {
-    for (const buffer of archivedBuffers) {
-      await deleteBuffer(buffer.id as number)
-    }
   }
 
   const handleNewTab = () => {
@@ -530,7 +538,7 @@ export const Tabs = () => {
       $tabsDisabled={tabsDisabled}
       data-hook={`editor-tabs${tabsDisabled ? "-disabled" : ""}`}
     >
-      <ReactChromeTabs
+      <TabBar
         darkMode
         limit={
           MAX_TABS - buffers.filter((b) => b.archived && !b.isTemporary).length
@@ -540,47 +548,33 @@ export const Tabs = () => {
         onTabActive={active}
         onTabRename={rename}
         onNewTab={handleNewTab}
-        tabs={buffers
-          .filter(
-            (buffer) =>
-              !(buffer as Record<string, unknown>)._markedForDeletion &&
-              (!buffer.archived || buffer.isTemporary),
-          )
-          .sort((a, b) => {
-            if (a.isTemporary) {
-              return 1
-            }
-            if (b.isTemporary) {
-              return -1
-            }
-            return a.position - b.position
-          })
-          .map((buffer) => {
-            const classNames = []
-            if (buffer.notebookViewState) {
-              classNames.push("notebook-tab")
-            }
-            if (buffer.metricsViewState) {
-              classNames.push("metrics-tab")
-            }
-            if (buffer.isTemporary) {
-              classNames.push("temporary-tab")
-            }
-            if (buffer.isPreviewBuffer) {
-              classNames.push("preview-tab")
-            }
+        tabs={sortOpenBuffers(buffers).map((buffer) => {
+          const classNames = []
+          if (buffer.notebookViewState) {
+            classNames.push("notebook-tab")
+          }
+          if (buffer.metricsViewState) {
+            classNames.push("metrics-tab")
+          }
+          if (buffer.isTemporary) {
+            classNames.push("temporary-tab")
+          }
+          if (buffer.isPreviewBuffer) {
+            classNames.push("preview-tab")
+          }
 
-            const className =
-              classNames.length > 0 ? classNames.join(" ") : undefined
+          const className =
+            classNames.length > 0 ? classNames.join(" ") : undefined
 
-            return {
-              id: buffer.id?.toString(),
-              faviconClass: mapTabIconToType(buffer),
-              title: buffer.label,
-              active: activeBuffer.id === buffer.id,
-              className,
-            } as Tab
-          })}
+          const tab: TabProperties = {
+            id: String(buffer.id),
+            faviconClass: mapTabIconToType(buffer),
+            title: buffer.label,
+            active: activeBuffer.id === buffer.id,
+            className,
+          }
+          return tab
+        })}
       />
       <DropdownMenu.Root
         modal={false}
@@ -594,6 +588,7 @@ export const Tabs = () => {
         <DropdownMenu.Trigger asChild>
           <ForwardRef>
             <HistoryButton
+              ref={historyButtonRef}
               label="Tab history"
               variant="ghost"
               aria-pressed={historyOpen}
@@ -606,72 +601,92 @@ export const Tabs = () => {
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenuContent data-hook="editor-tabs-history">
-            {archivedBuffers.length === 0 ? (
+            {closedBuffers.length === 0 ? (
               <div style={{ padding: "0.5rem 1.4rem" }}>
                 <Text color="contentSecondary">History is empty</Text>
               </div>
             ) : (
               <ArchivedBuffersList>
-                {archivedBuffers.map((buffer) => (
-                  <DropdownMenu.Item
-                    data-hook="editor-tabs-history-item"
-                    key={buffer.id}
-                    title={buffer.label}
-                    onClick={async () => {
-                      void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
-                      await updateBuffer(buffer.id as number, {
-                        archived: false,
-                        archivedAt: undefined,
-                        position: buffers.filter(
-                          (b) => !b.archived || b.isTemporary,
-                        ).length,
-                      })
-                      await setActiveBuffer(buffer)
-                    }}
-                    icon={
-                      buffer.metricsViewState ? (
-                        <LineChart size="16px" />
-                      ) : buffer.notebookViewState ? (
-                        <NotebookIcon size="16px" />
-                      ) : (
-                        <FileTextIcon size="16px" />
-                      )
-                    }
-                    subtitle={
-                      buffer.archivedAt ? (
-                        <span
-                          title={format(new Date(buffer.archivedAt), "P pppp", {
-                            locale: getLocaleFromLanguage(userLocale),
-                          })}
-                        >
-                          {formatDistance(
-                            buffer.archivedAt,
-                            new Date().getTime(),
-                            {
-                              locale: getLocaleFromLanguage(userLocale),
-                            },
-                          )}
-                          {" ago"}
-                        </span>
-                      ) : undefined
-                    }
-                  >
-                    <Text color="contentPrimary" ellipsis>
-                      {buffer.label.substring(0, 30)}
-                      {buffer.label.length > 30 ? "..." : ""}
-                    </Text>
-                  </DropdownMenu.Item>
+                {closedBuffers.map((buffer) => (
+                  <ArchivedBufferRow key={buffer.id}>
+                    <DropdownMenu.Item
+                      data-hook="editor-tabs-history-item"
+                      title={buffer.label}
+                      aria-keyshortcuts="Delete"
+                      onClick={() => {
+                        void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
+                        void restoreBuffer(buffer.id as number)
+                      }}
+                      onKeyDown={(event: React.KeyboardEvent<HTMLElement>) => {
+                        if (event.key !== "Delete" && event.key !== "Backspace")
+                          return
+                        event.preventDefault()
+                        focusNeighbourHistoryItem(event.currentTarget)
+                        deleteFromHistory(buffer, true)
+                      }}
+                      icon={
+                        buffer.metricsViewState ? (
+                          <LineChart size="16px" />
+                        ) : buffer.notebookViewState ? (
+                          <NotebookIcon size="16px" />
+                        ) : (
+                          <FileTextIcon size="16px" />
+                        )
+                      }
+                      subtitle={
+                        buffer.archivedAt ? (
+                          <span
+                            title={format(
+                              new Date(buffer.archivedAt),
+                              "P pppp",
+                              {
+                                locale: getLocaleFromLanguage(userLocale),
+                              },
+                            )}
+                          >
+                            {formatDistance(
+                              buffer.archivedAt,
+                              new Date().getTime(),
+                              {
+                                locale: getLocaleFromLanguage(userLocale),
+                              },
+                            )}
+                            {" ago"}
+                          </span>
+                        ) : undefined
+                      }
+                    >
+                      <Text color="contentPrimary" ellipsis>
+                        {buffer.label.substring(0, 30)}
+                        {buffer.label.length > 30 ? "..." : ""}
+                      </Text>
+                    </DropdownMenu.Item>
+                    {/* Mouse only: Delete on the entry is the keyboard path,
+                        and a menu cannot own a plain button. */}
+                    <IconButton
+                      label="Delete from history"
+                      size="sm"
+                      variant="dangerQuiet"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      data-hook="editor-tabs-history-item-delete"
+                      onClick={(event: React.MouseEvent) => {
+                        event.stopPropagation()
+                        if (!acceptDeleteClick()) return
+                        deleteFromHistory(buffer)
+                      }}
+                    >
+                      <Trash size="14px" />
+                    </IconButton>
+                  </ArchivedBufferRow>
                 ))}
               </ArchivedBuffersList>
             )}
-            {archivedBuffers.length > 0 && (
+            {closedBuffers.length > 0 && (
               <>
                 <DropdownMenu.Divider />
                 <DropdownMenu.Item
-                  onClick={() => {
-                    void trackEvent(ConsoleEvent.TAB_HISTORY_CLEAR)
-                    void removeAllArchived()
-                  }}
+                  onClick={() => setClearHistoryOpen(true)}
                   data-hook="editor-tabs-history-clear"
                   icon={<Trash size="16px" />}
                 >
@@ -724,6 +739,17 @@ export const Tabs = () => {
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
       <EditorSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <ClearHistoryDialog
+        open={clearHistoryOpen}
+        count={closedBuffers.length}
+        returnFocusRef={historyButtonRef}
+        onDismiss={() => setClearHistoryOpen(false)}
+        onConfirm={() => {
+          void trackEvent(ConsoleEvent.TAB_HISTORY_CLEAR)
+          void clearArchivedBuffers()
+          setClearHistoryOpen(false)
+        }}
+      />
       <ImportSummaryDialog
         open={importSummaryOpen}
         onOpenChange={setImportSummaryOpen}
@@ -747,15 +773,6 @@ export const Tabs = () => {
           >
             <DropdownMenu.Item
               onSelect={() => {
-                void addBuffer()
-              }}
-              data-hook="new-tab-editor"
-              icon={<FileTextIcon size={16} />}
-            >
-              New editor
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              onSelect={() => {
                 void addBuffer({
                   notebookViewState: createDefaultNotebookViewState(),
                 }).then((buffer) => {
@@ -773,6 +790,15 @@ export const Tabs = () => {
               icon={<NotebookIcon size={16} />}
             >
               New notebook
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() => {
+                void addBuffer()
+              }}
+              data-hook="new-tab-editor"
+              icon={<FileTextIcon size={16} />}
+            >
+              New editor
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>

@@ -15,6 +15,7 @@ export const buttonVariants = [
   "ghost",
   "danger",
   "dangerGhost",
+  "dangerQuiet",
   "success",
   "warning",
   "gradient",
@@ -92,6 +93,23 @@ const themes: {
       background: "surfaceRaised",
       border: "transparent",
       color: "contentPrimary",
+    },
+    disabled: {
+      background: "transparent",
+      border: "transparent",
+      color: "contentDisabled",
+    },
+  },
+  dangerQuiet: {
+    normal: {
+      background: "transparent",
+      border: "transparent",
+      color: "contentSecondary",
+    },
+    hover: {
+      background: "statusDangerSurfaceHover",
+      border: "transparent",
+      color: "statusDangerSubtle",
     },
     disabled: {
       background: "transparent",
@@ -202,7 +220,8 @@ export const makeButtonVariant = (variant: ButtonVariant) => {
           ? t.color.interactionHover
           : t.color[theme.hover.background]};
       color: ${({ theme: t }) =>
-        variant === "dangerGhost" && t.mode === "dark"
+        (variant === "dangerGhost" || variant === "dangerQuiet") &&
+        t.mode === "dark"
           ? t.color.statusDanger
           : t.color[theme.hover.color]};
       border-color: ${getColor(theme.hover.border)};

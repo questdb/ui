@@ -198,22 +198,109 @@
     }
   },
   {
-    "name": "delete_notebook",
+    "name": "archive_tab",
     "category": "free",
     "surfaces": ["ai", "mcp"],
-    "mutatesNotebook": true,
+    "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Archive (soft-delete) a notebook tab — the same as the user closing it with the X. It moves to history and the user can restore it; it is not permanently destroyed and query data is untouched. If this notebook is bound to the current chat, the binding goes stale (start a new one with create_notebook).",
+    "mutatesWorkspace": true,
+    "description": "Close a tab — the same as the user closing it with the X. Works for every tab kind: SQL editor, metrics, and notebook. The tab moves to the closed-tabs history with its content intact; the user can reopen it from the Tabs panel or history. Nothing is destroyed and query data is untouched. If it is the active tab, the console switches to the most recently used open tab automatically. If the tab is a notebook bound to the current chat, the binding goes stale (start a new one with create_notebook). Prefer this over delete_tab unless the user explicitly asks to delete.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "buffer_id": {
           "type": "number",
-          "description": "Notebook buffer id (from <notebook_context> prefix)."
+          "description": "Tab buffer id (from <notebook_context>, <workspace>, or active_buffer in get_workspace_state)."
         }
       },
       "required": ["buffer_id"]
+    }
+  },
+  {
+    "name": "delete_tab",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
+    "mutatesWorkspace": true,
+    "description": "Permanently delete a tab and its content: SQL text, metrics configuration, or notebook cells and saved results. Works for every tab kind and for open or closed tabs. This cannot be undone and the tab will not appear in history. Query data in the database is untouched. If it is the active tab, the console switches to the most recently used open tab automatically. Only call this when the user explicitly asks to delete; otherwise use archive_tab.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number",
+          "description": "Tab buffer id (from <notebook_context>, <workspace>, or active_buffer in get_workspace_state)."
+        }
+      },
+      "required": ["buffer_id"]
+    }
+  },
+  {
+    "name": "restore_tab",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
+    "mutatesWorkspace": true,
+    "description": "Reopen a closed tab — the reverse of archive_tab. Works for every tab kind: SQL editor, metrics, and notebook. The tab returns to the end of the open tabs with its content intact. It does NOT become the active tab; the user switches to it themselves (for notebooks, call activate_notebook only if they explicitly ask). No-op if the tab is already open.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number",
+          "description": "Tab buffer id of a closed tab (archived: true in <workspace>.tabs)."
+        }
+      },
+      "required": ["buffer_id"]
+    }
+  },
+  {
+    "name": "activate_tab",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
+    "mutatesWorkspace": true,
+    "description": "Switch the user's editor to the given tab so it becomes visible. Works for every tab kind: SQL editor, metrics, and notebook (for a notebook, prefer activate_notebook when you also want to focus a cell). The tab must be open; call restore_tab first if it is closed. ONLY call this after the user has explicitly agreed to be taken there. Never call it to auto-switch while the user is working elsewhere.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number",
+          "description": "Tab buffer id of an open tab (from <workspace>.tabs)."
+        }
+      },
+      "required": ["buffer_id"]
+    }
+  },
+  {
+    "name": "rename_tab",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
+    "mutatesWorkspace": true,
+    "description": "Rename a tab. Works for every tab kind and for open or closed tabs. The label is trimmed and must be 1–100 characters. Users refer to tabs by label, so choose short, descriptive names and tell the user the new label afterwards.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number",
+          "description": "Tab buffer id (from <workspace>.tabs)."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "New tab label."
+        }
+      },
+      "required": ["buffer_id", "label"]
     }
   },
   {

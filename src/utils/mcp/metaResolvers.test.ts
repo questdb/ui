@@ -25,6 +25,7 @@ const emptyDigest = (): UserActionDigest => ({
   deleted: new Set(),
   edited: new Set(),
   ran: new Map(),
+  tabChanges: [],
 })
 
 beforeEach(async () => {
@@ -51,9 +52,9 @@ describe("resolveGetWorkspaceState", () => {
     const ctx: MetaToolContext = {
       getActiveBufferId: () => null,
       getWorkspace: () => ({
-        notebooks: [
-          { buffer_id: 2, label: "Trades", archived: false },
-          { buffer_id: 5, label: "Latency", archived: false },
+        tabs: [
+          { buffer_id: 2, label: "Trades", kind: "notebook", archived: false },
+          { buffer_id: 5, label: "Latency", kind: "notebook", archived: false },
         ],
         active: { buffer_id: 9, label: "Query 1", kind: "sql" },
       }),
@@ -71,12 +72,40 @@ describe("resolveGetWorkspaceState", () => {
     expect(out[0].text).toMatch(/buffer_id/)
   })
 
+  it("lists SQL and metrics tabs when the workspace has no notebook", async () => {
+    // Given only SQL and metrics tabs, one of them closed
+    const ctx: MetaToolContext = {
+      getActiveBufferId: () => null,
+      getWorkspace: () => ({
+        tabs: [
+          { buffer_id: 11, label: "Query A", kind: "sql", archived: false },
+          { buffer_id: 12, label: "Latency", kind: "metrics", archived: false },
+          { buffer_id: 13, label: "Old query", kind: "sql", archived: true },
+        ],
+        active: { buffer_id: 11, label: "Query A", kind: "sql" },
+      }),
+      getDigest: () => null,
+    }
+
+    // When workspace state is resolved
+    const out = await resolveGetWorkspaceState(undefined, ctx)
+
+    // Then every tab is listed, so the tab tools can target it by buffer_id
+    expect(out[0].text).toMatch(/no_notebook_open/)
+    expect(out[0].text).toContain("<workspace>")
+    expect(out[0].text).toContain("buffer_id: 11")
+    expect(out[0].text).toContain("buffer_id: 12")
+    expect(out[0].text).toContain("buffer_id: 13")
+  })
+
   it("returns workspace + notebook_context when buffer is active", async () => {
     await seedNotebookBuffer(1)
     const ctx: MetaToolContext = {
       getActiveBufferId: () => 1,
       getWorkspace: () => ({
-        notebooks: [{ buffer_id: 1, label: "n1", archived: false }],
+        tabs: [
+          { buffer_id: 1, label: "n1", kind: "notebook", archived: false },
+        ],
         active: { buffer_id: 1, label: "n1", kind: "notebook" },
       }),
       getDigest: () => null,
@@ -93,7 +122,9 @@ describe("resolveGetWorkspaceState", () => {
     const ctx: MetaToolContext = {
       getActiveBufferId: () => 1,
       getWorkspace: () => ({
-        notebooks: [{ buffer_id: 1, label: "n1", archived: false }],
+        tabs: [
+          { buffer_id: 1, label: "n1", kind: "notebook", archived: false },
+        ],
         active: { buffer_id: 1, label: "n1", kind: "notebook" },
       }),
       getDigest: () => digest,
