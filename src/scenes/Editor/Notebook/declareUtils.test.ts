@@ -300,6 +300,36 @@ describe("prependGlobalsDeclare", () => {
     expect(sql).toBe("/* header */ DECLARE\n  @x := 1\nSELECT @x")
   })
 
+  it.each([
+    "/* '/*' */\n",
+    "/* 'a\n/* b' */\n",
+    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
+  ])("preserves globals and original SQL after %s", (prefix) => {
+    // Given / When
+    const prepared = prependGlobalsDeclare(
+      `${prefix}SELECT @x`,
+      vars({ x: "1" }),
+    )
+
+    // Then the original comment and SQL survive, with insertion at SELECT
+    expect(prepared.sql).toBe(`${prefix}DECLARE\n  @x := 1\nSELECT @x`)
+    expect(prepared.insertedRange?.start).toBe(prefix.length)
+  })
+
+  it("merges a user's DECLARE after a legacy comment without losing text", () => {
+    // Given / When
+    const prefix = "/* '/*' */\n"
+    const prepared = prependGlobalsDeclare(
+      `${prefix}DECLARE @y := '/* value */' SELECT @x, @y`,
+      vars({ x: "1" }),
+    )
+
+    // Then
+    expect(prepared.sql).toBe(
+      `${prefix}DECLARE\n  @x := 1,\n  @y := '/* value */' SELECT @x, @y`,
+    )
+  })
+
   it("no-ops when every global is shadowed by a user local", () => {
     const sql = "DECLARE @x := 99 SELECT @x"
     expect(prependGlobalsDeclare(sql, vars({ x: "1" }))).toEqual({
