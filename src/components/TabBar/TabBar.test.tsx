@@ -10,11 +10,11 @@ import { TabBar } from "./TabBar"
 const TAB_WIDTH = 150
 const slotCenter = (index: number) => index * TAB_WIDTH + TAB_WIDTH / 2
 
-const pointer = (type: string, clientX: number) => {
+const pointer = (type: string, clientX: number, button = 0) => {
   const event = new MouseEvent(type, {
     bubbles: true,
     cancelable: true,
-    button: 0,
+    button,
     clientX,
   })
   Object.defineProperty(event, "pointerId", { value: 1 })
@@ -22,6 +22,7 @@ const pointer = (type: string, clientX: number) => {
 }
 
 const onTabReorder = vi.fn()
+const onTabActive = vi.fn()
 let closeFirstTab: () => void = () => undefined
 
 const Bar = () => {
@@ -30,7 +31,7 @@ const Bar = () => {
   return (
     <TabBar
       tabs={ids.map((id) => ({ id, title: `Tab ${id}`, active: id === "3" }))}
-      onTabActive={() => undefined}
+      onTabActive={onTabActive}
       onTabClose={() => undefined}
       onTabRename={() => undefined}
       onNewTab={() => undefined}
@@ -44,12 +45,17 @@ const displayedIds = (container: HTMLElement) =>
     tab.getAttribute("data-tab-id"),
   )
 
-const pressOnTab = (container: HTMLElement, id: string, clientX: number) => {
+const pressOnTab = (
+  container: HTMLElement,
+  id: string,
+  clientX: number,
+  button = 0,
+) => {
   const handle = container.querySelector(
     `.chrome-tab[data-tab-id="${id}"] .chrome-tab-drag-handle`,
   ) as HTMLElement
   act(() => {
-    handle.dispatchEvent(pointer("pointerdown", clientX))
+    handle.dispatchEvent(pointer("pointerdown", clientX, button))
   })
 }
 
@@ -65,6 +71,7 @@ const releasePointer = (clientX: number) =>
 
 beforeEach(() => {
   onTabReorder.mockReset()
+  onTabActive.mockReset()
   vi.stubGlobal("requestAnimationFrame", () => 1)
   vi.stubGlobal("cancelAnimationFrame", () => undefined)
 })
@@ -101,6 +108,35 @@ describe("TabBar drag", () => {
     expect(onTabReorder).not.toHaveBeenCalled()
     expect(displayedIds(container)).toEqual(["2", "3", "4"])
     expect(container.querySelector(".chrome-tab-is-dragging")).toBeNull()
+  })
+})
+
+describe("TabBar activation", () => {
+  it("activates a tab on a primary-button press", () => {
+    // Given four tabs with tab 3 active
+    const { container } = renderComponent(<Bar />)
+
+    // When the user presses tab 1 with the primary button
+    pressOnTab(container, "1", slotCenter(0))
+    releasePointer(slotCenter(0))
+
+    // Then tab 1 is activated
+    expect(onTabActive).toHaveBeenCalledWith("1")
+  })
+
+  it.each([
+    ["middle", 1],
+    ["right", 2],
+  ])("leaves the active tab alone on a %s click", (_name, button) => {
+    // Given four tabs with tab 3 active
+    const { container } = renderComponent(<Bar />)
+
+    // When the user presses tab 1 with a non-primary button
+    pressOnTab(container, "1", slotCenter(0), button)
+    releasePointer(slotCenter(0))
+
+    // Then no tab is activated
+    expect(onTabActive).not.toHaveBeenCalled()
   })
 })
 

@@ -52,12 +52,14 @@ describe("runCellsAutomatically", () => {
     // When they are run automatically
     await runCellsAutomatically(1, ["a", "b"])
 
-    // Then both ran gated, and nothing is reported
+    // Then both ran gated, as user runs, and nothing is reported
     expect(runCell).toHaveBeenCalledWith("a", undefined, undefined, {
       kind: "autoRun",
+      initiator: "user",
     })
     expect(runCell).toHaveBeenCalledWith("b", undefined, undefined, {
       kind: "autoRun",
+      initiator: "user",
     })
     expect(toastError).not.toHaveBeenCalled()
   })

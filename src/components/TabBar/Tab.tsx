@@ -109,6 +109,8 @@ export const Tab = ({
           className="chrome-tab-drag-handle"
           role="presentation"
           onPointerDown={(event) => {
+            // Right and middle clicks leave the active tab alone.
+            if (event.button !== 0) return
             onActivate(tab.id)
             onHandlePointerDown(event)
           }}

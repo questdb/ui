@@ -965,6 +965,7 @@ describe("EditorProvider: example dashboards", () => {
         await waitFor(() =>
           expect(runCell).toHaveBeenCalledWith("c1", undefined, undefined, {
             kind: "autoRun",
+            initiator: "user",
           }),
         )
         expect(runCell).toHaveBeenCalledTimes(1)

@@ -3,6 +3,49 @@
 // An exported notebook carries which cells were showing a result, but not
 // the rows. On import, read-only cells that were showing a result run again;
 // cells with DDL/DML are held and the toast says so.
+
+// The stored lastRunStatus of a notebook cell, polled until it matches: the
+// imported cells run in the background, before the tab is opened.
+const waitForStoredRunStatus = (label, cellId, expected) =>
+  cy.window().then((win) => {
+    const deadline = Date.now() + 10000
+    const read = () =>
+      new Cypress.Promise((resolve, reject) => {
+        const request = win.indexedDB.open("web-console")
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const database = request.result
+          const transaction = database.transaction("buffers", "readonly")
+          const rows = transaction.objectStore("buffers").getAll()
+          transaction.onerror = () => {
+            database.close()
+            reject(transaction.error)
+          }
+          transaction.oncomplete = () => {
+            database.close()
+            const buffer = rows.result.find((row) => row.label === label)
+            const cell = buffer?.notebookViewState?.cells.find(
+              (candidate) => candidate.id === cellId,
+            )
+            resolve(cell?.lastRunStatus)
+          }
+        }
+      })
+    const poll = () =>
+      read().then((actual) => {
+        if (actual === expected) return
+        if (Date.now() >= deadline) {
+          throw new Error(
+            `Cell ${cellId} lastRunStatus ${actual}, expected ${expected}`,
+          )
+        }
+        return new Cypress.Promise((resolve) =>
+          win.setTimeout(resolve, 50),
+        ).then(poll)
+      })
+    return poll()
+  })
+
 describe("import runs read-only cells", () => {
   beforeEach(() => {
     // A plain console: no example dashboards, whatever the served config says.
@@ -25,6 +68,15 @@ describe("import runs read-only cells", () => {
       .should("be.visible")
       .should("contain", "Imported 1 tab successfully.")
       .should("contain", "1 cell containing DDL/DML was not run automatically.")
+
+    // The console ran the cell for the user, not an agent: once the run has
+    // committed, no agent change is announced.
+    waitForStoredRunStatus("Imported notebook runs", "dql", "success")
+    // An announcement follows the commit; give it time to render before
+    // checking that there is none.
+    cy.wait(1000)
+    cy.getByDataHook("agent-changes-popper").should("not.exist")
+    cy.getByDataHook("mcp-status-pill").should("not.contain", "new changes")
 
     cy.getEditorTabByTitle("Imported notebook runs")
       .find(".chrome-tab-drag-handle")

@@ -94,7 +94,10 @@ export const runCellsAutomatically = async (
   for (const cellId of cellIds) {
     try {
       const summary = await withBoundNotebook(bufferId, (controller) =>
-        controller.runCell(cellId, undefined, undefined, { kind: "autoRun" }),
+        controller.runCell(cellId, undefined, undefined, {
+          kind: "autoRun",
+          initiator: "user",
+        }),
       )
       if (summary.denied !== undefined) notRun += 1
     } catch (error) {
