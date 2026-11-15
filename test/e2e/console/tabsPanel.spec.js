@@ -1316,18 +1316,22 @@ describe("tab history dropdown", () => {
 })
 
 describe("AI diff tab", () => {
-  const tabTitles = () =>
-    cy
-      .get(".chrome-tab")
-      .then(($tabs) =>
+  // Retried until they match: the panel reorders at once, the tab bar once
+  // the new positions are read back from IndexedDB.
+  const expectTabTitles = (expected) =>
+    cy.get(".chrome-tab").should(($tabs) => {
+      expect(
         [...$tabs].map((tab) => tab.getAttribute("data-tab-title")),
-      )
+      ).to.deep.equal(expected)
+    })
 
-  const panelLabels = () =>
+  const expectPanelLabels = (expected) =>
     cy
       .getByDataHook("tabs-panel-open")
       .find(ROW)
-      .then(($rows) => [...$rows].map((row) => row.textContent))
+      .should(($rows) => {
+        expect([...$rows].map((row) => row.textContent)).to.deep.equal(expected)
+      })
 
   const dragTabOnto = (source, target) => {
     const handle = (title) =>
@@ -1395,31 +1399,31 @@ describe("AI diff tab", () => {
 
   it("stays after every tab, is not listed in the Tabs panel, and does not shift a reorder", () => {
     // Then the diff tab is last in the tab bar
-    tabTitles().should("deep.equal", ["SQL", "Beta", "AI Suggestion"])
+    expectTabTitles(["SQL", "Beta", "AI Suggestion"])
 
     // And the Tabs panel lists only the user's tabs, in both modes
     openTabsPanel()
     editors().find(ROW).should("have.length", 2)
     cy.getByDataHook("tabs-panel").should("not.contain", "AI Suggestion")
     setViewMode("list")
-    panelLabels().should("deep.equal", ["SQL", "Beta"])
+    expectPanelLabels(["SQL", "Beta"])
 
     // When the user moves SQL down from the keyboard in the list
     openRow("SQL").find('[data-hook="tabs-panel-row-button"]').focus()
     cy.realPress(["Alt", "ArrowDown"])
 
     // Then the list and the tab bar agree, and the diff tab is still last
-    panelLabels().should("deep.equal", ["Beta", "SQL"])
-    tabTitles().should("deep.equal", ["Beta", "SQL", "AI Suggestion"])
+    expectPanelLabels(["Beta", "SQL"])
+    expectTabTitles(["Beta", "SQL", "AI Suggestion"])
     cy.wait(500)
-    panelLabels().should("deep.equal", ["Beta", "SQL"])
+    expectPanelLabels(["Beta", "SQL"])
     setViewMode("groups")
 
     // When the user drags a tab onto the diff tab
     dragTabOnto("Beta", "AI Suggestion")
 
     // Then it lands last among the user's tabs, never after the diff tab
-    tabTitles().should("deep.equal", ["SQL", "Beta", "AI Suggestion"])
+    expectTabTitles(["SQL", "Beta", "AI Suggestion"])
 
     // And the diff tab itself cannot be dragged
     cy.get(
@@ -1433,7 +1437,7 @@ describe("AI diff tab", () => {
       })
     cy.get(".chrome-tab-is-dragging").should("not.exist")
     cy.get("body").realMouseUp({ scrollBehavior: false })
-    tabTitles().should("deep.equal", ["SQL", "Beta", "AI Suggestion"])
+    expectTabTitles(["SQL", "Beta", "AI Suggestion"])
   })
 
   it("closes next to a single tab and is not reported to the agent as a user deletion", () => {
@@ -1454,7 +1458,7 @@ describe("AI diff tab", () => {
 
     // Then it is gone, and the user's tab remains
     cy.getEditorTabByTitle("AI Suggestion").should("not.exist")
-    tabTitles().should("deep.equal", ["SQL"])
+    expectTabTitles(["SQL"])
 
     // And the agent's digest does not report a deleted tab
     cy.window()

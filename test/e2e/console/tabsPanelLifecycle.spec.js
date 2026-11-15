@@ -124,9 +124,11 @@ describe("Tabs panel lifecycle", () => {
     cy.loadConsoleWithAuth(false, {}, { buffers, activeBufferId: 1 })
     openPanel()
     cy.getByDataHook("tabs-panel-include-closed").check({ force: true })
+    // The SQL folder holds the active tab, so it opens even though the other
+    // folders start collapsed on a showcase deployment
     cy.getByDataHook("tabs-panel-group-sql")
-      .find('[aria-expanded="false"]')
-      .click()
+      .find("[aria-expanded]")
+      .should("have.attr", "aria-expanded", "true")
     cy.intercept("GET", "**/exec*", (request) => {
       const query = new URL(request.url).searchParams.get("query")
       if (query?.toLowerCase() !== "select 1 as first") return
