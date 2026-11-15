@@ -55,7 +55,7 @@ import {
   sortClosedBuffers,
   sortOpenBuffers,
 } from "../../../utils/buffers/tabOrder"
-import { acceptDeleteClick } from "../../../utils/buffers/deleteClickGuard"
+import { acceptRowActionClick } from "../../../utils/buffers/rowActionClickGuard"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -184,6 +184,7 @@ export const Tabs = () => {
   } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false)
+  const [clearHistoryCount, setClearHistoryCount] = useState(0)
   const [importSummaryOpen, setImportSummaryOpen] = useState(false)
   const [importedCount, setImportedCount] = useState(0)
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
@@ -462,12 +463,17 @@ export const Tabs = () => {
   // active tab.
   const deleteFromHistory = (buffer: Buffer, keepFocus = false) => {
     void trackEvent(ConsoleEvent.TAB_HISTORY_DELETE)
-    void deleteBuffer(
-      buffer.id as number,
-      keepFocus ? buffer.isTemporary === true : true,
-      "user",
-      { focusEditor: !keepFocus },
-    )
+    void deleteBuffer(buffer.id as number, {
+      activateNext: keepFocus ? buffer.isTemporary === true : true,
+      focus: !keepFocus,
+    })
+  }
+
+  // The dialog keeps the count it opened with: the tabs are deleted one by one
+  // while it fades out.
+  const openClearHistory = () => {
+    setClearHistoryCount(closedBuffers.length)
+    setClearHistoryOpen(true)
   }
 
   // Keyboard users delete a history entry with Delete/Backspace on the entry
@@ -621,6 +627,9 @@ export const Tabs = () => {
                         if (event.key !== "Delete" && event.key !== "Backspace")
                           return
                         event.preventDefault()
+                        // A held key repeats on the entry that takes focus
+                        // next: one key press deletes one entry.
+                        if (event.repeat) return
                         focusNeighbourHistoryItem(event.currentTarget)
                         deleteFromHistory(buffer, true)
                       }}
@@ -672,7 +681,7 @@ export const Tabs = () => {
                       data-hook="editor-tabs-history-item-delete"
                       onClick={(event: React.MouseEvent) => {
                         event.stopPropagation()
-                        if (!acceptDeleteClick()) return
+                        if (!acceptRowActionClick()) return
                         deleteFromHistory(buffer)
                       }}
                     >
@@ -686,7 +695,7 @@ export const Tabs = () => {
               <>
                 <DropdownMenu.Divider />
                 <DropdownMenu.Item
-                  onClick={() => setClearHistoryOpen(true)}
+                  onClick={openClearHistory}
                   data-hook="editor-tabs-history-clear"
                   icon={<Trash size="16px" />}
                 >
@@ -741,7 +750,7 @@ export const Tabs = () => {
       <EditorSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <ClearHistoryDialog
         open={clearHistoryOpen}
-        count={closedBuffers.length}
+        count={clearHistoryCount}
         returnFocusRef={historyButtonRef}
         onDismiss={() => setClearHistoryOpen(false)}
         onConfirm={() => {

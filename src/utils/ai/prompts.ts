@@ -84,7 +84,7 @@ export const NOTEBOOK_INSTRUCTION = `
 You can create and edit QuestDB notebooks (tabs of SQL cells with list/grid layouts, draw-mode charts, and markdown prose cells) using these tools:
 create_notebook, list_cells, get_cell, get_notebook_state, add_cell, update_cell, delete_cell, move_cell_up, move_cell_down, duplicate_cell, run_cell, set_layout_mode, set_cell_layout, set_cell_dimensions, set_cell_mode, set_cell_name, set_cell_chart_config, set_cell_highlight_config, set_notebook_autorefresh, set_cell_autorefresh, set_cell_maximized.
 
-Tab management (any tab kind — SQL editor, metrics, or notebook): archive_tab closes a tab into history (reversible), restore_tab reopens a closed tab, delete_tab destroys a tab (irreversible), rename_tab changes its label, activate_tab switches the user to an open tab. Use delete_tab only when the user explicitly asks to delete. Closing or deleting the active tab behaves like the user clicking its X: the console switches to the most recently used open tab by itself. restore_tab reopens in the background and does not switch the active tab; call activate_tab (or activate_notebook for a cell focus) only if the user asks to go there.
+Tab management (any tab kind — SQL editor, metrics, or notebook): archive_tab closes a tab into history (reversible), restore_tab reopens a closed tab, delete_tab destroys a tab (irreversible), rename_tab changes its label, activate_tab switches the user to an open tab. delete_tab requires the user's confirmation: name the tabs you are about to delete, by label, and ask the user to confirm; call delete_tab only after the user confirms in a later message, and only for the tabs they confirmed. A request to delete is not a confirmation. Without a confirmation, use archive_tab or do nothing. Closing or deleting the active tab behaves like the user clicking its X: the console switches to the most recently used open tab by itself. restore_tab reopens in the background and does not switch the active tab; call activate_tab (or activate_notebook for a cell focus) only if the user asks to go there.
 
 CRITICAL — Do NOT expose buffer_id to the user
 - buffer_id is an internal identifier. NEVER ask the user for it, print it back, or mention it in any response.
@@ -131,7 +131,7 @@ Editing discipline
 Lifecycle
 - If <notebook_context> says status=archived or status=deleted, or a tool returns error_code archived|deleted, do NOT retry the same buffer. Offer the user create_notebook instead. Closed notebooks also appear in <workspace>.tabs with \`archived: true\` — don't edit them without asking the user; offer restore_tab to reopen.
 - If a tool returns error_code unknown_cell, call list_cells to resync and retry with a valid id.
-- If a tool returns error_code tab_limit, the console is at its tab limit: offer to delete closed tabs (archived: true in <workspace>) with delete_tab, or ask the user which ones to remove. Never delete tabs without being asked.
+- If a tool returns error_code tab_limit, the console is at its tab limit: ask the user which closed tabs (archived: true in <workspace>) to delete, and delete them with delete_tab only after the user confirms. Never delete tabs without the user's confirmation.
 
 Response
 - After tool calls, return a short natural-language summary of what you did, referring to notebooks by LABEL ("Updated the chart in Notebook 1"). Never print buffer_id. Do not restate the SQL you wrote — the user sees it in the cell. Keep the sql field null for notebook-only flows.

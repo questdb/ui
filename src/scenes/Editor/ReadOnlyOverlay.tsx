@@ -36,11 +36,19 @@ const scrollContainerOf = (from: Element, dx: number, dy: number) => {
   return null
 }
 
-const LEGACY_WHEEL_FIELDS = ["wheelDelta", "wheelDeltaX", "wheelDeltaY"]
+const LEGACY_WHEEL_FIELDS = [
+  "wheelDelta",
+  "wheelDeltaX",
+  "wheelDeltaY",
+] as const
 
-const copyLegacyWheelFields = (from: WheelEvent, to: WheelEvent) => {
+// Non-standard fields that browsers still set on wheel events.
+type LegacyWheelEvent = WheelEvent &
+  Partial<Record<(typeof LEGACY_WHEEL_FIELDS)[number], number>>
+
+const copyLegacyWheelFields = (from: LegacyWheelEvent, to: WheelEvent) => {
   for (const field of LEGACY_WHEEL_FIELDS) {
-    const value = (from as unknown as Record<string, unknown>)[field]
+    const value = from[field]
     if (typeof value === "number") {
       Object.defineProperty(to, field, { value })
     }

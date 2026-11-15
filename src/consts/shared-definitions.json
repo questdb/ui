@@ -224,7 +224,7 @@
     "mutatesNotebook": false,
     "createsNotebook": false,
     "mutatesWorkspace": true,
-    "description": "Permanently delete a tab and its content: SQL text, metrics configuration, or notebook cells and saved results. Works for every tab kind and for open or closed tabs. This cannot be undone and the tab will not appear in history. Query data in the database is untouched. If it is the active tab, the console switches to the most recently used open tab automatically. Only call this when the user explicitly asks to delete; otherwise use archive_tab.",
+    "description": "Permanently delete a tab and its content: SQL text, metrics configuration, or notebook cells and saved results. Works for every tab kind and for open or closed tabs. This cannot be undone and the tab will not appear in history. Query data in the database is untouched. If it is the active tab, the console switches to the most recently used open tab automatically. Requires the user's confirmation: first name the tabs to delete and ask the user to confirm, then call this only after the user confirms in a later message. Otherwise use archive_tab.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,

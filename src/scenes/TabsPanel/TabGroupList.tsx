@@ -1,17 +1,11 @@
 import React, { useMemo } from "react"
-import {
-  ArrowCounterClockwiseIcon,
-  TrashIcon,
-  XIcon,
-} from "@phosphor-icons/react"
 import { format, formatDistance } from "date-fns"
-import { Tooltip } from "../../components"
 import { useEditor } from "../../providers"
 import type { Buffer } from "../../store/buffers"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../utils"
 import { TabRow } from "./TabRow"
 import { BufferIcon } from "./bufferIcon"
-import { DeleteRowButton, ROW_ICON_SIZE, RowIconButton } from "./rowActions"
+import { RowActions } from "./rowActions"
 import { isOwnActivationKey } from "./keyboard"
 import { useRowActions } from "./useRowActions"
 
@@ -23,7 +17,7 @@ type Props = {
 export const TabGroupList = ({ rows }: Props) => {
   const { activeBuffer, setActiveBuffer, previewBuffer, tabsDisabled } =
     useEditor()
-  const { canRemove, close, remove, reopen } = useRowActions()
+  const rowActions = useRowActions()
   const locale = useMemo(() => getLocaleFromLanguage(fetchUserLocale()), [])
 
   const activate = (buffer: Buffer) =>
@@ -37,40 +31,6 @@ export const TabGroupList = ({ rows }: Props) => {
         {formatDistance(buffer.archivedAt, Date.now(), { locale })} ago
       </span>
     ) : undefined
-
-  const actionsFor = (buffer: Buffer) => (
-    <>
-      {buffer.archived ? (
-        <Tooltip content="Reopen" placement="right">
-          <RowIconButton
-            label="Reopen tab"
-            disabled={tabsDisabled}
-            data-hook="tabs-panel-reopen"
-            onClick={(event) => void reopen(buffer, event.currentTarget)}
-          >
-            <ArrowCounterClockwiseIcon size={ROW_ICON_SIZE} />
-          </RowIconButton>
-        </Tooltip>
-      ) : (
-        <RowIconButton
-          label="Close tab"
-          disabled={!canRemove}
-          data-hook="tabs-panel-close"
-          onClick={(event) => void close(buffer, event.currentTarget)}
-        >
-          <XIcon size={ROW_ICON_SIZE} />
-        </RowIconButton>
-      )}
-      <DeleteRowButton
-        label="Delete tab"
-        disabled={tabsDisabled || (!buffer.archived && !canRemove)}
-        data-hook="tabs-panel-delete"
-        onClick={(event) => void remove(buffer, event.currentTarget)}
-      >
-        <TrashIcon size={ROW_ICON_SIZE} />
-      </DeleteRowButton>
-    </>
-  )
 
   return (
     <div role="list" data-hook="tabs-panel-list">
@@ -97,7 +57,7 @@ export const TabGroupList = ({ rows }: Props) => {
                 void activate(buffer)
               }
             }}
-            actions={actionsFor(buffer)}
+            actions={<RowActions buffer={buffer} actions={rowActions} />}
           />
         </div>
       ))}

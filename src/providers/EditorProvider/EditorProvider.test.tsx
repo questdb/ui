@@ -125,6 +125,12 @@ const seed = async (rows: Array<Partial<Buffer>>, activeIndex = 0) => {
 
 const activeId = async () => (await bufferStore.getActiveId())?.value
 
+const fakeModel = (value: string) => ({
+  getValue: () => value,
+  getFullModelRange: () => ({}),
+  dispose: () => undefined,
+})
+
 const waitForReady = () => findHook("editor-ready")
 
 const openPositions = async () =>
@@ -463,6 +469,45 @@ describe("EditorProvider: adding tabs", () => {
     ])
   })
 
+  it("puts the new tab's text in the editor before it resolves", async () => {
+    // Given an open SQL tab shown in the editor
+    await seed([{ label: "Initial", value: "select 1" }])
+    renderProvider()
+    await waitForReady()
+    let model = fakeModel("select 1")
+    let selected = false
+    editor.editorRef.current = {
+      getModel: () => model,
+      setModel: (next: typeof model) => {
+        model = next
+      },
+      setSelection: () => {
+        selected = true
+      },
+      saveViewState: () => null,
+      restoreViewState: () => undefined,
+      focus: () => undefined,
+    } as unknown as NonNullable<EditorContext["editorRef"]["current"]>
+    editor.monacoRef.current = {
+      editor: { createModel: fakeModel, setModelMarkers: () => undefined },
+    } as unknown as NonNullable<EditorContext["monacoRef"]["current"]>
+
+    // When a query is opened in a new tab (a query sent during a preview)
+    let created: Buffer | undefined
+    await act(async () => {
+      created = await editor.addBuffer(
+        { value: "select 7" },
+        { shouldSelectAll: true },
+      )
+    })
+
+    // Then the new tab is active and the editor already holds its selected
+    // text, so a run started right after targets it
+    expect(editor.activeBuffer.id).toBe(created?.id)
+    expect(model.getValue()).toBe("select 7")
+    expect(selected).toBe(true)
+  })
+
   it("enforces the tab limit across concurrent creations", async () => {
     // Given one remaining slot and two requests using the same callback
     await seed(Array.from({ length: MAX_TABS - 1 }, () => ({})))
@@ -593,6 +638,45 @@ describe("EditorProvider: reload during a preview", () => {
   })
 })
 
+describe("EditorProvider: closing the previewed tab", () => {
+  it.each([1, 2])(
+    "ends the preview and keeps the closed tab next to %i open tab(s)",
+    async (openCount) => {
+      // Given a closed SQL tab previewed next to the open tabs
+      const ids = await seed([
+        ...Array.from({ length: openCount }, (_, index) => ({
+          label: `Open ${index}`,
+          value: `select ${index}`,
+        })),
+        {
+          label: "Closed",
+          value: "select closed",
+          archived: true,
+          archivedAt: 1,
+          position: -1,
+        },
+      ])
+      const closed = ids[openCount]
+      renderProvider()
+      await waitForReady()
+      await act(() => editor.previewBuffer(closed))
+      await waitFor(() => expect(editor.activeBuffer.id).toBe(closed))
+
+      // When the user closes the preview from its tab
+      await act(() => editor.closeBuffer(closed))
+
+      // Then an open tab is active and the closed tab is still in history
+      await waitFor(() => expect(editor.activeBuffer.id).toBe(ids[0]))
+      const stored = await db.buffers.get(closed)
+      expect(stored?.archived).toBe(true)
+      expect(stored?.value).toBe("select closed")
+      expect(editor.buffers.find((b) => b.id === closed)?.isTemporary).toBe(
+        false,
+      )
+    },
+  )
+})
+
 describe("EditorProvider: reopening the previewed tab", () => {
   it("makes it a regular, editable tab", async () => {
     // Given a closed SQL tab that is being previewed
@@ -669,7 +753,7 @@ describe("EditorProvider: removing a tab", () => {
       await act(async () => {
         await editor.addBuffer({ label: "C", value: "select 3" })
       })
-      await act(() => editor.deleteBuffer(b, true, "agent"))
+      await act(() => editor.deleteBuffer(b, { initiator: "agent" }))
 
       // Then the rejection has not blocked later removals
       expect(await openPositions()).toEqual([["C", 0]])
@@ -715,7 +799,7 @@ describe("EditorProvider: removing a tab", () => {
     await act(async () => {
       await Promise.all([
         editor.deleteBuffer(closed),
-        editor.deleteBuffer(diff, true, "agent"),
+        editor.deleteBuffer(diff, { initiator: "agent" }),
       ])
     })
 
@@ -735,7 +819,7 @@ describe("EditorProvider: removing a tab", () => {
     await waitForReady()
 
     // When the middle tab is closed by an agent
-    await act(() => editor.archiveBuffer(b, "agent"))
+    await act(() => editor.archiveBuffer(b, { initiator: "agent" }))
 
     // Then the remaining tabs keep consecutive positions
     expect(await openPositions()).toEqual([
@@ -794,8 +878,8 @@ describe("EditorProvider: user actions", () => {
     await waitForReady()
 
     // When an agent closes one and deletes the other
-    await act(() => editor.archiveBuffer(a, "agent"))
-    await act(() => editor.deleteBuffer(b, true, "agent"))
+    await act(() => editor.archiveBuffer(a, { initiator: "agent" }))
+    await act(() => editor.deleteBuffer(b, { initiator: "agent" }))
 
     // Then nothing is reported back as a user action
     expect(tabEvents()).toEqual([])
@@ -1033,7 +1117,7 @@ describe("EditorProvider: example dashboards", () => {
 
   it("keeps explicit archive operations reversible for examples", async () => {
     const notebook = await openExample()
-    await act(() => editor.archiveBuffer(notebook, "agent"))
+    await act(() => editor.archiveBuffer(notebook, { initiator: "agent" }))
     expect((await db.buffers.get(notebook))?.archived).toBe(true)
     expect((await db.buffers.get(notebook))?.templateId).toBeUndefined()
   })
@@ -1264,7 +1348,42 @@ describe("EditorProvider: example dashboards", () => {
       ["Second", 2],
       ["Trades", 3],
     ])
-    expect(editor.activeBuffer.templateId).toBe("trades")
+  })
+
+  it("opens a delayed example in the background once the user has moved to another tab", async () => {
+    // Given an example whose file is still being fetched while tab A is active
+    const [, other] = await seed([
+      { label: "A", value: "select 1" },
+      { label: "B", value: "select 2" },
+    ])
+    localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+    let respond: (response: Response) => void = () => undefined
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((resolve) => (respond = resolve))),
+    )
+    const example = { id: "trades", title: "Trades", path: "t.json" }
+    renderProvider({ exampleDashboards: [example] })
+    await waitForReady()
+    let opening = Promise.resolve()
+    act(() => {
+      opening = editor.openExampleDashboard(example)
+    })
+
+    // When the user activates tab B before the file arrives
+    await act(() => editor.setActiveBuffer(editor.buffers[1]))
+    await act(async () => {
+      respond(new Response(JSON.stringify(exampleFile("Trades"))))
+      await opening
+    })
+
+    // Then the example exists, and the user stays on tab B
+    const examples = (await bufferStore.getAll()).filter(
+      (buffer) => buffer.templateId === example.id,
+    )
+    expect(examples).toHaveLength(1)
+    expect(editor.activeBuffer.id).toBe(other)
+    expect(await activeId()).toBe(other)
   })
 
   it("shows a spinner while a first visitor's example loads", async () => {

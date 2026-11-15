@@ -46,6 +46,8 @@ import {
   Box,
   Button,
   PaneContent,
+  PaneHeader,
+  PaneHeaderRow,
   PaneWrapper,
   PrimaryToggleButton,
   Tooltip,
@@ -91,21 +93,14 @@ const loadingStyles = css`
   justify-content: center;
 `
 
-// Same frame as the Search and Tabs panels, so the filter inputs of the three
-// left panels sit on the same line.
-const Header = styled.div`
+const Header = styled(PaneHeader)`
   position: relative;
   z-index: 5;
-  padding: 1.2rem 1.4rem 1rem;
   background: ${({ theme }) => theme.color.surfaceRaised};
-  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
-const HeaderRow = styled.div`
-  display: flex;
-  align-items: center;
+const HeaderRow = styled(PaneHeaderRow)`
   justify-content: space-between;
-  height: 4.5rem;
   gap: 0.4rem;
 `
 

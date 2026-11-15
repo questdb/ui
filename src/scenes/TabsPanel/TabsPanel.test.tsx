@@ -136,13 +136,13 @@ describe("TabsPanel active tab reveal", () => {
     expect(row).not.toBeNull()
     expect(scrollIntoView).toHaveBeenLastCalledWith({
       behavior: "instant",
-      block: "center",
+      block: "nearest",
       inline: "nearest",
     })
     expect(scrollIntoView.mock.instances.at(-1)).toBe(row)
   }
 
-  it("centers the active row after opening its group and preserves keyboard focus", () => {
+  it("reveals the active row after opening its group and preserves keyboard focus", () => {
     const { rerender } = renderComponent(<TabsPanel open />)
     fireEvent.click(sectionHeader("tabs-panel-group-sql")!)
     const filter = document.querySelector<HTMLInputElement>(

@@ -83,6 +83,9 @@ export const TabSection = ({
 
   // A collapsed section mounts its rows after expanding. Scroll after that
   // commit, before paint, without moving keyboard focus from the editor.
+  // "nearest" leaves a row that is already in view where it is: a clicked row
+  // must not move away under the pointer before the second click of a
+  // double-click.
   useLayoutEffect(() => {
     if (!expanded || activeTabId === undefined) return
     rootRef.current
@@ -91,7 +94,7 @@ export const TabSection = ({
       )
       ?.scrollIntoView({
         behavior: "instant",
-        block: "center",
+        block: "nearest",
         inline: "nearest",
       })
   }, [activeTabId, expanded])

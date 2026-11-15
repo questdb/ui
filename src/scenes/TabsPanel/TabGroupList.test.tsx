@@ -4,7 +4,7 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../theme"
 import type { Buffer } from "../../store/buffers"
-import { resetDeleteClickGuard } from "../../utils/buffers/deleteClickGuard"
+import { resetRowActionClickGuard } from "../../utils/buffers/rowActionClickGuard"
 
 const mocks = vi.hoisted(() => ({
   editor: {
@@ -51,8 +51,10 @@ const buffer = (id: number, label: string, extra: Partial<Buffer> = {}) =>
 let renderer: ReactTestRenderer | undefined
 
 beforeEach(() => {
-  resetDeleteClickGuard()
+  resetRowActionClickGuard()
+  mocks.editor.closeBuffer.mockReset()
   mocks.editor.deleteBuffer.mockReset()
+  mocks.editor.restoreBuffer.mockReset()
 })
 
 afterEach(() => {
@@ -122,28 +124,46 @@ describe("TabGroupList remove gating", () => {
   })
 })
 
-describe("TabGroupList delete double-click guard", () => {
-  it("ignores a second Delete click inside the guard window", () => {
-    const a = buffer(1, "alpha")
-    const b = buffer(2, "beta")
-    const c = buffer(3, "gamma")
-    renderList([a, b, c], [a, b, c])
-
-    const click = (index: number) =>
-      act(() => {
-        ;(
-          buttons("tabs-panel-delete")[index].props as {
-            onClick: (event: unknown) => void
-          }
-        ).onClick({ currentTarget: { closest: () => null } })
-      })
-    click(0)
-    // The list re-rendered and the next row is now under the pointer.
-    click(1)
-
-    expect(mocks.editor.deleteBuffer).toHaveBeenCalledTimes(1)
-    expect(mocks.editor.deleteBuffer).toHaveBeenCalledWith(1, true, "user", {
-      focusEditor: false,
+describe("TabGroupList row action double-click guard", () => {
+  const open = [buffer(1, "alpha"), buffer(2, "beta"), buffer(3, "gamma")]
+  const closed = [
+    buffer(4, "closed 1", { archived: true, position: -1 }),
+    buffer(5, "closed 2", { archived: true, position: -1 }),
+  ]
+  const click = (hook: string, index: number) =>
+    act(() => {
+      ;(
+        buttons(hook)[index].props as {
+          onClick: (event: unknown) => void
+        }
+      ).onClick({ currentTarget: { closest: () => null } })
     })
+
+  it.each([
+    ["tabs-panel-close", "closeBuffer"],
+    ["tabs-panel-reopen", "restoreBuffer"],
+    ["tabs-panel-delete", "deleteBuffer"],
+  ] as const)(
+    "ignores a second %s click inside the guard window",
+    (hook, action) => {
+      // Given open and closed rows
+      renderList([...open, ...closed], [...open, ...closed])
+
+      // When the button is clicked on a row, then on the row that slid up
+      // under the pointer, as the second click of a double-click
+      click(hook, 0)
+      click(hook, 1)
+
+      // Then only the first row's tab is affected
+      expect(mocks.editor[action]).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it("passes the clicked tab to Delete and keeps focus in the panel", () => {
+    renderList(open, open)
+
+    click("tabs-panel-delete", 0)
+
+    expect(mocks.editor.deleteBuffer).toHaveBeenCalledWith(1, { focus: false })
   })
 })

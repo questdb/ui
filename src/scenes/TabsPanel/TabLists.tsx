@@ -2,6 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { Text } from "../../components"
 import { useEditor, useSettings } from "../../providers"
+import type { Buffer } from "../../store/buffers"
 import { hasExampleDashboards } from "../../utils/examples/hasExampleDashboards"
 import {
   sortClosedBuffers,
@@ -31,6 +32,8 @@ const Empty = styled.div`
 
 export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
   const { buffers, activeBuffer } = useEditor()
+  // Read the link from the live rows: a rename detaches the notebook from its
+  // example at once, and the cached activeBuffer would lag behind.
   const activeTemplateId = buffers.find(
     (buffer) => buffer.id === activeBuffer.id,
   )?.templateId
@@ -53,6 +56,12 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
   const openTabs = sortPinnedBuffers(userTabs)
   const closedTabs = sortClosedBuffers(userTabs)
 
+  // A section gets the active tab's id only when it lists that tab.
+  const activeIdIn = (rows: Buffer[]) =>
+    rows.some((buffer) => buffer.id === activeBuffer.id)
+      ? activeBuffer.id
+      : undefined
+
   return (
     <Lists>
       {viewMode === "groups" ? (
@@ -73,7 +82,10 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
                   <Text color="contentSecondary">No examples match</Text>
                 </Empty>
               ) : (
-                <ExampleList examples={examples} />
+                <ExampleList
+                  examples={examples}
+                  activeTemplateId={activeTemplateId}
+                />
               )}
             </TabSection>
           )}
@@ -82,11 +94,7 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
               key={group.type}
               title={group.title}
               count={groupCountLabel(group, includeClosed)}
-              activeTabId={
-                group.rows.some((buffer) => buffer.id === activeBuffer.id)
-                  ? activeBuffer.id
-                  : undefined
-              }
+              activeTabId={activeIdIn(group.rows)}
               // With examples configured the panel is a showcase: keep
               // the visitor's eye on the examples and fold the rest.
               defaultExpanded={!hasExamples}
@@ -108,11 +116,7 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
           <TabSection
             title="Open"
             count={String(openTabs.length)}
-            activeTabId={
-              openTabs.some((buffer) => buffer.id === activeBuffer.id)
-                ? activeBuffer.id
-                : undefined
-            }
+            activeTabId={activeIdIn(openTabs)}
             data-hook="tabs-panel-open"
           >
             {openTabs.length === 0 ? (
@@ -129,11 +133,7 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
           <TabSection
             title="Closed"
             count={String(closedTabs.length)}
-            activeTabId={
-              closedTabs.some((buffer) => buffer.id === activeBuffer.id)
-                ? activeBuffer.id
-                : undefined
-            }
+            activeTabId={activeIdIn(closedTabs)}
             data-hook="tabs-panel-closed"
           >
             {closedTabs.length === 0 ? (

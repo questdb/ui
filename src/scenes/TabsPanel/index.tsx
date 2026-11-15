@@ -6,6 +6,8 @@ import {
   IconButton,
   Input,
   PaneContent,
+  PaneHeader,
+  PaneHeaderRow,
   PaneWrapper,
   SegmentedControl,
   SegmentedControlButton,
@@ -41,28 +43,12 @@ const Content = styled(PaneContent)`
   }
 `
 
-// Same frame as the Search panel: input and option above the divider, with
-// the same spacing around it, and the list starting a step below.
-const FilterContainer = styled.div`
-  flex-shrink: 0;
-  padding: 1.2rem 1.4rem 1rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
-`
-
 // Only the tab lists scroll; the filter and view options stay in view, as in
 // the Search panel.
 const ListScroller = styled.div`
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-`
-
-const Filter = styled.div`
-  position: relative;
-  display: flex;
-  align-items: center;
-  height: 4.5rem;
-  width: 100%;
 `
 
 const FilterInput = styled(Input)`
@@ -146,8 +132,8 @@ export const TabsPanel = ({ open }: Props) => {
   return (
     <Wrapper $open={open} data-hook="tabs-panel">
       <Content>
-        <FilterContainer>
-          <Filter>
+        <PaneHeader>
+          <PaneHeaderRow>
             <FilterInput
               placeholder="Filter tabs..."
               value={filter}
@@ -168,7 +154,7 @@ export const TabsPanel = ({ open }: Props) => {
                 <XIcon size={16} />
               </ClearFilterButton>
             )}
-          </Filter>
+          </PaneHeaderRow>
           <Options>
             <ViewToggle
               role="group"
@@ -218,7 +204,7 @@ export const TabsPanel = ({ open }: Props) => {
               )}
             </Option>
           </Options>
-        </FilterContainer>
+        </PaneHeader>
         <ListScroller data-hook="tabs-panel-lists">
           {open && (
             <TabLists

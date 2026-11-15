@@ -1,13 +1,13 @@
 import React, { useRef } from "react"
 import styled, { css } from "styled-components"
-import { DotsSixVerticalIcon, TrashIcon, XIcon } from "@phosphor-icons/react"
+import { DotsSixVerticalIcon } from "@phosphor-icons/react"
 import { useEditor } from "../../providers"
 import type { Buffer } from "../../store/buffers"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { TabRow, type LeadingVisibility } from "./TabRow"
 import { BufferIcon } from "./bufferIcon"
-import { DeleteRowButton, ROW_ICON_SIZE, RowIconButton } from "./rowActions"
+import { RowActions } from "./rowActions"
 import { useRowDrag, type RowDragState } from "./useRowDrag"
 import { isOwnActivationKey } from "./keyboard"
 import { useRowActions } from "./useRowActions"
@@ -69,7 +69,7 @@ const slotStyleFor = (
 export const OpenTabList = ({ buffers, reorderable }: Props) => {
   const { activeBuffer, setActiveBuffer, reorderBuffer, tabsDisabled } =
     useEditor()
-  const { canRemove, close, remove } = useRowActions()
+  const rowActions = useRowActions()
   const listRef = useRef<HTMLDivElement>(null)
   const { displayedItems: rows, applyMove } = useOptimisticOrder(
     buffers,
@@ -103,27 +103,6 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
     applyMove(fromIndex, toIndex)
     await reorderBuffer(buffer.id as number, toIndex)
   }
-
-  const actionsFor = (buffer: Buffer) => (
-    <>
-      <RowIconButton
-        label="Close tab"
-        disabled={!canRemove || buffer.isPreviewBuffer}
-        data-hook="tabs-panel-close"
-        onClick={(event) => void close(buffer, event.currentTarget)}
-      >
-        <XIcon size={ROW_ICON_SIZE} />
-      </RowIconButton>
-      <DeleteRowButton
-        label="Delete tab"
-        disabled={!canRemove}
-        data-hook="tabs-panel-delete"
-        onClick={(event) => void remove(buffer, event.currentTarget)}
-      >
-        <TrashIcon size={ROW_ICON_SIZE} />
-      </DeleteRowButton>
-    </>
-  )
 
   return (
     <div ref={listRef} role="list" data-hook="tabs-panel-open-list">
@@ -172,7 +151,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
               )
             }
             leadingVisibility={handleVisibilityFor(drag, buffer.id as number)}
-            actions={actionsFor(buffer)}
+            actions={<RowActions buffer={buffer} actions={rowActions} />}
           />
         </RowSlot>
       ))}

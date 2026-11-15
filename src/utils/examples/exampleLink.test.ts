@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { makeBuffer, type Buffer } from "../../store/buffers"
 import type { ExampleDashboard } from "../../providers/SettingsProvider/types"
 import {
+  EXAMPLE_LINK_NOT_FOUND,
   planExampleStartup,
   readExampleLink,
   withoutTemplateParam,
@@ -52,11 +53,11 @@ const openLinked: ExampleStartup = {
   markAutoOpened: false,
 }
 const stored: ExampleStartup = { kind: "stored", markAutoOpened: false }
-const notFound = (id: string): ExampleStartup => ({
+const notFound: ExampleStartup = {
   kind: "stored",
-  error: `Example dashboard "${id}" was not found.`,
+  error: EXAMPLE_LINK_NOT_FOUND,
   markAutoOpened: false,
-})
+}
 
 const cases: Case[] = [
   {
@@ -130,20 +131,26 @@ const cases: Case[] = [
     name: "reports a template that is not configured",
     search: "?templateId=missing&keep=yes",
     search_after: "?keep=yes",
-    plan: notFound("missing"),
+    plan: notFound,
   },
   {
     name: "matches template ids case-sensitively",
     search: "?templateId=Linked",
     search_after: "",
-    plan: notFound("Linked"),
+    plan: notFound,
   },
   {
-    name: "reports a template on a deployment without examples",
+    name: "does not repeat the link text in the error",
+    search: "?templateId=x%22.%20Your%20session%20expired",
+    search_after: "",
+    plan: notFound,
+  },
+  {
+    name: "ignores a template on a deployment without examples",
     search: "?templateId=linked&keep=yes",
     config: [],
     search_after: "?keep=yes",
-    plan: notFound("linked"),
+    plan: stored,
   },
   {
     name: "opens the requested example instead of the default on a fresh workspace",
@@ -333,9 +340,7 @@ describe("malformed example lists", () => {
       expect(plain.fetchExample).toBeUndefined()
       expect(planExampleStartup(plain, [sqlTab], MAX_TABS)).toEqual(stored)
       expect(linked.fetchExample).toBeUndefined()
-      expect(planExampleStartup(linked, [sqlTab], MAX_TABS)).toEqual(
-        notFound("linked"),
-      )
+      expect(planExampleStartup(linked, [sqlTab], MAX_TABS)).toEqual(stored)
     },
   )
 })

@@ -29,6 +29,13 @@ const iconFor = (buffer: Buffer): { color: Color; glyph: React.ReactNode } => {
   return { color: "contentPrimary", glyph: <FileTextIcon size={ICON_SIZE} /> }
 }
 
+// Example dashboards are notebooks before they are opened.
+export const NotebookTabIcon = () => (
+  <Icon $color="statusInfo">
+    <NotebookIcon size={ICON_SIZE} />
+  </Icon>
+)
+
 export const BufferIcon = ({ buffer }: { buffer: Buffer }) => {
   const { color, glyph } = iconFor(buffer)
   return <Icon $color={color}>{glyph}</Icon>

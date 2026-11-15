@@ -8,6 +8,9 @@ import { hasExampleDashboards } from "./hasExampleDashboards"
 
 const TEMPLATE_PARAM = "templateId"
 
+export const EXAMPLE_LINK_NOT_FOUND =
+  "The example dashboard in this link was not found."
+
 // The search string after a template link is consumed: only `templateId` is
 // removed, every other parameter keeps its value and order.
 export const withoutTemplateParam = (search: string): string => {
@@ -19,7 +22,8 @@ export const withoutTemplateParam = (search: string): string => {
 }
 
 export type ExampleLink = {
-  // The `templateId` parameter, when present and non-empty.
+  // The `templateId` parameter, when present and non-empty, on a deployment
+  // with examples. Elsewhere the parameter is ignored.
   templateId?: string
   // A SQL share link (`?query=`) takes priority over any example.
   hasQuery: boolean
@@ -46,13 +50,14 @@ export const readExampleLink = ({
   autoOpened: boolean
 }): ExampleLink => {
   const params = new URLSearchParams(search)
-  const templateId = params.get(TEMPLATE_PARAM) || undefined
   const hasQuery = !!params.get("query")
   // Only a non-empty array configures examples; anything else (including a
   // malformed value) means a regular console.
   const examples = hasExampleDashboards(consoleConfig)
     ? consoleConfig.exampleDashboards
     : []
+  const templateId =
+    examples.length > 0 ? params.get(TEMPLATE_PARAM) || undefined : undefined
   const linkedExample = hasQuery
     ? undefined
     : examples.find((example) => example.id === templateId)
@@ -91,9 +96,10 @@ export const planExampleStartup = (
 ): ExampleStartup => {
   if (link.hasQuery) return { kind: "stored", markAutoOpened: false }
   if (link.templateId && !link.linkedExample) {
+    // The link text is not repeated: anyone can write it.
     return {
       kind: "stored",
-      error: `Example dashboard "${link.templateId}" was not found.`,
+      error: EXAMPLE_LINK_NOT_FOUND,
       markAutoOpened: false,
     }
   }

@@ -309,7 +309,8 @@ describe("tabs panel", () => {
     closeFromPanel("Alpha")
     includeClosed()
 
-    // When the user reopens it from its row
+    // When the user reopens it from its row, past the double-click window
+    cy.wait(600)
     closedRow("Alpha").find('[data-hook="tabs-panel-reopen"]').click()
 
     // Then it is active and placed after the other open tabs
@@ -396,9 +397,11 @@ describe("tabs panel", () => {
     createTab("Alpha", "select 1;")
     createTab("Beta", "select 2;")
     closeFromPanel("Alpha")
+    cy.wait(600)
     closeFromPanel("Beta")
     includeClosed()
     cy.get('[data-hook="tabs-panel-closed-row"]').should("have.length", 2)
+    cy.wait(600)
 
     // When the user double-clicks Delete on the first closed row
     doubleClickLikeAPerson(() =>
@@ -413,6 +416,58 @@ describe("tabs panel", () => {
     closedRow("Alpha").should("be.visible")
     cy.wait(700)
     cy.get('[data-hook="tabs-panel-closed-row"]').should("have.length", 1)
+  })
+
+  it("ignores the second click of a double-click on Close", () => {
+    // Given three extra open tabs
+    createTab("Alpha", "select 1;")
+    createTab("Beta", "select 2;")
+    createTab("Gamma", "select 3;")
+    cy.wait(600)
+
+    // When the user double-clicks Close on Alpha's row (the second open row)
+    doubleClickLikeAPerson(() =>
+      cy
+        .get('[data-hook="tabs-panel-open-row"]')
+        .eq(1)
+        .find('[data-hook="tabs-panel-close"]'),
+    )
+
+    // Then only Alpha is closed; Beta, which slid up under the pointer, stays
+    cy.getEditorTabByTitle("Alpha").should("not.exist")
+    cy.wait(700)
+    cy.getEditorTabByTitle("Beta").should("exist")
+    openRow("Beta").should("be.visible")
+  })
+
+  it("keeps a double-clicked row under the pointer in a long list", () => {
+    // Given more tabs than fit in the panel, the first one active
+    const buffers = Array.from({ length: 60 }, (_, index) => ({
+      label: `Tab ${index + 1}`,
+      value: `select ${index + 1}`,
+    }))
+    cy.loadConsoleWithAuth(
+      false,
+      { "tabs.panel.viewMode": "list" },
+      { buffers, activeBufferId: 1 },
+    )
+    openTabsPanel()
+    openRow("Tab 20").should("be.visible")
+
+    // When the user double-clicks a row well below the middle of the list,
+    // both clicks on the same screen point
+    openRow("Tab 20").then(($row) => {
+      const rect = $row[0].getBoundingClientRect()
+      const x = Math.round(rect.left + 60)
+      const y = Math.round(rect.top + rect.height / 2)
+      cy.get("body").realClick({ x, y, scrollBehavior: false })
+      cy.wait(150)
+      cy.get("body").realClick({ x, y, scrollBehavior: false })
+    })
+
+    // Then the double-clicked tab is the active one
+    cy.getEditorTabByTitle("Tab 20").should("have.attr", "active")
+    openRow("Tab 20").should("have.attr", "data-active", "true")
   })
 
   it("moves keyboard focus past the content of a previewed tab", () => {
@@ -1261,6 +1316,46 @@ describe("tab history dropdown", () => {
     cy.focused()
       .should("have.attr", "data-hook", "editor-tabs-history-item")
       .and("contain", "Alpha")
+  })
+
+  it("deletes one history entry per key press, even when the key is held", () => {
+    // Given three closed tabs
+    for (const [label, sql] of [
+      ["Alpha", "select 1;"],
+      ["Beta", "select 2;"],
+      ["Gamma", "select 3;"],
+    ]) {
+      createTab(label, sql)
+      cy.getEditorTabByTitle(label).find(".chrome-tab-close").click()
+      cy.getEditorTabByTitle(label).should("not.exist")
+    }
+    cy.getByDataHook("editor-tabs-history-button").focus()
+    cy.realPress("Enter")
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 3)
+
+    // When the user holds Delete: the key press, then auto-repeats that land
+    // on the entry that took focus
+    const pressDelete = (repeat) =>
+      cy.document().then((doc) =>
+        doc.activeElement.dispatchEvent(
+          new doc.defaultView.KeyboardEvent("keydown", {
+            key: "Delete",
+            code: "Delete",
+            repeat,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      )
+    pressDelete(false)
+    pressDelete(true)
+    pressDelete(true)
+
+    // Then only the first entry is deleted
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 2)
+    cy.wait(500)
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 2)
+    cy.getByDataHook("editor-tabs-history").should("contain", "Beta")
   })
 
   it("keeps focus in the menu when the previewed entry is deleted from the keyboard", () => {

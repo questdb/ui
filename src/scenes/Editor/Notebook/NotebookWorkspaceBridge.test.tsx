@@ -147,7 +147,10 @@ describe("NotebookWorkspaceBridge — archiveTab", () => {
 
     // Then it is archived on the agent's behalf
     expect(editor.archiveBuffer).toHaveBeenCalledTimes(1)
-    expect(editor.archiveBuffer.mock.calls[0]).toEqual([2, "agent"])
+    expect(editor.archiveBuffer.mock.calls[0]).toEqual([
+      2,
+      { initiator: "agent" },
+    ])
     expect(editor.buffers.find((b) => b.id === 2)?.archived).toBe(true)
     expect(editor.openOrder()).toEqual([1, 3])
     expect(
@@ -372,7 +375,10 @@ describe("NotebookWorkspaceBridge — deleteTab", () => {
     // Then it is deleted on the agent's behalf (not reported as a user
     // deletion)
     expect(editor.deleteBuffer).toHaveBeenCalledTimes(1)
-    expect(editor.deleteBuffer.mock.calls[0]).toEqual([1, true, "agent"])
+    expect(editor.deleteBuffer.mock.calls[0]).toEqual([
+      1,
+      { initiator: "agent" },
+    ])
     expect(editor.buffers.map((b) => b.id)).toEqual([2, 3])
   })
 
@@ -384,7 +390,10 @@ describe("NotebookWorkspaceBridge — deleteTab", () => {
     await requireWorkspace().deleteTab(2)
 
     // Then only the closed tab is removed, on the agent's behalf
-    expect(editor.deleteBuffer.mock.calls[0]).toEqual([2, true, "agent"])
+    expect(editor.deleteBuffer.mock.calls[0]).toEqual([
+      2,
+      { initiator: "agent" },
+    ])
     expect(editor.buffers.map((b) => b.id)).toEqual([1])
   })
 

@@ -164,7 +164,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
           )
         }
         assertNotRunningScript(bufferId, "close")
-        await archiveBuffer(bufferId, "agent")
+        await archiveBuffer(bufferId, { initiator: "agent" })
       },
       async restoreTab(bufferId) {
         const target = findTab(bufferId)
@@ -221,7 +221,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
           )
         }
         assertNotRunningScript(bufferId, "delete")
-        await deleteBuffer(bufferId, true, "agent")
+        await deleteBuffer(bufferId, { initiator: "agent" })
       },
       async activateNotebook(bufferId, cellToFocus) {
         // The buffer is claimed by the live side (it is, or is becoming, the
