@@ -46,6 +46,9 @@ import {
 import { Metrics } from "./Metrics"
 import { Notebook } from "./Notebook"
 import { NotebookWorkspaceBridge } from "./Notebook/NotebookWorkspaceBridge"
+import { PreviewBar } from "./PreviewBar"
+import { ReadOnlyGuard } from "./ReadOnlyGuard"
+import { ReadOnlyOverlay } from "./ReadOnlyOverlay"
 import Notifications from "../Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
@@ -114,18 +117,20 @@ const EditorLeftPane = styled.div`
 `
 
 const EditorContent = styled.div`
+  position: relative;
   flex: 1;
   display: flex;
   overflow: hidden;
   min-height: 0;
 `
 
-const EditorPane = styled.div`
+const EditorPane = styled.div<{ $readOnly: boolean }>`
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 100%;
   overflow: hidden;
+  isolation: ${({ $readOnly }) => ($readOnly ? "isolate" : "auto")};
 `
 
 const DiffViewWrapper = styled(PaneContent)`
@@ -230,6 +235,8 @@ const Editor = ({
       void addBuffer({ label: "Shared Query", value: query.trim() })
     }
   }, [])
+
+  const isPreviewingClosedTab = activeBuffer.isTemporary === true
 
   const isMonacoHidden =
     !!activeBuffer.isPreviewBuffer ||
@@ -342,146 +349,154 @@ const Editor = ({
       <NotebookWorkspaceBridge />
       <EditorLeftPane>
         <Tabs />
+        {isPreviewingClosedTab && <PreviewBar />}
         <EditorContent>
-          <EditorPane>
-            {activeBuffer.editorViewState && <Monaco hidden={isMonacoHidden} />}
-            {/* Diff preview mode */}
-            {isDiffPreview && (
-              <DiffViewWrapper>
-                <DiffEditorContainer data-hook="diff-editor-container">
-                  <DiffEditor
-                    key={
-                      (
-                        activeBuffer.previewContent as {
-                          original: string
-                          modified: string
-                        }
-                      ).original +
-                      (
-                        activeBuffer.previewContent as {
-                          original: string
-                          modified: string
-                        }
-                      ).modified
-                    }
-                    onMount={(editor) => {
-                      editor.onDidUpdateDiff(() => {
-                        const lineChange = editor.getLineChanges()?.[0]
-                        if (lineChange) {
-                          editor
-                            .getModifiedEditor()
-                            .revealLineInCenter(
-                              lineChange.modifiedStartLineNumber,
-                            )
-                        }
-                      })
-                    }}
-                    original={
-                      (activeBuffer.previewContent as { original: string })
-                        .original
-                    }
-                    modified={
-                      (activeBuffer.previewContent as { modified: string })
-                        .modified
-                    }
-                    keepCurrentOriginalModel
-                    keepCurrentModifiedModel
-                    language={QuestDBLanguageName}
-                    theme={getMonacoThemeName(theme.mode)}
-                    options={{
-                      readOnly: true,
-                      renderSideBySide: false,
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      lineNumbers: "off",
-                      renderIndicators: false,
-                      renderOverviewRuler: false,
-                      hideCursorInOverviewRuler: true,
-                      automaticLayout: true,
-                      enableSplitViewResizing: false,
-                      originalEditable: false,
-                      fontSize: 14,
-                      lineHeight: 24,
-                      folding: false,
-                      wordWrap: "on",
-                      stickyScroll: {
-                        enabled: false,
-                      },
-                    }}
-                  />
-                </DiffEditorContainer>
-                {pendingDiffInfo && (
-                  <ButtonBar align="center" justifyContent="center">
-                    <RejectButton
-                      onClick={handleRejectFromDiffEditor}
-                      data-hook="diff-reject-button"
-                    >
-                      Reject
-                      <KeyContainer>
-                        <Key
-                          keyString="Esc"
-                          color={color("contentAccentStrong")}
-                        />
-                      </KeyContainer>
-                    </RejectButton>
-                    <AcceptButton
-                      onClick={handleAcceptFromDiffEditor}
-                      data-hook="diff-accept-button"
-                    >
-                      Accept
-                      <KeyContainer>
-                        <Key
-                          keyString={ctrlCmd}
-                          color={color("contentAccentStrong")}
-                        />
-                        <Key
-                          keyString="Enter"
-                          color={color("contentAccentStrong")}
-                        />
-                      </KeyContainer>
-                    </AcceptButton>
-                  </ButtonBar>
-                )}
-              </DiffViewWrapper>
-            )}
-            {/* Code preview mode */}
-            {isCodePreview && (
-              <DiffViewWrapper>
-                <DiffEditorContainer data-hook="code-preview-container">
-                  <MonacoEditor
-                    value={
-                      (activeBuffer.previewContent as { value: string }).value
-                    }
-                    language={QuestDBLanguageName}
-                    theme={getMonacoThemeName(theme.mode)}
-                    options={{
-                      readOnly: true,
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      lineNumbers: "off",
-                      hideCursorInOverviewRuler: true,
-                      automaticLayout: true,
-                      fontSize: 14,
-                      lineHeight: 24,
-                      folding: false,
-                      wordWrap: "on",
-                    }}
-                  />
-                </DiffEditorContainer>
-              </DiffViewWrapper>
-            )}
-            {/* Metrics view */}
-            {activeBuffer.metricsViewState && <Metrics key={activeBuffer.id} />}
-            {activeBuffer.notebookViewState && (
-              <Notebook
-                key={`${activeBuffer.id}:${activeBuffer.archived ? "archived" : "live"}`}
+          <EditorPane $readOnly={isPreviewingClosedTab}>
+            <ReadOnlyGuard active={isPreviewingClosedTab}>
+              {activeBuffer.editorViewState && (
+                <Monaco hidden={isMonacoHidden} />
+              )}
+              {/* Diff preview mode */}
+              {isDiffPreview && (
+                <DiffViewWrapper>
+                  <DiffEditorContainer data-hook="diff-editor-container">
+                    <DiffEditor
+                      key={
+                        (
+                          activeBuffer.previewContent as {
+                            original: string
+                            modified: string
+                          }
+                        ).original +
+                        (
+                          activeBuffer.previewContent as {
+                            original: string
+                            modified: string
+                          }
+                        ).modified
+                      }
+                      onMount={(editor) => {
+                        editor.onDidUpdateDiff(() => {
+                          const lineChange = editor.getLineChanges()?.[0]
+                          if (lineChange) {
+                            editor
+                              .getModifiedEditor()
+                              .revealLineInCenter(
+                                lineChange.modifiedStartLineNumber,
+                              )
+                          }
+                        })
+                      }}
+                      original={
+                        (activeBuffer.previewContent as { original: string })
+                          .original
+                      }
+                      modified={
+                        (activeBuffer.previewContent as { modified: string })
+                          .modified
+                      }
+                      keepCurrentOriginalModel
+                      keepCurrentModifiedModel
+                      language={QuestDBLanguageName}
+                      theme={getMonacoThemeName(theme.mode)}
+                      options={{
+                        readOnly: true,
+                        renderSideBySide: false,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        lineNumbers: "off",
+                        renderIndicators: false,
+                        renderOverviewRuler: false,
+                        hideCursorInOverviewRuler: true,
+                        automaticLayout: true,
+                        enableSplitViewResizing: false,
+                        originalEditable: false,
+                        fontSize: 14,
+                        lineHeight: 24,
+                        folding: false,
+                        wordWrap: "on",
+                        stickyScroll: {
+                          enabled: false,
+                        },
+                      }}
+                    />
+                  </DiffEditorContainer>
+                  {pendingDiffInfo && (
+                    <ButtonBar align="center" justifyContent="center">
+                      <RejectButton
+                        onClick={handleRejectFromDiffEditor}
+                        data-hook="diff-reject-button"
+                      >
+                        Reject
+                        <KeyContainer>
+                          <Key
+                            keyString="Esc"
+                            color={color("contentAccentStrong")}
+                          />
+                        </KeyContainer>
+                      </RejectButton>
+                      <AcceptButton
+                        onClick={handleAcceptFromDiffEditor}
+                        data-hook="diff-accept-button"
+                      >
+                        Accept
+                        <KeyContainer>
+                          <Key
+                            keyString={ctrlCmd}
+                            color={color("contentAccentStrong")}
+                          />
+                          <Key
+                            keyString="Enter"
+                            color={color("contentAccentStrong")}
+                          />
+                        </KeyContainer>
+                      </AcceptButton>
+                    </ButtonBar>
+                  )}
+                </DiffViewWrapper>
+              )}
+              {/* Code preview mode */}
+              {isCodePreview && (
+                <DiffViewWrapper>
+                  <DiffEditorContainer data-hook="code-preview-container">
+                    <MonacoEditor
+                      value={
+                        (activeBuffer.previewContent as { value: string }).value
+                      }
+                      language={QuestDBLanguageName}
+                      theme={getMonacoThemeName(theme.mode)}
+                      options={{
+                        readOnly: true,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        lineNumbers: "off",
+                        hideCursorInOverviewRuler: true,
+                        automaticLayout: true,
+                        fontSize: 14,
+                        lineHeight: 24,
+                        folding: false,
+                        wordWrap: "on",
+                      }}
+                    />
+                  </DiffEditorContainer>
+                </DiffViewWrapper>
+              )}
+              {/* Metrics view */}
+              {activeBuffer.metricsViewState && (
+                <Metrics key={activeBuffer.id} />
+              )}
+              {activeBuffer.notebookViewState && (
+                <Notebook
+                  key={`${activeBuffer.id}:${activeBuffer.archived ? "archived" : "live"}`}
+                />
+              )}
+              <Notifications
+                onClearNotifications={handleClearNotifications}
+                targetBufferId={targetNotificationsBufferId}
               />
-            )}
-            <Notifications
-              onClearNotifications={handleClearNotifications}
-              targetBufferId={targetNotificationsBufferId}
-            />
+            </ReadOnlyGuard>
           </EditorPane>
+          {isPreviewingClosedTab && <ReadOnlyOverlay />}
         </EditorContent>
       </EditorLeftPane>
     </EditorPaneWrapper>

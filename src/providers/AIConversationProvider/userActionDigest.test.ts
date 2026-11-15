@@ -3,6 +3,7 @@ import {
   applyUserActionToDigest,
   createEmptyDigest,
   isEmptyDigest,
+  routesUserAction,
 } from "./userActionDigest"
 import type { UserActionEvent } from "../../utils/notebooks/notebookAIBridge"
 
@@ -161,22 +162,83 @@ describe("user_changed_autorefresh_default", () => {
   })
 })
 
-describe("notebook lifecycle events", () => {
-  it("user_archived_notebook flips the flag to archived", () => {
-    const d = apply([{ kind: "user_archived_notebook", bufferId: 1 }])
-    expect(d.notebookStatusChange).toBe("archived")
-  })
-
-  it("user_deleted_notebook flips the flag to deleted", () => {
-    const d = apply([{ kind: "user_deleted_notebook", bufferId: 1 }])
-    expect(d.notebookStatusChange).toBe("deleted")
-  })
-
-  it("delete wins over archive if both fire", () => {
+describe("tab lifecycle events", () => {
+  it("user_archived_tab records a closed tab of any kind", () => {
     const d = apply([
-      { kind: "user_archived_notebook", bufferId: 1 },
-      { kind: "user_deleted_notebook", bufferId: 1 },
+      { kind: "user_archived_tab", bufferId: 1, tabKind: "sql", label: "Q1" },
     ])
-    expect(d.notebookStatusChange).toBe("deleted")
+    expect(d.tabChanges).toEqual([
+      { bufferId: 1, kind: "sql", label: "Q1", status: "closed" },
+    ])
+  })
+
+  it("user_deleted_tab records a deleted tab", () => {
+    const d = apply([
+      {
+        kind: "user_deleted_tab",
+        bufferId: 2,
+        tabKind: "metrics",
+        label: "CPU",
+      },
+    ])
+    expect(d.tabChanges).toEqual([
+      { bufferId: 2, kind: "metrics", label: "CPU", status: "deleted" },
+    ])
+  })
+
+  it("delete wins over close for the same tab", () => {
+    const d = apply([
+      {
+        kind: "user_archived_tab",
+        bufferId: 1,
+        tabKind: "notebook",
+        label: "N",
+      },
+      {
+        kind: "user_deleted_tab",
+        bufferId: 1,
+        tabKind: "notebook",
+        label: "N",
+      },
+    ])
+    expect(d.tabChanges).toEqual([
+      { bufferId: 1, kind: "notebook", label: "N", status: "deleted" },
+    ])
+  })
+})
+
+describe("routesUserAction", () => {
+  const boundChat = { notebookBufferId: 7 }
+  const otherChat = { notebookBufferId: 8 }
+  const unboundChat = {}
+  const tabEvent = (
+    kind: "user_archived_tab" | "user_deleted_tab",
+    bufferId: number,
+  ): UserActionEvent => ({ kind, bufferId, tabKind: "sql", label: "SQL" })
+
+  it.each(["user_archived_tab", "user_deleted_tab"] as const)(
+    "sends %s for any tab to every chat",
+    (kind) => {
+      // Given a chat bound to notebook 7, one bound to 8 and an unbound chat
+      // When the user closes or deletes a SQL tab no chat is bound to
+      const event = tabEvent(kind, 3)
+      // Then every chat hears about it
+      expect(routesUserAction(boundChat, event)).toBe(true)
+      expect(routesUserAction(otherChat, event)).toBe(true)
+      expect(routesUserAction(unboundChat, event)).toBe(true)
+    },
+  )
+
+  it("sends cell events only to the chat bound to that notebook", () => {
+    // Given a cell edit in notebook 7
+    const event: UserActionEvent = {
+      kind: "user_added_cell",
+      bufferId: 7,
+      cellId: "a",
+    }
+    // Then only the chat bound to notebook 7 hears about it
+    expect(routesUserAction(boundChat, event)).toBe(true)
+    expect(routesUserAction(otherChat, event)).toBe(false)
+    expect(routesUserAction(unboundChat, event)).toBe(false)
   })
 })

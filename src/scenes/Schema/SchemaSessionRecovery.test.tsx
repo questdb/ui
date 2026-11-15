@@ -57,6 +57,8 @@ vi.mock("../../components", () => ({
   Box: "div",
   Button: "button",
   PaneContent: "div",
+  PaneHeader: "div",
+  PaneHeaderRow: "div",
   PaneWrapper: "div",
   PrimaryToggleButton: "button",
   Tooltip: ({ children }: React.PropsWithChildren<unknown>) => <>{children}</>,

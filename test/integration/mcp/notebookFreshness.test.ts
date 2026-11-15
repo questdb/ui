@@ -32,12 +32,13 @@ const emptyDigest = (): UserActionDigest => ({
   deleted: new Set(),
   edited: new Set(),
   ran: new Map(),
+  tabChanges: [],
 })
 
 const minimalMetaCtx = (): MetaToolContext => ({
   getActiveBufferId: () => 1,
   getWorkspace: () => ({
-    notebooks: [{ buffer_id: 1, label: "n1", archived: false }],
+    tabs: [{ buffer_id: 1, label: "n1", kind: "notebook", archived: false }],
     active: { buffer_id: 1, label: "n1", kind: "notebook" },
   }),
   getDigest: () => emptyDigest(),
@@ -48,7 +49,11 @@ const minimalWorkspace = () => ({
     Promise.resolve({ bufferId: 1, label: "n1", activated: true }),
   duplicateNotebook: () =>
     Promise.resolve({ bufferId: 2, label: "n1 (copy)", activated: true }),
-  deleteNotebook: () => Promise.resolve(),
+  archiveTab: () => Promise.resolve(),
+  restoreTab: () => Promise.resolve(),
+  activateTab: () => Promise.resolve(),
+  renameTab: () => Promise.resolve(),
+  deleteTab: () => Promise.resolve(),
   activateNotebook: () => Promise.resolve(true),
   getBufferMeta: () => ({
     kind: "active" as const,
@@ -396,7 +401,7 @@ describe("dispatchMCPTool — since_last_check suffix", () => {
     const archivedMeta: MetaToolContext = {
       getActiveBufferId: () => 1,
       getWorkspace: () => ({
-        notebooks: [{ buffer_id: 1, label: "n1", archived: true }],
+        tabs: [{ buffer_id: 1, label: "n1", kind: "notebook", archived: true }],
         active: { buffer_id: 1, label: "n1", kind: "notebook", archived: true },
       }),
       getDigest: () => emptyDigest(),
@@ -426,6 +431,7 @@ describe("dispatchMCPTool — since_last_check suffix", () => {
       deleted: new Set<string>(),
       edited: new Set<string>(["c-2"]),
       ran: new Map<string, "success" | "error">(),
+      tabChanges: [],
     })
     const meta: MetaToolContext = {
       ...minimalMetaCtx(),

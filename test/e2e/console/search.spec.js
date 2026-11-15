@@ -105,8 +105,8 @@ describe("search panel", () => {
       )
       cy.get(".searchHighlight").should("be.visible")
       cy.getSearchResultGroups().should("contain", "closed")
-      // When
-      cy.getEditor().realClick()
+      // When keeping it open from the preview bar
+      cy.getByDataHook("tab-preview-keep-open").click()
       // Then
       cy.getEditorTabByTitle("markets")
         .should("not.have.class", "temporary-tab")
@@ -153,7 +153,20 @@ describe("search panel", () => {
 
       cy.getSearchResults().contains("DROP").dblclick()
 
-      // should navigate to editor on double click
+      // double click keeps the preview; only the preview bar promotes it
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
+      cy.getEditorTabByTitle("SQL 1").should("have.attr", "active")
+      cy.getByDataHook("tab-preview-bar").should("be.visible")
+
+      // the preview is read-only: clicking and typing change nothing
+      cy.getEditor().realClick()
+      cy.realType("XYZ")
+      cy.getEditor().should("not.contain", "XYZ")
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
+
+      cy.getByDataHook("tab-preview-keep-open").click()
+
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
       cy.getEditor().get(".searchHighlight").should("not.exist")
       cy.getEditorTabByTitle("SQL 1").should("not.have.class", "temporary-tab")
       cy.getEditorTabByTitle("SQL 1").should("have.attr", "active")
@@ -166,6 +179,54 @@ describe("search panel", () => {
       cy.waitForActiveBufferValue(
         "-- restored\nDROP TABLE IF EXISTS portfolio_positions;",
       )
+    })
+
+    it("should focus the editor after keeping the preview open", () => {
+      cy.searchFor("DROP")
+
+      cy.getSearchResults().contains("DROP").click()
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
+
+      cy.getByDataHook("tab-preview-keep-open").realClick()
+
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
+      cy.getEditorTabByTitle("SQL 1").should("not.have.class", "temporary-tab")
+      // typing right away goes into the kept tab, no click needed
+      cy.focused().should("have.class", "inputarea")
+      cy.realType("XYZ")
+      cy.getEditor().should("contain", "XYZ")
+    })
+
+    it("moves focus to Keep open when a closed match is opened with Enter", () => {
+      // Given a match in a closed tab, selected in the results
+      cy.searchFor("DROP")
+      cy.getSearchResults().contains("DROP").click()
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
+
+      // When the user presses Enter on it
+      cy.realPress("Enter")
+
+      // Then the read-only preview hands focus to its Keep open button
+      cy.getByDataHook("tab-preview-bar").should("be.visible")
+      cy.focused().should("have.attr", "data-hook", "tab-preview-keep-open")
+
+      // And Enter keeps the tab open
+      cy.realPress("Enter")
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
+      cy.getEditorTabByTitle("SQL 1").should("not.have.class", "temporary-tab")
+    })
+
+    it("should close the preview from the preview bar", () => {
+      cy.searchFor("DROP")
+
+      cy.getSearchResults().contains("DROP").click()
+      cy.getEditorTabByTitle("SQL 1").should("have.class", "temporary-tab")
+
+      cy.getByDataHook("tab-preview-close").click()
+
+      cy.getByDataHook("tab-preview-bar").should("not.exist")
+      cy.getEditorTabs().should("have.length", 2)
+      cy.getEditorTabByTitle("SQL 1").should("not.exist")
     })
   })
 
@@ -442,7 +503,11 @@ describe("search browser navigation", () => {
 
     cy.getByDataHook("search-result-buffer-group").dblclick()
 
-    // Then the tab becomes permanent
+    cy.getEditorTabByTitle("order entry").should("have.class", "temporary-tab")
+
+    // Then keeping it open from the preview bar makes it permanent
+    cy.getByDataHook("tab-preview-keep-open").click()
+
     cy.getEditorTabByTitle("order entry").should(
       "not.have.class",
       "temporary-tab",
@@ -460,5 +525,56 @@ describe("search browser navigation", () => {
     cy.getEditorTabByTitle("order entry")
       .should("not.have.class", "temporary-tab")
       .and("have.attr", "active")
+  })
+})
+
+describe("search while a script runs", () => {
+  it("keeps the editor read-only when a match in the running tab is opened", () => {
+    // Given a script the user has just written, whose first statement is held
+    // in flight (the edit gives the tab list a newer copy of the buffer than
+    // the active one, which a re-activation then swaps in)
+    const script = "select 1;\nselect 'needle';"
+    loadSearchConsole([{ value: "" }])
+    cy.getEditorContent().should("be.visible")
+    cy.window().then((win) =>
+      win.monaco.editor.getEditors()[0].setValue(script),
+    )
+    cy.waitForActiveBufferValue(script)
+    let release
+    cy.intercept(
+      { url: "**/exec*", query: { explain: "true" }, times: 1 },
+      () =>
+        new Cypress.Promise((resolve) => {
+          release = resolve
+        }),
+    )
+    const readOnly = () =>
+      cy.window().then((win) => {
+        const editor = win.monaco.editor.getEditors()[0]
+        return editor.getOption(win.monaco.editor.EditorOption.readOnly)
+      })
+    cy.clickRunScript()
+    cy.getByDataHook("button-cancel-script").should("be.visible")
+    cy.wrap(null).should(() => expect(release).to.be.a("function"))
+    readOnly().should("eq", true)
+
+    // When the user opens a search match in the running tab
+    cy.openSearchPanel()
+    cy.searchFor("needle")
+    cy.getSearchResults().should("have.length", 1)
+    cy.getSearchResults().first().click()
+    cy.get(".searchHighlight").should("be.visible")
+
+    // Then the editor stays locked and typing does not change the script
+    readOnly().should("eq", true)
+    cy.getEditorContent().type("XYZ", { force: true })
+    cy.window().then((win) => {
+      expect(win.monaco.editor.getEditors()[0].getValue()).to.eq(script)
+    })
+
+    // And it unlocks once the script ends
+    cy.then(() => release())
+    cy.getByDataHook("button-cancel-script").should("not.exist")
+    readOnly().should("eq", false)
   })
 })

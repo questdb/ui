@@ -168,7 +168,10 @@ export const hasWriteStatement = (stmts: ClassifiedStatement[]): boolean =>
 // strategy — dispatch never classifies separately.
 export type RunCellGate =
   | { kind: "explicit"; permissions: Permissions }
-  | { kind: "autoRun" }
+  // `initiator: "user"` marks an automatic run the console starts for the
+  // user (tab import, example dashboards): it is not reported as an agent
+  // change. Agent auto-runs leave it unset.
+  | { kind: "autoRun"; initiator?: "user" }
 
 export const checkStatementsForRunQuery = (
   stmts: ClassifiedStatement[],

@@ -28,6 +28,9 @@ export interface ToolDefinition {
   category: ToolCategory
   surfaces: ToolSurface[]
   mutatesNotebook: boolean
+  // Changes the tab workspace (close/reopen/switch/rename/delete) without
+  // editing notebook content: blocks turn replay, no freshness gate.
+  mutatesWorkspace?: boolean
   // Produces a brand-new notebook whose bufferId is in the result
   createsNotebook: boolean
 }
