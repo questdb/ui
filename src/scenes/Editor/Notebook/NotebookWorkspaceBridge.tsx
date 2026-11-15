@@ -85,6 +85,17 @@ export const NotebookWorkspaceBridge: React.FC = () => {
   const remainingOpenTabs = (bufferId: number) =>
     pinnedBuffersWithout(buffersRef.current, bufferId)
 
+  // Removing the active tab switches to another one, which a running script
+  // must not see: its markers and remaining statements belong to this tab.
+  const assertNotRunningScript = (bufferId: number, action: string) => {
+    if (tabsDisabledRef.current && activeBufferRef.current.id === bufferId) {
+      throw new NotebookToolError(
+        "tabs_locked",
+        `Cannot ${action} the tab while its script is running. Wait for it to finish, then retry.`,
+      )
+    }
+  }
+
   useEffect(() => {
     registerWorkspace({
       async createNotebook({ label, signal }) {
@@ -152,6 +163,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
             "Cannot close the only open tab. Create another tab first, then close this one.",
           )
         }
+        assertNotRunningScript(bufferId, "close")
         await archiveBuffer(bufferId, "agent")
       },
       async restoreTab(bufferId) {
@@ -208,6 +220,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
             "Cannot delete the only open tab. Create another tab first, then delete this one.",
           )
         }
+        assertNotRunningScript(bufferId, "delete")
         await deleteBuffer(bufferId, true, "agent")
       },
       async activateNotebook(bufferId, cellToFocus) {

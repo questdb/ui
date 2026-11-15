@@ -401,6 +401,43 @@ describe("NotebookWorkspaceBridge — deleteTab", () => {
   })
 })
 
+describe("NotebookWorkspaceBridge — while a script runs", () => {
+  it.each(["archiveTab", "deleteTab"] as const)(
+    "%s refuses the tab running the script and leaves it active",
+    async (tool) => {
+      // Given a script running in the active tab, next to another open tab
+      const editor = mountBridge([tab(1, 0), tab(2, 1)], 1)
+      editor.setTabsDisabled(true)
+
+      // When the agent closes or deletes the running tab
+      const code = await toolCode(requireWorkspace()[tool](1))
+
+      // Then the tool reports the lock and the tab stays open and active
+      expect(code).toBe("tabs_locked")
+      expect(editor.archiveBuffer).not.toHaveBeenCalled()
+      expect(editor.deleteBuffer).not.toHaveBeenCalled()
+      expect(editor.activeBufferId).toBe(1)
+      expect(editor.openOrder()).toEqual([1, 2])
+    },
+  )
+
+  it.each(["archiveTab", "deleteTab"] as const)(
+    "%s still removes a background tab",
+    async (tool) => {
+      // Given a script running in the active tab, next to another open tab
+      const editor = mountBridge([tab(1, 0), tab(2, 1)], 1)
+      editor.setTabsDisabled(true)
+
+      // When the agent closes or deletes the other tab
+      await requireWorkspace()[tool](2)
+
+      // Then that tab is removed and the running tab stays active
+      expect(editor.openOrder()).toEqual([1])
+      expect(editor.activeBufferId).toBe(1)
+    },
+  )
+})
+
 describe("NotebookWorkspaceBridge — through the tool dispatcher", () => {
   const ALL_GRANTED: Permissions = {
     grantSchemaAccess: true,

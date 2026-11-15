@@ -1,6 +1,17 @@
 import type { UserActionEvent } from "../../utils/notebooks/notebookAIBridge"
 import type { TabChange, UserActionDigest } from "./types"
 
+// Whether a chat hears about a user action. Closing or deleting a tab concerns
+// the whole workspace, of which every chat sees the tab list, so it reaches
+// every chat; cell-level edits only reach the chat bound to that notebook.
+export const routesUserAction = (
+  conversation: { notebookBufferId?: number },
+  evt: UserActionEvent,
+): boolean =>
+  evt.kind === "user_archived_tab" ||
+  evt.kind === "user_deleted_tab" ||
+  conversation.notebookBufferId === evt.bufferId
+
 export const createEmptyDigest = (): UserActionDigest => ({
   added: new Set(),
   deleted: new Set(),

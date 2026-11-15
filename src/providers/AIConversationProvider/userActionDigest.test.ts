@@ -3,6 +3,7 @@ import {
   applyUserActionToDigest,
   createEmptyDigest,
   isEmptyDigest,
+  routesUserAction,
 } from "./userActionDigest"
 import type { UserActionEvent } from "../../utils/notebooks/notebookAIBridge"
 
@@ -203,5 +204,41 @@ describe("tab lifecycle events", () => {
     expect(d.tabChanges).toEqual([
       { bufferId: 1, kind: "notebook", label: "N", status: "deleted" },
     ])
+  })
+})
+
+describe("routesUserAction", () => {
+  const boundChat = { notebookBufferId: 7 }
+  const otherChat = { notebookBufferId: 8 }
+  const unboundChat = {}
+  const tabEvent = (
+    kind: "user_archived_tab" | "user_deleted_tab",
+    bufferId: number,
+  ): UserActionEvent => ({ kind, bufferId, tabKind: "sql", label: "SQL" })
+
+  it.each(["user_archived_tab", "user_deleted_tab"] as const)(
+    "sends %s for any tab to every chat",
+    (kind) => {
+      // Given a chat bound to notebook 7, one bound to 8 and an unbound chat
+      // When the user closes or deletes a SQL tab no chat is bound to
+      const event = tabEvent(kind, 3)
+      // Then every chat hears about it
+      expect(routesUserAction(boundChat, event)).toBe(true)
+      expect(routesUserAction(otherChat, event)).toBe(true)
+      expect(routesUserAction(unboundChat, event)).toBe(true)
+    },
+  )
+
+  it("sends cell events only to the chat bound to that notebook", () => {
+    // Given a cell edit in notebook 7
+    const event: UserActionEvent = {
+      kind: "user_added_cell",
+      bufferId: 7,
+      cellId: "a",
+    }
+    // Then only the chat bound to notebook 7 hears about it
+    expect(routesUserAction(boundChat, event)).toBe(true)
+    expect(routesUserAction(otherChat, event)).toBe(false)
+    expect(routesUserAction(unboundChat, event)).toBe(false)
   })
 })

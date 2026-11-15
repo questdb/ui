@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
 // Same stubs as importTabs.test.ts: keep React and Monaco out of a pure test.
 vi.mock("../../store/buffers", () => ({
@@ -234,5 +234,37 @@ describe("fetchExampleDashboard", () => {
     await expect(
       fetchExampleDashboard("assets/examples/missing.json", fetchFn),
     ).rejects.toThrow("404")
+  })
+})
+
+describe("parseExampleDashboard: typeson paths", () => {
+  // A failing case would strip the built-in for every later test; put it back.
+  const builtIn = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    "isPrototypeOf",
+  ) as PropertyDescriptor
+  afterEach(() => {
+    Object.defineProperty(Object.prototype, "isPrototypeOf", builtIn)
+  })
+
+  it.each([
+    "__proto__.isPrototypeOf",
+    "notebookViewState.__proto__.isPrototypeOf",
+    "notebookViewState.cells.0.__proto__.isPrototypeOf",
+    "constructor.prototype.isPrototypeOf",
+  ])("does not follow %s out of the row", async (path) => {
+    // Given an example row whose $types names a path through the prototype
+    const json: unknown = JSON.parse(
+      JSON.stringify(
+        exportFile([{ ...notebookRow(), $types: { [path]: "undef" } }]),
+      ),
+    )
+
+    // When the file is parsed
+    const parsed = await parseExampleDashboard(json)
+
+    // Then the notebook loads and no built-in is removed
+    expect(parsed.notebookViewState.cells).toHaveLength(2)
+    expect(typeof Object.prototype.isPrototypeOf).toBe("function")
   })
 })

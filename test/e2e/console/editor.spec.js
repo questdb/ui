@@ -7,6 +7,7 @@ const editorExecution = { url: "**/exec*", query: { explain: "true" } }
 
 const { ctrlOrCmd } = require("../utils")
 const { createNotebookBuffer } = require("../utils/editorBuffers")
+const { seedConsoleStorage } = require("../utils/consoleStorage")
 
 const loadEditorWithQuery = (value) =>
   cy.loadConsoleWithAuth(false, {}, { buffers: [{ value }] })
@@ -742,6 +743,119 @@ describe("&query URL param", () => {
         // Then
         cy.getGridRow(0).should("contain", "2")
         cy.wrap(requests).should("deep.eq", ["SELECT 2"])
+      })
+  })
+})
+
+// Every link shape is covered by src/utils/examples/exampleLink.test.ts; this
+// only checks that the console acts on that plan in a browser.
+describe("?templateId URL param", () => {
+  const exampleExport = {
+    formatName: "dexie",
+    data: {
+      databaseVersion: 9,
+      data: [
+        {
+          tableName: "buffers",
+          rows: [
+            {
+              label: "Linked dashboard",
+              value: "",
+              position: 0,
+              notebookViewState: {
+                cells: [{ id: "intro", type: "markdown", value: "# Intro" }],
+                settings: { autoRefreshDefault: false },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  }
+
+  const readBuffers = (win) =>
+    new Cypress.Promise((resolve, reject) => {
+      const request = win.indexedDB.open("web-console")
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const db = request.result
+        const rows = db.transaction("buffers").objectStore("buffers").getAll()
+        rows.onsuccess = () => {
+          db.close()
+          resolve(rows.result)
+        }
+        rows.onerror = () => {
+          db.close()
+          reject(rows.error)
+        }
+      }
+    })
+
+  it("opens the linked example and consumes only its parameter", () => {
+    // Given a deployment with examples and a visitor who has their own SQL tab
+    cy.intercept("GET", "**/assets/console-configuration.json*", {
+      ctaBanner: false,
+      readOnly: false,
+      exampleDashboards: [
+        {
+          id: "default",
+          title: "Default dashboard",
+          path: "assets/link-default.json",
+        },
+        {
+          id: "linked",
+          title: "Linked dashboard",
+          path: "assets/link-test.json",
+        },
+      ],
+    })
+    cy.intercept("GET", "**/assets/link-default.json", exampleExport).as(
+      "defaultExport",
+    )
+    cy.intercept("GET", "**/assets/link-test.json", exampleExport)
+
+    // When they follow a link to the second example
+    let seeded
+    cy.loginWithApi().then((credentials) => {
+      cy.handleStorageAndVisit(
+        `${baseUrl}/?templateId=linked&keep=yes#anchor`,
+        true,
+        { ...credentials, "tabs.panel.exampleAutoOpened": "true" },
+        (win) => {
+          win.sessionStorage.clear()
+          win.sessionStorage.setItem("auth.login.method", "password")
+          seeded = seedConsoleStorage(win, {
+            buffers: [{ label: "My SQL", value: "select 42" }],
+            activeBufferId: 1,
+          })
+        },
+      )
+    })
+    cy.then(() => seeded)
+
+    // Then the linked dashboard opens as the active tab
+    cy.getEditorTabByTitle("Linked dashboard").should("have.attr", "active")
+    cy.getByDataHook("notebook-toolbar-name").should(
+      "have.text",
+      "Linked dashboard",
+    )
+    cy.get("@defaultExport.all").should("have.length", 0)
+
+    // And only templateId is removed from the address
+    cy.location("search").should("eq", "?keep=yes")
+    cy.location("hash").should("eq", "#anchor")
+
+    // And the visitor's own tab is kept next to a single linked copy
+    cy.window()
+      .then(readBuffers)
+      .then((rows) => {
+        expect(rows).to.have.length(2)
+        expect(rows.find((row) => row.label === "My SQL").value).to.eq(
+          "select 42",
+        )
+        expect(
+          rows.filter((row) => row.templateId === "linked"),
+        ).to.have.length(1)
       })
   })
 })

@@ -38,7 +38,7 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
 
   const hasExamples = hasExampleDashboards(consoleConfig)
   const examples = hasExamples
-    ? consoleConfig.exampleDashboards!.filter((example) =>
+    ? consoleConfig.exampleDashboards.filter((example) =>
         matchesFilter(example.title, filter),
       )
     : []

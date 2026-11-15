@@ -35,7 +35,7 @@ const Wrapper = styled(PaneWrapper)<{ $open: boolean }>`
 const Content = styled(PaneContent)`
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
   && {
     background: ${({ theme }) => theme.color.surfaceRaised};
   }
@@ -44,8 +44,17 @@ const Content = styled(PaneContent)`
 // Same frame as the Search panel: input and option above the divider, with
 // the same spacing around it, and the list starting a step below.
 const FilterContainer = styled.div`
+  flex-shrink: 0;
   padding: 1.2rem 1.4rem 1rem;
   border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+`
+
+// Only the tab lists scroll; the filter and view options stay in view, as in
+// the Search panel.
+const ListScroller = styled.div`
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 `
 
 const Filter = styled.div`
@@ -210,13 +219,15 @@ export const TabsPanel = ({ open }: Props) => {
             </Option>
           </Options>
         </FilterContainer>
-        {open && (
-          <TabLists
-            filter={filter}
-            includeClosed={includeClosed}
-            viewMode={viewMode}
-          />
-        )}
+        <ListScroller data-hook="tabs-panel-lists">
+          {open && (
+            <TabLists
+              filter={filter}
+              includeClosed={includeClosed}
+              viewMode={viewMode}
+            />
+          )}
+        </ListScroller>
       </Content>
     </Wrapper>
   )

@@ -1486,3 +1486,35 @@ describe("AI diff tab", () => {
       })
   })
 })
+
+describe("tabs panel layout", () => {
+  const filterTopIsInView = () =>
+    cy.getByDataHook("tabs-panel").then(($panel) => {
+      const panelTop = $panel[0].getBoundingClientRect().top
+      cy.getByDataHook("tabs-panel-filter").should(($filter) => {
+        expect($filter[0].getBoundingClientRect().top).to.be.at.least(panelTop)
+      })
+    })
+
+  it("keeps the filter in view while a long list scrolls", () => {
+    // Given more tabs than fit in the panel, with the last one active
+    const buffers = Array.from({ length: 60 }, (_, index) => ({
+      label: `Tab ${index + 1}`,
+      value: `select ${index + 1}`,
+    }))
+    cy.loadConsoleWithAuth(false, {}, { buffers, activeBufferId: 60 })
+
+    // When the panel opens, scrolled to the active tab
+    openTabsPanel()
+    setViewMode("list")
+    openRow("Tab 60").should("be.visible")
+
+    // Then the filter is still in view
+    filterTopIsInView()
+
+    // And it stays there when the user scrolls the list to the top and back
+    openRow("Tab 1").scrollIntoView()
+    openRow("Tab 60").scrollIntoView()
+    filterTopIsInView()
+  })
+})

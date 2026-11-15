@@ -540,6 +540,59 @@ describe("EditorProvider: closed-tab preview", () => {
   })
 })
 
+describe("EditorProvider: reload during a preview", () => {
+  it("shows the closed tab's own content when it is previewed again", async () => {
+    // Given a page reloaded while closed tab P was previewed, so the stored
+    // active id still points at P while the console opens tab X
+    const [open, closed] = await seed(
+      [
+        { label: "X", value: "select X" },
+        {
+          label: "P",
+          value: "select P",
+          archived: true,
+          archivedAt: 1,
+          position: -1,
+        },
+      ],
+      1,
+    )
+    renderProvider()
+    await waitForReady()
+    expect(editor.activeBuffer.id).toBe(open)
+    await waitFor(async () => expect(await activeId()).toBe(open))
+
+    // And the SQL editor holds X's text
+    let model = { getValue: () => "select X", dispose: () => undefined }
+    editor.editorRef.current = {
+      getModel: () => model,
+      setModel: (next: typeof model) => {
+        model = next
+      },
+      saveViewState: () => null,
+      restoreViewState: () => undefined,
+      focus: () => undefined,
+    } as unknown as NonNullable<EditorContext["editorRef"]["current"]>
+    editor.monacoRef.current = {
+      editor: {
+        createModel: (value: string) => ({
+          getValue: () => value,
+          dispose: () => undefined,
+        }),
+        setModelMarkers: () => undefined,
+      },
+    } as unknown as NonNullable<EditorContext["monacoRef"]["current"]>
+
+    // When P is previewed again and kept open
+    await act(() => editor.previewBuffer(closed))
+    await act(() => editor.keepBufferOpen(closed))
+
+    // Then the editor shows P's own text, so typing cannot save X's into P
+    expect(editor.activeBuffer.id).toBe(closed)
+    expect(model.getValue()).toBe("select P")
+  })
+})
+
 describe("EditorProvider: reopening the previewed tab", () => {
   it("makes it a regular, editable tab", async () => {
     // Given a closed SQL tab that is being previewed
@@ -1336,15 +1389,24 @@ describe("EditorProvider: example links", () => {
     { id: "linked", title: "Linked", path: "linked.json" },
   ]
 
+  it("mounts a regular console when the example list is not an array", async () => {
+    // Given a configuration whose exampleDashboards is malformed
+    const [id] = await seed([{ value: "select 42" }])
+    history.replaceState(null, "", "/")
+    // When the console loads
+    renderProvider({
+      exampleDashboards: {} as unknown as ConsoleConfig["exampleDashboards"],
+    })
+    await waitForReady()
+    // Then the stored tab opens
+    expect(editor.activeBuffer.id).toBe(id)
+  })
+
   it("opens the requested example in an existing workspace and consumes only its parameters", async () => {
     // Given an existing SQL tab and a link to a non-default example
     const [sqlId] = await seed([{ label: "My SQL", value: "select 42" }])
     localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
-    history.replaceState(
-      null,
-      "",
-      "/?cellName=missing&templateId=linked&cellId=c1&keep=yes#anchor",
-    )
+    history.replaceState(null, "", "/?a=1&templateId=linked&keep=yes#anchor")
     vi.stubGlobal(
       "fetch",
       vi.fn(() =>
@@ -1359,14 +1421,7 @@ describe("EditorProvider: example links", () => {
     expect(await bufferStore.getById(sqlId)).toMatchObject({
       value: "select 42",
     })
-    expect(location.search + location.hash).toBe(
-      "?cellName=missing&cellId=c1&keep=yes#anchor",
-    )
-    const { getPendingReveal, clearPendingReveal } = await import(
-      "../../scenes/Editor/Notebook/cellReveal"
-    )
-    expect(getPendingReveal()).toBeNull()
-    clearPendingReveal()
+    expect(location.search + location.hash).toBe("?a=1&keep=yes#anchor")
   })
 
   it("reuses an open example instead of creating a duplicate", async () => {
@@ -1398,7 +1453,7 @@ describe("EditorProvider: example links", () => {
     expect(await db.buffers.count()).toBe(2)
   })
 
-  it.each(["?cellName=anything", "?templateId=missing", "?templateId="])(
+  it.each(["?keep=yes", "?templateId=missing", "?templateId="])(
     "preserves the workspace for %s",
     async (search) => {
       // Given an existing workspace and an incomplete or invalid link
@@ -1416,9 +1471,7 @@ describe("EditorProvider: example links", () => {
       // Then the existing tab remains active
       expect(editor.activeBuffer.id).toBe(id)
       expect(await db.buffers.count()).toBe(1)
-      expect(location.search).toBe(
-        search === "?cellName=anything" ? search : "",
-      )
+      expect(location.search).toBe(search === "?keep=yes" ? search : "")
     },
   )
 
@@ -1428,7 +1481,7 @@ describe("EditorProvider: example links", () => {
     history.replaceState(
       null,
       "",
-      "/?templateId=linked&cellId=c1&query=select+7&executeQuery=true",
+      "/?templateId=linked&keep=yes&query=select+7&executeQuery=true",
     )
     const fetch = vi.fn()
     vi.stubGlobal("fetch", fetch)
@@ -1438,13 +1491,13 @@ describe("EditorProvider: example links", () => {
     // Then Monaco can consume the query without a competing example opening
     expect(editor.activeBuffer.notebookViewState).toBeUndefined()
     expect(fetch).not.toHaveBeenCalled()
-    expect(location.search).toBe("?cellId=c1&query=select+7&executeQuery=true")
+    expect(location.search).toBe("?keep=yes&query=select+7&executeQuery=true")
   })
 
   it("falls back to the stored tab when the linked export fails to load", async () => {
     // Given a broken example file
     const [id] = await seed([{ value: "select 42" }])
-    history.replaceState(null, "", "/?templateId=linked&cellId=c1")
+    history.replaceState(null, "", "/?templateId=linked&keep=yes")
     vi.stubGlobal(
       "fetch",
       vi.fn(() => Promise.resolve(new Response("missing", { status: 404 }))),
@@ -1455,6 +1508,6 @@ describe("EditorProvider: example links", () => {
     // Then the user keeps their workspace and sees the load error
     expect(editor.activeBuffer.id).toBe(id)
     expect(toastError).toHaveBeenCalled()
-    expect(location.search).toBe("?cellId=c1")
+    expect(location.search).toBe("?keep=yes")
   })
 })

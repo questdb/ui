@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react"
+import React, { useLayoutEffect, useRef, useState } from "react"
 import type { TabProperties } from "./types"
 
 type Props = {
@@ -39,11 +39,15 @@ export const Tab = ({
     if (!isRenameable(tab)) return
     setDraft(tab.title)
     setRenaming(true)
-    window.requestAnimationFrame(() => {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    })
   }
+
+  // Select the title as soon as the input is shown, before the next keystroke
+  // can arrive: typing replaces the title instead of appending to it.
+  useLayoutEffect(() => {
+    if (!renaming) return
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [renaming])
 
   const commitRename = () => {
     if (!renaming) return

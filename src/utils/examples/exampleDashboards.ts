@@ -1,4 +1,5 @@
 import type { NotebookViewState } from "../../store/notebook"
+import { DANGEROUS_KEYS } from "../dangerousKeys"
 
 // Example files are tab exports from the console (the dexie-export-import
 // envelope with a `buffers` table). The first notebook row is the dashboard;
@@ -48,10 +49,16 @@ const reviveTypeson = (
   for (const [path, type] of Object.entries(types as Record<string, unknown>)) {
     if (type !== "undef") continue
     const keys = path.split(".")
+    // A path may only walk the row's own data, never into a prototype.
+    if (keys.some((key) => DANGEROUS_KEYS.has(key))) continue
     const last = keys.pop() as string
     let node: unknown = rest
     for (const key of keys) {
-      if (typeof node !== "object" || node === null) {
+      if (
+        typeof node !== "object" ||
+        node === null ||
+        !Object.prototype.hasOwnProperty.call(node, key)
+      ) {
         node = undefined
         break
       }

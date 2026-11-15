@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React, { useState } from "react"
-import { act } from "@testing-library/react"
+import { act, fireEvent } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../test/component"
 import { TabBar } from "./TabBar"
@@ -101,5 +101,52 @@ describe("TabBar drag", () => {
     expect(onTabReorder).not.toHaveBeenCalled()
     expect(displayedIds(container)).toEqual(["2", "3", "4"])
     expect(container.querySelector(".chrome-tab-is-dragging")).toBeNull()
+  })
+})
+
+describe("TabBar rename", () => {
+  const renameInput = (container: HTMLElement, id: string) =>
+    container.querySelector(
+      `.chrome-tab[data-tab-id="${id}"] .chrome-tab-rename`,
+    ) as HTMLInputElement
+
+  const expectWholeTitleSelected = (input: HTMLInputElement) => {
+    expect(document.activeElement).toBe(input)
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(input.value.length)
+  }
+
+  // Animation frames never run here (see beforeEach), as on a machine that
+  // has not painted yet when the user starts typing.
+  it("selects the title as soon as a double-click starts renaming", () => {
+    // Given a tab bar
+    const { container } = renderComponent(<Bar />)
+
+    // When the user double-clicks a tab
+    fireEvent.doubleClick(
+      container.querySelector(
+        '.chrome-tab[data-tab-id="2"] .chrome-tab-drag-handle',
+      ) as HTMLElement,
+    )
+
+    // Then its whole title is selected, so typing replaces it
+    const input = renameInput(container, "2")
+    expect(input.value).toBe("Tab 2")
+    expectWholeTitleSelected(input)
+  })
+
+  it("selects the title as soon as the edit button starts renaming", () => {
+    // Given a tab bar
+    const { container } = renderComponent(<Bar />)
+
+    // When the user clicks a tab's edit button
+    fireEvent.click(
+      container.querySelector(
+        '.chrome-tab[data-tab-id="3"] .chrome-tab-edit',
+      ) as HTMLElement,
+    )
+
+    // Then its whole title is selected
+    expectWholeTitleSelected(renameInput(container, "3"))
   })
 })

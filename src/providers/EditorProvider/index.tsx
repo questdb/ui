@@ -56,10 +56,10 @@ import {
 import type { ExampleDashboard } from "../SettingsProvider/types"
 import { useSettings } from "../SettingsProvider/context"
 import { hasExampleDashboards } from "../../utils/examples/hasExampleDashboards"
-import { isFreshWorkspace } from "../../utils/examples/isFreshWorkspace"
 import {
   readExampleLink,
   clearExampleLinkParams,
+  planExampleStartup,
 } from "../../utils/examples/exampleLink"
 import { exampleAutoRunCellIds } from "../../utils/examples/exampleAutoRun"
 import { examplePersonalizationReason } from "../../utils/examples/examplePersonalization"
@@ -342,25 +342,16 @@ export const EditorProvider: React.FC = ({ children }) => {
   // Decided once per browser, on the first load: after that the visitor's own
   // tabs decide.
   const { consoleConfig } = useSettings()
-  const [exampleLink] = useState(() => readExampleLink(window.location.search))
-  const linkedExample = exampleLink.hasQuery
-    ? undefined
-    : consoleConfig.exampleDashboards?.find(
-        (example) => example.id === exampleLink.templateId,
-      )
-  const firstExample = hasExampleDashboards(consoleConfig)
-    ? consoleConfig.exampleDashboards![0]
-    : undefined
-  const startupExample = linkedExample ?? firstExample
+  const [exampleLink] = useState(() =>
+    readExampleLink({
+      search: window.location.search,
+      consoleConfig,
+      autoOpened: getValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED) !== "",
+    }),
+  )
+  const startupExample = exampleLink.fetchExample
   const autoOpenRef = useRef<Promise<ExampleFetchResult> | null>(null)
-  if (
-    autoOpenRef.current === null &&
-    startupExample &&
-    !exampleLink.hasQuery &&
-    (linkedExample ||
-      (!exampleLink.templateId &&
-        getValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED) === ""))
-  ) {
+  if (autoOpenRef.current === null && startupExample) {
     autoOpenRef.current = fetchExampleDashboard(startupExample.path).then(
       (content): ExampleFetchResult => ({ ok: true, content }),
       (error: unknown): ExampleFetchResult => ({ ok: false, error }),
@@ -384,7 +375,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     () =>
       new Set(
         hasExampleDashboards(consoleConfig)
-          ? consoleConfig.exampleDashboards?.map((example) => example.id)
+          ? consoleConfig.exampleDashboards.map((example) => example.id)
           : [],
       ),
     [consoleConfig],
@@ -429,8 +420,13 @@ export const EditorProvider: React.FC = ({ children }) => {
         try {
           const currentActiveBufferId = (await bufferStore.getActiveId())?.value
 
+          // Already active only if it is also the tab on screen: the stored id
+          // alone can lag behind (see activateStored).
           if (currentActiveBufferId) {
-            if (buffer.id === currentActiveBufferId) {
+            if (
+              buffer.id === currentActiveBufferId &&
+              activeBufferRef.current.id === buffer.id
+            ) {
               activeBufferRef.current = buffer
               setActiveBufferState(buffer)
               return
@@ -740,79 +736,64 @@ export const EditorProvider: React.FC = ({ children }) => {
         : buffer
       activeBufferRef.current = nextBuffer
       setActiveBufferState(nextBuffer)
+      // The stored id can point at a closed tab (the page was reloaded during
+      // its preview). Store the tab actually shown, or the next switch to the
+      // closed tab is taken for a no-op and keeps this tab's editor model.
+      if (
+        typeof nextBuffer.id === "number" &&
+        nextBuffer.id !== activeBufferId
+      ) {
+        void bufferStore.setActiveId(nextBuffer.id)
+      }
     }
 
     clearExampleLinkParams()
-    if (exampleLink.hasQuery) {
-      activateStored()
-      return
-    }
-    if (exampleLink.templateId && !linkedExample) {
-      toast.error(
-        `Example dashboard "${exampleLink.templateId}" was not found.`,
-      )
-      activateStored()
-      return
-    }
-    if (linkedExample) {
-      const open = buffers.find(
-        (buffer) =>
-          buffer.templateId === linkedExample.id &&
-          !buffer.archived &&
-          !buffer.isTemporary,
-      )
-      if (open) {
-        activeBufferRef.current = open
-        setActiveBufferState(open)
-        void bufferStore.setActiveId(open.id as number)
-        void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, {
-          id: linkedExample.id,
-          source: "link",
-          reused: true,
-        })
-        return
-      }
-      if (buffers.length >= MAX_TABS) {
-        toast.error(
-          `Tab limit reached (${MAX_TABS}). Delete closed tabs from the Tabs panel to free up space.`,
-        )
-        activateStored()
-        return
-      }
-    }
-    const pending = autoOpenRef.current
-    if (
-      !pending ||
-      !startupExample ||
-      (!linkedExample && !isFreshWorkspace(buffers))
-    ) {
-      // A visitor who already has tabs keeps them: the example is never opened
-      // for them, now or after they later empty the workspace, and later loads
-      // skip the fetch.
-      if (pending && !linkedExample)
+    const startup = planExampleStartup(exampleLink, buffers, MAX_TABS)
+    if (startup.kind === "stored") {
+      if (startup.error) toast.error(startup.error)
+      if (startup.markAutoOpened)
         setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
       activateStored()
       return
     }
-    // First visit on a showcase deployment: create the example tab and make it
-    // the active one. A spinner shows while the file is fetched; a file that
-    // cannot be loaded is reported once and the visitor gets the stored tab.
+    if (startup.kind === "reuse") {
+      const open = startup.buffer
+      activeBufferRef.current = open
+      setActiveBufferState(open)
+      void bufferStore.setActiveId(open.id as number)
+      void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, {
+        id: startup.example.id,
+        source: "link",
+        reused: true,
+      })
+      return
+    }
+    const pending = autoOpenRef.current
+    if (!pending) {
+      activateStored()
+      return
+    }
+    // First visit on a showcase deployment, or a template link: create the
+    // example tab and make it the active one. A spinner shows while the file is
+    // fetched; a file that cannot be loaded is reported once and the visitor
+    // gets the stored tab.
+    const { example, source, markAutoOpened } = startup
     setLoadingFirstExample(true)
     void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, {
-      id: startupExample.id,
-      source: linkedExample ? "link" : "automatic",
+      id: example.id,
+      source,
       reused: false,
     })
     void pending.then(async (result) => {
       if (!result.ok) {
         void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD, {
-          templateId: startupExample.id,
-          source: linkedExample ? "link" : "automatic",
+          templateId: example.id,
+          source,
           outcome: "error",
         })
         console.error("Could not load the example dashboard:", result.error)
-        toast.error(exampleErrorMessage(startupExample.title, result.error))
-        if (!linkedExample)
+        toast.error(exampleErrorMessage(example.title, result.error))
+        if (markAutoOpened)
           setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
         activateStored()
         setLoadingFirstExample(false)
@@ -820,32 +801,32 @@ export const EditorProvider: React.FC = ({ children }) => {
       }
       try {
         const buffer = makeBuffer({
-          label: startupExample.title,
+          label: example.title,
           notebookViewState: result.content.notebookViewState,
-          templateId: startupExample.id,
+          templateId: example.id,
           position: nextOpenPosition(buffers),
         })
         const id = await db.buffers.add(buffer)
         await bufferStore.setActiveId(id)
-        if (!linkedExample)
+        if (markAutoOpened)
           setValue(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
         const created = { ...buffer, id }
         activeBufferRef.current = created
         setActiveBufferState(created)
         setAutoOpenedId(id)
         void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD, {
-          templateId: startupExample.id,
-          source: linkedExample ? "link" : "automatic",
+          templateId: example.id,
+          source,
           outcome: "success",
         })
       } catch (error) {
         void trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_LOAD, {
-          templateId: startupExample.id,
-          source: linkedExample ? "link" : "automatic",
+          templateId: example.id,
+          source,
           outcome: "error",
         })
         console.error("Could not open the example dashboard:", error)
-        toast.error(exampleErrorMessage(startupExample.title, error))
+        toast.error(exampleErrorMessage(example.title, error))
         activateStored()
       }
       setLoadingFirstExample(false)
