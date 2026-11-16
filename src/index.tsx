@@ -23,9 +23,9 @@
  ******************************************************************************/
 
 import "./styles/_fonts.scss"
-import "./js/console"
+import "./styles/main.scss"
 import "./utils/monacoInit"
-import "./js/console/cryptoPolyfill"
+import "./utils/cryptoPolyfill"
 
 import { consumePendingPairFromUrl } from "./utils/mcp/consumePendingPair"
 
