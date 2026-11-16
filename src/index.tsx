@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 
-import "core-js/features/promise"
 import "./styles/_fonts.scss"
 import "./js/console"
 import "./utils/monacoInit"
