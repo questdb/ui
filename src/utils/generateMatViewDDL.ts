@@ -14,6 +14,7 @@ import {
   type StoragePolicy,
 } from "@questdb/sql-parser"
 import { formatSql } from "./formatSql"
+import { maskParserBlockComments } from "./parserSql"
 
 type TTLUnit = "HOURS" | "DAYS" | "WEEKS" | "MONTHS" | "YEARS"
 type TTLAst = { value: number; unit: TTLUnit }
@@ -540,7 +541,7 @@ export const generateMatViewDDL = (
   ddl: string,
   existingNames: readonly string[] = [],
 ): string => {
-  const stmt = parseOne(normalizeTTLUnits(ddl)) as
+  const stmt = parseOne(maskParserBlockComments(normalizeTTLUnits(ddl))) as
     | CreateTableStatement
     | CreateMaterializedViewStatement
   if (stmt.type === "createTable") return fromTable(stmt, existingNames)
