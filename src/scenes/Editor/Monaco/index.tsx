@@ -816,9 +816,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     )
     lineMarkingDecorationIdsRef.current = newLineMarkingIds
     if (
-      !["scroll", "script", "query-notifications-sync"].includes(
-        source ?? "",
-      ) &&
+      ![
+        "scroll",
+        "script",
+        "query-notifications-sync",
+        "run-finished",
+      ].includes(source ?? "") &&
       !isRunningScriptRef.current
     ) {
       updateQueryNotification(
@@ -1938,12 +1941,26 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   useEffect(() => {
     const gridNotificationKeySuffix = `@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
+    const previous = queryNotificationsRef.current
     queryNotificationsRef.current = queryNotifications
+    // Grid and script notifications share a key outside the editor's lines;
+    // only a change to a query's own notification moves its glyph. React
+    // batches a script's final dispatches into one render, so the active
+    // notification cannot tell them apart.
+    const editorNotificationChanged = Object.keys({
+      ...previous,
+      ...queryNotifications,
+    }).some(
+      (queryKey) =>
+        !queryKey.endsWith(gridNotificationKeySuffix) &&
+        previous?.[queryKey as QueryKey] !==
+          queryNotifications?.[queryKey as QueryKey],
+    )
     if (
       monacoRef.current &&
       editorRef.current &&
       !contentJustChangedRef.current &&
-      !activeNotification?.query.endsWith(gridNotificationKeySuffix)
+      editorNotificationChanged
     ) {
       applyGlyphsAndLineMarkings(
         monacoRef.current,
@@ -2377,7 +2394,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   useEffect(() => {
     requestRef.current = request
     if (monacoRef?.current && editorRef?.current) {
-      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+      // A finished run keeps the notification it has just added, even when
+      // the cursor has left its query; React commits both in one render.
+      applyGlyphsAndLineMarkings(
+        monacoRef.current,
+        editorRef.current,
+        request ? undefined : "run-finished",
+      )
     }
   }, [request])
 

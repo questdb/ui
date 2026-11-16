@@ -2848,7 +2848,7 @@ __metadata:
     react-is: "npm:^18.1.0"
     react-markdown: "npm:^10.1.0"
     react-redux: "npm:9.3.1"
-    react-toastify: "npm:^9.1.3"
+    react-toastify: "npm:^11.2.0"
     react-transition-group: "npm:4.4.1"
     react-virtuoso: "npm:^2.2.6"
     redux: "npm:5.0.1"
@@ -5543,13 +5543,6 @@ __metadata:
   dependencies:
     is-regexp: "npm:^2.0.0"
   checksum: 10/3624905a98920ad5c196080f4ea4379fa42b12f3b1d1272d958bb79c194508d2aec85160c25846f0016ca861a064316b213a565cf53b81a513047f89cf877803
-  languageName: node
-  linkType: hard
-
-"clsx@npm:^1.1.1":
-  version: 1.2.1
-  resolution: "clsx@npm:1.2.1"
-  checksum: 10/5ded6f61f15f1fa0350e691ccec43a28b12fb8e64c8e94715f2a937bc3722d4c3ed41d6e945c971fc4dcc2a7213a43323beaf2e1c28654af63ba70c9968a8643
   languageName: node
   linkType: hard
 
@@ -11002,15 +10995,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-toastify@npm:^9.1.3":
-  version: 9.1.3
-  resolution: "react-toastify@npm:9.1.3"
+"react-toastify@npm:^11.2.0":
+  version: 11.2.0
+  resolution: "react-toastify@npm:11.2.0"
   dependencies:
-    clsx: "npm:^1.1.1"
+    clsx: "npm:^2.1.1"
   peerDependencies:
-    react: ">=16"
-    react-dom: ">=16"
-  checksum: 10/12667aa10e6cf3f74be2e3c704c2d5570dd7de66fff89ae38fbfab1122e9a9f632de1cb712fe44a9a60b8ecca7590578157cb4ca6c4e8105a8cf80936a94e181
+    react: ^18 || ^19
+    react-dom: ^18 || ^19
+  checksum: 10/efd0c32efa24b5a51f65c1ed3287614a917ebc72817a78749bfeca3cee0d08e942e77b87ad539e6b83fa9dd932bdc097a6c324e4f1d06ff1b3d4e5d7a92f11c5
   languageName: node
   linkType: hard
 

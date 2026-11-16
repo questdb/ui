@@ -168,6 +168,7 @@ describe("questdb grid", () => {
     cy.then(() => expectColumnWidth("a", defaults.a))
     cy.get("[role=grid]").should("be.focused")
     resizeGridColumn(0, 150)
+    cy.then(() => expectColumnWidth("a", defaults.a + 150))
     let resizedWidth
     widthForColumn("a").then((width) => {
       resizedWidth = width

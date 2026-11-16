@@ -103,6 +103,11 @@ describe("notebook cell controls", () => {
       // Given a cell whose result splits it into an editor and a result pane
       loadNotebookCell("select 1")
       runFocusedCell()
+      // The run renders after it starts: until then the editor-only cell's
+      // bottom handle still carries the editor label.
+      cy.get('[role="separator"][aria-label="Resize result pane"]').should(
+        "exist",
+      )
       editorSeparator().should("have.attr", "aria-valuenow")
       let before
       editorSeparator().then(($separator) => {

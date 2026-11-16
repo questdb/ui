@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useEffect,
   useRef,
+  type SetStateAction,
 } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import { db, type ConversationMeta } from "../../store/db"
@@ -231,14 +232,23 @@ export const AIConversationProvider: React.FC<{
     return cleanupUserActionListener
   }, [])
 
-  const [activeConversationMessages, setActiveConversationMessages] = useState<
-    ConversationMessage[]
-  >([])
+  const [activeConversationMessages, setActiveConversationMessagesState] =
+    useState<ConversationMessage[]>([])
 
+  // Flows persist the messages right after updating them, before React has
+  // rendered the update, so the ref advances with every update itself.
   const activeConversationMessagesRef = useRef<ConversationMessage[]>([])
-  useEffect(() => {
-    activeConversationMessagesRef.current = activeConversationMessages
-  }, [activeConversationMessages])
+  const setActiveConversationMessages = useCallback(
+    (update: SetStateAction<ConversationMessage[]>) => {
+      const next =
+        typeof update === "function"
+          ? update(activeConversationMessagesRef.current)
+          : update
+      activeConversationMessagesRef.current = next
+      setActiveConversationMessagesState(next)
+    },
+    [],
+  )
   const renamedChatsRef = useRef<Set<ConversationId>>(new Set())
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
