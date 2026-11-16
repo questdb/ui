@@ -24,6 +24,7 @@ import { importInto, peakImportFile } from "dexie-export-import"
 import { exportBuffers } from "./exportTabs"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
 import { EditorSettingsModal } from "../../../components/EditorSettingsModal"
+import { NotebookFromEditorMenu } from "./NotebookFromEditorMenu"
 import {
   Box,
   DropdownMenu,
@@ -437,9 +438,6 @@ export const Tabs = () => {
         buffer.metricsViewState.metrics.length > 0) ||
       buffer.notebookViewState != null
     ) {
-      void trackEvent(ConsoleEvent.TAB_ARCHIVE, {
-        type: bufferTypeOf(buffer),
-      })
       await archiveBuffer(parseInt(id))
     } else {
       await deleteBuffer(parseInt(id))
@@ -482,7 +480,12 @@ export const Tabs = () => {
   const rename = async (id: string, title: string) => {
     const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
     void trackEvent(ConsoleEvent.TAB_RENAME, {
-      ...(buffer ? { type: bufferTypeOf(buffer) } : {}),
+      ...(buffer
+        ? {
+            type: bufferTypeOf(buffer),
+            ...(buffer.notebookViewState ? { notebookId: buffer.id } : {}),
+          }
+        : {}),
     })
     await updateBuffer(parseInt(id), {
       label: title.slice(0, MAX_BUFFER_NAME_LENGTH),
@@ -618,7 +621,12 @@ export const Tabs = () => {
                     key={buffer.id}
                     title={buffer.label}
                     onClick={async () => {
-                      void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
+                      void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE, {
+                        type: bufferTypeOf(buffer),
+                        ...(buffer.notebookViewState
+                          ? { notebookId: buffer.id }
+                          : {}),
+                      })
                       await updateBuffer(buffer.id as number, {
                         archived: false,
                         archivedAt: undefined,
@@ -712,6 +720,7 @@ export const Tabs = () => {
             >
               <Text color="contentPrimary">Export tabs</Text>
             </DropdownMenu.Item>
+            <NotebookFromEditorMenu />
             <DropdownMenu.Divider />
             <DropdownMenu.Item
               onClick={() => setSettingsOpen(true)}
@@ -762,9 +771,7 @@ export const Tabs = () => {
                   if (buffer) {
                     void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
                       source: "tab_menu",
-                    })
-                    void trackEvent(ConsoleEvent.NOTEBOOK_TAB_OPEN, {
-                      source: "tab_menu",
+                      notebookId: buffer.id,
                     })
                   }
                 })
@@ -774,6 +781,7 @@ export const Tabs = () => {
             >
               New notebook
             </DropdownMenu.Item>
+            <NotebookFromEditorMenu />
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>

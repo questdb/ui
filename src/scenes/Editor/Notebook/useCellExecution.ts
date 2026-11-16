@@ -39,6 +39,10 @@ import { hasPendingResult, statementKeysFor } from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
 import { authSessionState } from "../../../modules/OAuth2/authSessionState"
+import {
+  trackNotebookExecution,
+  type NotebookExecutionOutcome,
+} from "../../../modules/ConsoleEventTracker/notebookExecutionEvents"
 
 export type DrawGateOutcome =
   | { granted: true }
@@ -848,6 +852,9 @@ export const useCellExecution = ({
       const target = cell.result.results[index]
       if (!target || !target.query.trim()) return notCommitted
       const sql = target.query
+      const session = authSessionState.capture()
+      const startedAt = performance.now()
+      let executionOutcome: NotebookExecutionOutcome = "not_started"
 
       const isCurrentRun = beginCellRun(runGenerationRef.current, cellId)
       const controllers = abortControllersRef.current.get(cellId) ?? []
@@ -876,15 +883,35 @@ export const useCellExecution = ({
             error: "Cancelled by user",
           }
         }
-        if (ac.signal.aborted || !isCurrentRun()) return notCommitted
+        if (ac.signal.aborted || !isCurrentRun()) {
+          executionOutcome = ac.signal.aborted ? "cancelled" : "superseded"
+          return notCommitted
+        }
         publishSchemaIfMutating(execResult)
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
-        if (!liveCell?.result) return notCommitted
+        if (!liveCell?.result) {
+          executionOutcome = "unverified"
+          return notCommitted
+        }
+        executionOutcome = execResult.requestNotSent
+          ? "unverified"
+          : execResult.type === "error"
+            ? "error"
+            : "success"
         updateCellResult(cellId, index, singleResultFromExec(execResult, sql))
         stampRunHistory(cellId)
         persistSnapshot(cellId)
         return { committed: true, ok: execResult.type !== "error" }
       } finally {
+        if (session.isCurrent())
+          trackNotebookExecution({
+            notebookId: bufferId,
+            cellId,
+            mode: "grid",
+            trigger: "manual_refresh",
+            outcome: executionOutcome,
+            durationMs: performance.now() - startedAt,
+          })
         if (isCurrentRun()) {
           clearRunningCell(
             abortControllersRef,
@@ -896,6 +923,7 @@ export const useCellExecution = ({
       }
     },
     [
+      bufferId,
       cellsRef,
       executeSingle,
       updateCellResult,

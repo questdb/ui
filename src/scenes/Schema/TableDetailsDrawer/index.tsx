@@ -19,6 +19,7 @@ import {
 } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import { useSettings } from "../../../providers"
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import * as QuestDB from "../../../utils/questdb"
 import {
   getTableKind,
@@ -53,6 +54,8 @@ import {
   type SourceState,
 } from "../../../hooks/catalogSource"
 import { MonitoringTab } from "./MonitoringTab"
+import { MonitoringDashboardButton } from "./MonitoringDashboardButton"
+import { useMonitoringDashboard } from "../../../hooks/useMonitoringDashboard"
 import { DetailsTab } from "./DetailsTab"
 import { ErrorBanner } from "./ErrorBanner"
 import type { BaseTableStatus, TableKindData } from "./types"
@@ -210,6 +213,9 @@ const TabBadge = styled(Badge).attrs({
 
 export const TableDetailsDrawer = () => {
   const dispatch = useDispatch()
+  const { leftPanelState, updateLeftPanelState } = useLocalStorage()
+  const monitoringDashboard = useMonitoringDashboard()
+  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const target = useSelector(selectors.console.getTableDetailsTarget)
   const targetRef = useRef(target)
@@ -864,6 +870,39 @@ export const TableDetailsDrawer = () => {
                 onWalExpandedChange={setWalExpanded}
                 onOpenSuspensionDialog={() => setSuspensionDialogOpen(true)}
                 onAskAI={handleAskAIForIssue}
+                dashboardAction={
+                  (kind === "table" || kind === "matview") && (
+                    <MonitoringDashboardButton
+                      busy={monitoringDashboard.busy || tablesUnavailable}
+                      onClick={() => {
+                        void monitoringDashboard.open(
+                          {
+                            target: {
+                              instanceKey:
+                                telemetryConfig?.id ||
+                                new URL(".", window.location.href).href,
+                              tableId: tableData.id,
+                              kind,
+                            },
+                            name: tableName,
+                            telemetryEnabled: telemetryConfig?.enabled === true,
+                            walEnabled: tableData.walEnabled,
+                            refreshSchedule: matViewData ?? undefined,
+                          },
+                          () => isCurrentTarget(tableName, kind),
+                          () => {
+                            if (leftPanelState.type !== null) {
+                              updateLeftPanelState({
+                                type: null,
+                                width: leftPanelState.width,
+                              })
+                            }
+                          },
+                        )
+                      }}
+                    />
+                  )
+                }
               />
             )}
 

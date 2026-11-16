@@ -125,11 +125,16 @@ export const useGridKeyboardNav = (
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (!focusedCell) return
+      if (e.defaultPrevented || !focusedCell) return
 
       const { row, col } = focusedCell
 
       switch (e.key) {
+        case "Escape":
+          e.preventDefault()
+          e.stopPropagation()
+          setFocusedCell(null)
+          break
         case "ArrowUp":
           e.preventDefault()
           if (e.metaKey || e.ctrlKey) {

@@ -22,7 +22,7 @@ import { useCellResize } from "./useCellResize"
 import { ResizeHandle } from "../resize"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { ctrlCmd } from "../../../../utils/platform"
 import {
@@ -229,6 +229,7 @@ const MarkdownCellInner: React.FC<Props> = ({
 }) => {
   const { updateCell } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cell.id)
 
   const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({
     cellId: cell.id,
@@ -296,7 +297,7 @@ const MarkdownCellInner: React.FC<Props> = ({
         cellId: cell.id,
       })
     },
-    [bufferIdForEvents, cell.id],
+    [trackEvent, bufferIdForEvents, cell.id],
   )
 
   const edit = useCallback(() => setEditing(true), [])

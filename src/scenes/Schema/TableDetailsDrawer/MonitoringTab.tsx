@@ -75,6 +75,7 @@ export interface MonitoringTabProps {
   onWalExpandedChange: (expanded: boolean) => void
   onOpenSuspensionDialog: () => void
   onAskAI: (issue: HealthIssue) => void
+  dashboardAction?: React.ReactNode
 }
 
 const RowCountIndicatorInner = styled.div<{ $attachedToStatus?: boolean }>`
@@ -486,6 +487,7 @@ export const MonitoringTab = ({
   onWalExpandedChange,
   onOpenSuspensionDialog,
   onAskAI,
+  dashboardAction,
 }: MonitoringTabProps) => {
   const theme = useTheme()
   const matViewState = kindData.kind === "matview" ? kindData.matView : null
@@ -578,7 +580,7 @@ export const MonitoringTab = ({
 
       {/* View Status Section (matview and live view) */}
       {hasStatusSection && (
-        <Section $squishTop>
+        <Section $squishTop $squishBottom={!!dashboardAction}>
           <MetricsGrid $attachedToRowCount>
             <MetricCard data-hook="table-details-view-status">
               <MetricLabel>View Status</MetricLabel>
@@ -671,6 +673,8 @@ export const MonitoringTab = ({
           </MetricsGrid>
         </Section>
       )}
+
+      {dashboardAction}
 
       {(liveView || liveViewUnavailable) && (
         <>

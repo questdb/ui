@@ -62,6 +62,7 @@ import {
   withBoundNotebookReadOnly,
 } from "../../utils/notebooks/notebookController"
 import { enqueueBufferTask } from "../../utils/notebooks/notebookBufferQueue"
+import { closeUnmodifiedMonitoring } from "../../utils/monitoring/closeDashboard"
 
 import { useLiveQuery } from "dexie-react-hooks"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -118,7 +119,7 @@ export type EditorContext = {
   activeBuffer: Buffer
   setActiveBuffer: (
     buffer: Buffer,
-    options?: { focus?: boolean; fromSearch?: boolean },
+    options?: { focus?: boolean; fromSearch?: boolean; throwOnError?: boolean },
   ) => Promise<void>
   addBuffer: (
     buffer?: Partial<Buffer>,
@@ -233,7 +234,11 @@ export const EditorProvider: React.FC = ({ children }) => {
   const setActiveBuffer = useCallback(
     async (
       buffer: Buffer,
-      options?: { focus?: boolean; fromSearch?: boolean },
+      options?: {
+        focus?: boolean
+        fromSearch?: boolean
+        throwOnError?: boolean
+      },
     ) => {
       try {
         const currentActiveBufferId = (await bufferStore.getActiveId())?.value
@@ -281,6 +286,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         }
       } catch (e) {
         console.warn("Error setting active buffer:", e)
+        if (options?.throwOnError) throw e
       }
     },
     [],
@@ -625,6 +631,23 @@ export const EditorProvider: React.FC = ({ children }) => {
     id,
     initiator = "user",
   ) => {
+    const archivedBuffer = buffers.find((buffer) => buffer.id === id)
+    const trackArchive = (outcome: "archived" | "discarded_template") => {
+      if (initiator === "user" && archivedBuffer)
+        void trackEvent(ConsoleEvent.TAB_ARCHIVE, {
+          type: bufferTypeOf(archivedBuffer),
+          outcome,
+          ...(archivedBuffer.notebookViewState ? { notebookId: id } : {}),
+        })
+    }
+    if (
+      initiator === "user" &&
+      buffers.find((buffer) => buffer.id === id)?.monitoring &&
+      (await closeUnmodifiedMonitoring(id, () => deleteBuffer(id)))
+    ) {
+      trackArchive("discarded_template")
+      return
+    }
     // Snapshot before write — live query refresh makes post-update read unreliable.
     const wasNotebook = !!buffers.find((b) => b.id === id)?.notebookViewState
     await updateBuffer(id, {
@@ -632,6 +655,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       archivedAt: new Date().getTime(),
       position: -1,
     })
+    trackArchive("archived")
     await setActiveBufferOnRemoved(id)
     eventBus.publish(EventType.BUFFERS_UPDATED, {
       type: "archive",

@@ -89,7 +89,7 @@ const themes: {
       color: "contentSecondary",
     },
     hover: {
-      background: "surfaceRaised",
+      background: "interactionHover",
       border: "transparent",
       color: "contentPrimary",
     },

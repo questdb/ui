@@ -4,6 +4,7 @@ import { color } from "../../../../utils"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookBufferId } from "../NotebookProvider"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { CornerChip, SideChip } from "./chips"
 
@@ -115,12 +116,19 @@ const Handle = styled.div<{ $axis: string }>`
   `}
 `
 
-const dispatchAxisDoubleClick = (axis: string, target: HTMLElement): void => {
+const dispatchAxisDoubleClick = (
+  axis: string,
+  target: HTMLElement,
+  notebookId: number,
+): void => {
   const cellEl = target.closest<HTMLElement>("[data-cell-id]")
   const cellId = cellEl?.dataset.cellId
   if (!cellId) return
   if (axis === "s") {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, {
+      notebookId,
+      cellId,
+    })
     eventBus.publish(EventType.NOTEBOOK_CELL_RESET_SIZE, { cellId })
     return
   }
@@ -133,7 +141,14 @@ const dispatchAxisDoubleClick = (axis: string, target: HTMLElement): void => {
 }
 
 // Signature matches react-grid-layout's handleComponent prop.
-export const renderEdgeHandle = (axis: string, ref: React.Ref<HTMLElement>) => {
+const NotebookEdgeHandle = ({
+  axis,
+  handleRef: ref,
+}: {
+  axis: string
+  handleRef: React.Ref<HTMLElement>
+}) => {
+  const notebookId = useNotebookBufferId()
   const corner = isCorner(axis)
   return (
     <Handle
@@ -148,7 +163,12 @@ export const renderEdgeHandle = (axis: string, ref: React.Ref<HTMLElement>) => {
       onDoubleClick={
         corner
           ? undefined
-          : (e) => dispatchAxisDoubleClick(axis, e.currentTarget as HTMLElement)
+          : (e) =>
+              dispatchAxisDoubleClick(
+                axis,
+                e.currentTarget as HTMLElement,
+                notebookId,
+              )
       }
     >
       {!corner && <span className="edge-line" />}
@@ -158,3 +178,7 @@ export const renderEdgeHandle = (axis: string, ref: React.Ref<HTMLElement>) => {
     </Handle>
   )
 }
+
+export const renderEdgeHandle = (axis: string, ref: React.Ref<HTMLElement>) => (
+  <NotebookEdgeHandle axis={axis} handleRef={ref} />
+)

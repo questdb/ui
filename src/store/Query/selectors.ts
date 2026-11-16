@@ -36,6 +36,8 @@ import type {
   InformationSchemaColumn,
 } from "utils/questdb"
 import { QueryKey } from "./types"
+import { queryExecutionKey } from "../../utils/queryExecutionKey"
+import { Type } from "../../utils/questdb"
 
 const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
   store.query.notifications
@@ -71,6 +73,13 @@ const getColumns: (
 ) => Record<string, InformationSchemaColumn[]> = (store) => store.query.columns
 
 export default {
+  getResultHasRepeatedExecution: (store: StoreShape) =>
+    store.query.result?.type === Type.DQL &&
+    (store.query.executionCounts?.[
+      queryExecutionKey(store.query.result.query)
+    ] ?? 0) >= 2,
+  getResultSource: (store: StoreShape) => store.query.resultSource,
+  getBatchTransfer: (store: StoreShape) => store.query.batchTransfer,
   getNotifications,
   getQueryNotifications,
   getQueryNotificationsForBuffer,

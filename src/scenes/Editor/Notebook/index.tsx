@@ -18,6 +18,9 @@ import {
 import { absoluteStrategy } from "react-grid-layout/core"
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
+import { useNotebookTelemetry } from "./useNotebookTelemetry"
+import { useNotebookOpenTelemetry } from "../../../hooks/useNotebookOpenTelemetry"
+import { notebookFailureReason } from "../../../utils/notebooks/notebookFailureReason"
 import { useEditor } from "../../../providers/EditorProvider"
 import type { CellLayoutItem, NotebookViewState } from "../../../store/notebook"
 import {
@@ -414,6 +417,7 @@ const ListLayout: React.FC = () => {
 }
 
 const GridLayout: React.FC = () => {
+  const trackEvent = useNotebookTelemetry()
   const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
     useNotebookState()
   const resultHydration = useCellResultHydrationEngine()
@@ -511,7 +515,10 @@ const GridLayout: React.FC = () => {
         newItem &&
         (oldItem.x !== newItem.x || oldItem.y !== newItem.y)
       ) {
-        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "drag" })
+        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, {
+          method: "drag",
+          cellId: newItem.i,
+        })
       }
       autoScroll.stop()
       updateSettings({ layout: mapLayoutXYW(newLayout) })
@@ -522,7 +529,7 @@ const GridLayout: React.FC = () => {
         })
       }
     },
-    [autoScroll, mapLayoutXYW, updateSettings, activeBuffer.id],
+    [trackEvent, autoScroll, mapLayoutXYW, updateSettings, activeBuffer.id],
   )
 
   const handleResizeStop = useCallback<EventCallback>(
@@ -536,7 +543,10 @@ const GridLayout: React.FC = () => {
           oldItem.w !== newItem.w ||
           oldItem.h !== newItem.h)
       ) {
-        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region })
+        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, {
+          region,
+          cellId: newItem.i,
+        })
       }
       updateSettings({ layout: mapLayoutXYW(newLayout) })
       if (oldItem && newItem && oldItem.h !== newItem.h) {
@@ -564,6 +574,7 @@ const GridLayout: React.FC = () => {
       }
     },
     [
+      trackEvent,
       mapLayoutXYW,
       updateSettings,
       updateCell,
@@ -595,7 +606,7 @@ const GridLayout: React.FC = () => {
         nextW = cur.x + cur.w
       }
       if (nextX === cur.x && nextW === cur.w) return
-      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EXPAND_WIDTH, { kind })
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EXPAND_WIDTH, { kind, cellId })
       const nextLayout: CellLayoutItem[] = currentLayout.map((l) =>
         l.i === cellId
           ? { i: l.i, x: nextX, y: l.y, w: nextW, h: l.h }
@@ -612,7 +623,7 @@ const GridLayout: React.FC = () => {
     eventBus.subscribe(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, handler)
     return () =>
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, handler)
-  }, [currentLayout, updateSettings, activeBuffer.id])
+  }, [trackEvent, currentLayout, updateSettings, activeBuffer.id])
 
   return (
     <GridScrollContainer
@@ -889,6 +900,10 @@ export const Notebook: React.FC = () => {
   const bufferId = typeof activeBuffer.id === "number" ? activeBuffer.id : null
   const isNotebook = !!activeBuffer.notebookViewState
   const archived = !!activeBuffer.archived
+  useNotebookOpenTelemetry(
+    bufferId,
+    isNotebook && !archived && !!seed && !seedError,
+  )
   const previewView = activeBuffer.notebookViewState
 
   const previewSeed = useMemo(
@@ -900,7 +915,7 @@ export const Notebook: React.FC = () => {
   )
 
   const retrySeed = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_LOAD_RETRY)
+    void trackEvent(ConsoleEvent.NOTEBOOK_LOAD_RETRY, { notebookId: bufferId })
     setSeedAttempt((attempt) => attempt + 1)
   }
 
@@ -916,13 +931,23 @@ export const Notebook: React.FC = () => {
       (result) => {
         if (cancelled) return
         if (result instanceof NotebookToolError) {
+          void trackEvent(ConsoleEvent.NOTEBOOK_OPEN_FAILED, {
+            notebookId: bufferId,
+            stage: "load",
+            reason: notebookFailureReason(result),
+          })
           setSeedError({ message: result.message, retryable: false })
         } else {
           setSeed(result)
         }
       },
-      () => {
+      (error) => {
         if (!cancelled) {
+          void trackEvent(ConsoleEvent.NOTEBOOK_OPEN_FAILED, {
+            notebookId: bufferId,
+            stage: "load",
+            reason: notebookFailureReason(error),
+          })
           setSeedError({
             message: "Could not load this notebook.",
             retryable: true,
@@ -935,7 +960,7 @@ export const Notebook: React.FC = () => {
       window.clearTimeout(spinnerTimer)
       cancelNotebookMount(bufferId)
     }
-  }, [bufferId, isNotebook, archived, seedAttempt])
+  }, [trackEvent, bufferId, isNotebook, archived, seedAttempt])
 
   if (bufferId === null || !isNotebook) {
     return null

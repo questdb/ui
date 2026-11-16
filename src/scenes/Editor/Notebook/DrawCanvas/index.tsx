@@ -30,7 +30,7 @@ import {
   getChartZoom,
   setChartZoom,
 } from "../cellVirtualization/chartZoomStore"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { ChartSettingsTelemetry } from "../CellChart/chartSettingsTelemetry"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
@@ -62,27 +62,6 @@ const selectDrawState = (
     classifyBlock: state.classifyBlock,
     fetchCancelled: state.fetchCancelled,
   }
-
-const notebookChartSettingsTelemetry: ChartSettingsTelemetry = {
-  onCancel: (method) => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_CANCEL, { method })
-  },
-  onSave: (payload) => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_SAVE, payload)
-  },
-  onSaveBlocked: (reason) => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SAVE_BLOCKED, { reason })
-  },
-  onTypeChange: (from, to) => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_TYPE_CHANGE, { from, to })
-  },
-  onResetAuto: (chartType) => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_RESET_AUTO, { chartType })
-  },
-}
-
-const trackChartSettingsCancel = (method: SettingsDismissMethod) =>
-  notebookChartSettingsTelemetry.onCancel?.(method)
 
 const Wrapper = styled.div`
   display: flex;
@@ -133,11 +112,39 @@ export const DrawCanvas: React.FC<Props> = ({
   onConfigChange,
   onRetryUnmountWhileFocused,
 }) => {
+  const trackEvent = useNotebookTelemetry(cell.id)
+  const notebookChartSettingsTelemetry = useMemo<ChartSettingsTelemetry>(
+    () => ({
+      onCancel: (method) => {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_CANCEL, { method })
+      },
+      onSave: (payload) => {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_SAVE, payload)
+      },
+      onSaveBlocked: (reason) => {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SAVE_BLOCKED, { reason })
+      },
+      onTypeChange: (from, to) => {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CHART_TYPE_CHANGE, { from, to })
+      },
+      onResetAuto: (chartType) => {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CHART_RESET_AUTO, { chartType })
+      },
+    }),
+    [trackEvent],
+  )
+
+  const trackChartSettingsCancel = useCallback(
+    (method: SettingsDismissMethod) =>
+      notebookChartSettingsTelemetry.onCancel?.(method),
+    [notebookChartSettingsTelemetry],
+  )
+
   const trackSettingsOpen = useCallback(() => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
       chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
     })
-  }, [cell.chartConfig])
+  }, [trackEvent, cell.chartConfig])
   const settingsDrawer = useSettingsDrawerSession({
     sessions: chartSettingsSessions,
     cellId: cell.id,
@@ -200,7 +207,10 @@ export const DrawCanvas: React.FC<Props> = ({
   const handleRetry = (e: React.MouseEvent) => {
     if (e.currentTarget.matches(":focus-visible")) onRetryUnmountWhileFocused()
     signalUserEdit(bufferId)
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW, {
+      phase: "requested",
+      trigger: "manual",
+    })
     eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
   }
 
@@ -213,6 +223,14 @@ export const DrawCanvas: React.FC<Props> = ({
     classifyBlock !== null || queries.length === 0 || results.length === 0
   const settledForCurrentQueries = settledKey === queriesKey
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
+  const waitingForDraw =
+    cell.deferInitialDraw &&
+    !loading &&
+    !hadError &&
+    !state.fetchCancelled &&
+    queries.length > 0 &&
+    results.length === 0 &&
+    classifyBlock === null
   let emptyMessage: string
   if (classifyBlock?.kind === "write") {
     emptyMessage = `Cannot draw a write query ('${classifyBlock.queryType}'). Switch to Run mode to execute this SQL.`
@@ -261,6 +279,13 @@ export const DrawCanvas: React.FC<Props> = ({
             dataHook="draw-canvas-retry"
           >
             Retry
+          </Button>
+        </CancelledState>
+      ) : waitingForDraw ? (
+        <CancelledState data-hook="draw-canvas-transferred">
+          <span>Chart saved. Draw to load its data.</span>
+          <Button variant="secondary" size="sm" onClick={handleRetry}>
+            Draw
           </Button>
         </CancelledState>
       ) : empty ? (

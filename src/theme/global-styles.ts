@@ -79,10 +79,7 @@ export const GlobalStyle = createGlobalStyle`
 
   button[data-button-variant="ghost"]:hover:not(:disabled) {
     border-color: transparent;
-    background: ${({ theme }) =>
-      theme.mode === "light"
-        ? theme.color.interactionHover
-        : theme.color.surfaceRaised};
+    background: ${({ theme }) => theme.color.interactionHover};
     color: ${({ theme }) => theme.color.contentPrimary};
   }
 

@@ -1,7 +1,7 @@
 import React from "react"
 import { CheckmarkOutline, CloseOutline } from "../../../../components/icons"
 import { ArrowClockwiseIcon, MinusIcon, Queue } from "@phosphor-icons/react"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { LoadingIconSvg } from "../../Monaco/icons"
 import type { StatementSlotView } from "./statementSlotView"
@@ -76,41 +76,46 @@ const SlotIcon: React.FC<{ slot: StatementSlotView }> = ({ slot }) => {
 }
 
 type Props = {
+  cellId: string
   slots: StatementSlotView[]
   activeSlotIndex: number
   onTabChange?: (statementKey: string) => void
 }
 
 export const TabBar: React.FC<Props> = ({
+  cellId,
   slots,
   activeSlotIndex,
   onTabChange,
-}) => (
-  <TabBarWrapper role="tablist">
-    {slots.map((slot, i) => (
-      <Tab
-        // Positional identity — duplicate SQL across statements is legal
-        // (e.g. `SELECT 1; SELECT 1;`) and would collapse if keyed on query.
-        // eslint-disable-next-line react/no-array-index-key
-        key={i}
-        $active={i === activeSlotIndex}
-        onClick={() => {
-          if (i !== activeSlotIndex) {
-            void trackEvent(ConsoleEvent.NOTEBOOK_RESULT_TAB_SWITCH, {
-              tabIndex: i,
-              tabCount: slots.length,
-              resultType: slot.result?.type ?? "none",
-            })
-          }
-          onTabChange?.(slot.key)
-        }}
-        title={slot.sql}
-        role="tab"
-        aria-selected={i === activeSlotIndex}
-      >
-        <SlotIcon slot={slot} />
-        <TabLabel>{truncateQuery(slot.sql)}</TabLabel>
-      </Tab>
-    ))}
-  </TabBarWrapper>
-)
+}) => {
+  const trackEvent = useNotebookTelemetry(cellId)
+  return (
+    <TabBarWrapper role="tablist">
+      {slots.map((slot, i) => (
+        <Tab
+          // Positional identity — duplicate SQL across statements is legal
+          // (e.g. `SELECT 1; SELECT 1;`) and would collapse if keyed on query.
+          // eslint-disable-next-line react/no-array-index-key
+          key={i}
+          $active={i === activeSlotIndex}
+          onClick={() => {
+            if (i !== activeSlotIndex) {
+              void trackEvent(ConsoleEvent.NOTEBOOK_RESULT_TAB_SWITCH, {
+                tabIndex: i,
+                tabCount: slots.length,
+                resultType: slot.result?.type ?? "none",
+              })
+            }
+            onTabChange?.(slot.key)
+          }}
+          title={slot.sql}
+          role="tab"
+          aria-selected={i === activeSlotIndex}
+        >
+          <SlotIcon slot={slot} />
+          <TabLabel>{truncateQuery(slot.sql)}</TabLabel>
+        </Tab>
+      ))}
+    </TabBarWrapper>
+  )
+}

@@ -23,6 +23,8 @@
  ******************************************************************************/
 
 import type { ReactNode } from "react"
+import type { EditorBatchTransfer } from "../../utils/notebooks/notebookTransfer"
+import { queryExecutionKey } from "../../utils/queryExecutionKey"
 
 import type {
   QueryRawResult,
@@ -91,9 +93,27 @@ const removeNotification = (
   type: QueryAT.REMOVE_NOTIFICATION,
 })
 
-const setResult = (payload: QueryRawResult | undefined): QueryAction => ({
+const setResult = (
+  payload: QueryRawResult | undefined,
+  bufferId?: number,
+  fetchedAt = Date.now(),
+): QueryAction => ({
   payload,
+  source: payload ? { bufferId, fetchedAt } : undefined,
   type: QueryAT.SET_RESULT,
+})
+
+const setBatchTransfer = (
+  payload: EditorBatchTransfer | undefined,
+): QueryAction => ({ type: QueryAT.SET_BATCH_TRANSFER, payload })
+
+const recordQueryExecution = (sql: string): QueryAction => ({
+  type: QueryAT.RECORD_QUERY_EXECUTION,
+  payload: queryExecutionKey(sql),
+})
+
+const clearQueryExecutions = (): QueryAction => ({
+  type: QueryAT.CLEAR_QUERY_EXECUTIONS,
 })
 
 const stopRunning = (): QueryAction => ({
@@ -157,6 +177,8 @@ const setQueriesToRun = (payload: QueriesToRun): QueryAction => ({
 })
 
 export default {
+  recordQueryExecution,
+  clearQueryExecutions,
   addNotification,
   cleanupNotifications,
   cleanupBufferNotifications,
@@ -165,6 +187,7 @@ export default {
   updateNotificationKeys,
   moveNotificationNamespace,
   setResult,
+  setBatchTransfer,
   stopRunning,
   toggleRunning,
   setTables,

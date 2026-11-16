@@ -3,8 +3,94 @@ import query, { initialState } from "./reducers"
 import actions from "./actions"
 import { NotificationType } from "./types"
 import type { QueryKey, QueryNotifications, QueryStateShape } from "./types"
+import { Type } from "../../utils/questdb"
+import {
+  queryExecutionKey,
+  MAX_TRACKED_QUERY_EXECUTIONS,
+} from "../../utils/queryExecutionKey"
+
+it("ties transfer metadata to the displayed result and clears it with the result", () => {
+  const result = {
+    type: Type.DQL as const,
+    query: "select 1",
+    columns: [],
+    dataset: [],
+    count: 0,
+    error: undefined,
+    notice: undefined,
+    timings: { compiler: 0, authentication: 0, count: 0, execute: 0, fetch: 0 },
+  }
+  const fromEditor = query(initialState, actions.setResult(result, 7, 42))
+  expect(fromEditor.resultSource).toEqual({ bufferId: 7, fetchedAt: 42 })
+  const withBatch = query(
+    fromEditor,
+    actions.setBatchTransfer({
+      bufferId: 7,
+      queries: [{ sql: "select 1" }, { sql: "select 2" }],
+      writeCount: 0,
+      hasAllResults: false,
+    }),
+  )
+  const fromConversation = query(
+    withBatch,
+    actions.setResult(result, undefined, 99),
+  )
+  expect(fromConversation.resultSource).toEqual({
+    bufferId: undefined,
+    fetchedAt: 99,
+  })
+  expect(fromConversation.batchTransfer).toBeUndefined()
+  expect(
+    query(fromConversation, actions.setResult(undefined)).resultSource,
+  ).toBeUndefined()
+})
 
 const BUFFER_ID = 1
+
+describe("manual query execution counters", () => {
+  it("counts repeated executions independently from publishing results", () => {
+    const first = query(
+      initialState,
+      actions.recordQueryExecution(" select 1; "),
+    )
+    expect(first.executionCounts?.[queryExecutionKey("select 1")]).toBe(1)
+    const clearedResult = query(first, actions.setResult(undefined))
+    const second = query(
+      clearedResult,
+      actions.recordQueryExecution("select 1"),
+    )
+    const another = query(second, actions.recordQueryExecution("select 2"))
+    expect(another.executionCounts?.[queryExecutionKey("select 1")]).toBe(2)
+    expect(another.executionCounts?.[queryExecutionKey("select 2")]).toBe(1)
+    expect(
+      query(another, actions.recordQueryExecution("select 1"))
+        .executionCounts?.[queryExecutionKey("select 1")],
+    ).toBe(2)
+    expect(
+      query(another, actions.clearQueryExecutions()).executionCounts,
+    ).toBeUndefined()
+  })
+
+  it("bounds session memory without conflating SQL literals", () => {
+    expect(queryExecutionKey("select 'A'")).not.toBe(
+      queryExecutionKey("select 'a'"),
+    )
+    let state = initialState
+    for (let i = 0; i <= MAX_TRACKED_QUERY_EXECUTIONS; i++)
+      state = query(state, actions.recordQueryExecution(`select ${i}`))
+    expect(Object.keys(state.executionCounts ?? {})).toHaveLength(
+      MAX_TRACKED_QUERY_EXECUTIONS,
+    )
+    expect(
+      state.executionCounts?.[queryExecutionKey("select 0")],
+    ).toBeUndefined()
+    expect(
+      state.executionCounts?.[
+        queryExecutionKey(`select ${MAX_TRACKED_QUERY_EXECUTIONS}`)
+      ],
+    ).toBe(1)
+  })
+})
 
 const notificationGroup = (
   queryKey: QueryKey,

@@ -1,3 +1,5 @@
+import { trackEvent as trackConsoleEvent } from "../../../modules/ConsoleEventTracker"
+import { notebookFailureReason } from "../../../utils/notebooks/notebookFailureReason"
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Box, Button, IconButton, Spinner, Tooltip } from "../../../components"
@@ -10,7 +12,7 @@ import {
 import { CopyAlt } from "../../../components/icons"
 import { color } from "../../../utils"
 import { toast } from "../../../components/Toast"
-import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "./useNotebookTelemetry"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { exportBuffers } from "../Monaco/exportTabs"
 import { useNotebookActions, useNotebookState } from "./NotebookProvider"
@@ -137,6 +139,7 @@ const TooltipButton: React.FC<{
 )
 
 export const NotebookToolbar: React.FC = () => {
+  const trackEvent = useNotebookTelemetry()
   const { cells, settings } = useNotebookState()
   const { updateSettings } = useNotebookActions()
   const { activeBuffer, buffers, duplicateNotebook, updateBuffer } = useEditor()
@@ -213,6 +216,8 @@ export const NotebookToolbar: React.FC = () => {
     if (e.key === "Enter") {
       nameInputRef.current?.blur()
     } else if (e.key === "Escape") {
+      e.preventDefault()
+      e.stopPropagation()
       cancelRenameRef.current = true
       nameInputRef.current?.blur()
     }
@@ -243,13 +248,24 @@ export const NotebookToolbar: React.FC = () => {
   const handleDuplicate = async () => {
     if (typeof activeBuffer.id !== "number" || isArchived || isDuplicating)
       return
-    void trackEvent(ConsoleEvent.NOTEBOOK_DUPLICATE, {
-      cellCount: cells.length,
-      layoutMode: mode,
-    })
+    const sourceNotebookId = activeBuffer.id
     setIsDuplicating(true)
     try {
-      await duplicateNotebook(activeBuffer.id)
+      const copied = await duplicateNotebook(sourceNotebookId)
+      void trackConsoleEvent(ConsoleEvent.NOTEBOOK_DUPLICATE, {
+        sourceNotebookId,
+        notebookId: copied?.id,
+        cellCount: cells.length,
+        layoutMode: mode,
+        outcome: copied ? "success" : "not_created",
+      })
+    } catch (error) {
+      void trackConsoleEvent(ConsoleEvent.NOTEBOOK_DUPLICATE, {
+        sourceNotebookId,
+        outcome: "error",
+        reason: notebookFailureReason(error),
+      })
+      toast.error("Could not duplicate this notebook.")
     } finally {
       if (isMountedRef.current) setIsDuplicating(false)
     }

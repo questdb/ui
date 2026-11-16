@@ -20,7 +20,7 @@ export type ChartQueryState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "cancelled" }
-  | { status: "ready"; result: QueryExecResult }
+  | { status: "ready"; result: QueryExecResult; fetchedAt: number }
   | { status: "error"; message: string }
 
 export type ChartQuery = ChartQueryState & {
@@ -129,6 +129,7 @@ export const useChartQuery = ({ seed, enabled }: Params): ChartQuery => {
         settledSeedRef.current = seed
         setState({
           status: "ready",
+          fetchedAt: Date.now(),
           result: {
             type: "dql",
             query: response.query,

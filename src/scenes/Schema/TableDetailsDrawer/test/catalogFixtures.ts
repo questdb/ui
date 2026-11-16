@@ -75,6 +75,8 @@ export const matView = () => ({
   base_table_name: "trades",
   view_status: "valid",
   refresh_type: "incremental",
+  timer_interval: 0,
+  timer_interval_unit: null,
   invalidation_reason: null,
   refresh_base_table_txn: BigInt(100),
   base_table_txn: BigInt(100),

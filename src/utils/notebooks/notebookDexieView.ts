@@ -39,6 +39,7 @@ const MARKDOWN_FOREIGN_FIELDS = [
   "isViewMaximized",
   "mode",
   "chartConfig",
+  "deferInitialDraw",
   "highlightConfig",
   "autoRefresh",
   "bottomHeight",

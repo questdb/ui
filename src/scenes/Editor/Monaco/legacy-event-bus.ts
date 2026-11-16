@@ -31,10 +31,12 @@ export const registerLegacyEventBusEvents = ({
   editor,
   toggleRunning,
   getRunning,
+  onRefresh,
 }: {
   editor: editor.IStandaloneCodeEditor
   toggleRunning: (runningType?: RunningType) => void
   getRunning: () => RunningType
+  onRefresh: (query?: string) => void
 }) => {
   eventBus.subscribe<{ query: string }>(
     EventType.MSG_QUERY_FIND_N_EXEC,
@@ -48,8 +50,8 @@ export const registerLegacyEventBusEvents = ({
     },
   )
 
-  eventBus.subscribe(EventType.MSG_QUERY_EXEC, () => {
-    toggleRunning(RunningType.REFRESH)
+  eventBus.subscribe<{ q: string }>(EventType.MSG_QUERY_EXEC, (payload) => {
+    onRefresh(payload?.q)
   })
 
   eventBus.subscribe(EventType.MSG_EDITOR_FOCUS, () => {

@@ -164,3 +164,32 @@ describe("dispatchMCPTool — envelope shape", () => {
     expect(out.content[0].text).toMatch(/^boom/)
   })
 })
+
+describe("notebook telemetry before response decoration", () => {
+  it("extracts the created ID before adding permission notices and the workspace digest", async () => {
+    vi.mocked(mockedDispatchTool).mockResolvedValueOnce({
+      content: JSON.stringify({ bufferId: 23, label: "private name" }),
+    })
+    const context = ctx()
+    context.permissions.consumeDirty = () => true
+    const onNotebookTelemetry = vi.fn()
+    const response = await dispatchMCPTool(
+      makeCall("create_notebook", { label: "private name" }),
+      { ...context, onNotebookTelemetry },
+    )
+    expect(onNotebookTelemetry).toHaveBeenCalledWith({ notebookId: 23 })
+    expect(response.content[0].text).toContain("Permissions updated")
+    expect(response.content[0].text).toContain("since_last_check")
+  })
+  it("keeps the explicit target even when the tool is denied", async () => {
+    const onNotebookTelemetry = vi.fn()
+    await dispatchMCPTool(
+      makeCall("update_cell", { buffer_id: 99, cell_id: "c" }),
+      { ...ctx("unfetched"), onNotebookTelemetry },
+    )
+    expect(onNotebookTelemetry).toHaveBeenCalledWith({
+      notebookId: 99,
+      cellId: "c",
+    })
+  })
+})

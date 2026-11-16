@@ -52,7 +52,7 @@ import { useCellResultStatus } from "../resultHydration/CellResultHydrationConte
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { useCellRunActions } from "./useCellRunActions"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useCellResizeOrchestration } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
@@ -144,6 +144,7 @@ const CellInner: React.FC<Props> = ({
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
   const bufferIdForEvents = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cell.id)
   const isDrawMode = cell.mode === "draw"
 
   const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({

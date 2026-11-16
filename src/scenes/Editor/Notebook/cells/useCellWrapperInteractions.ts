@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef } from "react"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 // Wrapper-level interactions shared by every cell kind (SQL and markdown) so
@@ -27,6 +27,7 @@ export const useCellWrapperInteractions = ({
   const { moveCellUp, moveCellDown, setFocusedCell, getCellsSnapshot } =
     useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cellId)
 
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const canArrowMove = layoutMode !== "grid" && !isMaximized
@@ -38,11 +39,16 @@ export const useCellWrapperInteractions = ({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
       if (e.defaultPrevented) return
+      e.preventDefault()
+      e.stopPropagation()
       setFocusedCell(null)
-      ;(document.activeElement as HTMLElement | null)?.blur?.()
+      const active = document.activeElement
+      if (active instanceof HTMLElement && wrapperRef.current?.contains(active))
+        active.blur()
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    // Grid/editor handlers bubble here first; docked panels listen on window.
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
   }, [isFocused, setFocusedCell])
 
   const onKeyDown = useCallback(
@@ -72,6 +78,7 @@ export const useCellWrapperInteractions = ({
       })
     },
     [
+      trackEvent,
       canArrowMove,
       cellId,
       moveCellUp,

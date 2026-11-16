@@ -1,0 +1,40 @@
+import { describe, expect, it } from "vitest"
+import { notebookRunOutcome } from "./notebookExecutionEvents"
+import type { CellRunOutcome } from "../../scenes/Editor/Notebook/notebookUtils"
+
+const completed: CellRunOutcome = {
+  ok: true,
+  superseded: false,
+  result: {
+    activeResultIndex: 0,
+    timestamp: 0,
+    results: [{ type: "ddl", query: "private SQL" }],
+  },
+}
+describe("notebook execution outcomes", () => {
+  it("requires an attributable run result to call an execution successful", () => {
+    expect(notebookRunOutcome(completed)).toBe("success")
+    expect(notebookRunOutcome({ ...completed, ok: false })).toBe("error")
+    expect(notebookRunOutcome({ ...completed, result: undefined })).toBe(
+      "not_started",
+    )
+    expect(notebookRunOutcome({ ...completed, superseded: true })).toBe(
+      "superseded",
+    )
+    expect(notebookRunOutcome({ ...completed, cellChanged: true })).toBe(
+      "unverified",
+    )
+    expect(notebookRunOutcome({ ...completed, resultCleared: true })).toBe(
+      "unverified",
+    )
+    expect(notebookRunOutcome({ ...completed, cancelled: "cancelled" })).toBe(
+      "cancelled",
+    )
+    expect(notebookRunOutcome({ ...completed, denied: "private denial" })).toBe(
+      "denied",
+    )
+    expect(notebookRunOutcome({ ...completed, skipped: "write" })).toBe(
+      "skipped",
+    )
+  })
+})

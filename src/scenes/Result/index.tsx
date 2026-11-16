@@ -44,6 +44,7 @@ import { quickVis } from "../../js/console/quick-vis"
 import {
   Box,
   Button,
+  IconButton,
   PaneContent,
   PaneWrapper,
   PopperToggle,
@@ -73,7 +74,12 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { ResultGridAdapter } from "./ResultGridAdapter"
 import { type PaginationFn } from "./usePagedDataSource"
-import { ResultChart } from "./ResultChart"
+import { ResultChart, type ResultChartTransfer } from "./ResultChart"
+import { NotebookTransferActions } from "./NotebookTransferActions"
+import { BatchNotebookAction } from "./BatchNotebookAction"
+import { useEditor } from "../../providers/EditorProvider"
+import { toTransferResult } from "../../utils/notebooks/notebookTransfer"
+import type { NotebookTransferRequest } from "../../hooks/useNotebookTransfer"
 
 const Root = styled.div`
   display: flex;
@@ -118,6 +124,7 @@ const ResultCountBadge = styled.span`
   font-weight: 400;
   line-height: 1.56rem;
   white-space: nowrap;
+  margin-right: auto;
 `
 
 const ResultCount = styled.span`
@@ -139,9 +146,9 @@ const StyledPrimaryToggleButton = styled(PrimaryToggleButton).attrs({
   && {
     height: ${TOOLBAR_CONTROL_HEIGHT};
     min-height: ${TOOLBAR_CONTROL_HEIGHT};
-    width: auto;
+    width: ${TOOLBAR_CONTROL_HEIGHT};
     min-width: ${TOOLBAR_CONTROL_HEIGHT};
-    padding: 0 1.2rem;
+    padding: 0;
   }
 `
 
@@ -180,17 +187,53 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const { quest, questExecution } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
+  const resultSource = useSelector(selectors.query.getResultSource)
+  const showMonitor = useSelector(selectors.query.getResultHasRepeatedExecution)
+  const { buffers, activeBuffer } = useEditor()
+  const [chartTransfer, setChartTransfer] = useState<ResultChartTransfer>()
   const running = useSelector(selectors.query.getRunning)
   const { active: activeQueryExecution } = useQueryExecutionState()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | null>(null)
   const resultActionsRef = useRef<HTMLDivElement | null>(null)
+  const [toolbarWidth, setToolbarWidth] = useState(0)
+  useEffect(() => {
+    const toolbar = resultActionsRef.current
+    if (!toolbar) return
+    const observer = new ResizeObserver(([entry]) => {
+      setToolbarWidth(entry.contentRect.width)
+    })
+    observer.observe(toolbar)
+    return () => observer.disconnect()
+  }, [])
   const runningRef = useRef(running)
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
   const { useNewGrid, useQuickVis } = useLocalStorage()
   const dispatch = useDispatch()
+  const sourceBuffer =
+    resultSource?.bufferId === undefined
+      ? activeBuffer
+      : buffers.find((buffer) => buffer.id === resultSource.bufferId)
+  const transferQuery =
+    viewMode === "chart"
+      ? chartTransfer && chartTransfer.seed === result
+        ? chartTransfer.query
+        : undefined
+      : result?.type === QuestDB.Type.DQL && resultSource
+        ? {
+            sql: result.query,
+            result: toTransferResult(result, resultSource.fetchedAt),
+          }
+        : undefined
+  const transferRequest: NotebookTransferRequest | undefined = transferQuery
+    ? {
+        queries: [transferQuery],
+        source: viewMode === "chart" ? "result_chart" : "result_grid",
+        sourceBuffer,
+      }
+    : undefined
 
   // Shared by both grids. On a failed fetch it surfaces a notification and never
   // calls the renderer, leaving the failing page unloaded.
@@ -300,7 +343,8 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     {
       tooltipText: "Copy current page to Markdown",
       trigger: (
-        <Button
+        <IconButton
+          label="Copy current page to Markdown"
           data-hook="grid-toolbar-markdown"
           variant="ghost"
           onClick={() => {
@@ -314,7 +358,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           }}
         >
           {isCopied ? <Check size="18px" /> : <Markdown size="18px" />}
-        </Button>
+        </IconButton>
       ),
     },
     {
@@ -338,7 +382,8 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     {
       tooltipText: "Move selected column to the front",
       trigger: (
-        <Button
+        <IconButton
+          label="Move selected column to the front"
           data-hook="grid-toolbar-move-front"
           variant="ghost"
           disabled={!gridHasSelection}
@@ -350,13 +395,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           }}
         >
           <MoveColumnToFront size="18px" weight="regular" />
-        </Button>
+        </IconButton>
       ),
     },
     {
       tooltipText: "Reset grid layout",
       trigger: (
-        <Button
+        <IconButton
+          label="Reset grid layout"
           data-hook="grid-toolbar-reset"
           variant="ghost"
           // Keep the grid's keyboard focus and cell selection on the action.
@@ -367,13 +413,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           }}
         >
           <ResetGrid size="18px" weight="regular" />
-        </Button>
+        </IconButton>
       ),
     },
     {
       tooltipText: "Re-run query",
       trigger: (
-        <Button
+        <IconButton
+          label="Re-run query"
           data-hook="grid-toolbar-refresh"
           variant="ghost"
           disabled={activeQueryExecution !== null}
@@ -386,7 +433,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           }}
         >
           <ArrowClockwiseIcon size="18px" weight="regular" />
-        </Button>
+        </IconButton>
       ),
     },
   ]
@@ -422,6 +469,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   return (
     <Root>
       <Wrapper>
+        <BatchNotebookAction />
         <Actions ref={resultActionsRef}>
           {count !== undefined && (
             <ResultCountBadge
@@ -445,6 +493,12 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               </Tooltip>
             ))}
 
+          <NotebookTransferActions
+            request={transferRequest}
+            chart={viewMode === "chart"}
+            showMonitor={showMonitor}
+            compact={toolbarWidth < (viewMode === "chart" ? 520 : 820)}
+          />
           <Box gap="0">
             <DownloadButton
               variant="secondary"
@@ -544,6 +598,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           ) : (
             <ResultChart
               result={result?.type === QuestDB.Type.DQL ? result : null}
+              onTransferChange={setChartTransfer}
               visible={viewMode === "chart"}
               onResetZoomFocus={focusResultActions}
             />

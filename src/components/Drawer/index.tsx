@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import styled, { css } from "styled-components"
@@ -54,7 +54,7 @@ const animateHide = css`
   }
 `
 
-const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
+const drawerContentStyles = css<{
   width?: string
   mode: DrawerProps["mode"]
 }>`
@@ -89,6 +89,18 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
     outline: none;
   }
   `};
+`
+
+const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })`
+  ${drawerContentStyles}
+`
+
+// A docked panel is not a dismissable overlay. In particular, Radix's
+// document-capture Escape listener would run before grids and editors can
+// consume the key. Keep the shared appearance, but let side-panel Escape
+// run last, after the focused content has handled it.
+const SideDrawerContent = styled.div`
+  ${drawerContentStyles}
 `
 
 export const StyledClose = styled(IconButton).attrs({
@@ -161,6 +173,22 @@ export const Drawer = ({
 
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
 
+  useEffect(() => {
+    if (mode !== "side" || !open || !closeOnEscape || !onDismiss) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        isTextFieldWithValue(event.target)
+      )
+        return
+      event.preventDefault()
+      onDismiss()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [mode, open, closeOnEscape, onDismiss])
+
   // A text field with content owns Escape: it clears itself first, and the
   // drawer only closes on the next press.
   const handleEscapeKeyDown = (event: KeyboardEvent) => {
@@ -219,6 +247,32 @@ export const Drawer = ({
       title
     )
 
+  const contents = (
+    <>
+      <RadixDialog.Title asChild>
+        <span style={{ display: "none" }}>
+          {typeof title === "string" ? title : "Drawer"}
+        </span>
+      </RadixDialog.Title>
+      {(title || withCloseButton) && (
+        <Panel.Header
+          title={titleWithNavigation}
+          afterTitle={afterTitle}
+          titleColor={titleColor}
+          {...(withCloseButton && {
+            afterTitle: (
+              <AfterTitleContainer>
+                {afterTitle}
+                {closeControl}
+              </AfterTitleContainer>
+            ),
+          })}
+        />
+      )}
+      {children}
+    </>
+  )
+
   return (
     <Dialog.Root
       onOpenChange={onOpenChange}
@@ -238,43 +292,30 @@ export const Drawer = ({
             <Overlay primitive={RadixDialog.Overlay} />
           </ForwardRef>
         )}
-        <DrawerContent
-          aria-describedby={undefined}
-          data-hook={dataHook}
-          mode={mode}
-          width={width}
-          {...(onDismiss && {
-            onEscapeKeyDown: closeOnEscape ? handleEscapeKeyDown : undefined,
-            onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
-          })}
-          {...(mode === "side" && {
-            onInteractOutside: (e) => e.preventDefault(),
-            onEscapeKeyDown: handleEscapeKeyDown,
-            onPointerDownOutside: (e) => e.preventDefault(),
-          })}
-        >
-          <RadixDialog.Title asChild>
-            <span style={{ display: "none" }}>
-              {typeof title === "string" ? title : "Drawer"}
-            </span>
-          </RadixDialog.Title>
-          {(title || withCloseButton) && (
-            <Panel.Header
-              title={titleWithNavigation}
-              afterTitle={afterTitle}
-              titleColor={titleColor}
-              {...(withCloseButton && {
-                afterTitle: (
-                  <AfterTitleContainer>
-                    {afterTitle}
-                    {closeControl}
-                  </AfterTitleContainer>
-                ),
-              })}
-            />
-          )}
-          {children}
-        </DrawerContent>
+        {mode === "side" ? (
+          <SideDrawerContent
+            role="dialog"
+            aria-label={typeof title === "string" ? title : "Drawer"}
+            data-hook={dataHook}
+            mode={mode}
+            width={width}
+          >
+            {contents}
+          </SideDrawerContent>
+        ) : (
+          <DrawerContent
+            aria-describedby={undefined}
+            data-hook={dataHook}
+            mode={mode}
+            width={width}
+            {...(onDismiss && {
+              onEscapeKeyDown: closeOnEscape ? handleEscapeKeyDown : undefined,
+              onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
+            })}
+          >
+            {contents}
+          </DrawerContent>
+        )}
       </RadixDialog.Portal>
     </Dialog.Root>
   )

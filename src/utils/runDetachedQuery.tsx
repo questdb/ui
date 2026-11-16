@@ -66,6 +66,9 @@ export async function runDetachedQuery(
       endOffset: -1,
     }
 
+    if (result.type === QuestDB.Type.DQL) {
+      dispatch(actions.recordQueryExecution(result.query))
+    }
     dispatch(actions.setResult(result))
 
     if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {

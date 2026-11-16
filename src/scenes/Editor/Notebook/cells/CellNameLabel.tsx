@@ -94,6 +94,8 @@ export const CellNameLabel: React.FC<Props> = ({ name, onRename }) => {
             e.preventDefault()
             inputRef.current?.blur()
           } else if (e.key === "Escape") {
+            e.preventDefault()
+            e.stopPropagation()
             cancelRef.current = true
             inputRef.current?.blur()
           }

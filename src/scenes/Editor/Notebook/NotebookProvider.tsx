@@ -1,3 +1,4 @@
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 import React, {
   createContext,
   useCallback,
@@ -9,6 +10,10 @@ import React, {
 } from "react"
 import type { MutableRefObject } from "react"
 import { unstable_batchedUpdates } from "react-dom"
+import {
+  hasTransferSnapshot,
+  takeTransferSnapshot,
+} from "../../../utils/notebooks/notebookTransferState"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
 import type {
@@ -62,6 +67,10 @@ import {
 } from "./statementIdentity"
 import type { RunCellGate } from "../../../utils/tools/permissions"
 import { signalUserEdit } from "../../../utils/notebooks/notebookAIBridge"
+import {
+  notebookRunOutcome,
+  trackNotebookExecution,
+} from "../../../modules/ConsoleEventTracker/notebookExecutionEvents"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { getQueriesFromText } from "../Monaco/utils"
@@ -330,7 +339,11 @@ export const NotebookProvider: React.FC<{
   const resultHydration = useMemo(
     () =>
       new CellResultHydrationEngine({
-        loadSnapshot: (cellId) => loadCellSnapshot(bufferId, cellId),
+        loadSnapshot: async (cellId) => {
+          const transferred = takeTransferSnapshot(bufferId, cellId)
+          if (transferred) return transferred
+          return loadCellSnapshot(bufferId, cellId)
+        },
         rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
         deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
         getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
@@ -386,6 +399,7 @@ export const NotebookProvider: React.FC<{
             (cell) =>
               cell.result == null &&
               hasRunMarker(cell) &&
+              !hasTransferSnapshot(bufferId, cell.id) &&
               !snapshotIds.has(cell.id),
           )
           .forEach((cell) => resultHydration.noteMissing(cell.id))
@@ -754,7 +768,22 @@ export const NotebookProvider: React.FC<{
       const queryKey = createNotebookQueryKey(bufferId, cellId, runId)
       const scopeKey = createNotebookScopeKey(bufferId, cellId)
 
-      return new Promise<CellRunOutcome>((resolve) => {
+      const session = authSessionState.capture()
+      const startedAt = performance.now()
+      return new Promise<CellRunOutcome>((resolve, reject) => {
+        const finish = (outcome: CellRunOutcome, dismissed = false) => {
+          // Explicit agent runs are already reported by the MCP tool event.
+          if (gate?.kind !== "explicit" && session.isCurrent())
+            trackNotebookExecution({
+              notebookId: bufferId,
+              cellId,
+              mode: "grid",
+              trigger: gate?.kind === "autoRun" ? "auto_run" : "run",
+              outcome: dismissed ? "cancelled" : notebookRunOutcome(outcome),
+              durationMs: performance.now() - startedAt,
+            })
+          resolve(outcome)
+        }
         const execute = () => {
           void runCellNow(
             cellId,
@@ -764,14 +793,25 @@ export const NotebookProvider: React.FC<{
             signal,
             expectFullValue,
             gate,
-          ).then(resolve)
+          ).then(finish, (error: unknown) => {
+            if (gate?.kind !== "explicit" && session.isCurrent())
+              trackNotebookExecution({
+                notebookId: bufferId,
+                cellId,
+                mode: "grid",
+                trigger: gate?.kind === "autoRun" ? "auto_run" : "run",
+                outcome: "error",
+                durationMs: performance.now() - startedAt,
+              })
+            reject(error)
+          })
         }
         const request = () =>
           questExecution.requestExecution({
             abort: (reason) => cancelCell(cellId, runCancelReasonOf(reason)),
             bufferId,
             execute,
-            onDismiss: () => resolve({ ok: false, superseded: false }),
+            onDismiss: () => finish({ ok: false, superseded: false }, true),
             queryKey,
             scopeKey,
           })
@@ -886,6 +926,7 @@ export const NotebookProvider: React.FC<{
     signalUserEdit(bufferId)
     store.updateCells((prev) => prev.map(clearCellAutoRefresh))
     void trackEvent(ConsoleEvent.NOTEBOOK_AUTOREFRESH_RESET_OVERRIDES, {
+      notebookId: bufferId,
       count,
     })
   }, [bufferId, store])

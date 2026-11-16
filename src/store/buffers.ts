@@ -24,6 +24,7 @@ import { RefreshRate } from "../scenes/Editor/Metrics/utils"
  ******************************************************************************/
 
 import { db } from "./db"
+import { updateWithMonitoringCustomization } from "./monitoringCustomization"
 import type { editor } from "monaco-editor"
 import {
   MetricType,
@@ -32,6 +33,7 @@ import {
 } from "scenes/Editor/Metrics/utils"
 import type { NotebookViewState } from "./notebook"
 import { createDefaultNotebookViewState } from "./notebook"
+import type { MonitoringSource } from "../utils/monitoring/types"
 
 export enum BufferType {
   SQL = "SQL",
@@ -95,6 +97,7 @@ export type Buffer = {
   editorViewState?: editor.ICodeEditorViewState
   metricsViewState?: MetricsViewState
   notebookViewState?: NotebookViewState
+  monitoring?: MonitoringSource
   isTemporary?: boolean
   isPreviewBuffer?: boolean
   previewContent?: PreviewContent
@@ -145,6 +148,7 @@ export const makeBuffer = ({
   editorViewState = defaultEditorViewState,
   metricsViewState,
   notebookViewState,
+  monitoring,
   position,
   archived,
   archivedAt,
@@ -157,6 +161,7 @@ export const makeBuffer = ({
   editorViewState?: editor.ICodeEditorViewState
   metricsViewState?: MetricsViewState
   notebookViewState?: NotebookViewState
+  monitoring?: MonitoringSource
   position: number
   archived?: boolean
   archivedAt?: number
@@ -172,6 +177,7 @@ export const makeBuffer = ({
       : editorViewState,
   metricsViewState,
   notebookViewState,
+  monitoring,
   position,
   archived,
   archivedAt,
@@ -236,7 +242,7 @@ export const bufferStore = {
       ),
 
   update: (id: number, buffer: Partial<Buffer>) =>
-    db.buffers.update(id, buffer),
+    updateWithMonitoringCustomization(id, buffer),
 
   delete: (id: number) => db.buffers.delete(id),
 
