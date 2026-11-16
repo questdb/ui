@@ -7,7 +7,6 @@ import React, {
   useRef,
   useState,
 } from "react"
-import { unstable_batchedUpdates } from "react-dom"
 import {
   AuthPayload,
   LogoutOptions,
@@ -243,11 +242,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     authSessionState.setAuthPayload(installed)
     // Login choice is tab-local; never erase another tab's password credentials.
     sessionStorage.setItem(StoreKey.LOGIN_METHOD, "sso")
-    // React 17 does not batch promise callbacks automatically.
-    unstable_batchedUpdates(() => {
-      setSessionData(installed)
-      dispatch({ view: View.ready })
-    })
+    setSessionData(installed)
+    dispatch({ view: View.ready })
     setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
     return installed
   }
@@ -398,10 +394,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else if (retainedPayload) {
         // Settings recovery can remount the providers without ending this
         // tab's SSO session. Resume its refresh capability as well as its bearer.
-        unstable_batchedUpdates(() => {
-          setSessionData(retainedPayload)
-          dispatch({ view: View.ready })
-        })
+        setSessionData(retainedPayload)
+        dispatch({ view: View.ready })
         if (authSessionState.hasRefreshFailed()) showRefreshFailedWarning()
       } else if (
         sessionStorage.getItem(StoreKey.LOGIN_METHOD) !== "password" &&
@@ -483,9 +477,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // next must start a new session, without the previous login's requests
       // or last result.
       if (authSessionState.isAuthenticated()) {
-        unstable_batchedUpdates(() =>
-          authSessionState.endSession(explainInterruptedRequests({})),
-        )
+        authSessionState.endSession(explainInterruptedRequests({}))
       }
       // Stop loading and display the login state
       dispatch({ view: View.login })
@@ -548,10 +540,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     // Session-end listeners clear client credentials, pending confirmations,
     // refresh work and telemetry timers, and, unless this document reloads,
-    // the last query result. React 17 does not batch promise continuations:
-    // their updates and showing Login must be one commit, before console
-    // effects can run again.
-    unstable_batchedUpdates(() => authSessionState.endSession(logoutOptions))
+    // the last query result. Their updates and showing Login commit together,
+    // before console effects can run again.
+    authSessionState.endSession(logoutOptions)
     destroyServerSession()
     if (reload) {
       // This session's running work was confirmed above. An earlier session's
@@ -572,7 +563,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       authSessionState.isSSOAuthenticated() &&
       (!settings["acl.enabled"] || !settings["acl.oidc.enabled"])
     ) {
-      unstable_batchedUpdates(() => authSessionState.endSession())
+      authSessionState.endSession()
     }
     // A rotating refresh can outlive Settings recovery and its original auth
     // owner. Shared teardown must notify the mounted owner, not only the
@@ -581,14 +572,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       authSessionState.onEnd(
         ({ errorTitle, errorMessage, isDisconnection, reload } = {}) => {
           if (reload) return
-          unstable_batchedUpdates(() => {
-            setSessionData(undefined)
-            dispatch({
-              view: View.login,
-              errorTitle,
-              errorMessage,
-              isDisconnection,
-            })
+          setSessionData(undefined)
+          dispatch({
+            view: View.login,
+            errorTitle,
+            errorMessage,
+            isDisconnection,
           })
         },
       ),

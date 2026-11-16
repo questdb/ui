@@ -70,7 +70,11 @@ const epicMiddleware = createEpicMiddleware<
   StoreShape
 >()
 
-const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
+const store = createStore(
+  rootReducer,
+  undefined,
+  compose(applyMiddleware(epicMiddleware)),
+)
 
 epicMiddleware.run(rootEpic)
 

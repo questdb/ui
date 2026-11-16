@@ -1,7 +1,8 @@
-import React from "react"
-import { act, create, type ReactTestRenderer } from "react-test-renderer"
+// @vitest-environment jsdom
+import React, { act } from "react"
+import { cleanup, render, type RenderResult } from "@testing-library/react"
 import { ThemeProvider } from "styled-components"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../../theme"
 import type { ProcessedFile } from "./types"
 
@@ -9,20 +10,11 @@ vi.mock("../../../components", () => ({ Box: "div" }))
 
 import { DropBox } from "./dropbox"
 
-let renderer: ReactTestRenderer | undefined
-
-beforeEach(() => {
-  // Paste is listened for on the window.
-  vi.stubGlobal("window", {
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  })
-})
+let view: RenderResult | undefined
 
 afterEach(() => {
-  act(() => renderer?.unmount())
-  renderer = undefined
-  vi.unstubAllGlobals()
+  cleanup()
+  view = undefined
 })
 
 const csv = (name: string) => ({ name }) as File
@@ -55,11 +47,8 @@ const mount = () => {
       />
     </ThemeProvider>
   )
-  act(() => {
-    renderer = create(element([]))
-  })
-  const setFiles = (files: ProcessedFile[]) =>
-    act(() => renderer!.update(element(files)))
+  view = render(element([]))
+  const setFiles = (files: ProcessedFile[]) => view!.rerender(element(files))
   return {
     onFilesDropped,
     box,

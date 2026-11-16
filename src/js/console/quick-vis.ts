@@ -45,7 +45,6 @@ import { escapeHtml } from "../../utils/escapeHtml"
 import * as QuestDB from "../../utils/questdb"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import { AnyIfEmpty } from "react-redux"
 import { request } from "http"
 import { createDetachedQueryKey } from "../../scenes/Editor/Monaco/utils"
 
@@ -91,7 +90,7 @@ export function quickVis(
   let currentChartOptions = blankChartOptions
 
   let cachedResponse: any
-  let cachedQuery: AnyIfEmpty
+  let cachedQuery: unknown
   let requestActive: boolean = false
   let executionToken = 0
   let activeQueryId: QuestDB.QueryId | null = null

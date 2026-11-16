@@ -342,8 +342,8 @@ export class CellResultHydrationEngine {
     })
   }
 
-  // One release per idle tick — each release re-renders a cell, and React 17
-  // does not batch state updates fired outside event handlers.
+  // One release per idle tick: each release re-renders a cell, so the work
+  // spreads over idle time instead of one long render.
   private releaseNextCell() {
     if (this.destroyed) return
     for (const cellId of [...this.releaseQueue]) {

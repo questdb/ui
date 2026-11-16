@@ -1,12 +1,16 @@
+// @vitest-environment jsdom
 import "../../../src/test/stubBrowserGlobals"
 import React from "react"
 import { Base64 } from "js-base64"
 import {
   act,
-  create,
-  type ReactTestInstance,
-  ReactTestRenderer,
-} from "react-test-renderer"
+  cleanup,
+  fireEvent,
+  render,
+  type RenderResult,
+  screen,
+  within,
+} from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthProvider, useAuth } from "../../../src/providers/AuthProvider"
 import { QuestProvider } from "../../../src/providers/QuestProvider"
@@ -75,9 +79,15 @@ vi.mock("../../../src/components/Toast", () => ({
     isActive: mocks.toastActive,
   },
 }))
-vi.mock("../../../src/components/Button", () => ({ Button: "button" }))
+vi.mock("../../../src/components/Button", async () => {
+  const { domStandIn } = await import("../../../src/test/domStandIn")
+  return { Button: domStandIn("button", ["prefixIcon"]) }
+})
 vi.mock("../../../src/components/Text", () => ({ Text: "span" }))
-vi.mock("../../../src/components/Box", () => ({ Box: "div" }))
+vi.mock("../../../src/components/Box", async () => {
+  const { domStandIn } = await import("../../../src/test/domStandIn")
+  return { Box: domStandIn("div", ["flexDirection"]) }
+})
 vi.mock("react-redux", () => ({
   useDispatch: () => vi.fn(),
   useSelector: () => undefined,
@@ -93,22 +103,45 @@ vi.mock("../../../src/modules/ConsoleEventTracker", () => ({
 vi.mock("../../../src/components/QueryExecutionConfirmDialog", () => ({
   QueryExecutionConfirmDialog: () => null,
 }))
-vi.mock("../../../src/components", () => ({
-  Text: "span",
-  Button: "button",
-  Box: "div",
-  CenteredLayout: "section",
-}))
+vi.mock("../../../src/components", async () => {
+  const { domStandIn } = await import("../../../src/test/domStandIn")
+  return {
+    Text: "span",
+    Button: domStandIn("button", ["prefixIcon"]),
+    Box: domStandIn("div", ["flexDirection"]),
+    CenteredLayout: domStandIn("section", ["preloadedImages"]),
+  }
+})
 vi.mock("../../../src/modules/OAuth2/views/login", () => ({
-  Login: (props: Record<string, unknown>) =>
-    React.createElement("div", {
-      ...props,
-      "data-hook": "mock-login",
-      "data-sso-username": localStorage.getItem("sso.username.test-client"),
-    }),
+  Login: ({
+    errorTitle,
+    errorMessage,
+    unfinishedWrites,
+    onBasicAuthSuccess,
+  }: {
+    errorTitle?: string
+    errorMessage?: string
+    unfinishedWrites: number
+    onBasicAuthSuccess: () => void
+  }) =>
+    React.createElement(
+      "div",
+      {
+        "data-hook": "mock-login",
+        "data-error-title": errorTitle,
+        "data-error-message": errorMessage,
+        "data-unfinished-writes": unfinishedWrites,
+        "data-sso-username": localStorage.getItem("sso.username.test-client"),
+      },
+      React.createElement(
+        "button",
+        { type: "button", onClick: onBasicAuthSuccess },
+        "Sign in with password",
+      ),
+    ),
 }))
 
-let renderer: ReactTestRenderer | undefined
+let view: RenderResult | undefined
 let auth: ReturnType<typeof useAuth>
 const initialToken = {
   access_token: "initial",
@@ -117,10 +150,28 @@ const initialToken = {
   expires_in: 3600,
   token_type: "Bearer",
 }
-const textOf = (node: ReactTestInstance): string =>
-  node.children
-    .map((child) => (typeof child === "string" ? child : textOf(child)))
-    .join("")
+const byHook = (hook: string) =>
+  document.body.querySelectorAll<HTMLElement>(`[data-hook="${hook}"]`)
+const loginView = () => {
+  const found = byHook("mock-login")
+  expect(found).toHaveLength(1)
+  const element = found[0]
+  const unfinishedWrites = element.getAttribute("data-unfinished-writes")
+  return {
+    errorTitle: element.getAttribute("data-error-title"),
+    errorMessage: element.getAttribute("data-error-message"),
+    unfinishedWrites:
+      unfinishedWrites === null ? undefined : Number(unfinishedWrites),
+    ssoUsername: element.getAttribute("data-sso-username"),
+    signInWithPassword: () =>
+      fireEvent.click(within(element).getByRole("button")),
+  }
+}
+// Text and element children, as rendered.
+const childrenOf = (element: Element) =>
+  Array.from(element.childNodes, (node) =>
+    node.nodeType === Node.TEXT_NODE ? node.textContent : node,
+  )
 const refreshToken = (
   deadline = new AbortController().signal,
   request = new AbortController().signal,
@@ -172,7 +223,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  act(() => renderer?.unmount())
+  cleanup()
   authSessionState.endSession()
   tokenRefresh.syncSession()
   vi.unstubAllGlobals()
@@ -186,7 +237,7 @@ const mount = async () => {
     return null
   }
   await act(async () => {
-    renderer = create(
+    view = render(
       <AuthProvider>
         <Consumer />
       </AuthProvider>,
@@ -194,9 +245,7 @@ const mount = async () => {
     await Promise.resolve()
   })
   // Signed in, so `auth` comes from this render rather than an earlier test.
-  expect(
-    renderer?.root.findAllByProps({ "data-hook": "mock-login" }),
-  ).toHaveLength(0)
+  expect(byHook("mock-login")).toHaveLength(0)
   expect(auth.sessionData?.access_token).toBe("initial")
 }
 
@@ -221,12 +270,10 @@ describe("AuthProvider token installation", () => {
       ),
     )
     await act(async () => {
-      renderer = create(tree())
+      view = render(tree())
       await Promise.resolve()
     })
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-    ).toHaveLength(1)
+    expect(byHook("console-live")).toHaveLength(1)
     const session = authSessionState.getAuthPayload()!
     const generation = authSessionState.getSessionId()
     vi.spyOn(Date, "now").mockReturnValue(
@@ -253,10 +300,10 @@ describe("AuthProvider token installation", () => {
 
     // Settings error/retry removes and replaces both providers without ending
     // this tab's session or cancelling its in-flight rotating refresh.
-    act(() => renderer!.unmount())
+    view!.unmount()
     location.search = ""
     await act(async () => {
-      renderer = create(tree())
+      view = render(tree())
       await Promise.resolve()
     })
     expect(authSessionState.getAuthPayload()).toBe(session)
@@ -274,7 +321,7 @@ describe("AuthProvider token installation", () => {
         authSessionState.markRefreshFailed()
         act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
       }
-      act(() => renderer!.unmount())
+      view!.unmount()
       authSessionState.markRefreshFailed()
       eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED)
       mocks.toastError.mockClear()
@@ -300,8 +347,7 @@ describe("AuthProvider token installation", () => {
     expect(authSessionState.isAuthenticated()).toBe(true)
     confirm.mockReturnValue(true)
     act(() => auth.signInAgain())
-    const login = renderer!.root.findByProps({ "data-hook": "mock-login" })
-    expect(login.props.errorMessage).toContain("Verify their outcomes")
+    expect(loginView().errorMessage).toContain("Verify their outcomes")
     expect(authSessionState.isAuthenticated()).toBe(false)
   })
 
@@ -316,10 +362,9 @@ describe("AuthProvider token installation", () => {
     expect(confirm).toHaveBeenCalledWith(
       "Signing in again cancels requests that have not been sent yet. End this session?",
     )
-    expect(
-      renderer!.root.findByProps({ "data-hook": "mock-login" }).props
-        .errorMessage,
-    ).toBe("Your previous session has ended. Please sign in again.")
+    expect(loginView().errorMessage).toBe(
+      "Your previous session has ended. Please sign in again.",
+    )
     expect(authSessionState.isAuthenticated()).toBe(false)
   })
 
@@ -343,8 +388,7 @@ describe("AuthProvider token installation", () => {
     vi.stubGlobal("confirm", confirm)
     act(() => auth.signInAgain())
     expect(confirm).not.toHaveBeenCalled()
-    const message = renderer!.root.findByProps({ "data-hook": "mock-login" })
-      .props.errorMessage as string
+    const message = loginView().errorMessage as string
     expect(message).toBe(
       "Your previous session has ended. Please sign in again.",
     )
@@ -366,13 +410,13 @@ describe("AuthProvider token installation", () => {
     expect(localStorage.getItem(StoreKey.SSO_SESSION_ACTIVE)).toBe("true")
 
     // And another SSO tab that reloads still signs in silently
-    act(() => renderer!.unmount())
+    view!.unmount()
     sessionStorage.setItem(StoreKey.LOGIN_METHOD, "sso")
     location.search = ""
     mocks.settings["acl.oidc.authorization.endpoint"] =
       "https://identity.example/authorize"
     await act(async () => {
-      renderer = create(
+      view = render(
         <AuthProvider>
           <span />
         </AuthProvider>,
@@ -426,20 +470,18 @@ describe("AuthProvider token installation", () => {
     )
     confirm.mockReturnValue(true)
     act(() => auth.signInAgain())
-    const login = () =>
-      renderer!.root.findByProps({ "data-hook": "mock-login" })
-    expect(login().props.errorMessage).toContain("Verify their outcomes")
+    expect(loginView().errorMessage).toContain("Verify their outcomes")
     // Aborting mid-stream could leave a partially imported table.
     expect(abortUpload).not.toHaveBeenCalled()
     // The upload no longer counts as the next login's activity, but Login
     // still reports it: leaving the page, even to sign in, would cancel it.
     expect(questClient.hasActiveRequests()).toBe(false)
-    expect(login().props.unfinishedWrites).toBe(1)
+    expect(loginView().unfinishedWrites).toBe(1)
     await act(async () => {
       finishUpload()
       await rejected
     })
-    expect(login().props.unfinishedWrites).toBe(0)
+    expect(loginView().unfinishedWrites).toBe(0)
     expect(abortUpload).not.toHaveBeenCalled()
   })
 
@@ -494,22 +536,13 @@ describe("AuthProvider token installation", () => {
       vi.fn(() => true),
     )
     act(() => auth.signInAgain())
-    const login = () =>
-      renderer!.root.findByProps({ "data-hook": "mock-login" })
-    expect(login().props.unfinishedWrites).toBe(1)
+    expect(loginView().unfinishedWrites).toBe(1)
     expect(leavePage().preventDefault).toHaveBeenCalledOnce()
     // Login explains the upload itself.
     expect(mocks.toastWarning).not.toHaveBeenCalled()
 
-    const { onBasicAuthSuccess } = login().props as {
-      onBasicAuthSuccess: () => void
-    }
-    act(() => {
-      onBasicAuthSuccess()
-    })
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
-    ).toHaveLength(0)
+    loginView().signInWithPassword()
+    expect(byHook("mock-login")).toHaveLength(0)
     return {
       leavePage,
       leaveListeners,
@@ -536,24 +569,21 @@ describe("AuthProvider token installation", () => {
       closeOnClick: false,
       toastId: UNFINISHED_WRITES_TOAST_ID,
     })
-    let warning!: ReactTestRenderer
-    act(() => {
-      warning = create(content)
-    })
-    expect(textOf(warning.root)).toContain(
+    const warning = render(content)
+    expect(warning.container.textContent).toContain(
       "Your previous session is still sending 1 request",
     )
-    expect(textOf(warning.root)).toContain(
+    expect(warning.container.textContent).toContain(
       "Importing the same file again meanwhile can import its rows twice.",
     )
 
     await settleUpload()
     expect(leaveListeners.size).toBe(0)
     expect(mocks.toastDismiss).toHaveBeenCalledWith(UNFINISHED_WRITES_TOAST_ID)
-    expect(textOf(warning.root)).toBe(
+    expect(warning.container.textContent).toBe(
       "Your previous session finished sending its requests.",
     )
-    act(() => warning.unmount())
+    warning.unmount()
   })
 
   it("still reloads at once when logging out from the toolbar while an ended session's upload is sent", async () => {
@@ -678,14 +708,13 @@ describe("AuthProvider token installation", () => {
     act(() => auth.signInAgain())
     expect(writeSignal?.aborted).toBe(false)
     expect(confirm).toHaveBeenCalledTimes(2)
-    expect(
-      renderer!.root.findByProps({ "data-hook": "mock-login" }).props
-        .errorMessage,
-    ).toContain("Verify their outcomes")
+    expect(loginView().errorMessage).toContain("Verify their outcomes")
     expect(authSessionState.isAuthenticated()).toBe(false)
     expect(questClient.hasActiveRequests()).toBe(false)
-    finish(new Response("{}"))
-    await rejected
+    await act(async () => {
+      finish(new Response("{}"))
+      await rejected
+    })
   })
 
   it("shows the mounted login when a refresh started before recovery ends the session", async () => {
@@ -703,15 +732,11 @@ describe("AuthProvider token installation", () => {
       await query
     })
     expect(authSessionState.isAuthenticated()).toBe(false)
-    expect(
-      renderer!.root.findByProps({ "data-hook": "mock-login" }).props,
-    ).toMatchObject({
+    expect(loginView()).toMatchObject({
       errorTitle: "Your SSO session has expired",
       errorMessage: "Revoked. Please sign in again.",
     })
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-    ).toHaveLength(0)
+    expect(byHook("console-live")).toHaveLength(0)
   })
 
   it("keeps a rotated token when a refresh started before recovery succeeds", async () => {
@@ -730,12 +755,8 @@ describe("AuthProvider token installation", () => {
       access_token: "renewed",
       refresh_token: "rotated",
     })
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
-    ).toHaveLength(0)
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-    ).toHaveLength(1)
+    expect(byHook("mock-login")).toHaveLength(0)
+    expect(byHook("console-live")).toHaveLength(1)
     expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toMatchObject({
       Authorization: "Bearer renewed",
     })
@@ -747,7 +768,7 @@ describe("AuthProvider token installation", () => {
       await mount()
       const retained = auth.sessionData
       const generation = authSessionState.getSessionId()
-      act(() => renderer?.unmount())
+      view!.unmount()
       localStorage.setItem(credentialKey, "another-tab")
       location.search = ""
       vi.mocked(fetch).mockImplementation((url) =>
@@ -762,7 +783,7 @@ describe("AuthProvider token installation", () => {
         return null
       }
       await act(async () => {
-        renderer = create(
+        view = render(
           <AuthProvider>
             <QuestProvider>
               <Consumer />
@@ -823,7 +844,7 @@ describe("AuthProvider token installation", () => {
       await mount()
       const generation = authSessionState.getSessionId()
       const oldSession = authSessionState.capture()
-      act(() => renderer!.unmount())
+      view!.unmount()
       location.search = ""
       mocks.settings = {
         "acl.enabled": mode !== "disabled ACL",
@@ -835,7 +856,7 @@ describe("AuthProvider token installation", () => {
         Promise.resolve(new Response(JSON.stringify({ ddl: "OK" }))),
       )
       await act(async () => {
-        renderer = create(
+        view = render(
           <AuthProvider>
             <QuestProvider>
               <span data-hook="console-live" />
@@ -848,9 +869,7 @@ describe("AuthProvider token installation", () => {
       expect(authSessionState.getSessionId()).toBeGreaterThan(generation)
       expect(oldSession.isCurrent()).toBe(false)
       expect(questClient.refreshTokenMethod).toBeUndefined()
-      expect(
-        renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-      ).toHaveLength(1)
+      expect(byHook("console-live")).toHaveLength(1)
       if (key) expect(localStorage.getItem(key)).toBe(value)
       await questClient.queryRaw("select 99")
       const headers = vi.mocked(fetch).mock.lastCall?.[1]?.headers as Record<
@@ -865,10 +884,10 @@ describe("AuthProvider token installation", () => {
     const { finishRefresh, query } = await recoverDuringRefresh()
     const requestSignal = vi.mocked(fetch).mock.lastCall?.[1]?.signal
     authSessionState.markRefreshFailed()
-    act(() => renderer!.unmount())
+    view!.unmount()
     mocks.settings = { "acl.enabled": false }
     await act(async () => {
-      renderer = create(
+      view = render(
         <AuthProvider>
           <QuestProvider>
             <span data-hook="console-live" />
@@ -895,9 +914,7 @@ describe("AuthProvider token installation", () => {
     expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).not.toHaveProperty(
       "Authorization",
     )
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-    ).toHaveLength(1)
+    expect(byHook("console-live")).toHaveLength(1)
   })
 
   it("clears the remembered identity before an asynchronous forced logout renders Login", async () => {
@@ -911,11 +928,7 @@ describe("AuthProvider token installation", () => {
       ),
     )
     expect(localStorage.getItem("sso.username.test-client")).toBeNull()
-    expect(
-      renderer!.root.findByProps({ "data-hook": "mock-login" }).props[
-        "data-sso-username"
-      ],
-    ).toBeNull()
+    expect(loginView().ssoUsername).toBeNull()
   })
 
   it("warns after expiry, avoids duplicates, and restores a dismissed warning", async () => {
@@ -926,11 +939,8 @@ describe("AuthProvider token installation", () => {
     })
     act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
     expect(mocks.toastError).toHaveBeenCalledOnce()
-    let warning!: ReactTestRenderer
-    act(() => {
-      warning = create(mocks.toastError.mock.calls[0][0])
-    })
-    expect(warning.root.findAllByType("span")[0].children).toEqual([
+    const warning = render(mocks.toastError.mock.calls[0][0])
+    expect(childrenOf(warning.container.querySelectorAll("span")[0])).toEqual([
       expect.stringContaining("Queries are not being sent"),
     ])
     mocks.toastActive.mockReturnValue(true)
@@ -939,11 +949,7 @@ describe("AuthProvider token installation", () => {
     mocks.toastActive.mockReturnValue(false)
     act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
     expect(mocks.toastError).toHaveBeenCalledTimes(2)
-    act(() => {
-      ;(
-        warning.root.findByType("button").props as { onClick: () => void }
-      ).onClick()
-    })
+    fireEvent.click(within(warning.container).getByRole("button"))
     expect(authSessionState.isAuthenticated()).toBe(false)
     warning.unmount()
   })
@@ -959,7 +965,7 @@ describe("AuthProvider token installation", () => {
       mocks.settings["acl.oidc.authorization.endpoint"] =
         "https://identity.example/authorize"
       await act(async () => {
-        renderer = create(
+        view = render(
           <AuthProvider>
             <span data-hook="live" />
           </AuthProvider>,
@@ -974,9 +980,7 @@ describe("AuthProvider token installation", () => {
         expect(new URL(location.href).searchParams.get("prompt")).toBe("none")
       } else {
         expect(location.href).toBe("http://localhost/?code=test")
-        expect(
-          renderer!.root.findAllByProps({ "data-hook": "live" }),
-        ).toHaveLength(1)
+        expect(byHook("live")).toHaveLength(1)
         expect(authSessionState.isSSOAuthenticated()).toBe(false)
       }
     },
@@ -1016,10 +1020,7 @@ describe("AuthProvider token installation", () => {
       await expect(refreshToken()).resolves.toBeUndefined()
     })
     expect(authSessionState.getAuthPayload()).toBeNull()
-    expect(
-      renderer?.root.findByProps({ "data-hook": "mock-login" }).props
-        .errorTitle,
-    ).toBe("Missing ID token")
+    expect(loginView().errorTitle).toBe("Missing ID token")
     expect(body).not.toHaveProperty("groups_encoded_in_token")
   })
 
@@ -1063,7 +1064,7 @@ describe("AuthProvider token installation", () => {
         }),
     )
     await act(async () => {
-      renderer = create(
+      view = render(
         <AuthProvider>
           <span data-hook="console-live" />
         </AuthProvider>,
@@ -1077,9 +1078,7 @@ describe("AuthProvider token installation", () => {
       await Promise.resolve()
     })
     expect(authSessionState.isAuthenticated()).toBe(false)
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
-    ).toHaveLength(1)
+    expect(byHook("mock-login")).toHaveLength(1)
     expect(fetch).toHaveBeenCalledOnce()
   })
 
@@ -1143,9 +1142,7 @@ describe("AuthProvider token installation", () => {
         `Identity provider unavailable (HTTP ${status})`,
       )
       expect(authSessionState.getAuthPayload()).toBe(session)
-      expect(
-        renderer?.root.findAllByProps({ "data-hook": "mock-login" }),
-      ).toHaveLength(0)
+      expect(byHook("mock-login")).toHaveLength(0)
     },
   )
 
@@ -1213,15 +1210,10 @@ describe("AuthProvider token installation", () => {
       })
       expect(writeSignal?.aborted).toBe(true)
       expect(questClient.hasSentRequests()).toBe(false)
-      expect(
-        renderer!.root.findByProps({ "data-hook": "mock-login" }).props,
-      ).toMatchObject({
+      expect(loginView()).toMatchObject({
         errorTitle: "Your SSO session has expired",
       })
-      expect(
-        renderer!.root.findByProps({ "data-hook": "mock-login" }).props
-          .errorMessage,
-      ).toBe(
+      expect(loginView().errorMessage).toBe(
         "Revoked. Please sign in again. Running requests were interrupted or may still be finishing; statements may have executed. Verify their outcomes before running them again.",
       )
       expect(
@@ -1272,10 +1264,7 @@ describe("AuthProvider token installation", () => {
           questClient.queryRaw("INSERT INTO trades VALUES (1)"),
         ).rejects.toMatchObject({ sessionEnded: true, requestNotSent: true })
       })
-      expect(
-        renderer!.root.findByProps({ "data-hook": "mock-login" }).props
-          .errorMessage,
-      ).toBe("Revoked. Please sign in again.")
+      expect(loginView().errorMessage).toBe("Revoked. Please sign in again.")
       expect(
         vi
           .mocked(fetch)
@@ -1324,8 +1313,7 @@ describe("AuthProvider token installation", () => {
         ).rejects.toMatchObject({ sessionEnded: true, requestNotSent: true })
         if (pending) expect(await pending).toMatchObject({ sessionEnded: true })
       })
-      const message = renderer!.root.findByProps({ "data-hook": "mock-login" })
-        .props.errorMessage as string
+      const message = loginView().errorMessage as string
       expect(message).toContain("You are not authorized to use the Web Console")
       expect(message.includes("statements may have executed")).toBe(otherWrite)
       expect(questClient.hasSentRequests()).toBe(false)
@@ -1399,17 +1387,15 @@ describe("AuthProvider token installation", () => {
       closeOnClick: false,
       toastId: "sso-refresh-failed",
     })
-    let warning!: ReactTestRenderer
-    act(() => {
-      warning = create(mocks.toastError.mock.calls[0][0])
-    })
-    expect(warning.root.findAllByType("span")[0].children).toEqual([
+    const warning = render(mocks.toastError.mock.calls[0][0])
+    const spans = warning.container.querySelectorAll("span")
+    expect(childrenOf(spans[0])).toEqual([
       expect.stringContaining("expires at"),
     ])
-    expect(warning.root.findByType("button").children).toEqual([
+    expect(childrenOf(within(warning.container).getByRole("button"))).toEqual([
       "Sign in again",
     ])
-    expect(warning.root.findAllByType("span")[1].children).toEqual([
+    expect(childrenOf(spans[1])).toEqual([
       expect.stringContaining("interrupts running queries"),
     ])
     warning.unmount()
@@ -1497,7 +1483,7 @@ describe.each([
           return null
         }
         await act(async () => {
-          renderer = create(
+          view = render(
             <ThemeProvider theme={darkTheme}>
               <SettingsProvider>
                 <SettingsDriver />
@@ -1512,13 +1498,13 @@ describe.each([
           await Promise.resolve()
         })
         const retry = () =>
-          renderer!.root
-            .findAllByType("button")
-            .find((button) => button.children.includes("Retry"))!
+          screen
+            .getAllByRole("button")
+            .find((button) => childrenOf(button).includes("Retry"))!
         // A later settings refresh can still remove the Auth owner while its
         // initial code exchange is pending.
         await act(async () => {
-          retry().props.onClick()
+          fireEvent.click(retry())
           await Promise.resolve()
         })
         expect(settingsGates).toHaveLength(1)
@@ -1539,13 +1525,13 @@ describe.each([
           await Promise.resolve()
         })
         await act(async () => {
-          retry().props.onClick()
+          fireEvent.click(retry())
           await Promise.resolve()
         })
-        const login = renderer!.root.findByProps({ "data-hook": "mock-login" })
+        const login = loginView()
         await act(async () => {
           localStorage.setItem(key, value)
-          login.props.onBasicAuthSuccess()
+          login.signInWithPassword()
           await Promise.resolve()
         })
         const recoveredSession = authSessionState.capture()
@@ -1566,9 +1552,7 @@ describe.each([
         expect(authSessionState.getAuthPayload()).toBeNull()
         expect(recoveredSession.isCurrent()).toBe(true)
         expect(fetch).toHaveBeenCalledTimes(callsBefore)
-        expect(
-          renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-        ).toHaveLength(1)
+        expect(byHook("console-live")).toHaveLength(1)
         await questClient.queryRaw("SELECT 987")
         expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toMatchObject({
           Authorization: authorization,
@@ -1603,12 +1587,10 @@ describe("AuthProvider password login after settings recovery", () => {
         </AuthProvider>
       )
       await act(async () => {
-        renderer = create(providers())
+        view = render(providers())
         await Promise.resolve()
       })
-      expect(
-        renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-      ).toHaveLength(1)
+      expect(byHook("console-live")).toHaveLength(1)
       const firstLogin = authSessionState.capture()
       const statement = questClient
         .queryRaw("INSERT INTO trades VALUES (1)")
@@ -1619,21 +1601,21 @@ describe("AuthProvider password login after settings recovery", () => {
       try {
         // When a failed settings refresh unmounts the console, another tab
         // logs out, and Settings Retry mounts the providers again
-        act(() => renderer!.unmount())
+        view!.unmount()
         localStorage.removeItem(StoreKey.REST_TOKEN)
         await act(async () => {
-          renderer = create(providers())
+          view = render(providers())
           await Promise.resolve()
         })
 
         // Then Login replaces the console only after the login has ended, so
         // the statement can no longer complete into the next login
-        const login = renderer!.root.findByProps({ "data-hook": "mock-login" })
+        expect(byHook("mock-login")).toHaveLength(1)
         expect(ended).toHaveBeenCalledOnce()
         expect(firstLogin.isCurrent()).toBe(false)
         expect(authSessionState.isAuthenticated()).toBe(false)
         expect(await statement).toMatchObject({ sessionEnded: true })
-        expect(login.props.errorMessage).toContain(
+        expect(loginView().errorMessage).toContain(
           "Running requests were interrupted",
         )
 
@@ -1641,16 +1623,12 @@ describe("AuthProvider password login after settings recovery", () => {
         const atLogin = authSessionState.capture()
         await act(async () => {
           localStorage.setItem(StoreKey.REST_TOKEN, "second-user")
-          ;(
-            login.props as { onBasicAuthSuccess: () => void }
-          ).onBasicAuthSuccess()
+          loginView().signInWithPassword()
           await Promise.resolve()
         })
         expect(authSessionState.isAuthenticated()).toBe(true)
         expect(atLogin.isCurrent()).toBe(false)
-        expect(
-          renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-        ).toHaveLength(1)
+        expect(byHook("console-live")).toHaveLength(1)
       } finally {
         stopListening()
       }
@@ -1663,13 +1641,12 @@ describe("AuthProvider logout and the password credentials tabs share", () => {
     localStorage.setItem(StoreKey.REST_TOKEN, "password-tab")
     localStorage.setItem(StoreKey.BASIC_AUTH_HEADER, "Basic password-tab")
   }
-  const consoleShown = () =>
-    renderer!.root.findAllByProps({ "data-hook": "console-live" }).length > 0
+  const consoleShown = () => byHook("console-live").length > 0
   const reload = async () => {
-    act(() => renderer!.unmount())
+    view!.unmount()
     location.search = ""
     await act(async () => {
-      renderer = create(
+      view = render(
         <AuthProvider>
           <span data-hook="console-live" />
         </AuthProvider>,
@@ -1724,9 +1701,7 @@ describe("AuthProvider logout and the password credentials tabs share", () => {
         expect(new URL(location.href).searchParams.get("prompt")).toBe("none")
       } else {
         expect(location.href).toBe("http://localhost/?code=test")
-        expect(
-          renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
-        ).toHaveLength(1)
+        expect(byHook("mock-login")).toHaveLength(1)
       }
     },
   )
@@ -1740,7 +1715,7 @@ describe("AuthProvider logout and the password credentials tabs share", () => {
       return <span data-hook="console-live" />
     }
     await act(async () => {
-      renderer = create(
+      view = render(
         <AuthProvider>
           <Consumer />
         </AuthProvider>,
@@ -1759,9 +1734,7 @@ describe("AuthProvider logout and the password credentials tabs share", () => {
     expect(sessionStorage.getItem(StoreKey.LOGIN_METHOD)).toBeNull()
     await reload()
     expect(consoleShown()).toBe(false)
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "mock-login" }),
-    ).toHaveLength(1)
+    expect(byHook("mock-login")).toHaveLength(1)
   })
 })
 
@@ -1796,7 +1769,7 @@ describe("AuthProvider bearer expiry", () => {
         return <span data-hook="console-live" />
       }
       await act(async () => {
-        renderer = create(
+        view = render(
           <AuthProvider>
             <QuestProvider>
               <Consumer />
@@ -1832,9 +1805,7 @@ describe("AuthProvider bearer expiry", () => {
       expect(sqlCalls.length).toBeGreaterThan(0)
       for (const [, init] of sqlCalls)
         expect(init?.headers).toMatchObject({ Authorization: "Bearer renewed" })
-      expect(
-        renderer!.root.findAllByProps({ "data-hook": "console-live" }),
-      ).toHaveLength(1)
+      expect(byHook("console-live")).toHaveLength(1)
     },
   )
 

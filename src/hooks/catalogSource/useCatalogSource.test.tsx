@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import "../../test/stubBrowserGlobals"
 import React from "react"
-import { act, create, ReactTestRenderer } from "react-test-renderer"
+import { act, cleanup, render, type RenderResult } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { QuestContext } from "../../providers"
 import { useCatalogSource } from "./useCatalogSource"
@@ -14,10 +15,11 @@ vi.mock("../../providers", async () => {
   return { QuestContext: createContext({}) }
 })
 
-let renderer: ReactTestRenderer | undefined
+let rendered: RenderResult | undefined
 
 afterEach(() => {
-  act(() => renderer?.unmount())
+  cleanup()
+  rendered = undefined
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -59,13 +61,11 @@ const renderSource = (quest: Client) => {
       <Harness {...props} />
     </QuestContext.Provider>
   )
-  act(() => {
-    renderer = create(tree({ sourceKey: "catalog", enabled: true }))
-  })
+  rendered = render(tree({ sourceKey: "catalog", enabled: true }))
   return {
     status: () => status,
     data: () => readyData,
-    update: (props: Props) => act(() => renderer?.update(tree(props))),
+    update: (props: Props) => rendered?.rerender(tree(props)),
   }
 }
 

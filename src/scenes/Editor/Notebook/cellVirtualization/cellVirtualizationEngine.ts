@@ -277,8 +277,8 @@ export class CellVirtualizationEngine {
     })
   }
 
-  // One drop per idle tick — each drop unmounts a Monaco/grid, and React 17
-  // does not batch state updates fired outside event handlers.
+  // One drop per idle tick: each drop unmounts a Monaco/grid, so the work
+  // spreads over idle time instead of one long render.
   private dropNextCell() {
     if (this.destroyed) return
     for (const cellId of [...this.pendingDrops]) {

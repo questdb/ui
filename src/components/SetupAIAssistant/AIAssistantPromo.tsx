@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import ReactDOM from "react-dom"
-import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import { Close } from "../icons"
@@ -17,6 +16,7 @@ import { Text } from "../Text"
 import { Box } from "../Box"
 import { AISparkle } from "../AISparkle"
 import { TransitionDuration } from "../Transition"
+import { usePopper } from "../../hooks"
 import { floatingSurfaceStyles } from "../overlayStyles"
 
 const TooltipContainer = styled.div<{ $positionReady: boolean }>`

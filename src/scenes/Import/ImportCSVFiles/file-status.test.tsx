@@ -1,24 +1,29 @@
+// @vitest-environment jsdom
 import React from "react"
-import { act, create, type ReactTestRenderer } from "react-test-renderer"
+import { cleanup, render } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { FileCheckStatus } from "../../../utils/questdb/types"
 import { TableNameCheck, type ProcessedFile } from "./types"
 
-vi.mock("../../../components", () => ({
-  Box: "div",
-  Badge: ({ type, children }: { type: string; children: React.ReactNode }) => (
-    <span data-type={type}>{children}</span>
-  ),
-}))
+vi.mock("../../../components", async () => {
+  const { domStandIn } = await import("../../../test/domStandIn")
+  return {
+    Box: domStandIn("div", ["flexDirection"]),
+    Badge: ({
+      type,
+      children,
+    }: {
+      type: string
+      children: React.ReactNode
+    }) => <span data-type={type}>{children}</span>,
+  }
+})
 vi.mock("../../../components/icons", () => ({ CheckboxCircle: () => null }))
 
 import { FileStatus } from "./file-status"
 
-let renderer: ReactTestRenderer | undefined
-
 afterEach(() => {
-  act(() => renderer?.unmount())
-  renderer = undefined
+  cleanup()
 })
 
 const badge = (status: string) => {
@@ -28,13 +33,11 @@ const badge = (status: string) => {
     uploaded: false,
     uploadProgress: 0,
   } as ProcessedFile
-  act(() => {
-    renderer = create(<FileStatus file={file} />)
-  })
-  const root = renderer!.root.findByType("span")
+  const { container } = render(<FileStatus file={file} />)
+  const root = container.querySelector("span")!
   return {
-    type: root.props["data-type"] as string,
-    label: JSON.stringify(renderer!.toJSON()),
+    type: root.getAttribute("data-type")!,
+    label: container.textContent,
   }
 }
 

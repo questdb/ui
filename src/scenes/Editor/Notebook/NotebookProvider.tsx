@@ -8,7 +8,6 @@ import React, {
   useState,
 } from "react"
 import type { MutableRefObject } from "react"
-import { unstable_batchedUpdates } from "react-dom"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
 import type {
@@ -508,12 +507,10 @@ export const NotebookProvider: React.FC<{
           clearSettingsDrawerSessions(cell.id)
         }
       }
-      unstable_batchedUpdates(() => {
-        store.hydrateCells(() => parts.cells)
-        setSettingsState(parts.settings)
-        setMaximizedCellIdState(parts.maximizedCellId)
-        setFocusedCellState(parts.focusedCellId)
-      })
+      store.hydrateCells(() => parts.cells)
+      setSettingsState(parts.settings)
+      setMaximizedCellIdState(parts.maximizedCellId)
+      setFocusedCellState(parts.focusedCellId)
       const persisted = persistImmediately(parts.cells, true)
       // A deleted cell's in-flight run is discarded, not cancelled: superseding
       // it makes a late completion report the deletion instead of a cleared

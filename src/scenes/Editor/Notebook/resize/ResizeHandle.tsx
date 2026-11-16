@@ -248,7 +248,7 @@ export const ResizeHandle: React.FC<Props> = ({
   }, [targetRef])
 
   // A new target is another pane: the drag commits the old one where it is
-  // and stops. React 17 runs every cleanup before any effect, so the callback
+  // and stops. React runs every cleanup before any effect, so the callback
   // ref still holds the old pane's onResizeEnd here.
   useEffect(
     () => () => {

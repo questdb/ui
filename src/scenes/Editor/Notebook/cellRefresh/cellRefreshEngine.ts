@@ -232,10 +232,6 @@ const errorExecResult = (query: string, cause: unknown): QueryExecResult => ({
 export type CellRefreshEngineOptions = {
   initialFetchJitterMs?: number
   requestLimiter?: RequestLimiter
-  // React 17 renders each state update in an async continuation separately;
-  // the provider passes unstable_batchedUpdates so a slot settle costs one
-  // render pass instead of one per subscriber.
-  batchUpdates?: (fn: () => void) => void
 }
 
 // Editor-only cells are never entries: charts are entries by mode, grids only
@@ -349,7 +345,6 @@ export class CellRefreshEngine {
   private documentHidden = false
   private limitRequest: RequestLimiter
   private initialFetchJitterMs: number
-  private batchUpdates: (fn: () => void) => void
   private pendingRefreshSeeds = new Map<string, SnapshotRefreshState>()
   // Runs in flight per cell, from noteRunStarted to noteRunFinished. A count,
   // not a flag: a superseded run's finish must not reopen the gate while its
@@ -380,7 +375,6 @@ export class CellRefreshEngine {
     this.limitRequest = options.requestLimiter ?? statementRequestLimiter
     this.initialFetchJitterMs =
       options.initialFetchJitterMs ?? INITIAL_FETCH_JITTER_MS
-    this.batchUpdates = options.batchUpdates ?? ((fn) => fn())
   }
 
   attach() {
@@ -897,12 +891,10 @@ export class CellRefreshEngine {
   // One render for the whole pass: the statement list and the frame it
   // reconciles into land together, so no consumer sees them disagree.
   private applySql(entry: Entry, sql: string) {
-    this.batchUpdates(() => {
-      this.applySqlState(entry, sql)
-      if (entry.kind === "grid") this.reconcileGridResult(entry)
-      if (entry.visible) this.ensureData(entry)
-      else entry.ensureAttempted = false
-    })
+    this.applySqlState(entry, sql)
+    if (entry.kind === "grid") this.reconcileGridResult(entry)
+    if (entry.visible) this.ensureData(entry)
+    else entry.ensureAttempted = false
   }
 
   // Editor typing reshapes the visible frame after the debounce: unchanged
@@ -1335,8 +1327,8 @@ export class CellRefreshEngine {
       // shows the same tabs a real run would — including errors and empty
       // results — instead of dropping them or leaving stale rows behind. A
       // carried slot keeps its result and the fetch time of its rows. The
-      // result lands before settledKey flips: React 17 renders the two updates
-      // separately, and a settled state without data would flash "No data".
+      // result lands before settledKey flips, so a settled state never renders
+      // without data and flashes "No data".
       const written = out.map(
         (r, index) =>
           carriedResults[index] ?? singleResultFromExec(r, queries[index]),
@@ -1452,34 +1444,30 @@ export class CellRefreshEngine {
               notExecutedSlots.add(key)
               return
             }
-            this.batchUpdates(() => {
-              if (exec.type === "error") {
-                this.setSlotError(entry, key, exec.error ?? "Query failed")
-              } else {
-                // Changed rows are written with their fetch time. Identical
-                // rows keep the frame — a rewrite would churn renders and
-                // snapshots — and the overlay records the verifying poll so
-                // the status line stays current.
-                const previous = this.currentSlotResult(entry.cellId, key)
-                const unchanged =
-                  previous !== undefined &&
-                  resultsEquivalent([toExecResult(previous)], [exec])
-                if (!unchanged) this.commitSlotResult(entry, key, exec)
-                this.settleSlotSuccess(entry, key)
-              }
-            })
+            if (exec.type === "error") {
+              this.setSlotError(entry, key, exec.error ?? "Query failed")
+            } else {
+              // Changed rows are written with their fetch time. Identical
+              // rows keep the frame — a rewrite would churn renders and
+              // snapshots — and the overlay records the verifying poll so
+              // the status line stays current.
+              const previous = this.currentSlotResult(entry.cellId, key)
+              const unchanged =
+                previous !== undefined &&
+                resultsEquivalent([toExecResult(previous)], [exec])
+              if (!unchanged) this.commitSlotResult(entry, key, exec)
+              this.settleSlotSuccess(entry, key)
+            }
           } catch (e) {
             if (slotAbort.signal.aborted || round.signal.aborted) return
-            this.batchUpdates(() =>
-              this.setSlotError(entry, key, errorMessage(e)),
-            )
+            this.setSlotError(entry, key, errorMessage(e))
           } finally {
             // A superseded round's late settle must not clobber the slot the
             // replacement round registered under the same key.
             if (entry.slotAborts.get(key) === slotAbort) {
               entry.slotAborts.delete(key)
               if (entry.state.slotFetching.has(key))
-                this.batchUpdates(() => this.setSlotFetching(entry, key, false))
+                this.setSlotFetching(entry, key, false)
             }
           }
         }),

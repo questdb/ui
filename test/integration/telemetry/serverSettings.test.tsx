@@ -2,7 +2,15 @@
 import "../auth/support/authHarness"
 import React from "react"
 import { act, render } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import { Provider, useSelector } from "react-redux"
 import { applyMiddleware, createStore } from "redux"
 import { createEpicMiddleware } from "redux-observable"
@@ -24,6 +32,18 @@ const ConfigConsumer = () => {
   const config = useSelector(selectors.telemetry.getConfig)
   return <output>{config?.id ?? "Waiting for telemetry config"}</output>
 }
+
+const reactTestGlobals = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+
+// Telemetry runs on fake timers while vi.waitFor polls in real time, so the
+// providers update outside act by design.
+beforeAll(() => {
+  reactTestGlobals.IS_REACT_ACT_ENVIRONMENT = false
+})
+
+afterAll(() => {
+  reactTestGlobals.IS_REACT_ACT_ENVIRONMENT = true
+})
 
 afterEach(() => {
   stopEpics.next()
@@ -116,7 +136,7 @@ describe("Authenticated telemetry startup", () => {
       )
       await trackEvent("help_open")
       const epic = createEpicMiddleware<StoreAction, StoreAction, StoreShape>()
-      const store = createStore(rootReducer, applyMiddleware(epic))
+      const store = createStore(rootReducer, undefined, applyMiddleware(epic))
       epic.run((...args) => rootEpic(...args).pipe(takeUntil(stopEpics)))
       render(
         <ThemeProvider theme={darkTheme}>
