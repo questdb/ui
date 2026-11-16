@@ -1838,7 +1838,6 @@ __metadata:
     rollup-plugin-license: "npm:^3.7.1"
     rxjs: "npm:7.8.2"
     sass: "npm:^1.93.2"
-    slim-select: "npm:1.26.0"
     styled-components: "npm:5.3.5"
     stylelint: "npm:^13.13.1"
     stylelint-config-prettier: "npm:8.0.1"
@@ -10701,13 +10700,6 @@ __metadata:
     ansi-styles: "npm:^6.2.1"
     is-fullwidth-code-point: "npm:^5.0.0"
   checksum: 10/75f61e1285c294b18c88521a0cdb22cdcbe9b0fd5e8e26f649be804cc43122aa7751bd960a968e3ed7f5aa7f3c67ac605c939019eae916870ec288e878b6fafb
-  languageName: node
-  linkType: hard
-
-"slim-select@npm:1.26.0":
-  version: 1.26.0
-  resolution: "slim-select@npm:1.26.0"
-  checksum: 10/3d2310ddfd08950d27df83a567089cb1122ac067e5f7014bb382886a27b444d1b9f3effe32a1b83f5d6bb0987ef09f12bc7f991504d99b1f8e1c042f2868eae9
   languageName: node
   linkType: hard
 

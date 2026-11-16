@@ -1799,7 +1799,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const lastResult = individualQueryResults[individualQueryResults.length - 1]
     if (lastResult && lastResult.result?.type === QuestDB.Type.DQL) {
       dispatch(actions.query.setResult(lastResult.result))
-      eventBus.publish(EventType.MSG_QUERY_DATASET, lastResult.result)
     }
 
     const querySchemaMessageTypes = [
@@ -2217,7 +2216,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                   targetBufferId,
                 ),
               )
-              eventBus.publish(EventType.MSG_QUERY_DATASET, result)
             }
           })
           .catch((error: ErrorResult) => {

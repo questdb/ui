@@ -198,7 +198,6 @@ describe("Console served by QuestDB under a context path", () => {
       query,
       executeQuery: "true",
       useNewGrid: "1",
-      useQuickVis: "1",
     })
 
     // When
@@ -207,9 +206,7 @@ describe("Console served by QuestDB under a context path", () => {
     // Then
     cy.getGridRow(0).should("contain", "shared under prefix")
     cy.location("pathname").should("equal", pagePath)
-    cy.location("search")
-      .should("not.contain", "useNewGrid")
-      .and("not.contain", "useQuickVis")
+    cy.location("search").should("not.contain", "useNewGrid")
     cy.location("hash").should("equal", "#shared")
 
     // When

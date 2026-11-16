@@ -1,12 +1,7 @@
 export enum EventType {
-  MSG_ACTIVE_SIDEBAR = "active.panel",
   MSG_EDITOR_FOCUS = "editor.focus",
-  MSG_QUERY_DATASET = "query.out.dataset",
-  MSG_QUERY_ERROR = "query.out.error",
   MSG_QUERY_EXEC = "query.in.exec",
   MSG_QUERY_FIND_N_EXEC = "query.build.execute",
-  MSG_QUERY_OK = "query.out.ok",
-  MSG_QUERY_RUNNING = "query.out.running",
   MSG_QUERY_SCHEMA = "query.out.schema",
   MSG_CONNECTION_OK = "query.connection.ok",
   MSG_CONNECTION_ERROR = "query.connection.error",
@@ -26,5 +21,4 @@ export enum EventType {
   NOTEBOOK_CELL_RESET_ZOOM = "notebook.cell.reset.zoom",
   NOTEBOOK_CELL_RUN = "notebook.cell.run",
   NOTEBOOK_CELL_DRAW = "notebook.cell.draw",
-  MSG_THEME_CHANGED = "theme.changed",
 }

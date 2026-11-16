@@ -117,7 +117,6 @@ export async function runDetachedQuery(
           namespaceKey,
         ),
       )
-      eventBus.publish(EventType.MSG_QUERY_DATASET, result)
     }
   } catch (_error: unknown) {
     const error = _error as {

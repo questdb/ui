@@ -74,7 +74,6 @@ const defaultConfig: LocalConfig = {
   autoRefreshTables: true,
   autoRefreshQueryActivity: true,
   useNewGrid: true,
-  useQuickVis: false,
   runWithSelectionMode: "partial",
   capitalizeKeywordsOnFormat: false,
   maxColumnWidth: "auto",
@@ -97,12 +96,6 @@ const NEW_GRID_OVERRIDE: BooleanFeatureOverride = {
   queryParam: "useNewGrid",
   storeKey: StoreKey.USE_NEW_GRID,
   fallback: defaultConfig.useNewGrid,
-}
-
-const QUICK_VIS_OVERRIDE: BooleanFeatureOverride = {
-  queryParam: "useQuickVis",
-  storeKey: StoreKey.USE_QUICK_VIS,
-  fallback: defaultConfig.useQuickVis,
 }
 
 const readBooleanQueryOverride = (queryParam: string): boolean | null => {
@@ -150,7 +143,6 @@ type ContextProps = {
   autoRefreshTables: boolean
   autoRefreshQueryActivity: boolean
   useNewGrid: boolean
-  useQuickVis: boolean
   runWithSelectionMode: RunWithSelectionMode
   capitalizeKeywordsOnFormat: boolean
   maxColumnWidth: MaxColumnWidth
@@ -193,7 +185,6 @@ const defaultValues: ContextProps = {
   autoRefreshTables: true,
   autoRefreshQueryActivity: true,
   useNewGrid: true,
-  useQuickVis: false,
   runWithSelectionMode: "partial",
   capitalizeKeywordsOnFormat: false,
   maxColumnWidth: "auto",
@@ -254,10 +245,6 @@ export const LocalStorageProvider = ({
     getInitialBooleanFeature(NEW_GRID_OVERRIDE),
   )
 
-  const [useQuickVis, setUseQuickVis] = useState<boolean>(() =>
-    getInitialBooleanFeature(QUICK_VIS_OVERRIDE),
-  )
-
   const [runWithSelectionMode, setRunWithSelectionMode] =
     useState<RunWithSelectionMode>(
       parseRunWithSelectionMode(getValue(StoreKey.RUN_WITH_SELECTION)),
@@ -277,10 +264,6 @@ export const LocalStorageProvider = ({
 
   useEffect(() => {
     persistBooleanQueryOverride(NEW_GRID_OVERRIDE)
-  }, [])
-
-  useEffect(() => {
-    persistBooleanQueryOverride(QUICK_VIS_OVERRIDE)
   }, [])
 
   const getLeftPanelState = (): LeftPanelState => {
@@ -381,9 +364,6 @@ export const LocalStorageProvider = ({
       case StoreKey.USE_NEW_GRID:
         setUseNewGrid(value === "true")
         break
-      case StoreKey.USE_QUICK_VIS:
-        setUseQuickVis(value === "true")
-        break
       case StoreKey.RUN_WITH_SELECTION:
         setRunWithSelectionMode(parseRunWithSelectionMode(value))
         break
@@ -440,7 +420,6 @@ export const LocalStorageProvider = ({
       autoRefreshTables,
       autoRefreshQueryActivity,
       useNewGrid,
-      useQuickVis,
       runWithSelectionMode,
       capitalizeKeywordsOnFormat,
       maxColumnWidth,
@@ -462,7 +441,6 @@ export const LocalStorageProvider = ({
       autoRefreshTables,
       autoRefreshQueryActivity,
       useNewGrid,
-      useQuickVis,
       runWithSelectionMode,
       capitalizeKeywordsOnFormat,
       maxColumnWidth,

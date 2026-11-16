@@ -98,7 +98,6 @@
     "redux-observable": "3.0.0-rc.3",
     "remark-gfm": "^4.0.1",
     "rxjs": "7.8.2",
-    "slim-select": "1.26.0",
     "styled-components": "5.3.5",
     "throttle-debounce": "2.2.1",
     "uplot": "^1.6.31",

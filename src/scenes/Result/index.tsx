@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 
-import $ from "jquery"
 import React, {
   useCallback,
   useContext,
@@ -33,14 +32,13 @@ import React, {
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { ArrowClockwiseIcon } from "@phosphor-icons/react"
-import { Download2, Play, ResetGrid } from "../../components/icons"
+import { Download2, ResetGrid } from "../../components/icons"
 import { MoveColumnToFront } from "../../components/icons"
 import { TableFreezeColumn } from "../../components/icons"
 import { Markdown } from "../../components/icons"
 import { Check } from "../../components/icons"
 import { ArrowDownS } from "../../components/icons"
 import { grid } from "../../js/console/grid"
-import { quickVis } from "../../js/console/quick-vis"
 import {
   Box,
   Button,
@@ -177,7 +175,7 @@ const DownloadMenuItem = styled(Button)`
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
-  const { quest, questExecution } = useContext(QuestContext)
+  const { quest } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
   const running = useSelector(selectors.query.getRunning)
@@ -189,7 +187,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
-  const { useNewGrid, useQuickVis } = useLocalStorage()
+  const { useNewGrid } = useLocalStorage()
   const dispatch = useDispatch()
 
   // Shared by both grids. On a failed fetch it surfaces a notification and never
@@ -234,23 +232,12 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   }, [running])
 
   useEffect(() => {
-    let disposeQuickVis: (() => void) | undefined
-
     if (!useNewGrid) {
       gridRef.current = grid(document.getElementById("grid"), paginationFn)
     }
 
-    if (useQuickVis) {
-      disposeQuickVis = quickVis(
-        $("#quick-vis"),
-        window.bus as unknown as ReturnType<typeof $>,
-        quest,
-        questExecution,
-      )
-    }
-
     const _grid = gridRef.current
-    if (!_grid) return disposeQuickVis
+    if (!_grid) return
 
     const onSelectionChange = (event: CustomEvent<{ hasSelection: boolean }>) =>
       setGridHasSelection(event.detail.hasSelection)
@@ -263,7 +250,6 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     _grid.addEventListener("freeze.state", onFreezeState)
 
     return () => {
-      disposeQuickVis?.()
       _grid.removeEventListener?.("selection.change", onSelectionChange)
       _grid.removeEventListener?.("yield.focus", onYieldFocus)
       _grid.removeEventListener?.("freeze.state", onFreezeState)
@@ -283,12 +269,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     } else {
       gridRef?.current?.hide()
     }
-
-    if (useQuickVis) {
-      const chart = document.getElementById("quick-vis")
-      if (chart) chart.style.display = viewMode === "grid" ? "none" : "flex"
-    }
-  }, [viewMode, useQuickVis])
+  }, [viewMode])
 
   useEffect(() => {
     gridRef?.current?.render()
@@ -501,53 +482,11 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             <div id="grid" />
           )}
 
-          {useQuickVis ? (
-            <div id="quick-vis">
-              <div className="quick-vis-controls">
-                <form className="v-fit">
-                  <div className="form-group">
-                    <label htmlFor="_qvis_frm_chart_type">Chart type</label>
-                    <select id="_qvis_frm_chart_type">
-                      <option>bar</option>
-                      <option>line</option>
-                      <option>area</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="_qvis_frm_axis_x">Labels</label>
-                    <select
-                      id="_qvis_frm_axis_x"
-                      data-hook="chart-panel-labels-select"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="_qvis_frm_axis_y">Series</label>
-                    <select
-                      id="_qvis_frm_axis_y"
-                      data-hook="chart-panel-series-select"
-                      multiple
-                    />
-                  </div>
-                  <Button
-                    variant="primary"
-                    className="js-chart-draw"
-                    id="_qvis_frm_draw"
-                    data-hook="chart-panel-draw-button"
-                  >
-                    <Play size="16px" weight="fill" />
-                    <span>Draw</span>
-                  </Button>
-                </form>
-              </div>
-              <div className="quick-vis-canvas" />
-            </div>
-          ) : (
-            <ResultChart
-              result={result?.type === QuestDB.Type.DQL ? result : null}
-              visible={viewMode === "chart"}
-              onResetZoomFocus={focusResultActions}
-            />
-          )}
+          <ResultChart
+            result={result?.type === QuestDB.Type.DQL ? result : null}
+            visible={viewMode === "chart"}
+            onResetZoomFocus={focusResultActions}
+          />
         </Content>
       </Wrapper>
     </Root>
