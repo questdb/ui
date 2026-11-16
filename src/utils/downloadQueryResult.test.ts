@@ -39,6 +39,20 @@ describe("downloadQueryResult", () => {
     },
   )
 
+  it("sends the notebook variables in the variables parameter", () => {
+    // Given a query and the variables it reads
+    const query = "select @city"
+    const variables = "@city := 'İstanbul & Zürich + 50% #?'"
+
+    // When the result is downloaded
+    downloadQueryResult(query, "csv", variables)
+
+    // Then both reach the server unchanged
+    const url = new URL(document.querySelector("iframe")!.src)
+    expect(url.searchParams.get("query")).toBe(query)
+    expect(url.searchParams.get("variables")).toBe(variables)
+  })
+
   it("uses CSV parameters without Parquet's response mode", () => {
     // Given
     const query = "select x from long_sequence(10)"
@@ -51,6 +65,7 @@ describe("downloadQueryResult", () => {
     expect(url.searchParams.get("query")).toBe(query)
     expect(url.searchParams.get("fmt")).toBe("csv")
     expect(url.searchParams.has("rmode")).toBe(false)
+    expect(url.searchParams.has("variables")).toBe(false)
   })
 
   it.each([

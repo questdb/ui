@@ -8,9 +8,12 @@ import { API_VERSION } from "../consts"
 export const downloadQueryResult = (
   query: string,
   format: "csv" | "parquet",
+  // the notebook variables, see renderVariablesParameter()
+  variables?: string,
 ): void => {
   const url = `exp?${QuestDB.Client.encodeParams({
     query,
+    variables,
     version: API_VERSION,
     fmt: format,
     filename: `questdb-query-${Date.now().toString()}`,

@@ -54,8 +54,8 @@ export type UseMonacoCellEditorOptions = {
   // here. Caller is responsible for guarding on cell.topResized.
   onContentHeightChange?: (px: number) => void
   // Optional override for the JIT validator. Notebook passes a wrapped
-  // function that prepends global variables as DECLARE so `@symbol`
-  // references resolve. Falls back to quest.validateQuery if absent.
+  // function that sends the notebook variables so `@symbol` references
+  // resolve. Falls back to quest.validateQuery if absent.
   validate?: ValidateFn
 }
 

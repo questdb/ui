@@ -70,6 +70,8 @@ const toErrorResult = (
 ): ErrorResult => {
   const { error } = body
   const position = body.position ?? body.errorPos
+  // An error in the `variables` parameter has a position in the parameter.
+  const isInVariables = body.errorSource === "variables"
   return {
     ...body,
     query,
@@ -78,7 +80,7 @@ const toErrorResult = (
       typeof position === "number" &&
       Number.isInteger(position) &&
       position >= 0 &&
-      position <= query.length
+      (isInVariables || position <= query.length)
         ? position
         : -1,
     type: Type.ERROR,
@@ -872,11 +874,12 @@ export class Client {
   async validateQuery(
     query: string,
     signal?: AbortSignal,
+    variables?: string,
   ): Promise<ValidateQueryResult> {
     const session = await this.prepareRequest(signal)
     this.ensureRequestAllowed(session, signal ?? new AbortController().signal)
     const response = await fetch(
-      `api/v1/sql/validate?${Client.encodeParams({ query })}`,
+      `api/v1/sql/validate?${Client.encodeParams({ query, variables })}`,
       {
         headers: this.requestHeaders(),
         signal,
