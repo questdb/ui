@@ -173,6 +173,32 @@ describe("Client queryRaw HTTP errors", () => {
     expect(url.searchParams.get("variables")).toBe(variables)
   })
 
+  it("validates a query with the variables parameter, and without it when there are none", async () => {
+    // Given a server that accepts any query
+    const fetchMock = vi.fn((_url: string) =>
+      Promise.resolve(
+        new Response(JSON.stringify({ query, columns: [], timestamp: -1 }), {
+          status: 200,
+        }),
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const variables = "@a := 1\n, @b := 'x & y'"
+
+    // When the query is validated with variables, and then without them
+    await new Client().validateQuery(query, undefined, variables)
+    await new Client().validateQuery(query)
+
+    // Then the first request carries them unchanged, and the second has none
+    const [withVariables, withoutVariables] = fetchMock.mock.calls.map(
+      ([url]) => new URL(url, "http://host/"),
+    )
+    expect(withVariables.pathname).toBe("/api/v1/sql/validate")
+    expect(withVariables.searchParams.get("query")).toBe(query)
+    expect(withVariables.searchParams.get("variables")).toBe(variables)
+    expect(withoutVariables.searchParams.has("variables")).toBe(false)
+  })
+
   it("keeps other fields of an HTTP 400 error body", async () => {
     vi.stubGlobal(
       "fetch",
