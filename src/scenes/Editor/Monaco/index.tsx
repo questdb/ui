@@ -7,7 +7,7 @@ import React, { useContext, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled, { useTheme } from "styled-components"
-import type { ExecutionInfo } from "../../Editor"
+import type { ExecutionInfo } from ".."
 import {
   Box,
   Button,

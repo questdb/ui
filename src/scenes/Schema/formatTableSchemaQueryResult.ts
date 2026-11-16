@@ -1,5 +1,5 @@
-import { pick } from "./../../utils/pick"
-import { formatTableSchemaQuery } from "./../../utils/formatTableSchemaQuery"
+import { pick } from "../../utils/pick"
+import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )

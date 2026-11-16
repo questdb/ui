@@ -87,6 +87,22 @@ describe("validateRule", () => {
     expect(zeroErrors).toEqual({})
   })
 
+  it("rejects an emptied change threshold instead of treating it as zero", () => {
+    // Given
+    const rule = valueRule("prev.changedBy")
+    if (rule.kind !== "previous" || rule.condition.op !== "changedBy")
+      throw new Error("expected changedBy")
+
+    // When
+    const errors = validateRule(
+      { ...rule, condition: { ...rule.condition, threshold: NaN } },
+      columns,
+    )
+
+    // Then
+    expect(errors).toEqual({ threshold: "Should be a number" })
+  })
+
   it("checks a comparison value against the column kind", () => {
     // Given > value rules on a numeric and a temporal column
     const numeric = valueRule("value.gt")

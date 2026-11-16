@@ -1,6 +1,6 @@
 import React, { useContext } from "react"
 import styled from "styled-components"
-import { Button, Box, Key } from "../../components"
+import { Button, Box, Key } from ".."
 import { color } from "../../utils"
 import { ctrlCmd } from "../../utils/platform"
 import { useSelector } from "react-redux"

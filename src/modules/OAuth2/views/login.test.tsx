@@ -9,7 +9,7 @@ import { ThemeProvider } from "styled-components"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../../theme"
 
-vi.mock("../../../providers", () => ({
+vi.mock("../../../providers/SettingsProvider", () => ({
   useSettings: () => ({
     settings: {
       "release.type": "EE",
@@ -18,11 +18,11 @@ vi.mock("../../../providers", () => ({
     },
   }),
 }))
-vi.mock("../../../components", () => ({
-  Badge: "div",
-  Text: "span",
-  Button: "button",
-  IconButton: "button",
+vi.mock("../../../components/Badge", () => ({ Badge: "div" }))
+vi.mock("../../../components/Text", () => ({ Text: "span" }))
+vi.mock("../../../components/Button", () => ({ Button: "button" }))
+vi.mock("../../../components/IconButton", () => ({ IconButton: "button" }))
+vi.mock("../../../components/Form", () => ({
   Form: Object.assign(
     (props: React.ComponentProps<"form">) => <form {...props} />,
     { Item: "label", Input: "input", Submit: "button" },

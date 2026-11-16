@@ -575,3 +575,66 @@ describe("calculateHealthStatus for live views", () => {
     )
   })
 })
+
+describe("table ingestion health boundaries", () => {
+  const emptyTrend: TrendData = {
+    walPendingRowCount: [],
+    transactionLag: [],
+    ingestionMetric: [],
+  }
+
+  it.each([
+    [null, false],
+    [BigInt(0), false],
+    [BigInt(1), true],
+    [BigInt(99), true],
+    [BigInt(100), false],
+  ] as const)(
+    "warns about small transactions at p90=%s only when rows need batching",
+    (size, warning) => {
+      // Given
+      const table = { walEnabled: true, wal_tx_size_p90: size } as Table
+      // When
+      const health = calculateHealthStatus(table, { kind: "table" }, emptyTrend)
+      // Then
+      expect(health.issues.some((issue) => issue.id === "Y3")).toBe(warning)
+    },
+  )
+
+  it.each([
+    [null, "healthy", undefined],
+    [0, "healthy", undefined],
+    [1, "warning", "Y5"],
+    [2, "critical", "R3"],
+  ] as const)(
+    "maps memory pressure %s to the expected severity",
+    (level, severity, issueId) => {
+      // Given
+      const table = {
+        walEnabled: true,
+        table_memory_pressure_level: level,
+      } as Table
+      // When
+      const health = calculateHealthStatus(table, { kind: "table" }, emptyTrend)
+      // Then
+      expect(health.overallSeverity).toBe(severity)
+      expect(health.fieldIssues.get("memoryPressure")?.id).toBe(issueId)
+    },
+  )
+
+  it("ignores WAL-only warnings and suspension when WAL is disabled", () => {
+    // Given
+    const table = {
+      walEnabled: false,
+      table_suspended: true,
+      wal_tx_size_p90: BigInt(1),
+      table_write_amp_p50: 10,
+      table_memory_pressure_level: 1,
+    } as Table
+    // When
+    const health = calculateHealthStatus(table, { kind: "table" }, emptyTrend)
+    // Then
+    expect(health.issues).toEqual([])
+    expect(health.overallSeverity).toBe("healthy")
+  })
+})

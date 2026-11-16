@@ -808,9 +808,13 @@ export const AIConversationProvider: React.FC<{
       }
     }
 
-    if (conversationMetas.size > 0) {
-      const latestMeta = Array.from(conversationMetas.values()).reduce(
-        (latest, meta) => (meta.updatedAt > latest.updatedAt ? meta : latest),
+    // Until the live query first resolves, conversationMetas is empty. Read the
+    // stored list directly, so an early open does not hide existing chats.
+    const metas =
+      conversationMetasArray ?? (await db.ai_conversations.toArray())
+    if (metas.length > 0) {
+      const latestMeta = metas.reduce((latest, meta) =>
+        meta.updatedAt > latest.updatedAt ? meta : latest,
       )
       await openChatWindow(latestMeta.id)
       return
@@ -821,6 +825,7 @@ export const AIConversationProvider: React.FC<{
   }, [
     chatWindowState.activeConversationId,
     conversationMetas,
+    conversationMetasArray,
     openChatWindow,
     createConversation,
   ])

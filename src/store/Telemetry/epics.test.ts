@@ -59,8 +59,8 @@ vi.mock("../../consts", () => ({
   },
 }))
 
-vi.mock("../../store", () => ({
-  actions: {
+vi.mock("../actions", () => ({
+  default: {
     telemetry: {
       setConfig: (config: TelemetryConfigShape) => ({
         type: TelemetryAT.SET_CONFIG,
@@ -70,7 +70,9 @@ vi.mock("../../store", () => ({
         mockSetRemoteConfig(config),
     },
   },
-  selectors: {
+}))
+vi.mock("../selectors", () => ({
+  default: {
     telemetry: {
       getRemoteConfig: (): TelemetryRemoteConfigShape | undefined =>
         mockGetRemoteConfig() as TelemetryRemoteConfigShape | undefined,

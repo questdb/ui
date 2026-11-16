@@ -1,22 +1,30 @@
-import { describe, it, expect } from "vitest"
-import type { editor, IRange } from "monaco-editor"
+import type { editor, IPosition, IRange } from "monaco-editor"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+  appendQuery,
+  applyQueryKeyUpdates,
+  buildShareLinkUrl,
+  createInflightQuery,
+  createQueryKey,
+  getAllQueries,
   getQueriesFromText,
+  getQueriesStartingFromLine,
+  getQueriesToRun,
+  getQueryFromCursor,
+  getQueryRequestFromEditor,
+  getStatementOffsets,
   isCursorInComment,
   isCursorInQuotedIdentifier,
-  getQueriesToRun,
-  getQueryRequestFromEditor,
-  getQueryFromCursor,
-  isQueryTextAtOffset,
-  createInflightQuery,
-  shiftInflightQuery,
-  isInflightQueryStillInPlace,
-  shiftSelection,
-  applyQueryKeyUpdates,
-  getStatementOffsets,
   isFullQueryMatch,
+  isInflightQueryStillInPlace,
+  isQueryTextAtOffset,
   joinQueryTexts,
+  normalizeQueryText,
+  parseQueryKey,
   resolveSelectionRun,
+  shiftInflightQuery,
+  shiftQueryKey,
+  shiftSelection,
 } from "./utils"
 
 type SingleLineSelection = { startColumn: number; endColumn: number }
@@ -64,7 +72,11 @@ const makeSingleLineEditor = (
   } as unknown as editor.IStandaloneCodeEditor
 }
 
-const makeMultiLineEditor = (text: string, selection?: IRange) => {
+const makeMultiLineEditor = (
+  text: string,
+  selection?: IRange,
+  cursor?: IPosition,
+) => {
   const lines = text.split("\n")
   const getOffsetAt = (position: { lineNumber: number; column: number }) =>
     lines
@@ -106,7 +118,7 @@ const makeMultiLineEditor = (text: string, selection?: IRange) => {
   return {
     getModel: () => model,
     getValue: () => text,
-    getPosition: () => getPositionAt(text.length),
+    getPosition: () => cursor ?? getPositionAt(text.length),
     getSelection: () =>
       selection
         ? {
@@ -1310,4 +1322,391 @@ describe("applyQueryKeyUpdates", () => {
       [thirdKey]: second,
     })
   })
+})
+
+describe("query keys for SQL containing @", () => {
+  it.each([
+    ["DECLARE @x := 1 SELECT @x", 0, "DECLARE @x := 1 SELECT @x@0-25"],
+    [
+      "DECLARE @myVar := 'shift-this' select @myVar;",
+      12,
+      "DECLARE @myVar := 'shift-this' select @myVar@12-56",
+    ],
+  ])("round-trips %j through its query key", (sql, startOffset, key) => {
+    // Given a statement whose text contains @ variables
+    // When creating its key and parsing it back
+    const queryKey = createQueryKey(sql, startOffset)
+    const parsed = parseQueryKey(queryKey)
+
+    // Then the key ends with the offsets and parsing restores the full text
+    expect(queryKey).toBe(key)
+    expect(parsed).toEqual({
+      queryText: normalizeQueryText(sql),
+      startOffset,
+      endOffset: startOffset + normalizeQueryText(sql).length,
+    })
+  })
+
+  it("keeps the full text when the key moves with its statement", () => {
+    // Given the key of a DECLARE statement at offset 12
+    const queryKey = createQueryKey("DECLARE @x := 1 SELECT @x", 12)
+
+    // When text inserted above shifts the statement by 7 characters
+    const shifted = shiftQueryKey(queryKey, 0, 7)
+
+    // Then only the offsets move
+    expect(shifted).toBe("DECLARE @x := 1 SELECT @x@19-44")
+  })
+})
+
+describe("statement boundaries around comments", () => {
+  it.each([
+    [
+      "leading line comments",
+      "-- comment\n-- comment\nselect x from long_sequence(1);",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "empty line comments",
+      "--\nselect x from long_sequence(1);",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "leading block comment",
+      "/* comment */\nselect x from long_sequence(1);",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "multiline block comment",
+      "/*\ncomment\n*/\nselect x from long_sequence(1);",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "comments inside a statement",
+      "select\nx\n-- y\n-- z\n from long_sequence(1);",
+      ["select\nx\n-- y\n-- z\n from long_sequence(1)"],
+    ],
+    [
+      "trailing comment",
+      "select x from long_sequence(1); -- comment",
+      ["select x from long_sequence(1)"],
+    ],
+    [
+      "comment semicolons",
+      "-- not a query;\n/* not a query 2;\n not a query 3; */select /* not; a; query;*/ 1; --not a query /* ; 4;\nselect\n\n --line;\n 2;",
+      ["select /* not; a; query;*/ 1", "select\n\n --line;\n 2"],
+    ],
+    [
+      "apostrophes in block comments",
+      "/* Today's aggregation;\n is not SQL */\nSELECT *\nFROM long_sequence(100);",
+      ["SELECT *\nFROM long_sequence(100)"],
+    ],
+  ])("keeps executable statements separate from %s", (_, source, expected) => {
+    // Given / When
+    const statements = getQueriesFromText(source)
+    // Then
+    expect(statements).toEqual(expected)
+  })
+})
+
+describe("cursor decorations and run glyphs around comments", () => {
+  type Glyph = [line: number, column: number, sql: string]
+  type DecoratedLines = [startLine: number, endLine: number] | null
+
+  // Mirrors the editor: a glyph sits on each statement's start line and runs
+  // the statements starting there; the cursor decoration spans the whole
+  // lines of the statement under the cursor.
+  const glyphsOf = (source: string): Glyph[] => {
+    const editor = makeMultiLineEditor(source)
+    const offsets = getStatementOffsets(editor)
+    return getAllQueries(editor).flatMap((statement) =>
+      getQueriesStartingFromLine(editor, statement.row + 1, offsets).map(
+        (query): Glyph => [
+          query.row + 1,
+          query.column,
+          normalizeQueryText(query.query),
+        ],
+      ),
+    )
+  }
+  const decoratedLinesWithCursorAtEndOf = (
+    source: string,
+    lineNumber: number,
+  ): DecoratedLines => {
+    const column = source.split("\n")[lineNumber - 1].length + 1
+    const statement = getQueryFromCursor(
+      makeMultiLineEditor(source, undefined, { lineNumber, column }),
+    )
+    return statement ? [statement.row + 1, statement.endRow + 1] : null
+  }
+
+  it.each<[string, string, Glyph[], DecoratedLines[]]>([
+    [
+      "leading line comments",
+      "-- comment\n-- comment\nselect x from long_sequence(1);",
+      [[3, 1, "select x from long_sequence(1)"]],
+      [null, null, [3, 3]],
+    ],
+    [
+      "an empty line comment",
+      "--\nselect x from long_sequence(1);",
+      [[2, 1, "select x from long_sequence(1)"]],
+      [null, [2, 2]],
+    ],
+    [
+      "a leading block comment",
+      "/* comment */\nselect x from long_sequence(1);",
+      [[2, 1, "select x from long_sequence(1)"]],
+      [null, [2, 2]],
+    ],
+    [
+      "a multiline block comment",
+      "/*\ncomment\n*/\nselect x from long_sequence(1);",
+      [[4, 1, "select x from long_sequence(1)"]],
+      [null, null, null, [4, 4]],
+    ],
+    [
+      "line comments inside a statement",
+      "select\nx\n-- y\n-- z\n from long_sequence(1);",
+      [[1, 1, "select\nx\n-- y\n-- z\n from long_sequence(1)"]],
+      [
+        [1, 5],
+        [1, 5],
+        [1, 5],
+        [1, 5],
+        [1, 5],
+      ],
+    ],
+    [
+      "a trailing line comment",
+      "select x from long_sequence(1); -- comment",
+      [[1, 1, "select x from long_sequence(1)"]],
+      [[1, 1]],
+    ],
+    [
+      "comments containing semicolons",
+      "-- not a query;\n/* not a query 2;\n not a query 3; */select /* not; a; query;*/ 1; --not a query /* ; 4;\nselect\n\n --line;\n 2;",
+      [
+        [3, 19, "select /* not; a; query;*/ 1"],
+        [4, 1, "select\n\n --line;\n 2"],
+      ],
+      [null, null, [3, 3], [4, 7], [4, 7], [4, 7], [4, 7]],
+    ],
+    [
+      "single quotes in a multiline comment",
+      "/* Today's aggregations for the BTC-USDT symbol downsampled in 15-minute intervals.\n We use the SQL extension SAMPLE BY to aggregate data at regular intervals. QuestDB\n ingests live market data.; */\nSELECT *\nFROM long_sequence(100);",
+      [[4, 1, "SELECT *\nFROM long_sequence(100)"]],
+      [null, null, null, [4, 5], [4, 5]],
+    ],
+    [
+      "mixed comments, quotes and semicolons",
+      "/* Comment with semicolon; and single quote ' */\n-- Line comment with quote ' and semicolon;\nSELECT 'another;test' AS col2;\n/* Multi\nline;\ncomment;\nwith ' quote */\nSELECT 1 AS col3;\nSELECT 'text'/* inline; ' */ AS col5;",
+      [
+        [3, 1, "SELECT 'another;test' AS col2"],
+        [8, 1, "SELECT 1 AS col3"],
+        [9, 1, "SELECT 'text'/* inline; ' */ AS col5"],
+      ],
+      [null, null, [3, 3], null, null, null, null, [8, 8], [9, 9]],
+    ],
+  ])(
+    "places glyphs and decorations for %s",
+    (_, source, expectedGlyphs, expectedDecorationPerLine) => {
+      // Given a buffer mixing statements and comments
+      const lineNumbers = source.split("\n").map((_line, index) => index + 1)
+
+      // When resolving glyphs and the decoration for a cursor on each line
+      const glyphs = glyphsOf(source)
+      const decorations = lineNumbers.map((lineNumber) =>
+        decoratedLinesWithCursorAtEndOf(source, lineNumber),
+      )
+
+      // Then only real statements get a glyph at their own start position, and
+      // the decoration spans every line of the statement under the cursor
+      expect(glyphs).toEqual(expectedGlyphs)
+      expect(decorations).toEqual(expectedDecorationPerLine)
+    },
+  )
+})
+
+describe("appendQuery", () => {
+  const makeEditableEditor = (initialText: string, cursor: IPosition) => {
+    let text = initialText
+    let selection: IRange | null = null
+    const lines = () => text.split("\n")
+    // Like Monaco, positions past the end of the buffer clamp to its end.
+    const toOffset = ({ lineNumber, column }: IPosition) =>
+      lineNumber > lines().length
+        ? text.length
+        : lines()
+            .slice(0, lineNumber - 1)
+            .reduce((offset, line) => offset + line.length + 1, 0) +
+          Math.min(column, lines()[lineNumber - 1].length + 1) -
+          1
+    const model = {
+      getValue: () => text,
+      getLineCount: () => lines().length,
+      getLineContent: (lineNumber: number) => lines()[lineNumber - 1],
+    }
+    const editor = {
+      getModel: () => model,
+      getValue: () => text,
+      getPosition: () =>
+        selection
+          ? {
+              lineNumber: selection.endLineNumber,
+              column: selection.endColumn,
+            }
+          : cursor,
+      executeEdits: (
+        _source: string,
+        edits: { range: IRange; text: string }[],
+      ) => {
+        edits.forEach(({ range, text: insertedText }) => {
+          const start = toOffset({
+            lineNumber: range.startLineNumber,
+            column: range.startColumn,
+          })
+          const end = toOffset({
+            lineNumber: range.endLineNumber,
+            column: range.endColumn,
+          })
+          text = text.slice(0, start) + insertedText + text.slice(end)
+        })
+        return true
+      },
+      setSelection: (range: IRange) => {
+        selection = range
+      },
+      focus: () => {},
+      revealLine: () => {},
+    } as unknown as editor.IStandaloneCodeEditor
+
+    return {
+      editor,
+      getText: () => text,
+      getSelectedText: () =>
+        selection
+          ? text.slice(
+              toOffset({
+                lineNumber: selection.startLineNumber,
+                column: selection.startColumn,
+              }),
+              toOffset({
+                lineNumber: selection.endLineNumber,
+                column: selection.endColumn,
+              }),
+            )
+          : "",
+    }
+  }
+
+  it.each<[string, string, IPosition, string]>([
+    [
+      "the occupied first line",
+      "--a",
+      { lineNumber: 1, column: 4 },
+      "--a\nfirst query;",
+    ],
+    [
+      "the first line before other comments",
+      "--a\n\n--b",
+      { lineNumber: 1, column: 4 },
+      "--a\n\n--b\nfirst query;",
+    ],
+    [
+      "the empty middle line",
+      "--a\n\n--b",
+      { lineNumber: 2, column: 1 },
+      "--a\n\n--b\n\nfirst query;",
+    ],
+    [
+      "the last occupied line",
+      "--a\n--b",
+      { lineNumber: 2, column: 4 },
+      "--a\n--b\n\nfirst query;",
+    ],
+    [
+      "the empty last line",
+      "--a\n",
+      { lineNumber: 2, column: 1 },
+      "--a\n\n\nfirst query;",
+    ],
+    [
+      "the middle of an occupied line",
+      "--a\n--b\n\n--c",
+      { lineNumber: 2, column: 2 },
+      "--a\n--b\n\n--c\n\nfirst query;",
+    ],
+    [
+      "a terminated statement with a trailing comment",
+      "select 1; -- done",
+      { lineNumber: 1, column: 18 },
+      "select 1; -- done\nfirst query;",
+    ],
+    [
+      "an unterminated statement",
+      "select 1",
+      { lineNumber: 1, column: 9 },
+      "select 1;\nfirst query;",
+    ],
+  ])(
+    "terminates only real SQL when appending after %s",
+    (_, source, cursor, expected) => {
+      // Given a buffer with the cursor placed in it
+      const { editor, getText, getSelectedText } = makeEditableEditor(
+        source,
+        cursor,
+      )
+
+      // When a query is appended
+      appendQuery(editor, "first query;")
+
+      // Then a semicolon is added only after unterminated SQL, never after
+      // comments, and only the appended query is selected
+      expect(getText()).toBe(expected)
+      expect(getSelectedText()).toBe("first query;")
+    },
+  )
+
+  it("appends twice after a comment-only buffer without semicolons", () => {
+    // Given a comment below an empty first line holding the cursor
+    const { editor, getText, getSelectedText } = makeEditableEditor("\n--b", {
+      lineNumber: 1,
+      column: 1,
+    })
+
+    // When two queries are appended in a row
+    appendQuery(editor, "first query;")
+    appendQuery(editor, "second query;")
+
+    // Then neither append injects a semicolon and the last query is selected
+    expect(getText()).toBe("\n--b\nfirst query;\n\nsecond query;")
+    expect(getSelectedText()).toBe("second query;")
+  })
+})
+
+describe("share link encoding", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  it.each(["/", "/console/", "/nested/console/", "/nested/console/index.html"])(
+    "preserves %s while encoding SQL and dropping old query parameters",
+    (path) => {
+      // Given
+      vi.stubGlobal("window", {
+        location: new URL(`${path}?old=value#old-fragment`, "http://localhost"),
+      })
+      const sql = "select 'a&b+c; 日本語' as name;\nselect 2;"
+      // When
+      const url = new URL(buildShareLinkUrl(sql))
+      // Then
+      expect(url.origin).toBe("http://localhost")
+      expect(url.pathname).toBe(path)
+      expect([...url.searchParams]).toEqual([
+        ["query", sql],
+        ["executeQuery", "true"],
+      ])
+      expect(url.hash).toBe("")
+    },
+  )
 })

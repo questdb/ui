@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react"
-import { QuestContext } from "../providers"
+import { QuestContext } from "../providers/QuestProvider"
 import type { QueryExecutionSnapshot } from "../utils/questdb"
 
 export const useQueryExecutionState = (): QueryExecutionSnapshot => {

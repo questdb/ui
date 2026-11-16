@@ -1,5 +1,5 @@
 import * as QuestDB from "./questdb"
-import { toast } from "../components"
+import { toast } from "../components/Toast"
 import { API_VERSION } from "../consts"
 
 // Streams a query's full result from the server's `/exp` endpoint into a file
@@ -22,11 +22,12 @@ export const downloadQueryResult = (
   document.body.appendChild(iframe)
 
   iframe.onerror = (e) => {
-    if (typeof e === "object") {
-      toast.error("An error occurred while downloading the file")
-    }
-    const error = e as string
-    toast.error(`An error occurred while downloading the file: ${error}`)
+    toast.error(
+      typeof e === "string"
+        ? `An error occurred while downloading the file: ${e}`
+        : "An error occurred while downloading the file",
+    )
+    iframe.remove()
   }
 
   iframe.onload = () => {
@@ -41,7 +42,7 @@ export const downloadQueryResult = (
       }
       toast.error(error)
     }
-    document.body.removeChild(iframe)
+    iframe.remove()
   }
 
   iframe.src = url

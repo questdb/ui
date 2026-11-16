@@ -7,7 +7,7 @@ import {
   Overlay,
   Text,
 } from "../"
-import { QuestContext } from "../../providers"
+import { QuestContext } from "../../providers/QuestProvider"
 import { useQueryExecutionState } from "../../hooks/useQueryExecutionState"
 
 export const QueryExecutionConfirmDialog: React.FC = () => {

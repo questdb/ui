@@ -43,7 +43,7 @@ import type {
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
 import type { Permissions } from "../../utils/tools/permissions"
 import { ForwardRef } from "../ForwardRef"
-import { Badge } from "../../components/Badge"
+import { Badge } from "../Badge"
 import { CheckCircle } from "../icons"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"

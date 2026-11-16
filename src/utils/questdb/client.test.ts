@@ -23,6 +23,193 @@ afterEach(() => {
   authSessionState.endSession()
 })
 
+describe("Client queryRaw HTTP errors", () => {
+  const query = "SELECT 1"
+
+  it("does not return an HTTP 400 result when a connection listener ends its session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: "bad query", position: 0 }), {
+          status: 400,
+        }),
+      ),
+    )
+    const endSession = () => authSessionState.endSession()
+    eventBus.subscribe(EventType.MSG_CONNECTION_OK, endSession)
+
+    try {
+      await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+        type: Type.ERROR,
+        sessionEnded: true,
+      })
+    } finally {
+      eventBus.unsubscribe(EventType.MSG_CONNECTION_OK, endSession)
+    }
+  })
+
+  it("does not publish an HTTP 400 result after its session ends during the body read", async () => {
+    let finishBody!: (body: string) => void
+    const reply = new Response(null, { status: 400 })
+    const readBody = vi.spyOn(reply, "text").mockReturnValue(
+      new Promise<string>((resolve) => {
+        finishBody = resolve
+      }),
+    )
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply))
+    const publish = vi.spyOn(eventBus, "publish")
+    const result = new Client().queryRaw(query).catch((error: unknown) => error)
+
+    await vi.waitFor(() => expect(readBody).toHaveBeenCalled())
+    authSessionState.endSession()
+    finishBody(JSON.stringify({ error: "bad query", position: 0 }))
+
+    await expect(result).resolves.toMatchObject({
+      type: Type.ERROR,
+      sessionEnded: true,
+    })
+    expect(publish).not.toHaveBeenCalledWith(EventType.MSG_CONNECTION_OK)
+  })
+
+  it.each([
+    ["null body", "null"],
+    ["missing error", "{}"],
+    ["object error", '{"error":{"message":"bad query"}}'],
+    ["array body", "[]"],
+    ["HTML body", "<html>Bad request</html>"],
+    ["success-shaped body", '{"ddl":true}'],
+  ])("rejects a %s with a renderable error", async (_, body) => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(body, { status: 400, statusText: "Bad Request" }),
+        ),
+    )
+
+    await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+      query,
+      error: "Bad Request",
+      position: -1,
+      type: Type.ERROR,
+      status: 400,
+    })
+  })
+
+  it.each([undefined, null, "3", -2, 0.5, 9])(
+    "does not expose invalid error position %s to the editor",
+    async (position) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ error: "bad query", position }), {
+            status: 400,
+          }),
+        ),
+      )
+
+      await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+        error: "bad query",
+        position: -1,
+      })
+    },
+  )
+
+  it.each([0, query.length])(
+    "preserves valid position %s",
+    async (position) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({ error: "bad query", query, position }),
+            {
+              status: 400,
+            },
+          ),
+        ),
+      )
+
+      await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+        query,
+        error: "bad query",
+        position,
+        type: Type.ERROR,
+        status: 400,
+      })
+    },
+  )
+
+  it("keeps other fields of an HTTP 400 error body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ error: "bad query", position: 0, errorCode: 42 }),
+            { status: 400 },
+          ),
+        ),
+    )
+
+    await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+      error: "bad query",
+      position: 0,
+      errorCode: 42,
+    })
+  })
+
+  // An error raised after rows started streaming keeps HTTP 200 and follows
+  // the partial dataset, with the position named errorPos.
+  it("rejects an HTTP 200 error raised while rows stream", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        response({
+          query,
+          columns: [{ name: "1", type: "INT" }],
+          timestamp: -1,
+          dataset: [[1]],
+          count: 1,
+          error: "timeout, query aborted",
+          errorPos: 7,
+        }),
+      ),
+    )
+
+    await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+      query,
+      error: "timeout, query aborted",
+      position: 7,
+      type: Type.ERROR,
+    })
+  })
+
+  it.each([
+    ["invalid position", { error: "bad query", position: 99 }, "bad query", -1],
+    [
+      "object error",
+      { error: { message: "bad" }, position: 0 },
+      "Query failed",
+      0,
+    ],
+  ])(
+    "normalizes an HTTP 200 error body with an %s",
+    async (_, body, error, position) => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(body)))
+
+      await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+        query,
+        error,
+        position,
+        type: Type.ERROR,
+      })
+    },
+  )
+})
+
 const rawDqlResult = (
   columns: Array<{ name: string; type: string }>,
   dataset: Array<Array<string | number | boolean | null>>,

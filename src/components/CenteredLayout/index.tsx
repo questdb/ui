@@ -2,7 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { Text } from "../Text"
 import { Badge } from "../Badge"
-import { useSettings } from "../../providers"
+import { useSettings } from "../../providers/SettingsProvider"
 
 const Root = styled.div`
   width: 100%;

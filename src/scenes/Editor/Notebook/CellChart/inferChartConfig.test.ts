@@ -241,6 +241,26 @@ describe("inferChartConfig", () => {
     expect(config.xColumn).toBe("symbol")
   })
 
+  it.each([
+    "/* '/*' */",
+    "/* 'a\n/* b' */",
+    "/* disabled:\nSELECT 1 -- see /* below\n*/",
+  ])("preserves the LATEST chart hint after %s", (prefix) => {
+    // Given / When
+    const config = inferChartConfig(
+      [col("symbol", "SYMBOL"), col("price", "DOUBLE")],
+      [
+        ["BTC", 1],
+        ["ETH", 2],
+      ],
+      `${prefix}\nSELECT symbol, price FROM trades LATEST ON ts PARTITION BY symbol`,
+    )
+
+    // Then LATEST remains a bar snapshot instead of the pie fallback
+    expect(config.chart.type).toBe("bar")
+    expect(config.xColumn).toBe("symbol")
+  })
+
   it("picks scatter when only numerics, no temporal", () => {
     const columns = [col("x", "DOUBLE"), col("y", "DOUBLE")]
     const config = inferChartConfig(columns, [], "SELECT x, y FROM t")

@@ -58,7 +58,8 @@ const RETRY_MAX_DELAY_MS = 30000
 const TELEMETRY_INTERVAL_MS = 36e5 // 1 hour
 
 import { API, TelemetryTable } from "../../consts"
-import { actions, selectors } from "../../store"
+import actions from "../actions"
+import selectors from "../selectors"
 import {
   SetTelemetryConfigAction,
   SetTelemetryRemoteConfigAction,
