@@ -1048,7 +1048,7 @@
             },
             "required": ["name", "value"]
           },
-          "description": "Ordered notebook-scoped global variables to be referenced as @var in the query (the DECLARE block surfaced in the Variables popover). Each item is {\"name\": \"from\", \"value\": \"dateadd('d', -7, now())\"}; names have no leading '@'. Order matters: if one variable references another, place the dependency first and the dependent variable later. Pass null to preserve current; pass [] to clear all."
+          "description": "Ordered notebook-scoped global variables to be referenced as @var in the query (the DECLARE block surfaced in the Variables popover). Each item is {\"name\": \"from\", \"value\": \"dateadd('d', -7, now())\"}; names have no leading '@'. Order matters: if one variable references another, place the dependency first and the dependent variable later. SELECT, WITH … SELECT, EXPLAIN and INSERT … SELECT read these variables; INSERT … VALUES, UPDATE, CREATE TABLE AS SELECT and view definitions do not. In those, declare inside the statement's own SELECT, e.g. `CREATE TABLE t AS (DECLARE @x := … SELECT …)` or `WITH c AS (DECLARE @x := … SELECT …) UPDATE t SET a = c.v FROM c`. Pass null to preserve current; pass [] to clear all."
         },
         "cells": {
           "type": "array",
