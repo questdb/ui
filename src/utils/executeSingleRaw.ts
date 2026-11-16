@@ -1,7 +1,11 @@
 import * as QuestDB from "./questdb"
 import type { Client } from "./questdb/client"
 import type { ColumnDefinition, Timings } from "./questdb/types"
-import { expandGlobals } from "../scenes/Editor/Notebook/declareUtils"
+import {
+  effectiveQueryOf,
+  mapVariablesError,
+  renderVariablesParameter,
+} from "../scenes/Editor/Notebook/declareUtils"
 import type { NotebookVariable } from "../store/notebook"
 import {
   sessionFailureOf,
@@ -24,7 +28,8 @@ export type QueryExecResult = SessionFailure & {
 }
 
 // Context-free single-query execution: runs one statement through the quest
-// client, expanding globals and mapping the raw response to QueryExecResult.
+// client with the notebook variables in the `variables` parameter, and maps the
+// raw response to QueryExecResult.
 // Kept out of useQueryExecution (which pulls React/QuestProvider) so the
 // headless notebook run path can reuse the exact same mapping with no React.
 export const executeSingleRaw = async (
@@ -36,6 +41,7 @@ export const executeSingleRaw = async (
   options: { background?: boolean } = {},
 ): Promise<QueryExecResult> => {
   let cleanup: (() => void) | undefined
+  const variables = renderVariablesParameter(globals)
   try {
     if (signal?.aborted) {
       return {
@@ -47,10 +53,11 @@ export const executeSingleRaw = async (
         error: "Query aborted before execution.",
       }
     }
-    const expanded = expandGlobals(sql, globals)
-    const { promise, queryId } = quest.queryRaw(expanded, {
+    const effectiveQuery = effectiveQueryOf(sql, variables)
+    const { promise, queryId } = quest.queryRaw(sql, {
       limit: `0,${limit}`,
       cancellable: true,
+      ...(variables ? { variables: variables.text } : {}),
       ...(options.background ? { background: true } : {}),
     })
     if (signal) {
@@ -68,7 +75,7 @@ export const executeSingleRaw = async (
       return {
         type: "dql",
         query: sql,
-        effectiveQuery: expanded,
+        effectiveQuery,
         columns: result.columns,
         dataset: result.dataset,
         count: result.count,
@@ -81,7 +88,7 @@ export const executeSingleRaw = async (
       return {
         type: "dql",
         query: sql,
-        effectiveQuery: expanded,
+        effectiveQuery,
         columns: result.columns ?? [],
         dataset: result.dataset ?? [],
         count: result.count ?? 0,
@@ -100,14 +107,23 @@ export const executeSingleRaw = async (
     }
   } catch (e: unknown) {
     const err = e as Record<string, unknown> | null
+    const message =
+      (err?.error as string) ?? (err?.message as string) ?? "Unknown error"
     return {
       type: "error",
       query: sql,
       columns: [],
       dataset: [],
       count: 0,
+      // an error in the variables names the variable
       error:
-        (err?.error as string) ?? (err?.message as string) ?? "Unknown error",
+        err?.errorSource === "variables"
+          ? mapVariablesError(variables, {
+              error: message,
+              position: typeof err.position === "number" ? err.position : -1,
+              errorSource: "variables",
+            }).error
+          : message,
       ...sessionFailureOf(e),
     }
   } finally {

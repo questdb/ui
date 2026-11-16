@@ -1,4 +1,4 @@
-import { parse, tokenize } from "@questdb/sql-parser"
+import { parse } from "@questdb/sql-parser"
 import type { CstNode, IToken } from "@chevrotain/types"
 import type { NotebookVariable } from "../../../store/notebook"
 import type { Client } from "../../../utils/questdb/client"
@@ -28,13 +28,6 @@ export const normalizeVariables = (raw: unknown): NotebookVariable[] => {
     )
   }
   return []
-}
-
-export const expandGlobals = (sql: string, globals: unknown): string => {
-  const normalized = normalizeVariables(globals)
-  return normalized.length > 0
-    ? prependGlobalsDeclare(sql, normalized).sql
-    : sql
 }
 
 export const stripLeadingAt = (raw: string): string =>
@@ -98,8 +91,6 @@ type UserDeclareAssignment = {
 type LeadingDeclareInfo = {
   assignments: UserDeclareAssignment[]
   hasInvalidAssignment: boolean
-  blockStart: number
-  bodyStart: number
 }
 
 const extractLeadingDeclare = (text: string): LeadingDeclareInfo | null => {
@@ -109,8 +100,7 @@ const extractLeadingDeclare = (text: string): LeadingDeclareInfo | null => {
   const decl = findFirstNode(cst, "declareClause")
   if (!decl) return null
 
-  const range = subtreeRange(decl)
-  if (!range) return null
+  if (!subtreeRange(decl)) return null
 
   const assignments: UserDeclareAssignment[] = []
   let hasInvalidAssignment = false
@@ -139,12 +129,7 @@ const extractLeadingDeclare = (text: string): LeadingDeclareInfo | null => {
       originalText: text.slice(aRange.start, aRange.end + 1),
     })
   }
-  return {
-    assignments,
-    hasInvalidAssignment,
-    blockStart: range.start,
-    bodyStart: range.end + 1,
-  }
+  return { assignments, hasInvalidAssignment }
 }
 
 export const parseDeclareBlock = (text: string): NotebookVariable[] => {
@@ -191,30 +176,64 @@ export const validateVariableShape = (
   return null
 }
 
-export type InsertedRange = { start: number; end: number; delta: number }
-
-export type PreparedSql = {
-  sql: string
-  // Information about the rewrite, or null if no rewrite happened.
-  insertedRange: InsertedRange | null
+// The `variables` parameter of /exec, /exp and /api/v1/sql/validate: the
+// assignments of a DECLARE block, which the server reads as a DECLARE block
+// that opens the statement. The range of each assignment lets an error the
+// server reports in the parameter name its variable.
+export type VariablesParameter = {
+  text: string
+  assignments: Array<{ name: string; start: number; end: number }>
 }
 
-export type WireErrorPosition =
-  | { kind: "passthrough"; position: number }
-  | { kind: "inDeclareBlock"; position: number }
-  | { kind: "shifted"; position: number }
+// A line comment that ends a value ends at the newline, before the comma.
+const ASSIGNMENT_SEPARATOR = "\n, "
 
-export const mapWireErrorPosition = (
-  range: InsertedRange,
-  wirePosition: number,
-): WireErrorPosition => {
-  if (wirePosition < range.start) {
-    return { kind: "passthrough", position: wirePosition }
+export const renderVariablesParameter = (
+  globals: unknown,
+): VariablesParameter | undefined => {
+  let text = ""
+  const assignments: VariablesParameter["assignments"] = []
+  for (const { name, value } of normalizeVariables(globals)) {
+    if (!isValidVariableName(name)) continue
+    if (assignments.length > 0) text += ASSIGNMENT_SEPARATOR
+    const start = text.length
+    text += `@${name} := ${value}`
+    assignments.push({ name, start, end: text.length })
   }
-  if (wirePosition < range.end) {
-    return { kind: "inDeclareBlock", position: range.start }
-  }
-  return { kind: "shifted", position: wirePosition - range.delta }
+  return assignments.length > 0 ? { text, assignments } : undefined
+}
+
+// The text a statement runs as, which tells apart the results of one
+// statement run with other variable values.
+export const effectiveQueryOf = (
+  sql: string,
+  variables: VariablesParameter | undefined,
+): string => (variables ? `DECLARE ${variables.text}\n${sql}` : sql)
+
+type ServerError = {
+  error: string
+  position: number
+  errorSource?: "variables"
+}
+
+// An error the server reports in the variables has a position in the
+// parameter. Point it at the start of the statement and name the variable.
+export const mapVariablesError = <T extends ServerError>(
+  variables: VariablesParameter | undefined,
+  result: T,
+): T => {
+  if (result.errorSource !== "variables") return result
+  const { errorSource: _, ...rest } = result
+  const assignment = variables?.assignments
+    .filter(({ start }) => start <= result.position)
+    .pop()
+  return {
+    ...rest,
+    position: 0,
+    error: assignment
+      ? `${result.error} (in variable @${assignment.name})`
+      : `${result.error} (in variables)`,
+  } as T
 }
 
 export const createValidateWithGlobals =
@@ -223,152 +242,7 @@ export const createValidateWithGlobals =
     getVariables: () => NotebookVariable[] | undefined,
   ) =>
   async (sql: string, signal?: AbortSignal) => {
-    const variables = normalizeVariables(getVariables())
-    const prepared =
-      variables.length > 0
-        ? prependGlobalsDeclare(sql, variables)
-        : { sql, insertedRange: null }
-    const result = await quest.validateQuery(prepared.sql, signal)
-    if (!("error" in result) || !prepared.insertedRange) return result
-    const mapped = mapWireErrorPosition(prepared.insertedRange, result.position)
-    if (mapped.kind === "passthrough") return result
-    if (mapped.kind === "inDeclareBlock") {
-      return {
-        ...result,
-        position: mapped.position,
-        error: `${result.error} (in DECLARE block)`,
-      }
-    }
-    return { ...result, position: mapped.position }
+    const variables = renderVariablesParameter(getVariables())
+    const result = await quest.validateQuery(sql, signal, variables?.text)
+    return "error" in result ? mapVariablesError(variables, result) : result
   }
-
-const NO_OP = (sql: string): PreparedSql => ({ sql, insertedRange: null })
-
-const renderMergedDeclare = (
-  globals: NotebookVariable[],
-  userAssignments: UserDeclareAssignment[],
-): string => {
-  const validGlobalLines = globals
-    .filter(({ name }) => isValidVariableName(name))
-    .map(({ name, value }) => `  @${name} := ${value}`)
-  const userLines = userAssignments.map((a) => `  ${a.originalText}`)
-  const lines = [...validGlobalLines, ...userLines]
-  if (lines.length === 0) return ""
-  return `DECLARE\n${lines.join(",\n")}`
-}
-
-type StatementShape =
-  | { kind: "select" }
-  | { kind: "leadingDeclare"; info: LeadingDeclareInfo }
-  | { kind: "skip" }
-
-const analyzeStatement = (text: string): StatementShape => {
-  const r = parse(maskParserBlockComments(text))
-  // Any parse error or recovery-induced multi-statement shape: refuse to
-  // rewrite. The user's broken SQL surfaces server errors directly.
-  if (r.parseErrors.length > 0) return { kind: "skip" }
-  if (!r.cst) return { kind: "skip" }
-  const stmtChildren = (r.cst.children.statement ?? []).filter(
-    (s): s is CstNode => !isToken(s),
-  )
-  if (stmtChildren.length !== 1) return { kind: "skip" }
-  const stmt = stmtChildren[0]
-
-  if (stmt.children.selectStatement) {
-    const sel = stmt.children.selectStatement[0]
-    if (isToken(sel) || !sel.children.selectBody) return { kind: "skip" }
-    if (sel.children.declareClause) {
-      const info = extractLeadingDeclare(text)
-      if (!info || info.hasInvalidAssignment) return { kind: "skip" }
-      return { kind: "leadingDeclare", info }
-    }
-    return { kind: "select" }
-  }
-
-  if (stmt.children.withStatement) {
-    const w = stmt.children.withStatement[0]
-    if (isToken(w)) return { kind: "skip" }
-    // WITH … <body>. Only a SELECT body is safe to prepend DECLARE before
-    // (DECLARE grammar is `DECLARE … [WITH …] SELECT …`). WITH … INSERT,
-    // WITH … UPDATE, etc. are valid user SQL but not valid DECLARE targets.
-    if (w.children.selectBody) return { kind: "select" }
-    return { kind: "skip" }
-  }
-
-  // INSERT / CREATE / UPDATE / DELETE / ALTER / DROP / SHOW / TRUNCATE / etc.
-  return { kind: "skip" }
-}
-
-export const prependGlobalsDeclare = (
-  sql: string,
-  globals: NotebookVariable[],
-): PreparedSql => {
-  if (globals.length === 0) return NO_OP(sql)
-
-  const { tokens } = tokenize(maskParserBlockComments(sql))
-  if (tokens.length === 0) return NO_OP(sql)
-
-  const first = tokens[0]
-
-  // EXPLAIN is the one form we handle by stripping and recursing — the inner
-  // statement's grammar is what matters (`EXPLAIN DECLARE … SELECT …` is the
-  // only valid shape; `EXPLAIN WITH … INSERT …` is valid user SQL but not a
-  // DECLARE target). The recursive call's analyzer makes that call.
-  if (first.tokenType.name === "Explain") {
-    // QuestDBLexer is configured with `positionTracking: "full"`, so every
-    // token has both startOffset and endOffset as numbers. Asserting `!`
-    // here documents that invariant; the recursion is bounded by sql.length
-    // because suffixStart is always >= 1 (endOffset >= startOffset >= 0).
-    const suffixStart = first.endOffset! + 1
-    const recursed = prependGlobalsDeclare(sql.slice(suffixStart), globals)
-    if (!recursed.insertedRange) return NO_OP(sql)
-    return {
-      sql: sql.slice(0, suffixStart) + recursed.sql,
-      insertedRange: {
-        start: suffixStart + recursed.insertedRange.start,
-        end: suffixStart + recursed.insertedRange.end,
-        delta: recursed.insertedRange.delta,
-      },
-    }
-  }
-
-  const shape = analyzeStatement(sql)
-  if (shape.kind === "skip") return NO_OP(sql)
-
-  if (shape.kind === "select") {
-    const valid = globals.filter(({ name }) => isValidVariableName(name))
-    if (valid.length === 0) return NO_OP(sql)
-    const block = renderDeclareBlock(valid) + "\n"
-    return {
-      sql:
-        sql.slice(0, first.startOffset) + block + sql.slice(first.startOffset),
-      insertedRange: {
-        start: first.startOffset,
-        end: first.startOffset + block.length,
-        delta: block.length,
-      },
-    }
-  }
-
-  // shape.kind === "leadingDeclare"
-  const { info } = shape
-  const userNames = new Set(info.assignments.map((a) => a.name))
-  const filtered = globals.filter(
-    ({ name }) => isValidVariableName(name) && !userNames.has(name),
-  )
-  if (filtered.length === 0) return NO_OP(sql)
-  const newBlock = renderMergedDeclare(filtered, info.assignments)
-  const originalBlock = sql.slice(info.blockStart, info.bodyStart)
-  return {
-    sql: sql.slice(0, info.blockStart) + newBlock + sql.slice(info.bodyStart),
-    insertedRange: {
-      start: info.blockStart,
-      // `end` covers the full wire DECLARE block (globals + user locals).
-      // We can't back-map inside this range uniformly because we may have
-      // rewritten the inter-assignment separators; treat any error inside
-      // as "in DECLARE block" and only shift positions AFTER it.
-      end: info.blockStart + newBlock.length,
-      delta: newBlock.length - originalBlock.length,
-    },
-  }
-}

@@ -1,12 +1,13 @@
-import { describe, expect, it } from "vitest"
-import queries from "./__fixtures__/declare-cases.json"
+import { describe, expect, it, vi } from "vitest"
 import {
+  createValidateWithGlobals,
+  effectiveQueryOf,
   isValidVariableName,
-  mapWireErrorPosition,
+  mapVariablesError,
   normalizeVariables,
   parseDeclareBlock,
-  prependGlobalsDeclare,
   renderDeclareBlock,
+  renderVariablesParameter,
   stripLeadingAt,
   validateVariableShape,
 } from "./declareUtils"
@@ -237,336 +238,6 @@ describe("renderDeclareBlock", () => {
   })
 })
 
-describe("prependGlobalsDeclare", () => {
-  it("is a no-op when globals are empty", () => {
-    const sql = "SELECT @x FROM t"
-    expect(prependGlobalsDeclare(sql, [])).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("is a no-op for empty / whitespace / comment-only input", () => {
-    const globals = vars({ x: "1" })
-    expect(prependGlobalsDeclare("", globals).insertedRange).toBeNull()
-    expect(prependGlobalsDeclare("   \n  ", globals).insertedRange).toBeNull()
-    expect(
-      prependGlobalsDeclare("-- only a comment", globals).insertedRange,
-    ).toBeNull()
-    expect(
-      prependGlobalsDeclare("/* block only */", globals).insertedRange,
-    ).toBeNull()
-  })
-
-  it("prepends DECLARE before a bare SELECT", () => {
-    const original = "SELECT @x FROM t"
-    const { sql, insertedRange } = prependGlobalsDeclare(
-      original,
-      vars({ x: "1" }),
-    )
-    expect(sql).toBe("DECLARE\n  @x := 1\nSELECT @x FROM t")
-    const blockLen = "DECLARE\n  @x := 1\n".length
-    expect(insertedRange).toEqual({
-      start: 0,
-      end: blockLen,
-      delta: blockLen,
-    })
-  })
-
-  it("prepends DECLARE before a bare WITH", () => {
-    const { sql } = prependGlobalsDeclare(
-      "WITH cte AS (SELECT 1) SELECT @x FROM cte",
-      vars({ x: "1" }),
-    )
-    expect(sql.startsWith("DECLARE\n  @x := 1\nWITH ")).toBe(true)
-  })
-
-  it("preserves a leading line comment, with insertion offset AFTER the comment", () => {
-    const { sql, insertedRange } = prependGlobalsDeclare(
-      "-- header\nSELECT @x",
-      vars({ x: "1" }),
-    )
-    expect(sql).toBe("-- header\nDECLARE\n  @x := 1\nSELECT @x")
-    // Start must point at the first non-trivia char (the 'S' of SELECT),
-    // not at 0. Otherwise marker classification of trivia-area errors breaks.
-    expect(insertedRange?.start).toBe("-- header\n".length)
-  })
-
-  it("preserves a leading block comment and inserts DECLARE after it", () => {
-    const { sql } = prependGlobalsDeclare(
-      "/* header */ SELECT @x",
-      vars({ x: "1" }),
-    )
-    expect(sql).toBe("/* header */ DECLARE\n  @x := 1\nSELECT @x")
-  })
-
-  it.each([
-    "/* '/*' */\n",
-    "/* 'a\n/* b' */\n",
-    "/* disabled:\nSELECT 1 -- see /* below\n*/\n",
-  ])("preserves globals and original SQL after %s", (prefix) => {
-    // Given / When
-    const prepared = prependGlobalsDeclare(
-      `${prefix}SELECT @x`,
-      vars({ x: "1" }),
-    )
-
-    // Then the original comment and SQL survive, with insertion at SELECT
-    expect(prepared.sql).toBe(`${prefix}DECLARE\n  @x := 1\nSELECT @x`)
-    expect(prepared.insertedRange?.start).toBe(prefix.length)
-  })
-
-  it("merges a user's DECLARE after a legacy comment without losing text", () => {
-    // Given / When
-    const prefix = "/* '/*' */\n"
-    const prepared = prependGlobalsDeclare(
-      `${prefix}DECLARE @y := '/* value */' SELECT @x, @y`,
-      vars({ x: "1" }),
-    )
-
-    // Then
-    expect(prepared.sql).toBe(
-      `${prefix}DECLARE\n  @x := 1,\n  @y := '/* value */' SELECT @x, @y`,
-    )
-  })
-
-  it("no-ops when every global is shadowed by a user local", () => {
-    const sql = "DECLARE @x := 99 SELECT @x"
-    expect(prependGlobalsDeclare(sql, vars({ x: "1" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("merges non-shadowed globals into the user's DECLARE block (globals first)", () => {
-    const original = "DECLARE @y := 99 SELECT @x + @y"
-    const { sql, insertedRange } = prependGlobalsDeclare(
-      original,
-      vars({ x: "1", y: "10" }),
-    )
-    // Globals listed first; `y` is dropped because the user declared it.
-    expect(sql).toBe("DECLARE\n  @x := 1,\n  @y := 99 SELECT @x + @y")
-    expect(insertedRange?.start).toBe(0)
-    // The wire-block range covers the FULL merged DECLARE; `delta` is just
-    // the size change (used for the body shift after the block ends).
-    const wireBlock = "DECLARE\n  @x := 1,\n  @y := 99"
-    expect(insertedRange?.end).toBe(wireBlock.length)
-    expect(insertedRange?.delta).toBe(sql.length - original.length)
-  })
-
-  it("merge with multiple user assignments: wire block covers all locals, delta = total byte change", () => {
-    // The merge case where the simple `position - delta` math would mis-map
-    // positions inside the user's @a — the canonical `,\n  ` separator we
-    // emit doesn't match the user's `, ` separator, so shifts vary.
-    // `insertedRange.end` extending past the last user assignment ensures
-    // the validator wrapper treats any error inside the block as
-    // "in DECLARE block" rather than back-mapping incorrectly.
-    const original = "DECLARE @a := 1, @b := 2 SELECT @a + @b"
-    const { sql, insertedRange } = prependGlobalsDeclare(
-      original,
-      vars({ x: "99" }),
-    )
-    const wireBlock = "DECLARE\n  @x := 99,\n  @a := 1,\n  @b := 2"
-    expect(sql).toBe(`${wireBlock} SELECT @a + @b`)
-    expect(insertedRange).toEqual({
-      start: 0,
-      end: wireBlock.length,
-      delta: sql.length - original.length,
-    })
-    // A position INSIDE @a (in wire coords) must be inside [start, end) so
-    // the validator wrapper falls through to the "in DECLARE block" branch
-    // — back-mapping with `delta` would point at the wrong column.
-    const wireAtPosOfA = wireBlock.indexOf("@a")
-    expect(wireAtPosOfA).toBeGreaterThanOrEqual(insertedRange!.start)
-    expect(wireAtPosOfA).toBeLessThan(insertedRange!.end)
-  })
-
-  it("preserves OVERRIDABLE on a user assignment when merging in a new global", () => {
-    // P1 fix: the merge must not re-render the user's assignment from a plain
-    // name/value map — that would silently drop OVERRIDABLE and change view
-    // semantics (caller-can-override flag).
-    const { sql } = prependGlobalsDeclare(
-      "DECLARE OVERRIDABLE @y := 99 SELECT @x + @y",
-      vars({ x: "1" }),
-    )
-    expect(sql).toBe(
-      "DECLARE\n  @x := 1,\n  OVERRIDABLE @y := 99 SELECT @x + @y",
-    )
-  })
-
-  it("preserves OVERRIDABLE across multiple user assignments in a merge", () => {
-    const { sql } = prependGlobalsDeclare(
-      "DECLARE OVERRIDABLE @a := 1, @b := 2 SELECT @a + @b + @c",
-      vars({ c: "3" }),
-    )
-    expect(sql).toBe(
-      "DECLARE\n  @c := 3,\n  OVERRIDABLE @a := 1,\n  @b := 2 SELECT @a + @b + @c",
-    )
-  })
-
-  it("no-ops when the user's leading DECLARE contains an invalid `=` assignment", () => {
-    // P1 fix: don't silently rewrite the user's broken SQL into something
-    // executable just because we have a global. Let the server emit
-    // `expected variable assignment operator ':='`.
-    const sql = "DECLARE @x = 1 SELECT @x"
-    expect(prependGlobalsDeclare(sql, vars({ x: "10" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("no-ops when ANY user assignment is invalid, even if globals are non-shadowed", () => {
-    const sql = "DECLARE @x := 1, @y = 2 SELECT @x + @y + @z"
-    expect(prependGlobalsDeclare(sql, vars({ z: "3" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("EXPLAIN: recurses into the suffix and inserts before the inner SELECT", () => {
-    const original = "EXPLAIN SELECT @x"
-    const { sql, insertedRange } = prependGlobalsDeclare(
-      original,
-      vars({ x: "1" }),
-    )
-    expect(sql).toBe("EXPLAIN DECLARE\n  @x := 1\nSELECT @x")
-    const blockLen = "DECLARE\n  @x := 1\n".length
-    expect(insertedRange).toEqual({
-      start: "EXPLAIN ".length,
-      end: "EXPLAIN ".length + blockLen,
-      delta: blockLen,
-    })
-  })
-
-  it("EXPLAIN with user DECLARE: drops shadowed global, no-op when all shadowed", () => {
-    const sql = "EXPLAIN DECLARE @x := 99 SELECT @x"
-    expect(prependGlobalsDeclare(sql, vars({ x: "1" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("EXPLAIN with user DECLARE: merges non-shadowed globals", () => {
-    const { sql } = prependGlobalsDeclare(
-      "EXPLAIN DECLARE @y := 99 SELECT @x + @y",
-      vars({ x: "1" }),
-    )
-    expect(sql).toBe("EXPLAIN DECLARE\n  @x := 1,\n  @y := 99 SELECT @x + @y")
-  })
-
-  it("INSERT INTO is a no-op (phase-1 fallback)", () => {
-    const sql = "INSERT INTO t SELECT @x"
-    expect(prependGlobalsDeclare(sql, vars({ x: "1" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("WITH cte ... INSERT INTO is a no-op (WITH-led but not a SELECT body)", () => {
-    // `WITH ... INSERT INTO ... SELECT ...` is valid user SQL but is NOT a
-    // valid DECLARE target — the grammar is `DECLARE ... [WITH ...] SELECT`.
-    // Prepending would produce a server error.
-    const sql = "WITH cte AS (SELECT 1) INSERT INTO t SELECT * FROM cte"
-    expect(prependGlobalsDeclare(sql, vars({ x: "1" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("EXPLAIN WITH ... INSERT is a no-op (recursion delegates to analyzer)", () => {
-    const sql = "EXPLAIN WITH cte AS (SELECT 1) INSERT INTO t SELECT * FROM cte"
-    expect(prependGlobalsDeclare(sql, vars({ x: "1" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("WITH cte ... SELECT IS prepended (valid DECLARE target)", () => {
-    const original = "WITH cte AS (SELECT 1 AS v) SELECT @x + v FROM cte"
-    const { sql, insertedRange } = prependGlobalsDeclare(
-      original,
-      vars({ x: "1" }),
-    )
-    expect(sql).toBe(
-      `DECLARE\n  @x := 1\nWITH cte AS (SELECT 1 AS v) SELECT @x + v FROM cte`,
-    )
-    expect(insertedRange?.start).toBe(0)
-  })
-
-  it("DECLARE @x := 1 INSERT INTO ... is a no-op (parse-recovery sham)", () => {
-    // Parser recovery produces a declareClause + an orphan insertStatement.
-    // We must NOT silently rewrite the user's invalid SQL into something
-    // executable just because `x` doesn't shadow.
-    const sql = "DECLARE @x := 1 INSERT INTO t SELECT @x"
-    // Use a non-shadowing global so the merge would otherwise try to fire.
-    expect(prependGlobalsDeclare(sql, vars({ y: "2" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("DECLARE @x := 1 (no body) is a no-op (parser error, not a SELECT)", () => {
-    const sql = "DECLARE @x := 1"
-    expect(prependGlobalsDeclare(sql, vars({ y: "2" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("CREATE TABLE AS is a no-op (phase-1 fallback)", () => {
-    const sql = "CREATE TABLE foo AS (DECLARE @x := 99 SELECT @x)"
-    expect(prependGlobalsDeclare(sql, vars({ x: "1" }))).toEqual({
-      sql,
-      insertedRange: null,
-    })
-  })
-
-  it("UPDATE / DROP / ALTER / SHOW: all no-ops", () => {
-    for (const sql of [
-      "UPDATE t SET v = 1",
-      "DROP TABLE t",
-      "ALTER TABLE t ADD COLUMN c INT",
-      "SHOW TABLES",
-    ]) {
-      expect(prependGlobalsDeclare(sql, vars({ x: "1" }))).toEqual({
-        sql,
-        insertedRange: null,
-      })
-    }
-  })
-
-  it("drops globals with invalid identifier names without affecting valid ones", () => {
-    const { sql, insertedRange } = prependGlobalsDeclare(
-      "SELECT @x, @good FROM t",
-      vars({ x: "1", "bad-name": "2", good: "3" }),
-    )
-    expect(sql).toBe(
-      "DECLARE\n  @x := 1,\n  @good := 3\nSELECT @x, @good FROM t",
-    )
-    expect(insertedRange?.delta).toBeGreaterThan(0)
-  })
-
-  it("insertedRange.delta matches the actual byte difference", () => {
-    const original = "SELECT @x"
-    const { sql, insertedRange } = prependGlobalsDeclare(
-      original,
-      vars({ x: "1" }),
-    )
-    expect(sql.length - original.length).toBe(insertedRange?.delta)
-  })
-
-  it("does not substitute @x in string literals or comments (server resolves it)", () => {
-    // We don't do substitution anymore — the server handles @x reference resolution.
-    // Just confirm we don't accidentally rewrite comments / string literals.
-    const { sql } = prependGlobalsDeclare(
-      "SELECT @x, 'has @x in string', /* @x in comment */ @x",
-      vars({ x: "1" }),
-    )
-    expect(sql).toContain("'has @x in string'")
-    expect(sql).toContain("/* @x in comment */")
-  })
-})
-
 describe("validateVariableShape", () => {
   it("accepts a plain integer literal", () => {
     expect(validateVariableShape({ name: "x", value: "1" })).toBeNull()
@@ -631,126 +302,148 @@ describe("validateVariableShape", () => {
   })
 })
 
-describe("mapWireErrorPosition", () => {
-  const range = { start: 10, end: 30, delta: 20 }
+describe("renderVariablesParameter", () => {
+  it("renders the assignments in order and records the range of each", () => {
+    // Given two variables, the second reading the first
+    const variables = vars({ from: "'2026-01-01'", to: "@from + 1d" })
 
-  it("passes a position before the insertion point straight through", () => {
-    // Given a wire error positioned before the injected DECLARE block
-    // When mapped
-    // Then the original position is returned unchanged
-    expect(mapWireErrorPosition(range, 4)).toEqual({
-      kind: "passthrough",
-      position: 4,
-    })
+    // When rendered as the variables parameter
+    const parameter = renderVariablesParameter(variables)!
+
+    // Then each assignment's range covers exactly its text
+    expect(parameter.text).toBe("@from := '2026-01-01'\n, @to := @from + 1d")
+    expect(
+      parameter.assignments.map(({ name, start, end }) => [
+        name,
+        parameter.text.slice(start, end),
+      ]),
+    ).toEqual([
+      ["from", "@from := '2026-01-01'"],
+      ["to", "@to := @from + 1d"],
+    ])
   })
 
-  it("clamps a position inside the DECLARE block to the block start", () => {
-    // Given a wire error landing within the injected block
-    // When mapped
-    // Then it is clamped to the block start and flagged as in-block
-    expect(mapWireErrorPosition(range, 20)).toEqual({
-      kind: "inDeclareBlock",
-      position: 10,
-    })
+  it("ends a value's line comment before the next assignment", () => {
+    // Given a value that ends in a line comment
+    const variables = vars({ a: "1 -- one", b: "2" })
+
+    // When rendered
+    const { text } = renderVariablesParameter(variables)!
+
+    // Then the comment does not swallow the next assignment
+    expect(text.split("\n")).toEqual(["@a := 1 -- one", ", @b := 2"])
   })
 
-  it("shifts a position after the DECLARE block back by delta", () => {
-    // Given a wire error positioned after the injected block
-    // When mapped
-    // Then it is shifted back into user-SQL coordinates by delta
-    expect(mapWireErrorPosition(range, 35)).toEqual({
-      kind: "shifted",
-      position: 15,
-    })
+  it("accepts the stored map form of the variables", () => {
+    // Given variables stored as a name-to-value map
+    // When rendered
+    // Then they are rendered like the list form
+    expect(renderVariablesParameter({ a: "1" })?.text).toBe("@a := 1")
   })
 
-  it("treats position === start as inside the block (lower boundary)", () => {
-    // Given a wire error exactly at the block start
-    // When mapped
-    // Then it is treated as inside the block, not as passthrough
-    expect(mapWireErrorPosition(range, 10)).toEqual({
-      kind: "inDeclareBlock",
-      position: 10,
-    })
-  })
-
-  it("treats position === end as after the block (upper boundary)", () => {
-    // Given a wire error exactly at the block end
-    // When mapped
-    // Then it is shifted, since end is exclusive for the in-block range
-    expect(mapWireErrorPosition(range, 30)).toEqual({
-      kind: "shifted",
-      position: 10,
-    })
-  })
-
-  it("treats position === end-1 as inside the block (last in-block offset)", () => {
-    // Given a wire error one position before the block end
-    // When mapped
-    // Then it is still inside the block
-    expect(mapWireErrorPosition(range, 29)).toEqual({
-      kind: "inDeclareBlock",
-      position: 10,
-    })
+  it("skips invalid names, and renders nothing without a valid one", () => {
+    // Given variables with invalid names
+    // When rendered
+    // Then only the valid ones are rendered
+    expect(
+      renderVariablesParameter(vars({ "bad name": "1", ok: "2" }))?.text,
+    ).toBe("@ok := 2")
+    expect(renderVariablesParameter(vars({ "bad name": "1" }))).toBe(undefined)
+    expect(renderVariablesParameter([])).toBe(undefined)
+    expect(renderVariablesParameter(undefined)).toBe(undefined)
   })
 })
 
-const cases: string[] = queries
+describe("effectiveQueryOf", () => {
+  it("tells apart the runs of one statement with other variable values", () => {
+    // Given one statement and two values of the variable it reads
+    const sql = "select @sym"
+    const btc = renderVariablesParameter(vars({ sym: "'BTC-USD'" }))
+    const eth = renderVariablesParameter(vars({ sym: "'ETH-USD'" }))
 
-const startsWithDeclare = (q: string) => /^\s*DECLARE\b/i.test(q)
-const startsWithExplain = (q: string) => /^\s*EXPLAIN\b/i.test(q)
-const hasInnerDeclare = (q: string) => /\bDECLARE\b/i.test(q)
+    // When the effective queries are compared
+    // Then they differ, and are the statement itself without variables
+    expect(effectiveQueryOf(sql, btc)).not.toBe(effectiveQueryOf(sql, eth))
+    expect(effectiveQueryOf(sql, btc)).toContain("'BTC-USD'")
+    expect(effectiveQueryOf(sql, undefined)).toBe(sql)
+  })
+})
 
-const GLOBAL = [{ name: "x", value: "999" }]
+describe("mapVariablesError", () => {
+  const variables = renderVariablesParameter(vars({ a: "1", b: "nope()" }))
 
-describe("prependGlobalsDeclare — corpus regression (declare-cases.json)", () => {
-  it("EXPLAIN-led statements remain EXPLAIN-led", () => {
-    const explains = cases.filter(startsWithExplain)
-    expect(explains.length).toBeGreaterThan(0)
-    for (const c of explains) {
-      const { sql } = prependGlobalsDeclare(c, GLOBAL)
-      expect(/^\s*EXPLAIN\b/i.test(sql)).toBe(true)
-    }
+  it("names the variable an error in the variables falls in", () => {
+    // Given an error inside the second assignment of the parameter
+    const position = variables!.text.indexOf("nope")
+
+    // When mapped to the statement
+    const mapped = mapVariablesError(variables, {
+      query: "select @b from t",
+      error: "unknown function name",
+      position,
+      errorSource: "variables" as const,
+    })
+
+    // Then it names the variable and points at the start of the statement
+    expect(mapped).toEqual({
+      query: "select @b from t",
+      error: "unknown function name (in variable @b)",
+      position: 0,
+    })
   })
 
-  it("wrapped shapes (CREATE VIEW/TABLE AS (, INSERT INTO ... SELECT * FROM () are left untouched", () => {
-    const wrapped = cases.filter(
-      (c) =>
-        !startsWithDeclare(c) && !startsWithExplain(c) && hasInnerDeclare(c),
+  it("keeps an error in the statement as reported", () => {
+    // Given an error in the statement itself
+    const error = { error: "table does not exist", position: 15 }
+
+    // When mapped
+    // Then it is unchanged
+    expect(mapVariablesError(variables, error)).toBe(error)
+  })
+})
+
+describe("createValidateWithGlobals", () => {
+  // The client-side parser cannot parse this statement (questdb/ui#631).
+  const unparsable = "select @a, ??? from t"
+
+  it("validates the statement as written, with the variables beside it", async () => {
+    // Given a server that reports an error in the variables
+    const validateQuery = vi.fn().mockResolvedValue({
+      query: unparsable,
+      error: "unknown function name",
+      position: 6,
+      errorSource: "variables",
+    })
+    const validate = createValidateWithGlobals({ validateQuery }, () =>
+      vars({ a: "nope()" }),
     )
-    expect(wrapped.length).toBeGreaterThan(0)
-    for (const c of wrapped) {
-      const r = prependGlobalsDeclare(c, GLOBAL)
-      expect(r.sql).toBe(c)
-      expect(r.insertedRange).toBeNull()
-    }
+
+    // When a statement the parser cannot parse is validated
+    const result = await validate(unparsable)
+
+    // Then the server gets the statement unchanged and the variables apart,
+    // and the error names the variable
+    expect(validateQuery).toHaveBeenCalledWith(
+      unparsable,
+      undefined,
+      "@a := nope()",
+    )
+    expect(result).toEqual({
+      query: unparsable,
+      error: "unknown function name (in variable @a)",
+      position: 0,
+    })
   })
 
-  it("statements starting with DECLARE either merge `@x` once or no-op (shadowed/invalid)", () => {
-    const starts = cases.filter(startsWithDeclare)
-    expect(starts.length).toBeGreaterThan(40)
-    for (const c of starts) {
-      const { sql, insertedRange } = prependGlobalsDeclare(c, GLOBAL)
-      const userHasX = /@x\s*:=/.test(c)
-      if (userHasX) {
-        expect(sql).toBe(c)
-        expect(insertedRange).toBeNull()
-      } else if (insertedRange === null) {
-        expect(sql).toBe(c)
-      } else {
-        // Merged: the rendered block contains exactly one `@x := 999`.
-        const matches = sql.match(/@x\s*:=\s*999/g) ?? []
-        expect(matches.length).toBe(1)
-      }
-      // Result still starts with DECLARE.
-      expect(/^\s*DECLARE\b/i.test(sql)).toBe(true)
-    }
-  })
+  it("sends no variables when the notebook has none", async () => {
+    // Given a notebook without variables
+    const validateQuery = vi.fn().mockResolvedValue({ query: "", columns: [] })
+    const validate = createValidateWithGlobals({ validateQuery }, () => [])
 
-  it("insertedRange.delta always matches the actual byte delta", () => {
-    for (const c of cases) {
-      const { sql, insertedRange } = prependGlobalsDeclare(c, GLOBAL)
-      expect(sql.length - c.length).toBe(insertedRange?.delta ?? 0)
-    }
+    // When a statement is validated
+    await validate("select 1")
+
+    // Then only the statement is sent
+    expect(validateQuery).toHaveBeenCalledWith("select 1", undefined, undefined)
   })
 })

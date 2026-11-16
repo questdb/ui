@@ -16,7 +16,7 @@ import { downloadQueryResult } from "../../../../utils/downloadQueryResult"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useNotebookActions } from "../NotebookProvider"
-import { expandGlobals } from "../declareUtils"
+import { renderVariablesParameter } from "../declareUtils"
 import { ActionButton, ActionsBar, FreezeToggle } from "./styles"
 
 const preventFocusSteal = (e: React.MouseEvent) => e.preventDefault()
@@ -80,7 +80,11 @@ export const ResultActionsBar: React.FC<Props> = ({
         : ConsoleEvent.GRID_CSV_DOWNLOAD,
       { source: "notebook" },
     )
-    downloadQueryResult(expandGlobals(data.query, getVariables()), format)
+    downloadQueryResult(
+      data.query,
+      format,
+      renderVariablesParameter(getVariables())?.text,
+    )
   }
 
   return (

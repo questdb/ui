@@ -76,6 +76,9 @@ export type RawErrorResult = {
   error: string
   position: number
   query: string
+  // "variables": the error lies in the `variables` parameter, and `position`
+  // is a position in the parameter rather than in the query.
+  errorSource?: "variables"
 }
 
 export type RawNoticeResult = {
@@ -167,6 +170,8 @@ export type ValidateQueryErrorResult = {
   query: string
   position: number
   error: string
+  // see RawErrorResult
+  errorSource?: "variables"
 }
 
 export type ValidateQueryResult =
@@ -367,6 +372,11 @@ export type SymbolColumnDetails = {
 
 export type Options = {
   limit?: string
+  /**
+   * The assignments of a DECLARE block, such as `@a := 1, @b := @a + 1`, that
+   * the query reads as a DECLARE block that opens it.
+   */
+  variables?: string
   explain?: boolean
   nm?: boolean
   count?: boolean

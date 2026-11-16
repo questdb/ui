@@ -141,6 +141,38 @@ describe("Client queryRaw HTTP errors", () => {
     },
   )
 
+  it("sends the variables parameter and keeps the position of an error in it", async () => {
+    // Given a server that reports an error past the end of the query, in the
+    // variables
+    const variables = "@a := 1, @b := nope()"
+    const fetchMock = vi.fn((_url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: "unknown function name",
+            query,
+            position: 15,
+            errorSource: "variables",
+          }),
+          { status: 400 },
+        ),
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    // When the query runs with the variables
+    const result = new Client().queryRaw(query, { variables })
+
+    // Then the request carries them, and the error keeps its position in them
+    await expect(result).rejects.toMatchObject({
+      position: 15,
+      errorSource: "variables",
+    })
+    const url = new URL(fetchMock.mock.calls[0][0], "http://host/")
+    expect(url.searchParams.get("query")).toBe(query)
+    expect(url.searchParams.get("variables")).toBe(variables)
+  })
+
   it("keeps other fields of an HTTP 400 error body", async () => {
     vi.stubGlobal(
       "fetch",
