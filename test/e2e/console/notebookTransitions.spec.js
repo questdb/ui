@@ -436,14 +436,33 @@ describe("SQL work → notebook", () => {
     cy.viewport(850, 900)
     cy.get("[data-notebook-cell]").should(($cells) => {
       const bounds = [...$cells].map((cell) => cell.getBoundingClientRect())
-      expect(bounds[0].left).to.be.closeTo(bounds[1].left, 1)
-      expect(bounds[1].top).to.be.greaterThan(bounds[0].bottom)
+      expect(bounds[0].top).to.be.closeTo(bounds[1].top, 1)
+      expect(bounds[0].bottom).to.be.closeTo(bounds[1].bottom, 1)
+      expect(bounds[1].left).to.be.greaterThan(bounds[0].right)
+      const editorBottom = [...$cells].map(
+        (cell) =>
+          cell.querySelector(".monaco-editor").getBoundingClientRect().bottom,
+      )
+      expect(editorBottom[0]).to.be.closeTo(editorBottom[1], 1)
     })
+    cy.get('.react-grid-item > .edge-handle[data-axis="se"]').should(
+      "have.length",
+      2,
+    )
     cy.viewport(1600, 900)
     cy.get("[data-notebook-cell]").should(($cells) => {
       const bounds = [...$cells].map((cell) => cell.getBoundingClientRect())
       expect(bounds[0].top).to.be.closeTo(bounds[1].top, 1)
       expect(bounds[0].bottom).to.be.closeTo(bounds[1].bottom, 1)
+    })
+    readBuffers().then((buffers) => {
+      const view = buffers.find((b) => b.notebookViewState).notebookViewState
+      expect(
+        view.settings.layout.map(({ x, y, w }) => ({ x, y, w })),
+      ).to.deep.eq([
+        { x: 0, y: 0, w: 6 },
+        { x: 6, y: 0, w: 6 },
+      ])
     })
   })
 
