@@ -22,8 +22,7 @@
  *
  ******************************************************************************/
 
-.splitter,
-.qs-ghost {
+.splitter {
   cursor: row-resize;
 }
 
@@ -36,16 +35,6 @@
   background: theme-color(contentDisabled);
 }
 
-.splitter.qs-dragging {
-  opacity: 0;
-}
-
 .splitter:hover {
   background: theme-color(contentDisabled);
-}
-
-.qs-ghost {
-  background: theme-color(contentDisabled);
-  opacity: 0.4;
-  z-index: 10;
 }

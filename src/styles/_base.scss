@@ -60,23 +60,8 @@ body {
   height: 100%;
 }
 
-body #wrapper,
-body #page-wrapper {
+body #wrapper {
   height: calc(100% - 4rem);
-}
-
-body.boxed-layout #wrapper {
-  background-color: theme-color(editorBorder);
-  max-width: $boxed-width;
-  margin: 0 auto;
-  -webkit-box-shadow: 0 0 5px 0 theme-color(shadowOverlay);
-  -moz-box-shadow: 0 0 5px 0 theme-color(shadowOverlay);
-  box-shadow: 0 0 5px 0 theme-color(shadowOverlay);
-}
-
-.top-navigation.boxed-layout #wrapper,
-.boxed-layout #wrapper.top-navigation {
-  max-width: 1300px !important;
 }
 
 .block {
@@ -110,61 +95,9 @@ textarea {
   border-bottom: 1px solid $border-color !important;
 }
 
-.font-bold {
-  font-weight: 600;
-}
-
-.font-noraml {
-  font-weight: 400;
-}
-
-.text-uppercase {
-  text-transform: uppercase;
-}
-
-.b-r {
-  border-right: 1px solid $border-color;
-}
-
-.hr-line-dashed {
-  border-top: 1px dashed $border-color;
-  color: theme-color(contentInverse);
-  background-color: theme-color(contentInverse);
-  height: 1px;
-  margin: 20px 0;
-}
-
-.hr-line-solid {
-  background-color: theme-color(transparent);
-  border-style: solid $border-color !important;
-  margin-top: 15px;
-  margin-bottom: 15px;
-}
-
 video {
   width: 100% !important;
   height: auto !important;
-}
-
-/* GALLERY */
-.gallery > .row > div {
-  margin-bottom: 15px;
-}
-
-.fancybox img {
-  margin-bottom: 5px;
-  /* Only for demo */
-  width: 24%;
-}
-
-/* Summernote text editor  */
-.note-editor {
-  height: auto !important;
-  min-height: 300px;
-}
-
-.note-editor.fullscreen {
-  z-index: 2050;
 }
 
 /* WRAPPERS */
@@ -178,48 +111,10 @@ video {
   padding: 0 20px;
 }
 
-.wrapper-content {
-  padding: 10px 0 20px;
-}
-
-#page-wrapper {
-  position: relative !important;
-}
-
-@media (min-width: 768px) {
-  #page-wrapper {
-    position: inherit;
-    margin: 0 0 0 240px;
-  }
-}
-
-.title-action {
-  text-align: right;
-  padding-top: 30px;
-}
-
-.ibox-content h1,
-.ibox-content h2,
-.ibox-content h3,
-.ibox-content h4,
-.ibox-content h5,
-.ibox-title h1,
-.ibox-title h2,
-.ibox-title h3,
-.ibox-title h4,
-.ibox-title h5 {
-  margin-top: 5px;
-}
-
 ul.unstyled,
 ol.unstyled {
   list-style: none outside none;
   margin-left: 0;
-}
-
-.big-icon {
-  font-size: 160px !important;
-  color: theme-color(contentPrimary);
 }
 
 /* FOOTER */
@@ -235,17 +130,6 @@ ol.unstyled {
   border-top: 1px solid theme-color(borderSubtle);
 }
 
-.footer.fixed_full {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  padding: 10px 20px;
-  background: theme-color(contentPrimary);
-  border-top: 1px solid $border-color;
-}
-
 .footer.fixed {
   position: fixed;
   bottom: 0;
@@ -258,60 +142,11 @@ ol.unstyled {
   margin-left: $sidebar-width;
 }
 
-body.mini-navbar .footer.fixed,
-body.body-small.mini-navbar .footer.fixed {
+body.mini-navbar .footer.fixed {
   margin: 0 0 0 70px;
 }
 
-body.mini-navbar.canvas-menu .footer.fixed,
-body.canvas-menu .footer.fixed {
-  margin: 0 !important;
-}
-
-body.fixed-sidebar.body-small.mini-navbar .footer.fixed {
-  margin: 0 0 0 $sidebar-width;
-}
-
-body.body-small .footer.fixed {
-  margin-left: 0;
-}
-
-/* PANELS */
-
-.page-heading {
-  border-top: 0;
-  padding: 0 10px 0 10px;
-  height: 4rem;
-  display: flex;
-  align-items: center;
-  padding: 0 15px;
-}
-
-.panel-heading h1,
-.panel-heading h2 {
-  margin-bottom: 5px;
-}
-
 /* TABLES */
-
-.table-bordered {
-  border: 1px solid theme-color(borderStrong);
-}
-
-.table-bordered > thead > tr > th,
-.table-bordered > thead > tr > td {
-  background-color: theme-color(contentPrimary);
-  border-bottom-width: 1px;
-}
-
-.table-bordered > thead > tr > th,
-.table-bordered > tbody > tr > th,
-.table-bordered > tfoot > tr > th,
-.table-bordered > thead > tr > td,
-.table-bordered > tbody > tr > td,
-.table-bordered > tfoot > tr > td {
-  border: 1px solid theme-color(borderStrong);
-}
 
 .table > thead > tr > th {
   border-bottom: 1px solid theme-color(contentSecondary);
@@ -330,80 +165,7 @@ body.body-small .footer.fixed {
   vertical-align: top;
 }
 
-/* PANELS */
-
-.panel.blank-panel {
-  background: none;
-  margin: 0;
-}
-
-.blank-panel .panel-heading {
-  padding-bottom: 0;
-}
-
-.nav-tabs > li.active > a,
-.nav-tabs > li.active > a:hover,
-.nav-tabs > li.active > a:focus {
-  -moz-border-bottom-colors: none;
-  -moz-border-left-colors: none;
-  -moz-border-right-colors: none;
-  -moz-border-top-colors: none;
-  //background: none;
-  border-color: theme-color(contentSecondary) theme-color(contentSecondary)
-    theme-color(transparent);
-  //border-bottom: $gray;
-  border-image: none;
-  border-style: solid;
-  border-width: 1px;
-  color: theme-color(contentDisabled);
-  cursor: default;
-}
-
-.nav.nav-tabs li {
-  background: none;
-  border: none;
-}
-
-.nav-tabs > li > a {
-  color: theme-color(contentSecondary);
-  font-weight: 600;
-  padding: 10px 20px 10px 25px;
-}
-
-.nav-tabs > li > a:hover,
-.nav-tabs > li > a:focus {
-  background: none;
-  color: $text-color;
-}
-
-.ui-tab .tab-content {
-  padding: 20px 0;
-}
-
 /* GLOBAL  */
-
-.no-padding {
-  padding: 0 !important;
-}
-
-.no-borders {
-  border: none !important;
-}
-
-.no-margins {
-  margin: 0 !important;
-}
-
-.no-top-border {
-  border-top: 0 !important;
-}
-
-.border-left-right {
-  border-left: 1px solid $border-color;
-  border-right: 1px solid $border-color;
-  border-top: none;
-  border-bottom: none;
-}
 
 .border-left {
   border-left: 1px solid $border-color;
@@ -421,69 +183,6 @@ body.body-small .footer.fixed {
 
 .full-width {
   width: 100% !important;
-}
-
-.link-block {
-  font-size: 12px;
-  padding: 10px;
-}
-
-.nav.navbar-top-links .link-block a {
-  font-size: 12px;
-}
-
-.link-block a {
-  font-size: 10px;
-  color: inherit;
-}
-
-body.mini-navbar .branding {
-  display: none;
-}
-
-img.circle-border {
-  border: 6px solid theme-color(contentInverse);
-  border-radius: 50%;
-}
-
-.branding {
-  float: left;
-  color: theme-color(contentInverse);
-  font-size: 18px;
-  font-weight: 600;
-  padding: 17px 20px;
-  text-align: center;
-  background-color: $navy;
-}
-
-.login-panel {
-  margin-top: 25%;
-}
-
-.icons-box h3 {
-  margin-top: 10px;
-  margin-bottom: 10px;
-}
-
-.icons-box .infont a i {
-  font-size: 25px;
-  display: block;
-  color: $text-color;
-}
-
-.icons-box .infont a {
-  color: theme-color(contentSecondary);
-}
-
-.icons-box .infont a {
-  padding: 10px;
-
-  margin: 1px;
-  display: block;
-}
-
-.ui-draggable .ibox-title {
-  cursor: move;
 }
 
 .breadcrumb {
@@ -509,23 +208,6 @@ code {
   white-space: nowrap;
 }
 
-table.table-mail tr td {
-  padding: 12px;
-}
-
-.table-mail .check-mail {
-  padding-left: 20px;
-}
-
-.table-mail .mail-date {
-  padding-right: 20px;
-}
-
-.star-mail,
-.check-mail {
-  width: 40px;
-}
-
 .unread td a,
 .unread td {
   font-weight: 600;
@@ -542,299 +224,8 @@ table.table-mail tr td {
   background-color: theme-color(contentPrimary);
 }
 
-/* BACKGROUNDS */
-
-.gray-bg {
-  background-color: $gray;
-}
-
-.white-bg {
-  background-color: theme-color(contentInverse);
-}
-
-.navy-bg {
-  background-color: $navy;
-  color: theme-color(contentInverse);
-}
-
-.blue-bg {
-  background-color: $blue;
-  color: theme-color(contentInverse);
-}
-
-.lazur-bg {
-  background-color: $lazur;
-  color: theme-color(contentInverse);
-}
-
-.yellow-bg {
-  background-color: $yellow;
-  color: theme-color(contentInverse);
-}
-
-.red-bg {
-  background-color: $red;
-  color: theme-color(contentInverse);
-}
-
-.black-bg {
-  background-color: theme-color(surfaceInset);
-}
-
-.panel-primary {
-  border-color: $navy;
-}
-
-.panel-primary > .panel-heading {
-  background-color: $navy;
-  border-color: $navy;
-}
-
-.panel-success {
-  border-color: $blue;
-}
-
-.panel-success > .panel-heading {
-  background-color: $blue;
-  border-color: $blue;
-  color: theme-color(contentInverse);
-}
-
-.panel-info {
-  border-color: $lazur;
-}
-
-.panel-info > .panel-heading {
-  background-color: $lazur;
-  border-color: $lazur;
-  color: theme-color(contentInverse);
-}
-
-.panel-warning {
-  border-color: $yellow;
-}
-
-.panel-warning > .panel-heading {
-  background-color: $yellow;
-  border-color: $yellow;
-  color: theme-color(contentInverse);
-}
-
-.panel-danger {
-  border-color: $red;
-}
-
-.panel-danger > .panel-heading {
-  background-color: $red;
-  border-color: $red;
-  color: theme-color(contentInverse);
-}
-
-.progress-bar {
-  background-color: $navy;
-}
-
-.progress-small,
-.progress-small .progress-bar {
-  height: 10px;
-}
-
-.progress-small,
-.progress-mini {
-  margin-top: 5px;
-}
-
-.progress-mini,
-.progress-mini .progress-bar {
-  height: 5px;
-  margin-bottom: 0;
-}
-
-.progress-bar-navy-light {
-  background-color: theme-color(statusSuccess);
-}
-
-.progress-bar-success {
-  background-color: $blue;
-}
-
-.progress-bar-info {
-  background-color: $lazur;
-}
-
-.progress-bar-warning {
-  background-color: $yellow;
-}
-
-.progress-bar-danger {
-  background-color: $red;
-}
-
-.panel-title {
-  font-size: inherit;
-}
-
-/* COLORS */
-
-.text-navy {
-  color: $navy;
-}
-
-.text-primary {
-  color: inherit;
-}
-
-.text-success {
-  color: $blue;
-}
-
-.text-info {
-  color: $lazur;
-}
-
-.text-warning {
-  color: $yellow;
-}
-
-.text-danger {
-  color: $red;
-}
-
-.text-muted {
-  color: theme-color(contentSecondary);
-}
-
-.text-white {
-  color: theme-color(contentInverse);
-}
-
-.simple_tag {
-  background-color: $gray;
-  border: 1px solid theme-color(borderStrong);
-  border-radius: 2px;
-  color: inherit;
-  font-size: 10px;
-  margin-right: 5px;
-  margin-top: 5px;
-  padding: 5px 12px;
-  display: inline-block;
-}
-
-.img-shadow {
-  -webkit-box-shadow: 0 0 3px 0 theme-color(shadowStrong);
-  -moz-box-shadow: 0 0 3px 0 theme-color(shadowStrong);
-  box-shadow: 0 0 3px 0 theme-color(shadowStrong);
-}
-
-/* For handle different bg color in AngularJS version */
-.dashboards\.dashboard_2 nav.navbar,
-.dashboards\.dashboard_3 nav.navbar,
-.mailbox\.inbox nav.navbar,
-.mailbox\.email_view nav.navbar,
-.mailbox\.email_compose nav.navbar,
-.dashboards\.dashboard_4_1 nav.navbar,
-.metrics nav.navbar,
-.metrics\.index nav.navbar,
-.dashboards\.dashboard_5 nav.navbar {
-  background: theme-color(contentInverse);
-}
-
-/* For handle different bg color in MVC version */
-.Dashboard_2 .navbar.navbar-static-top,
-.Dashboard_3 .navbar.navbar-static-top,
-.Dashboard_4_1 .navbar.navbar-static-top,
-.ComposeEmail .navbar.navbar-static-top,
-.EmailView .navbar.navbar-static-top,
-.Inbox .navbar.navbar-static-top,
-.Metrics .navbar.navbar-static-top,
-.Dashboard_5 .navbar.navbar-static-top {
-  background: theme-color(contentInverse);
-}
-
-a.close-canvas-menu {
-  position: absolute;
-  top: 10px;
-  right: 15px;
-  z-index: 1011;
-  color: theme-color(contentSecondary);
-}
-
-a.close-canvas-menu:hover {
-  color: theme-color(contentInverse);
-}
-
-.close-canvas-menu {
-  display: none;
-}
-
-.canvas-menu .close-canvas-menu {
-  display: block;
-}
-
-.light-navbar .navbar.navbar-static-top {
-  background-color: theme-color(contentInverse);
-}
-
-/* FULL HEIGHT */
-
-.full-height {
-  height: 100%;
-}
-
-.fh-breadcrumb {
-  height: calc(100% - 196px);
-  margin: 0 -15px;
-  position: relative;
-}
-
-.fh-no-breadcrumb {
-  height: calc(100% - 99px);
-  margin: 0 -15px;
-  position: relative;
-}
-
-.fh-column {
-  background: theme-color(contentInverse);
-  height: 100%;
-  width: 240px;
-  float: left;
-}
-
-.spiner-example {
-  height: 200px;
-  padding-top: 70px;
-}
-
-// Bootstrap issue in 3.3.0 with modal https://github.com/twbs/bootstrap/issues/9855
-// Fix
-body.modal-open {
-  padding-right: inherit !important;
-}
-
-/* Show profile dropdown on fixed sidebar */
-body.mini-navbar.fixed-sidebar .profile-element,
 .block {
   display: block !important;
-}
-
-body.mini-navbar.fixed-sidebar .nav-header {
-  padding: 33px 25px;
-}
-
-.section-title {
-  display: inline-block;
-  font-size: 12pt;
-  padding-right: 15px;
-  vertical-align: middle;
-}
-
-.section-title .fa {
-  margin-right: 5px;
-  color: $navy;
-}
-
-.section-nav {
-  display: inline-block;
 }
 
 label {
