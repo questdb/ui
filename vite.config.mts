@@ -269,6 +269,7 @@ export default defineConfig(({ mode }) => {
             vendor: [
               'react',
               'react-dom',
+              'react-dom/client',
               'redux',
               'react-redux',
               'redux-observable',
@@ -287,6 +288,7 @@ export default defineConfig(({ mode }) => {
       include: [
         'react',
         'react-dom',
+        'react-dom/client',
         'styled-components',
         'redux',
         'react-redux',
