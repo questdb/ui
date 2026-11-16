@@ -23,12 +23,6 @@
  ******************************************************************************/
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// eslint-disable-next-line no-var
-declare var bus: {
-  on: (event: string, callback: (event: null, payload: any) => void) => void
-  trigger: (event: string, payload?: any) => void
-}
-
 declare module "lodash.isequal" {
   export default function isEqual(value: any, other: any): boolean
 }

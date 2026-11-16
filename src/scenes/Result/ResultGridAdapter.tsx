@@ -1,6 +1,7 @@
 import React, {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -13,7 +14,6 @@ import {
   type ResultGridRow,
 } from "../../components/ResultGrid"
 import type { ColumnDefinition } from "../../utils/questdb/types"
-import type { IQuestDBGrid } from "../../js/console/grid"
 import { usePagedDataSource, type PaginationFn } from "./usePagedDataSource"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -32,8 +32,7 @@ const AdapterRoot = styled.div<{ $visible: boolean }>`
   min-height: 0;
 `
 
-// Narrows IQuestDBGrid.setData's `any` to the fields we read.
-type DqlResultInput = {
+export type DqlResultInput = {
   columns: ColumnDefinition[]
   dataset: ResultGridRow[]
   count: number
@@ -41,156 +40,148 @@ type DqlResultInput = {
   timestamp?: number
 }
 
-type ResultGridAdapterProps = {
-  isFocused?: boolean
-  paginationFn?: PaginationFn
+export type ResultGridAdapterHandle = {
+  focus: () => void
+  getSQL: () => string | undefined
+  getResultAsMarkdown: () => string
+  resetLayout: () => void
+  shuffleFocusedColumnToFront: () => void
+  toggleFreezeLeft: () => void
 }
 
-// Backs the legacy IQuestDBGrid surface the console's Result scene drives with
-// the neutral React ResultGrid and a server-paged data source.
+type ResultGridAdapterProps = {
+  // Each new result object starts a new run, even when its query is the same.
+  result: DqlResultInput | null
+  visible: boolean
+  isFocused?: boolean
+  paginationFn?: PaginationFn
+  onSelectionChange: (hasSelection: boolean) => void
+  onYieldFocus: () => void
+  onFrozenColumnsChange: (count: number) => void
+}
+
+// Connects the console's result pane to the neutral React ResultGrid: pages
+// the result from the server and keeps a column layout per result shape.
 export const ResultGridAdapter = forwardRef<
-  IQuestDBGrid,
+  ResultGridAdapterHandle,
   ResultGridAdapterProps
->(({ isFocused = true, paginationFn }, ref) => {
-  const { dataSource, setResult, getSQL, getCurrentPageRows, hasData } =
-    usePagedDataSource(paginationFn)
-  const { maxColumnWidth } = useLocalStorage()
-
-  const [visible, setVisible] = useState(true)
-  const [runToken, setRunToken] = useState(0)
-  const [restoredSizing, setRestoredSizing] = useState<Record<string, number>>(
-    {},
-  )
-  const [restoredOrder, setRestoredOrder] = useState<string[]>([])
-  const [restoredPinned, setRestoredPinned] = useState<string[]>([])
-
-  const rootRef = useRef<HTMLDivElement>(null)
-  const gridImperativeRef = useRef<ResultGridHandle>(null)
-  // Current result's columns, for keying the persisted layout on commit.
-  const columnsRef = useRef<ColumnDefinition[]>([])
-  const listenersRef = useRef<Map<string, Set<(event: CustomEvent) => void>>>(
-    new Map(),
-  )
-
-  const emit = useCallback((name: string, detail?: unknown) => {
-    const set = listenersRef.current.get(name)
-    if (!set) return
-    const event = new CustomEvent(name, { detail })
-    set.forEach((fn) => fn(event))
-  }, [])
-
-  const handleSizingCommit = useCallback((sizing: Record<string, number>) => {
-    saveColumnLayout(columnsRef.current, { columnSizing: sizing })
-  }, [])
-
-  const handleOrderCommit = useCallback((order: string[]) => {
-    saveColumnLayout(columnsRef.current, { columnOrder: order })
-  }, [])
-
-  const handleResetLayout = useCallback(() => {
-    removeColumnLayout(columnsRef.current)
-  }, [])
-
-  const handlePinnedColumnsCommit = useCallback(
-    (pinnedLeft: string[]) => {
-      saveColumnLayout(columnsRef.current, { pinnedColumns: pinnedLeft })
-      emit("freeze.state", { freezeLeft: pinnedLeft.length })
+>(
+  (
+    {
+      result,
+      visible,
+      isFocused = true,
+      paginationFn,
+      onSelectionChange,
+      onYieldFocus,
+      onFrozenColumnsChange,
     },
-    [emit],
-  )
-
-  useImperativeHandle(
     ref,
-    (): IQuestDBGrid => ({
-      setData: (incoming: DqlResultInput) => {
-        setResult({
-          columns: incoming.columns,
-          dataset: incoming.dataset,
-          count: incoming.count,
-          query: incoming.query,
-          timestamp: incoming.timestamp,
-        })
-        setRunToken((token) => token + 1)
-        columnsRef.current = incoming.columns
-        const layout = loadColumnLayout(incoming.columns)
-        setRestoredSizing(layout?.columnSizing ?? {})
-        setRestoredOrder(layout?.columnOrder ?? [])
-        const pinnedLeft = layout?.pinnedColumns ?? []
-        setRestoredPinned(pinnedLeft)
-        // Sync the toolbar's freeze button to the restored layout.
-        emit("freeze.state", { freezeLeft: pinnedLeft.length })
+  ) => {
+    const { dataSource, setResult, getSQL, getCurrentPageRows, hasData } =
+      usePagedDataSource(paginationFn)
+    const { maxColumnWidth } = useLocalStorage()
+
+    const [runToken, setRunToken] = useState(0)
+    const [restoredSizing, setRestoredSizing] = useState<
+      Record<string, number>
+    >({})
+    const [restoredOrder, setRestoredOrder] = useState<string[]>([])
+    const [restoredPinned, setRestoredPinned] = useState<string[]>([])
+
+    const rootRef = useRef<HTMLDivElement>(null)
+    const gridImperativeRef = useRef<ResultGridHandle>(null)
+    // Current result's columns, for keying the persisted layout on commit.
+    const columnsRef = useRef<ColumnDefinition[]>([])
+    const onFrozenColumnsChangeRef = useRef(onFrozenColumnsChange)
+    onFrozenColumnsChangeRef.current = onFrozenColumnsChange
+
+    const handleSizingCommit = useCallback((sizing: Record<string, number>) => {
+      saveColumnLayout(columnsRef.current, { columnSizing: sizing })
+    }, [])
+
+    const handleOrderCommit = useCallback((order: string[]) => {
+      saveColumnLayout(columnsRef.current, { columnOrder: order })
+    }, [])
+
+    const handleResetLayout = useCallback(() => {
+      removeColumnLayout(columnsRef.current)
+    }, [])
+
+    const handlePinnedColumnsCommit = useCallback(
+      (pinnedLeft: string[]) => {
+        saveColumnLayout(columnsRef.current, { pinnedColumns: pinnedLeft })
+        onFrozenColumnsChange(pinnedLeft.length)
       },
+      [onFrozenColumnsChange],
+    )
 
-      getSQL: () => getSQL(),
+    useEffect(() => {
+      if (!result) return
+      setResult({
+        columns: result.columns,
+        dataset: result.dataset,
+        count: result.count,
+        query: result.query,
+        timestamp: result.timestamp,
+      })
+      setRunToken((token) => token + 1)
+      columnsRef.current = result.columns
+      const layout = loadColumnLayout(result.columns)
+      setRestoredSizing(layout?.columnSizing ?? {})
+      setRestoredOrder(layout?.columnOrder ?? [])
+      const pinnedLeft = layout?.pinnedColumns ?? []
+      setRestoredPinned(pinnedLeft)
+      // Sync the toolbar's freeze button to the restored layout.
+      onFrozenColumnsChangeRef.current(pinnedLeft.length)
+    }, [result, setResult])
 
-      focus: () => {
-        rootRef.current?.querySelector<HTMLElement>('[role="grid"]')?.focus()
-      },
+    useImperativeHandle(
+      ref,
+      (): ResultGridAdapterHandle => ({
+        focus: () => {
+          rootRef.current?.querySelector<HTMLElement>('[role="grid"]')?.focus()
+        },
+        getSQL,
+        getResultAsMarkdown: () =>
+          buildResultPageMarkdown(columnsRef.current, getCurrentPageRows()),
+        resetLayout: () => gridImperativeRef.current?.resetLayout(),
+        shuffleFocusedColumnToFront: () =>
+          gridImperativeRef.current?.shuffleFocusedColumnToFront(),
+        toggleFreezeLeft: () => gridImperativeRef.current?.toggleFreezeLeft(),
+      }),
+      [getSQL, getCurrentPageRows],
+    )
 
-      show: () => setVisible(true),
-
-      hide: () => setVisible(false),
-
-      // No-op: React + the grid's ResizeObserver handle layout.
-      render: () => undefined,
-
-      addEventListener: (
-        eventName: string,
-        fn: (event: CustomEvent) => void,
-      ) => {
-        const set = listenersRef.current.get(eventName) ?? new Set()
-        set.add(fn)
-        listenersRef.current.set(eventName, set)
-      },
-
-      removeEventListener: (
-        eventName: string,
-        fn: (event: CustomEvent) => void,
-      ) => {
-        listenersRef.current.get(eventName)?.delete(fn)
-      },
-
-      clearCustomLayout: () => gridImperativeRef.current?.resetLayout(),
-      shuffleFocusedColumnToFront: () =>
-        gridImperativeRef.current?.shuffleFocusedColumnToFront(),
-      toggleFreezeLeft: () => gridImperativeRef.current?.toggleFreezeLeft(),
-
-      getResultAsMarkdown: () =>
-        buildResultPageMarkdown(columnsRef.current, getCurrentPageRows()),
-    }),
-    [setResult, getSQL, getCurrentPageRows, emit],
-  )
-
-  return (
-    <AdapterRoot
-      ref={rootRef}
-      $visible={visible}
-      data-hook="result-grid-tanstack"
-    >
-      {hasData && (
-        <ResultGrid
-          ref={gridImperativeRef}
-          dataSource={dataSource}
-          maxColumnWidth={maxColumnWidth}
-          runToken={runToken}
-          isFocused={isFocused}
-          initialColumnSizing={restoredSizing}
-          onColumnSizingCommit={handleSizingCommit}
-          initialColumnOrder={restoredOrder}
-          onColumnOrderCommit={handleOrderCommit}
-          initialPinnedColumns={restoredPinned}
-          onPinnedColumnsCommit={handlePinnedColumnsCommit}
-          onYieldFocus={() => emit("yield.focus")}
-          onResetLayout={handleResetLayout}
-          onSelectionChange={(hasSelection) =>
-            emit("selection.change", { hasSelection })
-          }
-          onCellCopy={() => void trackEvent(ConsoleEvent.GRID_CELL_COPY)}
-          onColumnCopy={() => void trackEvent(ConsoleEvent.GRID_COLUMN_COPY)}
-        />
-      )}
-    </AdapterRoot>
-  )
-})
+    return (
+      <AdapterRoot
+        ref={rootRef}
+        $visible={visible}
+        data-hook="result-grid-tanstack"
+      >
+        {hasData && (
+          <ResultGrid
+            ref={gridImperativeRef}
+            dataSource={dataSource}
+            maxColumnWidth={maxColumnWidth}
+            runToken={runToken}
+            isFocused={isFocused}
+            initialColumnSizing={restoredSizing}
+            onColumnSizingCommit={handleSizingCommit}
+            initialColumnOrder={restoredOrder}
+            onColumnOrderCommit={handleOrderCommit}
+            initialPinnedColumns={restoredPinned}
+            onPinnedColumnsCommit={handlePinnedColumnsCommit}
+            onYieldFocus={onYieldFocus}
+            onResetLayout={handleResetLayout}
+            onSelectionChange={onSelectionChange}
+            onCellCopy={() => void trackEvent(ConsoleEvent.GRID_CELL_COPY)}
+            onColumnCopy={() => void trackEvent(ConsoleEvent.GRID_COLUMN_COPY)}
+          />
+        )}
+      </AdapterRoot>
+    )
+  },
+)
 
 ResultGridAdapter.displayName = "ResultGridAdapter"

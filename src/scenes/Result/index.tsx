@@ -38,7 +38,6 @@ import { TableFreezeColumn } from "../../components/icons"
 import { Markdown } from "../../components/icons"
 import { Check } from "../../components/icons"
 import { ArrowDownS } from "../../components/icons"
-import { grid } from "../../js/console/grid"
 import {
   Box,
   Button,
@@ -54,7 +53,6 @@ import { actions, selectors } from "../../store"
 import { color, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
-import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { isSessionEnded } from "../../modules/OAuth2/session"
@@ -68,8 +66,10 @@ import { useQueryExecutionState } from "../../hooks/useQueryExecutionState"
 import { downloadQueryResult } from "../../utils/downloadQueryResult"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { ResultGridAdapter } from "./ResultGridAdapter"
+import {
+  ResultGridAdapter,
+  type ResultGridAdapterHandle,
+} from "./ResultGridAdapter"
 import { type PaginationFn } from "./usePagedDataSource"
 import { ResultChart } from "./ResultChart"
 
@@ -180,18 +180,16 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const result = useSelector(selectors.query.getResult)
   const running = useSelector(selectors.query.getRunning)
   const { active: activeQueryExecution } = useQueryExecutionState()
-  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-  const gridRef = useRef<IQuestDBGrid | null>(null)
+  const gridRef = useRef<ResultGridAdapterHandle | null>(null)
   const resultActionsRef = useRef<HTMLDivElement | null>(null)
   const runningRef = useRef(running)
-  const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
+  const [gridFrozenColumns, setGridFrozenColumns] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
-  const { useNewGrid } = useLocalStorage()
   const dispatch = useDispatch()
 
-  // Shared by both grids. On a failed fetch it surfaces a notification and never
-  // calls the renderer, leaving the failing page unloaded.
+  // On a failed fetch it surfaces a notification and never calls the renderer,
+  // leaving the failing page unloaded.
   const paginationFn = useCallback<PaginationFn>(
     async (sql, lo, hi, rendererFn) => {
       try {
@@ -231,49 +229,12 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     runningRef.current = running
   }, [running])
 
-  useEffect(() => {
-    if (!useNewGrid) {
-      gridRef.current = grid(document.getElementById("grid"), paginationFn)
-    }
+  const handleYieldFocus = useCallback(
+    () => eventBus.publish(EventType.MSG_EDITOR_FOCUS),
+    [],
+  )
 
-    const _grid = gridRef.current
-    if (!_grid) return
-
-    const onSelectionChange = (event: CustomEvent<{ hasSelection: boolean }>) =>
-      setGridHasSelection(event.detail.hasSelection)
-    const onYieldFocus = () => eventBus.publish(EventType.MSG_EDITOR_FOCUS)
-    const onFreezeState = (event: CustomEvent<{ freezeLeft: number }>) =>
-      setGridFreezeLeftState(event.detail.freezeLeft)
-
-    _grid.addEventListener("selection.change", onSelectionChange)
-    _grid.addEventListener("yield.focus", onYieldFocus)
-    _grid.addEventListener("freeze.state", onFreezeState)
-
-    return () => {
-      _grid.removeEventListener?.("selection.change", onSelectionChange)
-      _grid.removeEventListener?.("yield.focus", onYieldFocus)
-      _grid.removeEventListener?.("freeze.state", onFreezeState)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (result?.type === QuestDB.Type.DQL) {
-      setCount(result.count)
-      gridRef?.current?.setData(result)
-    }
-  }, [result])
-
-  useEffect(() => {
-    if (viewMode === "grid") {
-      gridRef?.current?.show()
-    } else {
-      gridRef?.current?.hide()
-    }
-  }, [viewMode])
-
-  useEffect(() => {
-    gridRef?.current?.render()
-  }, [activeSidebar])
+  const dqlResult = result?.type === QuestDB.Type.DQL ? result : null
 
   const [isCopied, setIsCopied] = useState<boolean>(false)
 
@@ -287,7 +248,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_MARKDOWN_COPY)
             void copyToClipboard(
-              gridRef?.current?.getResultAsMarkdown() as string,
+              gridRef.current?.getResultAsMarkdown() ?? "",
             ).then(() => {
               setIsCopied(true)
               setTimeout(() => setIsCopied(false), 1000)
@@ -307,10 +268,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_COLUMN_FREEZE)
-            gridRef?.current?.toggleFreezeLeft()
-            gridRef?.current?.focus()
+            gridRef.current?.toggleFreezeLeft()
+            gridRef.current?.focus()
           }}
-          selected={gridFreezeLeftState > 0}
+          selected={gridFrozenColumns > 0}
         >
           <TableFreezeColumnIcon size="18px" />
         </StyledPrimaryToggleButton>
@@ -327,7 +288,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_COLUMN_MOVE_TO_FRONT)
-            gridRef?.current?.shuffleFocusedColumnToFront()
+            gridRef.current?.shuffleFocusedColumnToFront()
           }}
         >
           <MoveColumnToFront size="18px" weight="regular" />
@@ -344,7 +305,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_LAYOUT_RESET)
-            gridRef?.current?.clearCustomLayout()
+            gridRef.current?.resetLayout()
           }}
         >
           <ResetGrid size="18px" weight="regular" />
@@ -360,7 +321,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           disabled={activeQueryExecution !== null}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_REFRESH)
-            const sql = gridRef?.current?.getSQL()
+            const sql = gridRef.current?.getSQL()
             if (sql) {
               eventBus.publish(EventType.MSG_QUERY_EXEC, { q: sql })
             }
@@ -385,7 +346,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         : ConsoleEvent.GRID_CSV_DOWNLOAD,
     )
     setDownloadMenuActive(false)
-    const sql = gridRef?.current?.getSQL()
+    const sql = gridRef.current?.getSQL()
     if (!sql) {
       toast.error("No SQL query found to download")
       return
@@ -476,14 +437,18 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         </Actions>
 
         <Content>
-          {useNewGrid ? (
-            <ResultGridAdapter ref={gridRef} paginationFn={paginationFn} />
-          ) : (
-            <div id="grid" />
-          )}
+          <ResultGridAdapter
+            ref={gridRef}
+            result={dqlResult}
+            visible={viewMode === "grid"}
+            paginationFn={paginationFn}
+            onSelectionChange={setGridHasSelection}
+            onYieldFocus={handleYieldFocus}
+            onFrozenColumnsChange={setGridFrozenColumns}
+          />
 
           <ResultChart
-            result={result?.type === QuestDB.Type.DQL ? result : null}
+            result={dqlResult}
             visible={viewMode === "chart"}
             onResetZoomFocus={focusResultActions}
           />

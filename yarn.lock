@@ -1764,7 +1764,6 @@ __metadata:
     "@testing-library/user-event": "npm:14"
     "@types/babel__core": "npm:^7"
     "@types/draggabilly": "npm:^2.1.6"
-    "@types/jquery": "npm:3.5.1"
     "@types/lodash.merge": "npm:^4.6.9"
     "@types/node": "npm:^18.0.0"
     "@types/ramda": "npm:0.27.40"
@@ -1804,7 +1803,6 @@ __metadata:
     husky: "npm:^9.1.7"
     jiti: "npm:^2.6.1"
     joi: "npm:17.5.0"
-    jquery: "npm:3.5.1"
     js-base64: "npm:^3.7.7"
     js-sha256: "npm:^0.11.0"
     js-tiktoken: "npm:^1.0.21"
@@ -3101,15 +3099,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/jquery@npm:3.5.1":
-  version: 3.5.1
-  resolution: "@types/jquery@npm:3.5.1"
-  dependencies:
-    "@types/sizzle": "npm:*"
-  checksum: 10/52e248cfbb01ed95166a356838bb006e1ab6fd3806744e1664a8b859d63b80696aa68e4cb7b6edf1100d582284e94515537cb4205386cecb4ce629ca7b83c6eb
-  languageName: node
-  linkType: hard
-
 "@types/jsesc@npm:^2.5.0":
   version: 2.5.1
   resolution: "@types/jsesc@npm:2.5.1"
@@ -3247,7 +3236,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/sizzle@npm:*, @types/sizzle@npm:^2.3.2":
+"@types/sizzle@npm:^2.3.2":
   version: 2.3.10
   resolution: "@types/sizzle@npm:2.3.10"
   checksum: 10/7898ae8c147d6804e1eb7811664bf6e58c382840b03a56976c668f17fbc76f752c4086bddb0d6c6d54e279a9259cf4fbb61a6ee968dac98615c42350f6f57d6a
@@ -7397,13 +7386,6 @@ __metadata:
     "@sideway/formula": "npm:^3.0.0"
     "@sideway/pinpoint": "npm:^2.0.0"
   checksum: 10/385b5d634fbfdd405708021f7068c4f91f9d3a389a1eb0b83edf50f03742719c0fd6a9f9ad125f170f59d1d6007755dcfe032442b28c6bd161bb0c425b99d74d
-  languageName: node
-  linkType: hard
-
-"jquery@npm:3.5.1":
-  version: 3.5.1
-  resolution: "jquery@npm:3.5.1"
-  checksum: 10/b301ef0561057a8f2967bb15c03ac8ed16f902f0fc3c768be90171e4f3ebf5938c4e86ffcca6424eec9ed38ea210c57252cc8777502f064c241ee7dfcb8a4cc7
   languageName: node
   linkType: hard
 

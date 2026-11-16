@@ -47,7 +47,6 @@ export enum StoreKey {
   AI_ASSISTANT_SETTINGS = "ai.assistant.settings",
   AI_CHAT_PANEL_WIDTH = "ai.chat.panel.width",
   CLIENT_ID = "client.id",
-  USE_NEW_GRID = "feature.new.grid",
   NOTEBOOK_ONBOARDING = "notebook.onboarding",
   RUN_WITH_SELECTION = "editor.runWithSelection",
   CAPITALIZE_KEYWORDS_ON_FORMAT = "editor.capitalizeKeywordsOnFormat",

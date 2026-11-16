@@ -63,7 +63,6 @@ export type LocalConfig = {
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
   autoRefreshQueryActivity: boolean
-  useNewGrid: boolean
   runWithSelectionMode: RunWithSelectionMode
   capitalizeKeywordsOnFormat: boolean
   maxColumnWidth: MaxColumnWidth
