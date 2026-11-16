@@ -6,7 +6,7 @@ import { cellToolbarTier, type CellToolbarTier } from "../notebookUtils"
 // the tier changes — not on every pixel of an intra-tier resize. A maximized
 // cell is always expanded, regardless of width.
 export const useCellToolbarTier = (
-  ref: RefObject<HTMLElement>,
+  ref: RefObject<HTMLElement | null>,
   isMaximized: boolean,
 ): CellToolbarTier => {
   const [widthTier, setWidthTier] = useState<CellToolbarTier>("expanded")

@@ -31,7 +31,7 @@ import "echarts/lib/component/title"
 import * as echarts from "echarts/lib/echarts"
 import { LegendComponent, GridComponent } from "echarts/components"
 import React from "react"
-import ReactDOM from "react-dom"
+import { createRoot } from "react-dom/client"
 import { PlayIcon, StopIcon } from "@phosphor-icons/react"
 
 import $ from "jquery"
@@ -96,8 +96,11 @@ export function quickVis(
   let executionToken = 0
   let activeQueryId: QuestDB.QueryId | null = null
 
+  let drawButtonRoot = null
+
   const renderDrawButton = (Icon: typeof PlayIcon, label: string) => {
-    ReactDOM.render(
+    drawButtonRoot ??= createRoot(btnDraw[0])
+    drawButtonRoot.render(
       React.createElement(
         React.Fragment,
         null,
@@ -108,7 +111,6 @@ export function quickVis(
         }),
         React.createElement("span", null, label),
       ),
-      btnDraw[0],
     )
   }
 

@@ -904,10 +904,11 @@ describe("AuthProvider token installation", () => {
     await mount()
     localStorage.setItem("sso.username.test-client", "previous-user")
     localStorage.setItem(StoreKey.OAUTH_REDIRECT_COUNT, "5")
-    // Deliberately outside act's outer batch: React 17 flushes the session-end
-    // listener synchronously when an asynchronous SQL 401 reaches logout.
-    await Promise.resolve().then(() =>
-      eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED),
+    // An asynchronous SQL 401 reaches logout from a promise continuation.
+    await act(() =>
+      Promise.resolve().then(() =>
+        eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED),
+      ),
     )
     expect(localStorage.getItem("sso.username.test-client")).toBeNull()
     expect(
@@ -925,7 +926,10 @@ describe("AuthProvider token installation", () => {
     })
     act(() => eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED))
     expect(mocks.toastError).toHaveBeenCalledOnce()
-    const warning = create(mocks.toastError.mock.calls[0][0])
+    let warning!: ReactTestRenderer
+    act(() => {
+      warning = create(mocks.toastError.mock.calls[0][0])
+    })
     expect(warning.root.findAllByType("span")[0].children).toEqual([
       expect.stringContaining("Queries are not being sent"),
     ])
@@ -1395,7 +1399,10 @@ describe("AuthProvider token installation", () => {
       closeOnClick: false,
       toastId: "sso-refresh-failed",
     })
-    const warning = create(mocks.toastError.mock.calls[0][0])
+    let warning!: ReactTestRenderer
+    act(() => {
+      warning = create(mocks.toastError.mock.calls[0][0])
+    })
     expect(warning.root.findAllByType("span")[0].children).toEqual([
       expect.stringContaining("expires at"),
     ])

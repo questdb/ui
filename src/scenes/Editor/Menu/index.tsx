@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 import React from "react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled, { css, keyframes } from "styled-components"
@@ -115,6 +115,10 @@ const CloseIcon = styled(_CloseIcon)`
   color: ${color("contentPrimary")};
 `
 
+const MenuIconSlot = styled.span`
+  display: inline-flex;
+`
+
 const SideMenuMenuButton = styled(Button)`
   width: ${SIDEBAR_BUTTON_SIZE};
   min-width: ${SIDEBAR_BUTTON_SIZE};
@@ -168,6 +172,7 @@ const MenuItems = styled.div<{ $hidden: boolean }>`
 const Menu = () => {
   const dispatch = useDispatch()
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
+  const menuIconRef = useRef<HTMLSpanElement>(null)
   const escPress = useKeyPress("Escape")
   const { consoleConfig } = useSettings()
   const opened = useSelector(selectors.console.getSideMenuOpened)
@@ -270,11 +275,14 @@ const Menu = () => {
           onClick={handleSideMenuButtonClick}
         >
           <CSSTransition
+            nodeRef={menuIconRef}
             classNames="fade"
             in={opened}
             timeout={TransitionDuration.REG}
           >
-            {opened ? <CloseIcon size="26px" /> : <MenuIcon size="26px" />}
+            <MenuIconSlot ref={menuIconRef}>
+              {opened ? <CloseIcon size="26px" /> : <MenuIcon size="26px" />}
+            </MenuIconSlot>
           </CSSTransition>
         </SideMenuMenuButton>
       )}

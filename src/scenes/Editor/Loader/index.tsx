@@ -66,7 +66,8 @@ const Wrapper = styled.div`
 
 const Loader = ({ show }: Props) => {
   const [visible, setVisible] = useState(false)
-  const timeoutId = useRef<number | undefined>()
+  const timeoutId = useRef<number | undefined>(undefined)
+  const wrapperRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     return () => {
@@ -89,12 +90,13 @@ const Loader = ({ show }: Props) => {
   return (
     <>
       <CSSTransition
+        nodeRef={wrapperRef}
         classNames="fade-slow"
         in={visible && show}
         timeout={TransitionDuration.SLOW}
         unmountOnExit
       >
-        <Wrapper />
+        <Wrapper ref={wrapperRef} />
       </CSSTransition>
     </>
   )

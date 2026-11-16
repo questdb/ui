@@ -154,12 +154,14 @@ const ContentRoot = styled(RadixDropdownMenu.Content)<{
   overflow-y: auto;
 `
 
-type ContentProps = React.ComponentPropsWithoutRef<typeof ContentRoot> & {
+type ContentProps = React.ComponentPropsWithoutRef<
+  typeof RadixDropdownMenu.Content
+> & {
   minWidth?: string
 }
 
 const Content = React.forwardRef<
-  React.ElementRef<typeof RadixDropdownMenu.Content>,
+  React.ComponentRef<typeof RadixDropdownMenu.Content>,
   ContentProps
 >(({ minWidth, ...props }, ref) => (
   <ContentRoot {...props} ref={ref} $minWidth={minWidth} />

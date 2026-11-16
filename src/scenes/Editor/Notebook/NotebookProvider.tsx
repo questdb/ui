@@ -252,6 +252,7 @@ export const NotebookProvider: React.FC<{
   initialState: NotebookViewState
   bufferId: number
   preview?: boolean
+  children: React.ReactNode
 }> = ({ initialState, bufferId, preview = false, children }) => {
   const { updateBuffer } = useEditor()
   const { quest, questExecution } = useContext(QuestContext)

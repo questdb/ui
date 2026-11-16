@@ -1,5 +1,5 @@
 import { createElement } from "react"
-import { act, create } from "react-test-renderer"
+import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { describe, expect, it, vi } from "vitest"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { authSessionState } from "../../../modules/OAuth2/authSessionState"
@@ -63,7 +63,10 @@ describe("useCellExecution at session end", () => {
       }).runCell
       return null
     }
-    const renderer = create(createElement(Harness))
+    let renderer!: ReactTestRenderer
+    await act(() => {
+      renderer = create(createElement(Harness))
+    })
     const run = runCell("c1")
     await vi.waitFor(() => expect(executeSingle).toHaveBeenCalledOnce())
     expect(updateCell).toHaveBeenCalledOnce()
@@ -85,7 +88,7 @@ describe("useCellExecution at session end", () => {
     await expect(run).resolves.toMatchObject({ superseded: true })
     expect(updateCell).toHaveBeenCalledOnce()
     expect(persistCellSnapshot).not.toHaveBeenCalled()
-    act(() => renderer.unmount())
+    await act(() => renderer.unmount())
   })
 })
 

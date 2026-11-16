@@ -305,7 +305,9 @@ const readClientY = (event: Event): number | null => {
 const EDGE_ZONE_PX = 64
 const MAX_SCROLL_SPEED_PX = 18
 
-const useGridDragAutoScroll = (containerRef: React.RefObject<HTMLElement>) => {
+const useGridDragAutoScroll = (
+  containerRef: React.RefObject<HTMLElement | null>,
+) => {
   const pointerYRef = useRef<number | null>(null)
   const rafRef = useRef<number | null>(null)
 
@@ -432,7 +434,7 @@ const GridLayout: React.FC = () => {
   } = useContainerWidth({ measureBeforeMount: true })
   const suppressTransitions = useContainerResizeInFlight(containerWidth)
   const autoScroll = useGridDragAutoScroll(
-    containerRef as React.RefObject<HTMLElement>,
+    containerRef as React.RefObject<HTMLElement | null>,
   )
   useScrollUserAddedCellIntoView()
 
@@ -616,7 +618,7 @@ const GridLayout: React.FC = () => {
 
   return (
     <GridScrollContainer
-      ref={containerRef as React.RefObject<HTMLDivElement>}
+      ref={containerRef}
       id="notebook-scroll-container"
       $suppressTransitions={suppressTransitions}
       onMouseDown={(e) => {

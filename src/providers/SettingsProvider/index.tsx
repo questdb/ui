@@ -33,7 +33,7 @@ type SettingsResponse = {
   "preferences.version": number
 }
 
-const initialState = { view: View.loading }
+const initialState: State = { view: View.loading }
 
 const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
 

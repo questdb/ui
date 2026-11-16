@@ -12,7 +12,7 @@ const RESIZE_DEBOUNCE_MS = 100
 // it into whatever state they actually depend on (raw px, a layout tier, …) so
 // only the values they care about trigger a re-render.
 export const useWidthObserver = (
-  ref: RefObject<HTMLElement>,
+  ref: RefObject<HTMLElement | null>,
   onWidth: (width: number) => void,
 ): void => {
   const onWidthRef = useRef(onWidth)
@@ -59,7 +59,7 @@ export const useWidthObserver = (
 }
 
 export const useContainerWidth = (
-  ref: RefObject<HTMLElement>,
+  ref: RefObject<HTMLElement | null>,
 ): number | null => {
   const [width, setWidth] = useState<number | null>(null)
   useWidthObserver(ref, setWidth)

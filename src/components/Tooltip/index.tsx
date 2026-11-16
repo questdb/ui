@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React from "react"
+import React, { type JSX } from "react"
 import styled, { css, keyframes, useTheme } from "styled-components"
 import * as RadixTooltip from "@radix-ui/react-tooltip"
 import type { Placement } from "@popperjs/core"

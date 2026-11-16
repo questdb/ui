@@ -103,7 +103,7 @@ export const useCellHoverTooltip = (
   const [hovered, setHovered] = useState<HoveredTarget | null>(null)
 
   const hoveredTargetRef = useRef<Element | null>(null)
-  const showTimeoutRef = useRef<number>()
+  const showTimeoutRef = useRef<number>(undefined)
 
   const hideTooltip = useCallback(() => {
     window.clearTimeout(showTimeoutRef.current)

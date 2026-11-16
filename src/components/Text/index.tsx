@@ -52,7 +52,7 @@ export type TextProps = Readonly<{
   lineHeight?: string
 }>
 
-const defaultProps: Readonly<{
+export const textDefaultProps: Readonly<{
   color: Color
   type: Type
 }> = {
@@ -84,8 +84,10 @@ const TextStyled = styled.label<TextProps>`
   ${textStyles};
 `
 
-export const Text = ({ type, ...rest }: TextProps) => {
-  return <TextStyled as={type} {...rest} type={type} />
+export const Text = ({
+  type = textDefaultProps.type,
+  color = textDefaultProps.color,
+  ...rest
+}: TextProps) => {
+  return <TextStyled as={type} color={color} {...rest} type={type} />
 }
-
-Text.defaultProps = defaultProps

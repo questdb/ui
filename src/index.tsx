@@ -36,6 +36,7 @@ consumePendingPairFromUrl()
 
 import React from "react"
 import ReactDOM from "react-dom"
+import { createRoot } from "react-dom/client"
 import { Provider } from "react-redux"
 import { applyMiddleware, compose, createStore } from "redux"
 import { createEpicMiddleware } from "redux-observable"
@@ -82,7 +83,7 @@ const FadeSlow = createGlobalFadeTransition(
   TransitionDuration.SLOW,
 )
 
-ReactDOM.render(
+createRoot(document.getElementById("root") as HTMLElement).render(
   <ThemeModeProvider>
     <VendorGlobalStyle />
     <ThemeCssVariables />
@@ -108,5 +109,4 @@ ReactDOM.render(
       </ScreenSizeProvider>
     </TooltipProvider>
   </ThemeModeProvider>,
-  document.getElementById("root"),
 )

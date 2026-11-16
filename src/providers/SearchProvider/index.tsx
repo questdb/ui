@@ -15,7 +15,7 @@ export type SearchState = {
   isSearchPanelOpen: boolean
   setSearchPanelOpen: (open: boolean) => void
   toggleSearchPanel: () => void
-  searchPanelRef: React.RefObject<SearchPanelRef>
+  searchPanelRef: React.RefObject<SearchPanelRef | null>
 }
 
 const defaultValues: SearchState = {
@@ -27,7 +27,9 @@ const defaultValues: SearchState = {
 
 const SearchContext = createContext<SearchState>(defaultValues)
 
-export const SearchProvider: React.FC = ({ children }) => {
+export const SearchProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const { leftPanelState, updateLeftPanelState } = useLocalStorage()
   const isSearchPanelOpen = leftPanelState.type === LeftPanelType.SEARCH
   const searchPanelRef = useRef<SearchPanelRef>(null)

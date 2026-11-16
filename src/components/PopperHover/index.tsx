@@ -42,21 +42,35 @@ export type Placement = PopperJsPlacement
 type Props = Readonly<{
   children: ReactNode
   delay?: number
-  placement: Placement
-  modifiers: Options["modifiers"]
+  placement?: Placement
+  modifiers?: Options["modifiers"]
   trigger: ReactNode
 }>
+
+type TriggerProps = {
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+  ref: React.Ref<HTMLElement>
+}
+
+type PopperContentProps = Record<string, unknown> & {
+  arrow: {
+    setArrowElement: (element: HTMLElement | null) => void
+    styles: React.CSSProperties
+  }
+}
 
 export const PopperHover = ({
   children,
   delay,
-  modifiers,
-  placement,
+  modifiers = [],
+  placement = "auto",
   trigger,
 }: Props) => {
   const [container] = useState<HTMLElement>(document.createElement("div"))
-  const delayTimeoutId = useRef<number | undefined>()
-  const transitionTimeoutId = useRef<number | undefined>()
+  const transitionNodeRef = useRef(container)
+  const delayTimeoutId = useRef<number | undefined>(undefined)
+  const transitionTimeoutId = useRef<number | undefined>(undefined)
   const [active, setActive] = useState(false)
   const [triggerElement, setTriggerElement] = useState<HTMLElement | null>(null)
   const [arrowElement, setArrowElement] = useState<HTMLElement | null>(null)
@@ -115,7 +129,7 @@ export const PopperHover = ({
 
   return (
     <>
-      {React.isValidElement(trigger) &&
+      {React.isValidElement<TriggerProps>(trigger) &&
         React.cloneElement(trigger, {
           onMouseEnter: handleMouseEnter,
           onMouseLeave: handleMouseLeave,
@@ -124,12 +138,13 @@ export const PopperHover = ({
 
       {ReactDOM.createPortal(
         <CSSTransition
+          nodeRef={transitionNodeRef}
           classNames="fade-reg"
           in={active}
           timeout={TransitionDuration.REG}
           unmountOnExit
         >
-          {React.isValidElement(children) &&
+          {React.isValidElement<PopperContentProps>(children) &&
             React.cloneElement(children, {
               ...attributes.popper,
               arrow: { setArrowElement, styles: styles.arrow },
@@ -139,9 +154,4 @@ export const PopperHover = ({
       )}
     </>
   )
-}
-
-PopperHover.defaultProps = {
-  modifiers: [],
-  placement: "auto",
 }

@@ -40,22 +40,28 @@ import { TransitionDuration } from "../Transition"
 type Props = Readonly<{
   active?: boolean
   children: ReactNode
-  placement: Placement
-  modifiers: Options["modifiers"]
+  placement?: Placement
+  modifiers?: Options["modifiers"]
   onToggle?: (_active: boolean) => void
   trigger?: ReactNode
 }>
 
+type TriggerProps = {
+  onClick: () => void
+  ref: React.Ref<HTMLElement>
+}
+
 export const PopperToggle = ({
   active,
   children,
-  modifiers,
+  modifiers = [],
   onToggle,
-  placement,
+  placement = "auto",
   trigger,
 }: Props) => {
   const [container] = useState<HTMLElement>(document.createElement("div"))
-  const transitionTimeoutId = useRef<number | undefined>()
+  const transitionNodeRef = useRef(container)
+  const transitionTimeoutId = useRef<number | undefined>(undefined)
   const [_active, setActive] = useState(false)
   const [triggerElement, setTriggerElement] = useState<HTMLElement | null>(null)
   const { attributes, styles } = usePopper(triggerElement, container, {
@@ -148,14 +154,15 @@ export const PopperToggle = ({
 
   return (
     <>
-      {React.isValidElement(trigger) &&
+      {React.isValidElement<TriggerProps>(trigger) &&
         React.cloneElement(trigger, {
           onClick: handleClick,
           ref: setTriggerElement,
         })}
 
-      {React.isValidElement(children) && (
+      {React.isValidElement<Record<string, unknown>>(children) && (
         <CSSTransition
+          nodeRef={transitionNodeRef}
           classNames="fade-reg"
           in={_active}
           timeout={TransitionDuration.REG}
@@ -173,9 +180,4 @@ export const PopperToggle = ({
       )}
     </>
   )
-}
-
-PopperToggle.defaultProps = {
-  modifiers: [],
-  placement: "auto",
 }
