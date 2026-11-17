@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect, useState } from "react"
 import styled, { css } from "styled-components"
 import { NotebookIcon } from "@phosphor-icons/react"
 import { Button, Tooltip } from "../../components"
@@ -85,6 +85,15 @@ export const NotebookTransferActions: React.FC<{
   // indistinguishable from the adjacent "Re-run query" button.
   const icon = <NotebookGlyph size={18} />
   const iconOnly = density === "icon"
+  // Always controlled: switching the Radix tooltip between controlled and
+  // uncontrolled warns and leaves stale open state behind. The full label
+  // needs no tooltip; the button element itself never changes.
+  const [tooltipOpen, setTooltipOpen] = useState(false)
+  // A full-density tooltip is forced closed without reporting it; forget an
+  // open state from a narrower toolbar so it can't reappear unhovered.
+  useEffect(() => {
+    if (density === "full") setTooltipOpen(false)
+  }, [density])
 
   return (
     <Group>
@@ -92,7 +101,8 @@ export const NotebookTransferActions: React.FC<{
         delay={350}
         placement="bottom"
         content={label}
-        open={density === "full" ? false : undefined}
+        open={density !== "full" && tooltipOpen}
+        onOpenChange={setTooltipOpen}
       >
         <ActionButton
           $iconOnly={iconOnly}

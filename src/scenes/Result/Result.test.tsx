@@ -223,6 +223,39 @@ describe("result toolbar notebook action", () => {
     expect(action()).toHaveTextContent("")
     expect(action()).toHaveAccessibleName("Add query to notebook")
   })
+  it("keeps the label tooltip controlled across breakpoints", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const resize = observeToolbar()
+    const store = mountResult()
+    act(() => {
+      store.dispatch(
+        queryActions.setResult(resultFor("select x from long_sequence(10)"), 1),
+      )
+    })
+    const action = () =>
+      document.querySelector<HTMLElement>('[data-hook="result-add-notebook"]')!
+    const tooltip = () => document.querySelector('[data-hook="tooltip"]')
+
+    resize(700)
+    act(() => action().focus())
+    expect(tooltip()).toHaveTextContent("Add query to notebook")
+
+    // The full label needs no tooltip; the button keeps its focus.
+    resize(1000)
+    expect(tooltip()).toBeNull()
+    expect(document.activeElement).toBe(action())
+    act(() => action().blur())
+
+    resize(700)
+    expect(tooltip()).toBeNull()
+    expect(
+      warn.mock.calls.filter(([message]) =>
+        String(message).includes("uncontrolled"),
+      ),
+    ).toEqual([])
+    warn.mockRestore()
+  })
+
   it("keeps the auto-refresh action distinct from Re-run when only icons fit", () => {
     const resize = observeToolbar()
     const store = mountResult()
