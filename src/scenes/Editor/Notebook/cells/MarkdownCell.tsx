@@ -26,6 +26,11 @@ import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { ctrlCmd } from "../../../../utils/platform"
 import {
+  claimEscape,
+  isEscape,
+  isEscapeClaimed,
+} from "../../../../utils/escapeKey"
+import {
   hasAgentVisibleCellHeightChanged,
   MIN_MARKDOWN_HEIGHT_PX,
   MAX_PANE_HEIGHT_PX,
@@ -227,7 +232,7 @@ const MarkdownCellInner: React.FC<Props> = ({
   isFocused,
   isMaximized,
 }) => {
-  const { updateCell } = useNotebookActions()
+  const { updateCell, setFocusedCell } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
   const trackEvent = useNotebookTelemetry(cell.id)
 
@@ -416,6 +421,13 @@ const MarkdownCellInner: React.FC<Props> = ({
                   e.preventDefault()
                   e.stopPropagation()
                   apply("shortcut")
+                } else if (isEscape(e) && !isEscapeClaimed(e)) {
+                  // A text field with text owns Escape (utils/escapeKey.ts),
+                  // so the cell layer never sees it: finish editing here.
+                  // Leaving focus applies the edit (the isFocused effect).
+                  claimEscape(e)
+                  setFocusedCell(null)
+                  e.currentTarget.blur()
                 }
               }}
             />
