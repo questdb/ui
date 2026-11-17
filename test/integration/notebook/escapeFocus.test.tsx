@@ -2,7 +2,7 @@
 import React, { useRef, useState } from "react"
 import { Provider } from "react-redux"
 import { createStore } from "redux"
-import { screen } from "@testing-library/react"
+import { act, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu"
 import { describe, expect, it, vi } from "vitest"
@@ -104,12 +104,29 @@ const NotebookCell = () => {
   )
 }
 
+// Clears itself on Escape without claiming it, like a field written before
+// the Escape model. The drawer must still treat it as owning that press.
+const UnclaimedField = ({ label }: { label: string }) => {
+  const [value, setValue] = useState("")
+  return (
+    <input
+      aria-label={label}
+      value={value}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setValue("")
+      }}
+    />
+  )
+}
+
 const Fixture = ({ plainGrid = false }: { plainGrid?: boolean }) => {
   const [open, setOpen] = useState(true)
   const [filter, setFilter] = useState("")
   return (
     <>
       {plainGrid ? <Grid /> : <NotebookCell />}
+      <UnclaimedField label="Schema filter" />
       <Drawer
         mode="side"
         title="Table details"
@@ -122,13 +139,13 @@ const Fixture = ({ plainGrid = false }: { plainGrid?: boolean }) => {
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Escape" && filter) {
+            if (event.key === "Escape" && filter && !event.defaultPrevented) {
               event.preventDefault()
-              event.stopPropagation()
               setFilter("")
             }
           }}
         />
+        <Button>Drawer action</Button>
       </Drawer>
     </>
   )
@@ -224,4 +241,45 @@ describe("Escape focus hierarchy", () => {
     await userEvent.keyboard("{Escape}")
     expect(drawer()).not.toBeInTheDocument()
   })
+
+  it("closes the drawer that holds the focus before clearing a focused notebook cell", async () => {
+    mount()
+    await userEvent.click(
+      screen.getByRole("button", { name: "Focus notebook cell" }),
+    )
+    expect(cell()).toHaveAttribute("data-focused", "true")
+    screen.getByRole("button", { name: "Drawer action" }).focus()
+    await userEvent.keyboard("{Escape}")
+    expect(drawer()).not.toBeInTheDocument()
+    expect(cell()).toHaveAttribute("data-focused", "true")
+    await userEvent.keyboard("{Escape}")
+    expect(cell()).toHaveAttribute("data-focused", "false")
+  })
+
+  // A browser event is not wrapped in act(): React 17 flushes the field's
+  // cleared state before the event reaches window, unlike user-event.
+  const pressNativeEscape = (target: HTMLElement) =>
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+
+  it.each(["Schema filter", "Drawer filter"])(
+    "lets the %s clear itself without also closing the drawer",
+    async (label) => {
+      mount()
+      const field = screen.getByRole("textbox", { name: label })
+      await userEvent.type(field, "trades")
+      pressNativeEscape(field)
+      await act(async () => {})
+      expect(field).toHaveValue("")
+      expect(drawer()).toBeInTheDocument()
+      pressNativeEscape(field)
+      await act(async () => {})
+      expect(drawer()).not.toBeInTheDocument()
+    },
+  )
 })

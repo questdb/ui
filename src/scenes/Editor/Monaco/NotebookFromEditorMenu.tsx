@@ -30,7 +30,7 @@ export const NotebookFromEditorMenu = () => {
         void transfer({
           queries: selected.map((sql) => ({ sql })),
           source: "editor_split",
-          sourceBuffer: activeBuffer,
+          sourceBufferId: activeBuffer.id,
         })
       }
       disabled={busy || !canCreate}

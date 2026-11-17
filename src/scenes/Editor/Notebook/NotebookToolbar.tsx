@@ -13,6 +13,11 @@ import { CopyAlt } from "../../../components/icons"
 import { color } from "../../../utils"
 import { toast } from "../../../components/Toast"
 import { useNotebookTelemetry } from "./useNotebookTelemetry"
+import {
+  claimEscape,
+  isEscape,
+  isEscapeClaimed,
+} from "../../../utils/escapeKey"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { exportBuffers } from "../Monaco/exportTabs"
 import { useNotebookActions, useNotebookState } from "./NotebookProvider"
@@ -215,9 +220,8 @@ export const NotebookToolbar: React.FC = () => {
   const handleNameKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       nameInputRef.current?.blur()
-    } else if (e.key === "Escape") {
-      e.preventDefault()
-      e.stopPropagation()
+    } else if (isEscape(e) && !isEscapeClaimed(e)) {
+      claimEscape(e)
       cancelRenameRef.current = true
       nameInputRef.current?.blur()
     }

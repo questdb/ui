@@ -34,7 +34,8 @@ import styled, { useTheme } from "styled-components"
 import { DiffEditor, Editor as MonacoEditor } from "@monaco-editor/react"
 
 import { PaneWrapper, PaneContent, Box, Button, Key } from "../../components"
-import { useKeyPress } from "../../hooks"
+import { useEscapeLayer } from "../../hooks/useEscapeLayer"
+import { EscapePriority } from "../../utils/escapeKey"
 
 import Monaco from "./Monaco"
 import { Tabs } from "./Monaco/tabs"
@@ -316,13 +317,14 @@ const Editor = ({
     await rejectSuggestion(conversationId, messageId)
   }, [pendingDiffInfo, rejectSuggestion])
 
-  // Keyboard shortcut: Escape to reject diff
-  const escPressed = useKeyPress("Escape")
-  useEffect(() => {
-    if (escPressed && pendingDiffInfo) {
+  // Keyboard shortcut: Escape to reject diff (utils/escapeKey.ts)
+  useEscapeLayer(!!pendingDiffInfo, {
+    priority: EscapePriority.editorDiff,
+    onEscape: () => {
       void handleRejectFromDiffEditor()
-    }
-  }, [escPressed, pendingDiffInfo, handleRejectFromDiffEditor])
+      return true
+    },
+  })
 
   // Keyboard shortcut: Ctrl/Cmd+Enter to accept diff
   useEffect(() => {

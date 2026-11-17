@@ -17,7 +17,6 @@ import { SessionEndedError } from "../../modules/OAuth2/session"
 
 export type MonitoringRequest = {
   target: MonitoringTarget
-  name: string
   telemetryEnabled: boolean
   walEnabled: boolean
   refreshSchedule?: MonitoringRefreshSchedule
@@ -83,9 +82,10 @@ export const openMonitoringDashboard = (
     requireSession()
     const notebookViewState = buildMonitoringDashboard({
       ...request,
+      name: request.target.name,
       kind: request.target.kind,
     })
-    const label = `${request.name} · monitoring`.slice(
+    const label = `${request.target.name} · monitoring`.slice(
       0,
       MAX_BUFFER_NAME_LENGTH,
     )

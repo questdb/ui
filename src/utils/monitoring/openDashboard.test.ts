@@ -17,8 +17,7 @@ vi.hoisted(() => {
 afterAll(() => db.close())
 
 const request: MonitoringRequest = {
-  target: { instanceKey: "instance-a", tableId: 7, kind: "table" },
-  name: "trades",
+  target: { instanceKey: "instance-a", kind: "table", name: "trades" },
   telemetryEnabled: true,
   walEnabled: true,
 }
@@ -84,23 +83,43 @@ describe("opening a monitoring dashboard", () => {
     expect(add).toHaveBeenCalledTimes(1)
   })
 
-  it("isolates instances and drop/recreated tables instead of matching notebook names", async () => {
+  it("isolates instances, kinds and names", async () => {
     const first = await openMonitoringDashboard(request, add)
-    const otherInstance = await openMonitoringDashboard(
-      { ...request, target: { ...request.target, instanceKey: "instance-b" } },
+    const ids = [first?.buffer.id]
+    for (const target of [
+      { ...request.target, instanceKey: "instance-b" },
+      { ...request.target, kind: "matview" as const },
+      { ...request.target, name: "trades_renamed" },
+    ]) {
+      ids.push(
+        (await openMonitoringDashboard({ ...request, target }, add))?.buffer.id,
+      )
+    }
+    expect(new Set(ids).size).toBe(4)
+  })
+
+  it("reuses the dashboard for a re-created table and ignores name case", async () => {
+    const first = await openMonitoringDashboard(request, add)
+    const again = await openMonitoringDashboard(
+      { ...request, target: { ...request.target, name: "TRADES" } },
       add,
     )
-    const recreated = await openMonitoringDashboard(
-      { ...request, target: { ...request.target, tableId: 8 } },
+    expect(again?.outcome).toBe("reused")
+    expect(again?.buffer.id).toBe(first?.buffer.id)
+  })
+
+  it("opens a new dashboard after a rename, whose SQL targets the new name", async () => {
+    await openMonitoringDashboard(request, add)
+    const renamed = await openMonitoringDashboard(
+      { ...request, target: { ...request.target, name: "trades_v2" } },
       add,
     )
-    expect(
-      new Set([
-        first?.buffer.id,
-        otherInstance?.buffer.id,
-        recreated?.buffer.id,
-      ]).size,
-    ).toBe(3)
+    expect(renamed?.outcome).toBe("created")
+    expect(renamed?.buffer.label).toBe("trades_v2 · monitoring")
+    const sql = renamed!.buffer
+      .notebookViewState!.cells.filter((c) => c.type !== "markdown")
+      .map((c) => c.value)
+    expect(sql.every((value) => value.includes("'trades_v2'"))).toBe(true)
   })
 
   it("does not adopt an independent copy or an ordinary notebook with the same name", async () => {

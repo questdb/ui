@@ -34,7 +34,14 @@ vi.mock("../Editor/Monaco", () => ({ LINE_NUMBER_HARD_LIMIT: 100000 }))
 vi.mock("../Editor/Monaco/query-in-notification", () => ({
   QueryInNotification: () => null,
 }))
-vi.mock("./ResultChart", () => ({ ResultChart: () => null }))
+const renders = vi.hoisted(() => ({ result: 0 }))
+// ResultChart is always mounted by Result, so its renders count Result's.
+vi.mock("./ResultChart", () => ({
+  ResultChart: () => {
+    renders.result++
+    return null
+  },
+}))
 vi.mock("../../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
 
 beforeEach(() => {
@@ -143,4 +150,67 @@ describe("result export actions", () => {
       ).toHaveAttribute("aria-expanded", "false")
     },
   )
+})
+
+describe("result toolbar notebook action", () => {
+  const observeToolbar = () => {
+    const observers: Array<{
+      callback: ResizeObserverCallback
+      target?: Element
+    }> = []
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        entry: { callback: ResizeObserverCallback; target?: Element }
+        constructor(callback: ResizeObserverCallback) {
+          this.entry = { callback }
+          observers.push(this.entry)
+        }
+        observe(target: Element) {
+          this.entry.target = target
+        }
+        unobserve() {}
+        disconnect() {}
+      },
+    )
+    // Only the toolbar's observer: the grid observes its own elements.
+    return (width: number) =>
+      act(() => {
+        const action = document.querySelector(
+          '[data-hook="result-add-notebook"]',
+        )
+        observers
+          .filter(({ target }) => action && target?.contains(action))
+          .forEach(({ callback }) =>
+            callback(
+              [{ contentRect: { width } } as ResizeObserverEntry],
+              {} as ResizeObserver,
+            ),
+          )
+      })
+  }
+
+  it("fits the label to the toolbar and re-renders only at breakpoints", () => {
+    const resize = observeToolbar()
+    const store = mountResult()
+    act(() => {
+      store.dispatch(
+        queryActions.setResult(resultFor("select x from long_sequence(10)"), 1),
+      )
+    })
+    const action = () =>
+      document.querySelector('[data-hook="result-add-notebook"]')!
+
+    resize(1000)
+    expect(action()).toHaveTextContent("Add query to notebook")
+    const rendersAtFullWidth = renders.result
+    for (const width of [1010, 990, 950, 900, 850]) resize(width)
+    expect(renders.result).toBe(rendersAtFullWidth)
+
+    resize(700)
+    expect(action()).toHaveTextContent(/^Add query$/)
+    resize(600)
+    expect(action()).toHaveTextContent("")
+    expect(action()).toHaveAccessibleName("Add query to notebook")
+  })
 })

@@ -46,18 +46,22 @@ const DashboardAction = styled(Button)`
   }
 `
 
+// `busy` is an in-progress open; `disabled` covers reasons that are not
+// progress (a script owns the tabs, table metadata is unavailable).
 export const MonitoringDashboardButton = ({
   onClick,
   busy,
+  disabled,
 }: {
   onClick: () => void
   busy: boolean
+  disabled: boolean
 }) => (
   <Action>
     <DashboardAction
       variant="secondary"
       fontSize="md"
-      disabled={busy}
+      disabled={busy || disabled}
       aria-busy={busy}
       onClick={onClick}
       data-hook="table-details-monitoring-dashboard"

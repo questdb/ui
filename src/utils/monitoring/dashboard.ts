@@ -37,8 +37,9 @@ export const monitoringWindowMinutes = (
 
 export const MONITORING_TEMPLATE_VERSION = 1
 
+// QuestDB table names are case-insensitive.
 export const monitoringTargetKey = (target: MonitoringTarget): string =>
-  JSON.stringify([target.instanceKey, target.kind, target.tableId])
+  JSON.stringify([target.instanceKey, target.kind, target.name.toLowerCase()])
 
 export { monitoringFingerprint, isUnmodifiedMonitoring } from "./fingerprint"
 
@@ -63,9 +64,11 @@ export const buildMonitoringDashboard = ({
   const markdownName = name.replace(/[\\`*_{}[\]<>#|]/g, "\\$&")
   const cells = templates.map((template, position) => {
     let highlightConfig = template.highlightConfig
+    // Function replacers: a string replacement would expand `$'`, `$$` and
+    // `$&` in names such as `orders$` into unrelated SQL.
     let value = template.value
-      .replaceAll("__TARGET_SQL__", sqlName)
-      .replaceAll("__TARGET_NAME__", markdownName)
+      .replaceAll("__TARGET_SQL__", () => sqlName)
+      .replaceAll("__TARGET_NAME__", () => markdownName)
     if (!history && template.name === "Reading the data") {
       value =
         "### Current state\nThis dashboard shows live health and partition storage. Historical charts and incident history require enabled telemetry and a WAL table. Polling does not store history."

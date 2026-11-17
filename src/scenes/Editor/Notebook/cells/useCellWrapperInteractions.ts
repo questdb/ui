@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useCallback, useRef } from "react"
+import { useEscapeLayer } from "../../../../hooks/useEscapeLayer"
+import { EscapePriority } from "../../../../utils/escapeKey"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
 import { useNotebookTelemetry } from "../useNotebookTelemetry"
@@ -32,24 +34,20 @@ export const useCellWrapperInteractions = ({
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const canArrowMove = layoutMode !== "grid" && !isMaximized
 
-  // Esc blurs the cell. Respect defaultPrevented so a Radix popper close
-  // doesn't double up with cell blur on the same keystroke.
-  useEffect(() => {
-    if (!isFocused) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return
-      if (e.defaultPrevented) return
-      e.preventDefault()
-      e.stopPropagation()
+  // Esc clears the focused cell: an ambient layer (utils/escapeKey.ts), so a
+  // grid selection or menu inside the cell closes first, and a side panel that
+  // holds the focus closes before the cell is cleared.
+  useEscapeLayer(isFocused, {
+    priority: EscapePriority.notebookCell,
+    scope: () => wrapperRef.current,
+    onEscape: () => {
       setFocusedCell(null)
       const active = document.activeElement
       if (active instanceof HTMLElement && wrapperRef.current?.contains(active))
         active.blur()
-    }
-    // Grid/editor handlers bubble here first; docked panels listen on window.
-    document.addEventListener("keydown", onKey)
-    return () => document.removeEventListener("keydown", onKey)
-  }, [isFocused, setFocusedCell])
+      return true
+    },
+  })
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {

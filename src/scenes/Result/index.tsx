@@ -27,6 +27,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react"
@@ -75,9 +76,12 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { ResultGridAdapter } from "./ResultGridAdapter"
 import { type PaginationFn } from "./usePagedDataSource"
 import { ResultChart, type ResultChartTransfer } from "./ResultChart"
-import { NotebookTransferActions } from "./NotebookTransferActions"
+import {
+  NotebookTransferActions,
+  TRANSFER_ACTION_BREAKPOINTS,
+  transferActionDensity,
+} from "./NotebookTransferActions"
 import { BatchNotebookAction } from "./BatchNotebookAction"
-import { useEditor } from "../../providers/EditorProvider"
 import { toTransferResult } from "../../utils/notebooks/notebookTransfer"
 import type { NotebookTransferRequest } from "../../hooks/useNotebookTransfer"
 
@@ -189,20 +193,33 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const result = useSelector(selectors.query.getResult)
   const resultSource = useSelector(selectors.query.getResultSource)
   const showMonitor = useSelector(selectors.query.getResultHasRepeatedExecution)
-  const { buffers, activeBuffer } = useEditor()
   const [chartTransfer, setChartTransfer] = useState<ResultChartTransfer>()
   const running = useSelector(selectors.query.getRunning)
   const { active: activeQueryExecution } = useQueryExecutionState()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | null>(null)
   const resultActionsRef = useRef<HTMLDivElement | null>(null)
+  // The widest breakpoint the toolbar reaches. Storing the raw width would
+  // re-render the whole result view on every frame of a splitter drag.
   const [toolbarWidth, setToolbarWidth] = useState(0)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const toolbar = resultActionsRef.current
     if (!toolbar) return
-    const observer = new ResizeObserver(([entry]) => {
-      setToolbarWidth(entry.contentRect.width)
-    })
+    const measure = (width: number) =>
+      setToolbarWidth(
+        TRANSFER_ACTION_BREAKPOINTS.filter((step) => width >= step).pop() ?? 0,
+      )
+    // Size the action before the first paint, so it doesn't swap its
+    // element when the observer reports.
+    const style = getComputedStyle(toolbar)
+    measure(
+      toolbar.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight),
+    )
+    const observer = new ResizeObserver(([entry]) =>
+      measure(entry.contentRect.width),
+    )
     observer.observe(toolbar)
     return () => observer.disconnect()
   }, [])
@@ -212,10 +229,6 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
   const { useNewGrid, useQuickVis } = useLocalStorage()
   const dispatch = useDispatch()
-  const sourceBuffer =
-    resultSource?.bufferId === undefined
-      ? activeBuffer
-      : buffers.find((buffer) => buffer.id === resultSource.bufferId)
   const transferQuery =
     viewMode === "chart"
       ? chartTransfer && chartTransfer.seed === result
@@ -231,7 +244,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     ? {
         queries: [transferQuery],
         source: viewMode === "chart" ? "result_chart" : "result_grid",
-        sourceBuffer,
+        sourceBufferId: resultSource?.bufferId,
       }
     : undefined
 
@@ -497,7 +510,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             request={transferRequest}
             chart={viewMode === "chart"}
             showMonitor={showMonitor}
-            compact={toolbarWidth < (viewMode === "chart" ? 520 : 820)}
+            density={transferActionDensity(viewMode === "chart", toolbarWidth)}
           />
           <Box gap="0">
             <DownloadButton

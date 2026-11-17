@@ -36,6 +36,7 @@ import { CSSTransition } from "react-transition-group"
 
 import { usePopperStyles, useTransition } from "../../hooks"
 import { TransitionDuration } from "../Transition"
+import { claimEscape, isEscape, isEscapeClaimed } from "../../utils/escapeKey"
 
 type Props = Readonly<{
   active?: boolean
@@ -100,14 +101,16 @@ export const PopperToggle = ({
     [container, onToggle, triggerElement, _active],
   )
 
+  // An overlay: claims Escape in the capture phase, before the focused
+  // control underneath it (utils/escapeKey.ts).
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
-      if (event.key === "Escape" && _active) {
-        setActive(false)
+      if (!isEscape(event) || !_active || isEscapeClaimed(event)) return
+      claimEscape(event)
+      setActive(false)
 
-        if (onToggle) {
-          onToggle(false)
-        }
+      if (onToggle) {
+        onToggle(false)
       }
     },
     [_active, onToggle],
@@ -137,12 +140,12 @@ export const PopperToggle = ({
   useEffect(() => {
     document.addEventListener("mousedown", handleMouseDown)
     document.addEventListener("touchstart", handleMouseDown)
-    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("keydown", handleKeyDown, true)
 
     return () => {
       document.removeEventListener("mousedown", handleMouseDown)
       document.removeEventListener("touchstart", handleMouseDown)
-      document.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("keydown", handleKeyDown, true)
     }
   }, [handleMouseDown, handleKeyDown])
 

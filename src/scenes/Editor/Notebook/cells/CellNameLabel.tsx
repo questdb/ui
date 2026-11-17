@@ -6,6 +6,11 @@ import {
   NotebookRenameInput,
   notebookRenameFieldStyles,
 } from "../NotebookRenameInput"
+import {
+  claimEscape,
+  isEscape,
+  isEscapeClaimed,
+} from "../../../../utils/escapeKey"
 
 const Label = styled(ButtonBase)<{ $placeholder: boolean }>`
   ${notebookRenameFieldStyles}
@@ -93,9 +98,8 @@ export const CellNameLabel: React.FC<Props> = ({ name, onRename }) => {
           if (e.key === "Enter") {
             e.preventDefault()
             inputRef.current?.blur()
-          } else if (e.key === "Escape") {
-            e.preventDefault()
-            e.stopPropagation()
+          } else if (isEscape(e) && !isEscapeClaimed(e)) {
+            claimEscape(e)
             cancelRef.current = true
             inputRef.current?.blur()
           }

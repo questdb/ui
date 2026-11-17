@@ -35,7 +35,7 @@ const setup = async () => {
   view.cells[0].value = "select 1"
   const label = "Monitoring"
   const monitoring = {
-    target: { instanceKey: "instance", tableId: 9, kind: "table" as const },
+    target: { instanceKey: "instance", kind: "table" as const, name: "trades" },
     templateVersion: 1,
     initialFingerprint: monitoringFingerprint(label, view),
   }

@@ -27,6 +27,7 @@ import {
   type QueryActivityOrderKey,
   type QueryActivitySortDirection,
 } from "./queryActivity"
+import { claimEscape, isEscape, isEscapeClaimed } from "../../utils/escapeKey"
 
 type Props = {
   filter: string
@@ -161,7 +162,9 @@ export const QueryActivityToolbar = ({
             $padRight={!!filter}
             onChange={(event) => onFilterChange(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Escape" && filter) onFilterChange("")
+              if (!isEscape(event) || isEscapeClaimed(event) || !filter) return
+              claimEscape(event)
+              onFilterChange("")
             }}
             data-hook="query-activity-search"
           />

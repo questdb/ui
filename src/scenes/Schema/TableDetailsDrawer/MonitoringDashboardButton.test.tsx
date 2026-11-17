@@ -19,6 +19,7 @@ const opener = vi.hoisted(() => ({
     Promise<void>
   >(),
   busy: false,
+  unavailable: false,
 }))
 vi.mock("../../../hooks/useMonitoringDashboard", () => ({
   useMonitoringDashboard: () => opener,
@@ -49,9 +50,7 @@ describe("drawer monitoring dashboard action", () => {
       )
       await click("monitoring-dashboard")
       const [request, isCurrent, onOpened] = opener.open.mock.calls[0]
-      expect(request.name).toBe(name)
-      expect(request.target.kind).toBe(kind)
-      expect(request.target.tableId).toEqual(expect.any(Number))
+      expect(request.target).toMatchObject({ kind, name })
       if (kind === "matview")
         expect(request.refreshSchedule).toMatchObject({
           refresh_type: "timer",
@@ -98,6 +97,27 @@ describe("drawer monitoring dashboard action", () => {
       catalog()
       await mountDrawer(kind === "view" ? "trades_view" : "trades_lv", kind)
       expect(queryHook("monitoring-dashboard")).not.toBeInTheDocument()
+    },
+  )
+
+  it.each([
+    [{ busy: true, unavailable: false }, "true"],
+    [{ busy: false, unavailable: true }, "false"],
+  ])(
+    "disables the action for %o and reports aria-busy=%s",
+    async (state, ariaBusy) => {
+      catalog()
+      Object.assign(opener, state)
+      try {
+        await mountDrawer()
+        expect(hook("monitoring-dashboard")).toBeDisabled()
+        expect(hook("monitoring-dashboard")).toHaveAttribute(
+          "aria-busy",
+          ariaBusy,
+        )
+      } finally {
+        Object.assign(opener, { busy: false, unavailable: false })
+      }
     },
   )
 

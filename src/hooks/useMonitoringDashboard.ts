@@ -121,19 +121,24 @@ export const useMonitoringDashboard = () => {
             kind: "autoRun",
           }),
         )
-        if (summary.denied || summary.skipped || !summary.success) {
-          failures++
-          trackFailure(
-            summary.denied
-              ? "permission_denied"
-              : summary.skipped
-                ? "write_blocked"
-                : summary.cancelled
-                  ? "cancelled"
-                  : "query_error",
-            cell.id,
-          )
-        }
+        if (summary.success) continue
+        // Leaving the tab aborts the in-flight run. An interrupted run is not
+        // a failure: report it, but don't tell the user that a cell failed.
+        const interrupted =
+          summary.denied === undefined &&
+          summary.skipped === undefined &&
+          (summary.cancelled !== undefined || summary.unverified === true)
+        if (!interrupted) failures++
+        trackFailure(
+          summary.denied !== undefined
+            ? "permission_denied"
+            : summary.skipped !== undefined
+              ? "write_blocked"
+              : interrupted
+                ? "cancelled"
+                : "query_error",
+          cell.id,
+        )
       } catch (error) {
         trackFailure(notebookFailureReason(error), cell.id)
         if (
@@ -149,5 +154,7 @@ export const useMonitoringDashboard = () => {
         `${failures} monitoring cells could not run. Check their errors in the notebook.`,
       )
   }
-  return { open, busy: busy || tabsDisabled }
+  // `busy` means a dashboard is opening. `unavailable` means it can't be
+  // opened right now (a script owns the tabs), which is not progress.
+  return { open, busy, unavailable: tabsDisabled }
 }

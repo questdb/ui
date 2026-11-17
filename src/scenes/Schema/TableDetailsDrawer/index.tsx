@@ -435,6 +435,29 @@ export const TableDetailsDrawer = () => {
     (tableSource.state.status === "loading" && tableData === null) ||
     kindSourceLoading
   const tablesUnavailable = tableSource.state.status === "unavailable"
+
+  const openMonitoringDashboard = () => {
+    if (!tableData || (kind !== "table" && kind !== "matview")) return
+    void monitoringDashboard.open(
+      {
+        target: {
+          instanceKey:
+            telemetryConfig?.id || new URL(".", window.location.href).href,
+          kind,
+          name: tableName,
+        },
+        telemetryEnabled: telemetryConfig?.enabled === true,
+        walEnabled: tableData.walEnabled,
+        refreshSchedule: matViewData ?? undefined,
+      },
+      () => isCurrentTarget(tableName, kind),
+      () => {
+        if (leftPanelState.type !== null) {
+          updateLeftPanelState({ type: null, width: leftPanelState.width })
+        }
+      },
+    )
+  }
   const kindSourceUnavailable =
     (isView && viewSource.state.status === "unavailable") ||
     (isMatView && matViewSource.state.status === "unavailable") ||
@@ -873,33 +896,11 @@ export const TableDetailsDrawer = () => {
                 dashboardAction={
                   (kind === "table" || kind === "matview") && (
                     <MonitoringDashboardButton
-                      busy={monitoringDashboard.busy || tablesUnavailable}
-                      onClick={() => {
-                        void monitoringDashboard.open(
-                          {
-                            target: {
-                              instanceKey:
-                                telemetryConfig?.id ||
-                                new URL(".", window.location.href).href,
-                              tableId: tableData.id,
-                              kind,
-                            },
-                            name: tableName,
-                            telemetryEnabled: telemetryConfig?.enabled === true,
-                            walEnabled: tableData.walEnabled,
-                            refreshSchedule: matViewData ?? undefined,
-                          },
-                          () => isCurrentTarget(tableName, kind),
-                          () => {
-                            if (leftPanelState.type !== null) {
-                              updateLeftPanelState({
-                                type: null,
-                                width: leftPanelState.width,
-                              })
-                            }
-                          },
-                        )
-                      }}
+                      busy={monitoringDashboard.busy}
+                      disabled={
+                        monitoringDashboard.unavailable || tablesUnavailable
+                      }
+                      onClick={openMonitoringDashboard}
                     />
                   )
                 }

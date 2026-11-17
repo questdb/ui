@@ -41,7 +41,7 @@ export const BatchNotebookAction = () => {
           void transfer({
             queries: batch.queries,
             source: "script_results",
-            sourceBuffer: activeBuffer,
+            sourceBufferId: activeBuffer.id,
             compare: true,
           })
         }

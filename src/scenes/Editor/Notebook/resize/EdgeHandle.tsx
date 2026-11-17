@@ -140,18 +140,24 @@ const dispatchAxisDoubleClick = (
   }
 }
 
-// Signature matches react-grid-layout's handleComponent prop.
+// react-resizable wraps the handle in DraggableCore, which clones it to
+// inject onMouseDown/onMouseUp/onTouchEnd. Those must reach the DOM node or
+// mouse resizing never starts, so forward every prop we don't own.
+type NotebookEdgeHandleProps = React.HTMLAttributes<HTMLDivElement> & {
+  axis: string
+  handleRef: React.Ref<HTMLElement>
+}
+
 const NotebookEdgeHandle = ({
   axis,
   handleRef: ref,
-}: {
-  axis: string
-  handleRef: React.Ref<HTMLElement>
-}) => {
+  ...draggableProps
+}: NotebookEdgeHandleProps) => {
   const notebookId = useNotebookBufferId()
   const corner = isCorner(axis)
   return (
     <Handle
+      {...draggableProps}
       ref={ref as React.Ref<HTMLDivElement>}
       $axis={axis}
       className={`edge-handle edge-handle--${corner ? "corner" : "side"}`}
@@ -179,6 +185,7 @@ const NotebookEdgeHandle = ({
   )
 }
 
+// Signature matches react-grid-layout's handleComponent prop.
 export const renderEdgeHandle = (axis: string, ref: React.Ref<HTMLElement>) => (
   <NotebookEdgeHandle axis={axis} handleRef={ref} />
 )

@@ -195,7 +195,7 @@ describe("UI notebook lifecycle telemetry", () => {
     await db.buffers.update(41, {
       notebookViewState: view,
       monitoring: {
-        target: { instanceKey: "test", kind: "table", tableId: 7 },
+        target: { instanceKey: "test", kind: "table", name: "trades" },
         templateVersion: 1,
         initialFingerprint: monitoringFingerprint("Source", view),
       },

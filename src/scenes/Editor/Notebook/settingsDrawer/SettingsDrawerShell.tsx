@@ -4,6 +4,11 @@ import { XIcon } from "@phosphor-icons/react"
 import { Button, Spinner } from "../../../../components"
 import { prefersReducedMotion } from "../../../../utils/prefersReducedMotion"
 import { CellOverlayPortal } from "./CellOverlayContext"
+import {
+  claimEscape,
+  isEscape,
+  isEscapeClaimed,
+} from "../../../../utils/escapeKey"
 
 export type SettingsPresentation = "drawer" | "panel"
 
@@ -267,11 +272,13 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
 
   useEffect(() => {
     if (!open || !isDrawer) return
+    // An overlay over the cell: claims Escape in the capture phase, unless a
+    // menu or popover inside it is open and closes first.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return
+      if (!isEscape(e) || isEscapeClaimed(e)) return
       if (isRadixPopperOpen()) return
+      claimEscape(e)
       onDismiss("escape")
-      e.stopImmediatePropagation()
     }
     window.addEventListener("keydown", onKey, { capture: true })
     return () => window.removeEventListener("keydown", onKey, { capture: true })

@@ -44,10 +44,23 @@ export type SnapshotRefreshState = Pick<NotebookResultSnapshot, "refreshErrors">
 
 export const MAX_PERSISTED_PASSIVE_NOTEBOOKS = 10
 
+// Notebooks whose snapshots were deleted with them. A late write from the
+// unmounting provider (a pending chart frame flushed on teardown) would
+// otherwise recreate rows that nothing reads or deletes, and that take a slot
+// from a real notebook in pruneToRecentNotebooks.
+const deletedNotebooks = new Set<number>()
+
 export const saveCellSnapshot = async (
   snapshot: NotebookResultSnapshot,
 ): Promise<void> => {
-  await db.notebook_results.put(snapshot)
+  if (!deletedNotebooks.has(snapshot.bufferId)) {
+    await db.notebook_results.put(snapshot)
+    return
+  }
+  await db.transaction("rw", db.buffers, db.notebook_results, async () => {
+    if (await db.buffers.get(snapshot.bufferId))
+      await db.notebook_results.put(snapshot)
+  })
 }
 
 // Records the result tab the user switched to, so a release/re-hydrate cycle
@@ -84,9 +97,12 @@ export const deleteCellSnapshot = async (
   await db.notebook_results.delete([bufferId, cellId])
 }
 
+// For a deleted notebook: later saves for this id are dropped unless a
+// buffer with the id exists again.
 export const deleteNotebookSnapshots = async (
   bufferId: number,
 ): Promise<void> => {
+  deletedNotebooks.add(bufferId)
   await db.notebook_results.where("bufferId").equals(bufferId).delete()
 }
 

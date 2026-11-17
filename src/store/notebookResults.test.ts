@@ -147,6 +147,14 @@ describe("notebookResults", () => {
     expect(await loadSnapshotCellIds(1)).toHaveLength(0)
   })
 
+  it("drops a late save for a deleted notebook", async () => {
+    await saveCellSnapshot(snap(77, "c1", 100))
+    await deleteNotebookSnapshots(77)
+    // The unmounting provider flushes its pending frame after the delete.
+    await saveCellSnapshot(snap(77, "c1", 200))
+    expect(await loadSnapshotCellIds(77)).toEqual([])
+  })
+
   it("copies mapped snapshots under new ids without coupling them to the source", async () => {
     // Given two live source snapshots, one orphan, and full restore metadata
     const scriptResults: SingleQueryResult[] = [

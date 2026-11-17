@@ -16,6 +16,7 @@ import {
 } from "../utils/notebooks/notebookTransfer"
 
 const mocks = vi.hoisted(() => ({
+  buffers: [],
   addBuffer: vi.fn(),
   setActiveBuffer: vi.fn(),
   getById: vi.fn(),

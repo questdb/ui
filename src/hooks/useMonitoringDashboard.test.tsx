@@ -47,8 +47,7 @@ vi.mock("../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
 vi.mock("../components/Toast", () => ({ toast: { error: mocks.error } }))
 
 const request: MonitoringRequest = {
-  target: { instanceKey: "instance", tableId: 7, kind: "table" },
-  name: "trades",
+  target: { instanceKey: "instance", kind: "table", name: "trades" },
   telemetryEnabled: true,
   walEnabled: true,
 }
@@ -181,6 +180,30 @@ describe("monitoring dashboard opening lock", () => {
       "1 monitoring cells could not run. Check their errors in the notebook.",
     )
   })
+
+  it.each([
+    ["cancelled", { cancelled: "cancelled" as const }],
+    ["superseded", { unverified: true }],
+  ])(
+    "does not report a %s run (the user left the tab) as a failed cell",
+    async (_label, interruption) => {
+      mocks.runCell.mockResolvedValue({
+        ...success,
+        success: false,
+        queryCount: 0,
+        ...interruption,
+      })
+      const hook = mount()
+      await act(async () => {
+        await hook().open(request, () => true, vi.fn())
+      })
+      expect(mocks.error).not.toHaveBeenCalled()
+      expect(trackEvent).toHaveBeenCalledWith(
+        ConsoleEvent.MONITORING_DASHBOARD_FAILED,
+        expect.objectContaining({ reason: "cancelled", cellId: "health" }),
+      )
+    },
+  )
 })
 
 describe("monitoring telemetry", () => {

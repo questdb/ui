@@ -8,10 +8,12 @@ export type MonitoringRefreshSchedule = Pick<
 
 export type MonitoringKind = "table" | "matview"
 
+// The dashboard SQL addresses the table by name, so the name is its identity:
+// a renamed table gets a new dashboard, a re-created one reuses its dashboard.
 export type MonitoringTarget = {
   instanceKey: string
-  tableId: number
   kind: MonitoringKind
+  name: string
 }
 
 export type MonitoringSource = {

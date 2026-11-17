@@ -1,7 +1,8 @@
 import React from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import { NotebookIcon, ArrowClockwiseIcon } from "@phosphor-icons/react"
-import { Button } from "../../components"
+import { Button, Tooltip } from "../../components"
+import { BUTTON_HEIGHTS } from "../../components/Button"
 import {
   useNotebookTransfer,
   type NotebookTransferRequest,
@@ -16,16 +17,59 @@ const Group = styled.div`
   white-space: nowrap;
 `
 
+// One element for every density: the toolbar can cross a breakpoint while the
+// result pane lays out, and swapping elements would drop focus and clicks.
+const ActionButton = styled(Button)<{ $iconOnly: boolean }>`
+  ${({ $iconOnly }) =>
+    $iconOnly &&
+    css`
+      width: ${BUTTON_HEIGHTS.md};
+      min-width: ${BUTTON_HEIGHTS.md};
+      padding: 0;
+      justify-content: center;
+    `}
+`
+
 const NotebookGlyph = styled(NotebookIcon)`
   color: ${({ theme }) => theme.color.statusInfo};
 `
 
+export type TransferActionDensity = "full" | "compact" | "icon"
+
+// Result toolbar widths (px) from which each label still fits beside the other
+// toolbar controls without clipping them. Measured with the real styles and a
+// seven-digit row count; below `compact` only the icon is shown.
+const MIN_TOOLBAR_WIDTH = {
+  grid: { full: 820, compact: 680 },
+  chart: { full: 520, compact: 480 },
+}
+
+// Every width at which the density can change, ascending. The toolbar only
+// needs to re-render when its width crosses one of these.
+export const TRANSFER_ACTION_BREAKPOINTS = [
+  ...new Set(
+    Object.values(MIN_TOOLBAR_WIDTH).flatMap(({ full, compact }) => [
+      full,
+      compact,
+    ]),
+  ),
+].sort((a, b) => a - b)
+
+export const transferActionDensity = (
+  chart: boolean,
+  toolbarWidth: number,
+): TransferActionDensity => {
+  const { full, compact } = MIN_TOOLBAR_WIDTH[chart ? "chart" : "grid"]
+  if (toolbarWidth >= full) return "full"
+  return toolbarWidth >= compact ? "compact" : "icon"
+}
+
 export const NotebookTransferActions: React.FC<{
   request?: NotebookTransferRequest
   chart: boolean
-  compact: boolean
+  density: TransferActionDensity
   showMonitor: boolean
-}> = ({ request, chart, compact, showMonitor }) => {
+}> = ({ request, chart, density, showMonitor }) => {
   const { transfer, busy } = useNotebookTransfer()
   const label = showMonitor
     ? "Auto-refresh in a notebook"
@@ -37,36 +81,43 @@ export const NotebookTransferActions: React.FC<{
     : chart
       ? "Save chart"
       : "Add query"
+  const icon = showMonitor ? (
+    <ArrowClockwiseIcon size={18} />
+  ) : (
+    <NotebookGlyph size={18} />
+  )
+  const iconOnly = density === "icon"
 
   return (
     <Group>
-      <Button
-        variant="secondary"
-        disabled={!request || busy}
-        aria-label={label}
-        title={compact ? label : undefined}
-        leadingIcon={
-          showMonitor ? (
-            <ArrowClockwiseIcon size={18} />
-          ) : (
-            <NotebookGlyph size={18} />
-          )
-        }
-        data-hook={
-          showMonitor ? "result-auto-refresh-notebook" : "result-add-notebook"
-        }
-        onClick={() => {
-          if (!request || busy) return
-          void transfer({
-            ...request,
-            target: undefined,
-            monitor: showMonitor,
-            source: showMonitor ? "result_monitor" : request.source,
-          })
-        }}
+      <Tooltip
+        delay={350}
+        placement="bottom"
+        content={label}
+        open={density === "full" ? false : undefined}
       >
-        {compact ? compactLabel : label}
-      </Button>
+        <ActionButton
+          $iconOnly={iconOnly}
+          variant="secondary"
+          disabled={!request || busy}
+          aria-label={label}
+          leadingIcon={icon}
+          data-hook={
+            showMonitor ? "result-auto-refresh-notebook" : "result-add-notebook"
+          }
+          onClick={() => {
+            if (!request || busy) return
+            void transfer({
+              ...request,
+              target: undefined,
+              monitor: showMonitor,
+              source: showMonitor ? "result_monitor" : request.source,
+            })
+          }}
+        >
+          {iconOnly ? null : density === "compact" ? compactLabel : label}
+        </ActionButton>
+      </Tooltip>
     </Group>
   )
 }

@@ -36,14 +36,16 @@ import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
 export type NotebookTransferRequest = {
   queries: TransferQuery[]
   source: NotebookTransferSource
-  sourceBuffer?: Buffer
+  // The tab the transferred work came from: names the notebook and places it
+  // next to that tab.
+  sourceBufferId?: number
   target?: Buffer
   monitor?: boolean
   compare?: boolean
 }
 
 export const useNotebookTransfer = () => {
-  const { addBuffer, setActiveBuffer } = useEditor()
+  const { addBuffer, buffers, setActiveBuffer } = useEditor()
   const inFlight = useRef(false)
   const mounted = useRef(true)
   const [busy, setBusy] = useState(false)
@@ -81,11 +83,13 @@ export const useNotebookTransfer = () => {
     try {
       cells = createTransferCells(request.queries)
       const view = createTransferView(cells, request.compare)
-      const label =
-        `${request.sourceBuffer?.label ?? "Query"} – notebook`.slice(
-          0,
-          MAX_BUFFER_NAME_LENGTH,
-        )
+      const sourceBuffer = buffers.find(
+        (buffer) => buffer.id === request.sourceBufferId,
+      )
+      const label = `${sourceBuffer?.label ?? "Query"} – notebook`.slice(
+        0,
+        MAX_BUFFER_NAME_LENGTH,
+      )
       stage = "create"
       target =
         request.target ??
@@ -101,7 +105,7 @@ export const useNotebookTransfer = () => {
           },
           {
             activate: false,
-            afterBufferId: request.sourceBuffer?.id,
+            afterBufferId: sourceBuffer?.id,
             signal: abort.signal,
           },
         ))

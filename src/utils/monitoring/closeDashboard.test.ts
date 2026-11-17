@@ -37,7 +37,7 @@ const setup = async () => {
       position: 1,
       notebookViewState: view,
       monitoring: {
-        target: { instanceKey: "db", tableId: 1, kind: "table" },
+        target: { instanceKey: "db", kind: "table", name: "trades" },
         templateVersion: 1,
         initialFingerprint: monitoringFingerprint(label, view),
       },
@@ -93,6 +93,23 @@ describe("closing a monitoring dashboard", () => {
     live.readView.mockRejectedValue(new Error("unmounting"))
     expect(await closeUnmodifiedMonitoring(id, remove)).toBe(false)
     expect(remove).not.toHaveBeenCalled()
+  })
+
+  it("archives an unmodified dashboard that an AI chat is bound to", async () => {
+    const { id, remove } = await setup()
+    await db.ai_conversations.put({
+      id: "chat",
+      conversationName: "About trades",
+      createdAt: 1,
+      updatedAt: 1,
+      notebookBufferId: id,
+    } as never)
+    try {
+      expect(await closeUnmodifiedMonitoring(id, remove)).toBe(false)
+      expect(remove).not.toHaveBeenCalled()
+    } finally {
+      await db.ai_conversations.clear()
+    }
   })
 
   it("does not delete if another user action arrives during inspection", async () => {

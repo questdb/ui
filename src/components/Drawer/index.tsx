@@ -1,6 +1,8 @@
-import React, { useEffect } from "react"
+import React, { useRef } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
+import { useEscapeLayer } from "../../hooks/useEscapeLayer"
+import { EscapePriority, isTextFieldWithValue } from "../../utils/escapeKey"
 import styled, { css } from "styled-components"
 import { useSelector, useDispatch } from "react-redux"
 import { selectors, actions } from "../../store"
@@ -95,10 +97,9 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })`
   ${drawerContentStyles}
 `
 
-// A docked panel is not a dismissable overlay. In particular, Radix's
-// document-capture Escape listener would run before grids and editors can
-// consume the key. Keep the shared appearance, but let side-panel Escape
-// run last, after the focused content has handled it.
+// A docked panel is not a dismissable overlay: it is an ambient Escape layer
+// (utils/escapeKey.ts), closed only by an Escape that nothing inside or in
+// front of it claimed. Radix's capture-phase listener would run first.
 const SideDrawerContent = styled.div`
   ${drawerContentStyles}
 `
@@ -136,11 +137,6 @@ const TitleWrapper = styled.div`
   min-width: 0;
 `
 
-const isTextFieldWithValue = (target: EventTarget | null) =>
-  (target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement) &&
-  target.value.length > 0
-
 export const Drawer = ({
   mode = "modal",
   children,
@@ -173,21 +169,15 @@ export const Drawer = ({
 
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
 
-  useEffect(() => {
-    if (mode !== "side" || !open || !closeOnEscape || !onDismiss) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key !== "Escape" ||
-        event.defaultPrevented ||
-        isTextFieldWithValue(event.target)
-      )
-        return
-      event.preventDefault()
-      onDismiss()
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [mode, open, closeOnEscape, onDismiss])
+  const sideContentRef = useRef<HTMLDivElement>(null)
+  useEscapeLayer(mode === "side" && !!open && closeOnEscape && !!onDismiss, {
+    priority: EscapePriority.sidePanel,
+    scope: () => sideContentRef.current,
+    onEscape: () => {
+      onDismiss?.()
+      return true
+    },
+  })
 
   // A text field with content owns Escape: it clears itself first, and the
   // drawer only closes on the next press.
@@ -294,6 +284,7 @@ export const Drawer = ({
         )}
         {mode === "side" ? (
           <SideDrawerContent
+            ref={sideContentRef}
             role="dialog"
             aria-label={typeof title === "string" ? title : "Drawer"}
             data-hook={dataHook}

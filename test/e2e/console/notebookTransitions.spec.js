@@ -7,7 +7,7 @@ const SQL =
 const SQL_TWO =
   "-- a second result\nSELECT timestamp_sequence(0, 1000000) ts, x probe_two FROM long_sequence(4);"
 
-const rows = (query, count = 4) => ({
+const rows = (query, count = 4, totalRows = count) => ({
   query,
   columns: [
     { name: "ts", type: "TIMESTAMP" },
@@ -20,7 +20,7 @@ const rows = (query, count = 4) => ({
     new Date(i * 1000).toISOString(),
     i + 1,
   ]),
-  count,
+  count: totalRows,
   timings: { compiler: 10, authentication: 0, count: 0, execute: 20, fetch: 0 },
 })
 
@@ -30,6 +30,7 @@ const load = (
   chartDelayMs = 0,
   theme = "dark",
   rowCount = 4,
+  totalRows = rowCount,
 ) => {
   const executions = []
   cy.intercept("GET", "**/settings", {
@@ -62,7 +63,9 @@ const load = (
       req.alias = "probeQuery"
       req.reply({
         delay: req.query.src === "vis" ? chartDelayMs : 0,
-        body: /^CREATE/i.test(query) ? { ddl: "OK" } : rows(query, rowCount),
+        body: /^CREATE/i.test(query)
+          ? { ddl: "OK" }
+          : rows(query, rowCount, totalRows),
       })
     } else req.reply({ query, columns: [], dataset: [], count: 0 })
   })
@@ -465,6 +468,40 @@ describe("SQL work → notebook", () => {
       ])
     })
   })
+
+  // Result pane widths around the action's density breakpoints. The toolbar
+  // overflows to the left behind overflow:hidden, so a control that does not
+  // fit is clipped rather than wrapped.
+  for (const [viewport, density] of [
+    [632, "icon"],
+    [712, "icon"],
+    [850, "compact"],
+  ])
+    it(`fits every result toolbar control at a ${viewport}px viewport`, () => {
+      cy.viewport(viewport, 900)
+      // A seven-digit row count is the widest badge the toolbar must fit.
+      load(SQL, [], 0, "dark", 4, 1234567)
+      run()
+      cy.document().then((doc) => doc.fonts.ready)
+      cy.getByDataHook("result-add-notebook")
+        .should(density === "icon" ? "have.text" : "not.have.text", "")
+        .and("have.attr", "aria-label", "Add query to notebook")
+        .parent()
+        .parent()
+        .should(($actions) => {
+          const bounds = $actions[0].getBoundingClientRect()
+          for (const child of $actions[0].children) {
+            const rect = child.getBoundingClientRect()
+            expect(rect.left, child.className).to.be.gte(bounds.left - 0.5)
+            expect(rect.right, child.className).to.be.lte(bounds.right + 0.5)
+          }
+        })
+      // The Download label already wraps below ~555px without this action.
+      if (viewport >= 712)
+        cy.getByDataHook("download-parquet-button").should(($button) => {
+          expect($button[0].scrollHeight).to.be.lte($button[0].clientHeight)
+        })
+    })
 
   it("keeps both actions one-click in a narrow toolbar and shows only the relevant one", () => {
     cy.viewport(850, 900)

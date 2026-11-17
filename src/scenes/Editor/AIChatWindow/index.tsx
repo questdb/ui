@@ -519,6 +519,7 @@ const AIChatWindow: React.FC = () => {
 
       const normalizedSQL = normalizeQueryText(sql)
       const queryKey = createDetachedQueryKey(normalizedSQL)
+      const sourceBufferId = activeBuffer.id
       let queryId: QuestDB.QueryId | null = null
 
       questExecution.requestExecution({
@@ -566,6 +567,7 @@ const AIChatWindow: React.FC = () => {
             dispatch,
             executionRefs,
             releaseExecution: questExecution.releaseExecution,
+            sourceBufferId,
             onQueryStarted: (nextQueryId) => {
               queryId = nextQueryId
             },
@@ -580,6 +582,7 @@ const AIChatWindow: React.FC = () => {
       })
     },
     [
+      activeBuffer.id,
       conversation,
       executionRefs,
       notificationNamespaceKey,

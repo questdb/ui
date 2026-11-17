@@ -4,6 +4,7 @@ import { copyToClipboard } from "../../utils/copyToClipboard"
 import { toast } from "../Toast"
 import { formatCellValueForCopy } from "./inlineGridUtils"
 import type { CellValue } from "./types"
+import { claimEscape } from "../../utils/escapeKey"
 
 export type CellCoord = { row: number; col: number }
 
@@ -131,8 +132,8 @@ export const useGridKeyboardNav = (
 
       switch (e.key) {
         case "Escape":
-          e.preventDefault()
-          e.stopPropagation()
+          // Claimed, not stopped: outer Escape layers see it and skip it.
+          claimEscape(e)
           setFocusedCell(null)
           break
         case "ArrowUp":

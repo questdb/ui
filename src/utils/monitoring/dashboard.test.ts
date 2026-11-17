@@ -84,6 +84,29 @@ describe("monitoring templates", () => {
     },
   )
 
+  it.each([
+    ["table", "orders$"],
+    ["table", "a$$b"],
+    ["matview", "a$&b"],
+    ["matview", "x$`y"],
+  ] as const)(
+    "binds the %s name %s literally, without replacement patterns",
+    (kind, name) => {
+      const view = buildMonitoringDashboard({
+        name,
+        kind,
+        telemetryEnabled: true,
+        walEnabled: true,
+      })
+      for (const cell of view.cells.filter((c) => c.type !== "markdown")) {
+        expect(cell.value).toContain(`'${name}'`)
+        expect(cell.value).not.toContain("__TARGET")
+      }
+      // Markdown escaping only adds a backslash before the backtick.
+      expect(view.cells[0].value).toContain(` · ${name.replace("`", "\\`")}\n`)
+    },
+  )
+
   it.each(["table", "matview"] as const)(
     "keeps the %s panels aligned with no overlapping rows",
     (kind) => {
@@ -153,7 +176,7 @@ describe("monitoring templates", () => {
       position: 0,
       notebookViewState: view,
       monitoring: {
-        target: { instanceKey: "db", tableId: 1, kind: "table" },
+        target: { instanceKey: "db", kind: "table", name: "trades" },
         templateVersion: 1,
         initialFingerprint: monitoringFingerprint("trades · monitoring", view),
       },

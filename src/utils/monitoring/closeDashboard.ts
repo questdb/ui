@@ -1,4 +1,5 @@
 import { bufferStore } from "../../store/buffers"
+import { aiConversationStore } from "../../store/aiConversations"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 import { getController } from "../notebooks/notebookController"
 import { enqueueBufferTask } from "../notebooks/notebookBufferQueue"
@@ -23,9 +24,12 @@ export const closeUnmodifiedMonitoring = async (
       if (!view || sequence !== getBufferActionSeq(id)) return false
       // Column widths, ordering and frozen columns live outside the notebook
       // document, but are still user customization that must survive closing.
+      // So is an AI chat about this dashboard: it must keep a restorable
+      // notebook to point at.
       if (
         isUnmodifiedMonitoring(current, view) &&
-        !hasNotebookBufferLayouts(id)
+        !hasNotebookBufferLayouts(id) &&
+        !(await aiConversationStore.hasNotebookConversation(id))
       ) {
         await remove()
         return true

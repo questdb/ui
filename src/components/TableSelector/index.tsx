@@ -12,6 +12,7 @@ import {
 } from "../VirtualizedTree"
 import { IconButton } from "../IconButton"
 import { floatingSurfaceStyles } from "../overlayStyles"
+import { claimEscape, isEscape, isEscapeClaimed } from "../../utils/escapeKey"
 
 export type TableOption = {
   label: string
@@ -270,8 +271,8 @@ export const TableSelector = ({
           handleSelect(item)
           inputRef.current?.blur()
         }
-      } else if (e.key === "Escape") {
-        e.preventDefault()
+      } else if (isEscape(e) && !isEscapeClaimed(e)) {
+        claimEscape(e)
         if (query) {
           setQuery("")
           setFocusedIndex(0)
@@ -298,8 +299,8 @@ export const TableSelector = ({
         handleSelect(item)
         return
       }
-      if (e.key === "Escape") {
-        e.preventDefault()
+      if (isEscape(e) && !isEscapeClaimed(e)) {
+        claimEscape(e)
         setOpen(false)
         setQuery("")
         setFocusedIndex(null)

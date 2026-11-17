@@ -188,6 +188,19 @@ const defaultValues = {
 
 const EditorContext = createContext<EditorContext>(defaultValues)
 
+// The editor context value changes on every buffer write (each keystroke in the
+// SQL editor). Layout-level consumers that only need to know which tab is
+// active read this narrow, memoized summary instead.
+export type ActiveBufferSummary = {
+  id: number | undefined
+  isNotebook: boolean
+}
+
+const ActiveBufferSummaryContext = createContext<ActiveBufferSummary>({
+  id: undefined,
+  isNotebook: false,
+})
+
 export const EditorProvider: React.FC = ({ children }) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
@@ -212,6 +225,11 @@ export const EditorProvider: React.FC = ({ children }) => {
   )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
+  const activeIsNotebook = !!activeBuffer.notebookViewState
+  const activeBufferSummary = useMemo<ActiveBufferSummary>(
+    () => ({ id: activeBuffer.id, isNotebook: activeIsNotebook }),
+    [activeBuffer.id, activeIsNotebook],
+  )
   const activeBufferRef = useRef(activeBuffer)
   const searchUpdateTimeoutRef = useRef<number | null>(null)
   const queryParamProcessedRef = useRef(false)
@@ -1031,9 +1049,14 @@ export const EditorProvider: React.FC = ({ children }) => {
         },
       }}
     >
-      {children}
+      <ActiveBufferSummaryContext.Provider value={activeBufferSummary}>
+        {children}
+      </ActiveBufferSummaryContext.Provider>
     </EditorContext.Provider>
   )
 }
 
 export const useEditor = () => useContext(EditorContext)
+
+export const useActiveBufferSummary = () =>
+  useContext(ActiveBufferSummaryContext)

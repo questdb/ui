@@ -11,6 +11,11 @@ import type { ConversationMeta } from "../../../store/db"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { IconButton } from "../../../components"
+import {
+  claimEscape,
+  isEscape,
+  isEscapeClaimed,
+} from "../../../utils/escapeKey"
 
 const Container = styled.div<{ $disabled?: boolean }>`
   display: flex;
@@ -177,7 +182,8 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
   const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       await handleSave()
-    } else if (e.key === "Escape") {
+    } else if (isEscape(e) && !isEscapeClaimed(e)) {
+      claimEscape(e)
       setEditValue(conversation.conversationName)
       setIsEditing(false)
     }

@@ -27,7 +27,7 @@ import { useSettings, useSearch } from "../../providers"
 import { SearchPanel } from "../Search"
 import { LeftPanelType } from "../../providers/LocalStorageProvider/types"
 import { AIStatusIndicator } from "../../components/AIStatusIndicator"
-import { useEditor } from "../../providers/EditorProvider"
+import { useActiveBufferSummary } from "../../providers/EditorProvider"
 
 const Root = styled.div`
   display: flex;
@@ -122,8 +122,14 @@ const Console = () => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const { consoleConfig } = useSettings()
-  const { activeBuffer } = useEditor()
-  const isNotebook = !!activeBuffer.notebookViewState
+  const resultSource = useSelector(selectors.query.getResultSource)
+  const activeBufferSummary = useActiveBufferSummary()
+  // A notebook uses the full workspace, so the SQL editor's result stays
+  // mounted but hidden for the return trip. A result produced while the
+  // notebook is active (e.g. an AI chat run) belongs to it and is shown.
+  const hideResult =
+    activeBufferSummary.isNotebook &&
+    resultSource?.bufferId !== activeBufferSummary.id
   const { isSearchPanelOpen, setSearchPanelOpen, searchPanelRef } = useSearch()
 
   const isDataSourcesPanelOpen =
@@ -245,7 +251,7 @@ const Console = () => {
                 </Tooltip>
                 <SidebarSpacer />
                 {result &&
-                  !isNotebook &&
+                  !hideResult &&
                   viewModes.map(({ icon, mode, tooltipText }) => (
                     <Tooltip key={mode} placement="right" content={tooltipText}>
                       <Navigation
@@ -360,11 +366,9 @@ const Console = () => {
 
                 <Allotment.Pane
                   minSize={0}
-                  // Keep the SQL result and chart mounted for the return trip,
-                  // but let the notebook use the full workspace.
                   visible={
                     activeBottomPanel !== "zeroState" &&
-                    !(isNotebook && activeBottomPanel === "result")
+                    !(hideResult && activeBottomPanel === "result")
                   }
                 >
                   <Bottom>
