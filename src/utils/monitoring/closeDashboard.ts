@@ -38,7 +38,10 @@ export const closeUnmodifiedMonitoring = async (
         await bufferStore.update(id, {
           notebookViewState: buildPersistPayload(
             view.cells,
-            view.focusedCellId ?? null,
+            // The live view carries no focus; keep the stored one.
+            view.focusedCellId ??
+              current.notebookViewState?.focusedCellId ??
+              null,
             view.maximizedCellId ?? null,
             view.settings,
           ),

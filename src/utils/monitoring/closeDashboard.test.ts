@@ -121,4 +121,24 @@ describe("closing a monitoring dashboard", () => {
     expect(await closeUnmodifiedMonitoring(id, remove)).toBe(false)
     expect(remove).not.toHaveBeenCalled()
   })
+
+  it("keeps the focused cell when persisting a live edit on close", async () => {
+    const { id, view, remove } = await setup()
+    const focused = view.cells[1].id
+    await db.buffers.update(id, {
+      notebookViewState: { ...view, focusedCellId: focused },
+    })
+    // The live controller's view has no focusedCellId.
+    live.readView.mockResolvedValue({
+      cells: view.cells.map((cell, index) =>
+        index === 1 ? { ...cell, value: "select 2" } : cell,
+      ),
+      settings: view.settings,
+      maximizedCellId: null,
+    })
+    expect(await closeUnmodifiedMonitoring(id, remove)).toBe(false)
+    const stored = await db.buffers.get(id)
+    expect(stored?.notebookViewState?.cells[1].value).toBe("select 2")
+    expect(stored?.notebookViewState?.focusedCellId).toBe(focused)
+  })
 })
