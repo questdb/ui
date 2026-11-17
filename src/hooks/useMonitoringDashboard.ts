@@ -5,12 +5,10 @@ import {
   openMonitoringDashboard,
   type MonitoringRequest,
 } from "../utils/monitoring/openDashboard"
-import { withBoundNotebook } from "../utils/notebooks/notebookController"
 import { authSessionState } from "../modules/OAuth2/authSessionState"
 import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
-import { bufferStore, type Buffer } from "../store/buffers"
-import { NotebookToolError } from "../utils/notebooks/notebookToolError"
+import { bufferStore } from "../store/buffers"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
 
 export const useMonitoringDashboard = () => {
@@ -34,17 +32,15 @@ export const useMonitoringDashboard = () => {
     inFlight.current = true
     setBusy(true)
     const session = authSessionState.capture()
-    let created: Buffer | undefined
     let notebookId: number | undefined
     let stage = "create_or_restore"
-    const trackFailure = (reason: string, cellId?: string) => {
+    const trackFailure = (reason: string) => {
       if (!session.isCurrent()) return
       void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_FAILED, {
         notebookId,
         kind: request.target.kind,
         stage,
         reason,
-        ...(cellId ? { cellId, mode: "grid" } : {}),
       })
     }
     try {
@@ -62,7 +58,6 @@ export const useMonitoringDashboard = () => {
           source: "table_monitoring",
           notebookId,
         })
-        created = buffer
       }
       stage = "activate"
       if (isCurrentTarget()) {
@@ -89,7 +84,6 @@ export const useMonitoringDashboard = () => {
       } else {
         // Navigation cancellation is distinguishable from a technical error.
         trackFailure("target_changed")
-        return
       }
     } catch (error) {
       trackFailure(notebookFailureReason(error))
@@ -104,56 +98,10 @@ export const useMonitoringDashboard = () => {
       inFlight.current = false
       if (mounted.current) setBusy(false)
     }
-
-    // Opening is complete. Initial queries must not keep the action locked;
-    // subsequent clicks can reuse this notebook while its cells are running.
-    if (created?.id === undefined) return
-    stage = "initial_query"
-    // Charts bootstrap on mount. Grids run through the same read-only
-    // auto-run gate as imports; never execute user-edited SQL on reopen.
-    let failures = 0
-    for (const cell of created.notebookViewState?.cells ?? []) {
-      if (!session.isCurrent()) break
-      if (cell.type === "markdown" || cell.mode === "draw") continue
-      try {
-        const summary = await withBoundNotebook(created.id, (controller) =>
-          controller.runCell(cell.id, undefined, undefined, {
-            kind: "autoRun",
-          }),
-        )
-        if (summary.success) continue
-        // Leaving the tab aborts the in-flight run. An interrupted run is not
-        // a failure: report it, but don't tell the user that a cell failed.
-        const interrupted =
-          summary.denied === undefined &&
-          summary.skipped === undefined &&
-          (summary.cancelled !== undefined || summary.unverified === true)
-        if (!interrupted) failures++
-        trackFailure(
-          summary.denied !== undefined
-            ? "permission_denied"
-            : summary.skipped !== undefined
-              ? "write_blocked"
-              : interrupted
-                ? "cancelled"
-                : "query_error",
-          cell.id,
-        )
-      } catch (error) {
-        trackFailure(notebookFailureReason(error), cell.id)
-        if (
-          error instanceof NotebookToolError &&
-          ["deleted", "archived", "unknown_buffer"].includes(error.code)
-        )
-          return
-        failures++
-      }
-    }
-    if (failures && session.isCurrent())
-      toast.error(
-        `${failures} monitoring cells could not run. Check their errors in the notebook.`,
-      )
+    // The mounted dashboard runs its never-run grid cells itself
+    // (useMonitoringAutoRun), however it was opened.
   }
+
   // `busy` means a dashboard is opening. `unavailable` means it can't be
   // opened right now (a script owns the tabs), which is not progress.
   return { open, busy, unavailable: tabsDisabled }

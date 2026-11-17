@@ -65,6 +65,8 @@ export const trackNotebookExecution = (payload: {
   // successful query is still success. No query text or result rows are sent.
   mode: "grid" | "chart"
   trigger: "run" | "manual_refresh" | "initial_load" | "auto_run"
+  // Which feature started an auto-run, when it is not an agent or an import.
+  source?: "monitoring"
   outcome: NotebookExecutionOutcome
   durationMs: number
 }): void => {

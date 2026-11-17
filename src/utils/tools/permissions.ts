@@ -168,7 +168,8 @@ export const hasWriteStatement = (stmts: ClassifiedStatement[]): boolean =>
 // strategy — dispatch never classifies separately.
 export type RunCellGate =
   | { kind: "explicit"; permissions: Permissions }
-  | { kind: "autoRun" }
+  // `source` labels telemetry only; the gate is the same for every auto-run.
+  | { kind: "autoRun"; source?: "monitoring" }
 
 export const checkStatementsForRunQuery = (
   stmts: ClassifiedStatement[],

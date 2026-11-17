@@ -9,10 +9,6 @@ import type {
   MonitoringOpenResult,
   MonitoringRequest,
 } from "../utils/monitoring/openDashboard"
-import type {
-  NotebookController,
-  RunCellSummary,
-} from "../utils/notebooks/notebookController"
 
 const mocks = vi.hoisted(() => ({
   editor: {
@@ -23,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   },
   openDashboard: vi.fn(),
   getById: vi.fn(),
-  runCell: vi.fn(),
   error: vi.fn(),
 }))
 vi.mock("../providers/EditorProvider", () => ({
@@ -34,14 +29,6 @@ vi.mock("../utils/monitoring/openDashboard", () => ({
 }))
 vi.mock("../store/buffers", () => ({
   bufferStore: { getById: mocks.getById },
-}))
-vi.mock("../utils/notebooks/notebookController", () => ({
-  withBoundNotebook: (
-    _id: number,
-    run: (
-      controller: Pick<NotebookController, "runCell">,
-    ) => Promise<RunCellSummary>,
-  ) => run({ runCell: mocks.runCell }),
 }))
 vi.mock("../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
 vi.mock("../components/Toast", () => ({ toast: { error: mocks.error } }))
@@ -60,7 +47,6 @@ const buffer: Buffer = {
     cells: [{ id: "health", position: 0, value: "select 1" }],
   },
 }
-const success: RunCellSummary = { success: true, queryCount: 1, results: [] }
 const deferred = <T,>() => {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => {
@@ -88,18 +74,15 @@ beforeEach(() => {
   mocks.openDashboard
     .mockResolvedValue({ buffer, outcome: "reused" })
     .mockResolvedValueOnce({ buffer, outcome: "created" })
-  mocks.runCell.mockResolvedValue(success)
 })
 afterEach(() => {
   act(() => renderer?.unmount())
 })
 
 describe("monitoring dashboard opening lock", () => {
-  it("unlocks after activation so the notebook can be reopened while its first query is pending", async () => {
+  it("ignores repeated clicks until the dashboard is activated, then unlocks", async () => {
     const activation = deferred<void>()
-    const query = deferred<RunCellSummary>()
     mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
-    mocks.runCell.mockReturnValueOnce(query.promise)
     const hook = mount()
     const onOpened = vi.fn()
     let initial!: Promise<void>
@@ -109,40 +92,34 @@ describe("monitoring dashboard opening lock", () => {
     })
     expect(hook().busy).toBe(true)
     expect(mocks.openDashboard).toHaveBeenCalledTimes(1)
-    expect(mocks.runCell).not.toHaveBeenCalled()
 
     await act(async () => {
       activation.resolve()
-      await activation.promise
+      await initial
     })
     expect(onOpened).toHaveBeenCalledTimes(1)
     expect(hook().busy).toBe(false)
-    expect(mocks.runCell).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       await hook().open(request, () => true, onOpened)
     })
     expect(onOpened).toHaveBeenCalledTimes(2)
     expect(mocks.openDashboard).toHaveBeenCalledTimes(2)
-    expect(mocks.runCell).toHaveBeenCalledTimes(1)
-    await act(async () => {
-      query.resolve(success)
-      await initial
-    })
-    expect(mocks.error).not.toHaveBeenCalled()
   })
 
-  it("does not unlock a later opening when an earlier query finishes", async () => {
-    const query = deferred<RunCellSummary>()
-    mocks.runCell.mockReturnValueOnce(query.promise)
+  it("does not unlock a later opening when an earlier one finishes", async () => {
+    const activation = deferred<void>()
+    mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
     const hook = mount()
     let initial!: Promise<void>
-    await act(async () => {
+    act(() => {
       initial = hook().open(request, () => true, vi.fn())
-      await Promise.resolve()
     })
-    expect(hook().busy).toBe(false)
-
+    expect(hook().busy).toBe(true)
+    await act(async () => {
+      activation.resolve()
+      await initial
+    })
     const reopening = deferred<MonitoringOpenResult>()
     mocks.openDashboard.mockReturnValueOnce(reopening.promise)
     let next!: Promise<void>
@@ -151,59 +128,11 @@ describe("monitoring dashboard opening lock", () => {
     })
     expect(hook().busy).toBe(true)
     await act(async () => {
-      query.resolve(success)
-      await initial
-    })
-    expect(hook().busy).toBe(true)
-    await act(async () => {
       reopening.resolve({ buffer, outcome: "reused" })
       await next
     })
     expect(hook().busy).toBe(false)
   })
-
-  it("still reports initial query failures after releasing the opening lock", async () => {
-    const query = deferred<RunCellSummary>()
-    mocks.runCell.mockReturnValueOnce(query.promise)
-    const hook = mount()
-    let initial!: Promise<void>
-    await act(async () => {
-      initial = hook().open(request, () => true, vi.fn())
-      await Promise.resolve()
-    })
-    expect(hook().busy).toBe(false)
-    await act(async () => {
-      query.resolve({ ...success, success: false })
-      await initial
-    })
-    expect(mocks.error).toHaveBeenCalledWith(
-      "1 monitoring cells could not run. Check their errors in the notebook.",
-    )
-  })
-
-  it.each([
-    ["cancelled", { cancelled: "cancelled" as const }],
-    ["superseded", { unverified: true }],
-  ])(
-    "does not report a %s run (the user left the tab) as a failed cell",
-    async (_label, interruption) => {
-      mocks.runCell.mockResolvedValue({
-        ...success,
-        success: false,
-        queryCount: 0,
-        ...interruption,
-      })
-      const hook = mount()
-      await act(async () => {
-        await hook().open(request, () => true, vi.fn())
-      })
-      expect(mocks.error).not.toHaveBeenCalled()
-      expect(trackEvent).toHaveBeenCalledWith(
-        ConsoleEvent.MONITORING_DASHBOARD_FAILED,
-        expect.objectContaining({ reason: "cancelled", cellId: "health" }),
-      )
-    },
-  )
 })
 
 describe("monitoring telemetry", () => {
@@ -250,7 +179,7 @@ describe("monitoring telemetry", () => {
     )
   })
 
-  it("separates activation failure from successful creation and does not run cells", async () => {
+  it("separates activation failure from successful creation", async () => {
     mocks.editor.setActiveBuffer.mockRejectedValue(
       new DOMException("sensitive detail", "QuotaExceededError"),
     )
@@ -271,7 +200,6 @@ describe("monitoring telemetry", () => {
       ConsoleEvent.MONITORING_DASHBOARD_OPEN,
       expect.anything(),
     )
-    expect(mocks.runCell).not.toHaveBeenCalled()
   })
 
   it("does not count a changed drawer target as an opened dashboard", async () => {
@@ -288,28 +216,5 @@ describe("monitoring telemetry", () => {
       expect.anything(),
     )
     expect(mocks.editor.setActiveBuffer).not.toHaveBeenCalled()
-  })
-
-  it("records the failed grid cell with a safe reason code", async () => {
-    mocks.runCell.mockResolvedValue({
-      ...success,
-      success: false,
-      denied: "private table",
-    })
-    const hook = mount()
-    await act(async () => {
-      await hook().open(request, () => true, vi.fn())
-    })
-    expect(trackEvent).toHaveBeenCalledWith(
-      ConsoleEvent.MONITORING_DASHBOARD_FAILED,
-      {
-        notebookId: buffer.id,
-        kind: "table",
-        stage: "initial_query",
-        reason: "permission_denied",
-        cellId: "health",
-        mode: "grid",
-      },
-    )
   })
 })

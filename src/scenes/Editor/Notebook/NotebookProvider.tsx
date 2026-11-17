@@ -779,6 +779,9 @@ export const NotebookProvider: React.FC<{
               cellId,
               mode: "grid",
               trigger: gate?.kind === "autoRun" ? "auto_run" : "run",
+              ...(gate?.kind === "autoRun" && gate.source
+                ? { source: gate.source }
+                : {}),
               outcome: dismissed ? "cancelled" : notebookRunOutcome(outcome),
               durationMs: performance.now() - startedAt,
             })
@@ -800,6 +803,9 @@ export const NotebookProvider: React.FC<{
                 cellId,
                 mode: "grid",
                 trigger: gate?.kind === "autoRun" ? "auto_run" : "run",
+                ...(gate?.kind === "autoRun" && gate.source
+                  ? { source: gate.source }
+                  : {}),
                 outcome: "error",
                 durationMs: performance.now() - startedAt,
               })
