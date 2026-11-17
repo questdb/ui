@@ -19,6 +19,8 @@ import rootReducer from "../../store/reducers"
 import queryActions from "../../store/Query/actions"
 import { Type } from "../../utils/questdb/types"
 import Result from "./index"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 const storage = vi.hoisted(() => {
   const { jsdom } = globalThis as typeof globalThis & {
@@ -35,10 +37,18 @@ vi.mock("../Editor/Monaco/query-in-notification", () => ({
   QueryInNotification: () => null,
 }))
 const renders = vi.hoisted(() => ({ result: 0 }))
+const chart = vi.hoisted(() => ({
+  onTransferChange: undefined as ((value: unknown) => void) | undefined,
+}))
 // ResultChart is always mounted by Result, so its renders count Result's.
 vi.mock("./ResultChart", () => ({
-  ResultChart: () => {
+  ResultChart: ({
+    onTransferChange,
+  }: {
+    onTransferChange?: (value: unknown) => void
+  }) => {
     renders.result++
+    chart.onTransferChange = onTransferChange
     return null
   },
 }))
@@ -78,7 +88,7 @@ const resultFor = (query: string) => ({
   timings: { compiler: 0, authentication: 0, count: 0, execute: 0, fetch: 0 },
 })
 
-const mountResult = () => {
+const mountResult = (viewMode: "grid" | "chart" = "grid") => {
   const store = createStore(rootReducer)
   render(
     <ThemeProvider theme={darkTheme}>
@@ -93,7 +103,7 @@ const mountResult = () => {
                 commitHash: "test",
               }}
             >
-              <Result viewMode="grid" />
+              <Result viewMode={viewMode} />
               <ToastContainer />
             </QuestContext.Provider>
           </LocalStorageProvider>
@@ -212,5 +222,63 @@ describe("result toolbar notebook action", () => {
     resize(600)
     expect(action()).toHaveTextContent("")
     expect(action()).toHaveAccessibleName("Add query to notebook")
+  })
+})
+
+describe("result notebook actions", () => {
+  const action = (hook: string) =>
+    document.querySelector(`[data-hook="${hook}"]`)
+
+  it("offers auto-refresh only for a query that has run repeatedly", () => {
+    const store = mountResult()
+    const repeated = "select x from long_sequence(10)"
+    act(() => {
+      store.dispatch(queryActions.recordQueryExecution(repeated))
+      store.dispatch(queryActions.setResult(resultFor(repeated), 1))
+    })
+    expect(action("result-add-notebook")).toBeInTheDocument()
+    expect(action("result-auto-refresh-notebook")).not.toBeInTheDocument()
+
+    act(() => {
+      store.dispatch(queryActions.recordQueryExecution(repeated))
+      store.dispatch(queryActions.setResult(resultFor(repeated), 1))
+    })
+    expect(action("result-auto-refresh-notebook")).toBeInTheDocument()
+    expect(action("result-add-notebook")).not.toBeInTheDocument()
+
+    act(() => {
+      store.dispatch(queryActions.recordQueryExecution("select 2"))
+      store.dispatch(queryActions.setResult(resultFor("select 2"), 1))
+    })
+    expect(action("result-add-notebook")).toBeInTheDocument()
+    expect(action("result-auto-refresh-notebook")).not.toBeInTheDocument()
+  })
+
+  it("enables Save chart only once the chart reports the frame of this result", () => {
+    const store = mountResult("chart")
+    const shown = resultFor("select x from long_sequence(10)")
+    act(() => {
+      store.dispatch(queryActions.setResult(shown, 1))
+    })
+    expect(action("result-add-notebook")).toBeDisabled()
+
+    const frame = { query: { sql: shown.query } }
+    act(() => chart.onTransferChange?.({ ...frame, seed: resultFor("old") }))
+    expect(action("result-add-notebook")).toBeDisabled()
+
+    const current = store.getState().query.result
+    act(() => chart.onTransferChange?.({ ...frame, seed: current }))
+    expect(action("result-add-notebook")).toBeEnabled()
+  })
+
+  it("re-runs the query whose result is displayed", async () => {
+    const publish = vi.spyOn(eventBus, "publish")
+    const store = mountResult()
+    const shown = "select x from long_sequence(10)"
+    act(() => {
+      store.dispatch(queryActions.setResult(resultFor(shown), 1))
+    })
+    await userEvent.click(screen.getByRole("button", { name: "Re-run query" }))
+    expect(publish).toHaveBeenCalledWith(EventType.MSG_QUERY_EXEC, { q: shown })
   })
 })

@@ -1,7 +1,7 @@
 /// <reference types="cypress" />
 
-// Runs every statement of the generated monitoring dashboards against the real
-// QuestDB, including the history panels. The console builds those only when
+// Opens the generated monitoring dashboards and runs every statement against
+// the real QuestDB, including the history panels. The console builds those only when
 // telemetry is enabled, so the spec reports it as enabled. WAL telemetry is
 // recorded regardless of that setting; materialized view telemetry is not, so
 // without it those statements must fail only for its missing table.
@@ -103,7 +103,7 @@ describe("monitoring dashboards on a real server", () => {
     [TABLE, "table"],
     [MATVIEW, "matview"],
   ])
-    it(`runs every panel of the ${kind} dashboard without an error`, () => {
+    it(`opens the ${kind} dashboard and runs every panel without an error`, () => {
       if (kind === "table") cy.expandTables()
       else cy.expandMatViews()
       cy.openDetailsDrawer(name, kind)
@@ -114,6 +114,18 @@ describe("monitoring dashboards on a real server", () => {
         "have.attr",
         "active",
       )
+      // What the user sees first: the live health panel runs and shows the row.
+      cy.contains("[data-notebook-cell]", /Live (table|view) health/, {
+        timeout: 20000,
+      }).within(() => {
+        cy.getByDataHook("success-notification", { timeout: 20000 }).should(
+          "be.visible",
+        )
+        cy.getByDataHook("error-notification").should("not.exist")
+        cy.contains(name).should("be.visible")
+      })
+
+      // Every other panel's SQL, including those not scrolled into view.
 
       readBuffers().then((buffers) => {
         const dashboard = buffers.find(

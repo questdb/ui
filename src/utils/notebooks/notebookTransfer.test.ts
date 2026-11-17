@@ -120,6 +120,15 @@ describe("notebook transfer", () => {
     expect(cell.mode).toBeUndefined()
   })
 
+  it("focuses the first transferred cell, where the auto-refresh menu opens", () => {
+    const cells = createTransferCells([
+      { sql: "select 1" },
+      { sql: "select 2" },
+    ])
+    for (const compare of [false, true])
+      expect(createTransferView(cells, compare).focusedCellId).toBe(cells[0].id)
+  })
+
   it("appends below the existing layout without changing cells, variables or refresh defaults", () => {
     const existing = createCell(0, "select 7")
     const layout = [{ i: existing.id, x: 6, y: 20, w: 6, h: 16 }]

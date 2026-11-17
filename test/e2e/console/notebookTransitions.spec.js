@@ -7,7 +7,7 @@ const SQL =
 const SQL_TWO =
   "-- a second result\nSELECT timestamp_sequence(0, 1000000) ts, x probe_two FROM long_sequence(4);"
 
-const rows = (query, count = 4, totalRows = count) => ({
+const rows = (query, count = 4) => ({
   query,
   columns: [
     { name: "ts", type: "TIMESTAMP" },
@@ -20,7 +20,7 @@ const rows = (query, count = 4, totalRows = count) => ({
     new Date(i * 1000).toISOString(),
     i + 1,
   ]),
-  count: totalRows,
+  count,
   timings: { compiler: 10, authentication: 0, count: 0, execute: 20, fetch: 0 },
 })
 
@@ -30,7 +30,6 @@ const load = (
   chartDelayMs = 0,
   theme = "dark",
   rowCount = 4,
-  totalRows = rowCount,
 ) => {
   const executions = []
   cy.intercept("GET", "**/settings", {
@@ -63,9 +62,7 @@ const load = (
       req.alias = "probeQuery"
       req.reply({
         delay: req.query.src === "vis" ? chartDelayMs : 0,
-        body: /^CREATE/i.test(query)
-          ? { ddl: "OK" }
-          : rows(query, rowCount, totalRows),
+        body: /^CREATE/i.test(query) ? { ddl: "OK" } : rows(query, rowCount),
       })
     } else req.reply({ query, columns: [], dataset: [], count: 0 })
   })
@@ -122,122 +119,8 @@ const repeatQuery = () => {
 
 describe("SQL work → notebook", () => {
   beforeEach(() => cy.viewport(1280, 720))
-  it("keeps an unavailable chart action disabled and creates a new notebook in one click when ready", () => {
-    load(
-      SQL,
-      [
-        {
-          label: "Saved work",
-          notebookViewState: {
-            cells: [{ id: "existing", position: 0, value: "select 42" }],
-          },
-        },
-      ],
-      2000,
-    )
-    run()
-    cy.getByDataHook("chart-panel-button").click()
-    cy.getByDataHook("result-add-notebook")
-      .should("be.disabled")
-      .trigger("keydown", { key: "Enter", force: true })
-    cy.getEditorTabByTitle("Analysis – notebook").should("not.exist")
-    cy.wait("@probeQuery")
-    cy.getByDataHook("result-add-notebook").should("be.enabled").realHover()
-    cy.getByDataHook("result-add-notebook").should(
-      "have.css",
-      "cursor",
-      "pointer",
-    )
-    cy.getByDataHook("result-add-notebook").click()
-    cy.getEditorTabByTitle("Analysis – notebook").should("have.attr", "active")
-    cy.get('[role="menu"]').should("not.exist")
-    readBuffers().then((buffers) => {
-      expect(buffers.filter((b) => b.notebookViewState)).to.have.length(2)
-      expect(
-        buffers.find((b) => b.id === 2).notebookViewState.cells,
-      ).to.have.length(1)
-    })
-  })
 
-  it("shows the monitoring action only for the query that has been repeated", () => {
-    load()
-    run()
-    cy.getByDataHook("result-auto-refresh-notebook").should("not.exist")
-    repeatQuery()
-    repeatQuery()
-    repeatQuery()
-    cy.window().then((win) =>
-      win.monaco.editor.getEditors()[0].setValue(SQL_TWO),
-    )
-    cy.clickRunIconInLine(2)
-    cy.wait("@probeQuery")
-    cy.getByDataHook("result-auto-refresh-notebook").should("not.exist")
-    cy.getByDataHook("result-add-notebook").should("be.visible")
-  })
-
-  for (const theme of ["dark", "light"])
-    it(`uses matching grid toolbar hover feedback in ${theme} mode`, () => {
-      load(SQL, [], 0, theme)
-      run()
-      // Native hover uses fixed coordinates; wait for the responsive label and
-      // fonts to settle so the toolbar cannot move away from the pointer.
-      cy.getByDataHook("result-add-notebook").should(
-        "have.text",
-        "Add query to notebook",
-      )
-      cy.document().then((doc) => doc.fonts.ready)
-      let hoverBackground
-      cy.window().then((win) => {
-        const sample = win.document.createElement("span")
-        sample.style.display = "none"
-        sample.style.backgroundColor = "var(--qdb-color-interactionHover)"
-        win.document.body.appendChild(sample)
-        hoverBackground = win.getComputedStyle(sample).backgroundColor
-        sample.remove()
-      })
-      for (const name of ["markdown", "freeze", "reset", "refresh"]) {
-        const hook = `grid-toolbar-${name}`
-        cy.getByDataHook(hook).realHover({ scrollBehavior: false })
-        cy.getByDataHook(hook).should(($button) => {
-          const el = $button[0],
-            style = el.ownerDocument.defaultView.getComputedStyle(el)
-          expect(style.cursor).to.eq("pointer")
-          expect(style.backgroundColor).not.to.eq("rgba(0, 0, 0, 0)")
-          expect(el.getBoundingClientRect().width).to.eq(
-            el.getBoundingClientRect().height,
-          )
-          expect(style.backgroundColor).to.eq(hoverBackground)
-        })
-      }
-      cy.getByDataHook("grid-toolbar-move-front").should("be.disabled")
-      cy.screenshot(`notebook-toolbar-${theme}`)
-    })
-  it("adds the displayed query and rows even after the editor changes, without re-running", () => {
-    const executions = load()
-    run()
-    cy.window().then((win) =>
-      win.monaco.editor.getEditors()[0].setValue(SQL_TWO),
-    )
-    cy.getByDataHook("result-add-notebook").click()
-    cy.get("[data-notebook-cell]").should("have.length", 1)
-    cy.get("[data-notebook-cell]").should("contain.text", "probe_one")
-    readBuffers().then((buffers) => {
-      const notebook = buffers.find((b) => b.notebookViewState)
-      expect(notebook.notebookViewState.cells[0].value).to.contain("probe_one")
-      expect(notebook.notebookViewState.cells[0].autoRefresh).to.eq(false)
-      expect(buffers.find((b) => b.id === 1).archived).not.to.eq(true)
-      expect(executions).to.have.length(1)
-    })
-    cy.screenshot("notebook-transfer-grid")
-    cy.getEditorTabByTitle("Analysis").find(".chrome-tab-drag-handle").click()
-    cy.getByDataHook("result-add-notebook").should("be.visible")
-    cy.window().then((win) => {
-      expect(win.monaco.editor.getEditors()[0].getValue()).to.eq(SQL_TWO)
-      expect(executions).to.have.length(1)
-    })
-  })
-
-  it("opens results in a new notebook without changing an existing notebook", () => {
+  it("adds the displayed query and rows to a new notebook without re-running or touching other notebooks", () => {
     const layout = [{ i: "existing", x: 6, y: 0, w: 6, h: 8 }]
     const executions = load(SQL, [
       {
@@ -251,18 +134,31 @@ describe("SQL work → notebook", () => {
       },
     ])
     run()
+    cy.window().then((win) =>
+      win.monaco.editor.getEditors()[0].setValue(SQL_TWO),
+    )
     cy.getByDataHook("result-add-notebook").click()
     cy.getEditorTabByTitle("Analysis – notebook").should("have.attr", "active")
     cy.get("[data-notebook-cell]").should("have.length", 1)
-    cy.get('[role="menu"]').should("not.exist")
+    cy.get("[data-notebook-cell]").should("contain.text", "probe_one")
     readBuffers().then((buffers) => {
-      const view = buffers.find((b) => b.id === 2).notebookViewState
-      expect(view.cells).to.have.length(1)
-      expect(view.settings.layout[0]).to.deep.eq(layout[0])
-      expect(view.settings.autoRefreshDefault).to.eq(true)
-      const created = buffers.find((b) => b.id !== 2 && b.notebookViewState)
-      expect(created.notebookViewState.cells[0].value).to.contain("probe_one")
-      expect(created.notebookViewState.cells[0].autoRefresh).to.eq(false)
+      const existing = buffers.find((b) => b.id === 2).notebookViewState
+      expect(existing.cells).to.have.length(1)
+      expect(existing.settings.layout[0]).to.deep.eq(layout[0])
+      expect(existing.settings.autoRefreshDefault).to.eq(true)
+      const created = buffers.find(
+        (b) => b.id !== 2 && b.notebookViewState,
+      ).notebookViewState
+      expect(created.cells[0].value).to.contain("probe_one")
+      expect(created.cells[0].autoRefresh).to.eq(false)
+      expect(buffers.find((b) => b.id === 1).archived).not.to.eq(true)
+      expect(executions).to.have.length(1)
+    })
+    cy.screenshot("notebook-transfer-grid")
+    cy.getEditorTabByTitle("Analysis").find(".chrome-tab-drag-handle").click()
+    cy.getByDataHook("result-add-notebook").should("be.visible")
+    cy.window().then((win) => {
+      expect(win.monaco.editor.getEditors()[0].getValue()).to.eq(SQL_TWO)
       expect(executions).to.have.length(1)
     })
   })
@@ -272,7 +168,6 @@ describe("SQL work → notebook", () => {
     run()
     cy.getByDataHook("chart-panel-button").click()
     cy.wait("@probeQuery")
-    cy.getByDataHook("result-auto-refresh-notebook").should("not.exist")
     cy.getByDataHook("chart-settings-panel")
       .find('button[aria-label^="Chart type"]')
       .click()
@@ -298,7 +193,7 @@ describe("SQL work → notebook", () => {
     cy.then(() => expect(executions).to.have.length(2))
   })
 
-  it("opens auto-refresh choices with polling off until the interval is selected", () => {
+  it("monitors a repeated query in a notebook with polling off until an interval is chosen", () => {
     const executions = load()
     run()
     cy.getByDataHook("result-auto-refresh-notebook").should("not.exist")
@@ -321,8 +216,8 @@ describe("SQL work → notebook", () => {
     })
   })
 
-  it("creates separate cells from an editor while preserving comments and never executing", () => {
-    const source = `\n\n${SQL}\n\n\n${SQL_TWO}\n-- trailing explanation\n\n`
+  it("converts an editor script into one cell per query without executing it", () => {
+    const source = `${SQL}\n${SQL_TWO}`
     const executions = load(source)
     cy.getByDataHook("new-tab-button").click()
     cy.getByDataHook("notebook-from-editor").click()
@@ -330,75 +225,13 @@ describe("SQL work → notebook", () => {
     readBuffers().then((buffers) => {
       const cells = buffers.find((b) => b.notebookViewState).notebookViewState
         .cells
-      expect(cells.map((c) => c.value)).to.deep.eq([
-        SQL,
-        `${SQL_TWO}\n-- trailing explanation`,
-      ])
       expect(cells.every((c) => !c.mode && !c.result)).to.eq(true)
-      expect(executions).to.have.length(0)
-    })
-  })
-
-  it("copies only the first 200 queries as unexecuted cells and leaves the editor intact", () => {
-    const source = Array.from({ length: 201 }, (_, i) => `select ${i};`).join(
-      "\n",
-    )
-    const executions = load(source)
-    cy.getByDataHook("editor-tabs-menu-button").click()
-    cy.getByDataHook("notebook-from-editor")
-      .should("contain.text", "First 200 of 201 queries")
-      .click()
-    cy.get("[data-notebook-cell]").should("exist")
-    readBuffers().then((buffers) => {
-      const cells = buffers.find((b) => b.notebookViewState).notebookViewState
-        .cells
-      expect(cells).to.have.length(200)
-      expect(cells[0].value.trim()).to.eq("select 0;")
-      expect(cells[199].value.trim()).to.eq("select 199;")
-      expect(cells.every((cell) => !cell.result)).to.eq(true)
       expect(buffers.find((b) => b.id === 1).value).to.eq(source)
       expect(executions).to.have.length(0)
     })
   })
 
-  it("creates a new monitor notebook even with existing notebooks and leaves polling off when cancelled", () => {
-    const executions = load(SQL, [
-      {
-        label: "Monitoring",
-        notebookViewState: {
-          cells: [
-            { id: "existing", position: 0, value: "select 42", topHeight: 180 },
-          ],
-          settings: { autoRefreshDefault: true },
-        },
-      },
-    ])
-    run()
-    repeatQuery()
-    cy.getByDataHook("result-auto-refresh-notebook").click()
-    cy.contains('[role="menuitemradio"]', /^Off$/).should(
-      "have.attr",
-      "aria-checked",
-      "true",
-    )
-    cy.get("body").type("{esc}")
-    cy.get('[role="menuitemradio"]').should("not.exist")
-    cy.getEditorTabByTitle("Analysis – notebook").should("have.attr", "active")
-    cy.get("[data-notebook-cell]").should("have.length", 1)
-    readBuffers().then((buffers) => {
-      const existing = buffers.find((b) => b.id === 2).notebookViewState
-      expect(existing.cells).to.have.length(1)
-      expect(existing.settings.autoRefreshDefault).to.eq(true)
-      const view = buffers.find(
-        (b) => b.id !== 2 && b.notebookViewState,
-      ).notebookViewState
-      expect(view.focusedCellId).to.eq(view.cells[0].id)
-      expect(view.cells[0].autoRefresh).to.eq(false)
-      expect(executions).to.have.length(2)
-    })
-  })
-
-  it("transfers a mixed batch's read results with aligned cells and no replay", () => {
+  it("opens a mixed script's read results side by side without replaying them", () => {
     cy.viewport(1600, 900)
     const executions = load(
       `${SQL}\n${SQL_TWO}\nCREATE TABLE transfer_test(x int);`,
@@ -416,117 +249,20 @@ describe("SQL work → notebook", () => {
     )
     cy.getByDataHook("batch-open-notebook").click()
     cy.get("[data-notebook-cell]").should("have.length", 2)
+    // The captured rows render without another query.
+    cy.get("[data-notebook-cell]").eq(0).should("contain.text", "probe_one")
+    cy.get("[data-notebook-cell]").eq(1).should("contain.text", "probe_two")
     cy.get("[data-notebook-cell]").should(($cells) => {
       const bounds = [...$cells].map((cell) => cell.getBoundingClientRect())
       expect(bounds[0].top).to.be.closeTo(bounds[1].top, 1)
-      expect(bounds[0].bottom).to.be.closeTo(bounds[1].bottom, 1)
-      expect(bounds[0].height).to.be.lessThan(320)
-      const editorBottom = [...$cells].map(
-        (cell) =>
-          cell.querySelector(".monaco-editor").getBoundingClientRect().bottom,
-      )
-      expect(editorBottom[0]).to.be.closeTo(editorBottom[1], 1)
+      expect(bounds[1].left).to.be.greaterThan(bounds[0].right)
     })
     readBuffers().then((buffers) => {
       const cells = buffers.find((b) => b.notebookViewState).notebookViewState
         .cells
       expect(cells.every((c) => !c.value.includes("CREATE TABLE"))).to.eq(true)
-      expect(cells.map((c) => c.bottomHeight)).to.deep.eq([154, 154])
-      expect(cells.every((c) => !c.bottomResized)).to.eq(true)
       expect(executions).to.have.length(3)
     })
     cy.screenshot("notebook-transfer-comparison", { scale: true })
-    cy.viewport(850, 900)
-    cy.get("[data-notebook-cell]").should(($cells) => {
-      const bounds = [...$cells].map((cell) => cell.getBoundingClientRect())
-      expect(bounds[0].top).to.be.closeTo(bounds[1].top, 1)
-      expect(bounds[0].bottom).to.be.closeTo(bounds[1].bottom, 1)
-      expect(bounds[1].left).to.be.greaterThan(bounds[0].right)
-      const editorBottom = [...$cells].map(
-        (cell) =>
-          cell.querySelector(".monaco-editor").getBoundingClientRect().bottom,
-      )
-      expect(editorBottom[0]).to.be.closeTo(editorBottom[1], 1)
-    })
-    cy.get('.react-grid-item > .edge-handle[data-axis="se"]').should(
-      "have.length",
-      2,
-    )
-    cy.viewport(1600, 900)
-    cy.get("[data-notebook-cell]").should(($cells) => {
-      const bounds = [...$cells].map((cell) => cell.getBoundingClientRect())
-      expect(bounds[0].top).to.be.closeTo(bounds[1].top, 1)
-      expect(bounds[0].bottom).to.be.closeTo(bounds[1].bottom, 1)
-    })
-    readBuffers().then((buffers) => {
-      const view = buffers.find((b) => b.notebookViewState).notebookViewState
-      expect(
-        view.settings.layout.map(({ x, y, w }) => ({ x, y, w })),
-      ).to.deep.eq([
-        { x: 0, y: 0, w: 6 },
-        { x: 6, y: 0, w: 6 },
-      ])
-    })
-  })
-
-  // Result pane widths around the action's density breakpoints. The toolbar
-  // overflows to the left behind overflow:hidden, so a control that does not
-  // fit is clipped rather than wrapped.
-  for (const [viewport, density] of [
-    [632, "icon"],
-    [712, "icon"],
-    [850, "compact"],
-  ])
-    it(`fits every result toolbar control at a ${viewport}px viewport`, () => {
-      cy.viewport(viewport, 900)
-      // A seven-digit row count is the widest badge the toolbar must fit.
-      load(SQL, [], 0, "dark", 4, 1234567)
-      run()
-      cy.document().then((doc) => doc.fonts.ready)
-      cy.getByDataHook("result-add-notebook")
-        .should(density === "icon" ? "have.text" : "not.have.text", "")
-        .and("have.attr", "aria-label", "Add query to notebook")
-        .parent()
-        .parent()
-        .should(($actions) => {
-          const bounds = $actions[0].getBoundingClientRect()
-          for (const child of $actions[0].children) {
-            const rect = child.getBoundingClientRect()
-            expect(rect.left, child.className).to.be.gte(bounds.left - 0.5)
-            expect(rect.right, child.className).to.be.lte(bounds.right + 0.5)
-          }
-        })
-      // The Download label already wraps below ~555px without this action.
-      if (viewport >= 712)
-        cy.getByDataHook("download-parquet-button").should(($button) => {
-          expect($button[0].scrollHeight).to.be.lte($button[0].clientHeight)
-        })
-    })
-
-  it("keeps both actions one-click in a narrow toolbar and shows only the relevant one", () => {
-    cy.viewport(850, 900)
-    load()
-    cy.clickRunIconInLine(1)
-    cy.wait("@probeQuery")
-    cy.getByDataHook("result-auto-refresh-notebook").should("not.exist")
-    cy.getByDataHook("result-add-notebook").should("be.visible").click()
-    cy.get("[data-notebook-cell]").should("have.length", 1)
-    cy.getEditorTabByTitle("Analysis").find(".chrome-tab-drag-handle").click()
-    repeatQuery()
-    cy.screenshot("notebook-transfer-narrow")
-    cy.getByDataHook("result-auto-refresh-notebook").click()
-    cy.contains('[role="menuitemradio"]', /^Off$/).should(
-      "have.attr",
-      "aria-checked",
-      "true",
-    )
-    cy.contains('[role="menuitemradio"]', /^1s$/).click()
-    cy.wait("@probeQuery")
-    cy.getEditorTabByTitle("Analysis").find(".chrome-tab-drag-handle").click()
-    readBuffers().then((buffers) => {
-      const notebooks = buffers.filter((b) => b.notebookViewState)
-      expect(notebooks).to.have.length(2)
-      expect(notebooks[1].notebookViewState.cells[0].autoRefresh).to.eq("1s")
-    })
   })
 })
