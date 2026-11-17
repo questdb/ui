@@ -117,7 +117,6 @@ export const NotebookTransferActions: React.FC<{
             if (!request || busy) return
             void transfer({
               ...request,
-              target: undefined,
               monitor: showMonitor,
               source: showMonitor ? "result_monitor" : request.source,
             })

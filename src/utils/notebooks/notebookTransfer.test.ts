@@ -1,14 +1,13 @@
 import { describe, expect, it, vi } from "vitest"
 import { Type, type QueryRawResult } from "../questdb"
 import {
-  appendTransferredCells,
   buildBatchTransfer,
   createTransferCells,
   createTransferView,
   splitEditorScript,
   toTransferResult,
 } from "./notebookTransfer"
-import { createCell, MAX_NOTEBOOK_CELLS } from "../../store/notebook"
+import { MAX_NOTEBOOK_CELLS } from "../../store/notebook"
 import { toChartResult } from "../../scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import {
@@ -166,37 +165,6 @@ describe("notebook transfer", () => {
       expect(createTransferView(cells, compare).focusedCellId).toBe(cells[0].id)
   })
 
-  it("appends below the existing layout without changing cells, variables or refresh defaults", () => {
-    const existing = createCell(0, "select 7")
-    const layout = [{ i: existing.id, x: 6, y: 20, w: 6, h: 16 }]
-    const variables = [{ name: "a", value: "42" }]
-    const incoming = createTransferCells([
-      { sql: "select 1", result: toTransferResult(raw("select 1"), 1) },
-    ])
-    const { parts } = appendTransferredCells(
-      {
-        cells: [existing],
-        settings: {
-          layoutMode: "grid",
-          layout,
-          autoRefreshDefault: true,
-          variables,
-        },
-        focusedCellId: existing.id,
-        maximizedCellId: null,
-      },
-      incoming,
-      false,
-    )
-    expect(parts.cells[0]).toBe(existing)
-    expect(parts.settings.layout?.[0]).toBe(layout[0])
-    expect(parts.settings.layout?.[1]).toMatchObject({ x: 0, y: 36, w: 12 })
-    expect(parts.settings.variables).toBe(variables)
-    expect(parts.settings.autoRefreshDefault).toBe(true)
-    expect(parts.cells[1].autoRefresh).toBe(false)
-    expect(parts.focusedCellId).toBe(existing.id)
-  })
-
   it("aligns editors and result panes in each comparison row", () => {
     const sql = ["select 1", "-- note\n-- details\nselect 2", "select 3"]
     const cells = createTransferCells(
@@ -283,18 +251,6 @@ describe("notebook transfer", () => {
     expect(() =>
       createTransferCells(
         Array.from({ length: 201 }, () => ({ sql: "select 1" })),
-      ),
-    ).toThrow("200")
-    expect(() =>
-      appendTransferredCells(
-        {
-          cells: Array.from({ length: 200 }, (_, i) => createCell(i)),
-          settings: {},
-          focusedCellId: null,
-          maximizedCellId: null,
-        },
-        [cell],
-        false,
       ),
     ).toThrow("200")
   })

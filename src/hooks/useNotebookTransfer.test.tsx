@@ -32,22 +32,13 @@ vi.mock("../store/buffers", () => ({
   bufferStore: { getById: mocks.getById },
   MAX_BUFFER_NAME_LENGTH: 100,
 }))
-vi.mock("../store/notebookResults", () => ({
-  deleteCellSnapshot: vi.fn(),
-  pruneToRecentNotebooks: vi.fn(),
-}))
-vi.mock("../utils/notebooks/notebookController", () => ({
-  withBoundNotebook: vi.fn(),
-}))
 vi.mock("../utils/notebooks/notebookTransferState", () => ({
   requestTransferMonitor: vi.fn(),
   stageTransferSnapshot: vi.fn(),
-  takeTransferSnapshot: vi.fn(),
 }))
 vi.mock("../utils/notebooks/notebookTransfer", () => ({
   createTransferCells: vi.fn(),
   createTransferView: vi.fn(),
-  appendTransferredCells: vi.fn(),
 }))
 vi.mock("../scenes/Editor/Notebook/notebookUtils", () => ({
   buildPersistPayload: (cells: unknown) => ({ cells }),
@@ -206,7 +197,6 @@ describe("notebook transfer telemetry", () => {
     expect(trackEvent).toHaveBeenCalledWith(ConsoleEvent.NOTEBOOK_TRANSFER, {
       source: "result_grid",
       notebookId: 42,
-      target: "new",
       cellCount: 1,
       capturedResults: 0,
     })
@@ -266,7 +256,6 @@ describe("notebook transfer telemetry", () => {
       {
         notebookId: 42,
         source: "result_grid",
-        target: "new",
         stage: "activate",
         reason: "storage_quota",
       },

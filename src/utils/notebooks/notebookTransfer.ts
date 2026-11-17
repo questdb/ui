@@ -8,10 +8,6 @@ import {
   topHeightForSql,
 } from "../../scenes/Editor/Notebook/cellSizing"
 import {
-  nextGridSeedPosition,
-  upsertCellLayout,
-} from "../../scenes/Editor/Notebook/notebookUtils"
-import {
   createCell,
   exceedsCellLineLimit,
   MAX_NOTEBOOK_CELLS,
@@ -21,7 +17,6 @@ import {
 } from "../../store/notebook"
 import type { QueryRawResult } from "../questdb"
 import { Type } from "../questdb"
-import type { ViewParts, NotebookTransitionResult } from "./notebookController"
 
 export type NotebookTransferSource =
   | "result_chart"
@@ -208,40 +203,5 @@ export const createTransferView = (
     cells: aligned,
     focusedCellId: aligned[0]?.id,
     settings: { layoutMode: "grid", layout },
-  }
-}
-
-export const appendTransferredCells = (
-  parts: ViewParts,
-  incoming: NotebookCell[],
-  focus: boolean,
-): NotebookTransitionResult<string[]> => {
-  if (parts.cells.length + incoming.length > MAX_NOTEBOOK_CELLS)
-    throw new Error(`This notebook would exceed ${MAX_NOTEBOOK_CELLS} cells.`)
-  const added = incoming.map((cell, index) => ({
-    ...cell,
-    position: parts.cells.length + index,
-  }))
-  let layout = parts.settings.layout
-  if (parts.settings.layoutMode === "grid") {
-    for (const cell of added) {
-      layout = upsertCellLayout(layout, cell.id, {
-        ...nextGridSeedPosition(layout),
-        h: computeAgentCellGridH(cell, cell.result != null),
-      })
-    }
-  }
-  return {
-    parts: {
-      ...parts,
-      cells: [...parts.cells, ...added],
-      settings:
-        layout === parts.settings.layout
-          ? parts.settings
-          : { ...parts.settings, layout },
-      focusedCellId: focus ? added[0].id : parts.focusedCellId,
-      maximizedCellId: focus ? null : parts.maximizedCellId,
-    },
-    result: added.map((cell) => cell.id),
   }
 }
