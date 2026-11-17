@@ -77,29 +77,38 @@ export const buildBatchTransfer = (
 ): EditorBatchTransfer | undefined => {
   if (results.length !== expectedCount || results.some((r) => !r.success))
     return undefined
-  let bytes = 0
+  const reads: Array<{
+    result: Extract<QueryRawResult, { type: Type.DQL }>
+    fetchedAt?: number
+  }> = []
   let writeCount = 0
-  const queries: TransferQuery[] = []
   for (const item of results) {
-    if (item.result?.type === Type.DDL || item.result?.type === Type.DML) {
+    if (item.result?.type === Type.DDL || item.result?.type === Type.DML)
       writeCount++
-    }
-    if (item.result?.type !== Type.DQL) continue
-    const result = toTransferResult(item.result, item.fetchedAt ?? Date.now())
-    const size = new TextEncoder().encode(JSON.stringify(result)).byteLength
-    const keep =
-      size <= TRANSFER_RESULT_BYTES && bytes + size <= BATCH_TRANSFER_BYTES
-    if (keep) bytes += size
-    queries.push({ sql: result.query, result: keep ? result : undefined })
+    else if (item.result?.type === Type.DQL)
+      reads.push({ result: item.result, fetchedAt: item.fetchedAt })
   }
-  if (queries.length < 2 || queries.length > MAX_NOTEBOOK_CELLS)
-    return undefined
-  const hasAllResults = queries.every((q) => q.result !== undefined)
+  if (reads.length < 2 || reads.length > MAX_NOTEBOOK_CELLS) return undefined
+  // Size results only while all of them can still be kept. The fallback is an
+  // unexecuted script, not a mixture of populated and empty cells that would
+  // imply a complete side-by-side comparison, so the first result over budget
+  // ends the measuring: this runs on the main thread when a script finishes.
+  let bytes = 0
+  const withResults: TransferQuery[] = []
+  for (const { result: raw, fetchedAt } of reads) {
+    const result = toTransferResult(raw, fetchedAt ?? Date.now())
+    const size = new TextEncoder().encode(JSON.stringify(result)).byteLength
+    if (size > TRANSFER_RESULT_BYTES || bytes + size > BATCH_TRANSFER_BYTES)
+      break
+    bytes += size
+    withResults.push({ sql: result.query, result })
+  }
+  const hasAllResults = withResults.length === reads.length
   return {
     bufferId,
-    // The fallback is an unexecuted script, not a mixture of populated and
-    // empty cells that would imply a complete side-by-side comparison.
-    queries: hasAllResults ? queries : queries.map(({ sql }) => ({ sql })),
+    queries: hasAllResults
+      ? withResults
+      : reads.map(({ result }) => ({ sql: result.query })),
     writeCount,
     hasAllResults,
   }

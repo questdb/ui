@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { Type, type QueryRawResult } from "../questdb"
 import {
   appendTransferredCells,
@@ -8,7 +8,7 @@ import {
   splitEditorScript,
   toTransferResult,
 } from "./notebookTransfer"
-import { createCell } from "../../store/notebook"
+import { createCell, MAX_NOTEBOOK_CELLS } from "../../store/notebook"
 import { toChartResult } from "../../scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import {
@@ -95,6 +95,29 @@ describe("notebook transfer", () => {
         1,
       ),
     ).toBeUndefined()
+  })
+
+  it("does not serialize results it is going to discard", () => {
+    const stringify = vi.spyOn(JSON, "stringify")
+    const many = Array.from({ length: MAX_NOTEBOOK_CELLS + 1 }, (_, i) => ({
+      success: true,
+      result: raw(`select ${i}`),
+    }))
+    expect(buildBatchTransfer(1, many, many.length)).toBeUndefined()
+    expect(stringify).not.toHaveBeenCalled()
+
+    const large = { ...raw("select huge"), dataset: [["x".repeat(2_000_001)]] }
+    const batch = buildBatchTransfer(
+      1,
+      [large, raw("select 2"), raw("select 3")].map((result) => ({
+        success: true,
+        result,
+      })),
+      3,
+    )!
+    expect(batch.hasAllResults).toBe(false)
+    expect(stringify).toHaveBeenCalledTimes(1)
+    stringify.mockRestore()
   })
 
   it("keeps oversized batch SQL without pretending its results were captured", () => {
