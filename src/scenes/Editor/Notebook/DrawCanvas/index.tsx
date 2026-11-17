@@ -34,7 +34,7 @@ import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { ChartSettingsTelemetry } from "../CellChart/chartSettingsTelemetry"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
-import { useNotebookBufferId } from "../NotebookProvider"
+import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { PaneEmptyState } from "../PaneEmptyState"
 
 const NO_RESULTS: QueryExecResult[] = []
@@ -180,6 +180,16 @@ export const DrawCanvas: React.FC<Props> = ({
   const results =
     chartResult.kind === "settled" ? chartResult.results : NO_RESULTS
   const hadError = chartResult.kind === "settled" && chartResult.hadError
+
+  // A transferred chart defers only its initial draw. Once a frame for the
+  // current SQL is on screen, it is an ordinary chart: an empty result reads
+  // "No data to plot", not the transfer prompt.
+  const { updateCell } = useNotebookActions()
+  const drawnOnce =
+    cell.deferInitialDraw === true && chartResult.kind === "settled"
+  useEffect(() => {
+    if (drawnOnce) updateCell(cell.id, { deferInitialDraw: undefined })
+  }, [drawnOnce, cell.id, updateCell])
 
   const handleZoomChange = useCallback(
     (start: number, end: number) => {
