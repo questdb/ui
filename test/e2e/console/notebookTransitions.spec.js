@@ -2,10 +2,11 @@
 
 const { seedConsoleStorage } = require("../utils/consoleStorage")
 
-const SQL =
-  "SELECT timestamp_sequence(0, 1000000) ts, x probe_one FROM long_sequence(4);"
-const SQL_TWO =
-  "-- a second result\nSELECT timestamp_sequence(0, 1000000) ts, x probe_two FROM long_sequence(4);"
+// Rows start mid-day, not at the epoch: ECharts 5 takes seconds to lay out a
+// bar time axis whose first second-spaced point sits on a year boundary.
+const START = Date.UTC(2026, 2, 15, 12, 30)
+const SQL = `SELECT timestamp_sequence(${START * 1000}, 1000000) ts, x probe_one FROM long_sequence(4);`
+const SQL_TWO = `-- a second result\nSELECT timestamp_sequence(${START * 1000}, 1000000) ts, x probe_two FROM long_sequence(4);`
 
 const rows = (query, count = 4) => ({
   query,
@@ -17,7 +18,7 @@ const rows = (query, count = 4) => ({
     },
   ],
   dataset: Array.from({ length: count }, (_, i) => [
-    new Date(i * 1000).toISOString(),
+    new Date(START + i * 1000).toISOString(),
     i + 1,
   ]),
   count,
