@@ -58,6 +58,7 @@ import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { Toolbar } from "./Toolbar/toolbar"
+import { patchRowStatus, subscribeTableStatusUpdate } from "./tableStatusSync"
 import VirtualTables from "./VirtualTables"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -382,6 +383,30 @@ const Schema = ({
       listenerActiveRef.current = false
     }
   }, [autoRefreshTables])
+
+  useEffect(
+    () =>
+      subscribeTableStatusUpdate(
+        ({ tableName, kind, table, matView, view, liveView }) => {
+          const isTargetTable = (row: QuestDB.Table) =>
+            row.table_name === tableName && QuestDB.getTableKind(row) === kind
+          const isTargetView = (row: { view_name: string }) =>
+            row.view_name === tableName
+
+          setTables(
+            (prev) => prev && patchRowStatus(prev, isTargetTable, table),
+          )
+          setMaterializedViews(
+            (prev) => prev && patchRowStatus(prev, isTargetView, matView),
+          )
+          setViews((prev) => prev && patchRowStatus(prev, isTargetView, view))
+          setLiveViews(
+            (prev) => prev && patchRowStatus(prev, isTargetView, liveView),
+          )
+        },
+      ),
+    [],
+  )
 
   const allSelectableTables = useMemo<SelectedTable[]>(() => {
     if (!tables) return []

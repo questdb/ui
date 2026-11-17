@@ -12,6 +12,7 @@ import {
 
 type VirtualTablesProps = {
   tables: unknown[]
+  materializedViews?: unknown[]
   state: { view: number }
   loadingError: unknown
 }
@@ -81,7 +82,12 @@ vi.mock("../../store", () => ({
   },
 }))
 vi.mock("../../utils", () => ({ copyToClipboard: vi.fn() }))
-vi.mock("../../utils/questdb", () => ({ Type: { DQL: "dql" } }))
+vi.mock("../../utils/questdb", async () => {
+  const { getTableKind } = await vi.importActual<
+    typeof import("../../utils/questdb/types")
+  >("../../utils/questdb/types")
+  return { Type: { DQL: "dql" }, getTableKind }
+})
 vi.mock("../../providers/LocalStorageProvider", () => ({
   // Auto-refresh also listens to window focus; recovery doesn't depend on it.
   useLocalStorage: () => ({
@@ -122,6 +128,7 @@ vi.mock("./VirtualTables", () => ({
 }))
 
 import Schema, { View } from "."
+import { publishTableStatusUpdate } from "./tableStatusSync"
 
 const table = { table_name: "trades", table_type: "T" }
 const tablesLoaded = { type: "dql", data: [table] }
@@ -251,6 +258,99 @@ describe("Schema loading after a failed SSO renewal", () => {
     expect(panel().state.view).toBe(View.error)
     // Not the stale "Could not renew your SSO session" message
     expect(panel().loadingError).toBeNull()
+  })
+})
+
+describe("Schema status updates from the table details drawer", () => {
+  const trades = { table_name: "trades", table_type: "T" }
+  const tradesView = {
+    table_name: "trades_1h",
+    table_type: "M",
+    table_suspended: false,
+  }
+  const tradesViewStatus = {
+    view_name: "trades_1h",
+    view_status: "valid",
+    invalidation_reason: null,
+  }
+
+  const mountWithMatView = async () => {
+    mocks.quest.showTables.mockResolvedValue({
+      type: "dql",
+      data: [trades, tradesView],
+    })
+    mocks.quest.query.mockResolvedValue(columnsLoaded)
+    mocks.quest.showMaterializedViews.mockResolvedValue({
+      type: "dql",
+      data: [tradesViewStatus],
+    })
+    await mount()
+  }
+
+  it("should patch only the rows of the drawer's target", async () => {
+    // Given
+    await mountWithMatView()
+    const before = panel()
+
+    // When
+    act(() =>
+      publishTableStatusUpdate({
+        tableName: "trades_1h",
+        kind: "matview",
+        table: { table_suspended: true },
+        matView: {
+          view_status: "invalid",
+          invalidation_reason: "base table dropped",
+        },
+      }),
+    )
+
+    // Then
+    const after = panel()
+    expect(after.tables[0]).toBe(before.tables[0])
+    expect(after.tables[1]).toMatchObject({
+      table_name: "trades_1h",
+      table_suspended: true,
+    })
+    expect(after.materializedViews).toEqual([
+      {
+        view_name: "trades_1h",
+        view_status: "invalid",
+        invalidation_reason: "base table dropped",
+      },
+    ])
+  })
+
+  it("should ignore an update for another kind of the same name", async () => {
+    // Given
+    await mountWithMatView()
+    const before = panel()
+
+    // When
+    act(() =>
+      publishTableStatusUpdate({
+        tableName: "trades_1h",
+        kind: "table",
+        table: { table_suspended: true },
+      }),
+    )
+
+    // Then
+    expect(panel().tables).toBe(before.tables)
+  })
+
+  it("should stop listening on unmount", async () => {
+    // Given
+    await mountWithMatView()
+
+    // When
+    act(() => renderer?.unmount())
+    renderer = undefined
+
+    // Then
+    expect(
+      mocks.handlers.get(EventType.MSG_TABLE_STATUS_UPDATE)?.size ?? 0,
+    ).toBe(0)
   })
 })
 

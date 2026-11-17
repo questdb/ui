@@ -11,6 +11,7 @@ export enum EventType {
   MSG_QUERY_OK = "query.out.ok",
   MSG_QUERY_RUNNING = "query.out.running",
   MSG_QUERY_SCHEMA = "query.out.schema",
+  MSG_TABLE_STATUS_UPDATE = "schema.table.status",
   MSG_CONNECTION_OK = "query.connection.ok",
   MSG_CONNECTION_ERROR = "query.connection.error",
   MSG_CONNECTION_UNAUTHORIZED = "query.connection.unauthorized",

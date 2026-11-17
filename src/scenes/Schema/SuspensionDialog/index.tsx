@@ -17,7 +17,7 @@ import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import { Restart, Table } from "../../../components/icons"
-import { useState, useContext, useEffect, useCallback } from "react"
+import { useState, useContext, useEffect, useCallback, useRef } from "react"
 import { QuestContext } from "../../../providers"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
@@ -105,17 +105,24 @@ export const SuspensionDialog = ({
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  // The latest information decides the state: a WAL read, or a successful
+  // resume. Reads started before the resume are older and are dropped.
+  const [isSuspended, setIsSuspended] = useState(true)
+  const infoVersionRef = useRef(0)
   const [error, setError] = useState<string | undefined>()
 
   const fetchWalTableData = useCallback(async () => {
+    const version = infoVersionRef.current
     try {
       const escapedName = QuestDB.escapeSqlLiteral(tableName)
       const response = await quest.query<QuestDB.WalTable>(
         `wal_tables() WHERE name = '${escapedName}'`,
         { background: true },
       )
+      if (version !== infoVersionRef.current) return
       if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
         setWalTableData(response.data[0])
+        setIsSuspended(response.data[0].suspended)
       }
     } catch (error) {
       console.error("Failed to fetch WAL table data:", error)
@@ -126,13 +133,21 @@ export const SuspensionDialog = ({
     if (!open) return
 
     setLoading(true)
-    void fetchWalTableData().finally(() => setLoading(false))
+    const version = infoVersionRef.current
+    void fetchWalTableData().finally(() => {
+      // A read from a previous opening must not end this opening's loading
+      if (version === infoVersionRef.current) setLoading(false)
+    })
 
     const interval = setInterval(() => {
       void fetchWalTableData()
     }, 1000)
 
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      // A read still in flight belongs to this session, not the next one
+      infoVersionRef.current += 1
+    }
   }, [open, fetchWalTableData])
 
   const txnLag = walTableData
@@ -151,6 +166,10 @@ export const SuspensionDialog = ({
           ? "LIVE VIEW"
           : "TABLE"
     }`
+    // A resume answered after the dialog was closed belongs to that opening:
+    // it must not change the state of the next one
+    const version = infoVersionRef.current
+    let isStale = false
     try {
       const response = await quest.query(
         `${queryStart} '${escapedName}' RESUME WAL${
@@ -159,18 +178,23 @@ export const SuspensionDialog = ({
             : ""
         }`,
       )
+      isStale = version !== infoVersionRef.current
+      if (isStale) return
       if (response && response.type === QuestDB.Type.DDL) {
+        infoVersionRef.current += 1
         setIsSubmitted(true)
+        setIsSuspended(false)
       } else {
         setError(GENERIC_ERROR_TEXT)
       }
-      setIsSubmitting(false)
     } catch (e) {
+      isStale = version !== infoVersionRef.current
+      if (isStale) return
       const error = e as ErrorResult
-      setIsSubmitting(false)
       setError(`${GENERIC_ERROR_TEXT}${error.error ? `: ${error.error}` : ""}`)
     } finally {
-      await fetchWalTableData()
+      setIsSubmitting(false)
+      if (!isStale) await fetchWalTableData()
     }
   }
 
@@ -178,6 +202,7 @@ export const SuspensionDialog = ({
     if (open) {
       setError(undefined)
       setIsSubmitted(false)
+      setIsSuspended(true)
       setWalTableData(null)
     }
   }, [open])
@@ -205,12 +230,14 @@ export const SuspensionDialog = ({
           }}
           onEscapeKeyDown={() => onOpenChange(false)}
           onPointerDownOutside={() => onOpenChange(false)}
-          $success={isSubmitted}
+          $success={!isSuspended}
+          data-suspended={isSuspended}
         >
           <Dialog.Title>
             <Box>
-              <StyledTable size={20} $success={isSubmitted} />
-              {getTableKindLabel(kind)} is suspended: {tableName}
+              <StyledTable size={20} $success={!isSuspended} />
+              {getTableKindLabel(kind)}{" "}
+              {isSuspended ? "is suspended" : "is not suspended"}: {tableName}
             </Box>
           </Dialog.Title>
 
@@ -224,14 +251,16 @@ export const SuspensionDialog = ({
               <Box gap="3rem" flexDirection="column" align="center">
                 {error && <Text color="statusDanger">{error}</Text>}
 
-                {isSubmitted && (
+                {!isSuspended && (
                   <Text color="statusSuccess" size="lg">
-                    WAL resumed successfully!
+                    {isSubmitted
+                      ? "WAL resumed successfully!"
+                      : "WAL is not suspended"}
                   </Text>
                 )}
 
                 {walTableData.errorTag &&
-                  !isSubmitted &&
+                  isSuspended &&
                   errorWorkarounds[walTableData.errorTag] && (
                     <Text
                       color="statusDanger"
@@ -355,13 +384,13 @@ export const SuspensionDialog = ({
             <Dialog.Close asChild>
               <Button
                 prefixIcon={
-                  isSubmitted ? <CheckCircle size={18} /> : <Undo size={18} />
+                  isSuspended ? <Undo size={18} /> : <CheckCircle size={18} />
                 }
                 variant="secondary"
                 data-hook="schema-suspension-dialog-dismiss"
                 onClick={() => onOpenChange(false)}
               >
-                {isSubmitted ? "Close" : "Dismiss"}
+                {isSuspended ? "Dismiss" : "Close"}
               </Button>
             </Dialog.Close>
           </Dialog.ActionButtons>

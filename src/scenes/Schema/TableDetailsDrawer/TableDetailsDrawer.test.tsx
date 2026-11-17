@@ -504,6 +504,22 @@ describe("table health presentation", () => {
     expect(queryHook("resume-wal-button")).not.toBeInTheDocument()
   })
 
+  it("shows a retrying materialized view refresh as a warning, not as invalid", async () => {
+    // Given
+    const server = catalog()
+    Object.assign(server.matViews[0], {
+      view_status: "retrying",
+      invalidation_reason: null,
+    })
+    // When
+    await mountDrawer("trades_mv", "matview")
+    // Then
+    expect(hook("view-status")).toHaveTextContent("Retrying refresh")
+    expect(hook("view-status")).not.toHaveTextContent("Invalid")
+    expect(hook("health-status")).toHaveAttribute("data-severity", "healthy")
+    expect(queryHook("error-banner")).not.toBeInTheDocument()
+  })
+
   it("shows permanent invalidation guidance without offering WAL recovery for a live view", async () => {
     // Given
     const server = catalog()

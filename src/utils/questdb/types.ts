@@ -302,7 +302,7 @@ export type MaterializedView = {
   view_sql: string
   view_table_dir_name: string
   invalidation_reason: string | null
-  view_status: "valid" | "refreshing" | "invalid"
+  view_status: "valid" | "refreshing" | "retrying" | "invalid"
   refresh_period_hi: string | null
   refresh_base_table_txn: bigint
   base_table_txn: bigint
