@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import styled from "styled-components"
 import { color } from "../../../../utils"
 import { clamp } from "../../../../utils/clamp"
@@ -175,7 +176,10 @@ export const ResizeHandle: React.FC<Props> = ({
         maxHeight,
       )
       lastHeightRef.current = newHeight
-      onResizeRef.current(newHeight)
+      // Render the new height before the next frame. React would otherwise
+      // schedule a mousemove update for later, and the pane trails the
+      // pointer while it moves fast.
+      flushSync(() => onResizeRef.current(newHeight))
     }
 
     const finishDrag = () => {
