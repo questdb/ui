@@ -1,6 +1,6 @@
 import React from "react"
 import styled, { css } from "styled-components"
-import { NotebookIcon, ArrowClockwiseIcon } from "@phosphor-icons/react"
+import { NotebookIcon } from "@phosphor-icons/react"
 import { Button, Tooltip } from "../../components"
 import { BUTTON_HEIGHTS } from "../../components/Button"
 import {
@@ -81,11 +81,9 @@ export const NotebookTransferActions: React.FC<{
     : chart
       ? "Save chart"
       : "Add query"
-  const icon = showMonitor ? (
-    <ArrowClockwiseIcon size={18} />
-  ) : (
-    <NotebookGlyph size={18} />
-  )
+  // Always the notebook glyph: in icon-only density an arrow would be
+  // indistinguishable from the adjacent "Re-run query" button.
+  const icon = <NotebookGlyph size={18} />
   const iconOnly = density === "icon"
 
   return (

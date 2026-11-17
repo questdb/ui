@@ -187,7 +187,7 @@ describe("result toolbar notebook action", () => {
     return (width: number) =>
       act(() => {
         const action = document.querySelector(
-          '[data-hook="result-add-notebook"]',
+          '[data-hook="result-add-notebook"], [data-hook="result-auto-refresh-notebook"]',
         )
         observers
           .filter(({ target }) => action && target?.contains(action))
@@ -222,6 +222,25 @@ describe("result toolbar notebook action", () => {
     resize(600)
     expect(action()).toHaveTextContent("")
     expect(action()).toHaveAccessibleName("Add query to notebook")
+  })
+  it("keeps the auto-refresh action distinct from Re-run when only icons fit", () => {
+    const resize = observeToolbar()
+    const store = mountResult()
+    const repeated = "select x from long_sequence(10)"
+    act(() => {
+      store.dispatch(queryActions.recordQueryExecution(repeated))
+      store.dispatch(queryActions.recordQueryExecution(repeated))
+      store.dispatch(queryActions.setResult(resultFor(repeated), 1))
+    })
+    resize(600)
+    const autoRefresh = document.querySelector(
+      '[data-hook="result-auto-refresh-notebook"]',
+    )!
+    const reRun = document.querySelector('[data-hook="grid-toolbar-refresh"]')!
+    expect(autoRefresh).toHaveTextContent("")
+    expect(autoRefresh.querySelector("svg")!.innerHTML).not.toBe(
+      reRun.querySelector("svg")!.innerHTML,
+    )
   })
 })
 
