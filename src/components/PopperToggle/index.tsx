@@ -102,7 +102,10 @@ export const PopperToggle = ({
   )
 
   // An overlay: claims Escape in the capture phase, before the focused
-  // control underneath it (utils/escapeKey.ts).
+  // control underneath it (utils/escapeKey.ts). The listener sits on <body>,
+  // not the document, so it always runs after Radix layers (document capture):
+  // a menu or dialog opened over the popper closes first, whatever order the
+  // listeners were added in.
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (!isEscape(event) || !_active || isEscapeClaimed(event)) return
@@ -140,12 +143,12 @@ export const PopperToggle = ({
   useEffect(() => {
     document.addEventListener("mousedown", handleMouseDown)
     document.addEventListener("touchstart", handleMouseDown)
-    document.addEventListener("keydown", handleKeyDown, true)
+    document.body.addEventListener("keydown", handleKeyDown, true)
 
     return () => {
       document.removeEventListener("mousedown", handleMouseDown)
       document.removeEventListener("touchstart", handleMouseDown)
-      document.removeEventListener("keydown", handleKeyDown, true)
+      document.body.removeEventListener("keydown", handleKeyDown, true)
     }
   }, [handleMouseDown, handleKeyDown])
 
