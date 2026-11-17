@@ -61,6 +61,9 @@ export const toTransferResult = (
   timings: result.timings,
   fetchedAt,
   notice: "Loaded rows from editor",
+  // The editor fetches only its first page. A partial frame must not be
+  // drawn as if complete: draw mode refetches truncated frames.
+  ...(result.count > result.dataset.length ? { truncated: true } : {}),
 })
 
 export const buildBatchTransfer = (

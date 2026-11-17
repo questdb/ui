@@ -9,6 +9,7 @@ import {
   toTransferResult,
 } from "./notebookTransfer"
 import { createCell } from "../../store/notebook"
+import { toChartResult } from "../../scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import {
   computeCellHeights,
@@ -118,6 +119,19 @@ describe("notebook transfer", () => {
     expect(cell.result?.results[0]).toBe(result)
     expect(cell.result?.timestamp).toBe(123)
     expect(cell.mode).toBeUndefined()
+  })
+
+  it("marks a first-page editor result truncated, so drawing it refetches the full frame", () => {
+    const page = { ...raw("select x", [[1], [2]]), count: 50_000 }
+    const partial = toTransferResult(page, 1)
+    expect(partial.truncated).toBe(true)
+    const [cell] = createTransferCells([{ sql: page.query, result: partial }])
+    expect(toChartResult(cell.result, [page.query]).kind).not.toBe("settled")
+
+    const complete = toTransferResult(raw("select x", [[1], [2]]), 1)
+    expect(complete.truncated).toBeUndefined()
+    const [full] = createTransferCells([{ sql: "select x", result: complete }])
+    expect(toChartResult(full.result, ["select x"]).kind).toBe("settled")
   })
 
   it("focuses the first transferred cell, where the auto-refresh menu opens", () => {
