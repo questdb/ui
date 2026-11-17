@@ -6,6 +6,7 @@ import {
   monitoringWindowMinutes,
 } from "./dashboard"
 import { makeBuffer } from "../../store/buffers"
+import type { NotebookViewState } from "../../store/notebook"
 import { isHighlightConfig } from "../../components/ResultGrid/highlight/isHighlightConfig"
 
 const build = (kind: "table" | "matview" = "table", history = true) =>
@@ -198,5 +199,74 @@ describe("monitoring templates", () => {
     const resized = structuredClone(view)
     resized.cells[2].bottomHeight = 500
     expect(isUnmodifiedMonitoring(buffer, resized)).toBe(false)
+  })
+})
+
+describe("monitoring customization fingerprint", () => {
+  // Closing a dashboard that still matches its template deletes it for good,
+  // so every authored edit must change the fingerprint.
+  type Edit = (view: NotebookViewState) => void
+  const chart = (view: NotebookViewState) =>
+    view.cells.find((cell) => cell.mode === "draw")!
+  const grid = (view: NotebookViewState) =>
+    view.cells.find((cell) => cell.highlightConfig)!
+  const layoutOf = (view: NotebookViewState) => view.settings!.layout!
+
+  const authored: Array<[string, Edit]> = [
+    ["cell SQL", (v) => (grid(v).value += " limit 5")],
+    ["cell name", (v) => (grid(v).name = "Renamed")],
+    ["cell type", (v) => (grid(v).type = "markdown")],
+    ["chart mode", (v) => (grid(v).mode = "draw")],
+    ["chart config", (v) => (chart(v).chartConfig!.xColumn = "other")],
+    ["highlight rules", (v) => (grid(v).highlightConfig = undefined)],
+    ["cell auto-refresh", (v) => (grid(v).autoRefresh = "30s")],
+    [
+      "a resized editor",
+      (v) => {
+        grid(v).topResized = true
+        grid(v).topHeight = 333
+      },
+    ],
+    [
+      "a resized result",
+      (v) => {
+        grid(v).bottomResized = true
+        grid(v).bottomHeight = 444
+      },
+    ],
+    ["variables", (v) => (v.settings!.variables![0].value = "60")],
+    ["notebook auto-refresh", (v) => (v.settings!.autoRefreshDefault = "30s")],
+    ["layout mode", (v) => (v.settings!.layoutMode = "list")],
+    ["a panel's column", (v) => (layoutOf(v)[0].x += 1)],
+    ["a panel's width", (v) => (layoutOf(v)[0].w -= 1)],
+    [
+      "a panel's row",
+      (v) => (layoutOf(v)[0].y = Math.max(...layoutOf(v).map((i) => i.y)) + 1),
+    ],
+    ["a removed cell", (v) => v.cells.pop()],
+    ["cell order", (v) => v.cells.reverse()],
+  ]
+
+  const unauthored: Array<[string, Edit]> = [
+    ["focus", (v) => (v.focusedCellId = v.cells[1].id)],
+    ["run status", (v) => (grid(v).lastRunStatus = "success")],
+    ["pane inspection", (v) => (grid(v).paneView = "editor_result")],
+    ["automatic panel height", (v) => (layoutOf(v)[0].h += 3)],
+    ["layout compaction", (v) => layoutOf(v).forEach((item) => (item.y *= 2))],
+  ]
+
+  const template = build()
+  const fingerprint = (edit?: Edit) => {
+    const view = structuredClone(template)
+    edit?.(view)
+    return monitoringFingerprint("trades · monitoring", view)
+  }
+
+  it.each(authored)("counts %s as customization", (_name, edit) => {
+    expect(fingerprint(edit)).not.toBe(fingerprint())
+  })
+
+  it.each(unauthored)("ignores %s", (_name, edit) => {
+    expect(fingerprint(edit)).toBe(fingerprint())
   })
 })
