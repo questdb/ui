@@ -193,6 +193,30 @@ describe("SQL work → notebook", () => {
     cy.then(() => expect(executions).to.have.length(2))
   })
 
+  it("re-runs the displayed query, not the editor's last executed one", () => {
+    const executions = load(SQL, [
+      {
+        label: "Notes",
+        notebookViewState: {
+          cells: [{ id: "note", position: 0, value: "select 42" }],
+        },
+      },
+    ])
+    run()
+    // A notebook tab unmounts the SQL editor, which forgets its last executed
+    // query; the grid still shows the probe_one result on return.
+    cy.getEditorTabByTitle("Notes").find(".chrome-tab-drag-handle").click()
+    cy.get("[data-notebook-cell]").should("be.visible")
+    cy.getEditorTabByTitle("Analysis").find(".chrome-tab-drag-handle").click()
+    cy.getEditor().should("be.visible")
+    cy.getByDataHook("grid-toolbar-refresh").should("be.enabled").click()
+    cy.wait("@probeQuery")
+    cy.then(() => {
+      expect(executions).to.have.length(2)
+      expect(executions[1]).to.contain("probe_one")
+    })
+  })
+
   it("monitors a repeated query in a notebook with polling off until an interval is chosen", () => {
     const executions = load()
     run()
