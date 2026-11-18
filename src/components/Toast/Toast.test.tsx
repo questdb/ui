@@ -27,4 +27,13 @@ describe("ToastContainer", () => {
 
     expect(document.activeElement).toBe(cell)
   })
+
+  it("does not announce the Alt+T shortcut", () => {
+    renderComponent(<ToastContainer />)
+
+    expect(document.querySelector("section.Toastify")).toHaveAttribute(
+      "aria-label",
+      "Notifications",
+    )
+  })
 })
