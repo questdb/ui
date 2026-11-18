@@ -10,13 +10,26 @@ import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import { bufferStore } from "../store/buffers"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
+import { NotebookToolError } from "../utils/notebooks/notebookToolError"
 import type { CellRunOutcome } from "../utils/notebooks/runCellsAfterApply"
 import { isFailClosedClassifyDenial } from "../utils/tools/permissions"
 
 // Why a first run did not fill its cell, or null when it ran or was only
-// interrupted (the dashboard was opened or the session ended mid-run).
+// interrupted (the dashboard was opened or closed, or the session ended
+// mid-run).
 const firstRunFailure = (outcome: CellRunOutcome): string | null => {
-  if ("error" in outcome) return notebookFailureReason(outcome.error)
+  if ("error" in outcome) {
+    const { error } = outcome
+    // The user closed the dashboard (deleted or archived it) before or during
+    // a run; the activate stage records that once (unless the user already
+    // navigated away).
+    if (
+      error instanceof NotebookToolError &&
+      (error.code === "deleted" || error.code === "archived")
+    )
+      return null
+    return notebookFailureReason(error)
+  }
   const { summary } = outcome
   if (summary.success) return null
   if (summary.denied !== undefined)
@@ -47,8 +60,9 @@ export const useMonitoringDashboard = () => {
   ) => {
     if (inFlight.current || tabsDisabled) return
     // Repeated clicks are ignored for the whole open, but the button shows
-    // progress only while a new dashboard is created: activating an open one
-    // is immediate and must not flash a disabled spinner.
+    // progress only while first queries run (a new dashboard, or an open one
+    // whose first runs never landed): activating an open one is immediate and
+    // must not flash a disabled spinner.
     inFlight.current = true
     const session = authSessionState.capture()
     let notebookId: number | undefined

@@ -75,13 +75,28 @@ const getColumns: (
   store: StoreShape,
 ) => Record<string, InformationSchemaColumn[]> = (store) => store.query.columns
 
+// Keyed by the (immutable) displayed result, so unrelated dispatches don't
+// re-hash its SQL. Counts are read fresh: they change independently.
+const monitoredResultKeys = new WeakMap<QueryRawResult, string | null>()
+
+const getMonitoredResultKey = (result: QueryRawResult): string | null => {
+  let key = monitoredResultKeys.get(result)
+  if (key === undefined) {
+    key =
+      result.type === Type.DQL && !isExplainQuery(result.query)
+        ? queryExecutionKey(result.query)
+        : null
+    monitoredResultKeys.set(result, key)
+  }
+  return key
+}
+
 export default {
-  getResultHasRepeatedExecution: (store: StoreShape) =>
-    store.query.result?.type === Type.DQL &&
-    !isExplainQuery(store.query.result.query) &&
-    (store.query.executionCounts?.[
-      queryExecutionKey(store.query.result.query)
-    ] ?? 0) >= 2,
+  getResultHasRepeatedExecution: (store: StoreShape) => {
+    const { result, executionCounts } = store.query
+    const key = result ? getMonitoredResultKey(result) : null
+    return key !== null && (executionCounts?.[key] ?? 0) >= 2
+  },
   getResultSource: (store: StoreShape) => store.query.resultSource,
   getBatchTransfer: (store: StoreShape) => store.query.batchTransfer,
   getNotifications,

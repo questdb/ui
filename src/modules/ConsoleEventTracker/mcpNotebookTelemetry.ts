@@ -60,9 +60,12 @@ export const mcpNotebookTelemetry = (
   if (target !== undefined)
     payload[name === "duplicate_notebook" ? "sourceNotebookId" : "notebookId"] =
       target
+  if (!result || result.isError) return payload
+  // Only a successful call proves cell_id resolved to an existing cell (every
+  // cell tool rejects an unknown id with isError); until then it is free text
+  // from the agent.
   const cellId = CELL_TOOLS.has(name) ? cellIdOf(args.cell_id) : undefined
   if (cellId !== undefined) payload.cellId = cellId
-  if (!result || result.isError) return payload
   let output: Record<string, unknown> = {}
   try {
     const text = result.content.find((c) => c.type === "text")?.text

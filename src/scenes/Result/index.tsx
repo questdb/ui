@@ -506,12 +506,18 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               </Tooltip>
             ))}
 
-          <NotebookTransferActions
-            request={transferRequest}
-            chart={viewMode === "chart"}
-            showMonitor={showMonitor}
-            density={transferActionDensity(viewMode === "chart", toolbarWidth)}
-          />
+          {/* Legacy quick-vis draws no saveable chart config. */}
+          {!(viewMode === "chart" && useQuickVis) && (
+            <NotebookTransferActions
+              request={transferRequest}
+              chart={viewMode === "chart"}
+              showMonitor={showMonitor}
+              density={transferActionDensity(
+                viewMode === "chart",
+                toolbarWidth,
+              )}
+            />
+          )}
           <Box gap="0">
             <DownloadButton
               variant="secondary"

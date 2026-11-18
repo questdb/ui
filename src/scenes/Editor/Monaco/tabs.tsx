@@ -95,11 +95,16 @@ const HistoryButton = styled(IconButton)`
   border-radius: 0.7rem;
 
   &[aria-pressed="true"] {
-    background: ${({ theme }) => theme.color.surfaceRaised};
     border-color: ${({ theme }) => theme.color.borderDefault};
     box-shadow:
       inset 0 1px 0 ${({ theme }) => theme.color.borderSubtle},
       0 4px 12px ${({ theme }) => theme.color.shadowSoft};
+  }
+
+  /* The ghost variant's pressed state reuses interactionHover; this rail
+     latch stays raised, so it must outrank that (0,5,0) rule. */
+  &&&[aria-pressed="true"]:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.surfaceRaised};
   }
 `
 

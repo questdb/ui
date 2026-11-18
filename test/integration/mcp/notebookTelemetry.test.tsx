@@ -132,7 +132,7 @@ describe("MCP notebook telemetry over WebSocket", () => {
     ])
   })
 
-  it("retains the requested target on a dispatch exception without inventing an execution outcome", async () => {
+  it("retains the requested notebook on a dispatch exception, but not the unresolved cell or an execution outcome", async () => {
     await setup()
     await send("get_notebook_state", { buffer_id: 42 })
     vi.mocked(dispatchTool).mockRejectedValueOnce(new Error("private failure"))
@@ -143,7 +143,6 @@ describe("MCP notebook telemetry over WebSocket", () => {
         ConsoleEvent.MCP_RUN_CELL,
         {
           notebookId: 42,
-          cellId: "c1",
           outcome: "dispatch_error",
           durationMs: expect.any(Number) as number,
         },

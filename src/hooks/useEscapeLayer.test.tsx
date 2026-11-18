@@ -5,24 +5,41 @@ import { describe, expect, it, vi } from "vitest"
 import { useEscapeLayer } from "./useEscapeLayer"
 import { EscapePriority } from "../utils/escapeKey"
 
-const PendingDiff = ({ onReject }: { onReject: () => void }) => {
-  useEscapeLayer(true, {
-    priority: EscapePriority.editorDiff,
-    global: true,
+const Layer = ({
+  enabled,
+  onEscape,
+}: {
+  enabled: boolean
+  onEscape: () => void
+}) => {
+  useEscapeLayer(enabled, {
+    priority: EscapePriority.sidePanel,
     onEscape: () => {
-      onReject()
+      onEscape()
       return true
     },
   })
-  return <textarea defaultValue="draft follow-up" aria-label="chat" />
+  return null
 }
 
 describe("useEscapeLayer", () => {
-  // The AI chat input does not act on Escape, so a pending diff answers it.
-  it("registers a global layer that answers from a text field with text", () => {
-    const onReject = vi.fn()
-    const { getByLabelText } = render(<PendingDiff onReject={onReject} />)
-    fireEvent.keyDown(getByLabelText("chat"), { key: "Escape" })
-    expect(onReject).toHaveBeenCalledTimes(1)
+  it("registers only while enabled and calls the latest callback", () => {
+    const first = vi.fn()
+    const latest = vi.fn()
+    const { rerender, unmount } = render(
+      <Layer enabled={false} onEscape={first} />,
+    )
+    fireEvent.keyDown(document.body, { key: "Escape" })
+    expect(first).not.toHaveBeenCalled()
+
+    rerender(<Layer enabled onEscape={first} />)
+    rerender(<Layer enabled onEscape={latest} />)
+    fireEvent.keyDown(document.body, { key: "Escape" })
+    expect(first).not.toHaveBeenCalled()
+    expect(latest).toHaveBeenCalledTimes(1)
+
+    unmount()
+    fireEvent.keyDown(document.body, { key: "Escape" })
+    expect(latest).toHaveBeenCalledTimes(1)
   })
 })

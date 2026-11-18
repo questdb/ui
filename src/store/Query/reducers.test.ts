@@ -131,6 +131,20 @@ describe("repeated execution offer", () => {
     expect(repeated("select 'explain' from trades")).toBe(true)
     expect(repeated("select * from explained")).toBe(true)
   })
+
+  // The key is cached per result object; the counts must still be read fresh.
+  it("offers monitoring once the displayed result's query runs again", () => {
+    const sql = "select * from trades"
+    let state = query(initialState, actions.recordQueryExecution(sql))
+    state = query(state, actions.setResult(dql(sql) as never, BUFFER_ID))
+    const offered = () =>
+      selectors.getResultHasRepeatedExecution({
+        query: state,
+      } as unknown as StoreShape)
+    expect(offered()).toBe(false)
+    state = query(state, actions.recordQueryExecution(sql))
+    expect(offered()).toBe(true)
+  })
 })
 
 const notificationGroup = (

@@ -45,10 +45,35 @@ const add = vi.fn(async (partial?: Partial<Buffer>) => {
   const id = await db.buffers.add(buffer)
   return { ...buffer, id }
 })
+const summary = (note?: string) => ({
+  success: true,
+  queryCount: 1,
+  results: [],
+  ...(note ? { unverified: true, note } : {}),
+})
+// A committed run stamps run history on its cells, as the real runner does.
+const commitRuns = async (
+  bufferId: number,
+  cells: Array<{ cellId: string }>,
+): Promise<CellRunOutcome[]> => {
+  const ran = new Set(cells.map((c) => c.cellId))
+  const view = (await db.buffers.get(bufferId))!.notebookViewState!
+  await db.buffers.update(bufferId, {
+    notebookViewState: {
+      ...view,
+      cells: view.cells.map((cell) =>
+        ran.has(cell.id)
+          ? { ...cell, lastRunStatus: "success" as const }
+          : cell,
+      ),
+    },
+  })
+  return cells.map(({ cellId }) => ({ cellId, summary: summary() }))
+}
 beforeEach(async () => {
   await db.buffers.clear()
   add.mockClear()
-  runner.run.mockReset().mockResolvedValue([])
+  runner.run.mockReset().mockImplementation(commitRuns)
 })
 
 describe("opening a monitoring dashboard", () => {
@@ -94,9 +119,9 @@ describe("opening a monitoring dashboard", () => {
   })
 
   it("runs a created dashboard's grid cells once, like an applied agent notebook", async () => {
-    const onCreate = vi.fn()
-    const created = await openMonitoringDashboard(request, add, onCreate)
-    expect(onCreate).toHaveBeenCalledTimes(1)
+    const onProgress = vi.fn()
+    const created = await openMonitoringDashboard(request, add, onProgress)
+    expect(onProgress).toHaveBeenCalledTimes(1)
     expect(runner.run).toHaveBeenCalledTimes(1)
     const [bufferId, cells, signal, gate] = runner.run.mock.calls[0]
     expect(bufferId).toBe(created?.buffer.id)
@@ -114,22 +139,16 @@ describe("opening a monitoring dashboard", () => {
 
     // Reusing the open dashboard runs nothing and reports no creation.
     expect(
-      (await openMonitoringDashboard(request, add, onCreate))?.outcome,
+      (await openMonitoringDashboard(request, add, onProgress))?.outcome,
     ).toBe("reused")
     expect(runner.run).toHaveBeenCalledTimes(1)
-    expect(onCreate).toHaveBeenCalledTimes(1)
+    expect(onProgress).toHaveBeenCalledTimes(1)
   })
 
   // The tab is in the tab bar while the first runs are in flight. Opening it
   // then refuses those runs' background results; nothing else would ever run
   // the cells, so the open runs them again, now in the open notebook.
   it("runs again the cells whose first run the user interrupted by opening the tab", async () => {
-    const summary = (note?: string) => ({
-      success: true,
-      queryCount: 1,
-      results: [],
-      ...(note ? { unverified: true, note } : {}),
-    })
     runner.run.mockImplementationOnce((_bufferId, cells) =>
       Promise.resolve(
         cells.map(
@@ -159,6 +178,73 @@ describe("opening a monitoring dashboard", () => {
         (run) => "summary" in run && !run.summary.unverified,
       ),
     ).toBe(true)
+  })
+
+  it("does not run again an interrupted cell once the user closed the dashboard", async () => {
+    for (const close of [
+      (id: number) => db.buffers.delete(id),
+      (id: number) => db.buffers.update(id, { archived: true, position: -1 }),
+    ]) {
+      runner.run.mockReset().mockImplementationOnce(async (bufferId, cells) => {
+        await close(bufferId)
+        return cells.map(
+          ({ cellId }, index): CellRunOutcome => ({
+            cellId,
+            summary: summary(index === 0 ? MOUNTED_MID_RUN_NOTE : undefined),
+          }),
+        )
+      })
+      await db.buffers.clear()
+      const created = await openMonitoringDashboard(request, add)
+      expect(runner.run).toHaveBeenCalledTimes(1)
+      const first = created?.runs?.[0]
+      expect(first && "summary" in first && first.summary.unverified).toBe(true)
+    }
+  })
+
+  // The buffer is saved before its first runs. A reload or session end during
+  // them leaves cells that nothing else would ever run.
+  it("runs a reused dashboard's grid cells whose first run never landed", async () => {
+    runner.run.mockResolvedValueOnce([])
+    const created = await openMonitoringDashboard(request, add)
+    const id = created!.buffer.id!
+    const view = (await db.buffers.get(id))!.notebookViewState!
+    const grids = view.cells.filter(
+      (cell) => cell.type !== "markdown" && cell.mode !== "draw",
+    )
+    expect(grids.length).toBeGreaterThan(1)
+    // A failed run is run history too: it is not repeated.
+    await db.buffers.update(id, {
+      notebookViewState: {
+        ...view,
+        cells: view.cells.map((cell) =>
+          cell.id === grids[0].id
+            ? { ...cell, lastRunStatus: "error" as const }
+            : cell,
+        ),
+      },
+    })
+
+    const onProgress = vi.fn()
+    const reused = await openMonitoringDashboard(request, add, onProgress)
+    expect(reused?.outcome).toBe("reused")
+    expect(reused?.buffer.id).toBe(id)
+    expect(onProgress).toHaveBeenCalledTimes(1)
+    expect(runner.run).toHaveBeenCalledTimes(2)
+    const [bufferId, cells, , gate] = runner.run.mock.calls[1]
+    expect(bufferId).toBe(id)
+    expect(gate).toEqual({ kind: "autoRun", source: "monitoring" })
+    expect(cells).toEqual(
+      grids.slice(1).map((cell) => ({ cellId: cell.id, sql: cell.value })),
+    )
+    expect(reused?.runs).toHaveLength(grids.length - 1)
+
+    // Once they ran, reusing it runs nothing and shows no progress.
+    const again = await openMonitoringDashboard(request, add, onProgress)
+    expect(again?.outcome).toBe("reused")
+    expect(again?.runs).toBeUndefined()
+    expect(runner.run).toHaveBeenCalledTimes(2)
+    expect(onProgress).toHaveBeenCalledTimes(1)
   })
 
   it("isolates instances, kinds and names", async () => {

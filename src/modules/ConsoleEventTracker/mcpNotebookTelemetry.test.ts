@@ -6,14 +6,18 @@ const result = (data: unknown, isError = false) => ({
 })
 
 describe("MCP notebook attribution", () => {
-  it("uses the requested target and cell, with no active-tab fallback", () => {
-    expect(
-      mcpNotebookTelemetry("update_cell", {
-        buffer_id: 12,
-        cell_id: "custom.cell",
-        sql: "private",
-      }),
-    ).toEqual({ notebookId: 12, cellId: "custom.cell" })
+  it("uses the requested target, and the cell only once dispatch resolved it", () => {
+    const args = { buffer_id: 12, cell_id: "custom.cell", sql: "private" }
+    expect(mcpNotebookTelemetry("update_cell", args)).toEqual({
+      notebookId: 12,
+    })
+    expect(mcpNotebookTelemetry("update_cell", args, result({}, true))).toEqual(
+      { notebookId: 12 },
+    )
+    expect(mcpNotebookTelemetry("update_cell", args, result({}))).toEqual({
+      notebookId: 12,
+      cellId: "custom.cell",
+    })
     expect(mcpNotebookTelemetry("update_cell", { buffer_id: "12" })).toEqual({})
     expect(mcpNotebookTelemetry("update_cell", { buffer_id: -1 })).toEqual({})
     expect(

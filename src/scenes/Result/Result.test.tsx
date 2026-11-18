@@ -40,7 +40,8 @@ const renders = vi.hoisted(() => ({ result: 0 }))
 const chart = vi.hoisted(() => ({
   onTransferChange: undefined as ((value: unknown) => void) | undefined,
 }))
-// ResultChart is always mounted by Result, so its renders count Result's.
+// ResultChart is mounted whenever quick-vis is off, so its renders count
+// Result's.
 vi.mock("./ResultChart", () => ({
   ResultChart: ({
     onTransferChange,
@@ -53,6 +54,7 @@ vi.mock("./ResultChart", () => ({
   },
 }))
 vi.mock("../../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
+vi.mock("../../js/console/quick-vis", () => ({ quickVis: () => () => {} }))
 
 beforeEach(() => {
   vi.stubGlobal("localStorage", storage)
@@ -341,6 +343,27 @@ describe("result notebook actions", () => {
 
     const current = store.getState().query.result
     act(() => chart.onTransferChange?.({ ...frame, seed: current }))
+    expect(action("result-add-notebook")).toBeEnabled()
+  })
+
+  // Legacy quick-vis has no chart config to save, so it offers no action.
+  it("offers no chart action in legacy quick-vis, but keeps the grid one", () => {
+    storage.setItem("feature.quickVis", "true")
+    const chartStore = mountResult("chart")
+    act(() => {
+      chartStore.dispatch(
+        queryActions.setResult(resultFor("select x from long_sequence(10)"), 1),
+      )
+    })
+    expect(action("result-add-notebook")).not.toBeInTheDocument()
+    cleanup()
+
+    const gridStore = mountResult("grid")
+    act(() => {
+      gridStore.dispatch(
+        queryActions.setResult(resultFor("select x from long_sequence(10)"), 1),
+      )
+    })
     expect(action("result-add-notebook")).toBeEnabled()
   })
 

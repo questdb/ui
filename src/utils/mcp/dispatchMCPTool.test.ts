@@ -181,15 +181,12 @@ describe("notebook telemetry before response decoration", () => {
     expect(response.content[0].text).toContain("Permissions updated")
     expect(response.content[0].text).toContain("since_last_check")
   })
-  it("keeps the explicit target even when the tool is denied", async () => {
+  it("keeps the notebook target but not the unresolved cell when denied", async () => {
     const onNotebookTelemetry = vi.fn()
     await dispatchMCPTool(
       makeCall("update_cell", { buffer_id: 99, cell_id: "c" }),
       { ...ctx("unfetched"), onNotebookTelemetry },
     )
-    expect(onNotebookTelemetry).toHaveBeenCalledWith({
-      notebookId: 99,
-      cellId: "c",
-    })
+    expect(onNotebookTelemetry).toHaveBeenCalledWith({ notebookId: 99 })
   })
 })
