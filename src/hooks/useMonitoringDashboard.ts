@@ -11,6 +11,7 @@ import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import { bufferStore } from "../store/buffers"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
 import type { CellRunOutcome } from "../utils/notebooks/runCellsAfterApply"
+import { isFailClosedClassifyDenial } from "../utils/tools/permissions"
 
 // Why a first run did not fill its cell, or null when it ran or was only
 // interrupted (the dashboard was opened or the session ended mid-run).
@@ -18,7 +19,10 @@ const firstRunFailure = (outcome: CellRunOutcome): string | null => {
   if ("error" in outcome) return notebookFailureReason(outcome.error)
   const { summary } = outcome
   if (summary.success) return null
-  if (summary.denied !== undefined) return "permission_denied"
+  if (summary.denied !== undefined)
+    return isFailClosedClassifyDenial(summary.denied)
+      ? "validation_failed"
+      : "permission_denied"
   if (summary.skipped !== undefined) return "write_blocked"
   if (summary.cancelled !== undefined || summary.unverified) return null
   return "query_error"

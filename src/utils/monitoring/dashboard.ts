@@ -1,5 +1,6 @@
 import { createCell, type NotebookViewState } from "../../store/notebook"
 import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/cellSizing"
+import { NOTEBOOK_ROW_CAP } from "../../scenes/Editor/Notebook/notebookUtils"
 import { tableTemplate } from "./tableTemplate"
 import { matviewTemplate } from "./matviewTemplate"
 import type {
@@ -8,9 +9,22 @@ import type {
   MonitoringRefreshSchedule,
 } from "./types"
 
+// A notebook fetches at most NOTEBOOK_ROW_CAP rows, oldest first, so a chart
+// with more buckets than that would silently lose its newest ones. Every chart
+// clamps the window to the buckets it can hold: 1-minute charts to
+// NOTEBOOK_ROW_CAP minutes, 5-second charts to NOTEBOOK_ROW_CAP / 12 minutes.
+export const MONITORING_MAX_WINDOW_MINUTES = NOTEBOOK_ROW_CAP
+export const MONITORING_MAX_5S_WINDOW_MINUTES = Math.floor(
+  NOTEBOOK_ROW_CAP / 12,
+)
+
+const clampedWindow = (maxMinutes: number) =>
+  `least(@window_minutes,${maxMinutes})`
+
 // Show several refreshes for timer-based views rather than a rolling window
-// that is empty for most of each interval. Bound the initial scan to a week;
-// the user can still choose a different window in Variables.
+// that is empty for most of each interval. Bound the initial scan to what a
+// 1-minute chart can hold; the user can still choose a different window in
+// Variables.
 export const monitoringWindowMinutes = (
   schedule?: MonitoringRefreshSchedule,
 ): number => {
@@ -25,13 +39,28 @@ export const monitoringWindowMinutes = (
     return 30
   // Calendar months/years already exceed the initial scan limit.
   if (["MONTH", "YEAR"].includes(schedule.timer_interval_unit ?? ""))
-    return 10080
+    return MONITORING_MAX_WINDOW_MINUTES
   const minutes =
     schedule.timer_interval *
     (minutesPerUnit[schedule.timer_interval_unit ?? ""] ?? 0)
   return Number.isFinite(minutes) && minutes > 0
-    ? Math.max(30, Math.min(10080, Math.ceil(minutes * 6)))
+    ? Math.max(
+        30,
+        Math.min(MONITORING_MAX_WINDOW_MINUTES, Math.ceil(minutes * 6)),
+      )
     : 30
+}
+
+// A fence longer than any backtick run in the text, padded when the text
+// starts or ends with a backtick (CommonMark strips one space on each side).
+const markdownCodeSpan = (text: string): string => {
+  const longestRun = Math.max(
+    0,
+    ...(text.match(/`+/g) ?? []).map((run) => run.length),
+  )
+  const fence = "`".repeat(longestRun + 1)
+  const pad = text.startsWith("`") || text.endsWith("`") ? " " : ""
+  return `${fence}${pad}${text}${pad}${fence}`
 }
 
 export const MONITORING_TEMPLATE_VERSION = 1
@@ -48,11 +77,15 @@ export const buildMonitoringDashboard = ({
   name,
   kind,
   telemetryEnabled,
+  telemetryUnknown = false,
   refreshSchedule,
 }: {
   name: string
   kind: MonitoringKind
   telemetryEnabled: boolean
+  // The server's telemetry setting could not be read: telemetry panels are
+  // left out, and the dashboard says why without claiming it is disabled.
+  telemetryUnknown?: boolean
   refreshSchedule?: MonitoringRefreshSchedule
 }): NotebookViewState => {
   const templates = (
@@ -60,17 +93,30 @@ export const buildMonitoringDashboard = ({
   ).filter((cell) => telemetryEnabled || !cell.telemetry)
   // Only a view's refresh charts and incidents need enabled telemetry.
   const refreshHistory = kind === "table" || telemetryEnabled
+  const hiddenReason = telemetryUnknown
+    ? "the server's telemetry setting could not be read"
+    : "telemetry is disabled"
   const sqlName = `'${name.replace(/'/g, "''")}'`
-  const markdownName = name.replace(/[\\`*_{}[\]<>#|]/g, "\\$&")
+  // The name is shown as a code span: its text renders literally, and GFM
+  // autolinking, which runs on decoded text and so ignores backslash escapes
+  // and entities, leaves names such as `www.example.com` or `ops@example.com`
+  // alone.
+  const markdownName = markdownCodeSpan(name)
   const cells = templates.map((template, position) => {
     // Function replacers: a string replacement would expand `$'`, `$$` and
     // `$&` in names such as `orders$` into unrelated SQL.
     let value = template.value
       .replaceAll("__TARGET_SQL__", () => sqlName)
       .replaceAll("__TARGET_NAME__", () => markdownName)
+      .replaceAll("__WINDOW_1M__", () =>
+        clampedWindow(MONITORING_MAX_WINDOW_MINUTES),
+      )
+      .replaceAll("__WINDOW_5S__", () =>
+        clampedWindow(MONITORING_MAX_5S_WINDOW_MINUTES),
+      )
     if (!refreshHistory && template.name === "Reading the data") {
       value = `### Reading the data
-Charts use completed 1-minute buckets from WAL telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes, and an empty chart means nothing happened in its window. Refresh charts and incidents are hidden because telemetry is disabled. **Refresh age** is the time since the last refresh finished, whether it succeeded or failed.`
+Charts use completed 1-minute buckets from WAL telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes, and an empty chart means nothing happened in its window. A chart holds at most 10,000 buckets, so charts cover at most the latest 10,000 minutes of **window_minutes**. Refresh charts and incidents are hidden because ${hiddenReason}. **Refresh age** is the time since the last refresh finished, whether it succeeded or failed.`
     }
     if (!refreshHistory && position === 0) {
       value = `# Materialized view monitoring · ${markdownName}

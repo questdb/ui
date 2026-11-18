@@ -13,6 +13,7 @@ import {
 import type { MonitoringTarget, MonitoringRefreshSchedule } from "./types"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { SessionEndedError } from "../../modules/OAuth2/session"
+import { MOUNTED_MID_RUN_NOTE } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   cellsToRunAfterApply,
   runCellsAfterApply,
@@ -22,6 +23,7 @@ import {
 export type MonitoringRequest = {
   target: MonitoringTarget
   telemetryEnabled: boolean
+  telemetryUnknown?: boolean
   refreshSchedule?: MonitoringRefreshSchedule
 }
 
@@ -31,6 +33,11 @@ export type MonitoringOpenResult = {
   // The first runs of a created dashboard's grid cells.
   runs?: CellRunOutcome[]
 }
+
+const MAX_MOUNTED_RETRIES = 2
+
+const wasOpenedMidRun = (run: CellRunOutcome): boolean =>
+  "summary" in run && run.summary.note === MOUNTED_MID_RUN_NOTE
 
 const requests = new Map<string, Promise<MonitoringOpenResult | undefined>>()
 
@@ -98,14 +105,31 @@ export const openMonitoringDashboard = (
     )
     requireSession()
     if (buffer?.id === undefined) return undefined
-    const runs = await runCellsAfterApply(
-      buffer.id,
-      cellsToRunAfterApply(buffer.notebookViewState?.cells ?? []).map(
-        (cell) => ({ cellId: cell.id, sql: cell.value }),
-      ),
-      abort.signal,
-      { kind: "autoRun", source: "monitoring" },
-    )
+    const cells = cellsToRunAfterApply(
+      buffer.notebookViewState?.cells ?? [],
+    ).map((cell) => ({ cellId: cell.id, sql: cell.value }))
+    const gate = { kind: "autoRun", source: "monitoring" } as const
+    let runs = await runCellsAfterApply(buffer.id, cells, abort.signal, gate)
+    // The tab is in the tab bar while its first runs are in flight. If the user
+    // opens it then, a background run's result is refused at commit (the live
+    // notebook owns the cell now) and nothing else would ever run the cell: its
+    // auto-refresh only starts once the cell has a result. Run those cells
+    // again; the run now goes to the open notebook.
+    for (let attempt = 0; attempt < MAX_MOUNTED_RETRIES; attempt++) {
+      const interrupted = new Set(
+        runs.filter(wasOpenedMidRun).map((run) => run.cellId),
+      )
+      if (interrupted.size === 0) break
+      requireSession()
+      const retried = await runCellsAfterApply(
+        buffer.id,
+        cells.filter((cell) => interrupted.has(cell.cellId)),
+        abort.signal,
+        gate,
+      )
+      const byCell = new Map(retried.map((run) => [run.cellId, run]))
+      runs = runs.map((run) => byCell.get(run.cellId) ?? run)
+    }
     requireSession()
     return { buffer, outcome: "created", runs }
   }

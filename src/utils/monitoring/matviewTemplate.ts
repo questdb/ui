@@ -63,7 +63,7 @@ Duration only includes successful refreshes, so read it together with the failed
        approx_percentile(e.latency, 0.95) AS "p95 ms",
        approx_percentile(e.latency, 0.99) AS "p99 ms"
 FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id
-WHERE e.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND e.event=204
+WHERE e.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND e.event=204
 SAMPLE BY 1m ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
@@ -86,8 +86,8 @@ SAMPLE BY 1m ALIGN TO CALENDAR`,
     autoRefresh: "60s",
     value: `SELECT e.created, sum(CASE WHEN e.event=204 THEN 1 ELSE 0 END) AS "Successful", sum(CASE WHEN e.event=203 THEN 1 ELSE 0 END) AS "Failed"
 FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id
-WHERE e.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (203,204)
-SAMPLE BY 1m FROM dateadd('m',-@window_minutes,timestamp_floor('m',now())) TO timestamp_floor('m',now()) FILL(0,0)`,
+WHERE e.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (203,204)
+SAMPLE BY 1m FROM dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) TO timestamp_floor('m',now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -138,10 +138,10 @@ LEFT JOIN wal_tables() w ON w.name=t.table_name WHERE v.view_name=__TARGET_SQL__
  sum(w.rowCount)/60.0 AS "Logical rows/s",
  sum(w.physicalRowCount)/60.0 AS "Physical rows/s"
 FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created >= dateadd('m', -@window_minutes, timestamp_floor('m', now()))
+WHERE w.created >= dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
  AND t.table_name = __TARGET_SQL__ AND w.event=105 AND w.rowCount>0
-SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
+SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -163,7 +163,7 @@ SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO
     value: `SELECT w.created,
  sum(w.physicalRowCount)*1.0/nullif(sum(w.rowCount),0) AS "Physical / logical rows"
 FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created >= dateadd('m', -@window_minutes, timestamp_floor('m', now()))
+WHERE w.created >= dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
  AND t.table_name = __TARGET_SQL__ AND w.event=105 AND w.rowCount>0
 SAMPLE BY 1m ALIGN TO CALENDAR`,
@@ -286,6 +286,6 @@ LEFT JOIN (SELECT event_name,count() AS events,max(observed_at) AS last_seen FRO
     w: 12,
     height: 116,
     value: `### Reading the data
-Charts use completed 1-minute buckets from telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes. Duration and ratio charts only have points for minutes with events, so an empty chart or log means nothing happened in its window. Views that refresh weekly or less often, and manual views, will show few refreshes or none.`,
+Charts use completed 1-minute buckets from telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes. Duration and ratio charts only have points for minutes with events, so an empty chart or log means nothing happened in its window. A chart holds at most 10,000 buckets, so charts cover at most the latest 10,000 minutes of **window_minutes**. Views that refresh weekly or less often, and manual views, will show few refreshes or none.`,
   },
 ]

@@ -109,6 +109,58 @@ describe("ambient Escape layers", () => {
     expect(calls).toEqual(["panel"])
   })
 
+  it("still lets a global layer answer from a text field holding text", () => {
+    const calls: string[] = []
+    layer("panel", calls)
+    layer("diff", calls, {
+      priority: EscapePriority.editorDiff,
+      global: true,
+    })
+    const textarea = element("textarea") as HTMLTextAreaElement
+    textarea.value = "draft follow-up"
+    const event = press(textarea)
+    expect(calls).toEqual(["diff"])
+    expect(event.defaultPrevented).toBe(true)
+    expect(textarea.value).toBe("draft follow-up")
+  })
+
+  it("runs a global layer before the layer that contains the focus", () => {
+    const calls: string[] = []
+    const panel = element()
+    layer("panel", calls, { scope: () => panel })
+    layer("diff", calls, {
+      priority: EscapePriority.editorDiff,
+      global: true,
+    })
+    press(element("button", panel))
+    expect(calls).toEqual(["diff"])
+    press(element("button", panel))
+    expect(calls).toEqual(["diff", "diff"])
+  })
+
+  it("keeps a claimed Escape away from global layers", () => {
+    const calls: string[] = []
+    layer("diff", calls, { global: true })
+    const input = element("input") as HTMLInputElement
+    input.value = "trades"
+    input.addEventListener("keydown", (event) => event.preventDefault())
+    press(input)
+    expect(calls).toEqual([])
+  })
+
+  it.each(["checkbox", "radio", "range", "button"])(
+    "does not treat a %s input as a text field",
+    (type) => {
+      const calls: string[] = []
+      layer("panel", calls)
+      const input = element("input") as HTMLInputElement
+      input.type = type
+      input.value = input.value || "go"
+      press(input)
+      expect(calls).toEqual(["panel"])
+    },
+  )
+
   it("does not treat the editor's hidden input as a text field", () => {
     const calls: string[] = []
     layer("panel", calls)

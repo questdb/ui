@@ -3,7 +3,11 @@ import "fake-indexeddb/auto"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { db } from "../../store/db"
 import { bufferStore, makeBuffer, type Buffer } from "../../store/buffers"
-import type { runCellsAfterApply } from "../notebooks/runCellsAfterApply"
+import type {
+  CellRunOutcome,
+  runCellsAfterApply,
+} from "../notebooks/runCellsAfterApply"
+import { MOUNTED_MID_RUN_NOTE } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   openMonitoringDashboard,
   type MonitoringRequest,
@@ -114,6 +118,47 @@ describe("opening a monitoring dashboard", () => {
     ).toBe("reused")
     expect(runner.run).toHaveBeenCalledTimes(1)
     expect(onCreate).toHaveBeenCalledTimes(1)
+  })
+
+  // The tab is in the tab bar while the first runs are in flight. Opening it
+  // then refuses those runs' background results; nothing else would ever run
+  // the cells, so the open runs them again, now in the open notebook.
+  it("runs again the cells whose first run the user interrupted by opening the tab", async () => {
+    const summary = (note?: string) => ({
+      success: true,
+      queryCount: 1,
+      results: [],
+      ...(note ? { unverified: true, note } : {}),
+    })
+    runner.run.mockImplementationOnce((_bufferId, cells) =>
+      Promise.resolve(
+        cells.map(
+          ({ cellId }, index): CellRunOutcome => ({
+            cellId,
+            summary: summary(index === 0 ? MOUNTED_MID_RUN_NOTE : undefined),
+          }),
+        ),
+      ),
+    )
+    runner.run.mockImplementationOnce((_bufferId, cells) =>
+      Promise.resolve(
+        cells.map(
+          ({ cellId }): CellRunOutcome => ({ cellId, summary: summary() }),
+        ),
+      ),
+    )
+    const created = await openMonitoringDashboard(request, add)
+    expect(runner.run).toHaveBeenCalledTimes(2)
+    const [firstCells] = [runner.run.mock.calls[0][1]]
+    const [, retriedCells, , gate] = runner.run.mock.calls[1]
+    expect(retriedCells).toEqual([firstCells[0]])
+    expect(gate).toEqual({ kind: "autoRun", source: "monitoring" })
+    expect(created?.runs).toHaveLength(firstCells.length)
+    expect(
+      created?.runs?.every(
+        (run) => "summary" in run && !run.summary.unverified,
+      ),
+    ).toBe(true)
   })
 
   it("isolates instances, kinds and names", async () => {

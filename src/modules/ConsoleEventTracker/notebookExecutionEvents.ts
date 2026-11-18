@@ -1,4 +1,5 @@
 import type { CellRunOutcome } from "../../scenes/Editor/Notebook/notebookUtils"
+import { isFailClosedClassifyDenial } from "../../utils/tools/permissions"
 import { trackEvent } from "."
 import { ConsoleEvent } from "./events"
 
@@ -8,8 +9,12 @@ export type NotebookExecutionOutcome =
   | "cancelled"
   | "superseded"
   | "unverified"
+  // Refused by a permission.
   | "denied"
+  // A write that an auto-run or a draw cell does not execute.
   | "skipped"
+  // The SQL could not be classified (validate failed), so it did not run.
+  | "validation_failed"
   | "not_started"
 
 // Use this run's result, never a cell's previous/polled frame. A successful
@@ -18,7 +23,9 @@ export const notebookRunOutcome = (
   run: CellRunOutcome,
 ): NotebookExecutionOutcome => {
   if (run.denied !== undefined) {
-    return "denied"
+    return isFailClosedClassifyDenial(run.denied)
+      ? "validation_failed"
+      : "denied"
   }
 
   if (run.skipped !== undefined) {

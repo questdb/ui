@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { notebookRunOutcome } from "./notebookExecutionEvents"
 import type { CellRunOutcome } from "../../scenes/Editor/Notebook/notebookUtils"
+import { denyReasonFailClosedClassify } from "../../utils/tools/permissions"
 
 const completed: CellRunOutcome = {
   ok: true,
@@ -36,5 +37,16 @@ describe("notebook execution outcomes", () => {
     expect(notebookRunOutcome({ ...completed, skipped: "write" })).toBe(
       "skipped",
     )
+  })
+
+  // The same vocabulary as the refresh engine: a validate outage is not a
+  // permission denial.
+  it("labels a run refused because its SQL could not be classified", () => {
+    expect(
+      notebookRunOutcome({
+        ...completed,
+        denied: denyReasonFailClosedClassify("execution", "network down"),
+      }),
+    ).toBe("validation_failed")
   })
 })

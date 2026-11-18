@@ -1288,7 +1288,7 @@ export class CellRefreshEngine {
         classified = await this.classifyForRound(entry, ac)
       } catch (e) {
         if (ac.signal.aborted) return
-        execution.outcome = "error"
+        execution.outcome = "validation_failed"
         const message = e instanceof Error ? e.message : "validate failed"
         this.setState(entry, {
           classifyBlock: { kind: "failed", message },
@@ -1300,7 +1300,7 @@ export class CellRefreshEngine {
       if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
       const offender = classified.find((s) => s.klass === "DDL_DML")
       if (offender) {
-        execution.outcome = "denied"
+        execution.outcome = "skipped"
         this.setState(entry, {
           classifyBlock: {
             kind: "write",
@@ -1445,7 +1445,7 @@ export class CellRefreshEngine {
         classified = await this.classifyForRound(entry, round)
       } catch (e) {
         if (round.signal.aborted) return
-        execution.outcome = "error"
+        execution.outcome = "validation_failed"
         const message = e instanceof Error ? e.message : "validate failed"
         this.setState(entry, {
           classifyBlock: { kind: "failed", message },
@@ -1456,7 +1456,7 @@ export class CellRefreshEngine {
       if (round.signal.aborted) return
       const offender = classified.find((s) => s.klass === "DDL_DML")
       if (offender) {
-        execution.outcome = "denied"
+        execution.outcome = "skipped"
         // A write cell is a blocked entry: no execution, old rows stay.
         this.setState(entry, {
           classifyBlock: {

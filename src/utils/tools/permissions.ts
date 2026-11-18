@@ -61,6 +61,8 @@ export const denyReasonForDrawWrite = (queryType: string): string =>
   `Cannot draw a write query ('${queryType}'). ` +
   "Draw cells must contain only DQL (SELECT). Switch to Run mode to execute this SQL."
 
+const FAIL_CLOSED_CLASSIFY_PREFIX = "PERMISSION_DENIED: could not classify SQL"
+
 export const denyReasonFailClosedClassify = (
   context: "execution" | "draw",
   message: string,
@@ -68,8 +70,13 @@ export const denyReasonFailClosedClassify = (
   context === "draw"
     ? `Cannot classify cell SQL (validate request failed: ${message}). ` +
       "Refusing to draw until the query can be classified safely."
-    : `PERMISSION_DENIED: could not classify SQL (validate request failed: ${message}). ` +
+    : `${FAIL_CLOSED_CLASSIFY_PREFIX} (validate request failed: ${message}). ` +
       "Treating as a write to be safe; ask the user to grant 'write' or fix connectivity to QuestDB."
+
+// A run denied only because its SQL could not be classified (the validate
+// request failed), not because a permission refused it.
+export const isFailClosedClassifyDenial = (reason: string): boolean =>
+  reason.startsWith(FAIL_CLOSED_CLASSIFY_PREFIX)
 
 export const checkToolPermission = (
   tool: string,

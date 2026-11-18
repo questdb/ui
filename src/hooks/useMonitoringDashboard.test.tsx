@@ -1,4 +1,5 @@
 import React from "react"
+import { denyReasonFailClosedClassify } from "../utils/tools/permissions"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { trackEvent } from "../modules/ConsoleEventTracker"
@@ -201,6 +202,13 @@ describe("monitoring telemetry", () => {
       runs: [
         { cellId: "ok", summary: { ...summary, success: true } },
         { cellId: "private", summary: { ...summary, denied: "no access" } },
+        {
+          cellId: "offline",
+          summary: {
+            ...summary,
+            denied: denyReasonFailClosedClassify("execution", "network down"),
+          },
+        },
         { cellId: "broken", summary },
         // The user opened the tab or the session ended mid-run.
         { cellId: "opened", summary: { ...summary, unverified: true } },
@@ -224,6 +232,8 @@ describe("monitoring telemetry", () => {
     expect(failed).toEqual(
       [
         ["private", "permission_denied"],
+        // A validate outage, labelled like the charts' initial failure.
+        ["offline", "validation_failed"],
         ["broken", "query_error"],
         ["full", "storage_quota"],
       ].map(([cellId, reason]) => ({
@@ -236,7 +246,7 @@ describe("monitoring telemetry", () => {
       })),
     )
     expect(mocks.error).toHaveBeenCalledWith(
-      "3 monitoring cells could not run. Check their errors in the notebook.",
+      "4 monitoring cells could not run. Check their errors in the notebook.",
     )
     expect(mocks.editor.setActiveBuffer).toHaveBeenCalledTimes(1)
   })

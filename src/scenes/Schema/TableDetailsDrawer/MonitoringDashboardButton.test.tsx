@@ -5,12 +5,16 @@ import type { useMonitoringDashboard } from "../../../hooks/useMonitoringDashboa
 import { actions, selectors } from "../../../store"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { LeftPanelType } from "../../../providers/LocalStorageProvider/types"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import {
   catalog,
   click,
+  deferred,
+  flush,
   hook,
   mountDrawer,
   queryHook,
+  raw,
 } from "./test/drawerHarness"
 
 const opener = vi.hoisted(() => ({
@@ -90,6 +94,119 @@ describe("drawer monitoring dashboard action", () => {
       )
     },
   )
+
+  // The startup telemetry config read runs once and is never retried. The
+  // dashboard identity must not depend on it, and a missing config is read
+  // again instead of being taken for disabled telemetry.
+  it.each([
+    ["enabled", true, { telemetryEnabled: true, telemetryUnknown: false }],
+    ["disabled", false, { telemetryEnabled: false, telemetryUnknown: false }],
+    [
+      "unreadable",
+      undefined,
+      { telemetryEnabled: false, telemetryUnknown: true },
+    ],
+  ] as const)(
+    "re-reads a missing telemetry config (%s) before building a dashboard",
+    async (_label, enabled, expected) => {
+      const server = catalog()
+      server.reply = (query) =>
+        query.startsWith("telemetry_config")
+          ? enabled === undefined
+            ? new Response("unavailable", { status: 503 })
+            : Response.json(raw([{ id: "0x1", enabled }]))
+          : undefined
+      opener.open.mockClear()
+      const store = await mountDrawer("trades_mv", "matview")
+      expect(selectors.telemetry.getConfig(store.getState())).toBeUndefined()
+      await click("monitoring-dashboard")
+      expect(
+        server.requests.some(({ query }) =>
+          query.startsWith("telemetry_config"),
+        ),
+      ).toBe(true)
+      const [request] = opener.open.mock.calls[0]
+      expect(request).toMatchObject(expected)
+      expect(request.target.instanceKey).toBe(
+        new URL(".", window.location.href).href,
+      )
+    },
+  )
+
+  it("shows progress and ignores clicks while it reads the telemetry config", async () => {
+    const server = catalog()
+    const pending = deferred()
+    server.reply = (query) =>
+      query.startsWith("telemetry_config") ? pending.promise : undefined
+    opener.open.mockClear()
+    await mountDrawer("trades_mv", "matview")
+    await click("monitoring-dashboard")
+    expect(hook("monitoring-dashboard")).toBeDisabled()
+    expect(hook("monitoring-dashboard")).toHaveAttribute("aria-busy", "true")
+    await click("monitoring-dashboard")
+    await pending.respond(Response.json(raw([{ id: "0x1", enabled: true }])))
+    await flush()
+    expect(opener.open).toHaveBeenCalledTimes(1)
+    expect(
+      server.requests.filter(({ query }) =>
+        query.startsWith("telemetry_config"),
+      ),
+    ).toHaveLength(1)
+    expect(hook("monitoring-dashboard")).toBeEnabled()
+  })
+
+  it("reports a target change during the telemetry read and opens nothing", async () => {
+    const server = catalog()
+    const pending = deferred()
+    server.reply = (query) =>
+      query.startsWith("telemetry_config") ? pending.promise : undefined
+    opener.open.mockClear()
+    // Mocked by the drawer harness, which registers the mock after this
+    // file's own imports were resolved.
+    const { trackEvent } = await import("../../../modules/ConsoleEventTracker")
+    vi.mocked(trackEvent).mockClear()
+    const store = await mountDrawer("trades_mv", "matview")
+    await click("monitoring-dashboard")
+    act(() => {
+      store.dispatch(
+        actions.console.pushSidebarHistory({
+          type: "tableDetails",
+          payload: { tableName: "trades", kind: "table" },
+        }),
+      )
+    })
+    await pending.respond(Response.json(raw([{ id: "0x1", enabled: true }])))
+    await flush()
+    expect(opener.open).not.toHaveBeenCalled()
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.MONITORING_DASHBOARD_FAILED,
+      { kind: "matview", stage: "prepare", reason: "target_changed" },
+    )
+  })
+
+  it("uses a loaded telemetry config without reading it again", async () => {
+    const server = catalog()
+    opener.open.mockClear()
+    const store = await mountDrawer("trades_mv", "matview")
+    act(() => {
+      store.dispatch(
+        actions.telemetry.setConfig({
+          id: "0x1",
+          enabled: true,
+        } as never),
+      )
+    })
+    await click("monitoring-dashboard")
+    expect(
+      server.requests.some(({ query }) => query.startsWith("telemetry_config")),
+    ).toBe(false)
+    const [request] = opener.open.mock.calls[0]
+    expect(request).toMatchObject({
+      telemetryEnabled: true,
+      telemetryUnknown: false,
+      target: { instanceKey: new URL(".", window.location.href).href },
+    })
+  })
 
   it("does not advertise a dashboard for a non-WAL table", async () => {
     // Its history would come from WAL telemetry, which it has none of.

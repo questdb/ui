@@ -57,7 +57,7 @@ These charts use 5-second buckets. WAL rows/s shows rows committed to the WAL an
     height: 356,
     autoRefresh: "5s",
     value: `SELECT w.created, sum(CASE WHEN w.event=109 THEN w.rowCount ELSE 0 END)/5.0 AS "WAL rows/s", sum(CASE WHEN w.event=105 THEN w.rowCount ELSE 0 END)/5.0 AS "Applied rows/s" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event IN (109,105) AND w.rowCount>0 SAMPLE BY 5s FROM dateadd('m',-@window_minutes,timestamp_floor('5s',now())) TO timestamp_floor('5s',now()) FILL(0,0)`,
+WHERE w.created>=dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event IN (109,105) AND w.rowCount>0 SAMPLE BY 5s FROM dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) TO timestamp_floor('5s',now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -80,12 +80,12 @@ WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('5s',now())) AND w
        approx_percentile(w.latency, 0.9) AS "Queue p90 ms",
        approx_percentile(w.latency, 0.95) AS "Queue p95 ms",
        approx_percentile(w.latency, 0.99) AS "Queue p99 ms" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event=103 SAMPLE BY 5s ALIGN TO CALENDAR;
+WHERE w.created>=dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event=103 SAMPLE BY 5s ALIGN TO CALENDAR;
 SELECT w.created, approx_percentile(w.latency, 0.5) AS "Apply p50 ms",
        approx_percentile(w.latency, 0.9) AS "Apply p90 ms",
        approx_percentile(w.latency, 0.95) AS "Apply p95 ms",
        approx_percentile(w.latency, 0.99) AS "Apply p99 ms" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event=105 AND w.rowCount>0 SAMPLE BY 5s ALIGN TO CALENDAR`,
+WHERE w.created>=dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event=105 AND w.rowCount>0 SAMPLE BY 5s ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -220,10 +220,10 @@ These charts use 1-minute buckets. Look at the transaction rate next to the tran
  sum(CASE WHEN w.event=109 THEN 1 ELSE 0 END)/60.0 AS "Committed txns/s",
  sum(CASE WHEN w.event=105 THEN 1 ELSE 0 END)/60.0 AS "Applied txns/s"
 FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created >= dateadd('m', -@window_minutes, timestamp_floor('m', now()))
+WHERE w.created >= dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
  AND t.table_name = __TARGET_SQL__ AND w.event IN (109,105) AND w.rowCount>0
-SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
+SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -246,7 +246,7 @@ SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO
        approx_percentile(w.rowCount, 0.9) AS "p90 rows/txn",
        approx_percentile(w.rowCount, 0.95) AS "p95 rows/txn",
        approx_percentile(w.rowCount, 0.99) AS "p99 rows/txn" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND w.event=109 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
+WHERE w.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND w.event=109 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -275,10 +275,10 @@ WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND w.
  sum(w.rowCount)/60.0 AS "Logical rows/s",
  sum(w.physicalRowCount)/60.0 AS "Physical rows/s"
 FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created >= dateadd('m', -@window_minutes, timestamp_floor('m', now()))
+WHERE w.created >= dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
  AND t.table_name = __TARGET_SQL__ AND w.event=105 AND w.rowCount>0
-SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
+SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -298,7 +298,7 @@ SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO
     height: 356,
     autoRefresh: "60s",
     value: `SELECT w.created, sum(w.physicalRowCount)*1.0/nullif(sum(w.rowCount),0) AS "Physical / logical rows" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND w.event=105 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
+WHERE w.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND w.event=105 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -318,6 +318,6 @@ WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND w.
     w: 12,
     height: 116,
     value: `### Reading the data
-The charts come from telemetry, which the server keeps for one week. Rate charts show 0 when nothing happened. Latency, size and ratio charts only have points where something happened, so "No data to plot" means there were no events in the window. The grids show the current state and keep no history. **Write age** is the time since the server last applied WAL data to the table. After a restart it counts from the newest row's timestamp.`,
+The charts come from telemetry, which the server keeps for one week. Rate charts show 0 when nothing happened. Latency, size and ratio charts only have points where something happened, so "No data to plot" means there were no events in the window. A chart holds at most 10,000 buckets, so 5-second charts cover at most the latest 833 minutes of **window_minutes** and 1-minute charts the latest 10,000. The grids show the current state and keep no history. **Write age** is the time since the server last applied WAL data to the table. After a restart it counts from the newest row's timestamp.`,
   },
 ]

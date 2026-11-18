@@ -17,12 +17,15 @@
  *       a grid cell selection) handle Escape on the element itself.
  *    c. Ambient layers (notebook cell focus, a pending AI diff, a side panel)
  *       register with `useEscapeLayer` and receive only Escapes that nothing
- *       above claimed. A layer whose element contains the focus goes first;
- *       otherwise the highest `EscapePriority` wins.
+ *       above claimed. A global layer (a pending decision Escape answers,
+ *       wherever the focus is) goes first; then a layer whose element contains
+ *       the focus; otherwise the highest `EscapePriority` wins.
  *
- * 3. A text field that still holds text owns Escape: ambient layers ignore it.
- *    This is decided from the value at the moment the key was pressed, before
- *    a handler could clear it, so clearing a field never also closes a panel.
+ * 3. A text field that still holds text owns Escape: ambient layers other than
+ *    global ones ignore it. This is decided from the value at the moment the
+ *    key was pressed, before a handler could clear it, so clearing a field
+ *    never also closes a panel. A field that acts on Escape claims it, so a
+ *    global layer never sees that press either.
  */
 
 export const EscapePriority = {
@@ -40,6 +43,10 @@ export type EscapeLayer = {
   scope?: () => Element | null
   // Called with an unclaimed Escape. Return true when the layer acted.
   onEscape: (event: KeyboardEvent) => boolean
+  // A pending decision that Escape answers from anywhere, even from a text
+  // field holding text that does not act on Escape itself (e.g. a draft in the
+  // AI chat input while its suggested diff is pending).
+  global?: boolean
 }
 
 type EscapeEvent = { key: string; defaultPrevented: boolean }
@@ -51,10 +58,25 @@ export const claimEscape = (event: { preventDefault: () => void }) =>
 
 export const isEscapeClaimed = (event: EscapeEvent) => event.defaultPrevented
 
+// Inputs whose `value` is not text the user typed: a checkbox reports "on".
+const NON_TEXT_INPUT_TYPES = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "hidden",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+])
+
 // Monaco keeps a hidden textarea for input; it is not a text field the user
 // sees, and the editor handles its own Escape bindings.
 export const isTextFieldWithValue = (target: EventTarget | null) =>
-  (target instanceof HTMLInputElement ||
+  ((target instanceof HTMLInputElement &&
+    !NON_TEXT_INPUT_TYPES.has(target.type)) ||
     target instanceof HTMLTextAreaElement) &&
   target.value.length > 0 &&
   !target.closest(".monaco-editor")
@@ -72,23 +94,33 @@ const contains = (layer: EscapeLayer, target: EventTarget | null) => {
   return !!scope && target instanceof Node && scope.contains(target)
 }
 
-// Layers containing the target, innermost first, then the rest by priority.
-// Ties go to the most recently registered layer.
-const dispatchOrder = (target: EventTarget | null): EscapeLayer[] => {
+// Global layers by priority, then layers containing the target, innermost
+// first, then the rest by priority. Ties go to the most recently registered
+// layer. A press a text field owns reaches only the global layers.
+const dispatchOrder = (
+  target: EventTarget | null,
+  ownedByField: boolean,
+): EscapeLayer[] => {
   const latestFirst = [...layers].reverse()
-  const scoped = latestFirst
+  const byPriority = (a: EscapeLayer, b: EscapeLayer) => b.priority - a.priority
+  const global = latestFirst.filter((layer) => layer.global).sort(byPriority)
+  if (ownedByField) return global
+  const ambient = latestFirst.filter((layer) => !layer.global)
+  const scoped = ambient
     .filter((layer) => contains(layer, target))
     .sort((a, b) => (a.scope?.()?.contains(b.scope?.() ?? null) ? 1 : -1))
-  const rest = latestFirst
+  const rest = ambient
     .filter((layer) => !scoped.includes(layer))
-    .sort((a, b) => b.priority - a.priority)
-  return [...scoped, ...rest]
+    .sort(byPriority)
+  return [...global, ...scoped, ...rest]
 }
 
 const onBubble = (event: KeyboardEvent) => {
   if (!isEscape(event) || isEscapeClaimed(event)) return
-  if (ownedByTextField.has(event)) return
-  for (const layer of dispatchOrder(event.target)) {
+  for (const layer of dispatchOrder(
+    event.target,
+    ownedByTextField.has(event),
+  )) {
     if (layer.onEscape(event)) {
       claimEscape(event)
       return

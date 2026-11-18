@@ -1,4 +1,11 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import React, {
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react"
 import { useSelector, useDispatch } from "react-redux"
 import styled from "styled-components"
 import { selectors, actions } from "../../../store"
@@ -18,7 +25,8 @@ import {
   truncateLongDDL,
 } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
-import { useSettings } from "../../../providers"
+import { QuestContext, useSettings } from "../../../providers"
+import { queryTelemetryConfig } from "../../../utils/telemetryQueries"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import * as QuestDB from "../../../utils/questdb"
 import {
@@ -216,6 +224,7 @@ export const TableDetailsDrawer = () => {
   const { leftPanelState, updateLeftPanelState } = useLocalStorage()
   const monitoringDashboard = useMonitoringDashboard()
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
+  const { quest } = useContext(QuestContext)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const target = useSelector(selectors.console.getTableDetailsTarget)
   const targetRef = useRef(target)
@@ -436,20 +445,71 @@ export const TableDetailsDrawer = () => {
     kindSourceLoading
   const tablesUnavailable = tableSource.state.status === "unavailable"
 
-  const openMonitoringDashboard = () => {
+  // The startup telemetry config read runs once and is not retried, so it may
+  // be missing (failed, or not answered yet). Read it again rather than guess.
+  // Undefined means the setting is unknown.
+  const readTelemetryEnabled = async (): Promise<boolean | undefined> => {
+    if (telemetryConfig) return telemetryConfig.enabled === true
+    try {
+      const response = await queryTelemetryConfig(quest)
+      return response.type === QuestDB.Type.DQL && response.data[0]
+        ? response.data[0].enabled === true
+        : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  // Covers the telemetry re-read before the dashboard opener takes over: the
+  // button shows progress and ignores repeated clicks during it.
+  const [preparingDashboard, setPreparingDashboard] = useState(false)
+  const preparingDashboardRef = useRef(false)
+  const drawerMountedRef = useRef(true)
+  useEffect(
+    () => () => {
+      drawerMountedRef.current = false
+    },
+    [],
+  )
+
+  const openMonitoringDashboard = async () => {
     if (!tableData || (kind !== "table" && kind !== "matview")) return
+    if (monitoringDashboard.busy || preparingDashboardRef.current) return
+    const name = tableName
+    preparingDashboardRef.current = true
+    setPreparingDashboard(true)
+    let telemetryEnabled: boolean | undefined
+    try {
+      telemetryEnabled = await readTelemetryEnabled()
+    } finally {
+      preparingDashboardRef.current = false
+      if (drawerMountedRef.current) setPreparingDashboard(false)
+    }
+    if (!isCurrentTarget(name, kind)) {
+      // The opener reports a target change once it has started; this one
+      // happened before it.
+      void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_FAILED, {
+        kind,
+        stage: "prepare",
+        reason: "target_changed",
+      })
+      return
+    }
     void monitoringDashboard.open(
       {
         target: {
-          instanceKey:
-            telemetryConfig?.id || new URL(".", window.location.href).href,
+          // The console's own URL, not a server-reported id: the identity must
+          // not depend on whether a telemetry read succeeded, or one table could
+          // get two dashboards. Dashboards address the target by name.
+          instanceKey: new URL(".", window.location.href).href,
           kind,
-          name: tableName,
+          name,
         },
-        telemetryEnabled: telemetryConfig?.enabled === true,
+        telemetryEnabled: telemetryEnabled === true,
+        telemetryUnknown: telemetryEnabled === undefined,
         refreshSchedule: matViewData ?? undefined,
       },
-      () => isCurrentTarget(tableName, kind),
+      () => isCurrentTarget(name, kind),
       () => {
         if (leftPanelState.type !== null) {
           updateLeftPanelState({ type: null, width: leftPanelState.width })
@@ -897,11 +957,11 @@ export const TableDetailsDrawer = () => {
                   (kind === "matview" ||
                     (kind === "table" && tableData?.walEnabled === true)) && (
                     <MonitoringDashboardButton
-                      busy={monitoringDashboard.busy}
+                      busy={monitoringDashboard.busy || preparingDashboard}
                       disabled={
                         monitoringDashboard.unavailable || tablesUnavailable
                       }
-                      onClick={openMonitoringDashboard}
+                      onClick={() => void openMonitoringDashboard()}
                     />
                   )
                 }

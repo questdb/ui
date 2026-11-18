@@ -12,6 +12,7 @@ export const useEscapeLayer = (enabled: boolean, layer: EscapeLayer) => {
     if (!enabled) return
     return registerEscapeLayer({
       priority: latest.current.priority,
+      global: latest.current.global,
       scope: () => latest.current.scope?.() ?? null,
       onEscape: (event) => latest.current.onEscape(event),
     })

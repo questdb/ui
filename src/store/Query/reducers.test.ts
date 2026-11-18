@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest"
 import query, { initialState } from "./reducers"
 import actions from "./actions"
+import selectors from "./selectors"
+import type { StoreShape } from "../../types"
 import { NotificationType } from "./types"
 import type { QueryKey, QueryNotifications, QueryStateShape } from "./types"
 import { Type } from "../../utils/questdb"
@@ -89,6 +91,45 @@ describe("manual query execution counters", () => {
         queryExecutionKey(`select ${MAX_TRACKED_QUERY_EXECUTIONS}`)
       ],
     ).toBe(1)
+  })
+})
+
+describe("repeated execution offer", () => {
+  const dql = (sql: string) => ({
+    type: Type.DQL as const,
+    query: sql,
+    columns: [],
+    dataset: [],
+    count: 0,
+    timestamp: -1,
+    explain: undefined,
+  })
+  const repeated = (sql: string) => {
+    let state = query(initialState, actions.recordQueryExecution(sql))
+    state = query(state, actions.recordQueryExecution(sql))
+    state = query(state, actions.setResult(dql(sql) as never, BUFFER_ID))
+    return selectors.getResultHasRepeatedExecution({
+      query: state,
+    } as unknown as StoreShape)
+  }
+
+  it("offers monitoring for a query run twice", () => {
+    expect(repeated("select * from trades")).toBe(true)
+  })
+
+  // A plan from the Re-run button or a typed EXPLAIN is not data to monitor.
+  it.each([
+    "EXPLAIN select * from trades",
+    "  explain select 1",
+    "-- plan\nEXPLAIN select 1",
+    "/* plan */ explain select 1",
+  ])("never offers monitoring for the query plan %j", (sql) => {
+    expect(repeated(sql)).toBe(false)
+  })
+
+  it("still offers monitoring for a query that only mentions explain", () => {
+    expect(repeated("select 'explain' from trades")).toBe(true)
+    expect(repeated("select * from explained")).toBe(true)
   })
 })
 

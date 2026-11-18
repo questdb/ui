@@ -301,6 +301,29 @@ describe("CellRefreshEngine", () => {
     )
   })
 
+  // The same vocabulary as NotebookProvider.runCell: a write that is not run
+  // is "skipped", SQL that could not be classified is "validation_failed".
+  it("reports a blocked write as skipped", async () => {
+    deps.validateWithGlobals.mockResolvedValue({ queryType: "update" })
+    syncOnScreen([drawCell("c1", "update t set x = 1", false)])
+    await flushAsync()
+    expect(trackNotebookExecution).toHaveBeenLastCalledWith(
+      expect.objectContaining({ trigger: "initial_load", outcome: "skipped" }),
+    )
+  })
+
+  it("reports a classification outage as validation_failed", async () => {
+    deps.validateWithGlobals.mockRejectedValue(new Error("network down"))
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(trackNotebookExecution).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        trigger: "initial_load",
+        outcome: "validation_failed",
+      }),
+    )
+  })
+
   it("reports an initial chart failure once without flooding telemetry on polls", async () => {
     deps.executeSingle.mockResolvedValue({
       ...dqlResult("select 1"),

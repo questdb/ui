@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest"
 import {
   buildMonitoringDashboard,
   isUnmodifiedMonitoring,
+  MONITORING_MAX_WINDOW_MINUTES,
   monitoringFingerprint,
   monitoringWindowMinutes,
 } from "./dashboard"
+import { NOTEBOOK_ROW_CAP } from "../../scenes/Editor/Notebook/notebookUtils"
 import { makeBuffer } from "../../store/buffers"
 import type { NotebookViewState } from "../../store/notebook"
 import { isHighlightConfig } from "../../components/ResultGrid/highlight/isHighlightConfig"
@@ -22,9 +24,9 @@ describe("monitoring templates", () => {
     ["MINUTE", 10, 60],
     ["HOUR", 1, 360],
     ["DAY", 1, 8640],
-    ["WEEK", 1, 10080],
-    ["MONTH", 1, 10080],
-    ["YEAR", 1, 10080],
+    ["WEEK", 1, 10000],
+    ["MONTH", 1, 10000],
+    ["YEAR", 1, 10000],
     [null, 0, 30],
   ])(
     "shows several timer refreshes for %s %s while bounding the initial window",
@@ -100,10 +102,70 @@ describe("monitoring templates", () => {
         expect(cell.value).toContain(`'${name}'`)
         expect(cell.value).not.toContain("__TARGET")
       }
-      // Markdown escaping only adds a backslash before the backtick.
-      expect(view.cells[0].value).toContain(` · ${name.replace("`", "\\`")}\n`)
+      // The title shows the name as a code span, with a longer fence when
+      // the name holds a backtick.
+      expect(view.cells[0].value).toContain(
+        name.includes("`") ? ` · \`\`${name}\`\`\n` : ` · \`${name}\`\n`,
+      )
     },
   )
+
+  // A notebook fetches at most NOTEBOOK_ROW_CAP rows, oldest first: a chart
+  // with more buckets would silently drop its newest ones.
+  it.each([
+    ["table", undefined],
+    ["matview", undefined],
+    ["matview", "WEEK"],
+  ] as const)(
+    "keeps every %s chart within the notebook row cap (timer %s)",
+    (kind, unit) => {
+      const view = buildMonitoringDashboard({
+        name: "trades",
+        kind,
+        telemetryEnabled: true,
+        refreshSchedule: unit
+          ? {
+              refresh_type: "timer",
+              timer_interval: 1,
+              timer_interval_unit: unit,
+            }
+          : undefined,
+      })
+      const window = Number(
+        view.settings?.variables?.find((v) => v.name === "window_minutes")
+          ?.value,
+      )
+      expect(window).toBeLessThanOrEqual(MONITORING_MAX_WINDOW_MINUTES)
+      const charts = view.cells.filter((c) => c.value.includes("SAMPLE BY"))
+      expect(charts.length).toBeGreaterThan(0)
+      for (const cell of charts) {
+        expect(cell.value, cell.name).not.toMatch(/-\s*@window_minutes/)
+        const bucketsPerMinute = cell.value.includes("SAMPLE BY 5s") ? 12 : 1
+        const caps = [
+          ...cell.value.matchAll(/least\(@window_minutes,(\d+)\)/g),
+        ].map((match) => Number(match[1]))
+        expect(caps.length, cell.name).toBeGreaterThan(0)
+        for (const cap of caps)
+          expect(cap * bucketsPerMinute, cell.name).toBeLessThanOrEqual(
+            NOTEBOOK_ROW_CAP,
+          )
+      }
+    },
+  )
+
+  it("says why telemetry panels are hidden when the setting is unknown", () => {
+    const view = buildMonitoringDashboard({
+      name: "trades",
+      kind: "matview",
+      telemetryEnabled: false,
+      telemetryUnknown: true,
+    })
+    const reading = view.cells.find((c) => c.name === "Reading the data")?.value
+    expect(reading).toContain(
+      "hidden because the server's telemetry setting could not be read",
+    )
+    expect(reading).not.toContain("telemetry is disabled")
+  })
 
   it.each(["table", "matview"] as const)(
     "keeps the %s panels aligned with no overlapping rows",

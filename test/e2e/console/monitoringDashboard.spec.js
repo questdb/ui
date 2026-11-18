@@ -3,12 +3,23 @@
 // Opens the generated monitoring dashboards and runs every statement against
 // the real QuestDB, including the history panels. The console builds those only when
 // telemetry is enabled, so the spec reports it as enabled. WAL telemetry is
-// recorded regardless of that setting; materialized view telemetry is not, so
-// without it those statements must fail only for its missing table.
+// recorded regardless of that setting; materialized view telemetry is not.
+// Without it (CI runs with telemetry disabled) the spec creates a table with
+// the server's materialized view telemetry schema under the same name, so the
+// server still compiles those statements; with it, the spec checks that the
+// real table still has that schema.
 
 const TABLE = "btc_trades"
 const MATVIEW = "btc_trades_mv"
 const MATVIEW_TELEMETRY = "sys.telemetry_mat_view"
+const MATVIEW_TELEMETRY_COLUMNS = [
+  ["created", "TIMESTAMP"],
+  ["event", "SHORT"],
+  ["view_table_id", "INT"],
+  ["base_table_txn", "LONG"],
+  ["invalidation_reason", "VARCHAR"],
+  ["latency", "FLOAT"],
+]
 
 const readBuffers = () =>
   cy.window().then(
@@ -50,17 +61,17 @@ const statementsOf = (view) => {
     )
 }
 
-const exec = (sql) =>
+const exec = (sql, limit = "0,5") =>
   cy.request({
     method: "GET",
     url: `${Cypress.config("baseUrl")}/exec`,
-    qs: { query: sql, limit: "0,5" },
+    qs: { query: sql, limit },
     headers: { Authorization: `Basic ${btoa("admin:quest")}` },
     failOnStatusCode: false,
   })
 
 describe("monitoring dashboards on a real server", () => {
-  let matViewTelemetry = false
+  let standInTelemetry = false
 
   before(() => {
     cy.createTable(TABLE)
@@ -69,13 +80,32 @@ describe("monitoring dashboards on a real server", () => {
     )
     cy.createMaterializedView(MATVIEW)
     exec(`SELECT 1 FROM '${MATVIEW_TELEMETRY}' LIMIT 1`).then(({ body }) => {
-      matViewTelemetry = body.error === undefined
+      if (body.error === undefined) {
+        exec(
+          `SELECT "column", type FROM table_columns('${MATVIEW_TELEMETRY}')`,
+          "0,100",
+        ).then(({ body: columns }) =>
+          expect(columns.dataset, `${MATVIEW_TELEMETRY} schema`).to.deep.eq(
+            MATVIEW_TELEMETRY_COLUMNS,
+          ),
+        )
+        return
+      }
+      standInTelemetry = true
+      const columns = MATVIEW_TELEMETRY_COLUMNS.map(
+        ([name, type]) => `${name} ${type}`,
+      ).join(", ")
+      cy.execAdminQuery(
+        `CREATE TABLE '${MATVIEW_TELEMETRY}' (${columns}) TIMESTAMP(created) PARTITION BY DAY`,
+      )
     })
   })
 
   after(() => {
     cy.execAdminQuery(`DROP MATERIALIZED VIEW IF EXISTS ${MATVIEW};`)
     cy.dropTableIfExists(TABLE)
+    if (standInTelemetry)
+      cy.execAdminQuery(`DROP TABLE IF EXISTS '${MATVIEW_TELEMETRY}';`)
   })
 
   beforeEach(() => {
@@ -97,6 +127,37 @@ describe("monitoring dashboards on a real server", () => {
     )
     cy.loadConsoleWithAuth()
     cy.refreshSchema()
+  })
+
+  // The new tab is in the tab bar while the dashboard's first queries run.
+  // Opening it then must still fill the panels.
+  it("fills a panel whose first run was in flight when the tab was opened", () => {
+    let delayed = false
+    cy.intercept(
+      { method: "GET", pathname: "/exec", query: { query: /Suspend reason/ } },
+      (req) => {
+        if (delayed) return
+        delayed = true
+        req.on("response", (res) => res.setDelay(4000))
+      },
+    )
+    cy.expandTables()
+    cy.openDetailsDrawer(TABLE, "table")
+    cy.getByDataHook("table-details-monitoring-dashboard").click()
+    cy.getByDataHook("table-details-monitoring-dashboard-progress").should(
+      "exist",
+    )
+    cy.getEditorTabByTitle(`${TABLE} · monitoring`)
+      .find(".chrome-tab-drag-handle")
+      .click()
+    cy.contains("[data-notebook-cell]", "Live table health", {
+      timeout: 20000,
+    }).within(() => {
+      cy.getByDataHook("success-notification", { timeout: 20000 }).should(
+        "be.visible",
+      )
+      cy.contains(TABLE).should("be.visible")
+    })
   })
 
   for (const [name, kind] of [
@@ -140,12 +201,6 @@ describe("monitoring dashboards on a real server", () => {
 
         for (const { cell, sql } of statements) {
           exec(sql).then(({ body }) => {
-            if (!matViewTelemetry && sql.includes(MATVIEW_TELEMETRY)) {
-              expect(body.error, cell).to.eq(
-                `table does not exist [table=${MATVIEW_TELEMETRY}]`,
-              )
-              return
-            }
             expect(body.error, `${cell}: ${body.error}`).to.be.undefined
             if (/^Live (table|view) health$/.test(cell))
               expect(body.count, `${cell} rows`).to.eq(1)
