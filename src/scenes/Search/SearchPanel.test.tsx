@@ -239,7 +239,7 @@ describe("search options and results", () => {
     vi.useRealTimers()
     // Then
     await expectSummary("1 result in 1 tab")
-    expect(marks()).toEqual(["active_positions"])
+    await waitFor(() => expect(marks()).toEqual(["active_positions"]))
   })
   it("groups rows by tab and updates each group count", async () => {
     // Given

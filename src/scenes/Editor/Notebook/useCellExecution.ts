@@ -1041,7 +1041,7 @@ export const useCellExecution = ({
         controllersMap,
         runGenerations,
       )
-    // Session end aborts every request before React 17 runs this cleanup, so
+    // Session end aborts every request before React runs this cleanup, so
     // the aborted results would still count as current runs. Supersede them
     // as soon as the session ends instead.
     const stopOnSessionEnd = authSessionState.beforeEnd(abortRuns)

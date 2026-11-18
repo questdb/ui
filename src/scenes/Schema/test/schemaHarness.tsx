@@ -51,9 +51,15 @@ export const tableTitle = (name: string) => {
   if (!element) throw new Error(`Missing table ${name}`)
   return element
 }
+// The table icon tooltip opens after a 1s delay, which is the default
+// waitFor timeout.
+const TABLE_ICON_TOOLTIP_TIMEOUT_MS = 2000
+
 export const hover = async (element: HTMLElement) => {
   fireEvent.pointerMove(element, { pointerType: "mouse" })
-  await waitFor(() => get("tooltip"))
+  await waitFor(() => get("tooltip"), {
+    timeout: TABLE_ICON_TOOLTIP_TIMEOUT_MS,
+  })
 }
 
 vi.mock("react-virtuoso", async () => {

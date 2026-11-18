@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import ReactDOM from "react-dom"
-import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import { Close } from "../icons"
@@ -17,6 +16,7 @@ import { Text } from "../Text"
 import { Box } from "../Box"
 import { AISparkle } from "../AISparkle"
 import { TransitionDuration } from "../Transition"
+import { usePopper } from "../../hooks"
 import { floatingSurfaceStyles } from "../overlayStyles"
 
 const TooltipContainer = styled.div<{ $positionReady: boolean }>`
@@ -189,7 +189,7 @@ const SetupButton = styled(Button).attrs({
 `
 
 type Props = {
-  triggerRef: React.RefObject<HTMLElement>
+  triggerRef: React.RefObject<HTMLElement | null>
   onSetupClick: () => void
   showPromo: boolean
   setShowPromo: (show: boolean) => void
@@ -202,9 +202,14 @@ export const AIAssistantPromo = ({
   setShowPromo,
 }: Props) => {
   const [container] = useState<HTMLElement>(document.createElement("div"))
-  const transitionTimeoutId = useRef<number | undefined>()
+  const transitionTimeoutId = useRef<number | undefined>(undefined)
   const [arrowElement, setArrowElement] = useState<HTMLElement | null>(null)
   const [popperElement, setPopperElement] = useState<HTMLElement | null>(null)
+  const transitionNodeRef = useRef<HTMLElement | null>(null)
+  const attachPopperElement = useCallback((element: HTMLElement | null) => {
+    transitionNodeRef.current = element
+    setPopperElement(element)
+  }, [])
   const [positionReady, setPositionReady] = useState(false)
   const promoKeyRef = useRef(0)
 
@@ -313,6 +318,7 @@ export const AIAssistantPromo = ({
     <>
       {ReactDOM.createPortal(
         <CSSTransition
+          nodeRef={transitionNodeRef}
           key={promoKeyRef.current}
           classNames="fade-reg"
           in={positionReady}
@@ -320,7 +326,7 @@ export const AIAssistantPromo = ({
           unmountOnExit={false}
         >
           <TooltipContainer
-            ref={setPopperElement}
+            ref={attachPopperElement}
             {...attributes.popper}
             style={{
               zIndex: 1000,

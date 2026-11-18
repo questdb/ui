@@ -182,7 +182,6 @@ export const Help = () => {
       <PopperToggle
         active={shortcutsPopperActive}
         onToggle={handleShortcutsToggle}
-        trigger={<React.Fragment />}
       >
         <ShortcutsWrapper>
           <Shortcuts />

@@ -1,13 +1,20 @@
+// @vitest-environment jsdom
 import React from "react"
 import {
   act,
-  create,
-  type ReactTestInstance,
-  type ReactTestRenderer,
-} from "react-test-renderer"
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  type RenderResult,
+} from "@testing-library/react"
 import { ThemeProvider } from "styled-components"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi, type MockInstance } from "vitest"
 import { darkTheme } from "../../../theme"
+
+const formSubmission = vi.hoisted(() => ({
+  pending: undefined as Promise<void> | undefined,
+}))
 
 vi.mock("../../../providers/SettingsProvider", () => ({
   useSettings: () => ({
@@ -24,7 +31,32 @@ vi.mock("../../../components/Button", () => ({ Button: "button" }))
 vi.mock("../../../components/IconButton", () => ({ IconButton: "button" }))
 vi.mock("../../../components/Form", () => ({
   Form: Object.assign(
-    (props: React.ComponentProps<"form">) => <form {...props} />,
+    ({
+      onSubmit,
+      children,
+      name,
+    }: {
+      onSubmit: (values: {
+        username: FormDataEntryValue | null
+        password: FormDataEntryValue | null
+      }) => Promise<void>
+      children?: React.ReactNode
+      name?: string
+    }) => (
+      <form
+        name={name}
+        onSubmit={(event) => {
+          event.preventDefault()
+          const data = new FormData(event.currentTarget)
+          formSubmission.pending = onSubmit({
+            username: data.get("username"),
+            password: data.get("password"),
+          })
+        }}
+      >
+        {children}
+      </form>
+    ),
     { Item: "label", Input: "input", Submit: "button" },
   ),
 }))
@@ -44,11 +76,15 @@ vi.mock("../../../components/LoadingSpinner", () => ({
 vi.mock("./loginBackground", () => ({ LoginBackground: () => null }))
 import { Login } from "./login"
 
-let renderer: ReactTestRenderer | undefined
+let rendered: RenderResult | undefined
+let focusSpy: MockInstance | undefined
 
 afterEach(() => {
-  act(() => renderer?.unmount())
-  renderer = undefined
+  cleanup()
+  rendered = undefined
+  focusSpy?.mockRestore()
+  focusSpy = undefined
+  formSubmission.pending = undefined
   vi.unstubAllGlobals()
 })
 
@@ -58,6 +94,12 @@ const mount = (
 ) => {
   const heading = { focus: vi.fn() }
   const banner = { focus: vi.fn() }
+  focusSpy = vi
+    .spyOn(HTMLElement.prototype, "focus")
+    .mockImplementation(function (this: HTMLElement) {
+      if (this.tagName === "H2") heading.focus()
+      if (this.getAttribute("data-hook") === "sign-in-error") banner.focus()
+    })
   const props = {
     onOAuthLogin: vi.fn(),
     onBasicAuthSuccess: vi.fn(),
@@ -65,26 +107,16 @@ const mount = (
     unfinishedWrites,
     ...errors,
   }
-  const render = () => (
+  const view = () => (
     <ThemeProvider theme={darkTheme}>
       <Login {...props} />
     </ThemeProvider>
   )
-  act(() => {
-    renderer = create(render(), {
-      createNodeMock: (
-        element: React.ReactElement<Record<string, unknown>>,
-      ) => {
-        if (element.type === "h2") return heading
-        if (element.props["data-hook"] === "sign-in-error") return banner
-        return null
-      },
-    })
-  })
+  rendered = render(view())
   const clearErrors = () => {
     props.errorTitle = undefined
     props.errorMessage = undefined
-    renderer!.update(render())
+    rendered!.rerender(view())
   }
   props.resetErrors.mockImplementation(clearErrors)
   return {
@@ -92,50 +124,40 @@ const mount = (
     banner,
     props,
     updateErrors: (next: typeof errors) => {
-      act(() => {
-        props.errorTitle = next.errorTitle
-        props.errorMessage = next.errorMessage
-        renderer!.update(render())
-      })
+      props.errorTitle = next.errorTitle
+      props.errorMessage = next.errorMessage
+      rendered!.rerender(view())
     },
     updateUnfinishedWrites: (count: number) => {
-      act(() => {
-        props.unfinishedWrites = count
-        renderer!.update(render())
-      })
+      props.unfinishedWrites = count
+      rendered!.rerender(view())
     },
   }
 }
 
-const textOf = (node: ReactTestInstance): string =>
-  node.children
-    .map((child) => (typeof child === "string" ? child : textOf(child)))
-    .join("")
+const query = <E extends Element = HTMLElement>(selector: string) =>
+  Array.from(rendered!.container.querySelectorAll<E>(selector))
 
 // AuthProvider asks before leaving the page, as signing in replaces Login.
 describe("unfinished writes of the previous session", () => {
-  const notices = () =>
-    renderer!.root.findAll(
-      (node) =>
-        node.type === "div" && node.props["data-hook"] === "unfinished-writes",
-    )
+  const notices = () => query('div[data-hook="unfinished-writes"]')
 
   it("explains them until they finish", () => {
     const { updateUnfinishedWrites } = mount({}, 2)
     expect(notices()).toHaveLength(1)
-    expect(notices()[0].props.role).toBe("status")
-    expect(textOf(notices()[0])).toContain(
+    expect(notices()[0].getAttribute("role")).toBe("status")
+    expect(notices()[0].textContent).toContain(
       "Your previous session is still sending 2 requests",
     )
-    expect(textOf(notices()[0])).toContain(
+    expect(notices()[0].textContent).toContain(
       "Leaving the page, including to sign in with SSO, cancels them",
     )
 
     updateUnfinishedWrites(1)
-    expect(textOf(notices()[0])).toContain(
+    expect(notices()[0].textContent).toContain(
       "Your previous session is still sending 1 request",
     )
-    expect(textOf(notices()[0])).toContain("Keep this tab open until it")
+    expect(notices()[0].textContent).toContain("Keep this tab open until it")
 
     updateUnfinishedWrites(0)
     expect(notices()).toHaveLength(0)
@@ -169,11 +191,7 @@ describe("login focus", () => {
 
   it("retains explicit dismissal's heading focus", () => {
     const { heading, props } = mount({ errorMessage: "Sign-in cancelled" })
-    act(() => {
-      renderer!.root
-        .findByProps({ label: "Dismiss sign-in error" })
-        .props.onClick()
-    })
+    fireEvent.click(query('button[label="Dismiss sign-in error"]')[0])
     expect(props.resetErrors).toHaveBeenCalledOnce()
     expect(heading.focus).toHaveBeenCalledOnce()
   })
@@ -190,21 +208,17 @@ describe("login focus", () => {
           }),
       ),
     )
-    let pending!: Promise<void>
-    act(() => {
-      const { onSubmit } = renderer!.root.findByType("form").props as {
-        onSubmit: (values: {
-          username: string
-          password: string
-        }) => Promise<void>
-      }
-      pending = onSubmit({ username: "admin", password: "wrong" })
+    fireEvent.change(query<HTMLInputElement>('input[name="username"]')[0], {
+      target: { value: "admin" },
     })
+    fireEvent.change(query<HTMLInputElement>('input[name="password"]')[0], {
+      target: { value: "wrong" },
+    })
+    fireEvent.submit(query("form")[0])
+    const pending = formSubmission.pending!
     expect(props.resetErrors).toHaveBeenCalledOnce()
     expect(heading.focus).not.toHaveBeenCalled()
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "sign-in-error" }),
-    ).toHaveLength(0)
+    expect(query('[data-hook="sign-in-error"]')).toHaveLength(0)
 
     await act(async () => {
       finish(new Response("", { status: 401 }))
@@ -212,10 +226,8 @@ describe("login focus", () => {
     })
     expect(heading.focus).not.toHaveBeenCalled()
     expect(
-      renderer!.root
-        .findAllByType("span")
-        .some((node) => node.children.includes("Invalid username or password")),
-    ).toBe(true)
+      screen.getByText("Invalid username or password", { selector: "span" }),
+    ).toBeTruthy()
     expect(props.onBasicAuthSuccess).not.toHaveBeenCalled()
   })
 })

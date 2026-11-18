@@ -61,8 +61,6 @@ import { API, TelemetryTable } from "../../consts"
 import actions from "../actions"
 import selectors from "../selectors"
 import {
-  SetTelemetryConfigAction,
-  SetTelemetryRemoteConfigAction,
   StoreAction,
   StoreShape,
   TelemetryAction,
@@ -87,7 +85,7 @@ export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
   action$,
 ) =>
   action$.pipe(
-    ofType<StoreAction, TelemetryAction>(TelemetryAT.START),
+    ofType<StoreAction, TelemetryAT.START>(TelemetryAT.START),
     switchMap(() =>
       from(queryTelemetryConfig(quest, TELEMETRY_STARTUP_QUERY_OPTIONS)).pipe(
         // Keep the root epic alive so a later login/START can retry.
@@ -110,7 +108,7 @@ export const getLatestTelemetryTimestamp: Epic<
   StoreShape
 > = (action$, state$) =>
   action$.pipe(
-    ofType<StoreAction, SetTelemetryConfigAction>(TelemetryAT.SET_CONFIG),
+    ofType<StoreAction, TelemetryAT.SET_CONFIG>(TelemetryAT.SET_CONFIG),
     withLatestFrom(state$),
     switchMap(([_, state]) => {
       const serverInfo = selectors.telemetry.getConfig(state)
@@ -133,7 +131,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
   state$,
 ) =>
   action$.pipe(
-    ofType<StoreAction, SetTelemetryRemoteConfigAction>(
+    ofType<StoreAction, TelemetryAT.SET_REMOTE_CONFIG>(
       TelemetryAT.SET_REMOTE_CONFIG,
     ),
     withLatestFrom(state$),

@@ -73,7 +73,9 @@ const defaultValues: ContextProps = {
 
 export const QuestContext = createContext<ContextProps>(defaultValues)
 
-export const QuestProvider: React.FC = ({ children }) => {
+export const QuestProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const dispatch = useDispatch()
   const { settings } = useSettings()
   const { sessionData, refreshAuthToken, signInAgain } = useAuth()

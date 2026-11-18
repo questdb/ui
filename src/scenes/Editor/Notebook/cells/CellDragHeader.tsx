@@ -61,7 +61,7 @@ type Props = {
   right?: React.ReactNode
   // SQL cells pass this so the toolbar can adapt to the header's width; markdown
   // cells omit it (no width-driven tiering).
-  headerRef?: RefObject<HTMLDivElement>
+  headerRef?: RefObject<HTMLDivElement | null>
   toolbarTier?: CellToolbarTier
   paneLayout?: CellPaneLayout
   chartZoomed?: boolean

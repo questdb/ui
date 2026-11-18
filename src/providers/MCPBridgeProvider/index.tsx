@@ -451,9 +451,9 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [status, notebookOnboarding.mcpEverConnected, updateNotebookOnboarding])
 
-  // Don't flip consentSucceeded inside the timer: React 17 doesn't batch
-  // setStates in setTimeout, and Radix keeps the modal mounted during its
-  // 0.25s exit animation, so a flip would briefly swap success → default.
+  // Don't flip consentSucceeded inside the timer: Radix keeps the modal
+  // mounted during its 0.25s exit animation, so a flip would briefly swap
+  // success → default.
   // A minor mismatch connects fine but must keep the modal open so the user
   // actually reads the upgrade command — never auto-close past it.
   useEffect(() => {

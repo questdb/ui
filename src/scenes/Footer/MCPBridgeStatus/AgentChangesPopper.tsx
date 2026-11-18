@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import ReactDOM from "react-dom"
-import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import { InfoIcon, XIcon } from "@phosphor-icons/react"
-import { usePopperStyles, useTransition } from "../../../hooks"
+import { usePopper, usePopperStyles, useTransition } from "../../../hooks"
 import { OVERLAY_Z_INDEX } from "../../../components/Overlay"
 import { TransitionDuration } from "../../../components/Transition"
 import { IconButton, TextButton } from "../../../components"
@@ -68,7 +67,8 @@ export const AgentChangesPopper: React.FC<Props> = ({
   onAutoHidePausedChange,
 }) => {
   const [container] = useState<HTMLElement>(() => document.createElement("div"))
-  const transitionTimeoutId = useRef<number | undefined>()
+  const transitionNodeRef = useRef(container)
+  const transitionTimeoutId = useRef<number | undefined>(undefined)
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
   const { attributes, styles, forceUpdate } = usePopper(anchorEl, container, {
@@ -128,6 +128,7 @@ export const AgentChangesPopper: React.FC<Props> = ({
 
   return (
     <CSSTransition
+      nodeRef={transitionNodeRef}
       classNames="fade-reg"
       in={open}
       timeout={TransitionDuration.REG}

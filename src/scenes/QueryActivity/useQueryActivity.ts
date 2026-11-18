@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   MANUAL_RETRY_POLICY,
   POLLING_RETRY_POLICY,
@@ -107,6 +107,9 @@ export const useQueryActivity = ({
     transformResponse,
   })
   const [pollGeneration, setPollGeneration] = useState(0)
+  // A manual refresh fetches right away, so the restarted poll loop waits one
+  // interval instead of repeating that fetch.
+  const skipNextPollFetchRef = useRef(false)
   const [isFetching, setIsFetching] = useState(false)
   const isRefreshing = useDelayedFlag(
     isFetching,
@@ -155,15 +158,23 @@ export const useQueryActivity = ({
     }
   }, [poll, trackFetch])
 
+  const consumeSkipNextPollFetch = useCallback(() => {
+    const skip = skipNextPollFetchRef.current
+    skipNextPollFetchRef.current = false
+    return skip
+  }, [])
+
   useAdaptivePoll({
     fetchFn: pollOnce,
     enabled: enabled && autoRefresh,
     key: `query-activity:${pollGeneration}`,
     minIntervalMs: POLL_MIN_MS,
     maxIntervalMs: POLL_MAX_MS,
+    getSkipInitialFetch: consumeSkipNextPollFetch,
   })
 
   const refresh = () => {
+    skipNextPollFetchRef.current = autoRefresh
     setPollGeneration((generation) => generation + 1)
     void trackFetch(fetchNow)
   }

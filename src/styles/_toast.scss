@@ -1,3 +1,5 @@
+@import "theme";
+
 .Toastify__toast-container {
   top: 4.5rem;
 }
@@ -10,25 +12,45 @@
   opacity: 1;
   align-items: center;
   display: flex;
-  padding: 0 1.2rem;
+  padding: 1rem 1.2rem;
   gap: 1rem;
 }
 
-.Toastify__toast-body {
-  padding: 1rem 0 !important;
-}
-
 .Toastify__toast-icon {
-  margin-right: 1rem;
+  margin: 0;
   width: 1.8rem;
   height: 1.8rem;
 }
 
 .Toastify__progress-bar {
   height: 0.3rem;
+  opacity: 1;
+}
+
+.Toastify__progress-bar--bg {
+  display: none;
+}
+
+.toast-info-container .Toastify__progress-bar {
+  background: theme-color(statusInfo);
+}
+
+.toast-success-container .Toastify__progress-bar {
+  background: theme-color(statusSuccess);
+}
+
+.toast-warning-container .Toastify__progress-bar {
+  background: theme-color(statusWarning);
+}
+
+.toast-error-container .Toastify__progress-bar {
+  background: theme-color(statusDanger);
 }
 
 .Toastify__close-button {
+  position: static;
+  display: flex;
+  margin-left: auto;
   opacity: 0.7;
   align-self: center;
   transition: none;
@@ -36,12 +58,6 @@
 
 .Toastify__close-button:hover {
   opacity: 1;
-}
-
-.Toastify__toast-body {
-  display: flex;
-  align-items: center;
-  padding: 0.4rem 0;
 }
 
 .Toastify--animate {

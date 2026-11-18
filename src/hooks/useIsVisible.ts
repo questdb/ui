@@ -1,7 +1,7 @@
 import { useEffect, useState, RefObject } from "react"
 
 export const useIsVisible = <T extends Element = HTMLDivElement>(
-  ref: RefObject<T>,
+  ref: RefObject<T | null>,
 ) => {
   const [isIntersecting, setIntersecting] = useState(false)
 

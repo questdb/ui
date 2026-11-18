@@ -7,10 +7,10 @@ export const useRetainLastFocus = ({
   setFocusedIndex,
   wrapperRef,
 }: {
-  virtuosoRef: React.RefObject<VirtuosoHandle>
+  virtuosoRef: React.RefObject<VirtuosoHandle | null>
   focusedIndex: number | null
   setFocusedIndex: (index: number | null) => void
-  wrapperRef: React.RefObject<HTMLDivElement>
+  wrapperRef: React.RefObject<HTMLDivElement | null>
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

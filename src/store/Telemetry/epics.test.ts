@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { of, Subject } from "rxjs"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { AuthRefreshUnavailableError } from "../../modules/OAuth2/session"
-import { ActionsObservable, StateObservable } from "redux-observable"
+import { StateObservable } from "redux-observable"
 import {
   TelemetryAT,
   TelemetryRemoteConfigShape,
@@ -100,7 +100,7 @@ describe("startTelemetry epic", () => {
     const state$ = new StateObservable(new Subject(), {})
     const next = vi.fn()
     const sub = startTelemetry(
-      new ActionsObservable(actions$),
+      actions$,
       state$ as StateObservable<StoreShape>,
       undefined,
     ).subscribe(next)
@@ -144,7 +144,7 @@ describe("startTelemetry epic", () => {
         const remoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
         mockGetRemoteConfig.mockReturnValue(remoteConfig)
         mockQueryRaw.mockRejectedValueOnce(failure)
-        const action$ = of({
+        const action$ = of<StoreAction>({
           type: TelemetryAT.SET_REMOTE_CONFIG,
           payload: remoteConfig,
         })
@@ -152,7 +152,7 @@ describe("startTelemetry epic", () => {
         const next = vi.fn()
         const error = vi.fn()
         const sub = startTelemetry(
-          action$ as ActionsObservable<StoreAction>,
+          action$,
           state$ as StateObservable<StoreShape>,
           undefined,
         ).subscribe({ next, error })
@@ -195,7 +195,7 @@ describe("startTelemetry epic", () => {
       const next = vi.fn((action: StoreAction) => actions$.next(action))
       const error = vi.fn()
       const sub = startTelemetry(
-        new ActionsObservable(actions$),
+        actions$,
         state$ as StateObservable<StoreShape>,
         undefined,
       ).subscribe({ next, error })
@@ -237,7 +237,7 @@ describe("startTelemetry epic", () => {
     const next = vi.fn((action: StoreAction) => actions$.next(action))
     const error = vi.fn()
     const sub = startTelemetry(
-      new ActionsObservable(actions$),
+      actions$,
       state$ as StateObservable<StoreShape>,
       undefined,
     ).subscribe({ next, error })
@@ -272,7 +272,7 @@ describe("startTelemetry epic", () => {
       const next = vi.fn()
       const error = vi.fn()
       const sub = getServerInfo(
-        new ActionsObservable(actions$),
+        actions$,
         state$ as StateObservable<StoreShape>,
         undefined,
       ).subscribe({ next, error })
@@ -303,7 +303,7 @@ describe("startTelemetry epic", () => {
   it("should schedule next check when lastUpdated is missing (skip path)", async () => {
     mockGetRemoteConfig.mockReturnValue(undefined)
 
-    const action$ = of({
+    const action$ = of<StoreAction>({
       type: TelemetryAT.SET_REMOTE_CONFIG,
       payload: {},
     })
@@ -311,7 +311,7 @@ describe("startTelemetry epic", () => {
     const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(
-      action$ as ActionsObservable<StoreAction>,
+      action$,
       state$ as StateObservable<StoreShape>,
       undefined,
     )
@@ -349,7 +349,7 @@ describe("startTelemetry epic", () => {
       dataset: [],
     })
 
-    const action$ = of({
+    const action$ = of<StoreAction>({
       type: TelemetryAT.SET_REMOTE_CONFIG,
       payload: mockRemoteConfig,
     })
@@ -357,7 +357,7 @@ describe("startTelemetry epic", () => {
     const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(
-      action$ as ActionsObservable<StoreAction>,
+      action$,
       state$ as StateObservable<StoreShape>,
       undefined,
     )
@@ -405,7 +405,7 @@ describe("startTelemetry epic", () => {
     // Mock successful fetch
     mockFromFetch.mockReturnValue(of({ error: false, data: {} }))
 
-    const action$ = of({
+    const action$ = of<StoreAction>({
       type: TelemetryAT.SET_REMOTE_CONFIG,
       payload: mockRemoteConfig,
     })
@@ -413,7 +413,7 @@ describe("startTelemetry epic", () => {
     const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(
-      action$ as ActionsObservable<StoreAction>,
+      action$,
       state$ as StateObservable<StoreShape>,
       undefined,
     )
@@ -465,7 +465,7 @@ describe("startTelemetry epic", () => {
       return of({ error: true, data: null })
     })
 
-    const action$ = of({
+    const action$ = of<StoreAction>({
       type: TelemetryAT.SET_REMOTE_CONFIG,
       payload: mockRemoteConfig,
     })
@@ -473,7 +473,7 @@ describe("startTelemetry epic", () => {
     const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(
-      action$ as ActionsObservable<StoreAction>,
+      action$,
       state$ as StateObservable<StoreShape>,
       undefined,
     )
@@ -514,7 +514,7 @@ describe("startTelemetry epic", () => {
     // Always return error
     mockFromFetch.mockReturnValue(of({ error: true, data: null }))
 
-    const action$ = of({
+    const action$ = of<StoreAction>({
       type: TelemetryAT.SET_REMOTE_CONFIG,
       payload: mockRemoteConfig,
     })
@@ -522,7 +522,7 @@ describe("startTelemetry epic", () => {
     const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(
-      action$ as ActionsObservable<StoreAction>,
+      action$,
       state$ as StateObservable<StoreShape>,
       undefined,
     )
@@ -564,7 +564,7 @@ describe("startTelemetry epic", () => {
     // Successful fetch
     mockFromFetch.mockReturnValue(of({ error: false, data: {} }))
 
-    const action$ = of({
+    const action$ = of<StoreAction>({
       type: TelemetryAT.SET_REMOTE_CONFIG,
       payload: mockRemoteConfig,
     })
@@ -572,7 +572,7 @@ describe("startTelemetry epic", () => {
     const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(
-      action$ as ActionsObservable<StoreAction>,
+      action$,
       state$ as StateObservable<StoreShape>,
       undefined,
     )
