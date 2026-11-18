@@ -15,7 +15,7 @@ export const matviewTemplate = (): MonitoringCellTemplate[] => [
     w: 12,
     height: 86,
     value: `# Materialized view monitoring · __TARGET_NAME__
-Live health, refresh behavior, output and storage. Adjust the time windows in **Variables**.`,
+Live health, refresh behavior, output and storage. You can change the chart window (**window_minutes**) and the incident window (**incident_hours**) in **Variables**.`,
   },
   {
     name: "Live view health",
@@ -40,12 +40,23 @@ LEFT JOIN tables() b ON v.base_table_name=b.table_name WHERE v.view_name=__TARGE
     ),
   },
   {
+    name: "Refresh context",
+    type: "markdown",
+    row: 10,
+    x: 0,
+    w: 12,
+    height: 86,
+    telemetry: true,
+    value: `### Read refreshes in context
+Duration only includes successful refreshes, so read it together with the failed refreshes next to it and the schedule below. **Refresh age** is the time since the last refresh finished, whether it succeeded or failed. It doesn't tell you how fresh the data is. **Pending base txns** grows between runs of timer and manual views.`,
+  },
+  {
     name: "Refresh duration · ms",
     row: 13,
     x: 0,
     w: 6,
     height: 356,
-    history: true,
+    telemetry: true,
     autoRefresh: "60s",
     value: `SELECT e.created, approx_percentile(e.latency, 0.5) AS "p50 ms",
        approx_percentile(e.latency, 0.9) AS "p90 ms",
@@ -71,12 +82,12 @@ SAMPLE BY 1m ALIGN TO CALENDAR`,
     x: 6,
     w: 6,
     height: 356,
-    history: true,
+    telemetry: true,
     autoRefresh: "60s",
     value: `SELECT e.created, sum(CASE WHEN e.event=204 THEN 1 ELSE 0 END) AS "Successful", sum(CASE WHEN e.event=203 THEN 1 ELSE 0 END) AS "Failed"
 FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id
 WHERE e.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (203,204)
-SAMPLE BY 1m ALIGN TO CALENDAR`,
+SAMPLE BY 1m FROM dateadd('m',-@window_minutes,timestamp_floor('m',now())) TO timestamp_floor('m',now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -93,17 +104,6 @@ SAMPLE BY 1m ALIGN TO CALENDAR`,
     },
   },
   {
-    name: "Refresh context",
-    type: "markdown",
-    row: 27,
-    x: 0,
-    w: 12,
-    height: 86,
-    history: true,
-    value: `### Read refreshes in context
-Duration includes successful refreshes only. Read it with failures and the schedule below. **Refresh age** measures time since the last refresh, not end-to-end data freshness; timer-based views can accumulate pending work between runs.`,
-  },
-  {
     name: "Refresh setup & WAL health",
     row: 32,
     x: 0,
@@ -117,8 +117,10 @@ Duration includes successful refreshes only. Read it with failures and the sched
  CASE WHEN t.ttlValue=0 THEN 'None' ELSE concat(CAST(t.ttlValue AS STRING),' ',t.ttlUnit) END AS "TTL",
  CASE WHEN t.table_suspended THEN 'Suspended' ELSE 'Running' END AS "WAL status",
  t.wal_pending_row_count AS "Pending WAL rows",
- CASE t.table_memory_pressure_level WHEN 0 THEN 'None' WHEN 1 THEN 'Reduced parallelism' WHEN 2 THEN 'Backoff' ELSE 'Unknown' END AS "Memory pressure"
-FROM materialized_views() v JOIN tables() t ON v.view_name=t.table_name WHERE v.view_name=__TARGET_SQL__`,
+ CASE t.table_memory_pressure_level WHEN 0 THEN 'None' WHEN 1 THEN 'Reduced parallelism' WHEN 2 THEN 'Backoff' ELSE 'Unknown' END AS "Memory pressure",
+ nullif(w.errorMessage,'') AS "Suspend reason"
+FROM materialized_views() v JOIN tables() t ON v.view_name=t.table_name
+LEFT JOIN wal_tables() w ON w.name=t.table_name WHERE v.view_name=__TARGET_SQL__`,
     highlightConfig: healthHighlights(
       "View",
       ["WAL status", "Memory pressure"],
@@ -131,7 +133,6 @@ FROM materialized_views() v JOIN tables() t ON v.view_name=t.table_name WHERE v.
     x: 0,
     w: 6,
     height: 356,
-    history: true,
     autoRefresh: "60s",
     value: `SELECT w.created,
  sum(w.rowCount)/60.0 AS "Logical rows/s",
@@ -140,7 +141,7 @@ FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
 WHERE w.created >= dateadd('m', -@window_minutes, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
  AND t.table_name = __TARGET_SQL__ AND w.event=105 AND w.rowCount>0
-SAMPLE BY 1m ALIGN TO CALENDAR`,
+SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -158,7 +159,6 @@ SAMPLE BY 1m ALIGN TO CALENDAR`,
     x: 6,
     w: 6,
     height: 356,
-    history: true,
     autoRefresh: "60s",
     value: `SELECT w.created,
  sum(w.physicalRowCount)*1.0/nullif(sum(w.rowCount),0) AS "Physical / logical rows"
@@ -179,14 +179,14 @@ SAMPLE BY 1m ALIGN TO CALENDAR`,
     },
   },
   {
-    name: "View output & storage",
+    name: "View storage",
     type: "markdown",
     row: 54,
     x: 0,
     w: 12,
     height: 86,
     value: `### View storage
-The footprint shows current storage, not storage growth over time. The live grid puts active and newest partitions first and highlights changes.`,
+The footprint shows the current size, not growth over time. The grid lists active and newest partitions first and marks changes. Refreshes rewrite time ranges, so **Dead rows** (replaced rows still on disk) and **Pieces** (files per partition) can build up.`,
   },
   {
     name: "Partition footprint · MiB",
@@ -242,15 +242,15 @@ WHERE attached ORDER BY active DESC, minTimestamp DESC`,
     highlightConfig: partitionHighlights("Disk MiB"),
   },
   {
-    name: "Refresh & WAL incidents",
+    name: "Refresh incidents",
     type: "markdown",
     row: 74,
     x: 0,
     w: 12,
     height: 86,
-    history: true,
+    telemetry: true,
     value: `### What happened before the current state?
-Counts cover **incident_hours**; the log shows the latest 100 refresh failures, invalidations and this view's WAL suspend/resume events.`,
+Both grids cover the last **incident_hours** hours, and the log shows up to 100 of the latest refresh failures and invalidations. When a refresh fails on a valid view, the view is also invalidated, so one failure shows up twice. A WAL suspension shows up live, with its reason, in **Refresh setup & WAL health**.`,
   },
   {
     name: "Incident counts",
@@ -258,12 +258,12 @@ Counts cover **incident_hours**; the log shows the latest 100 refresh failures, 
     x: 0,
     w: 6,
     height: 356,
-    history: true,
+    telemetry: true,
     autoRefresh: "60s",
-    value: `WITH history AS (SELECT w.created AS observed_at, CASE WHEN w.event=107 THEN 'WAL suspended' ELSE 'WAL resumed' END AS event_name, CAST(NULL AS STRING) AS detail FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id WHERE w.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND w.event IN (107,108) UNION ALL SELECT e.created AS observed_at, CASE WHEN e.event=202 THEN 'View invalidated' ELSE 'Refresh failed' END AS event_name, e.invalidation_reason AS detail FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id WHERE e.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (202,203))
+    value: `WITH history AS (SELECT e.created AS observed_at, CASE WHEN e.event=202 THEN 'View invalidated' ELSE 'Refresh failed' END AS event_name, e.invalidation_reason AS detail FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id WHERE e.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (202,203))
 SELECT k.event_name AS "Event", coalesce(h.events,0) AS "Count",
- CASE WHEN coalesce(h.events,0)=0 THEN 'None recorded' WHEN k.event_name='WAL resumed' THEN 'Resumed' ELSE 'Review' END AS "Signal", h.last_seen AS "Last seen (UTC)"
-FROM (SELECT 'WAL suspended' AS event_name UNION ALL SELECT 'WAL resumed' UNION ALL SELECT 'View invalidated' UNION ALL SELECT 'Refresh failed') k
+ CASE WHEN coalesce(h.events,0)=0 THEN 'None recorded' ELSE 'Review' END AS "Signal", h.last_seen AS "Last seen (UTC)"
+FROM (SELECT 'View invalidated' AS event_name UNION ALL SELECT 'Refresh failed') k
 LEFT JOIN (SELECT event_name,count() AS events,max(observed_at) AS last_seen FROM history GROUP BY event_name) h ON k.event_name=h.event_name`,
     highlightConfig: incidentHighlights(true),
   },
@@ -273,9 +273,9 @@ LEFT JOIN (SELECT event_name,count() AS events,max(observed_at) AS last_seen FRO
     x: 6,
     w: 6,
     height: 356,
-    history: true,
+    telemetry: true,
     autoRefresh: "60s",
-    value: `WITH history AS (SELECT w.created AS observed_at, CASE WHEN w.event=107 THEN 'WAL suspended' ELSE 'WAL resumed' END AS event_name, CAST(NULL AS STRING) AS detail FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id WHERE w.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND w.event IN (107,108) UNION ALL SELECT e.created AS observed_at, CASE WHEN e.event=202 THEN 'View invalidated' ELSE 'Refresh failed' END AS event_name, e.invalidation_reason AS detail FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id WHERE e.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (202,203)) SELECT observed_at AS "Time (UTC)",event_name AS "Event",detail AS "Details" FROM history ORDER BY observed_at DESC LIMIT 100`,
+    value: `WITH history AS (SELECT e.created AS observed_at, CASE WHEN e.event=202 THEN 'View invalidated' ELSE 'Refresh failed' END AS event_name, e.invalidation_reason AS detail FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id WHERE e.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (202,203)) SELECT observed_at AS "Time (UTC)",event_name AS "Event",detail AS "Details" FROM history ORDER BY observed_at DESC LIMIT 100`,
     highlightConfig: incidentHighlights(false),
   },
   {
@@ -286,6 +286,6 @@ LEFT JOIN (SELECT event_name,count() AS events,max(observed_at) AS last_seen FRO
     w: 12,
     height: 116,
     value: `### Reading the data
-History charts use completed **1-minute buckets** and depend on retained telemetry. Timer-based views need a window longer than their schedule. Live state refreshes separately; an empty event log means no recorded events in the selected window.`,
+Charts use completed 1-minute buckets from telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes. Duration and ratio charts only have points for minutes with events, so an empty chart or log means nothing happened in its window. Views that refresh weekly or less often, and manual views, will show few refreshes or none.`,
   },
 ]

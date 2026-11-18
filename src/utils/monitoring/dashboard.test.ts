@@ -14,7 +14,6 @@ const build = (kind: "table" | "matview" = "table", history = true) =>
     name: "trades",
     kind,
     telemetryEnabled: history,
-    walEnabled: true,
   })
 
 describe("monitoring templates", () => {
@@ -45,7 +44,6 @@ describe("monitoring templates", () => {
       name: "fx_trades_ohlc_1d",
       kind: "matview",
       telemetryEnabled: true,
-      walEnabled: true,
       refreshSchedule: {
         refresh_type: "timer",
         timer_interval: 1,
@@ -70,12 +68,12 @@ describe("monitoring templates", () => {
         name: "my' table`",
         kind,
         telemetryEnabled: true,
-        walEnabled: true,
       })
-      expect(view.settings?.variables?.map((v) => v.name)).toEqual([
-        "window_minutes",
-        "incident_hours",
-      ])
+      expect(view.settings?.variables?.map((v) => v.name)).toEqual(
+        kind === "matview"
+          ? ["window_minutes", "incident_hours"]
+          : ["window_minutes"],
+      )
       for (const cell of view.cells.filter((c) => c.type !== "markdown")) {
         expect(cell.value).toContain("'my'' table`'")
         expect(cell.value).not.toMatch(/__TARGET|@target_name|market_data/)
@@ -97,7 +95,6 @@ describe("monitoring templates", () => {
         name,
         kind,
         telemetryEnabled: true,
-        walEnabled: true,
       })
       for (const cell of view.cells.filter((c) => c.type !== "markdown")) {
         expect(cell.value).toContain(`'${name}'`)
@@ -138,36 +135,40 @@ describe("monitoring templates", () => {
     },
   )
 
-  it.each(["table", "matview"] as const)(
-    "builds %s without telemetry queries when history is unavailable",
-    (kind) => {
-      const view = build(kind, false)
-      expect(view.settings?.variables).toEqual([])
-      expect(view.cells.some((c) => c.value.includes("sys.telemetry"))).toBe(
-        false,
-      )
-      expect(view.cells.some((c) => c.value.includes("table_partitions"))).toBe(
-        true,
-      )
-      expect(
-        view.cells.some((c) => c.value.includes("require enabled telemetry")),
-      ).toBe(true)
-    },
-  )
-
-  it("handles a non-WAL table with live storage instead of WAL history", () => {
-    const view = buildMonitoringDashboard({
-      name: "static",
-      kind: "table",
-      telemetryEnabled: true,
-      walEnabled: false,
-    })
-    expect(view.cells.some((c) => c.value.includes("sys.telemetry"))).toBe(
-      false,
+  it("keeps a table's WAL history when telemetry is disabled", () => {
+    // sys.telemetry_wal is recorded whatever the telemetry setting.
+    const view = build("table", false)
+    expect(view.settings?.variables?.map((v) => v.name)).toEqual([
+      "window_minutes",
+    ])
+    expect(view.cells.map((c) => c.value).join("\n")).toContain(
+      "sys.telemetry_wal",
     )
+    expect(view.cells.map((c) => c.name)).toEqual(
+      build("table", true).cells.map((c) => c.name),
+    )
+  })
+
+  it("hides only a view's refresh history when telemetry is disabled", () => {
+    const view = build("matview", false)
+    const sql = view.cells.map((c) => c.value).join("\n")
+    expect(view.settings?.variables?.map((v) => v.name)).toEqual([
+      "window_minutes",
+    ])
+    expect(sql).not.toContain("telemetry_mat_view")
+    expect(sql).not.toContain("@incident_hours")
+    // Output charts read WAL telemetry and stay.
+    expect(view.cells.map((c) => c.name)).toEqual(
+      expect.arrayContaining([
+        "View output · rows/s",
+        "View write amplification",
+      ]),
+    )
+    expect(view.cells.map((c) => c.name)).not.toContain("Refresh incidents")
+    expect(view.cells[0].value).not.toContain("incident_hours")
     expect(
-      view.cells.find((c) => c.name === "Live table health")?.value,
-    ).toContain("'Disabled'")
+      view.cells.find((c) => c.name === "Reading the data")?.value,
+    ).toContain("hidden because telemetry is disabled")
   })
 
   it("recognizes user customization while ignoring query results and inspection", () => {
@@ -197,7 +198,8 @@ describe("monitoring templates", () => {
     configured.settings!.variables![0].value = "60"
     expect(isUnmodifiedMonitoring(buffer, configured)).toBe(false)
     const resized = structuredClone(view)
-    resized.cells[2].bottomHeight = 500
+    resized.cells.find((c) => c.name === "Ingestion · rows/s")!.bottomHeight =
+      500
     expect(isUnmodifiedMonitoring(buffer, resized)).toBe(false)
   })
 })

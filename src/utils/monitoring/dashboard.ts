@@ -2,7 +2,6 @@ import { createCell, type NotebookViewState } from "../../store/notebook"
 import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/cellSizing"
 import { tableTemplate } from "./tableTemplate"
 import { matviewTemplate } from "./matviewTemplate"
-import { healthHighlights } from "./highlights"
 import type {
   MonitoringKind,
   MonitoringTarget,
@@ -43,42 +42,39 @@ export const monitoringTargetKey = (target: MonitoringTarget): string =>
 
 export { monitoringFingerprint, isUnmodifiedMonitoring } from "./fingerprint"
 
+// Monitoring dashboards exist only for WAL tables and materialized views
+// (always WAL): their history comes from WAL telemetry.
 export const buildMonitoringDashboard = ({
   name,
   kind,
   telemetryEnabled,
-  walEnabled,
   refreshSchedule,
 }: {
   name: string
   kind: MonitoringKind
   telemetryEnabled: boolean
-  walEnabled: boolean
   refreshSchedule?: MonitoringRefreshSchedule
 }): NotebookViewState => {
-  const history = telemetryEnabled && walEnabled
   const templates = (
     kind === "matview" ? matviewTemplate() : tableTemplate()
-  ).filter((cell) => history || !cell.history)
+  ).filter((cell) => telemetryEnabled || !cell.telemetry)
+  // Only a view's refresh charts and incidents need enabled telemetry.
+  const refreshHistory = kind === "table" || telemetryEnabled
   const sqlName = `'${name.replace(/'/g, "''")}'`
   const markdownName = name.replace(/[\\`*_{}[\]<>#|]/g, "\\$&")
   const cells = templates.map((template, position) => {
-    let highlightConfig = template.highlightConfig
     // Function replacers: a string replacement would expand `$'`, `$$` and
     // `$&` in names such as `orders$` into unrelated SQL.
     let value = template.value
       .replaceAll("__TARGET_SQL__", () => sqlName)
       .replaceAll("__TARGET_NAME__", () => markdownName)
-    if (!history && template.name === "Reading the data") {
-      value =
-        "### Current state\nThis dashboard shows live health and partition storage. Historical charts and incident history require enabled telemetry and a WAL table. Polling does not store history."
+    if (!refreshHistory && template.name === "Reading the data") {
+      value = `### Reading the data
+Charts use completed 1-minute buckets from WAL telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes, and an empty chart means nothing happened in its window. Refresh charts and incidents are hidden because telemetry is disabled. **Refresh age** is the time since the last refresh finished, whether it succeeded or failed.`
     }
-    if (!history && position === 0) {
-      value = `# ${kind === "matview" ? "Materialized view" : "Table"} monitoring · ${markdownName}\nLive health and partition storage for this ${kind === "matview" ? "view" : "table"}.`
-    }
-    if (!walEnabled && template.name === "Live table health") {
-      value = `SELECT table_name AS "Table", table_row_count AS "Rows", 'Disabled' AS "WAL status", CAST((now()-table_last_write_timestamp)/1000000.0 AS DECIMAL(16,3)) AS "Write age (s)" FROM tables() WHERE table_name=${sqlName}`
-      highlightConfig = healthHighlights("Table", ["WAL status"], ["Rows"])
+    if (!refreshHistory && position === 0) {
+      value = `# Materialized view monitoring · ${markdownName}
+Live health, output and storage. You can change the chart window (**window_minutes**) in **Variables**.`
     }
     return {
       ...createCell(position, value),
@@ -93,7 +89,7 @@ export const buildMonitoringDashboard = ({
             bottomResized: true,
             paneView: "result" as const,
             autoRefresh: template.autoRefresh,
-            highlightConfig,
+            highlightConfig: template.highlightConfig,
           }),
       ...(template.chartConfig
         ? {
@@ -132,19 +128,20 @@ export const buildMonitoringDashboard = ({
       layoutMode: "grid",
       layout,
       autoRefreshDefault: "1s",
-      variables: history
-        ? [
-            {
-              name: "window_minutes",
-              value: String(
-                monitoringWindowMinutes(
-                  kind === "matview" ? refreshSchedule : undefined,
-                ),
-              ),
-            },
-            { name: "incident_hours", value: "24" },
-          ]
-        : [],
+      variables: [
+        {
+          name: "window_minutes",
+          value: String(
+            monitoringWindowMinutes(
+              kind === "matview" ? refreshSchedule : undefined,
+            ),
+          ),
+        },
+        // Only views keep a per-target incident log (refresh failures).
+        ...(kind === "matview" && telemetryEnabled
+          ? [{ name: "incident_hours", value: "24" }]
+          : []),
+      ],
     },
   }
 }

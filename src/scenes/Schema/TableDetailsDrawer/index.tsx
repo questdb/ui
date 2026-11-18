@@ -447,7 +447,6 @@ export const TableDetailsDrawer = () => {
           name: tableName,
         },
         telemetryEnabled: telemetryConfig?.enabled === true,
-        walEnabled: tableData.walEnabled,
         refreshSchedule: matViewData ?? undefined,
       },
       () => isCurrentTarget(tableName, kind),
@@ -894,7 +893,9 @@ export const TableDetailsDrawer = () => {
                 onOpenSuspensionDialog={() => setSuspensionDialogOpen(true)}
                 onAskAI={handleAskAIForIssue}
                 dashboardAction={
-                  (kind === "table" || kind === "matview") && (
+                  // Dashboards read WAL telemetry; views are always WAL.
+                  (kind === "matview" ||
+                    (kind === "table" && tableData?.walEnabled === true)) && (
                     <MonitoringDashboardButton
                       busy={monitoringDashboard.busy}
                       disabled={

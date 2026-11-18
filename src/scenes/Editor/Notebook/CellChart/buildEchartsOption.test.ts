@@ -418,3 +418,45 @@ describe("buildEchartsOption — right-axis bounds", () => {
     expect(rightAxis).toHaveProperty("max", undefined)
   })
 })
+
+describe("buildEchartsOption — sparse line series", () => {
+  const columns = [col("ts", "TIMESTAMP"), col("ms", "DOUBLE")]
+  const chart: ChartGlobals = { xColumn: "ts" }
+  const series = (dataset: (string | number | null)[][], type = "line") =>
+    seriesList(
+      buildEchartsOption(chart, [
+        resolved({
+          columns,
+          dataset,
+          xColumn: "ts",
+          type: type as ResolvedQuery["type"],
+          yColumns: ["ms"],
+        }),
+      ]).series,
+    )[0]
+
+  // The theme hides symbols, and a line needs two points to draw anything.
+  it.each(["line", "area", "stepLine"])(
+    "shows the point of a single-value %s series",
+    (type) => {
+      const single = series([["2026-01-01T00:00:00Z", 184]], type)
+      expect(single.showSymbol).toBe(true)
+      expect(single.symbol).toBe("circle")
+    },
+  )
+
+  it("keeps a line with two or more values symbol-free", () => {
+    const line = series([
+      ["2026-01-01T00:00:00Z", 184],
+      ["2026-01-01T01:00:00Z", null],
+      ["2026-01-01T02:00:00Z", 248],
+    ])
+    expect(line.showSymbol).toBeUndefined()
+  })
+
+  it("does not add symbols to bars", () => {
+    expect(series([["2026-01-01T00:00:00Z", 1]], "bar").showSymbol).toBe(
+      undefined,
+    )
+  })
+})

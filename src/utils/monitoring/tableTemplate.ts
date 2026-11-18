@@ -3,7 +3,6 @@ import {
   healthHighlights,
   partitionHighlights,
   downstreamHighlights,
-  incidentHighlights,
 } from "./highlights"
 
 // Reviewed monitoring layout: preserve paired pane heights when adding panels.
@@ -16,7 +15,7 @@ export const tableTemplate = (): MonitoringCellTemplate[] => [
     w: 12,
     height: 86,
     value: `# Table monitoring · __TARGET_NAME__
-Live health, ingestion, partitions and downstream views. Adjust the time windows in **Variables**.`,
+Live health, ingestion, partitions and downstream views. You can change the chart window (**window_minutes**) in **Variables**.`,
   },
   {
     name: "Live table health",
@@ -25,12 +24,15 @@ Live health, ingestion, partitions and downstream views. Adjust the time windows
     w: 12,
     height: 176,
     autoRefresh: "1s",
-    value: `SELECT table_name AS "Table",table_row_count AS "Rows",
- CASE WHEN table_suspended THEN 'Suspended' ELSE 'Running' END AS "WAL status",
- wal_pending_row_count AS "Pending rows",CASE WHEN wal_txn IS NULL OR table_txn IS NULL THEN NULL WHEN wal_txn>table_txn THEN wal_txn-table_txn ELSE 0 END AS "Pending txns",
- CASE table_memory_pressure_level WHEN 0 THEN 'None' WHEN 1 THEN 'Reduced parallelism' WHEN 2 THEN 'Backoff' ELSE 'Unknown' END AS "Memory pressure",
- CAST((now()-table_last_write_timestamp)/1000000.0 AS DECIMAL(16,3)) AS "Write age (s)"
-FROM tables() WHERE table_name=__TARGET_SQL__`,
+    // A suspension's reason is only kept live, by wal_tables(): the server
+    // records WAL suspend/resume telemetry without the table it happened to.
+    value: `SELECT t.table_name AS "Table",t.table_row_count AS "Rows",
+ CASE WHEN t.table_suspended THEN 'Suspended' ELSE 'Running' END AS "WAL status",
+ t.wal_pending_row_count AS "Pending rows",CASE WHEN w.sequencerTxn IS NULL OR w.writerTxn IS NULL THEN NULL WHEN w.sequencerTxn>w.writerTxn THEN w.sequencerTxn-w.writerTxn ELSE 0 END AS "Pending txns",
+ CASE t.table_memory_pressure_level WHEN 0 THEN 'None' WHEN 1 THEN 'Reduced parallelism' WHEN 2 THEN 'Backoff' ELSE 'Unknown' END AS "Memory pressure",
+ CAST((now()-t.table_last_write_timestamp)/1000000.0 AS DECIMAL(16,3)) AS "Write age (s)",
+ nullif(w.errorMessage,'') AS "Suspend reason"
+FROM tables() t LEFT JOIN wal_tables() w ON w.name=t.table_name WHERE t.table_name=__TARGET_SQL__`,
     highlightConfig: healthHighlights(
       "Table",
       ["WAL status", "Memory pressure"],
@@ -38,15 +40,24 @@ FROM tables() WHERE table_name=__TARGET_SQL__`,
     ),
   },
   {
+    name: "Ingestion",
+    type: "markdown",
+    row: 10,
+    x: 0,
+    w: 12,
+    height: 86,
+    value: `### Ingestion and apply
+These charts use 5-second buckets. WAL rows/s shows rows committed to the WAL and Applied rows/s shows rows written to the table. Queue ms is how long a commit waits before it is applied. If the two rates drift apart or the queue time keeps rising, apply is falling behind.`,
+  },
+  {
     name: "Ingestion · rows/s",
     row: 13,
     x: 0,
     w: 6,
     height: 356,
-    history: true,
     autoRefresh: "5s",
     value: `SELECT w.created, sum(CASE WHEN w.event=109 THEN w.rowCount ELSE 0 END)/5.0 AS "WAL rows/s", sum(CASE WHEN w.event=105 THEN w.rowCount ELSE 0 END)/5.0 AS "Applied rows/s" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event IN (109,105) AND w.rowCount>0 SAMPLE BY 5s ALIGN TO CALENDAR`,
+WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event IN (109,105) AND w.rowCount>0 SAMPLE BY 5s FROM dateadd('m',-@window_minutes,timestamp_floor('5s',now())) TO timestamp_floor('5s',now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -64,7 +75,6 @@ WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('5s',now())) AND w
     x: 6,
     w: 6,
     height: 356,
-    history: true,
     autoRefresh: "5s",
     value: `SELECT w.created, approx_percentile(w.latency, 0.5) AS "Queue p50 ms",
        approx_percentile(w.latency, 0.9) AS "Queue p90 ms",
@@ -103,14 +113,14 @@ WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('5s',now())) AND w
     },
   },
   {
-    name: "Live partitions",
+    name: "Partitions",
     type: "markdown",
     row: 27,
     x: 0,
     w: 12,
     height: 86,
-    value: `### Follow the writes
-Active and newest partitions come first. Arrows show changes in numeric values; new partitions briefly highlight blue. The footprint chart combines splits into logical partitions.`,
+    value: `### Partitions
+Active and newest partitions are listed first. Arrows mark values that changed since the last refresh, and new partitions flash blue for a moment. **Dead rows** are replaced rows that are still on disk. **Pieces** above 1 means the partition is split into several files. The footprint chart shows the current size of each partition, with split partitions counted together.`,
   },
   {
     name: "Partition footprint · GiB",
@@ -166,14 +176,14 @@ WHERE attached ORDER BY active DESC, minTimestamp DESC`,
     highlightConfig: partitionHighlights("Disk GiB"),
   },
   {
-    name: "Downstream views",
+    name: "Downstream view health",
     type: "markdown",
     row: 47,
     x: 0,
     w: 12,
     height: 86,
     value: `### Downstream view health
-Check status, pending work and last refresh below. For refresh latency and failures, open the materialized view's monitoring dashboard. Timer-based views can accumulate pending work between runs.`,
+**Pending txns** is the number of this table's transactions a view hasn't picked up yet. It grows between refreshes of timer and manual views. For refresh times and failures, open the view's own monitoring dashboard. If the grid is empty, no views are built on this table.`,
   },
   {
     name: "Downstream views",
@@ -196,9 +206,8 @@ FROM materialized_views() WHERE base_table_name=__TARGET_SQL__ ORDER BY view_nam
     x: 0,
     w: 12,
     height: 86,
-    history: true,
     value: `### Investigate write efficiency
-These charts use **1-minute buckets**. Compare transaction rate with batch size, then physical write work with amplification. Rates count processed rows, not net growth; amplification is physical/logical rows, not the drawer's p50.`,
+These charts use 1-minute buckets. Look at the transaction rate next to the transaction size, then compare physical write work with amplification. The rates count every processed row, not net growth. Amplification is physical rows divided by logical rows for each minute, so it won't always match **Write Amplification (p50)** in the table details.`,
   },
   {
     name: "Transactions · txns/s",
@@ -206,7 +215,6 @@ These charts use **1-minute buckets**. Compare transaction rate with batch size,
     x: 0,
     w: 6,
     height: 356,
-    history: true,
     autoRefresh: "60s",
     value: `SELECT w.created,
  sum(CASE WHEN w.event=109 THEN 1 ELSE 0 END)/60.0 AS "Committed txns/s",
@@ -215,7 +223,7 @@ FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
 WHERE w.created >= dateadd('m', -@window_minutes, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
  AND t.table_name = __TARGET_SQL__ AND w.event IN (109,105) AND w.rowCount>0
-SAMPLE BY 1m ALIGN TO CALENDAR`,
+SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -233,7 +241,6 @@ SAMPLE BY 1m ALIGN TO CALENDAR`,
     x: 6,
     w: 6,
     height: 356,
-    history: true,
     autoRefresh: "60s",
     value: `SELECT w.created, avg(w.rowCount) AS "Mean rows/txn", approx_percentile(w.rowCount, 0.5) AS "p50 rows/txn",
        approx_percentile(w.rowCount, 0.9) AS "p90 rows/txn",
@@ -263,7 +270,6 @@ WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND w.
     x: 0,
     w: 6,
     height: 356,
-    history: true,
     autoRefresh: "60s",
     value: `SELECT w.created,
  sum(w.rowCount)/60.0 AS "Logical rows/s",
@@ -272,7 +278,7 @@ FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
 WHERE w.created >= dateadd('m', -@window_minutes, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
  AND t.table_name = __TARGET_SQL__ AND w.event=105 AND w.rowCount>0
-SAMPLE BY 1m ALIGN TO CALENDAR`,
+SAMPLE BY 1m FROM dateadd('m', -@window_minutes, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -290,7 +296,6 @@ SAMPLE BY 1m ALIGN TO CALENDAR`,
     x: 6,
     w: 6,
     height: 356,
-    history: true,
     autoRefresh: "60s",
     value: `SELECT w.created, sum(w.physicalRowCount)*1.0/nullif(sum(w.rowCount),0) AS "Physical / logical rows" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
 WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND w.event=105 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
@@ -306,48 +311,6 @@ WHERE w.created>=dateadd('m',-@window_minutes,timestamp_floor('m',now())) AND w.
     },
   },
   {
-    name: "Incident history",
-    type: "markdown",
-    row: 99,
-    x: 0,
-    w: 12,
-    height: 86,
-    history: true,
-    value: `### What happened before the current state?
-Counts cover **incident_hours**; the log shows the latest 100 suspend/resume events. These are past events, while the live summary at the top shows the current state.`,
-  },
-  {
-    name: "Incident counts",
-    row: 104,
-    x: 0,
-    w: 6,
-    height: 356,
-    history: true,
-    autoRefresh: "60s",
-    value: `WITH history AS (SELECT w.created AS observed_at, CASE WHEN w.event=107 THEN 'WAL suspended' ELSE 'WAL resumed' END AS event_name, CAST(NULL AS STRING) AS detail FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id WHERE w.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND w.event IN (107,108))
-SELECT k.event_name AS "Event", coalesce(h.events,0) AS "Count",
- CASE WHEN coalesce(h.events,0)=0 THEN 'None recorded' WHEN k.event_name='WAL resumed' THEN 'Resumed' ELSE 'Review' END AS "Signal", h.last_seen AS "Last seen (UTC)"
-FROM (SELECT 'WAL suspended' AS event_name UNION ALL SELECT 'WAL resumed') k
-LEFT JOIN (SELECT event_name,count() AS events,max(observed_at) AS last_seen FROM history GROUP BY event_name) h ON k.event_name=h.event_name`,
-    highlightConfig: incidentHighlights(true),
-  },
-  {
-    name: "Recent incidents",
-    row: 104,
-    x: 6,
-    w: 6,
-    height: 356,
-    history: true,
-    autoRefresh: "60s",
-    value: `SELECT w.created AS "Time (UTC)",
- CASE WHEN w.event=107 THEN 'WAL suspended' ELSE 'WAL resumed' END AS "Event"
-FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('h',-@incident_hours,now())
- AND t.table_name=__TARGET_SQL__ AND w.event IN (107,108)
-ORDER BY w.created DESC LIMIT 100`,
-    highlightConfig: incidentHighlights(false),
-  },
-  {
     name: "Reading the data",
     type: "markdown",
     row: 118,
@@ -355,6 +318,6 @@ ORDER BY w.created DESC LIMIT 100`,
     w: 12,
     height: 116,
     value: `### Reading the data
-History depends on retained telemetry. Live grids and partition footprint show current state; polling does not create stored history. Write age is time since the last tracked write. Dead rows are physical rows outside the live count; Pieces counts file pieces.`,
+The charts come from telemetry, which the server keeps for one week. Rate charts show 0 when nothing happened. Latency, size and ratio charts only have points where something happened, so "No data to plot" means there were no events in the window. The grids show the current state and keep no history. **Write age** is the time since the server last applied WAL data to the table. After a restart it counts from the newest row's timestamp.`,
   },
 ]

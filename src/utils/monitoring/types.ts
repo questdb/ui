@@ -16,12 +16,14 @@ export type MonitoringTarget = {
   name: string
 }
 
+// Present only while the notebook is an unedited dashboard, like an example
+// dashboard's `templateId`. The first authored edit, a rename or an archive
+// removes it for good: the notebook is then the user's own, and opening the
+// dashboard again creates a fresh one.
 export type MonitoringSource = {
   target: MonitoringTarget
   templateVersion: number
   initialFingerprint: string
-  /** First durable user/agent customization; retained across edits and undo. */
-  customizedAt?: number
 }
 
 export type MonitoringCellTemplate = {
@@ -33,7 +35,9 @@ export type MonitoringCellTemplate = {
   w: number
   height: number
   autoRefresh?: AutoRefresh
-  history?: boolean
+  // Reads `sys.telemetry_mat_view`, which the server records only while
+  // telemetry is enabled. WAL telemetry is recorded regardless of the setting.
+  telemetry?: boolean
   chartConfig?: NotebookCell["chartConfig"]
   highlightConfig?: NotebookCell["highlightConfig"]
 }

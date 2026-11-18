@@ -6,15 +6,16 @@ import { trackEvent } from "../modules/ConsoleEventTracker"
 import { authSessionState } from "../modules/OAuth2/authSessionState"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 
-const customize = (
+// The first customization detaches the notebook from its dashboard template,
+// as an edit detaches an example dashboard from its `templateId`.
+const detach = (
   id: number,
   buffer: Buffer,
   tx: Transaction,
 ): Partial<Buffer> => {
-  if (!buffer.monitoring || buffer.monitoring.customizedAt !== undefined)
-    return {}
+  const { monitoring } = buffer
+  if (!monitoring) return {}
   const session = authSessionState.capture()
-  const monitoring = { ...buffer.monitoring, customizedAt: Date.now() }
   // MCP commits can be inside a larger transaction. Only report committed
   // edits, and write telemetry outside that transaction's table scope.
   let root = tx
@@ -30,30 +31,33 @@ const customize = (
       }),
     )
   })
-  return { monitoring }
+  return { monitoring: undefined }
 }
 
 // Both UI persistence and passive MCP edits use bufferStore.update. Compare
 // authored fields so query results, focus and automatic sizing are excluded.
+// A patch that sets `monitoring` itself (an archive) decides on its own.
 export const updateWithMonitoringCustomization = (
   id: number,
   patch: Partial<Buffer>,
 ): Promise<number> => {
-  if (!patch.notebookViewState && patch.label === undefined)
+  if (
+    (!patch.notebookViewState && patch.label === undefined) ||
+    "monitoring" in patch
+  )
     return db.buffers.update(id, patch)
   return db.transaction("rw", db.buffers, async (tx) => {
     const previous = await db.buffers.get(id)
     const next = previous && { ...previous, ...patch }
     const changed =
       previous?.monitoring &&
-      previous.monitoring.customizedAt === undefined &&
       previous.notebookViewState &&
       next?.notebookViewState &&
       monitoringFingerprint(previous.label, previous.notebookViewState) !==
         monitoringFingerprint(next.label, next.notebookViewState)
     return db.buffers.update(id, {
       ...patch,
-      ...(changed ? customize(id, next, tx) : {}),
+      ...(changed ? detach(id, next, tx) : {}),
     })
   })
 }
@@ -63,6 +67,5 @@ export const markMonitoringColumnsCustomized = (id: number): Promise<void> =>
   db.transaction("rw", db.buffers, async (tx) => {
     const buffer = await db.buffers.get(id)
     if (!buffer?.notebookViewState || !buffer.monitoring) return
-    const patch = customize(id, buffer, tx)
-    if (patch.monitoring) await db.buffers.update(id, patch)
+    await db.buffers.update(id, detach(id, buffer, tx))
   })

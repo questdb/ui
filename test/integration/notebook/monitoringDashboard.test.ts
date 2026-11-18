@@ -15,31 +15,21 @@ const variants = [
     label: "WAL table with history",
     kind: "table",
     telemetryEnabled: true,
-    walEnabled: true,
   },
   {
     label: "materialized view with history",
     kind: "matview",
     telemetryEnabled: true,
-    walEnabled: true,
   },
   {
     label: "WAL table without history",
     kind: "table",
     telemetryEnabled: false,
-    walEnabled: true,
   },
   {
     label: "materialized view without history",
     kind: "matview",
     telemetryEnabled: false,
-    walEnabled: true,
-  },
-  {
-    label: "non-WAL table",
-    kind: "table",
-    telemetryEnabled: true,
-    walEnabled: false,
   },
 ] as const
 
@@ -68,12 +58,7 @@ describe("monitoring template execution integration", () => {
         if (cell.type === "markdown") continue
         const queries = getQueriesFromText(cell.value)
         for (const [index, query] of queries.entries()) {
-          const fixture = monitoringResponse(
-            cell.name!,
-            variant.kind,
-            variant.walEnabled,
-            index,
-          )
+          const fixture = monitoringResponse(cell.name!, variant.kind, index)
           transport.mockResolvedValueOnce(new Response(JSON.stringify(fixture)))
 
           // When the real notebook executor expands variables and parses HTTP data
@@ -91,15 +76,14 @@ describe("monitoring template execution integration", () => {
           expect(result.dataset, label).toEqual(fixture.dataset)
           expect(sent, label).toContain("'trades'")
           expect(sent, label).not.toContain("__TARGET")
-          if (variant.telemetryEnabled && variant.walEnabled) {
-            expect(sent, label).toMatch(/^DECLARE\s+@window_minutes := 30,/)
+          expect(sent, label).toMatch(/^DECLARE\s+@window_minutes := 30\b/)
+          if (variant.kind === "matview" && variant.telemetryEnabled)
             expect(sent, label).toContain("@incident_hours := 24")
-          } else {
-            expect(sent, label).not.toMatch(/@window_minutes|@incident_hours/)
-          }
+          else expect(sent, label).not.toContain("@incident_hours")
           expect(result.effectiveQuery, label).toBe(sent)
-          if (!variant.telemetryEnabled || !variant.walEnabled)
-            expect(sent, label).not.toContain("sys.telemetry")
+          // View refresh telemetry follows the setting; WAL telemetry does not.
+          if (!variant.telemetryEnabled)
+            expect(sent, label).not.toContain("sys.telemetry_mat_view")
           const names = result.columns.map((column) => column.name)
           if (cell.chartConfig) {
             const chart = cell.chartConfig.queries[index]
@@ -142,7 +126,6 @@ describe("monitoring template execution integration", () => {
       name,
       kind: "table",
       telemetryEnabled: false,
-      walEnabled: false,
     })
     const health = dashboard.cells.find(
       (cell) => cell.name === "Live table health",
@@ -150,9 +133,7 @@ describe("monitoring template execution integration", () => {
     const transport = mockTransport()
     transport.mockResolvedValueOnce(
       new Response(
-        JSON.stringify(
-          monitoringResponse(health.name!, "table", false, 0, name),
-        ),
+        JSON.stringify(monitoringResponse(health.name!, "table", 0, name)),
       ),
     )
 
@@ -173,12 +154,11 @@ describe("monitoring template execution integration", () => {
       name: "trades",
       kind: "matview",
       telemetryEnabled: true,
-      walEnabled: true,
     })
     const cell = dashboard.cells.find(
       (cell) => cell.name === "Refresh duration · ms",
     )!
-    const fixture = monitoringResponse(cell.name!, "matview", true)
+    const fixture = monitoringResponse(cell.name!, "matview")
     const transport = mockTransport()
     transport.mockResolvedValueOnce(
       new Response(JSON.stringify({ ...fixture, dataset: [], count: 0 })),
@@ -203,7 +183,6 @@ describe("monitoring template execution integration", () => {
       name: "trades",
       kind: "table",
       telemetryEnabled: true,
-      walEnabled: true,
     })
     const cell = dashboard.cells.find(
       (cell) => cell.name === "Ingestion · rows/s",

@@ -2,6 +2,7 @@ import React, { useRef } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import { useEscapeLayer } from "../../hooks/useEscapeLayer"
+import { FocusOnOpen } from "./focus-on-open"
 import { EscapePriority, isTextFieldWithValue } from "../../utils/escapeKey"
 import styled, { css } from "styled-components"
 import { useSelector, useDispatch } from "react-redux"
@@ -102,7 +103,13 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })`
 // front of it claimed. Radix's capture-phase listener would run first.
 const SideDrawerContent = styled.div`
   ${drawerContentStyles}
+
+  &:focus {
+    outline: none;
+  }
 `
+
+let sideDrawerSeq = 0
 
 export const StyledClose = styled(IconButton).attrs({
   label: "Close",
@@ -170,6 +177,9 @@ export const Drawer = ({
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
 
   const sideContentRef = useRef<HTMLDivElement>(null)
+  // Radix's trigger points `aria-controls` at its own content element, which
+  // a side panel does not render; it must name the panel instead.
+  const sideContentId = useRef(`side-drawer-${++sideDrawerSeq}`).current
   useEscapeLayer(mode === "side" && !!open && closeOnEscape && !!onDismiss, {
     priority: EscapePriority.sidePanel,
     scope: () => sideContentRef.current,
@@ -269,7 +279,10 @@ export const Drawer = ({
       open={open}
       modal={mode === "modal"}
     >
-      <RadixDialog.Trigger asChild>
+      <RadixDialog.Trigger
+        asChild
+        {...(mode === "side" && { "aria-controls": sideContentId })}
+      >
         <ForwardRef>{trigger}</ForwardRef>
       </RadixDialog.Trigger>
       <RadixDialog.Portal
@@ -285,6 +298,10 @@ export const Drawer = ({
         {mode === "side" ? (
           <SideDrawerContent
             ref={sideContentRef}
+            id={sideContentId}
+            // Focusable, so a click on plain text inside the panel keeps
+            // focus (and Escape) in the panel instead of moving it to body.
+            tabIndex={-1}
             role="dialog"
             aria-label={typeof title === "string" ? title : "Drawer"}
             data-hook={dataHook}
@@ -292,6 +309,7 @@ export const Drawer = ({
             width={width}
           >
             {contents}
+            <FocusOnOpen container={sideContentRef} />
           </SideDrawerContent>
         ) : (
           <DrawerContent

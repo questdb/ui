@@ -10,9 +10,22 @@ import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import { bufferStore } from "../store/buffers"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
+import type { CellRunOutcome } from "../utils/notebooks/runCellsAfterApply"
+
+// Why a first run did not fill its cell, or null when it ran or was only
+// interrupted (the dashboard was opened or the session ended mid-run).
+const firstRunFailure = (outcome: CellRunOutcome): string | null => {
+  if ("error" in outcome) return notebookFailureReason(outcome.error)
+  const { summary } = outcome
+  if (summary.success) return null
+  if (summary.denied !== undefined) return "permission_denied"
+  if (summary.skipped !== undefined) return "write_blocked"
+  if (summary.cancelled !== undefined || summary.unverified) return null
+  return "query_error"
+}
 
 export const useMonitoringDashboard = () => {
-  const { addBuffer, setActiveBuffer, tabsDisabled, updateBuffer } = useEditor()
+  const { addBuffer, setActiveBuffer, tabsDisabled } = useEditor()
   const [busy, setBusy] = useState(false)
   const inFlight = useRef(false)
   const mounted = useRef(true)
@@ -29,11 +42,13 @@ export const useMonitoringDashboard = () => {
     onOpened: () => void,
   ) => {
     if (inFlight.current || tabsDisabled) return
+    // Repeated clicks are ignored for the whole open, but the button shows
+    // progress only while a new dashboard is created: activating an open one
+    // is immediate and must not flash a disabled spinner.
     inFlight.current = true
-    setBusy(true)
     const session = authSessionState.capture()
     let notebookId: number | undefined
-    let stage = "create_or_restore"
+    let stage = "create_or_reuse"
     const trackFailure = (reason: string) => {
       if (!session.isCurrent()) return
       void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_FAILED, {
@@ -44,13 +59,15 @@ export const useMonitoringDashboard = () => {
       })
     }
     try {
-      const result = await openMonitoringDashboard(request, addBuffer)
+      const result = await openMonitoringDashboard(request, addBuffer, () => {
+        if (mounted.current) setBusy(true)
+      })
       if (!session.isCurrent()) return
       if (!result) {
         trackFailure("tab_limit")
         return
       }
-      const { buffer, outcome } = result
+      const { buffer, outcome, runs = [] } = result
       if (buffer.id === undefined) return
       notebookId = buffer.id
       if (outcome === "created") {
@@ -59,27 +76,41 @@ export const useMonitoringDashboard = () => {
           notebookId,
         })
       }
+      const failures = runs.flatMap((run) => {
+        const reason = firstRunFailure(run)
+        return reason === null ? [] : [{ cellId: run.cellId, reason }]
+      })
+      failures.forEach(({ cellId, reason }) =>
+        trackEvent(ConsoleEvent.MONITORING_DASHBOARD_FAILED, {
+          notebookId,
+          kind: request.target.kind,
+          stage: "initial_query",
+          reason,
+          cellId,
+          mode: "grid",
+        }),
+      )
+      if (failures.length > 0)
+        toast.error(
+          `${failures.length} monitoring cells could not run. Check their errors in the notebook.`,
+        )
       stage = "activate"
       if (isCurrentTarget()) {
-        // Clear a closed-tab preview before activating the restored notebook.
-        await updateBuffer(buffer.id, { archived: false, isTemporary: false })
         const current = await bufferStore.getById(buffer.id)
         if (!session.isCurrent()) return
-        if (!current) {
-          trackFailure("deleted")
+        if (!current || current.archived) {
+          trackFailure(current ? "archived" : "deleted")
           return
         }
-        await setActiveBuffer(
-          { ...current, isTemporary: false },
-          { throwOnError: true },
-        )
+        await setActiveBuffer(current, { throwOnError: true })
         if (!session.isCurrent()) return
         onOpened()
         void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_OPEN, {
           notebookId,
           kind: request.target.kind,
           outcome,
-          history: request.telemetryEnabled && request.walEnabled,
+          // Table history is WAL telemetry, recorded whatever the setting.
+          history: request.target.kind === "table" || request.telemetryEnabled,
         })
       } else {
         // Navigation cancellation is distinguishable from a technical error.
@@ -98,8 +129,6 @@ export const useMonitoringDashboard = () => {
       inFlight.current = false
       if (mounted.current) setBusy(false)
     }
-    // The mounted dashboard runs its never-run grid cells itself
-    // (useMonitoringAutoRun), however it was opened.
   }
 
   // `busy` means a dashboard is opening. `unavailable` means it can't be

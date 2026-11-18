@@ -807,7 +807,9 @@ export class CellRefreshEngine {
 
   private updateEntry(entry: Entry, cell: NotebookCell) {
     // Deferral belongs to the initial transfer. applySqlState clears it when
-    // the user edits the SQL; later unrelated syncs must not re-arm it.
+    // the user edits the SQL, and so does a drawn frame clearing the cell's
+    // flag; later unrelated syncs must not re-arm it.
+    if (cell.deferInitialDraw !== true) entry.deferInitialDraw = false
     const autoRefresh = resolveAutoRefresh(
       cell.autoRefresh,
       this.autoRefreshDefault,

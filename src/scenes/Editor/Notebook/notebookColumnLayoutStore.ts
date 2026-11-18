@@ -34,6 +34,13 @@ export const loadNotebookColumnLayout = (
   return readStore()[bufferId]?.[cellId]?.[queryKey] ?? null
 }
 
+// Reset layout commits an empty pin list before it removes the entry, so an
+// entry can change without holding anything the user arranged.
+const isCustomLayout = (layout: ColumnLayout): boolean =>
+  Object.keys(layout.columnSizing ?? {}).length > 0 ||
+  (layout.columnOrder?.length ?? 0) > 0 ||
+  (layout.pinnedColumns?.length ?? 0) > 0
+
 export const saveNotebookColumnLayout = (
   bufferId: number | undefined,
   cellId: string,
@@ -55,7 +62,10 @@ export const saveNotebookColumnLayout = (
     delete cell[keys[i]]
   }
   writeStore(store)
-  if (JSON.stringify(existing) !== JSON.stringify(cell[queryKey]))
+  if (
+    isCustomLayout(cell[queryKey]) &&
+    JSON.stringify(existing) !== JSON.stringify(cell[queryKey])
+  )
     void markMonitoringColumnsCustomized(bufferId).catch(() => undefined)
 }
 

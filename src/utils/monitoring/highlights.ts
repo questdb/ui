@@ -38,7 +38,8 @@ const status = (columns: string[]): HighlightRule[] =>
       kind: "value" as const,
       condition: {
         op: "matches" as const,
-        pattern: "^(Unknown|Reduced parallelism|refreshing)$",
+        // `retrying`: a view refresh deferred after a transient error.
+        pattern: "^(Unknown|Reduced parallelism|refreshing|retrying)$",
       },
     },
   ])
@@ -95,6 +96,7 @@ export const downstreamHighlights = (): HighlightConfig => ({
   ],
 })
 
+// View refresh incidents: a failure or invalidation highlights its row.
 export const incidentHighlights = (counts: boolean): HighlightConfig => ({
   identityColumns: counts ? ["Event"] : ["Time (UTC)", "Event"],
   rules: [
@@ -104,16 +106,8 @@ export const incidentHighlights = (counts: boolean): HighlightConfig => ({
       appliesTo: "row",
       condition: {
         op: "matches",
-        pattern: counts
-          ? "^Review$"
-          : "^(WAL suspended|View invalidated|Refresh failed)$",
+        pattern: counts ? "^Review$" : "^(View invalidated|Refresh failed)$",
       },
-    },
-    {
-      ...rule(counts ? "Signal" : "Event", "dataPositive"),
-      kind: "value",
-      appliesTo: "row",
-      condition: { op: "eq", value: counts ? "Resumed" : "WAL resumed" },
     },
     ...(counts ? trends(["Count"]) : []),
   ],

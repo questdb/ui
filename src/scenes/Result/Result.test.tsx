@@ -256,6 +256,27 @@ describe("result toolbar notebook action", () => {
     warn.mockRestore()
   })
 
+  it("does not show the tooltip after the toolbar narrows past a full-width visit", () => {
+    const resize = observeToolbar()
+    const store = mountResult()
+    act(() => {
+      store.dispatch(
+        queryActions.setResult(resultFor("select x from long_sequence(10)"), 1),
+      )
+    })
+    const action = () =>
+      document.querySelector<HTMLElement>('[data-hook="result-add-notebook"]')!
+    const tooltip = () => document.querySelector('[data-hook="tooltip"]')
+
+    resize(1000)
+    act(() => action().focus())
+    act(() => action().blur())
+    expect(tooltip()).toBeNull()
+
+    resize(700)
+    expect(tooltip()).toBeNull()
+  })
+
   it("keeps the auto-refresh action distinct from Re-run when only icons fit", () => {
     const resize = observeToolbar()
     const store = mountResult()

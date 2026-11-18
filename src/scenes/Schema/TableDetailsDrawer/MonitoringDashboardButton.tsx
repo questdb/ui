@@ -1,18 +1,11 @@
 import React from "react"
 import styled from "styled-components"
 import { ArrowRightIcon, NotebookIcon } from "@phosphor-icons/react"
-import { Button } from "../../../components"
+import { Button, Spinner } from "../../../components"
 import { Section } from "./shared-styles"
 
-const NotebookGlyph = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+const NotebookGlyph = styled(NotebookIcon)`
   flex-shrink: 0;
-  width: 3.2rem;
-  height: 3.2rem;
-  border-radius: 0.4rem;
-  background: ${({ theme }) => theme.color.statusInfoSurface};
   color: ${({ theme }) => theme.color.statusInfo};
 `
 
@@ -22,10 +15,10 @@ const Action = styled(Section)`
 `
 
 const ActionLabel = styled.span`
-  flex: 1;
   min-width: 0;
-  text-align: left;
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 const Direction = styled(ArrowRightIcon)`
@@ -33,13 +26,19 @@ const Direction = styled(ArrowRightIcon)`
   color: ${({ theme }) => theme.color.contentSecondary};
 `
 
+// Takes the arrow's place while the dashboard is created and its first
+// queries run, so the button keeps its size.
+const Progress = styled(Spinner)`
+  flex-shrink: 0;
+  color: ${({ theme }) => theme.color.contentSecondary};
+`
+
+// A standard button, like the drawer's AI actions: its own width, at the
+// start of the section, shrinking with an ellipsis only in a narrow panel.
 const DashboardAction = styled(Button)`
-  width: 100%;
-  height: auto;
-  min-height: 5.2rem;
-  padding: 0.9rem 1.2rem;
-  gap: 1.2rem;
-  border-radius: 0.6rem;
+  align-self: flex-start;
+  max-width: 100%;
+  gap: 0.8rem;
 
   &:disabled ${NotebookGlyph}, &:disabled ${Direction} {
     color: ${({ theme }) => theme.color.contentDisabled};
@@ -60,17 +59,22 @@ export const MonitoringDashboardButton = ({
   <Action>
     <DashboardAction
       variant="secondary"
-      fontSize="md"
       disabled={busy || disabled}
       aria-busy={busy}
       onClick={onClick}
       data-hook="table-details-monitoring-dashboard"
     >
-      <NotebookGlyph aria-hidden="true">
-        <NotebookIcon size={20} />
-      </NotebookGlyph>
+      <NotebookGlyph size={16} aria-hidden="true" />
       <ActionLabel>Create monitoring dashboard</ActionLabel>
-      <Direction size={18} aria-hidden="true" />
+      {busy ? (
+        <Progress
+          size={16}
+          aria-hidden="true"
+          data-hook="table-details-monitoring-dashboard-progress"
+        />
+      ) : (
+        <Direction size={16} aria-hidden="true" />
+      )}
     </DashboardAction>
   </Action>
 )

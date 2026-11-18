@@ -17,7 +17,6 @@ const percentiles = (prefix: string, unit: string): string[] =>
 export const monitoringResponse = (
   panel: string,
   kind: "table" | "matview",
-  walEnabled: boolean,
   queryIndex = 0,
   target = "trades",
 ) => {
@@ -26,15 +25,12 @@ export const monitoringResponse = (
     "Live table health": [
       text("Table", target),
       number("Rows", 2),
-      text("WAL status", walEnabled ? "Running" : "Disabled"),
-      ...(walEnabled
-        ? [
-            number("Pending rows"),
-            number("Pending txns"),
-            text("Memory pressure", "None"),
-          ]
-        : []),
+      text("WAL status"),
+      number("Pending rows"),
+      number("Pending txns"),
+      text("Memory pressure", "None"),
       number("Write age (s)"),
+      text("Suspend reason", ""),
     ],
     "Live view health": [
       text("View", target),
@@ -90,19 +86,20 @@ export const monitoringResponse = (
       text("WAL status"),
       number("Pending WAL rows"),
       text("Memory pressure", "None"),
+      text("Suspend reason", ""),
     ],
     "View output · rows/s": history("Logical rows/s", "Physical rows/s"),
     "View write amplification": history("Physical / logical rows"),
     "Incident counts": [
-      text("Event", "WAL suspended"),
+      text("Event", "Refresh failed"),
       number("Count", 1),
       text("Signal", "Review"),
       time("Last seen (UTC)"),
     ],
     "Recent incidents": [
       time("Time (UTC)"),
-      text("Event", "WAL suspended"),
-      ...(kind === "matview" ? [text("Details", "Refresh failed")] : []),
+      text("Event", "Refresh failed"),
+      text("Details", "table is busy"),
     ],
   }
   const row = fields[panel]

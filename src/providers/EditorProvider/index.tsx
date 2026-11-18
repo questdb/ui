@@ -672,6 +672,9 @@ export const EditorProvider: React.FC = ({ children }) => {
       archived: true,
       archivedAt: new Date().getTime(),
       position: -1,
+      // An archived dashboard is a recoverable personal notebook, as an
+      // archived example dashboard is; the drawer then opens a fresh one.
+      monitoring: undefined,
     })
     trackArchive("archived")
     await setActiveBufferOnRemoved(id)

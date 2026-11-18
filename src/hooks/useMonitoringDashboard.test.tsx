@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
   editor: {
     addBuffer: vi.fn(),
     setActiveBuffer: vi.fn(),
-    updateBuffer: vi.fn(),
     tabsDisabled: false,
   },
   openDashboard: vi.fn(),
@@ -36,7 +35,6 @@ vi.mock("../components/Toast", () => ({ toast: { error: mocks.error } }))
 const request: MonitoringRequest = {
   target: { instanceKey: "instance", kind: "table", name: "trades" },
   telemetryEnabled: true,
-  walEnabled: true,
 }
 const buffer: Buffer = {
   id: 1,
@@ -68,12 +66,20 @@ const mount = () => {
   return () => hook
 }
 
+// Like the real opener: reports a creation before it creates.
+const opens =
+  (outcome: MonitoringOpenResult["outcome"]) =>
+  (_request: unknown, _addBuffer: unknown, onCreate?: () => void) => {
+    if (outcome === "created") onCreate?.()
+    return Promise.resolve<MonitoringOpenResult>({ buffer, outcome })
+  }
+
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.getById.mockResolvedValue(buffer)
   mocks.openDashboard
-    .mockResolvedValue({ buffer, outcome: "reused" })
-    .mockResolvedValueOnce({ buffer, outcome: "created" })
+    .mockImplementation(opens("reused"))
+    .mockImplementationOnce(opens("created"))
 })
 afterEach(() => {
   act(() => renderer?.unmount())
@@ -121,17 +127,44 @@ describe("monitoring dashboard opening lock", () => {
       await initial
     })
     const reopening = deferred<MonitoringOpenResult>()
-    mocks.openDashboard.mockReturnValueOnce(reopening.promise)
+    mocks.openDashboard.mockImplementationOnce(
+      (_request: unknown, _addBuffer: unknown, onCreate?: () => void) => {
+        onCreate?.()
+        return reopening.promise
+      },
+    )
     let next!: Promise<void>
     act(() => {
       next = hook().open(request, () => true, vi.fn())
     })
     expect(hook().busy).toBe(true)
     await act(async () => {
-      reopening.resolve({ buffer, outcome: "reused" })
+      reopening.resolve({ buffer, outcome: "created" })
       await next
     })
     expect(hook().busy).toBe(false)
+  })
+
+  it("never shows progress for an open dashboard, but still ignores repeated clicks", async () => {
+    mocks.openDashboard.mockReset().mockImplementation(opens("reused"))
+    const activation = deferred<void>()
+    mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
+    const hook = mount()
+    const onOpened = vi.fn()
+    let initial!: Promise<void>
+    await act(async () => {
+      initial = hook().open(request, () => true, onOpened)
+      await hook().open(request, () => true, onOpened)
+    })
+    expect(hook().busy).toBe(false)
+    expect(mocks.openDashboard).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      activation.resolve()
+      await initial
+    })
+    expect(hook().busy).toBe(false)
+    expect(onOpened).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -160,6 +193,54 @@ describe("monitoring telemetry", () => {
     )
   })
 
+  it("reports the first runs that did not fill their cells, not interrupted ones", async () => {
+    const summary = { success: false, queryCount: 1, results: [] }
+    mocks.openDashboard.mockReset().mockResolvedValue({
+      buffer,
+      outcome: "created",
+      runs: [
+        { cellId: "ok", summary: { ...summary, success: true } },
+        { cellId: "private", summary: { ...summary, denied: "no access" } },
+        { cellId: "broken", summary },
+        // The user opened the tab or the session ended mid-run.
+        { cellId: "opened", summary: { ...summary, unverified: true } },
+        { cellId: "stopped", summary: { ...summary, cancelled: "cancelled" } },
+        {
+          cellId: "full",
+          error: new DOMException("quota", "QuotaExceededError"),
+        },
+      ],
+    } satisfies MonitoringOpenResult)
+    const hook = mount()
+    await act(async () => {
+      await hook().open(request, () => true, vi.fn())
+    })
+    const failed = vi
+      .mocked(trackEvent)
+      .mock.calls.filter(
+        ([name]) => name === ConsoleEvent.MONITORING_DASHBOARD_FAILED,
+      )
+      .map(([, props]) => props)
+    expect(failed).toEqual(
+      [
+        ["private", "permission_denied"],
+        ["broken", "query_error"],
+        ["full", "storage_quota"],
+      ].map(([cellId, reason]) => ({
+        notebookId: buffer.id,
+        kind: "table",
+        stage: "initial_query",
+        reason,
+        cellId,
+        mode: "grid",
+      })),
+    )
+    expect(mocks.error).toHaveBeenCalledWith(
+      "3 monitoring cells could not run. Check their errors in the notebook.",
+    )
+    expect(mocks.editor.setActiveBuffer).toHaveBeenCalledTimes(1)
+  })
+
   it("records a tab-limit failure even when creation returns without throwing", async () => {
     mocks.openDashboard.mockReset().mockResolvedValue(undefined)
     const hook = mount()
@@ -169,7 +250,7 @@ describe("monitoring telemetry", () => {
     expect(trackEvent).toHaveBeenCalledWith(
       ConsoleEvent.MONITORING_DASHBOARD_FAILED,
       expect.objectContaining({
-        stage: "create_or_restore",
+        stage: "create_or_reuse",
         reason: "tab_limit",
       }),
     )

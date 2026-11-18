@@ -168,7 +168,9 @@ export const hasWriteStatement = (stmts: ClassifiedStatement[]): boolean =>
 // strategy — dispatch never classifies separately.
 export type RunCellGate =
   | { kind: "explicit"; permissions: Permissions }
-  // `source` labels telemetry only; the gate is the same for every auto-run.
+  // The gate is the same for every auto-run. `source` marks a run the console
+  // starts for its own generated notebook (a monitoring dashboard): it labels
+  // telemetry and is not reported as an agent change. Agent runs leave it unset.
   | { kind: "autoRun"; source?: "monitoring" }
 
 export const checkStatementsForRunQuery = (

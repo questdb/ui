@@ -20,7 +20,6 @@ import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
 import { useNotebookTelemetry } from "./useNotebookTelemetry"
 import { useNotebookOpenTelemetry } from "../../../hooks/useNotebookOpenTelemetry"
-import { useMonitoringAutoRun } from "./useMonitoringAutoRun"
 import { notebookFailureReason } from "../../../utils/notebooks/notebookFailureReason"
 import { useEditor } from "../../../providers/EditorProvider"
 import type { CellLayoutItem, NotebookViewState } from "../../../store/notebook"
@@ -903,7 +902,6 @@ export const Notebook: React.FC = () => {
   const archived = !!activeBuffer.archived
   const mounted = isNotebook && !archived && !!seed && !seedError
   useNotebookOpenTelemetry(bufferId, mounted)
-  useMonitoringAutoRun(bufferId, activeBuffer.monitoring, mounted)
   const previewView = activeBuffer.notebookViewState
 
   const previewSeed = useMemo(

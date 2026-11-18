@@ -91,6 +91,14 @@ describe("drawer monitoring dashboard action", () => {
     },
   )
 
+  it("does not advertise a dashboard for a non-WAL table", async () => {
+    // Its history would come from WAL telemetry, which it has none of.
+    const server = catalog()
+    server.tables[0].walEnabled = false
+    await mountDrawer("trades", "table")
+    expect(queryHook("monitoring-dashboard")).not.toBeInTheDocument()
+  })
+
   it.each(["view", "liveview"] as const)(
     "does not advertise an unsupported %s dashboard",
     async (kind) => {
@@ -114,6 +122,10 @@ describe("drawer monitoring dashboard action", () => {
         expect(hook("monitoring-dashboard")).toHaveAttribute(
           "aria-busy",
           ariaBusy,
+        )
+        // Only an opening dashboard shows progress.
+        expect(queryHook("monitoring-dashboard-progress") !== null).toBe(
+          state.busy,
         )
       } finally {
         Object.assign(opener, { busy: false, unavailable: false })

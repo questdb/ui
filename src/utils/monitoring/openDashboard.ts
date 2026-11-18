@@ -3,7 +3,6 @@ import {
   MAX_BUFFER_NAME_LENGTH,
   type Buffer,
 } from "../../store/buffers"
-import { db } from "../../store/db"
 import type { EditorContext } from "../../providers/EditorProvider"
 import {
   buildMonitoringDashboard,
@@ -14,26 +13,41 @@ import {
 import type { MonitoringTarget, MonitoringRefreshSchedule } from "./types"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { SessionEndedError } from "../../modules/OAuth2/session"
+import {
+  cellsToRunAfterApply,
+  runCellsAfterApply,
+  type CellRunOutcome,
+} from "../notebooks/runCellsAfterApply"
 
 export type MonitoringRequest = {
   target: MonitoringTarget
   telemetryEnabled: boolean
-  walEnabled: boolean
   refreshSchedule?: MonitoringRefreshSchedule
 }
 
 export type MonitoringOpenResult = {
   buffer: Buffer
-  outcome: "created" | "restored" | "reused"
+  outcome: "created" | "reused"
+  // The first runs of a created dashboard's grid cells.
+  runs?: CellRunOutcome[]
 }
 
 const requests = new Map<string, Promise<MonitoringOpenResult | undefined>>()
 
 // Shared by every entry point. Web Locks also serialize separate browser tabs
 // sharing this IndexedDB; the fresh lookup inside the lock is authoritative.
+// Like an example dashboard, only an open, unedited dashboard is reused. An
+// edited or archived one has left the template (`monitoring` is gone) and is
+// the user's notebook, so the button then creates a fresh dashboard.
+// A created dashboard is filled the way apply_notebook_state fills an agent's
+// notebook: the state is committed, then its run-mode cells run before the
+// caller activates it. Charts draw themselves once it is shown.
+// `onCreate` fires once this call has decided to create a dashboard, so a
+// caller shows progress for creation only, never for reusing an open one.
 export const openMonitoringDashboard = (
   request: MonitoringRequest,
   addBuffer: EditorContext["addBuffer"],
+  onCreate?: () => void,
 ): Promise<MonitoringOpenResult | undefined> => {
   const key = monitoringTargetKey(request.target)
   const session = authSessionState.capture()
@@ -54,32 +68,13 @@ export const openMonitoringDashboard = (
         buffer.id !== undefined &&
         buffer.notebookViewState &&
         buffer.monitoring &&
+        !buffer.archived &&
+        !buffer.isTemporary &&
         monitoringTargetKey(buffer.monitoring.target) === key,
     )
-    if (existing?.id !== undefined) {
-      const restored = existing.archived === true
-      const buffer = await db.transaction("rw", db.buffers, async () => {
-        requireSession()
-        const current = await db.buffers.get(existing.id!)
-        if (!current) return undefined
-        if (current.archived) {
-          const openBuffers = await db.buffers
-            .filter((b) => !b.archived)
-            .toArray()
-          requireSession()
-          const patch = {
-            archived: false,
-            archivedAt: undefined,
-            position: Math.max(-1, ...openBuffers.map((b) => b.position)) + 1,
-          }
-          await db.buffers.update(existing.id!, patch)
-          return { ...current, ...patch }
-        }
-        return current
-      })
-      if (buffer) return { buffer, outcome: restored ? "restored" : "reused" }
-    }
+    if (existing) return { buffer: existing, outcome: "reused" }
     requireSession()
+    onCreate?.()
     const notebookViewState = buildMonitoringDashboard({
       ...request,
       name: request.target.name,
@@ -102,7 +97,17 @@ export const openMonitoringDashboard = (
       { activate: false, signal: abort.signal },
     )
     requireSession()
-    return buffer ? { buffer, outcome: "created" } : undefined
+    if (buffer?.id === undefined) return undefined
+    const runs = await runCellsAfterApply(
+      buffer.id,
+      cellsToRunAfterApply(buffer.notebookViewState?.cells ?? []).map(
+        (cell) => ({ cellId: cell.id, sql: cell.value }),
+      ),
+      abort.signal,
+      { kind: "autoRun", source: "monitoring" },
+    )
+    requireSession()
+    return { buffer, outcome: "created", runs }
   }
   const locked = async (): Promise<MonitoringOpenResult | undefined> =>
     typeof navigator !== "undefined" && navigator.locks

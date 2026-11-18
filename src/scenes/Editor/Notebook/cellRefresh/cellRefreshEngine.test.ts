@@ -377,6 +377,37 @@ describe("CellRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
   })
 
+  it("refetches a drawn transferred chart whose frame later comes back unusable", async () => {
+    // Given a transferred chart that drew its faithful in-memory frame
+    const cell = {
+      ...drawCell("c1", "select 1", false),
+      deferInitialDraw: true,
+    }
+    harness.beginLoadOnRequest()
+    syncOnScreen([cell])
+    await flushAsync()
+    harness.settleLoad("c1", dqlCellResult("select 1"))
+    await flushAsync()
+    // and the drawn frame cleared the cell's deferral
+    syncOnScreen([{ ...cell, deferInitialDraw: undefined }])
+    await flushAsync()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+
+    // When the frame is released and only a truncated copy reloads
+    const truncated = dqlCellResult("select 1")
+    truncated.results[0] = {
+      ...truncated.results[0],
+      truncated: true,
+    } as SingleQueryResult
+    cellResults.set("c1", truncated)
+    engine.setVisible("c1", false)
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then the chart fetches instead of settling with no data
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
   it("allows explicitly selected polling for a transferred chart", async () => {
     const cell = {
       ...drawCell("c1", "select 1", false),

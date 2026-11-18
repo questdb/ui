@@ -189,7 +189,6 @@ describe("UI notebook lifecycle telemetry", () => {
     const view = buildMonitoringDashboard({
       name: "trades",
       kind: "table",
-      walEnabled: true,
       telemetryEnabled: false,
     })
     await db.buffers.update(41, {
@@ -216,6 +215,33 @@ describe("UI notebook lifecycle telemetry", () => {
       ],
     ])
   })
+
+  it.each(["user", "agent"] as const)(
+    "detaches a dashboard the %s archives, keeping it as a personal notebook",
+    async (initiator) => {
+      const view = buildMonitoringDashboard({
+        name: "trades",
+        kind: "table",
+        telemetryEnabled: false,
+      })
+      await db.buffers.update(41, {
+        notebookViewState: view,
+        monitoring: {
+          target: { instanceKey: "test", kind: "table", name: "trades" },
+          templateVersion: 1,
+          // Customized: a user close archives it instead of discarding it.
+          initialFingerprint: "customized",
+        },
+      })
+      await mount()
+      await act(async () => {
+        await editor.archiveBuffer(41, initiator)
+      })
+      const archived = await db.buffers.get(41)
+      expect(archived?.archived).toBe(true)
+      expect(archived).not.toHaveProperty("monitoring")
+    },
+  )
 
   it("does not report an agent archive as a UI gesture", async () => {
     await mount()

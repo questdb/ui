@@ -28,7 +28,6 @@ const setup = async () => {
     name: "trades",
     kind: "table",
     telemetryEnabled: true,
-    walEnabled: true,
   })
   const label = "trades · monitoring"
   const id = await db.buffers.add(

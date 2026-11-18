@@ -843,6 +843,33 @@ describe("createDexieNotebookController — runCell", () => {
     timestamp: 0,
   }
 
+  it.each([
+    ["an agent's auto-run", { kind: "autoRun" } as const, 1],
+    [
+      "the console's own dashboard run",
+      { kind: "autoRun", source: "monitoring" } as const,
+      0,
+    ],
+  ])(
+    "reports %s as an agent change only when the agent started it",
+    async (_, gate, agentEdits) => {
+      await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+      const { quest, respondNext } = makeQuest({
+        validate: () => dqlValidation,
+      })
+      const controller = makeController({}, quest)
+      const seen: AgentEdit[] = []
+      onAgentEdit((e) => seen.push(e))
+
+      const run = controller.runCell("a", undefined, undefined, gate)
+      await vi.waitFor(() => respondNext(dqlResult))
+
+      expect((await run).success).toBe(true)
+      expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
+      expect(seen).toHaveLength(agentEdits)
+    },
+  )
+
   it("runs a non-write multi-statement cell in parallel — one failure skips nothing", async () => {
     // Given a classified all-DQL script
     await seedNotebook({ cells: [cell("a", "SELECT 1; SELECT 2; SELECT 3")] })

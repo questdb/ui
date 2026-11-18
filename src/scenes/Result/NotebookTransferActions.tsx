@@ -89,8 +89,9 @@ export const NotebookTransferActions: React.FC<{
   // uncontrolled warns and leaves stale open state behind. The full label
   // needs no tooltip; the button element itself never changes.
   const [tooltipOpen, setTooltipOpen] = useState(false)
-  // A full-density tooltip is forced closed without reporting it; forget an
-  // open state from a narrower toolbar so it can't reappear unhovered.
+  // A full-density tooltip is forced closed, so Radix reports its open
+  // requests but never the matching close. Never record an open state there,
+  // and forget one from a narrower toolbar, so it can't reappear unhovered.
   useEffect(() => {
     if (density === "full") setTooltipOpen(false)
   }, [density])
@@ -102,7 +103,7 @@ export const NotebookTransferActions: React.FC<{
         placement="bottom"
         content={label}
         open={density !== "full" && tooltipOpen}
-        onOpenChange={setTooltipOpen}
+        onOpenChange={(open) => setTooltipOpen(density !== "full" && open)}
       >
         <ActionButton
           $iconOnly={iconOnly}

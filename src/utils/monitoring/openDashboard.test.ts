@@ -2,7 +2,8 @@
 import "fake-indexeddb/auto"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { db } from "../../store/db"
-import { makeBuffer, type Buffer } from "../../store/buffers"
+import { bufferStore, makeBuffer, type Buffer } from "../../store/buffers"
+import type { runCellsAfterApply } from "../notebooks/runCellsAfterApply"
 import {
   openMonitoringDashboard,
   type MonitoringRequest,
@@ -16,10 +17,20 @@ vi.hoisted(() => {
 })
 afterAll(() => db.close())
 
+const runner = vi.hoisted(() => ({
+  run: vi.fn<
+    Parameters<typeof runCellsAfterApply>,
+    ReturnType<typeof runCellsAfterApply>
+  >(),
+}))
+vi.mock("../notebooks/runCellsAfterApply", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../notebooks/runCellsAfterApply")>()),
+  runCellsAfterApply: runner.run,
+}))
+
 const request: MonitoringRequest = {
   target: { instanceKey: "instance-a", kind: "table", name: "trades" },
   telemetryEnabled: true,
-  walEnabled: true,
 }
 const add = vi.fn(async (partial?: Partial<Buffer>) => {
   const buffer = makeBuffer({
@@ -33,6 +44,7 @@ const add = vi.fn(async (partial?: Partial<Buffer>) => {
 beforeEach(async () => {
   await db.buffers.clear()
   add.mockClear()
+  runner.run.mockReset().mockResolvedValue([])
 })
 
 describe("opening a monitoring dashboard", () => {
@@ -48,39 +60,60 @@ describe("opening a monitoring dashboard", () => {
     expect(await db.buffers.count()).toBe(1)
   })
 
-  it("restores the edited dashboard, preserving its name, SQL and association", async () => {
+  it("opens a fresh dashboard once the previous one was edited, keeping the edited one", async () => {
     const first = await openMonitoringDashboard(request, add)
     const view = structuredClone(first!.buffer.notebookViewState!)
     view.cells[1].value = "select 42"
-    view.settings!.variables![0].value = "90"
-    await db.buffers.update(first!.buffer.id!, {
+    await bufferStore.update(first!.buffer.id!, {
       label: "My investigation",
       notebookViewState: view,
-      archived: true,
-      position: -1,
     })
-    await db.buffers.add(makeBuffer({ label: "SQL", position: 8 }))
-    const reopened = await openMonitoringDashboard(
-      {
-        ...request,
-        refreshSchedule: {
-          refresh_type: "timer",
-          timer_interval: 1,
-          timer_interval_unit: "HOUR",
-        },
-      },
-      add,
+    const reopened = await openMonitoringDashboard(request, add)
+    expect(reopened?.outcome).toBe("created")
+    expect(reopened?.buffer.id).not.toBe(first?.buffer.id)
+    expect(reopened?.buffer.label).toBe("trades · monitoring")
+    const mine = await db.buffers.get(first!.buffer.id!)
+    expect(mine?.label).toBe("My investigation")
+    expect(mine?.notebookViewState?.cells[1].value).toBe("select 42")
+    expect(mine).not.toHaveProperty("monitoring")
+  })
+
+  it("never restores an archived dashboard, even an unedited one", async () => {
+    const first = await openMonitoringDashboard(request, add)
+    // Archives detach the dashboard; a row archived with its association
+    // (stored before that rule) must not be revived either.
+    await db.buffers.update(first!.buffer.id!, { archived: true, position: -1 })
+    const reopened = await openMonitoringDashboard(request, add)
+    expect(reopened?.outcome).toBe("created")
+    expect(reopened?.buffer.id).not.toBe(first?.buffer.id)
+    expect((await db.buffers.get(first!.buffer.id!))?.archived).toBe(true)
+  })
+
+  it("runs a created dashboard's grid cells once, like an applied agent notebook", async () => {
+    const onCreate = vi.fn()
+    const created = await openMonitoringDashboard(request, add, onCreate)
+    expect(onCreate).toHaveBeenCalledTimes(1)
+    expect(runner.run).toHaveBeenCalledTimes(1)
+    const [bufferId, cells, signal, gate] = runner.run.mock.calls[0]
+    expect(bufferId).toBe(created?.buffer.id)
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(gate).toEqual({ kind: "autoRun", source: "monitoring" })
+    // Grid SQL cells only: charts draw themselves, markdown is prose.
+    const view = created!.buffer.notebookViewState!
+    const grids = view.cells.filter(
+      (cell) => cell.type !== "markdown" && cell.mode !== "draw",
     )
-    expect(reopened?.outcome).toBe("restored")
-    expect(reopened?.buffer.id).toBe(first?.buffer.id)
-    expect(reopened?.buffer.position).toBe(9)
-    expect(reopened?.buffer.label).toBe("My investigation")
-    expect(reopened?.buffer.notebookViewState?.cells[1].value).toBe("select 42")
+    expect(grids.length).toBeGreaterThan(0)
+    expect(cells).toEqual(
+      grids.map((cell) => ({ cellId: cell.id, sql: cell.value })),
+    )
+
+    // Reusing the open dashboard runs nothing and reports no creation.
     expect(
-      reopened?.buffer.notebookViewState?.settings?.variables?.[0].value,
-    ).toBe("90")
-    expect(reopened?.buffer.monitoring?.target).toEqual(request.target)
-    expect(add).toHaveBeenCalledTimes(1)
+      (await openMonitoringDashboard(request, add, onCreate))?.outcome,
+    ).toBe("reused")
+    expect(runner.run).toHaveBeenCalledTimes(1)
+    expect(onCreate).toHaveBeenCalledTimes(1)
   })
 
   it("isolates instances, kinds and names", async () => {

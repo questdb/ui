@@ -46,7 +46,7 @@ const setup = async () => {
 }
 
 describe("monitoring customization telemetry", () => {
-  it("ignores query status, focus, inspection, automatic sizing and archive changes", async () => {
+  it("ignores query status, focus, inspection and automatic sizing", async () => {
     const { id, view } = await setup()
     await bufferStore.update(id, {
       notebookViewState: {
@@ -60,20 +60,18 @@ describe("monitoring customization telemetry", () => {
         })),
       },
     })
-    await bufferStore.update(id, { archived: true })
     expect(trackEvent).not.toHaveBeenCalled()
-    expect((await db.buffers.get(id))?.monitoring?.customizedAt).toBeUndefined()
+    expect((await db.buffers.get(id))?.monitoring).toBeDefined()
   })
 
-  it("records one durable edit across concurrent writers and keeps the target association", async () => {
-    const { id, monitoring } = await setup()
+  it("detaches the notebook from its template once, across concurrent writers", async () => {
+    const { id } = await setup()
     await Promise.all([
       bufferStore.update(id, { label: "My dashboard" }),
       bufferStore.update(id, { label: "My monitoring" }),
     ])
     const stored = await db.buffers.get(id)
-    expect(stored?.monitoring).toMatchObject(monitoring)
-    expect(stored?.monitoring?.customizedAt).toEqual(expect.any(Number))
+    expect(stored).not.toHaveProperty("monitoring")
     expect(trackEvent).toHaveBeenCalledTimes(1)
     expect(trackEvent).toHaveBeenCalledWith(
       ConsoleEvent.NOTEBOOK_TEMPLATE_CUSTOMIZE,
@@ -96,9 +94,7 @@ describe("monitoring customization telemetry", () => {
     expect(await commitView(id, partsOf(view))).toBe("committed")
     cancelPendingSearchPublish(id)
     expect(trackEvent).toHaveBeenCalledTimes(1)
-    expect((await db.buffers.get(id))?.monitoring?.customizedAt).toEqual(
-      expect.any(Number),
-    )
+    expect(await db.buffers.get(id)).not.toHaveProperty("monitoring")
   })
 
   it("does not report or retain an edit when the enclosing transaction rolls back", async () => {
@@ -111,7 +107,18 @@ describe("monitoring customization telemetry", () => {
       }),
     ).rejects.toThrow("abort")
     expect(trackEvent).not.toHaveBeenCalled()
-    expect((await db.buffers.get(id))?.monitoring?.customizedAt).toBeUndefined()
+    expect((await db.buffers.get(id))?.monitoring).toBeDefined()
+  })
+
+  it("leaves the association to an archive that removes it itself", async () => {
+    const { id } = await setup()
+    await bufferStore.update(id, {
+      label: "Archived",
+      archived: true,
+      monitoring: undefined,
+    })
+    expect(await db.buffers.get(id)).not.toHaveProperty("monitoring")
+    expect(trackEvent).not.toHaveBeenCalled()
   })
 
   it("records column-only customization once, including concurrent document edits", async () => {
@@ -122,6 +129,7 @@ describe("monitoring customization telemetry", () => {
     ])
     await markMonitoringColumnsCustomized(id)
     expect(trackEvent).toHaveBeenCalledTimes(1)
+    expect(await db.buffers.get(id)).not.toHaveProperty("monitoring")
   })
 
   it("never treats regular notebooks or missing buffers as template conversions", async () => {

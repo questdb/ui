@@ -47,19 +47,17 @@ const unknownColumns = (view: NotebookViewState): string[] => {
 
 describe("monitoring template columns", () => {
   it.each([
-    ["table", true, true],
-    ["matview", true, true],
-    ["table", false, true],
-    ["matview", false, true],
-    ["table", true, false],
+    ["table", true],
+    ["matview", true],
+    ["table", false],
+    ["matview", false],
   ] as const)(
-    "%s (history %s, WAL %s): charts and highlights name columns of their SQL",
-    (kind, telemetryEnabled, walEnabled) => {
+    "%s (telemetry %s): charts and highlights name columns of their SQL",
+    (kind, telemetryEnabled) => {
       const view = buildMonitoringDashboard({
         name: "trades",
         kind,
         telemetryEnabled,
-        walEnabled,
       })
       expect(view.cells.some((c) => c.chartConfig || c.highlightConfig)).toBe(
         true,
@@ -68,12 +66,59 @@ describe("monitoring template columns", () => {
     },
   )
 
+  // SAMPLE BY omits empty buckets, and a line joins the points it gets. For a
+  // rate or count an idle bucket is a real 0, so it must be filled across the
+  // whole window (FROM … TO), or idle time is drawn as its neighbours' rate and
+  // a stalled target's chart just ends at its last event. A duration or ratio has no value in
+  // an idle bucket: FILL(NULL) would isolate every sparse event (an hourly
+  // refresh in minute buckets) and the line would draw nothing.
+  const RATE_CHARTS = {
+    table: [
+      "Ingestion · rows/s",
+      "Transactions · txns/s",
+      "Write workload · rows/s",
+    ],
+    matview: ["Refreshes per minute", "View output · rows/s"],
+  }
+  it.each(["table", "matview"] as const)(
+    "%s: rate charts fill the window's idle buckets with 0, other charts never fill",
+    (kind) => {
+      const view = buildMonitoringDashboard({
+        name: "trades",
+        kind,
+        telemetryEnabled: true,
+      })
+      const sampled = view.cells
+        .filter((cell) => cell.chartConfig)
+        .flatMap((cell) =>
+          getQueriesFromText(cell.value).map((sql) => ({
+            name: cell.name ?? "",
+            sql,
+          })),
+        )
+        .filter(({ sql }) => /\bSAMPLE BY\b/i.test(sql))
+      const rates = sampled.filter(({ name }) =>
+        RATE_CHARTS[kind].includes(name),
+      )
+      expect(new Set(rates.map(({ name }) => name))).toEqual(
+        new Set(RATE_CHARTS[kind]),
+      )
+      for (const { name, sql } of sampled)
+        expect([
+          name,
+          /\bSAMPLE BY \w+ FROM [\s\S]+ TO [\s\S]+ FILL\(0(,0)*\)$/i.test(
+            sql.trim(),
+          ),
+        ]).toEqual([name, RATE_CHARTS[kind].includes(name)])
+      expect(sampled.filter(({ sql }) => /FILL\(NULL\)/i.test(sql))).toEqual([])
+    },
+  )
+
   it("detects a renamed SQL column", () => {
     const view = buildMonitoringDashboard({
       name: "trades",
       kind: "table",
       telemetryEnabled: true,
-      walEnabled: true,
     })
     const charted = view.cells.find((c) => c.chartConfig?.queries[0])!
     const column = charted.chartConfig!.queries[0]!.yColumns[0]

@@ -40,7 +40,6 @@ export const isUnmodifiedMonitoring = (
   view = buffer.notebookViewState,
 ): boolean =>
   !!buffer.monitoring &&
-  buffer.monitoring.customizedAt === undefined &&
   !!view &&
   buffer.monitoring.initialFingerprint ===
     monitoringFingerprint(buffer.label, view)
