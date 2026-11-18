@@ -21,49 +21,11 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-.nav > li > a {
-  color: $nav-text-color;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 44px;
-}
-
-.nav li a {
-  opacity: 0.5;
-
-  &.selected {
-    opacity: 1;
-    color: theme-color(contentPrimary);
-    border-left: 2px solid theme-color(editorSyntaxKeyword);
-    background: theme-color(surfaceOverlay) !important;
-  }
-}
-
-.nav > li > a:hover {
-  background: theme-color(editorSelection);
-}
-
-.nav > li.active {
-  border-left: 4px solid theme-color(statusSuccessStrong);
-  background: theme-color(surfaceInset);
-}
-
 .arrow {
   float: right;
 }
 
-.fa.arrow:before {
-  content: "\f104";
-}
-
-.active > a > .fa.arrow:before {
-  content: "\f107";
-}
-
-.pace-done li.active,
-.pace-done .footer {
+.pace-done li.active {
   -webkit-transition: all 0.4s;
   -moz-transition: all 0.4s;
   -o-transition: all 0.4s;
