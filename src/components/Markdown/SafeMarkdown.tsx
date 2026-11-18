@@ -16,9 +16,11 @@ import remarkGfm from "remark-gfm"
 //   - No raw HTML: react-markdown@10 escapes raw HTML by default and we never
 //     add rehype-raw, so embedded <script>/<img onerror> stay inert text.
 //   - Safe links: http(s) links open in a new tab with rel="noopener
-//     noreferrer"; other protocols are passed through react-markdown's default
-//     urlTransform (which neutralizes javascript: etc.). That default also
-//     drops data: URLs, so image sources keep data:image/ explicitly.
+//     noreferrer"; tel: links are kept; other protocols are passed through
+//     react-markdown's default urlTransform, which empties javascript: and
+//     other unsafe URLs. An emptied link renders without an href, so a click
+//     does nothing instead of reloading the console. The default also drops
+//     data: URLs, so image sources keep data:image/ explicitly.
 //   - Images off by default: dropped entirely unless allowImages is set, in
 //     which case only http(s)/data:image sources render.
 
@@ -31,7 +33,7 @@ const isSafeImageSrc = (value?: string): value is string =>
 
 const SafeLink = ({ children, href, ...props }: React.ComponentProps<"a">) => (
   <a
-    href={href}
+    href={href || undefined}
     {...(isHttpUrl(href)
       ? { target: "_blank", rel: "noopener noreferrer" }
       : {})}
@@ -46,8 +48,11 @@ const SafeImage = ({ src, alt, ...props }: React.ComponentProps<"img">) =>
 
 const DropImage = () => null
 
-const urlTransform: UrlTransform = (url, key) =>
-  key === "src" && /^data:image\//i.test(url) ? url : defaultUrlTransform(url)
+const urlTransform: UrlTransform = (url, key) => {
+  if (key === "src" && /^data:image\//i.test(url)) return url
+  if (key === "href" && /^tel:/i.test(url)) return url
+  return defaultUrlTransform(url)
+}
 
 type SafeMarkdownProps = {
   children: string
