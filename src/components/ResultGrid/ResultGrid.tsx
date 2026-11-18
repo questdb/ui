@@ -461,7 +461,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         if (visualCol === frontIndex) return frontIndex
         // A frozen column reorders within the frozen band — its columnOrder is
         // ignored while pinned, so reorder the pin list instead, landing it at
-        // visual index 0. This matches the legacy grid.
+        // visual index 0.
         if (visualCol < frozenCount) {
           const left = columnPinning.left ?? []
           const nextLeft = [id, ...left.filter((other) => other !== id)]

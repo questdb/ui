@@ -94,7 +94,7 @@ describe("formatCellValue", () => {
     expect(formatCellValue(5, col("x", "INT"))).toBe("5")
   })
 
-  it("formats 1-D array values (.0 on every integer, matching grid.js)", () => {
+  it("formats 1-D array values (.0 on every integer)", () => {
     expect(
       formatCellValue(
         [1, 2, 3] as unknown as number,
