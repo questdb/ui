@@ -344,6 +344,34 @@ describe("Import file checks that finish after other changes", () => {
     expect(queue().unlistedNames()).toEqual([])
   })
 
+  // The drop box finds listed names in the rendered list. If a file stopped
+  // counting as unlisted before the list rendered it, a drop in between would
+  // accept the same file again.
+  it("renders a dropped file in the list before it stops counting as unlisted", async () => {
+    view = render(element())
+    const check = deferred<{ status: string }>()
+    mocks.quest.checkCSVFile.mockReturnValueOnce(check.promise)
+    const { onFilesDropped, unlistedNames } = mocks.upload.mock.lastCall![0]
+    let drop!: Promise<void>
+    act(() => {
+      drop = onFilesDropped([csv("trades.csv")])
+    })
+
+    let listedOnceUnlisted: string[] | undefined
+    await act(async () => {
+      check.resolve({ status: FileCheckStatus.DOES_NOT_EXIST })
+      await drop
+      // act holds scheduled renders until it returns: only a render the drop
+      // forces has happened by now.
+      expect(unlistedNames()).toEqual([])
+      listedOnceUnlisted = mocks.queue.mock.lastCall?.[0].files.map(
+        ({ table_name }) => table_name,
+      )
+    })
+
+    expect(listedOnceUnlisted).toEqual(["trades.csv"])
+  })
+
   it("ignores the check of a name that was changed again", async () => {
     await mountWithFile()
     const first = deferred<{ status: string }>()
