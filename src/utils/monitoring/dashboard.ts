@@ -3,11 +3,7 @@ import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/cellSizing"
 import { NOTEBOOK_ROW_CAP } from "../../scenes/Editor/Notebook/notebookUtils"
 import { tableTemplate } from "./tableTemplate"
 import { matviewTemplate } from "./matviewTemplate"
-import type {
-  MonitoringKind,
-  MonitoringTarget,
-  MonitoringRefreshSchedule,
-} from "./types"
+import type { MonitoringKind, MonitoringRefreshSchedule } from "./types"
 
 // A notebook fetches at most NOTEBOOK_ROW_CAP rows, oldest first, so a chart
 // with more buckets than that would silently lose its newest ones. Every chart
@@ -63,12 +59,7 @@ const markdownCodeSpan = (text: string): string => {
   return `${fence}${pad}${text}${pad}${fence}`
 }
 
-export const MONITORING_TEMPLATE_VERSION = 1
-
-// QuestDB table names are case-insensitive.
-export const monitoringTargetKey = (target: MonitoringTarget): string =>
-  JSON.stringify([target.instanceKey, target.kind, target.name.toLowerCase()])
-
+export { MONITORING_TEMPLATE_VERSION, monitoringTargetKey } from "./identity"
 export { monitoringFingerprint, isUnmodifiedMonitoring } from "./fingerprint"
 
 // Monitoring dashboards exist only for WAL tables and materialized views

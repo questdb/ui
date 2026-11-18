@@ -4,12 +4,8 @@ import {
   type Buffer,
 } from "../../store/buffers"
 import type { EditorContext } from "../../providers/EditorProvider"
-import {
-  buildMonitoringDashboard,
-  monitoringFingerprint,
-  monitoringTargetKey,
-  MONITORING_TEMPLATE_VERSION,
-} from "./dashboard"
+import { monitoringFingerprint } from "./fingerprint"
+import { monitoringTargetKey, MONITORING_TEMPLATE_VERSION } from "./identity"
 import type { MonitoringTarget, MonitoringRefreshSchedule } from "./types"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { SessionEndedError } from "../../modules/OAuth2/session"
@@ -82,6 +78,9 @@ export const openMonitoringDashboard = (
     if (existing) return { buffer: existing, outcome: "reused" }
     requireSession()
     onCreate?.()
+    // The templates are a separate chunk, loaded only to create a dashboard.
+    const { buildMonitoringDashboard } = await import("./dashboard")
+    requireSession()
     const notebookViewState = buildMonitoringDashboard({
       ...request,
       name: request.target.name,

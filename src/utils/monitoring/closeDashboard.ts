@@ -4,7 +4,7 @@ import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 import { getController } from "../notebooks/notebookController"
 import { enqueueBufferTask } from "../notebooks/notebookBufferQueue"
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
-import { isUnmodifiedMonitoring } from "./dashboard"
+import { isUnmodifiedMonitoring } from "./fingerprint"
 import { hasNotebookBufferLayouts } from "../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 
 // Close must inspect live content too: a just-typed edit may not have reached
