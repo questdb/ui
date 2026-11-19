@@ -155,12 +155,45 @@ describe("notebook transfer telemetry", () => {
       await transfer
     })
     expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
-    expect(stageTransferSnapshot).not.toHaveBeenCalled()
+    // Staged before the first write; the session end discards staged copies.
+    expect(stageTransferSnapshot).toHaveBeenCalledTimes(2)
     expect(requestTransferMonitor).not.toHaveBeenCalled()
     expect(mocks.setActiveBuffer).not.toHaveBeenCalled()
     expect(trackEvent).not.toHaveBeenCalled()
     expect(mocks.error).not.toHaveBeenCalled()
     expect(hook().busy).toBe(false)
+  })
+
+  it("stages every result before writing any, so a notebook opened mid-write finds them all", async () => {
+    const firstWrite = deferred<boolean>()
+    vi.mocked(createTransferCells).mockReturnValue(
+      ["c1", "c2", "c3"].map((id, position) => ({
+        id,
+        position,
+        value: `select ${position}`,
+        result: { results: [], timestamp: 1, activeResultIndex: 0 },
+      })),
+    )
+    vi.mocked(persistCellSnapshot)
+      .mockReturnValueOnce(firstWrite.promise)
+      .mockResolvedValue(true)
+    const hook = mount()
+    let transfer!: Promise<void>
+    await act(async () => {
+      transfer = hook().transfer({ ...request, compare: true })
+      await Promise.resolve()
+    })
+    // The tab exists and the first write is still pending.
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    expect(
+      vi.mocked(stageTransferSnapshot).mock.calls.map(([s]) => s.cellId),
+    ).toEqual(["c1", "c2", "c3"])
+    await act(async () => {
+      firstWrite.resolve(true)
+      await transfer
+    })
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(3)
+    expect(stageTransferSnapshot).toHaveBeenCalledTimes(3)
   })
 
   it("does not activate a target whose lookup completes after logout", async () => {

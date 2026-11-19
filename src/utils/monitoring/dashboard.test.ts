@@ -86,6 +86,31 @@ describe("monitoring templates", () => {
   )
 
   it.each([
+    ["table", "a__WINDOW_5S__"],
+    ["table", "a__WINDOW_1M__"],
+    ["table", "x__TARGET_NAME__"],
+    ["matview", "a__WINDOW_1M__"],
+    ["matview", "x__TARGET_SQL__"],
+  ] as const)(
+    "keeps the %s name %s verbatim when it looks like template text",
+    (kind, name) => {
+      const view = buildMonitoringDashboard({
+        name,
+        kind,
+        telemetryEnabled: true,
+      })
+      const sql = view.cells.filter((c) => c.type !== "markdown")
+      expect(sql.some((cell) => cell.value.includes(`'${name}'`))).toBe(true)
+      for (const cell of sql) {
+        const literals =
+          cell.value.match(/(?:table_name|view_name)\s*=\s*'[^']*'/g) ?? []
+        literals.forEach((literal) => expect(literal).toContain(`'${name}'`))
+      }
+      expect(view.cells[0].value).toContain(` · \`${name}\`\n`)
+    },
+  )
+
+  it.each([
     ["table", "orders$"],
     ["table", "a$$b"],
     ["matview", "a$&b"],

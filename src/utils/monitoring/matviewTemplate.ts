@@ -1,4 +1,4 @@
-import type { MonitoringCellTemplate } from "./types"
+import type { MonitoringCellTemplate, MonitoringTemplateValues } from "./types"
 import {
   healthHighlights,
   partitionHighlights,
@@ -6,7 +6,11 @@ import {
 } from "./highlights"
 
 // Reviewed monitoring layout: preserve paired pane heights when adding panels.
-export const matviewTemplate = (): MonitoringCellTemplate[] => [
+export const matviewTemplate = ({
+  targetSql,
+  targetName,
+  window1m,
+}: MonitoringTemplateValues): MonitoringCellTemplate[] => [
   {
     name: "Live view monitoring",
     type: "markdown",
@@ -14,7 +18,7 @@ export const matviewTemplate = (): MonitoringCellTemplate[] => [
     x: 0,
     w: 12,
     height: 86,
-    value: `# Materialized view monitoring · __TARGET_NAME__
+    value: `# Materialized view monitoring · ${targetName}
 Live health, refresh behavior, output and storage. You can change the chart window (**window_minutes**) and the incident window (**incident_hours**) in **Variables**.`,
   },
   {
@@ -32,7 +36,7 @@ Live health, refresh behavior, output and storage. You can change the chart wind
  CAST((now()-v.last_refresh_finish_timestamp)/1000000.0 AS DECIMAL(16,3)) AS "Refresh age (s)",
  v.invalidation_reason AS "Reason"
 FROM materialized_views() v JOIN tables() t ON v.view_name=t.table_name
-LEFT JOIN tables() b ON v.base_table_name=b.table_name WHERE v.view_name=__TARGET_SQL__`,
+LEFT JOIN tables() b ON v.base_table_name=b.table_name WHERE v.view_name=${targetSql}`,
     highlightConfig: healthHighlights(
       "View",
       ["Status", "Base status"],
@@ -63,7 +67,7 @@ Duration only includes successful refreshes, so read it together with the failed
        approx_percentile(e.latency, 0.95) AS "p95 ms",
        approx_percentile(e.latency, 0.99) AS "p99 ms"
 FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id
-WHERE e.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND e.event=204
+WHERE e.created>=dateadd('m',-${window1m},timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=${targetSql} AND e.event=204
 SAMPLE BY 1m ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
@@ -86,8 +90,8 @@ SAMPLE BY 1m ALIGN TO CALENDAR`,
     autoRefresh: "60s",
     value: `SELECT e.created, sum(CASE WHEN e.event=204 THEN 1 ELSE 0 END) AS "Successful", sum(CASE WHEN e.event=203 THEN 1 ELSE 0 END) AS "Failed"
 FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id
-WHERE e.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (203,204)
-SAMPLE BY 1m FROM dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) TO timestamp_floor('m',now()) FILL(0,0)`,
+WHERE e.created>=dateadd('m',-${window1m},timestamp_floor('m',now())) AND e.created<timestamp_floor('m',now()) AND t.table_name=${targetSql} AND e.event IN (203,204)
+SAMPLE BY 1m FROM dateadd('m',-${window1m},timestamp_floor('m',now())) TO timestamp_floor('m',now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -120,7 +124,7 @@ SAMPLE BY 1m FROM dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) TO time
  CASE t.table_memory_pressure_level WHEN 0 THEN 'None' WHEN 1 THEN 'Reduced parallelism' WHEN 2 THEN 'Backoff' ELSE 'Unknown' END AS "Memory pressure",
  nullif(w.errorMessage,'') AS "Suspend reason"
 FROM materialized_views() v JOIN tables() t ON v.view_name=t.table_name
-LEFT JOIN wal_tables() w ON w.name=t.table_name WHERE v.view_name=__TARGET_SQL__`,
+LEFT JOIN wal_tables() w ON w.name=t.table_name WHERE v.view_name=${targetSql}`,
     highlightConfig: healthHighlights(
       "View",
       ["WAL status", "Memory pressure"],
@@ -138,10 +142,10 @@ LEFT JOIN wal_tables() w ON w.name=t.table_name WHERE v.view_name=__TARGET_SQL__
  sum(w.rowCount)/60.0 AS "Logical rows/s",
  sum(w.physicalRowCount)/60.0 AS "Physical rows/s"
 FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created >= dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now()))
+WHERE w.created >= dateadd('m', -${window1m}, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
- AND t.table_name = __TARGET_SQL__ AND w.event=105 AND w.rowCount>0
-SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
+ AND t.table_name = ${targetSql} AND w.event=105 AND w.rowCount>0
+SAMPLE BY 1m FROM dateadd('m', -${window1m}, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -163,9 +167,9 @@ SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO t
     value: `SELECT w.created,
  sum(w.physicalRowCount)*1.0/nullif(sum(w.rowCount),0) AS "Physical / logical rows"
 FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created >= dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now()))
+WHERE w.created >= dateadd('m', -${window1m}, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
- AND t.table_name = __TARGET_SQL__ AND w.event=105 AND w.rowCount>0
+ AND t.table_name = ${targetSql} AND w.event=105 AND w.rowCount>0
 SAMPLE BY 1m ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
@@ -204,8 +208,8 @@ The footprint shows the current size, not growth over time. The grid lists activ
   WHEN 'YEAR' THEN to_str(timestamp_floor('y', cast(p.minTimestamp AS TIMESTAMP)), 'yyyy')
   WHEN 'NONE' THEN 'Unpartitioned'
   ELSE p.name END AS logical_partition, p.diskSize AS disk_size
- FROM table_partitions(__TARGET_SQL__) p CROSS JOIN tables() t
- WHERE p.attached AND t.table_name=__TARGET_SQL__
+ FROM table_partitions(${targetSql}) p CROSS JOIN tables() t
+ WHERE p.attached AND t.table_name=${targetSql}
 )
 SELECT logical_partition AS "Partition", sum(disk_size)/1048576.0 AS "Disk MiB"
 FROM pieces GROUP BY logical_partition ORDER BY logical_partition`,
@@ -237,7 +241,7 @@ FROM pieces GROUP BY logical_partition ORDER BY logical_partition`,
  CASE WHEN active THEN 'Active' ELSE 'Historical' END AS "State",
  deadRows AS "Dead rows",
  pieceCount AS "Pieces"
-FROM table_partitions(__TARGET_SQL__)
+FROM table_partitions(${targetSql})
 WHERE attached ORDER BY active DESC, minTimestamp DESC`,
     highlightConfig: partitionHighlights("Disk MiB"),
   },
@@ -260,7 +264,7 @@ Both grids cover the last **incident_hours** hours, and the log shows up to 100 
     height: 356,
     telemetry: true,
     autoRefresh: "60s",
-    value: `WITH history AS (SELECT e.created AS observed_at, CASE WHEN e.event=202 THEN 'View invalidated' ELSE 'Refresh failed' END AS event_name, e.invalidation_reason AS detail FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id WHERE e.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (202,203))
+    value: `WITH history AS (SELECT e.created AS observed_at, CASE WHEN e.event=202 THEN 'View invalidated' ELSE 'Refresh failed' END AS event_name, e.invalidation_reason AS detail FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id WHERE e.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=${targetSql} AND e.event IN (202,203))
 SELECT k.event_name AS "Event", coalesce(h.events,0) AS "Count",
  CASE WHEN coalesce(h.events,0)=0 THEN 'None recorded' ELSE 'Review' END AS "Signal", h.last_seen AS "Last seen (UTC)"
 FROM (SELECT 'View invalidated' AS event_name UNION ALL SELECT 'Refresh failed') k
@@ -275,7 +279,7 @@ LEFT JOIN (SELECT event_name,count() AS events,max(observed_at) AS last_seen FRO
     height: 356,
     telemetry: true,
     autoRefresh: "60s",
-    value: `WITH history AS (SELECT e.created AS observed_at, CASE WHEN e.event=202 THEN 'View invalidated' ELSE 'Refresh failed' END AS event_name, e.invalidation_reason AS detail FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id WHERE e.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=__TARGET_SQL__ AND e.event IN (202,203)) SELECT observed_at AS "Time (UTC)",event_name AS "Event",detail AS "Details" FROM history ORDER BY observed_at DESC LIMIT 100`,
+    value: `WITH history AS (SELECT e.created AS observed_at, CASE WHEN e.event=202 THEN 'View invalidated' ELSE 'Refresh failed' END AS event_name, e.invalidation_reason AS detail FROM 'sys.telemetry_mat_view' e JOIN tables() t ON e.view_table_id=t.id WHERE e.created>=dateadd('h',-@incident_hours,now()) AND t.table_name=${targetSql} AND e.event IN (202,203)) SELECT observed_at AS "Time (UTC)",event_name AS "Event",detail AS "Details" FROM history ORDER BY observed_at DESC LIMIT 100`,
     highlightConfig: incidentHighlights(false),
   },
   {

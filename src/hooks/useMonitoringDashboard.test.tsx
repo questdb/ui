@@ -258,6 +258,26 @@ describe("monitoring telemetry", () => {
     expect(mocks.editor.setActiveBuffer).toHaveBeenCalledTimes(1)
   })
 
+  it("words the toast in the singular for one failed cell", async () => {
+    mocks.openDashboard.mockReset().mockResolvedValue({
+      buffer,
+      outcome: "created",
+      runs: [
+        {
+          cellId: "broken",
+          summary: { success: false, queryCount: 1, results: [] },
+        },
+      ],
+    } satisfies MonitoringOpenResult)
+    const hook = mount()
+    await act(async () => {
+      await hook().open(request, () => true, vi.fn())
+    })
+    expect(mocks.error).toHaveBeenCalledWith(
+      "1 monitoring cell could not run. Check its error in the notebook.",
+    )
+  })
+
   it("reports a dashboard closed during its first runs once, without a toast", async () => {
     mocks.openDashboard.mockReset().mockResolvedValue({
       buffer,

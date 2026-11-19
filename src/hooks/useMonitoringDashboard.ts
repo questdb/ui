@@ -110,7 +110,9 @@ export const useMonitoringDashboard = () => {
       )
       if (failures.length > 0)
         toast.error(
-          `${failures.length} monitoring cells could not run. Check their errors in the notebook.`,
+          failures.length === 1
+            ? "1 monitoring cell could not run. Check its error in the notebook."
+            : `${failures.length} monitoring cells could not run. Check their errors in the notebook.`,
         )
       stage = "activate"
       if (isCurrentTarget()) {

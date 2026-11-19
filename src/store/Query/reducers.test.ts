@@ -3,6 +3,7 @@ import query, { initialState } from "./reducers"
 import actions from "./actions"
 import selectors from "./selectors"
 import type { StoreShape } from "../../types"
+import { RunningType } from "../../types"
 import { NotificationType } from "./types"
 import type { QueryKey, QueryNotifications, QueryStateShape } from "./types"
 import { Type } from "../../utils/questdb"
@@ -45,6 +46,23 @@ it("ties transfer metadata to the displayed result and clears it with the result
   expect(
     query(fromConversation, actions.setResult(undefined)).resultSource,
   ).toBeUndefined()
+})
+
+it("clears a script's batch transfer when the next run starts", () => {
+  const withBatch = query(
+    initialState,
+    actions.setBatchTransfer({
+      bufferId: 7,
+      queries: [{ sql: "select 1" }, { sql: "select 2" }],
+      writeCount: 0,
+      hasAllResults: false,
+    }),
+  )
+  expect(withBatch.batchTransfer).toBeDefined()
+  expect(
+    query(withBatch, actions.toggleRunning(RunningType.QUERY)).batchTransfer,
+  ).toBeUndefined()
+  expect(query(withBatch, actions.stopRunning()).batchTransfer).toBeDefined()
 })
 
 const BUFFER_ID = 1

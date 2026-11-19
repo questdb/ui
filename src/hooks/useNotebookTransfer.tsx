@@ -103,20 +103,30 @@ export const useNotebookTransfer = () => {
         source: request.source,
         notebookId: bufferId,
       })
+      const savedAt = Date.now()
+      const snapshots = view.cells.flatMap((cell) =>
+        cell.result
+          ? [
+              {
+                bufferId,
+                cellId: cell.id,
+                results: cell.result.results,
+                savedAt,
+                activeResultIndex: 0,
+              },
+            ]
+          : [],
+      )
+      // The tab is already in the tab bar and can be opened while the results
+      // are written. Stage every result before the first write, in this same
+      // continuation: a notebook that mounts mid-write then finds all of them,
+      // and never marks a not-yet-written cell's result as missing.
+      snapshots.forEach(stageTransferSnapshot)
       stage = "persist_results"
-      for (const cell of view.cells) {
-        if (!cell.result) continue
-        const snapshot = {
-          bufferId,
-          cellId: cell.id,
-          results: cell.result.results,
-          savedAt: Date.now(),
-          activeResultIndex: 0,
-        }
+      for (const snapshot of snapshots) {
         const saved = await persistCellSnapshot(snapshot)
         requireSession()
         if (!saved) trackFailure("result_not_saved")
-        stageTransferSnapshot(snapshot)
       }
       if (request.monitor) requestTransferMonitor(bufferId, cells[0].id)
       stage = "activate"

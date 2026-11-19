@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest"
+import React from "react"
 import { act } from "@testing-library/react"
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import type { useMonitoringDashboard } from "../../../hooks/useMonitoringDashboard"
 import { actions, selectors } from "../../../store"
 import { StoreKey } from "../../../utils/localStorage/types"
-import { LeftPanelType } from "../../../providers/LocalStorageProvider/types"
+import {
+  LeftPanelType,
+  type LeftPanelState,
+} from "../../../providers/LocalStorageProvider/types"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import {
   catalog,
@@ -94,6 +99,28 @@ describe("drawer monitoring dashboard action", () => {
       )
     },
   )
+
+  it("closes the left panel as it is when the dashboard opens, not as it was at the click", async () => {
+    catalog()
+    opener.open.mockClear()
+    localStorage.setItem(
+      StoreKey.LEFT_PANEL_STATE,
+      JSON.stringify({ type: LeftPanelType.DATASOURCES, width: 420 }),
+    )
+    let setLeftPanel!: (state: LeftPanelState) => void
+    const Probe = () => {
+      setLeftPanel = useLocalStorage().updateLeftPanelState
+      return null
+    }
+    await mountDrawer("trades", "table", "disabled", <Probe />)
+    await click("monitoring-dashboard")
+    // The user resizes the panel while the first queries run.
+    act(() => setLeftPanel({ type: LeftPanelType.DATASOURCES, width: 600 }))
+    act(() => opener.open.mock.calls[0][2]())
+    expect(
+      JSON.parse(localStorage.getItem(StoreKey.LEFT_PANEL_STATE)!),
+    ).toEqual({ type: null, width: 600 })
+  })
 
   // The startup telemetry config read runs once and is never retried. The
   // dashboard identity must not depend on it, and a missing config is read

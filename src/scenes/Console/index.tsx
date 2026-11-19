@@ -150,13 +150,38 @@ const Console = () => {
     }
   }
 
-  useEffect(() => {
+  // A result change while the result is hidden (it belongs to another tab)
+  // must not take over the bottom panel: the pane would collapse and hide
+  // whatever the user has open there (e.g. Import). The change applies once
+  // the result is visible, unless the user picked a panel in the meantime.
+  const pendingResultRef = React.useRef<{ result: typeof result }>()
+  const showResult = () =>
     dispatch(
       actions.console.setActiveBottomPanel(
         resultRef.current && result ? "result" : "zeroState",
       ),
     )
+
+  useEffect(() => {
+    if (hideResult) {
+      pendingResultRef.current = { result }
+      return
+    }
+    pendingResultRef.current = undefined
+    showResult()
   }, [result])
+
+  useEffect(() => {
+    const pending = pendingResultRef.current
+    if (hideResult || !pending || pending.result !== result) return
+    pendingResultRef.current = undefined
+    showResult()
+  }, [hideResult])
+
+  // Any panel change while a result is pending is the user's choice: it wins.
+  useEffect(() => {
+    pendingResultRef.current = undefined
+  }, [activeBottomPanel])
 
   useEffect(() => {
     showPanel(activeBottomPanel)

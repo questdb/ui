@@ -11,6 +11,7 @@ import { TooltipProvider } from "../../components/Tooltip"
 import { LocalStorageProvider } from "../../providers/LocalStorageProvider"
 import rootReducer from "../../store/reducers"
 import queryActions from "../../store/Query/actions"
+import consoleActions from "../../store/Console/actions"
 import { Type } from "../../utils/questdb/types"
 import type { ActiveBufferSummary } from "../../providers/EditorProvider"
 import Console from "./index"
@@ -90,7 +91,7 @@ const dql = {
 
 const mountConsole = () => {
   const store = createStore(rootReducer)
-  const view = render(
+  const tree = () => (
     <ThemeProvider theme={darkTheme}>
       <TooltipProvider>
         <Provider store={store}>
@@ -99,9 +100,10 @@ const mountConsole = () => {
           </LocalStorageProvider>
         </Provider>
       </TooltipProvider>
-    </ThemeProvider>,
+    </ThemeProvider>
   )
-  return { store, view }
+  const view = render(tree())
+  return { store, view, rerender: () => view.rerender(tree()) }
 }
 
 const resultPaneVisible = () =>
@@ -142,5 +144,37 @@ describe("result pane on notebook tabs", () => {
       store.dispatch(queryActions.setResult(dql, 1))
     })
     expect(resultPaneVisible()).toBe(true)
+  })
+
+  it("keeps the open Import panel when a hidden result arrives, and shows the result on its tab", () => {
+    active.summary = { id: 2, isNotebook: true }
+    const { store, rerender } = mountConsole()
+    act(() => {
+      store.dispatch(consoleActions.setActiveBottomPanel("import"))
+    })
+    act(() => {
+      store.dispatch(queryActions.setResult(dql, 1))
+    })
+    expect(store.getState().console.activeBottomPanel).toBe("import")
+
+    active.summary = { id: 1, isNotebook: false }
+    rerender()
+    expect(store.getState().console.activeBottomPanel).toBe("result")
+    expect(resultPaneVisible()).toBe(true)
+  })
+
+  it("keeps an Import panel the user opens after a hidden result arrived", () => {
+    active.summary = { id: 2, isNotebook: true }
+    const { store, rerender } = mountConsole()
+    act(() => {
+      store.dispatch(queryActions.setResult(dql, 1))
+    })
+    act(() => {
+      store.dispatch(consoleActions.setActiveBottomPanel("import"))
+    })
+
+    active.summary = { id: 1, isNotebook: false }
+    rerender()
+    expect(store.getState().console.activeBottomPanel).toBe("import")
   })
 })

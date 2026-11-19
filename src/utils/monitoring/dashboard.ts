@@ -3,7 +3,11 @@ import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/cellSizing"
 import { NOTEBOOK_ROW_CAP } from "../../scenes/Editor/Notebook/notebookUtils"
 import { tableTemplate } from "./tableTemplate"
 import { matviewTemplate } from "./matviewTemplate"
-import type { MonitoringKind, MonitoringRefreshSchedule } from "./types"
+import type {
+  MonitoringKind,
+  MonitoringRefreshSchedule,
+  MonitoringTemplateValues,
+} from "./types"
 
 // A notebook fetches at most NOTEBOOK_ROW_CAP rows, oldest first, so a chart
 // with more buckets than that would silently lose its newest ones. Every chart
@@ -79,38 +83,32 @@ export const buildMonitoringDashboard = ({
   telemetryUnknown?: boolean
   refreshSchedule?: MonitoringRefreshSchedule
 }): NotebookViewState => {
+  const values: MonitoringTemplateValues = {
+    targetSql: `'${name.replace(/'/g, "''")}'`,
+    // The name is shown as a code span: its text renders literally, and GFM
+    // autolinking, which runs on decoded text and so ignores backslash
+    // escapes and entities, leaves names such as `www.example.com` or
+    // `ops@example.com` alone.
+    targetName: markdownCodeSpan(name),
+    window1m: clampedWindow(MONITORING_MAX_WINDOW_MINUTES),
+    window5s: clampedWindow(MONITORING_MAX_5S_WINDOW_MINUTES),
+  }
   const templates = (
-    kind === "matview" ? matviewTemplate() : tableTemplate()
+    kind === "matview" ? matviewTemplate(values) : tableTemplate(values)
   ).filter((cell) => telemetryEnabled || !cell.telemetry)
   // Only a view's refresh charts and incidents need enabled telemetry.
   const refreshHistory = kind === "table" || telemetryEnabled
   const hiddenReason = telemetryUnknown
     ? "the server's telemetry setting could not be read"
     : "telemetry is disabled"
-  const sqlName = `'${name.replace(/'/g, "''")}'`
-  // The name is shown as a code span: its text renders literally, and GFM
-  // autolinking, which runs on decoded text and so ignores backslash escapes
-  // and entities, leaves names such as `www.example.com` or `ops@example.com`
-  // alone.
-  const markdownName = markdownCodeSpan(name)
   const cells = templates.map((template, position) => {
-    // Function replacers: a string replacement would expand `$'`, `$$` and
-    // `$&` in names such as `orders$` into unrelated SQL.
     let value = template.value
-      .replaceAll("__TARGET_SQL__", () => sqlName)
-      .replaceAll("__TARGET_NAME__", () => markdownName)
-      .replaceAll("__WINDOW_1M__", () =>
-        clampedWindow(MONITORING_MAX_WINDOW_MINUTES),
-      )
-      .replaceAll("__WINDOW_5S__", () =>
-        clampedWindow(MONITORING_MAX_5S_WINDOW_MINUTES),
-      )
     if (!refreshHistory && template.name === "Reading the data") {
       value = `### Reading the data
 Charts use completed 1-minute buckets from WAL telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes, and an empty chart means nothing happened in its window. A chart holds at most 10,000 buckets, so charts cover at most the latest 10,000 minutes of **window_minutes**. Refresh charts and incidents are hidden because ${hiddenReason}. **Refresh age** is the time since the last refresh finished, whether it succeeded or failed.`
     }
     if (!refreshHistory && position === 0) {
-      value = `# Materialized view monitoring · ${markdownName}
+      value = `# Materialized view monitoring · ${values.targetName}
 Live health, output and storage. You can change the chart window (**window_minutes**) in **Variables**.`
     }
     return {

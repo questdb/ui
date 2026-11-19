@@ -1,4 +1,4 @@
-import type { MonitoringCellTemplate } from "./types"
+import type { MonitoringCellTemplate, MonitoringTemplateValues } from "./types"
 import {
   healthHighlights,
   partitionHighlights,
@@ -6,7 +6,12 @@ import {
 } from "./highlights"
 
 // Reviewed monitoring layout: preserve paired pane heights when adding panels.
-export const tableTemplate = (): MonitoringCellTemplate[] => [
+export const tableTemplate = ({
+  targetSql,
+  targetName,
+  window1m,
+  window5s,
+}: MonitoringTemplateValues): MonitoringCellTemplate[] => [
   {
     name: "Live table monitoring",
     type: "markdown",
@@ -14,7 +19,7 @@ export const tableTemplate = (): MonitoringCellTemplate[] => [
     x: 0,
     w: 12,
     height: 86,
-    value: `# Table monitoring · __TARGET_NAME__
+    value: `# Table monitoring · ${targetName}
 Live health, ingestion, partitions and downstream views. You can change the chart window (**window_minutes**) in **Variables**.`,
   },
   {
@@ -32,7 +37,7 @@ Live health, ingestion, partitions and downstream views. You can change the char
  CASE t.table_memory_pressure_level WHEN 0 THEN 'None' WHEN 1 THEN 'Reduced parallelism' WHEN 2 THEN 'Backoff' ELSE 'Unknown' END AS "Memory pressure",
  CAST((now()-t.table_last_write_timestamp)/1000000.0 AS DECIMAL(16,3)) AS "Write age (s)",
  nullif(w.errorMessage,'') AS "Suspend reason"
-FROM tables() t LEFT JOIN wal_tables() w ON w.name=t.table_name WHERE t.table_name=__TARGET_SQL__`,
+FROM tables() t LEFT JOIN wal_tables() w ON w.name=t.table_name WHERE t.table_name=${targetSql}`,
     highlightConfig: healthHighlights(
       "Table",
       ["WAL status", "Memory pressure"],
@@ -57,7 +62,7 @@ These charts use 5-second buckets. WAL rows/s shows rows committed to the WAL an
     height: 356,
     autoRefresh: "5s",
     value: `SELECT w.created, sum(CASE WHEN w.event=109 THEN w.rowCount ELSE 0 END)/5.0 AS "WAL rows/s", sum(CASE WHEN w.event=105 THEN w.rowCount ELSE 0 END)/5.0 AS "Applied rows/s" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event IN (109,105) AND w.rowCount>0 SAMPLE BY 5s FROM dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) TO timestamp_floor('5s',now()) FILL(0,0)`,
+WHERE w.created>=dateadd('m',-${window5s},timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=${targetSql} AND w.event IN (109,105) AND w.rowCount>0 SAMPLE BY 5s FROM dateadd('m',-${window5s},timestamp_floor('5s',now())) TO timestamp_floor('5s',now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -80,12 +85,12 @@ WHERE w.created>=dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) AND w.c
        approx_percentile(w.latency, 0.9) AS "Queue p90 ms",
        approx_percentile(w.latency, 0.95) AS "Queue p95 ms",
        approx_percentile(w.latency, 0.99) AS "Queue p99 ms" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event=103 SAMPLE BY 5s ALIGN TO CALENDAR;
+WHERE w.created>=dateadd('m',-${window5s},timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=${targetSql} AND w.event=103 SAMPLE BY 5s ALIGN TO CALENDAR;
 SELECT w.created, approx_percentile(w.latency, 0.5) AS "Apply p50 ms",
        approx_percentile(w.latency, 0.9) AS "Apply p90 ms",
        approx_percentile(w.latency, 0.95) AS "Apply p95 ms",
        approx_percentile(w.latency, 0.99) AS "Apply p99 ms" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-__WINDOW_5S__,timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=__TARGET_SQL__ AND w.event=105 AND w.rowCount>0 SAMPLE BY 5s ALIGN TO CALENDAR`,
+WHERE w.created>=dateadd('m',-${window5s},timestamp_floor('5s',now())) AND w.created<timestamp_floor('5s',now()) AND t.table_name=${targetSql} AND w.event=105 AND w.rowCount>0 SAMPLE BY 5s ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -138,8 +143,8 @@ Active and newest partitions are listed first. Arrows mark values that changed s
   WHEN 'YEAR' THEN to_str(timestamp_floor('y', cast(p.minTimestamp AS TIMESTAMP)), 'yyyy')
   WHEN 'NONE' THEN 'Unpartitioned'
   ELSE p.name END AS logical_partition, p.diskSize AS disk_size
- FROM table_partitions(__TARGET_SQL__) p CROSS JOIN tables() t
- WHERE p.attached AND t.table_name=__TARGET_SQL__
+ FROM table_partitions(${targetSql}) p CROSS JOIN tables() t
+ WHERE p.attached AND t.table_name=${targetSql}
 )
 SELECT logical_partition AS "Partition", sum(disk_size)/1073741824.0 AS "Disk GiB"
 FROM pieces GROUP BY logical_partition ORDER BY logical_partition`,
@@ -171,7 +176,7 @@ FROM pieces GROUP BY logical_partition ORDER BY logical_partition`,
  CASE WHEN active THEN 'Active' ELSE 'Historical' END AS "State",
  deadRows AS "Dead rows",
  pieceCount AS "Pieces"
-FROM table_partitions(__TARGET_SQL__)
+FROM table_partitions(${targetSql})
 WHERE attached ORDER BY active DESC, minTimestamp DESC`,
     highlightConfig: partitionHighlights("Disk GiB"),
   },
@@ -196,7 +201,7 @@ WHERE attached ORDER BY active DESC, minTimestamp DESC`,
  CASE WHEN base_table_txn IS NULL OR refresh_base_table_txn IS NULL THEN NULL
  WHEN base_table_txn>refresh_base_table_txn THEN base_table_txn-refresh_base_table_txn ELSE 0 END AS "Pending txns",
  last_refresh_finish_timestamp AS "Last refresh (UTC)"
-FROM materialized_views() WHERE base_table_name=__TARGET_SQL__ ORDER BY view_name`,
+FROM materialized_views() WHERE base_table_name=${targetSql} ORDER BY view_name`,
     highlightConfig: downstreamHighlights(),
   },
   {
@@ -220,10 +225,10 @@ These charts use 1-minute buckets. Look at the transaction rate next to the tran
  sum(CASE WHEN w.event=109 THEN 1 ELSE 0 END)/60.0 AS "Committed txns/s",
  sum(CASE WHEN w.event=105 THEN 1 ELSE 0 END)/60.0 AS "Applied txns/s"
 FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created >= dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now()))
+WHERE w.created >= dateadd('m', -${window1m}, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
- AND t.table_name = __TARGET_SQL__ AND w.event IN (109,105) AND w.rowCount>0
-SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
+ AND t.table_name = ${targetSql} AND w.event IN (109,105) AND w.rowCount>0
+SAMPLE BY 1m FROM dateadd('m', -${window1m}, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -246,7 +251,7 @@ SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO t
        approx_percentile(w.rowCount, 0.9) AS "p90 rows/txn",
        approx_percentile(w.rowCount, 0.95) AS "p95 rows/txn",
        approx_percentile(w.rowCount, 0.99) AS "p99 rows/txn" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND w.event=109 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
+WHERE w.created>=dateadd('m',-${window1m},timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=${targetSql} AND w.event=109 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -275,10 +280,10 @@ WHERE w.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND w.cr
  sum(w.rowCount)/60.0 AS "Logical rows/s",
  sum(w.physicalRowCount)/60.0 AS "Physical rows/s"
 FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created >= dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now()))
+WHERE w.created >= dateadd('m', -${window1m}, timestamp_floor('m', now()))
  AND w.created < timestamp_floor('m', now())
- AND t.table_name = __TARGET_SQL__ AND w.event=105 AND w.rowCount>0
-SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
+ AND t.table_name = ${targetSql} AND w.event=105 AND w.rowCount>0
+SAMPLE BY 1m FROM dateadd('m', -${window1m}, timestamp_floor('m', now())) TO timestamp_floor('m', now()) FILL(0,0)`,
     chartConfig: {
       xColumn: "created",
       queries: [
@@ -298,7 +303,7 @@ SAMPLE BY 1m FROM dateadd('m', -__WINDOW_1M__, timestamp_floor('m', now())) TO t
     height: 356,
     autoRefresh: "60s",
     value: `SELECT w.created, sum(w.physicalRowCount)*1.0/nullif(sum(w.rowCount),0) AS "Physical / logical rows" FROM 'sys.telemetry_wal' w JOIN tables() t ON w.tableId=t.id
-WHERE w.created>=dateadd('m',-__WINDOW_1M__,timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=__TARGET_SQL__ AND w.event=105 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
+WHERE w.created>=dateadd('m',-${window1m},timestamp_floor('m',now())) AND w.created<timestamp_floor('m',now()) AND t.table_name=${targetSql} AND w.event=105 AND w.rowCount>0 SAMPLE BY 1m ALIGN TO CALENDAR`,
     chartConfig: {
       xColumn: "created",
       queries: [

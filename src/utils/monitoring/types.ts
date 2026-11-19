@@ -26,6 +26,18 @@ export type MonitoringSource = {
   initialFingerprint: string
 }
 
+// Values a template inserts once, as plain interpolation: nothing rescans the
+// result, so a name containing template-like text is kept verbatim.
+export type MonitoringTemplateValues = {
+  // The target name as a quoted SQL string literal.
+  targetSql: string
+  // The target name as a markdown code span.
+  targetName: string
+  // Clamped chart windows for 1-minute and 5-second buckets.
+  window1m: string
+  window5s: string
+}
+
 export type MonitoringCellTemplate = {
   name: string
   value: string

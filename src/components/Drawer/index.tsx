@@ -1,4 +1,4 @@
-import React, { useRef } from "react"
+import React, { useRef, useState } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import { useEscapeLayer } from "../../hooks/useEscapeLayer"
@@ -179,7 +179,7 @@ export const Drawer = ({
   const sideContentRef = useRef<HTMLDivElement>(null)
   // Radix's trigger points `aria-controls` at its own content element, which
   // a side panel does not render; it must name the panel instead.
-  const sideContentId = useRef(`side-drawer-${++sideDrawerSeq}`).current
+  const [sideContentId] = useState(() => `side-drawer-${++sideDrawerSeq}`)
   useEscapeLayer(mode === "side" && !!open && closeOnEscape && !!onDismiss, {
     priority: EscapePriority.sidePanel,
     scope: () => sideContentRef.current,

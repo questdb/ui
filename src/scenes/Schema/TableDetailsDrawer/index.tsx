@@ -222,6 +222,10 @@ const TabBadge = styled(Badge).attrs({
 export const TableDetailsDrawer = () => {
   const dispatch = useDispatch()
   const { leftPanelState, updateLeftPanelState } = useLocalStorage()
+  // Read when a dashboard finishes opening, which can be seconds after the
+  // click: the user may have resized, opened or closed the panel meanwhile.
+  const leftPanelStateRef = useRef(leftPanelState)
+  leftPanelStateRef.current = leftPanelState
   const monitoringDashboard = useMonitoringDashboard()
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { quest } = useContext(QuestContext)
@@ -511,8 +515,9 @@ export const TableDetailsDrawer = () => {
       },
       () => isCurrentTarget(name, kind),
       () => {
-        if (leftPanelState.type !== null) {
-          updateLeftPanelState({ type: null, width: leftPanelState.width })
+        const current = leftPanelStateRef.current
+        if (current.type !== null) {
+          updateLeftPanelState({ type: null, width: current.width })
         }
       },
     )

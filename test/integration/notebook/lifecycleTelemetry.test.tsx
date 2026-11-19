@@ -216,6 +216,30 @@ describe("UI notebook lifecycle telemetry", () => {
     ])
   })
 
+  it("archives an unmodified dashboard an agent closes instead of deleting it", async () => {
+    const view = buildMonitoringDashboard({
+      name: "trades",
+      kind: "table",
+      telemetryEnabled: false,
+    })
+    await db.buffers.update(41, {
+      notebookViewState: view,
+      monitoring: {
+        target: { instanceKey: "test", kind: "table", name: "trades" },
+        templateVersion: 1,
+        initialFingerprint: monitoringFingerprint("Source", view),
+      },
+    })
+    await mount()
+    await act(async () => {
+      await editor.archiveBuffer(41, "agent")
+    })
+    const archived = await db.buffers.get(41)
+    expect(archived?.archived).toBe(true)
+    expect(archived).not.toHaveProperty("monitoring")
+    expect(events(ConsoleEvent.TAB_ARCHIVE)).toHaveLength(0)
+  })
+
   it.each(["user", "agent"] as const)(
     "detaches a dashboard the %s archives, keeping it as a personal notebook",
     async (initiator) => {
