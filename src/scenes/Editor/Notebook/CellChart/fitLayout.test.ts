@@ -162,4 +162,20 @@ describe("fitLayout", () => {
     expect(w).toBe(h)
     expect(w * 7).toBeLessThanOrEqual(SIZE.height)
   })
+
+  it("keeps a map's shape instead of stretching it to the box", () => {
+    // Given
+    const option = {
+      series: [{ type: "map", map: "world", left: 0, right: 0 }],
+    }
+
+    // When
+    const fitted = fitLayout<object>(option, SIZE) as { series: Box[] }
+
+    // Then
+    expect(fitted.series[0]).toMatchObject({
+      left: CHART_PADDING.left,
+      preserveAspect: "contain",
+    })
+  })
 })

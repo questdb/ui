@@ -57,14 +57,11 @@ const Overall = styled.span<{ $color: string }>`
   }
 `
 
-const Lanes = styled.div`
-  border: 1px solid ${({ theme }) => theme.color.borderSubtle};
-  border-radius: 0.6rem;
-`
+const Lanes = styled.div``
 
 const Lane = styled.div<{ $clickable: boolean }>`
   position: relative;
-  padding: 1.2rem 1.4rem 1rem;
+  padding: 1.2rem 0 1rem;
   cursor: ${({ $clickable }) => ($clickable ? "pointer" : "default")};
 
   & + & {
@@ -266,8 +263,7 @@ export const UptimeBars = ({ visual, statements, onSelect }: Props) => {
     () => readStateSegments(visual, statements[0]),
     [visual, statements],
   )
-  // Lanes are padded 1.4rem a side inside the 1.6rem root padding.
-  const barsWidth = Math.max(width - 60, 0)
+  const barsWidth = Math.max(width - 32, 0)
   const count = Math.max(
     10,
     Math.min(
@@ -328,8 +324,8 @@ export const UptimeBars = ({ visual, statements, onSelect }: Props) => {
           const left =
             hover?.lane === lane
               ? Math.min(
-                  Math.max(14 + hover.index * slot - 120, 0),
-                  Math.max(width - 32 - 260, 0),
+                  Math.max(hover.index * slot - 120, 0),
+                  Math.max(barsWidth - 260, 0),
                 )
               : 0
           return (

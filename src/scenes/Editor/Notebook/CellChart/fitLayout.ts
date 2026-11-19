@@ -218,6 +218,7 @@ type BoxPart = {
   target: Box
   rect: Rect
   grid: boolean
+  geo: boolean
   // Room for labels drawn outside the box.
   room: { left: number; right: number; top: number; bottom: number }
   calendar?: { columns: number; rows: number }
@@ -440,6 +441,7 @@ const collectParts = (option: Box, size: Size): Part[] => {
       target,
       rect: resolveBox(target, size, grid ? 0.1 : 0.08),
       grid,
+      geo: type === "geo" || type === "map",
       room: boxRoom(type, target),
       calendar: type === "calendar" ? calendarCells(target) : undefined,
     })
@@ -654,6 +656,8 @@ export const fitLayout = <T extends object>(input: T, size: Size): T => {
     target.top = Math.round(top)
     target.right = Math.round(right)
     target.bottom = Math.round(bottomPx)
+    // A map keeps its shape: fitted inside the box, not stretched to it.
+    if (part.geo) target.preserveAspect = "contain"
     if (part.grid) {
       delete target.containLabel
       target.outerBoundsMode = "same"
