@@ -120,8 +120,8 @@ describe("result toolbar notebook action", () => {
     // Given a result in a wide window
     cy.viewport(1600, 900)
     cy.loadConsoleWithAuth()
-    focusSqlEditor("select x from long_sequence(3)")
-    cy.runLine()
+    cy.typeQueryDirectly("select x from long_sequence(3)")
+    cy.clickRunQuery()
     cy.getByDataHook("result-add-notebook").should(
       "have.text",
       "Add query to notebook",
