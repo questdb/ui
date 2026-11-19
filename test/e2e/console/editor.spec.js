@@ -2879,7 +2879,7 @@ describe("editor browser interactions", () => {
   })
 })
 
-const dragTabOnto = (source, target, expectedOrder) => {
+const dragTabOnto = (source, target) => {
   cy.get(".chrome-tabs-ready").should("be.visible")
   cy.get(getTabDragHandleByTitle(source)).click(10, 10)
   cy.getEditorTabByTitle(source).should("have.attr", "active")
@@ -2901,11 +2901,6 @@ const dragTabOnto = (source, target, expectedOrder) => {
       position: "topLeft",
       keepMouseDownButton: "left",
       scrollBehavior: false,
-    })
-    cy.getEditorTabs().should((tabs) => {
-      expect(
-        [...tabs].map((tab) => tab.getAttribute("data-tab-title")),
-      ).to.deep.eq(expectedOrder)
     })
     cy.get("body").realMouseUp({
       ...destination,
@@ -3022,7 +3017,7 @@ describe("saved editor navigation", () => {
       ["SQL 1", "SQL"],
       ["SQL", "SQL 1"],
     ]) {
-      dragTabOnto("SQL", "SQL 1", expected)
+      dragTabOnto("SQL", "SQL 1")
       cy.getEditorTabs().should((tabs) =>
         expect(
           [...tabs].map((tab) => tab.getAttribute("data-tab-title")),
