@@ -145,6 +145,7 @@ export const CustomChart = ({
       animate={!live}
       zoomWindow={NO_ZOOM_WINDOW}
       zoomable={false}
+      fit
       specKey={specKey}
       events={events}
       onInstance={onInstance}

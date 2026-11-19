@@ -220,6 +220,7 @@ export const VisualCanvas = ({
         animate={!live}
         zoomWindow={NO_ZOOM_WINDOW}
         zoomable={false}
+        fit
         specKey={`visual:${visual.type}:${JSON.stringify(visual.columns ?? {})}`}
         events={events}
         onInstance={onInstance}

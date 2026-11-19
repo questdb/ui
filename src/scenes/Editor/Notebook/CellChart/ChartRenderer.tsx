@@ -12,6 +12,7 @@ import type { EChartsOption, EChartsType } from "echarts"
 import { useTheme } from "styled-components"
 import { echarts } from "./echartsSetup"
 import { withZoomDensity } from "./buildEchartsOption"
+import { fitLayout } from "./fitLayout"
 import { chartZoomDensity, type ChartZoomDensity } from "./chartDensity"
 import { createQuestdbTheme } from "./questdbTheme"
 import { useNotebookBufferId } from "../NotebookProvider"
@@ -37,6 +38,8 @@ type Props = {
   // False for options that manage their own zoom (custom options, visuals):
   // the renderer then adds no zoom controls.
   zoomable?: boolean
+  /** Lay the option out for the panel's size (custom options, visuals). */
+  fit?: boolean
   // Changes when the chart's specification changes, so a new spec draws on a
   // fresh instance instead of merging into the previous one.
   specKey?: string
@@ -117,6 +120,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       animate = true,
       zoomWindow,
       zoomable = true,
+      fit = false,
       specKey,
       events: extraEvents,
       onInstance,
@@ -149,12 +153,28 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       [theme.color],
     )
     const density = zoomable ? zoomDensity : NO_ZOOM
-    const optionToDraw = useMemo(
-      () =>
+    const [size, setSize] = useState<{ width: number; height: number } | null>(
+      null,
+    )
+    const optionToDraw = useMemo(() => {
+      const zoomed =
         !zoomable || density === null
           ? option
-          : withZoomDensity(option, density),
-      [option, density, zoomable],
+          : withZoomDensity(option, density)
+      return fit && size ? fitLayout(zoomed, size) : zoomed
+    }, [option, density, zoomable, fit, size])
+    const measureSize = useCallback(
+      (width: number, height: number) => {
+        if (!fit || width <= 0 || height <= 0) return
+        setSize((previous) =>
+          previous &&
+          Math.abs(previous.width - width) < 1 &&
+          Math.abs(previous.height - height) < 1
+            ? previous
+            : { width, height },
+        )
+      },
+      [fit],
     )
     const key = useMemo(
       () => `${specKey ?? ""}::${structuralKey(optionToDraw)}`,
@@ -306,6 +326,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         if (!box) return
         resizeTo(box.width, box.height)
         measureDensity(box.width)
+        measureSize(box.width, box.height)
       })
       observer.observe(wrapper)
 
@@ -322,14 +343,15 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         observer.disconnect()
         document.removeEventListener("visibilitychange", handleVisibility)
       }
-    }, [measureDensity])
+    }, [measureDensity, measureSize])
 
     // The chart mounts once the wrapper is measured, so the first instance
     // already carries the right slider decision instead of remounting for it.
     useLayoutEffect(() => {
-      const width = wrapperRef.current?.getBoundingClientRect().width
-      if (width) measureDensity(width)
-    }, [measureDensity, option])
+      const rect = wrapperRef.current?.getBoundingClientRect()
+      if (rect?.width) measureDensity(rect.width)
+      if (rect) measureSize(rect.width, rect.height)
+    }, [measureDensity, measureSize, option])
 
     // Without a slider or a wheel nothing can move the window back, so a
     // window that outlives its controls resets and the owner hears it go.
@@ -357,7 +379,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           height: typeof height === "number" ? `${height}px` : height,
         }}
       >
-        {density !== null && (
+        {density !== null && (!fit || size !== null) && (
           <ReactECharts
             key={key}
             ref={reactEchartsRef}
