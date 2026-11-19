@@ -1,3 +1,4 @@
+import { NOTEBOOK_FORMAT_VERSION } from "../../../store/notebookFormat"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import type {
@@ -435,6 +436,7 @@ describe("buildPersistPayload", () => {
     })
     // Then it packs the ids and the settings and collapses the result to a run status
     expect(payload).toEqual({
+      formatVersion: NOTEBOOK_FORMAT_VERSION,
       cells: [
         {
           ...cells[0],

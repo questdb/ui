@@ -1,0 +1,105 @@
+import { describe, expect, it } from "vitest"
+import {
+  NOTEBOOK_FORMAT_VERSION,
+  copyPlainOption,
+  migrateNotebookFormat,
+  sanitizeChartSync,
+  sanitizeChartTypes,
+  sanitizeInteractions,
+  sanitizeVisualConfig,
+} from "./notebookFormat"
+
+describe("migrateNotebookFormat", () => {
+  it("brings a state without a version to the current one", () => {
+    // Given
+    const state = { cells: [] }
+
+    // When
+    const migrated = migrateNotebookFormat(state)
+
+    // Then
+    expect(migrated.newer).toBe(false)
+    expect(migrated.state.formatVersion).toBe(NOTEBOOK_FORMAT_VERSION)
+  })
+
+  it("keeps a state from a newer console as it is", () => {
+    // Given
+    const state = { formatVersion: NOTEBOOK_FORMAT_VERSION + 1, cells: [] }
+
+    // When
+    const migrated = migrateNotebookFormat(state)
+
+    // Then
+    expect(migrated.newer).toBe(true)
+    expect(migrated.state).toBe(state)
+  })
+
+  it("returns the same object when already current", () => {
+    // Given
+    const state = { formatVersion: NOTEBOOK_FORMAT_VERSION, cells: [] }
+
+    // When / Then
+    expect(migrateNotebookFormat(state).state).toBe(state)
+  })
+})
+
+describe("sanitizers", () => {
+  it("keeps a visual's known roles and drops unknown types", () => {
+    // Given / When
+    const visual = sanitizeVisualConfig({
+      type: "orderBook",
+      columns: { price: "px", size: "qty", bogus: "x", path: ["a", 3] },
+      min: 0,
+    })
+
+    // Then
+    expect(visual).toEqual({
+      type: "orderBook",
+      columns: { price: "px", size: "qty", path: ["a"] },
+      min: 0,
+    })
+    expect(sanitizeVisualConfig({ type: "iframe" })).toBeUndefined()
+  })
+
+  it("copies plain options and refuses functions and prototype keys", () => {
+    // Given
+    const option = JSON.parse(
+      '{"series":[{"type":"bar"}],"__proto__":{"x":1}}',
+    ) as unknown
+
+    // When / Then
+    expect(copyPlainOption(option)).toEqual({ series: [{ type: "bar" }] })
+    expect(copyPlainOption({ formatter: () => "x" })).toBeUndefined()
+  })
+
+  it("accepts interactions only with valid variable names", () => {
+    // Given / When / Then
+    expect(
+      sanitizeInteractions({ click: { variable: "symbol", column: "sym" } }),
+    ).toEqual({ click: { variable: "symbol", column: "sym" } })
+    expect(sanitizeInteractions({ click: { variable: "1; DROP" } })).toBe(
+      undefined,
+    )
+  })
+
+  it("dedupes chart types by name and drops invalid ones", () => {
+    // Given / When
+    const types = sanitizeChartTypes([
+      { name: "lanes", renderItem: "return null" },
+      { name: "lanes", renderItem: "return 1" },
+      { name: "bad name", renderItem: "" },
+    ])
+
+    // Then
+    expect(types).toEqual([{ name: "lanes", renderItem: "return null" }])
+  })
+
+  it("drops a chart sync that does nothing", () => {
+    // Given / When / Then
+    expect(sanitizeChartSync({ crosshair: "off", zoom: false })).toBe(undefined)
+    expect(sanitizeChartSync({ crosshair: "tooltip" })).toEqual({
+      crosshair: "tooltip",
+      zoom: false,
+    })
+  })
+})

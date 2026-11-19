@@ -31,6 +31,7 @@ const TYPE_LABELS: Record<ChartType, string> = {
   scatter: "Scatter",
   pie: "Pie",
   candlestick: "Candlestick",
+  events: "Events (markers on the time axis)",
 }
 
 const PARTITION_TYPES: ChartType[] = [

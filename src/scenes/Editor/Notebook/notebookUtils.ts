@@ -1,3 +1,4 @@
+import { NOTEBOOK_FORMAT_VERSION } from "../../../store/notebookFormat"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
@@ -517,6 +518,7 @@ export const buildPersistPayload = (
   maximizedCellId: string | null,
   settings: NotebookViewState["settings"],
 ): NotebookViewState => ({
+  formatVersion: NOTEBOOK_FORMAT_VERSION,
   cells: stripCellResults(cells),
   focusedCellId: focusedCellId ?? undefined,
   maximizedCellId: maximizedCellId ?? undefined,

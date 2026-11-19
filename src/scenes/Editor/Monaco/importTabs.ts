@@ -35,6 +35,17 @@ import {
   sanitizeHighlightConfig,
 } from "../../../store/notebook"
 import {
+  migrateNotebookFormat,
+  sanitizeChartSync,
+  sanitizeChartTypes,
+  sanitizeCustomChart,
+  sanitizeEventColumns,
+  sanitizeGridMode,
+  sanitizeInteractions,
+  sanitizeVisualConfig,
+} from "../../../store/notebookFormat"
+import { sanitizeColumnFormats } from "../../../utils/formats/columnFormat"
+import {
   DEFAULT_METRIC_COLOR_TOKEN,
   toMetricColorToken,
 } from "../Metrics/metricColors"
@@ -240,12 +251,20 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
 
   const config: ChartConfig = {
     xColumn: typeof obj.xColumn === "string" ? obj.xColumn : null,
-    queries: obj.queries.map((q) =>
-      typeof q === "object" && q !== null ? (q as QueryChart) : null,
-    ),
+    queries: obj.queries.map((q) => {
+      if (typeof q !== "object" || q === null) return null
+      const query = q as QueryChart
+      const events = sanitizeEventColumns(query.events)
+      const { events: _raw, ...rest } = query
+      return events ? { ...rest, events } : rest
+    }),
   }
   if (typeof obj.rightAxis === "object" && obj.rightAxis !== null)
     config.rightAxis = obj.rightAxis as ChartConfig["rightAxis"]
+  const visual = sanitizeVisualConfig(obj.visual)
+  if (visual) config.visual = visual
+  const custom = sanitizeCustomChart(obj.custom)
+  if (custom) config.custom = custom
   return config
 }
 
@@ -305,6 +324,12 @@ const sanitizeNotebookCell = (
     const highlightConfig = sanitizeHighlightConfig(item.highlightConfig)
     if (highlightConfig) cell.highlightConfig = highlightConfig
     if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+    const formats = sanitizeColumnFormats(item.formats)
+    if (formats) cell.formats = formats
+    const interactions = sanitizeInteractions(item.interactions)
+    if (interactions) cell.interactions = interactions
+    const gridMode = sanitizeGridMode(item.gridMode)
+    if (gridMode) cell.gridMode = gridMode
     cell.paneView = isCellPaneView(item.paneView)
       ? item.paneView
       : inferredMaximized
@@ -358,6 +383,10 @@ const sanitizeNotebookSettings = (
   }
   if (isAutoRefresh(item.autoRefreshDefault))
     settings.autoRefreshDefault = item.autoRefreshDefault
+  const chartTypes = sanitizeChartTypes(item.chartTypes)
+  if (chartTypes) settings.chartTypes = chartTypes
+  const chartSync = sanitizeChartSync(item.chartSync)
+  if (chartSync) settings.chartSync = chartSync
   return settings
 }
 
@@ -377,7 +406,9 @@ const sanitizeNotebookViewState = (
     state.settings = sanitizeNotebookSettings(
       item.settings as Record<string, unknown>,
     )
-  return state
+  if (typeof item.formatVersion === "number")
+    state.formatVersion = item.formatVersion
+  return migrateNotebookFormat(state).state
 }
 
 export const sanitizeBuffer = (
