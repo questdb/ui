@@ -136,8 +136,15 @@ const FooterStart = styled.div`
 // How long after opening a menu may still hand focus back to its trigger.
 const OPENER_HANDBACK_WINDOW_MS = 1000
 
-const isRadixPopperOpen = () =>
-  document.querySelector("[data-radix-popper-content-wrapper]") !== null
+// An open menu, listbox or popover outside the panel: a dropdown opened from
+// the drawer renders in a portal. Tooltips are not layers the click closes.
+const OPEN_LAYER =
+  '[role="menu"][data-state="open"], [role="listbox"][data-state="open"], [role="dialog"][data-state="open"]'
+
+const hasOpenLayerOutside = (panel: HTMLElement | null) =>
+  Array.from(document.querySelectorAll(OPEN_LAYER)).some(
+    (layer) => !panel?.contains(layer),
+  )
 
 type SharedProps = {
   open: boolean
@@ -202,7 +209,7 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
   // reaches the backdrop. Radix unmounts the popper during pointerdown, so
   // whether one was open has to be read before that click arrives.
   const handleBackdropPointerDown = () => {
-    popperOpenAtPointerDownRef.current = isRadixPopperOpen()
+    popperOpenAtPointerDownRef.current = hasOpenLayerOutside(panelRef.current)
   }
 
   const handleBackdropClick = () => {
@@ -272,21 +279,25 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
 
   useEffect(() => {
     if (!open || !isDrawer) return
-    // An overlay over the cell: claims Escape in the capture phase, unless a
-    // menu or popover inside it is open and closes first, or a modal dialog
-    // is open on top. A Radix modal dialog hides the rest of the page from
-    // assistive technology (aria-hidden), the drawer included; some dialogs
-    // close on Escape even when it is claimed, so claiming it here would close
-    // both. Non-modal dialogs are not detected this way.
+    // An overlay over the cell. It listens on <body> in the capture phase, so
+    // a Radix layer (a menu in the drawer, a dialog on top) closes first and
+    // claims the press (utils/escapeKey.ts). Only a press from the drawer, or
+    // with focus nowhere, closes it: Escape typed elsewhere, e.g. in the AI
+    // chat, is not meant for it.
     const onKey = (e: KeyboardEvent) => {
       if (!isEscape(e) || isEscapeClaimed(e)) return
-      if (isRadixPopperOpen()) return
-      if (panelRef.current?.closest('[aria-hidden="true"]')) return
+      const target = e.target
+      if (
+        target !== document.body &&
+        !(target instanceof Node && panelRef.current?.contains(target))
+      )
+        return
       claimEscape(e)
       onDismiss("escape")
     }
-    window.addEventListener("keydown", onKey, { capture: true })
-    return () => window.removeEventListener("keydown", onKey, { capture: true })
+    document.body.addEventListener("keydown", onKey, { capture: true })
+    return () =>
+      document.body.removeEventListener("keydown", onKey, { capture: true })
   }, [open, isDrawer, onDismiss])
 
   if (!visible) return null

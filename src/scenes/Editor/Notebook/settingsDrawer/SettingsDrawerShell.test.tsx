@@ -69,4 +69,22 @@ describe("SettingsDrawerShell Escape", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1)
     expect(onDismiss).toHaveBeenCalledWith("escape")
   })
+
+  it("ignores Escape pressed outside the drawer, e.g. in the AI chat", () => {
+    vi.useFakeTimers()
+    const onDismiss = vi.fn()
+    renderComponent(
+      <>
+        <Harness onDismiss={onDismiss} />
+        <input aria-label="Chat" />
+      </>,
+    )
+    // Past the window in which the drawer adopts the control that opened it.
+    act(() => {
+      vi.advanceTimersByTime(1500)
+    })
+    screen.getByRole("textbox", { name: "Chat" }).focus()
+    pressEscape()
+    expect(onDismiss).not.toHaveBeenCalled()
+  })
 })
