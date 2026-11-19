@@ -46,6 +46,7 @@ describe("notebook execution outcomes", () => {
       notebookRunOutcome({
         ...completed,
         denied: denyReasonFailClosedClassify("execution", "network down"),
+        deniedCode: "classify_failed",
       }),
     ).toBe("validation_failed")
   })

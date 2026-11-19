@@ -49,7 +49,7 @@ const summary = (note?: string) => ({
   success: true,
   queryCount: 1,
   results: [],
-  ...(note ? { unverified: true, note } : {}),
+  ...(note ? { unverified: true, note, interruption: "mounted" as const } : {}),
 })
 // A committed run stamps run history on its cells, as the real runner does.
 const commitRuns = async (

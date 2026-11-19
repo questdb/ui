@@ -213,12 +213,20 @@ describe("monitoring telemetry", () => {
       outcome: "created",
       runs: [
         { cellId: "ok", summary: { ...summary, success: true } },
-        { cellId: "private", summary: { ...summary, denied: "no access" } },
+        {
+          cellId: "private",
+          summary: {
+            ...summary,
+            denied: "no access",
+            deniedCode: "permission",
+          },
+        },
         {
           cellId: "offline",
           summary: {
             ...summary,
             denied: denyReasonFailClosedClassify("execution", "network down"),
+            deniedCode: "classify_failed",
           },
         },
         { cellId: "broken", summary },

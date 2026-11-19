@@ -710,7 +710,12 @@ export const useCellExecution = ({
         })
       }
       if (barrier.action === "denied") {
-        return bail({ ok: false, superseded: false, denied: barrier.reason })
+        return bail({
+          ok: false,
+          superseded: false,
+          denied: barrier.reason,
+          deniedCode: barrier.code,
+        })
       }
       if (barrier.action === "skipped") {
         return bail({ ok: false, superseded: false, skipped: barrier.reason })

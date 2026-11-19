@@ -1,3 +1,4 @@
+import type { RunDenialCode } from "../../../utils/tools/permissions"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
@@ -438,6 +439,7 @@ export type CellRunOutcome = {
   // Barrier decisions for gated (agent) runs: a permission denial or an
   // auto-run write skip. Nothing executed when either is set.
   denied?: string
+  deniedCode?: RunDenialCode
   skipped?: string
   // The result THIS run produced, set only when it committed. Consumers that
   // report the run's output must read this instead of cell.result — a draw

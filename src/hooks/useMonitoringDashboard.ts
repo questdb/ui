@@ -12,7 +12,6 @@ import { bufferStore } from "../store/buffers"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
 import { NotebookToolError } from "../utils/notebooks/notebookToolError"
 import type { CellRunOutcome } from "../utils/notebooks/runCellsAfterApply"
-import { isFailClosedClassifyDenial } from "../utils/tools/permissions"
 import { useEditorBusy } from "./useEditorBusy"
 
 // Why a first run did not fill its cell, or null when it ran or was only
@@ -34,7 +33,7 @@ const firstRunFailure = (outcome: CellRunOutcome): string | null => {
   const { summary } = outcome
   if (summary.success) return null
   if (summary.denied !== undefined)
-    return isFailClosedClassifyDenial(summary.denied)
+    return summary.deniedCode === "classify_failed"
       ? "validation_failed"
       : "permission_denied"
   if (summary.skipped !== undefined) return "write_blocked"

@@ -1,5 +1,4 @@
 import type { CellRunOutcome } from "../../scenes/Editor/Notebook/notebookUtils"
-import { isFailClosedClassifyDenial } from "../../utils/tools/permissions"
 import { trackEvent } from "."
 import { ConsoleEvent } from "./events"
 
@@ -23,9 +22,7 @@ export const notebookRunOutcome = (
   run: CellRunOutcome,
 ): NotebookExecutionOutcome => {
   if (run.denied !== undefined) {
-    return isFailClosedClassifyDenial(run.denied)
-      ? "validation_failed"
-      : "denied"
+    return run.deniedCode === "classify_failed" ? "validation_failed" : "denied"
   }
 
   if (run.skipped !== undefined) {

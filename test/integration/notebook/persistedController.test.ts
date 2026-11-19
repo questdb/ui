@@ -1133,6 +1133,7 @@ describe("createDexieNotebookController — runCell", () => {
     // snapshot store was touched
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/opened this notebook/)
+    expect(summary.interruption).toBe("mounted")
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
@@ -1154,6 +1155,7 @@ describe("createDexieNotebookController — runCell", () => {
     // Then the stale result is reported unverified and nothing was recorded
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/changed this notebook/)
+    expect(summary.interruption).toBe("user_changed")
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })

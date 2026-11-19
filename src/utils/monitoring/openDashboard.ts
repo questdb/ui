@@ -13,7 +13,6 @@ import {
 import type { MonitoringTarget, MonitoringRefreshSchedule } from "./types"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { SessionEndedError } from "../../modules/OAuth2/session"
-import { MOUNTED_MID_RUN_NOTE } from "../../scenes/Editor/Notebook/notebookUtils"
 import type { NotebookCell } from "../../store/notebook"
 import {
   cellsToRunAfterApply,
@@ -36,7 +35,7 @@ export type MonitoringOpenResult = {
 }
 
 const wasOpenedMidRun = (run: CellRunOutcome): boolean =>
-  "summary" in run && run.summary.note === MOUNTED_MID_RUN_NOTE
+  "summary" in run && run.summary.interruption === "mounted"
 
 const requests = new Map<string, Promise<MonitoringOpenResult | undefined>>()
 
