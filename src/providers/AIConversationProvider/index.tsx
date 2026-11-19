@@ -18,7 +18,11 @@ import type {
   AIConversation,
   UserActionDigest,
 } from "./types"
-import { applyUserActionToDigest, createEmptyDigest } from "./userActionDigest"
+import {
+  applyUserActionToDigest,
+  createEmptyDigest,
+  routesUserAction,
+} from "./userActionDigest"
 import {
   on as onUserAction,
   type UserActionEvent,
@@ -218,7 +222,7 @@ export const AIConversationProvider: React.FC<{
       "user-action",
       (evt: UserActionEvent) => {
         for (const meta of conversationMetasRef.current.values()) {
-          if (meta.notebookBufferId !== evt.bufferId) continue
+          if (!routesUserAction(meta, evt)) continue
           let digest = userActionDigestsRef.current.get(meta.id)
           if (!digest) {
             digest = createEmptyDigest()

@@ -38,6 +38,7 @@ import {
   DEFAULT_METRIC_COLOR_TOKEN,
   toMetricColorToken,
 } from "../Metrics/metricColors"
+import { DANGEROUS_KEYS } from "../../../utils/dangerousKeys"
 
 type ValidationResult = true | string
 
@@ -45,8 +46,6 @@ const METRIC_TYPES = Object.values(MetricType)
 const METRIC_VIEW_MODES = Object.values(MetricViewMode)
 const SAMPLE_BY_VALUES = Object.values(SampleBy)
 const REFRESH_RATE_VALUES = Object.values(RefreshRate)
-
-const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"])
 
 export const DEFAULT_METRIC_COLOR: string = DEFAULT_METRIC_COLOR_TOKEN
 

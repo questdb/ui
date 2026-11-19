@@ -40,6 +40,7 @@ export type RunWithSelectionMode = "partial" | "complete" | "off"
 
 export enum LeftPanelType {
   DATASOURCES = "datasources",
+  TABS = "tabs",
   SEARCH = "search",
 }
 
@@ -60,7 +61,6 @@ export type LocalConfig = {
   editorLine: number
   editorSplitterBasis: number
   resultsSplitterBasis: number
-  exampleQueriesVisited: boolean
   autoRefreshTables: boolean
   autoRefreshQueryActivity: boolean
   useNewGrid: boolean

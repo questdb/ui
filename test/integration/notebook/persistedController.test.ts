@@ -937,6 +937,36 @@ describe("createDexieNotebookController — runCell", () => {
     expect(pending).toHaveLength(0)
   })
 
+  it.each([
+    [
+      "an agent",
+      { kind: "autoRun" } as const,
+      [{ bufferId: BUFFER_ID, cellId: "a" }],
+    ],
+    ["the user", { kind: "autoRun", initiator: "user" } as const, []],
+  ])(
+    "announces a committed auto-run started by %s only when an agent started it",
+    async (_who, gate, expected) => {
+      // Given a background notebook with one read-only cell
+      await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+      const { quest, respondNext } = makeQuest({
+        validate: () => dqlValidation,
+      })
+      const seen: AgentEdit[] = []
+      onAgentEdit((e) => seen.push(e))
+      const controller = makeController({}, quest)
+
+      // When the cell is auto-run and its result is committed
+      const pending = controller.runCell("a", undefined, undefined, gate)
+      await vi.waitFor(() => respondNext(dqlResult))
+      const summary = await pending
+
+      // Then only an agent's run is announced as an agent change
+      expect(summary).toMatchObject({ success: true })
+      expect(seen).toEqual(expected)
+    },
+  )
+
   it("a skipped newer claim does not supersede an in-flight run", async () => {
     // Given an explicit write that has passed its barrier and reached the server
     await seedNotebook({ cells: [cell("a", "INSERT INTO t VALUES (1)")] })

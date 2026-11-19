@@ -140,7 +140,7 @@ describe("closing an open monitoring dashboard", () => {
     expect((await stored())?.templateId).toBeDefined()
 
     await act(async () => {
-      await editor.archiveBuffer(DASHBOARD)
+      await editor.closeBuffer(DASHBOARD)
     })
 
     const archived = await stored()
@@ -152,7 +152,7 @@ describe("closing an open monitoring dashboard", () => {
   it("still discards an untouched dashboard that is open with a live controller", async () => {
     await mount()
     await act(async () => {
-      await editor.archiveBuffer(DASHBOARD)
+      await editor.closeBuffer(DASHBOARD)
     })
     expect(await stored()).toBeUndefined()
   })

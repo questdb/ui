@@ -186,7 +186,7 @@ describe("UI notebook lifecycle telemetry", () => {
     await seedDashboard()
     await mount()
     await act(async () => {
-      await editor.archiveBuffer(41)
+      await editor.closeBuffer(41)
     })
     expect(await db.buffers.get(41)).toBeUndefined()
   })
@@ -195,7 +195,7 @@ describe("UI notebook lifecycle telemetry", () => {
     await seedDashboard()
     await mount()
     await act(async () => {
-      await editor.archiveBuffer(41, "agent")
+      await editor.archiveBuffer(41, { initiator: "agent" })
     })
     const archived = await db.buffers.get(41)
     expect(archived?.archived).toBe(true)
@@ -215,7 +215,7 @@ describe("UI notebook lifecycle telemetry", () => {
     try {
       await mount()
       await act(async () => {
-        await editor.archiveBuffer(41)
+        await editor.closeBuffer(41)
       })
       const archived = await db.buffers.get(41)
       expect(archived?.archived).toBe(true)

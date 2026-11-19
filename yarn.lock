@@ -2616,7 +2616,6 @@ __metadata:
     "@testing-library/react": "npm:12"
     "@testing-library/user-event": "npm:14"
     "@types/babel__core": "npm:^7"
-    "@types/draggabilly": "npm:^2.1.6"
     "@types/jquery": "npm:3.5.1"
     "@types/lodash.merge": "npm:^4.6.9"
     "@types/node": "npm:^18.0.0"
@@ -2646,7 +2645,6 @@ __metadata:
     dexie-export-import: "npm:^4.1.4"
     dexie-react-hooks: "npm:^4.2.0"
     dotenv: "npm:^10.0.0"
-    draggabilly: "npm:^3.0.0"
     echarts: "npm:^5.6.0"
     echarts-for-react: "npm:^3.0.6"
     eslint: "npm:^9.13.0"
@@ -3897,13 +3895,6 @@ __metadata:
   dependencies:
     "@types/ms": "npm:*"
   checksum: 10/47876a852de8240bfdaf7481357af2b88cb660d30c72e73789abf00c499d6bc7cd5e52f41c915d1b9cd8ec9fef5b05688d7b7aef17f7f272c2d04679508d1053
-  languageName: node
-  linkType: hard
-
-"@types/draggabilly@npm:^2.1.6":
-  version: 2.1.6
-  resolution: "@types/draggabilly@npm:2.1.6"
-  checksum: 10/eef9933b80d6c90c86649d1a437a608a66b889bc87e7f65c076625168458fa7fba5d15f475f1c841522bf7b48d793025b3e74fd82948e40060d759e0c80b7561
   languageName: node
   linkType: hard
 
@@ -6011,16 +6002,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"draggabilly@npm:^3.0.0":
-  version: 3.0.0
-  resolution: "draggabilly@npm:3.0.0"
-  dependencies:
-    get-size: "npm:^3.0.0"
-    unidragger: "npm:^3.0.0"
-  checksum: 10/2c81089b44eec5fbe675ad5b7040f6005fe41e83a7cbb8b3c1f799755a59f31c074394d5315ccc370b21f60c3df7096501a2761a976daa89a5f6b2e29335986a
-  languageName: node
-  linkType: hard
-
 "dunder-proto@npm:^1.0.0, dunder-proto@npm:^1.0.1":
   version: 1.0.1
   resolution: "dunder-proto@npm:1.0.1"
@@ -6742,13 +6723,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ev-emitter@npm:^2.0.0":
-  version: 2.1.2
-  resolution: "ev-emitter@npm:2.1.2"
-  checksum: 10/1102823ef040684869256100e19a6c6aeeecd422d09a267d7c74e77023136eede2ee86ee475ad1019d30d1f7917557d74542d5665e9f91c398bd5814260af6b3
-  languageName: node
-  linkType: hard
-
 "eventemitter2@npm:6.4.7":
   version: 6.4.7
   resolution: "eventemitter2@npm:6.4.7"
@@ -7209,13 +7183,6 @@ __metadata:
     dunder-proto: "npm:^1.0.1"
     es-object-atoms: "npm:^1.0.0"
   checksum: 10/4fc96afdb58ced9a67558698b91433e6b037aaa6f1493af77498d7c85b141382cf223c0e5946f334fb328ee85dfe6edd06d218eaf09556f4bc4ec6005d7f5f7b
-  languageName: node
-  linkType: hard
-
-"get-size@npm:^3.0.0":
-  version: 3.0.0
-  resolution: "get-size@npm:3.0.0"
-  checksum: 10/9a475bce9a718322b80c20a9651a7b09c8ddb85d094131fda7d32ffe272442c3d0621df6a61b543a23ca741c261f96841078927e17acfc88957c2a6029ba5b34
   languageName: node
   linkType: hard
 
@@ -12667,15 +12634,6 @@ __metadata:
   version: 0.3.0
   resolution: "unicorn-magic@npm:0.3.0"
   checksum: 10/bdd7d7c522f9456f32a0b77af23f8854f9a7db846088c3868ec213f9550683ab6a2bdf3803577eacbafddb4e06900974385841ccb75338d17346ccef45f9cb01
-  languageName: node
-  linkType: hard
-
-"unidragger@npm:^3.0.0":
-  version: 3.0.1
-  resolution: "unidragger@npm:3.0.1"
-  dependencies:
-    ev-emitter: "npm:^2.0.0"
-  checksum: 10/0e1ca1da000dd31266dc3b138db147b9cce7f81b87423875dee8e89fb19d1d1db1cb19951dcdc4cfce0375d4c3bc317b496a41501c7663beb30188a4d0442bb1
   languageName: node
   linkType: hard
 

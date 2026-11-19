@@ -119,7 +119,7 @@ it("sends decisions created by Accept and Reject in later requests and persists 
   await openChat()
 
   const workspace =
-    '<workspace>\n  active: { buffer_id: 42, label: "Query", kind: other }\n  notebooks: []\n</workspace>\n\n'
+    '<workspace>\n  active: { buffer_id: 42, label: "Query", kind: sql }\n  tabs:\n    - { buffer_id: 42, label: "Query", kind: sql }\n</workspace>\n\n'
   const expectedHistory: Array<{
     role: "user" | "assistant"
     content: string

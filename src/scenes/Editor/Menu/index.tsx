@@ -22,28 +22,24 @@
  *
  ******************************************************************************/
 import React from "react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
-import styled, { css, keyframes } from "styled-components"
+import styled, { css } from "styled-components"
 import { CalendarCheckIcon } from "@phosphor-icons/react"
-import { Add, Close as _CloseIcon } from "../../../components/icons"
+import { Close as _CloseIcon } from "../../../components/icons"
 import { Menu as _MenuIcon } from "../../../components/icons"
 
 import {
   Button,
   type ButtonProps,
   PaneMenu,
-  PopperToggle,
   TransitionDuration,
   SetupAIAssistant,
 } from "../../../components"
-import { ScreenSize, useKeyPress, useScreenSize } from "../../../hooks"
+import { ScreenSize, useScreenSize } from "../../../hooks"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
-import QueryPicker from "../QueryPicker"
-import { useLocalStorage } from "../../../providers/LocalStorageProvider"
-import { StoreKey } from "../../../utils/localStorage/types"
 import { DocSearch } from "@docsearch/react"
 import { useSettings } from "../../../providers"
 import { ThemeModeSelector } from "./ThemeModeSelector"
@@ -81,30 +77,6 @@ const Wrapper = styled(PaneMenu)<{
 
 const Separator = styled.div`
   flex: 1;
-`
-
-const queryPickerPulse = (pulseColor: string) => keyframes`
-    0% {
-      box-shadow: 0 0 0 0 ${pulseColor};
-    }
-
-    75% {
-      box-shadow: 0 0 0 5px transparent;
-    }
-  `
-
-const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
-  position: relative;
-  flex: 0 0 auto;
-
-  ${({ $firstTimeVisitor, theme }) =>
-    $firstTimeVisitor
-      ? css`
-          animation: ${queryPickerPulse(theme.color.contentAccent)} 2s infinite;
-        `
-      : css`
-          animation: none;
-        `}
 `
 
 const MenuIcon = styled(_MenuIcon)`
@@ -167,28 +139,12 @@ const MenuItems = styled.div<{ $hidden: boolean }>`
 
 const Menu = () => {
   const dispatch = useDispatch()
-  const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
-  const escPress = useKeyPress("Escape")
   const { consoleConfig } = useSettings()
   const opened = useSelector(selectors.console.getSideMenuOpened)
   const isSmallScreen = useScreenSize() === ScreenSize.SM
-  const { exampleQueriesVisited, updateSettings } = useLocalStorage()
-  const handleQueriesToggle = useCallback((active: boolean) => {
-    if (!exampleQueriesVisited && active) {
-      updateSettings(StoreKey.EXAMPLE_QUERIES_VISITED, true)
-    }
-    setQueriesPopperActive(active)
-  }, [])
-  const handleHidePicker = useCallback(() => {
-    setQueriesPopperActive(false)
-  }, [])
   const handleSideMenuButtonClick = useCallback(() => {
     dispatch(actions.console.toggleSideMenu())
   }, [dispatch])
-
-  useEffect(() => {
-    setQueriesPopperActive(false)
-  }, [escPress])
 
   useEffect(() => {
     if (!isSmallScreen && opened) {
@@ -204,32 +160,6 @@ const Menu = () => {
       {!isSmallScreen && <Separator />}
 
       <MenuItems $hidden={isSmallScreen}>
-        {consoleConfig.savedQueries &&
-          consoleConfig.savedQueries.length > 0 && (
-            <PopperToggle
-              active={queriesPopperActive}
-              onToggle={handleQueriesToggle}
-              placement="bottom-end"
-              modifiers={[
-                { name: "offset", options: { offset: [0, 6] } },
-                { name: "preventOverflow", options: { padding: 8 } },
-              ]}
-              trigger={
-                <QueryPickerButton
-                  variant="secondary"
-                  $firstTimeVisitor={!exampleQueriesVisited}
-                >
-                  <Add size="18px" />
-                  <span>Example queries</span>
-                </QueryPickerButton>
-              }
-            >
-              <QueryPicker
-                hidePicker={handleHidePicker}
-                queries={consoleConfig.savedQueries ?? []}
-              />
-            </PopperToggle>
-          )}
         <ThemeModeSelector />
         <SetupAIAssistant />
         <DocSearch

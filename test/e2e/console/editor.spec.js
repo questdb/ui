@@ -7,6 +7,7 @@ const editorExecution = { url: "**/exec*", query: { explain: "true" } }
 
 const { ctrlOrCmd } = require("../utils")
 const { createNotebookBuffer } = require("../utils/editorBuffers")
+const { seedConsoleStorage } = require("../utils/consoleStorage")
 
 const loadEditorWithQuery = (value) =>
   cy.loadConsoleWithAuth(false, {}, { buffers: [{ value }] })
@@ -433,81 +434,6 @@ describe("run all queries in tab", () => {
   })
 })
 
-describe("appendQuery", () => {
-  const consoleConfiguration = {
-    savedQueries: [
-      { name: "query 1", value: "select 1;" },
-      { name: "query 2", value: "select 2;" },
-      {
-        name: "query 3",
-        value: "select\n3\nas result;",
-      },
-    ],
-  }
-
-  const queries = consoleConfiguration.savedQueries.map((query) => query.value)
-
-  before(() => {
-    cy.intercept(
-      {
-        method: "GET",
-        url: `${baseUrl}/assets/console-configuration.json`,
-      },
-      consoleConfiguration,
-    ).as("getConsoleConfiguration")
-
-    cy.loadConsoleWithAuth()
-  })
-
-  beforeEach(() => {
-    cy.getEditorContent().should("be.visible")
-    cy.clearEditor()
-  })
-
-  it("should correctly append and select query after multiple inserts", () => {
-    // Given
-    const selectedText = (expected) =>
-      cy.window().should((win) => {
-        const editor = win.monaco.editor.getEditors()[0]
-        expect(editor.getModel().getValueInRange(editor.getSelection())).to.eq(
-          expected,
-        )
-      })
-    // When / Then
-    cy.selectQuery(0)
-    selectedText(queries[0])
-    cy.selectQuery(1)
-    selectedText(queries[1])
-    cy.selectQuery(1)
-    selectedText(queries[1])
-    cy.selectRange({ lineNumber: 2, column: 1 }, { lineNumber: 2, column: 1 })
-    cy.selectQuery(2)
-    selectedText(queries[2])
-    cy.getEditorContent().should(
-      "have.value",
-      "\n" +
-        queries[0] +
-        "\n\n" +
-        queries[1] +
-        "\n\n" +
-        queries[1] +
-        "\n\n" +
-        queries[2],
-    )
-    cy.clickRunQuery()
-    cy.getGridRow(0).should("contain", "3")
-    // When an unfinished statement precedes another saved query
-    cy.clearEditor()
-    cy.typeQueryDirectly("select 1")
-    cy.selectQuery(1)
-    // Then insertion terminates the first statement and selects the second
-    cy.getEditorContent().should("have.value", "select 1;\nselect 2;")
-    selectedText(queries[1])
-    cy.clickRunQuery()
-    cy.getGridRow(0).should("contain", "2")
-  })
-})
-
 describe("&query URL param", () => {
   it("should open single line query in a new tab and select it", () => {
     const query = encodeURIComponent("select x+1 from long_sequence(1)")
@@ -821,6 +747,119 @@ describe("&query URL param", () => {
   })
 })
 
+// Every link shape is covered by src/utils/examples/exampleLink.test.ts; this
+// only checks that the console acts on that plan in a browser.
+describe("?templateId URL param", () => {
+  const exampleExport = {
+    formatName: "dexie",
+    data: {
+      databaseVersion: 9,
+      data: [
+        {
+          tableName: "buffers",
+          rows: [
+            {
+              label: "Linked dashboard",
+              value: "",
+              position: 0,
+              notebookViewState: {
+                cells: [{ id: "intro", type: "markdown", value: "# Intro" }],
+                settings: { autoRefreshDefault: false },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  }
+
+  const readBuffers = (win) =>
+    new Cypress.Promise((resolve, reject) => {
+      const request = win.indexedDB.open("web-console")
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const db = request.result
+        const rows = db.transaction("buffers").objectStore("buffers").getAll()
+        rows.onsuccess = () => {
+          db.close()
+          resolve(rows.result)
+        }
+        rows.onerror = () => {
+          db.close()
+          reject(rows.error)
+        }
+      }
+    })
+
+  it("opens the linked example and consumes only its parameter", () => {
+    // Given a deployment with examples and a visitor who has their own SQL tab
+    cy.intercept("GET", "**/assets/console-configuration.json*", {
+      ctaBanner: false,
+      readOnly: false,
+      exampleDashboards: [
+        {
+          id: "default",
+          title: "Default dashboard",
+          path: "assets/link-default.json",
+        },
+        {
+          id: "linked",
+          title: "Linked dashboard",
+          path: "assets/link-test.json",
+        },
+      ],
+    })
+    cy.intercept("GET", "**/assets/link-default.json", exampleExport).as(
+      "defaultExport",
+    )
+    cy.intercept("GET", "**/assets/link-test.json", exampleExport)
+
+    // When they follow a link to the second example
+    let seeded
+    cy.loginWithApi().then((credentials) => {
+      cy.handleStorageAndVisit(
+        `${baseUrl}/?templateId=linked&keep=yes#anchor`,
+        true,
+        { ...credentials, "tabs.panel.exampleAutoOpened": "true" },
+        (win) => {
+          win.sessionStorage.clear()
+          win.sessionStorage.setItem("auth.login.method", "password")
+          seeded = seedConsoleStorage(win, {
+            buffers: [{ label: "My SQL", value: "select 42" }],
+            activeBufferId: 1,
+          })
+        },
+      )
+    })
+    cy.then(() => seeded)
+
+    // Then the linked dashboard opens as the active tab
+    cy.getEditorTabByTitle("Linked dashboard").should("have.attr", "active")
+    cy.getByDataHook("notebook-toolbar-name").should(
+      "have.text",
+      "Linked dashboard",
+    )
+    cy.get("@defaultExport.all").should("have.length", 0)
+
+    // And only templateId is removed from the address
+    cy.location("search").should("eq", "?keep=yes")
+    cy.location("hash").should("eq", "#anchor")
+
+    // And the visitor's own tab is kept next to a single linked copy
+    cy.window()
+      .then(readBuffers)
+      .then((rows) => {
+        expect(rows).to.have.length(2)
+        expect(rows.find((row) => row.label === "My SQL").value).to.eq(
+          "select 42",
+        )
+        expect(
+          rows.filter((row) => row.templateId === "linked"),
+        ).to.have.length(1)
+      })
+  })
+})
+
 describe("autocomplete", () => {
   before(() => {
     const tables = {
@@ -1102,6 +1141,9 @@ describe.skip("editor tabs history", () => {
     cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 2")
     // Clear history
     cy.getByDataHook("editor-tabs-history-clear").click()
+    cy.getByDataHook("clear-history-dialog").should("be.visible")
+    cy.getByDataHook("clear-history-confirm").click()
+    cy.getByDataHook("clear-history-dialog").should("not.exist")
     cy.getByDataHook("editor-tabs-history-button").click()
     cy.getByDataHook("editor-tabs-history-item").should("not.exist")
   })
@@ -1667,7 +1709,8 @@ describe("editor settings", () => {
       )
     const runCellAtCursor = () =>
       cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
-    const cellResultTabs = () => cy.get("[role='tablist'] [role='tab']")
+    const cellResultTabs = () =>
+      cy.get("[data-notebook-root] [role='tablist'] [role='tab']")
 
     // And a resolved notebook whose focused cell holds two statements
     cy.loadConsoleWithAuth(false, {}, { buffers: [createNotebookBuffer(sql)] })
@@ -1740,11 +1783,9 @@ describe("editor settings", () => {
       "have.length",
       1,
     )
-    cy.get("[role='tablist'] [role='tab'][aria-selected='true']").should(
-      "have.attr",
-      "title",
-      "select 33",
-    )
+    cy.get(
+      "[data-notebook-root] [role='tablist'] [role='tab'][aria-selected='true']",
+    ).should("have.attr", "title", "select 33")
     cy.get("[data-hook='grid-header-name']:visible")
       .should("have.length", 1)
       .and("contain", "33")
@@ -1793,8 +1834,10 @@ describe("editor settings", () => {
     })
 
     // And Cmd+Shift+Enter runs the whole cell even from the result area
-    cy.get("[role='tablist'] [role='tab']").eq(1).click()
-    cy.get("[role='tablist'] [role='tab']").eq(1).should("have.focus")
+    cy.get("[data-notebook-root] [role='tablist'] [role='tab']").eq(1).click()
+    cy.get("[data-notebook-root] [role='tablist'] [role='tab']")
+      .eq(1)
+      .should("have.focus")
     cy.then(() => {
       execQueries.length = 0
     })
@@ -1898,8 +1941,8 @@ describe("editor settings", () => {
     })
 
     // When the second result tab has focus and Cmd+Enter is pressed
-    cy.get("[role='tablist'] [role='tab']").eq(1).click()
-    cy.get("[role='tablist'] [role='tab']")
+    cy.get("[data-notebook-root] [role='tablist'] [role='tab']").eq(1).click()
+    cy.get("[data-notebook-root] [role='tablist'] [role='tab']")
       .eq(1)
       .should("have.focus")
       .and("have.attr", "title", "select 2")
@@ -2807,7 +2850,7 @@ describe("editor browser interactions", () => {
     cy.getEditorTabByTitle("Cancelled new name").should("not.exist")
     cy.getEditorTabByTitle("New name").within(() => {
       cy.get(".chrome-tab-drag-handle").dblclick()
-      cy.get(".chrome-tab-rename").type("{selectall}{esc}{enter}")
+      cy.get(".chrome-tab-rename").type("{selectall}{backspace}{enter}")
       // empty tab name is not allowed, should not proceed
       cy.get(".chrome-tab-rename").should("be.visible")
     })

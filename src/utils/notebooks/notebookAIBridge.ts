@@ -1,6 +1,8 @@
 import type { AutoRefresh, CellMode } from "../../store/notebook"
 import type { RanStatus } from "../ai/runStatus"
 import type { Client } from "../questdb/client"
+import type { TabKind } from "../ai/workspaceInfo"
+import { NotebookToolError } from "./notebookToolError"
 
 // Agent↔user coordination for notebooks (no React, no controller internals):
 //
@@ -9,7 +11,7 @@ import type { Client } from "../questdb/client"
 //                       raced a user change it never read.
 //   - user-action bus — emitUserAction / on, consumed by the AI conversation
 //                       layer to narrate what the user did.
-//   - workspace       — cross-notebook ops (create/duplicate/delete/activate),
+//   - workspace       — cross-tab ops (create/duplicate/archive/delete/activate),
 //                       registered by NotebookWorkspaceBridge.
 //   - agent deps      — the reconnect-safe quest client accessor.
 //
@@ -36,7 +38,11 @@ export type NotebookWorkspaceController = {
   duplicateNotebook: (
     options: DuplicateNotebookOptions,
   ) => Promise<{ bufferId: number; label: string }>
-  deleteNotebook: (bufferId: number) => Promise<void>
+  archiveTab: (bufferId: number) => Promise<void>
+  restoreTab: (bufferId: number) => Promise<void>
+  activateTab: (bufferId: number) => Promise<void>
+  renameTab: (bufferId: number, label: string) => Promise<void>
+  deleteTab: (bufferId: number) => Promise<void>
   activateNotebook: (
     bufferId: number,
     cellToFocus: string | null | undefined,
@@ -58,6 +64,16 @@ export const registerWorkspace = (
 
 export const unregisterWorkspace = (): void => {
   workspace = undefined
+}
+
+export const requireWorkspace = (): NotebookWorkspaceController => {
+  if (!workspace) {
+    throw new NotebookToolError(
+      "workspace_unavailable",
+      "Notebook workspace is not mounted.",
+    )
+  }
+  return workspace
 }
 
 export const getWorkspace = (): NotebookWorkspaceController | undefined =>
@@ -147,8 +163,18 @@ export type UserActionEvent =
       mode: CellMode
     }
   | { kind: "user_changed_grid_layout"; bufferId: number }
-  | { kind: "user_archived_notebook"; bufferId: number }
-  | { kind: "user_deleted_notebook"; bufferId: number }
+  | {
+      kind: "user_archived_tab"
+      bufferId: number
+      tabKind: TabKind
+      label: string
+    }
+  | {
+      kind: "user_deleted_tab"
+      bufferId: number
+      tabKind: TabKind
+      label: string
+    }
 
 type Listener = (evt: UserActionEvent) => void
 

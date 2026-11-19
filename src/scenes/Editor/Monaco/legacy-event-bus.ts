@@ -32,22 +32,31 @@ export const registerLegacyEventBusEvents = ({
   onRefresh,
   toggleRunning,
   getRunning,
+  isPreviewing,
+  openQueryInNewTab,
 }: {
   editor: editor.IStandaloneCodeEditor
   // Re-runs the given query (the result grid's), else the last executed one.
   onRefresh?: (query?: string) => void
   toggleRunning: (runningType?: RunningType) => void
   getRunning: () => RunningType
+  isPreviewing: () => boolean
+  openQueryInNewTab: (query: string) => Promise<boolean>
 }) => {
   eventBus.subscribe<{ query: string }>(
     EventType.MSG_QUERY_FIND_N_EXEC,
-    (payload) => {
-      if (payload) {
-        const text = `${payload.query};`
+    async (payload) => {
+      if (!payload) return
+      const text = `${payload.query};`
+      if (isPreviewing()) {
+        // A previewed closed tab is read-only: the append would be dropped and
+        // the run would execute the preview's own last statement instead.
+        if (!(await openQueryInNewTab(text))) return
+      } else {
         appendQuery(editor, text)
-        if (getRunning() !== RunningType.NONE) return
-        toggleRunning()
       }
+      if (getRunning() !== RunningType.NONE) return
+      toggleRunning()
     },
   )
 

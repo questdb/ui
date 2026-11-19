@@ -37,6 +37,7 @@ import { stringifyWithBigInts } from "../questdb/serialize"
 import {
   categoryFor,
   mutatesNotebook,
+  mutatesWorkspace,
   requiresFreshNotebookRead,
 } from "./tools"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
@@ -312,7 +313,12 @@ export const dispatchTool = async (
   if (!gate.granted) {
     return { content: gate.reason, is_error: true }
   }
-  if (toolContext && mutatesNotebook(toolName)) {
+  // Any user-visible side effect makes the turn unsafe to replay on a
+  // retryable provider error (see tryWithRetries' isReplaySafe).
+  if (
+    toolContext &&
+    (mutatesNotebook(toolName) || mutatesWorkspace(toolName))
+  ) {
     toolContext.notebookMutated = true
   }
   // Read-before-write gate, same predicate as the MCP surface: every
@@ -536,12 +542,34 @@ export const dispatchTool = async (
           }
         })
       }
-      case "delete_notebook": {
+      case "archive_tab": {
         const { buffer_id } = (input as { buffer_id: number }) || {}
-        setStatus(AIOperationStatus.DeletingNotebook)
-        return routeNotebookTool(() =>
-          modelToolsClient.deleteNotebook(buffer_id),
-        )
+        setStatus(AIOperationStatus.ClosingTab)
+        return routeNotebookTool(() => modelToolsClient.archiveTab(buffer_id))
+      }
+      case "restore_tab": {
+        const { buffer_id } = (input as { buffer_id: number }) || {}
+        setStatus(AIOperationStatus.RestoringTab)
+        return routeNotebookTool(() => modelToolsClient.restoreTab(buffer_id))
+      }
+      case "activate_tab": {
+        const { buffer_id } = (input as { buffer_id: number }) || {}
+        setStatus(AIOperationStatus.ActivatingTab)
+        return routeNotebookTool(() => modelToolsClient.activateTab(buffer_id))
+      }
+      case "rename_tab": {
+        const { buffer_id, label } =
+          (input as { buffer_id: number; label: string }) || {}
+        setStatus(AIOperationStatus.RenamingTab)
+        return routeNotebookTool(async () => {
+          await modelToolsClient.renameTab(buffer_id, label)
+          return { buffer_id, label: label.trim() }
+        })
+      }
+      case "delete_tab": {
+        const { buffer_id } = (input as { buffer_id: number }) || {}
+        setStatus(AIOperationStatus.DeletingTab)
+        return routeNotebookTool(() => modelToolsClient.deleteTab(buffer_id))
       }
       case "list_cells": {
         const { buffer_id } = (input as { buffer_id: number }) || {}

@@ -70,7 +70,6 @@ const defaultConfig: LocalConfig = {
   editorLine: 10,
   editorSplitterBasis: 350,
   resultsSplitterBasis: 350,
-  exampleQueriesVisited: false,
   autoRefreshTables: true,
   autoRefreshQueryActivity: true,
   useNewGrid: true,
@@ -146,7 +145,6 @@ type ContextProps = {
   editorSplitterBasis: number
   resultsSplitterBasis: number
   updateSettings: (key: StoreKey, value: SettingsType) => void
-  exampleQueriesVisited: boolean
   autoRefreshTables: boolean
   autoRefreshQueryActivity: boolean
   useNewGrid: boolean
@@ -189,7 +187,6 @@ const defaultValues: ContextProps = {
   editorSplitterBasis: 350,
   resultsSplitterBasis: 350,
   updateSettings: (_key: StoreKey, _value: SettingsType) => undefined,
-  exampleQueriesVisited: false,
   autoRefreshTables: true,
   autoRefreshQueryActivity: true,
   useNewGrid: true,
@@ -230,10 +227,6 @@ export const LocalStorageProvider = ({
       getValue(StoreKey.RESULTS_SPLITTER_BASIS),
       defaultConfig.resultsSplitterBasis,
     ),
-  )
-
-  const [exampleQueriesVisited, setExampleQueriesVisited] = useState<boolean>(
-    getValue(StoreKey.EXAMPLE_QUERIES_VISITED) === "true",
   )
 
   const [autoRefreshTables, setAutoRefreshTables] = useState<boolean>(
@@ -359,9 +352,6 @@ export const LocalStorageProvider = ({
       case StoreKey.EDITOR_LINE:
         setEditorLine(parseInteger(value, defaultConfig.editorLine))
         break
-      case StoreKey.EXAMPLE_QUERIES_VISITED:
-        setExampleQueriesVisited(value === "true")
-        break
       case StoreKey.EDITOR_SPLITTER_BASIS:
         seteditorSplitterBasis(
           parseInteger(value, defaultConfig.editorSplitterBasis),
@@ -436,7 +426,6 @@ export const LocalStorageProvider = ({
       editorSplitterBasis,
       resultsSplitterBasis,
       updateSettings,
-      exampleQueriesVisited,
       autoRefreshTables,
       autoRefreshQueryActivity,
       useNewGrid,
@@ -458,7 +447,6 @@ export const LocalStorageProvider = ({
       editorSplitterBasis,
       resultsSplitterBasis,
       updateSettings,
-      exampleQueriesVisited,
       autoRefreshTables,
       autoRefreshQueryActivity,
       useNewGrid,

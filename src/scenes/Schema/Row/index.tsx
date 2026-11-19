@@ -51,7 +51,7 @@ import {
 } from "../../../components"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
-import { color, copyToClipboard } from "../../../utils"
+import { color, copyToClipboard, ctrlCmd } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
 import { Tooltip } from "../../../components/Tooltip"
@@ -66,7 +66,12 @@ import {
   VIEWS_GROUP_KEY,
 } from "../localStorageUtils"
 import { TreeNavigationOptions } from "../VirtualTables"
-import { CaretRightIcon, ClockIcon, InfoIcon } from "@phosphor-icons/react"
+import {
+  CaretRightIcon,
+  ClockIcon,
+  InfoIcon,
+  PlayIcon,
+} from "@phosphor-icons/react"
 
 export type TreeNodeKind =
   | "column"
@@ -97,6 +102,8 @@ type Props = Readonly<{
   expanded?: boolean
   onExpandCollapse: () => void | Promise<void>
   onOpenDetailsDrawer?: () => void
+  onQuery?: () => void
+  queryDisabled?: boolean
   navigateInTree: (options: TreeNavigationOptions) => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
@@ -178,7 +185,7 @@ const Wrapper = styled.div<{
   ${({ $viewDetailsButton }) =>
     $viewDetailsButton &&
     `
-    padding-right: 3rem;
+    padding-right: 6.4rem;
   `}
 
   ${({ $isPulsing, theme }) =>
@@ -199,6 +206,11 @@ const DetailsDrawerButton = styled(Button).attrs({ variant: "ghost" })`
   &&:active:not(:disabled):not([aria-disabled="true"]) {
     filter: none;
   }
+`
+
+// Sits left of the info button; same hover reveal (`.table-menu-button`).
+const QueryButton = styled(DetailsDrawerButton)`
+  right: 4.2rem;
 `
 
 const StyledTitle = styled(Title)`
@@ -422,6 +434,8 @@ const Row = ({
   walEnabled,
   onExpandCollapse,
   onOpenDetailsDrawer,
+  onQuery,
+  queryDisabled,
   navigateInTree,
   "data-hook": dataHook,
   isLoading,
@@ -545,6 +559,14 @@ const Row = ({
       onDoubleClick={handleExpandCollapse}
       onClick={handleClick}
       onKeyDown={(e) => {
+        // Enter/Space on the focused Query button activate it natively
+        if (
+          (e.key === "Enter" || e.key === " ") &&
+          e.target instanceof Element &&
+          e.target.closest('[data-hook="table-query-button"]')
+        ) {
+          return
+        }
         e.preventDefault()
 
         if (
@@ -577,7 +599,12 @@ const Row = ({
         }
 
         if (e.key === "Enter") {
-          onOpenDetailsDrawer?.()
+          // Ctrl/Cmd+Enter is the keyboard path to the Query button
+          if ((e.metaKey || e.ctrlKey) && onQuery) {
+            if (!queryDisabled) onQuery()
+          } else {
+            onOpenDetailsDrawer?.()
+          }
         }
 
         const shouldGoToParent =
@@ -714,6 +741,35 @@ const Row = ({
           )}
         </FlexRow>
       </Box>
+      {!selectOpen && onQuery && (
+        <Tooltip
+          content={`Query in a notebook (${ctrlCmd}+Enter)`}
+          placement="bottom"
+        >
+          <QueryButton
+            aria-label={`Query ${name}`}
+            aria-keyshortcuts="Control+Enter Meta+Enter"
+            size="sm"
+            className="table-menu-button"
+            data-hook="table-query-button"
+            disabled={queryDisabled}
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation()
+              onQuery()
+            }}
+            onDoubleClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <PlayIcon
+              size={16}
+              color={
+                queryDisabled
+                  ? theme.color.contentDisabled
+                  : theme.color.statusInfo
+              }
+            />
+          </QueryButton>
+        </Tooltip>
+      )}
       {!selectOpen && onOpenDetailsDrawer && (
         <DetailsDrawerButton
           aria-label="Open table details"

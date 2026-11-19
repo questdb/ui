@@ -19,7 +19,6 @@ const Root = styled(Box).attrs({
   alignItems: "center",
 })`
   width: 100%;
-  padding-right: 1rem;
   min-width: 14rem;
 `
 
