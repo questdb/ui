@@ -333,6 +333,42 @@ const boxRoom = (type: string, part: Box): BoxPart["room"] => {
   }
 }
 
+// Grids contain their axis labels, but not series labels drawn past the plot:
+// values at the end of horizontal bars, above the tallest bar, beside the last
+// point. Those get room, estimated from the values' length.
+const CARTESIAN_LABELLED = new Set([
+  "bar",
+  "pictorialBar",
+  "line",
+  "scatter",
+  "effectScatter",
+])
+
+const labelRoomAroundPlot = (option: Box): BoxPart["room"] => {
+  const room = { ...noRoom }
+  for (const series of list(option.series)) {
+    if (
+      typeof series.type !== "string" ||
+      !CARTESIAN_LABELLED.has(series.type) ||
+      (onOtherSystem(series) && series.coordinateSystem !== "cartesian2d")
+    )
+      continue
+    const label = isRecord(series.label) ? series.label : {}
+    if (label.show !== true) continue
+    const position = typeof label.position === "string" ? label.position : "top"
+    const longest = Math.max(
+      ...(Array.isArray(series.data) ? series.data : []).map((d) =>
+        textWidth(isRecord(d) ? d.value : Array.isArray(d) ? undefined : d),
+      ),
+      5 * CHAR_PX,
+    )
+    if (position === "right") room.right = Math.max(room.right, longest + 8)
+    else if (position === "left") room.left = Math.max(room.left, longest + 8)
+    else if (position === "top") room.top = Math.max(room.top, 16)
+  }
+  return room
+}
+
 const BOX_COMPONENTS = ["calendar", "geo", "parallel", "singleAxis", "matrix"]
 const BOX_SERIES = new Set([
   "funnel",
@@ -447,9 +483,12 @@ const collectParts = (option: Box, size: Size): Part[] => {
     })
   }
 
+  const plotRoom = labelRoomAroundPlot(option)
   for (const grid of list(option.grid)) {
     if (onOtherSystem(grid) || grid.show === false) continue
     boxPart(grid, "grid", true)
+    const part = parts[parts.length - 1] as BoxPart
+    part.room = plotRoom
   }
   for (const key of BOX_COMPONENTS)
     for (const part of list(option[key]))

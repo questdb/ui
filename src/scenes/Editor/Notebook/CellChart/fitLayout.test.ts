@@ -178,4 +178,25 @@ describe("fitLayout", () => {
       preserveAspect: "contain",
     })
   })
+
+  it("leaves room for values written at the end of horizontal bars", () => {
+    // Given
+    const option = {
+      xAxis: { type: "value" },
+      yAxis: { type: "category" },
+      series: [
+        {
+          type: "bar",
+          label: { show: true, position: "right" },
+          data: [1234567],
+        },
+      ],
+    }
+
+    // When
+    const fitted = fitLayout<object>(option, SIZE) as { grid: unknown }
+
+    // Then
+    expect(first(fitted.grid).right).toBeGreaterThan(CHART_PADDING.right + 40)
+  })
 })
