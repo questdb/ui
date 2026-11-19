@@ -262,14 +262,25 @@ describe("opening a monitoring dashboard", () => {
     expect(new Set(ids).size).toBe(4)
   })
 
-  it("reuses the dashboard for a re-created table and ignores name case", async () => {
+  it("reuses the dashboard for a re-created table with the same name", async () => {
     const first = await openMonitoringDashboard(request, add)
-    const again = await openMonitoringDashboard(
+    const again = await openMonitoringDashboard(request, add)
+    expect(again?.outcome).toBe("reused")
+    expect(again?.buffer.id).toBe(first?.buffer.id)
+  })
+
+  it("opens a new dashboard for a table re-created under another case", async () => {
+    const first = await openMonitoringDashboard(request, add)
+    const recreated = await openMonitoringDashboard(
       { ...request, target: { ...request.target, name: "TRADES" } },
       add,
     )
-    expect(again?.outcome).toBe("reused")
-    expect(again?.buffer.id).toBe(first?.buffer.id)
+    expect(recreated?.outcome).toBe("created")
+    expect(recreated?.buffer.id).not.toBe(first?.buffer.id)
+    const sql = recreated!.buffer
+      .notebookViewState!.cells.filter((c) => c.type !== "markdown")
+      .map((c) => c.value)
+    expect(sql.every((value) => value.includes("'TRADES'"))).toBe(true)
   })
 
   it("opens a new dashboard after a rename, whose SQL targets the new name", async () => {

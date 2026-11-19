@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   openDashboard: vi.fn(),
   getById: vi.fn(),
   error: vi.fn(),
+  info: vi.fn(),
 }))
 vi.mock("../providers/EditorProvider", () => ({
   useEditor: () => mocks.editor,
@@ -32,7 +33,9 @@ vi.mock("../store/buffers", () => ({
   bufferStore: { getById: mocks.getById },
 }))
 vi.mock("../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
-vi.mock("../components/Toast", () => ({ toast: { error: mocks.error } }))
+vi.mock("../components/Toast", () => ({
+  toast: { error: mocks.error, info: mocks.info },
+}))
 
 const request: MonitoringRequest = {
   target: { instanceKey: "instance", kind: "table", name: "trades" },
@@ -365,5 +368,46 @@ describe("monitoring telemetry", () => {
       expect.anything(),
     )
     expect(mocks.editor.setActiveBuffer).not.toHaveBeenCalled()
+  })
+
+  it("leaves the dashboard in the tab bar when a script started during its first runs", async () => {
+    const opening = deferred<MonitoringOpenResult>()
+    mocks.openDashboard.mockReset()
+    mocks.openDashboard.mockReturnValueOnce(opening.promise)
+    let hook!: ReturnType<typeof useMonitoringDashboard>
+    const Harness = () => {
+      hook = useMonitoringDashboard()
+      return null
+    }
+    act(() => {
+      renderer = create(<Harness />)
+    })
+    const onOpened = vi.fn()
+    let pending!: Promise<void>
+    act(() => {
+      pending = hook.open(request, () => true, onOpened)
+    })
+    // The user starts a script while the first runs are in flight.
+    mocks.editor.tabsDisabled = true
+    try {
+      act(() => renderer?.update(<Harness />))
+      await act(async () => {
+        opening.resolve({ buffer, outcome: "created" })
+        await pending
+      })
+      expect(mocks.editor.setActiveBuffer).not.toHaveBeenCalled()
+      expect(onOpened).not.toHaveBeenCalled()
+      expect(mocks.info).toHaveBeenCalledTimes(1)
+      expect(trackEvent).toHaveBeenCalledWith(
+        ConsoleEvent.MONITORING_DASHBOARD_FAILED,
+        expect.objectContaining({
+          stage: "activate",
+          reason: "script_running",
+        }),
+      )
+      expect(hook.busy).toBe(false)
+    } finally {
+      mocks.editor.tabsDisabled = false
+    }
   })
 })

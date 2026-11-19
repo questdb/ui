@@ -122,7 +122,10 @@ export const openMonitoringDashboard = (
         buffer.monitoring &&
         !buffer.archived &&
         !buffer.isTemporary &&
-        monitoringTargetKey(buffer.monitoring.target) === key,
+        monitoringTargetKey(buffer.monitoring.target) === key &&
+        // The key ignores case, but the dashboard SQL matches the name exactly:
+        // a table re-created under another case needs its own dashboard.
+        buffer.monitoring.target.name === request.target.name,
     )
     if (existing) {
       const pending = withoutFirstRun(existing.notebookViewState?.cells ?? [])

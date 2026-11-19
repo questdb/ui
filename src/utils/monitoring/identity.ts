@@ -5,6 +5,8 @@ import type { MonitoringTarget } from "./types"
 
 export const MONITORING_TEMPLATE_VERSION = 1
 
-// QuestDB table names are case-insensitive.
+// QuestDB table names are unique regardless of case, so opens of one table
+// under any case share a lock. Reuse also requires the exact name: the
+// dashboard SQL matches it case-sensitively.
 export const monitoringTargetKey = (target: MonitoringTarget): string =>
   JSON.stringify([target.instanceKey, target.kind, target.name.toLowerCase()])

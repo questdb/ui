@@ -45,6 +45,11 @@ export const useMonitoringDashboard = () => {
   const { addBuffer, setActiveBuffer, tabsDisabled } = useEditor()
   const [busy, setBusy] = useState(false)
   const inFlight = useRef(false)
+  // Read after the first runs, seconds after the click: a script started
+  // meanwhile owns the tabs, and activating the dashboard would unmount its
+  // editor and abort the statement in flight.
+  const tabsDisabledRef = useRef(tabsDisabled)
+  tabsDisabledRef.current = tabsDisabled
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -58,7 +63,7 @@ export const useMonitoringDashboard = () => {
     isCurrentTarget: () => boolean,
     onOpened: () => void,
   ) => {
-    if (inFlight.current || tabsDisabled) return
+    if (inFlight.current || tabsDisabledRef.current) return
     // Repeated clicks are ignored for the whole open, but the button shows
     // progress only while first queries run (a new dashboard, or an open one
     // whose first runs never landed): activating an open one is immediate and
@@ -120,6 +125,15 @@ export const useMonitoringDashboard = () => {
         if (!session.isCurrent()) return
         if (!current || current.archived) {
           trackFailure(current ? "archived" : "deleted")
+          return
+        }
+        // The dashboard stays in the tab bar for the user to open once the
+        // script is done.
+        if (tabsDisabledRef.current) {
+          trackFailure("script_running")
+          toast.info(
+            `${current.label} is ready. Open its tab once the script finishes.`,
+          )
           return
         }
         await setActiveBuffer(current, { throwOnError: true })

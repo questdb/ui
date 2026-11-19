@@ -273,10 +273,15 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
   useEffect(() => {
     if (!open || !isDrawer) return
     // An overlay over the cell: claims Escape in the capture phase, unless a
-    // menu or popover inside it is open and closes first.
+    // menu or popover inside it is open and closes first, or a modal dialog
+    // is open on top. A Radix modal dialog hides the rest of the page from
+    // assistive technology (aria-hidden), the drawer included; some dialogs
+    // close on Escape even when it is claimed, so claiming it here would close
+    // both. Non-modal dialogs are not detected this way.
     const onKey = (e: KeyboardEvent) => {
       if (!isEscape(e) || isEscapeClaimed(e)) return
       if (isRadixPopperOpen()) return
+      if (panelRef.current?.closest('[aria-hidden="true"]')) return
       claimEscape(e)
       onDismiss("escape")
     }

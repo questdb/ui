@@ -168,7 +168,12 @@ describe("drawer monitoring dashboard action", () => {
     opener.open.mockClear()
     await mountDrawer("trades_mv", "matview")
     await click("monitoring-dashboard")
-    expect(hook("monitoring-dashboard")).toBeDisabled()
+    // Locked without native disabled, which would drop the keyboard focus.
+    expect(hook("monitoring-dashboard")).not.toBeDisabled()
+    expect(hook("monitoring-dashboard")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    )
     expect(hook("monitoring-dashboard")).toHaveAttribute("aria-busy", "true")
     await click("monitoring-dashboard")
     await pending.respond(Response.json(raw([{ id: "0x1", enabled: true }])))
@@ -256,13 +261,22 @@ describe("drawer monitoring dashboard action", () => {
     [{ busy: true, unavailable: false }, "true"],
     [{ busy: false, unavailable: true }, "false"],
   ])(
-    "disables the action for %o and reports aria-busy=%s",
+    "locks the action for %o and reports aria-busy=%s",
     async (state, ariaBusy) => {
       catalog()
       Object.assign(opener, state)
       try {
         await mountDrawer()
-        expect(hook("monitoring-dashboard")).toBeDisabled()
+        // Busy is locked with aria-disabled; unavailable is natively disabled.
+        if (state.busy) {
+          expect(hook("monitoring-dashboard")).not.toBeDisabled()
+          expect(hook("monitoring-dashboard")).toHaveAttribute(
+            "aria-disabled",
+            "true",
+          )
+        } else {
+          expect(hook("monitoring-dashboard")).toBeDisabled()
+        }
         expect(hook("monitoring-dashboard")).toHaveAttribute(
           "aria-busy",
           ariaBusy,

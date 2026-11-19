@@ -43,10 +43,16 @@ const DashboardAction = styled(Button)`
   &:disabled ${NotebookGlyph}, &:disabled ${Direction} {
     color: ${({ theme }) => theme.color.contentDisabled};
   }
+
+  &[aria-disabled="true"] ${NotebookGlyph} {
+    color: ${({ theme }) => theme.color.contentDisabled};
+  }
 `
 
 // `busy` is an in-progress open; `disabled` covers reasons that are not
 // progress (a script owns the tabs, table metadata is unavailable).
+// A busy button is locked with aria-disabled, not disabled: a native disabled
+// control drops the keyboard focus of the user who just pressed it.
 export const MonitoringDashboardButton = ({
   onClick,
   busy,
@@ -59,9 +65,10 @@ export const MonitoringDashboardButton = ({
   <Action>
     <DashboardAction
       variant="secondary"
-      disabled={busy || disabled}
+      disabled={disabled && !busy}
+      aria-disabled={busy || undefined}
       aria-busy={busy}
-      onClick={onClick}
+      onClick={busy ? undefined : onClick}
       data-hook="table-details-monitoring-dashboard"
     >
       <NotebookGlyph size={16} aria-hidden="true" />
