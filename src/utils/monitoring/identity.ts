@@ -4,8 +4,6 @@ import type { MonitoringKind, MonitoringTarget } from "./types"
 // Kept apart from the templates (dashboard.ts), which load only when a
 // dashboard is created.
 
-export const MONITORING_TEMPLATE_VERSION = 1
-
 const TEMPLATE_PREFIX = "monitoring:"
 
 // A dashboard's `templateId` names its template, not its table: it is sent

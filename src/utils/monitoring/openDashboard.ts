@@ -8,7 +8,6 @@ import {
   isMonitoringDashboard,
   monitoringTargetKey,
   monitoringTemplateId,
-  MONITORING_TEMPLATE_VERSION,
 } from "./identity"
 import type { MonitoringTarget, MonitoringRefreshSchedule } from "./types"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
@@ -127,10 +126,7 @@ export const openMonitoringDashboard = (
         label,
         notebookViewState,
         templateId,
-        monitoring: {
-          target: request.target,
-          templateVersion: MONITORING_TEMPLATE_VERSION,
-        },
+        monitoring: { target: request.target },
       },
       { activate: false, signal: abort.signal },
     )

@@ -63,12 +63,6 @@ const markdownCodeSpan = (text: string): string => {
   return `${fence}${pad}${text}${pad}${fence}`
 }
 
-export {
-  MONITORING_TEMPLATE_VERSION,
-  monitoringTargetKey,
-  monitoringTemplateId,
-} from "./identity"
-
 // Monitoring dashboards exist only for WAL tables and materialized views
 // (always WAL): their history comes from WAL telemetry.
 export const buildMonitoringDashboard = ({

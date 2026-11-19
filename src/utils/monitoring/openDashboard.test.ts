@@ -251,7 +251,6 @@ describe("opening a monitoring dashboard", () => {
     expect(stored?.templateId).toBe("monitoring:table")
     expect(stored?.monitoring).toEqual({
       target: { kind: "table", name: "trades" },
-      templateVersion: 1,
     })
   })
 

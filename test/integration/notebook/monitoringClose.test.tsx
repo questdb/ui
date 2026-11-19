@@ -16,10 +16,8 @@ import {
 import { db } from "../../../src/store/db"
 import { makeBuffer } from "../../../src/store/buffers"
 import type { NotebookViewState } from "../../../src/store/notebook"
-import {
-  buildMonitoringDashboard,
-  monitoringTemplateId,
-} from "../../../src/utils/monitoring/dashboard"
+import { buildMonitoringDashboard } from "../../../src/utils/monitoring/dashboard"
+import { monitoringTemplateId } from "../../../src/utils/monitoring/identity"
 import {
   beginNotebookMount,
   getController,
@@ -109,7 +107,6 @@ beforeEach(async () => {
         templateId: monitoringTemplateId("table"),
         monitoring: {
           target: { kind: "table", name: "trades" },
-          templateVersion: 1,
         },
       }),
     },

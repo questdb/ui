@@ -1103,7 +1103,10 @@ export const buildAppliedCells = (
         resultsCleared.push(existing.id)
       }
       if (isDraw) next.mode = "draw"
-      else delete next.mode
+      else {
+        delete next.mode
+        delete next.deferInitialDraw
+      }
       if ((existing.mode === "draw") !== isDraw) {
         Object.assign(next, cellModeChangePatch(next, resolvedMode ?? "run"))
       }

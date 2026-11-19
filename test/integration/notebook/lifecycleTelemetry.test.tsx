@@ -14,10 +14,8 @@ import { db } from "../../../src/store/db"
 import { bufferStore, makeBuffer } from "../../../src/store/buffers"
 import { trackEvent } from "../../../src/modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../src/modules/ConsoleEventTracker/events"
-import {
-  buildMonitoringDashboard,
-  monitoringTemplateId,
-} from "../../../src/utils/monitoring/dashboard"
+import { buildMonitoringDashboard } from "../../../src/utils/monitoring/dashboard"
+import { monitoringTemplateId } from "../../../src/utils/monitoring/identity"
 
 vi.mock("../../../src/providers/AIConversationProvider", () => ({
   useAIConversationActions: () => ({ openNotebookChat: () => {} }),
@@ -178,7 +176,6 @@ describe("UI notebook lifecycle telemetry", () => {
       templateId: monitoringTemplateId("table"),
       monitoring: {
         target: { kind: "table", name: "trades" },
-        templateVersion: 1,
       },
     })
 

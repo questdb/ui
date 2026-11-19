@@ -44,23 +44,10 @@ export type SnapshotRefreshState = Pick<NotebookResultSnapshot, "refreshErrors">
 
 export const MAX_PERSISTED_PASSIVE_NOTEBOOKS = 10
 
-// Notebooks whose snapshots were deleted with them. A late write from the
-// unmounting provider (a pending chart frame flushed on teardown) would
-// otherwise recreate rows that nothing reads or deletes, and that take a slot
-// from a real notebook in pruneToRecentNotebooks.
-const deletedNotebooks = new Set<number>()
-
 export const saveCellSnapshot = async (
   snapshot: NotebookResultSnapshot,
 ): Promise<void> => {
-  if (!deletedNotebooks.has(snapshot.bufferId)) {
-    await db.notebook_results.put(snapshot)
-    return
-  }
-  await db.transaction("rw", db.buffers, db.notebook_results, async () => {
-    if (await db.buffers.get(snapshot.bufferId))
-      await db.notebook_results.put(snapshot)
-  })
+  await db.notebook_results.put(snapshot)
 }
 
 // Records the result tab the user switched to, so a release/re-hydrate cycle
@@ -97,12 +84,9 @@ export const deleteCellSnapshot = async (
   await db.notebook_results.delete([bufferId, cellId])
 }
 
-// For a deleted notebook: later saves for this id are dropped unless a
-// buffer with the id exists again.
 export const deleteNotebookSnapshots = async (
   bufferId: number,
 ): Promise<void> => {
-  deletedNotebooks.add(bufferId)
   await db.notebook_results.where("bufferId").equals(bufferId).delete()
 }
 
@@ -169,14 +153,31 @@ export const pruneToRecentNotebooks = async (
   try {
     const bufferIds = await db.notebook_results.orderBy("bufferId").uniqueKeys()
     if (bufferIds.length <= keep) return
-    await db.transaction("rw", db.notebook_results, async () => {
+    await db.transaction("rw", db.buffers, db.notebook_results, async () => {
+      // Snapshots of a deleted notebook take no slot: a late write from its
+      // unmounting provider (a chart frame flushed on teardown) can land after
+      // the delete, and nothing else would ever remove it.
+      const existing = new Set<unknown>(
+        await db.buffers.toCollection().primaryKeys(),
+      )
+      const orphans = new Set(
+        (bufferIds as number[]).filter(
+          (bufferId) => !existing.has(bufferId) && !pinCounts.has(bufferId),
+        ),
+      )
+      if (orphans.size > 0)
+        await db.notebook_results
+          .where("bufferId")
+          .anyOf([...orphans])
+          .delete()
       const latestByBuffer = new Map<number, number>()
       await db.notebook_results
         .orderBy("savedAt")
         .eachKey((savedAt, { primaryKey }) => {
           // Ascending key order: the last write per buffer is its latest savedAt.
           const [bufferId] = primaryKey
-          latestByBuffer.set(bufferId, savedAt as number)
+          if (!orphans.has(bufferId))
+            latestByBuffer.set(bufferId, savedAt as number)
         })
       if (latestByBuffer.size <= keep) return
       const staleBuffers = Array.from(latestByBuffer.entries())

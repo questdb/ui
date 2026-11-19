@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest"
 import {
   buildMonitoringDashboard,
   MONITORING_MAX_WINDOW_MINUTES,
-  monitoringTemplateId,
   monitoringWindowMinutes,
 } from "./dashboard"
+import { monitoringTemplateId } from "./identity"
 import { examplePersonalizationReason } from "../examples/examplePersonalization"
 import { NOTEBOOK_ROW_CAP } from "../../scenes/Editor/Notebook/notebookUtils"
 import { makeBuffer } from "../../store/buffers"
@@ -320,7 +320,6 @@ describe("monitoring dashboard customization", () => {
     templateId: monitoringTemplateId("table"),
     monitoring: {
       target: { kind: "table", name: "trades" },
-      templateVersion: 1,
     },
   })
   const customizes = (edit: Edit) => {

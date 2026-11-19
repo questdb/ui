@@ -708,6 +708,19 @@ describe("setCellModeTransition", () => {
     expect(stillDraw.cancelRuns).toBeUndefined()
   })
 
+  it("ends a transferred chart's deferred first draw when it leaves draw mode", () => {
+    // Given a chart transferred from the editor, still waiting to draw
+    const parts = partsOf([
+      cell("a", "select 1", { mode: "draw", deferInitialDraw: true }),
+    ])
+    // When it switches to run and back to draw
+    const toRun = setCellModeTransition(parts, BUFFER_ID, "a", "run")
+    const back = setCellModeTransition(toRun.parts, BUFFER_ID, "a", "draw")
+    // Then it draws like any chart instead of waiting again
+    expect(toRun.parts.cells[0].deferInitialDraw).toBeUndefined()
+    expect(back.parts.cells[0].deferInitialDraw).toBeUndefined()
+  })
+
   it.each(["draw", "run"] as const)(
     "rejects mode %s on a markdown cell with a typed error",
     (mode) => {

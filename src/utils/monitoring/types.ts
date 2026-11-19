@@ -19,10 +19,10 @@ export type MonitoringTarget = {
 // The table a dashboard monitors. The notebook is an unedited dashboard only
 // while it also has the dashboard's `templateId` (identity.ts), as an example
 // dashboard is: the first authored edit, a rename or an archive removes that
-// for good, and opening the dashboard again creates a fresh one.
+// for good, and opening the dashboard again creates a fresh one. Without the
+// template id this is never read.
 export type MonitoringSource = {
   target: MonitoringTarget
-  templateVersion: number
 }
 
 // Values a template inserts once, as plain interpolation: nothing rescans the

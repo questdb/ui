@@ -81,6 +81,12 @@ const cell = (
   overrides: Partial<NotebookCell> = {},
 ): NotebookCell => ({ id, position: 0, value, ...overrides })
 
+// Snapshot rows of notebooks that exist; pruning drops those of deleted ones.
+const seedOtherNotebooks = (ids: number[]) =>
+  db.buffers.bulkPut(
+    ids.map((id) => ({ id, label: `nb ${id}`, value: "", position: id })),
+  )
+
 const seedNotebook = (
   view: NotebookViewState,
   opts: { archived?: boolean } = {},
@@ -1987,6 +1993,7 @@ describe("createDexieNotebookController — runCell", () => {
 
     // Then the archived buffer is no longer pinned and prunes like any passive
     // notebook once newer ones exceed the budget
+    await seedOtherNotebooks([2, 3])
     await saveCellSnapshot({
       bufferId: 2,
       cellId: "a",
@@ -2254,6 +2261,7 @@ describe("createDexieNotebookController — field preservation", () => {
 describe("createDexieNotebookController — persisted snapshot cap", () => {
   it("a headless run commit evicts results beyond the 10 most recent notebooks", async () => {
     // Given 11 other notebooks already holding persisted results
+    await seedOtherNotebooks(Array.from({ length: 11 }, (_, i) => 101 + i))
     for (let bufferId = 101; bufferId <= 111; bufferId++) {
       await saveCellSnapshot({
         bufferId,
