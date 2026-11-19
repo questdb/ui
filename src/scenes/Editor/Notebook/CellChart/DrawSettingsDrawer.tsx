@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled from "styled-components"
 import { XCircleIcon } from "@phosphor-icons/react"
 import { Text } from "../../../../components"
@@ -24,6 +31,18 @@ import { CustomOptionSettings } from "./CustomOptionSettings"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
 import { columnsAndSamplesOf } from "../CellFormats/formatSummary"
+import {
+  InteractionsEditor,
+  interactionErrors,
+  newVariablesInUse,
+  serverInteractionErrors,
+  type VariableSlot,
+} from "../interactions/InteractionsEditor"
+import { QuestContext } from "../../../../providers/QuestProvider"
+import { useNotebookState } from "../NotebookProvider"
+import { normalizeVariables } from "../declareUtils"
+import { classifyColumn } from "./inferChartConfig"
+import type { NotebookVariable } from "../../../../store/notebook"
 import {
   DRAW_KINDS,
   draftOf,
@@ -55,11 +74,12 @@ const SaveError = styled.div`
   }
 `
 
-type Section = "chart" | "formats"
+type Section = "chart" | "formats" | "interactions"
 
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "chart", label: "Chart" },
   { id: "formats", label: "Formats" },
+  { id: "interactions", label: "Interactions" },
 ]
 
 const KIND_HINTS: Record<DrawKind, string> = {
@@ -81,7 +101,7 @@ type Props = {
   saved: DrawSettings
   effective: ChartConfig
   statements: (StatementRows | null)[]
-  onSave: (next: DrawSettings) => void
+  onSave: (next: DrawSettings, newVariables: NotebookVariable[]) => void
   telemetry?: ChartSettingsTelemetry
 }
 
@@ -106,6 +126,18 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   const [saveAttempted, setSaveAttempted] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [section, setSection] = useState<Section>("chart")
+  // After a save attempt, interaction problems show as the user fixes them.
+  const [interactionsChecked, setInteractionsChecked] = useState(false)
+  const [serverProblems, setServerProblems] = useState<Partial<
+    Record<VariableSlot, string>
+  > | null>(null)
+  const [committing, setCommitting] = useState(false)
+  const { quest } = useContext(QuestContext)
+  const { settings } = useNotebookState()
+  const variables = useMemo(
+    () => normalizeVariables(settings.variables),
+    [settings.variables],
+  )
   const { columns, samples } = useMemo(
     () => columnsAndSamplesOf(statements),
     [statements],
@@ -130,6 +162,8 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     setActiveIndex(tabs[0]?.index ?? 0)
     setSaveAttempted(false)
     setSection("chart")
+    setInteractionsChecked(false)
+    setServerProblems(null)
   }, [open, saved, effective, tabs, updateDraft])
 
   const dismiss = useCallback(
@@ -139,6 +173,24 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     },
     [telemetry, onClose],
   )
+
+  // A drag sets a time window on a preset chart over time.
+  const anchorX = tabs[0]?.columns.find((c) => c.name === draft.chart.xColumn)
+  const brushAvailability =
+    draft.kind !== "chart"
+      ? {
+          available: false as const,
+          reason:
+            "Dragging works on preset charts; components and custom options take clicks.",
+        }
+      : !anchorX ||
+          classifyColumn(anchorX) !== "temporal" ||
+          draft.chart.queries[tabs[0]?.index ?? 0]?.type === "pie"
+        ? {
+            available: false as const,
+            reason: "Dragging needs a time x-axis.",
+          }
+        : { available: true as const }
 
   const switchKind = (kind: DrawKind) => {
     if (kind === draft.kind) return
@@ -154,7 +206,25 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     })
   }
 
-  const commit = () => {
+  const interactionProblems = interactionsChecked
+    ? (interactionErrors(draft, variables) ?? serverProblems)
+    : null
+
+  // A save waiting on the database check goes on only while the drawer is
+  // open, and with the draft as it is then.
+  const acceptsSaveRef = useRef(open)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  useEffect(() => {
+    acceptsSaveRef.current = open
+    return () => {
+      acceptsSaveRef.current = false
+    }
+  }, [open])
+
+  const commit = async (): Promise<void> => {
+    if (committing) return
+    const draft = draftRef.current
     if (draft.kind === "chart") {
       const badIdx = draft.chart.queries.findIndex(candlestickMissingOhlc)
       if (badIdx >= 0) {
@@ -162,6 +232,26 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         setSaveAttempted(true)
         setActiveIndex(badIdx)
         setSection("chart")
+        return
+      }
+    }
+    setInteractionsChecked(true)
+    if (interactionErrors(draft, variables)) {
+      setSection("interactions")
+      return
+    }
+    // New variables join every query of the notebook: the server checks them.
+    if (newVariablesInUse(draft).length > 0) {
+      setCommitting(true)
+      const server = await serverInteractionErrors(draft, variables, (q) =>
+        quest.validateQuery(q),
+      ).finally(() => setCommitting(false))
+      if (!acceptsSaveRef.current) return
+      // Edited while the database checked: check the edits instead.
+      if (draftRef.current !== draft) return commit()
+      setServerProblems(server)
+      if (server) {
+        setSection("interactions")
         return
       }
     }
@@ -175,7 +265,7 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
       ...savePayloadOf(draft.chart, tabs),
       kind: draft.kind,
     })
-    onSave(result.settings)
+    onSave(result.settings, newVariablesInUse(draft))
     onClose()
   }
 
@@ -190,7 +280,8 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         draft.kind === "custom" && section === "chart" ? "52rem" : undefined
       }
       onDismiss={dismiss}
-      onCommit={commit}
+      onCommit={() => void commit()}
+      committing={committing}
       footerNote={
         saveError && (
           <SaveError role="alert">
@@ -208,6 +299,21 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         onChange={setSection}
         ariaLabel="Chart settings sections"
       />
+
+      {section === "interactions" && (
+        <InteractionsEditor
+          draft={draft}
+          onChange={({ interactions, created }) => {
+            setServerProblems(null)
+            updateDraft({ ...draft, interactions, created })
+          }}
+          variables={variables}
+          columns={columns}
+          clickTarget="item"
+          brush={brushAvailability}
+          errors={interactionProblems}
+        />
+      )}
 
       {section === "formats" && (
         <ColumnFormatsEditor

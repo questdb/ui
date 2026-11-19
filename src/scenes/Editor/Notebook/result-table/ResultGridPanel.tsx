@@ -51,6 +51,8 @@ import type { ResultGridRow } from "../../../../components/ResultGrid"
 import type { CellHighlight } from "../../../../components/ResultGrid/highlight/types"
 import { sqlLiteral } from "../interactions/chartInteractions"
 import { useLiveRows } from "./liveRows"
+import { withNewVariables } from "../interactions/InteractionsEditor"
+import { normalizeVariables } from "../declareUtils"
 import { identityColumnIndexes } from "../../../../components/ResultGrid/highlight/identityIndex"
 
 const SELECTED_ROW_HIGHLIGHT: CellHighlight = {
@@ -142,7 +144,8 @@ const ResultGridPanelInner: React.FC<Props> = ({
     viewportStore,
   })
   const { maxColumnWidth } = useLocalStorage()
-  const { setCellSettings, setVariableValues } = useNotebookActions()
+  const { setCellSettings, setVariableValues, updateSettings } =
+    useNotebookActions()
   const trendStore = useResultTrendStore()
   // What the grid drawer edits; compared field by field, so a remount
   // keeps an open drawer and a change made elsewhere closes it.
@@ -272,6 +275,8 @@ const ResultGridPanelInner: React.FC<Props> = ({
     highlight,
     formats: nextFormats,
     gridMode: nextGridMode,
+    interactions: nextInteractions,
+    newVariables,
   }: GridSettingsSave) => {
     const highlightChanged =
       JSON.stringify(highlight ?? null) !==
@@ -285,10 +290,18 @@ const ResultGridPanelInner: React.FC<Props> = ({
     else if (highlightChanged && (savedHighlightConfig?.rules.length ?? 0) > 0)
       void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
     signalUserEdit(bufferId)
+    if (newVariables.length > 0)
+      updateSettings({
+        variables: withNewVariables(
+          normalizeVariables(settings.variables),
+          newVariables,
+        ),
+      })
     setCellSettings(cellId, {
       highlightConfig: highlight ?? undefined,
       formats: nextFormats,
       gridMode: nextGridMode,
+      interactions: nextInteractions,
     })
     highlightDrawer.close()
   }
@@ -310,6 +323,10 @@ const ResultGridPanelInner: React.FC<Props> = ({
         focus: { section: "highlights" },
       }),
     [cellId],
+  )
+  const variables = useMemo(
+    () => normalizeVariables(settings.variables),
+    [settings.variables],
   )
   const samples = useMemo(
     () =>
@@ -396,6 +413,8 @@ const ResultGridPanelInner: React.FC<Props> = ({
         config={highlightConfig}
         formats={formats}
         gridMode={gridMode}
+        interactions={interactions}
+        variables={variables}
         samples={samples}
         focus={highlightDrawer.request?.focus}
         defaultIdentity={defaultIdentity}

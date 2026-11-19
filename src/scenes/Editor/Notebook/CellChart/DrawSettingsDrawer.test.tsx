@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Button } from "../../../../components/Button"
 import { DrawSettingsDrawer } from "./DrawSettingsDrawer"
+import { questClient } from "../../../../utils/questdb/queryClient"
 import type { DrawSettings } from "./drawSettings"
 import type { ChartConfig } from "./chartTypes"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
@@ -144,9 +145,12 @@ describe("draw settings drawer", () => {
 
     // Then
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
-    expect(onSave).toHaveBeenCalledWith({
-      chartConfig: { ...effective, visual: { type: "gauge" } },
-    })
+    expect(onSave).toHaveBeenCalledWith(
+      {
+        chartConfig: { ...effective, visual: { type: "gauge" } },
+      },
+      [],
+    )
   })
 
   it("draws a preset as a component", async () => {
@@ -164,9 +168,12 @@ describe("draw settings drawer", () => {
 
     // Then stat tiles are saved, the preset kept underneath
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
-    expect(onSave).toHaveBeenCalledWith({
-      chartConfig: { ...effective, visual: { type: "stat" } },
-    })
+    expect(onSave).toHaveBeenCalledWith(
+      {
+        chartConfig: { ...effective, visual: { type: "stat" } },
+      },
+      [],
+    )
   })
 
   it("starts a custom option from the chart and refuses to save broken JSON", async () => {
@@ -198,9 +205,12 @@ describe("draw settings drawer", () => {
 
     // Then the option is saved
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
-    expect(onSave).toHaveBeenCalledWith({
-      chartConfig: { ...effective, custom: { option: { series: [] } } },
-    })
+    expect(onSave).toHaveBeenCalledWith(
+      {
+        chartConfig: { ...effective, custom: { option: { series: [] } } },
+      },
+      [],
+    )
   })
 
   it("lists what the sanitizer will change in a custom option", async () => {
@@ -370,9 +380,115 @@ describe("draw settings drawer", () => {
 
     // Then the chart and its formats are saved together
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
-    expect(onSave).toHaveBeenCalledWith({
-      chartConfig: effective,
-      formats: { price: { decimals: 2 } },
+    expect(onSave).toHaveBeenCalledWith(
+      {
+        chartConfig: effective,
+        formats: { price: { decimals: 2 } },
+      },
+      [],
+    )
+  })
+
+  it("saves a click into a new variable, and sends the user back to fix an unfinished one", async () => {
+    // Given a preset chart
+    const onSave = vi.fn()
+    renderComponent(
+      <Fixture saved={{ chartConfig: effective }} onSave={onSave} />,
+    )
+    const drawer = await openDrawer()
+
+    // When the user turns clicks on without a variable and saves from Chart
+    await userEvent.click(
+      within(drawer).getByRole("tab", { name: "Interactions" }),
+    )
+    fireEvent.click(
+      within(drawer).getByRole("checkbox", { name: /A click sets/ }),
+    )
+    await userEvent.click(within(drawer).getByRole("tab", { name: "Chart" }))
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+
+    // Then nothing is saved and Interactions shows what is missing
+    expect(onSave).not.toHaveBeenCalled()
+    expect(within(drawer).getByRole("alert")).toHaveTextContent(
+      "Choose a variable.",
+    )
+
+    // When the user creates the variable, which the database accepts
+    const validate = vi
+      .spyOn(questClient, "validateQuery")
+      .mockResolvedValue(
+        {} as Awaited<ReturnType<typeof questClient.validateQuery>>,
+      )
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^Variable/ }),
+    )
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: "New variable…" }),
+    )
+    fireEvent.change(within(drawer).getByPlaceholderText("e.g. symbol"), {
+      target: { value: "symbol" },
     })
+    fireEvent.change(within(drawer).getByPlaceholderText("e.g. 'BTC'"), {
+      target: { value: "'BTC'" },
+    })
+    expect(within(drawer).queryByRole("alert")).toBeNull()
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+
+    // Then the variable is checked, and the click and the variable are saved
+    // together
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(validate).toHaveBeenCalledWith(
+      expect.stringContaining("@symbol := 'BTC'"),
+    )
+    expect(onSave).toHaveBeenCalledWith(
+      {
+        chartConfig: effective,
+        interactions: { click: { variable: "symbol" } },
+      },
+      [{ name: "symbol", value: "'BTC'" }],
+    )
+  })
+
+  it("does not save when the user cancels while the database checks a new variable", async () => {
+    // Given a click into a new variable, and a database that answers late
+    const onSave = vi.fn()
+    type Answer = Awaited<ReturnType<typeof questClient.validateQuery>>
+    let answer: (value: Answer) => void = () => undefined
+    vi.spyOn(questClient, "validateQuery").mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve
+      }),
+    )
+    renderComponent(
+      <Fixture saved={{ chartConfig: effective }} onSave={onSave} />,
+    )
+    const drawer = await openDrawer()
+    await userEvent.click(
+      within(drawer).getByRole("tab", { name: "Interactions" }),
+    )
+    fireEvent.click(
+      within(drawer).getByRole("checkbox", { name: /A click sets/ }),
+    )
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^Variable/ }),
+    )
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: "New variable…" }),
+    )
+    fireEvent.change(within(drawer).getByPlaceholderText("e.g. symbol"), {
+      target: { value: "symbol" },
+    })
+    fireEvent.change(within(drawer).getByPlaceholderText("e.g. 'BTC'"), {
+      target: { value: "'BTC'" },
+    })
+
+    // When the user saves, then cancels before the database answers
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+    fireEvent.click(within(drawer).getByRole("button", { name: "Cancel" }))
+    answer({} as Answer)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    // Then nothing is saved
+    expect(onSave).not.toHaveBeenCalled()
   })
 })

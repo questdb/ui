@@ -1,9 +1,13 @@
-import type { CellInteractions } from "../../../../store/notebook"
+import type {
+  CellInteractions,
+  NotebookVariable,
+} from "../../../../store/notebook"
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, QueryChart, VisualConfig } from "./chartTypes"
 import { classifyColumn } from "./inferChartConfig"
 import { tidyFormats } from "../CellFormats/formatSummary"
+import type { VariableSlot } from "../interactions/InteractionsEditor"
 
 // What the chart settings drawer edits: everything a draw cell shows, saved in
 // one update. A draw cell is drawn as one of three kinds: a preset chart, a
@@ -42,6 +46,8 @@ export type DrawDraft = {
   customJson: string
   formats?: ColumnFormats
   interactions?: CellInteractions
+  // Variables the Interactions section creates, by the slot using them.
+  created: Partial<Record<VariableSlot, NotebookVariable>>
 }
 
 /** The same saved settings: each field the same object as before. */
@@ -85,6 +91,7 @@ export const draftOf = (
     customJson: custom ? JSON.stringify(custom.option, null, 2) : "",
     formats: saved.formats,
     interactions: saved.interactions,
+    created: {},
   }
 }
 

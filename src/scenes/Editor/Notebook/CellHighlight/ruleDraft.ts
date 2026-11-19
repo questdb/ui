@@ -1,5 +1,10 @@
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
-import type { GridMode } from "../../../../store/notebook"
+import type {
+  CellInteractions,
+  GridMode,
+  NotebookVariable,
+} from "../../../../store/notebook"
+import type { VariableSlot } from "../interactions/InteractionsEditor"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   columnKindOf,
@@ -348,6 +353,9 @@ export type HighlightDraft = {
   formats?: ColumnFormats
   // How the grid treats rows on refresh.
   gridMode?: GridMode
+  // What a click on the grid sets, and variables created for it.
+  interactions?: CellInteractions
+  created?: Partial<Record<VariableSlot, NotebookVariable>>
 }
 
 export const createUnsetRule = (id: string): UnsetRule => ({

@@ -52,6 +52,9 @@ import {
 import { joinChartSync, setChartSync } from "../interactions/chartSync"
 import { setRenderReport } from "../renderReports"
 import { PaneEmptyState } from "../PaneEmptyState"
+import { withNewVariables } from "../interactions/InteractionsEditor"
+import { normalizeVariables } from "../declareUtils"
+import type { NotebookVariable } from "../../../../store/notebook"
 
 const NO_RESULTS: QueryExecResult[] = []
 
@@ -249,7 +252,22 @@ export const DrawCanvas: React.FC<Props> = ({
   )
 
   const { settings } = useNotebookState()
-  const { setVariableValues } = useNotebookActions()
+  const { setVariableValues, updateSettings } = useNotebookActions()
+  // A save adds the variables the Interactions section created, then the
+  // cell's settings.
+  const saveSettings = useCallback(
+    (next: DrawSettings, newVariables: NotebookVariable[]) => {
+      if (newVariables.length > 0)
+        updateSettings({
+          variables: withNewVariables(
+            normalizeVariables(settings.variables),
+            newVariables,
+          ),
+        })
+      onSettingsChange(next)
+    },
+    [updateSettings, settings.variables, onSettingsChange],
+  )
   const visual = cell.chartConfig?.visual
   const custom = cell.chartConfig?.custom
   const statementResults = useMemo(
@@ -444,7 +462,7 @@ export const DrawCanvas: React.FC<Props> = ({
         saved={savedSettings}
         effective={resolution.effectiveConfig}
         statements={statements}
-        onSave={onSettingsChange}
+        onSave={saveSettings}
         telemetry={notebookChartSettingsTelemetry}
       />
     </Wrapper>

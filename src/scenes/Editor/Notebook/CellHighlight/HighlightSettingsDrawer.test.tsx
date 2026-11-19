@@ -72,6 +72,7 @@ const Fixture = ({
           samples={{ v: 12 }}
           focus={focus}
           defaultIdentity={["k"]}
+          variables={[{ name: "sym", value: "'BTC'" }]}
           duplicateCountOf={() => 0}
           onSave={onSave}
           onCancel={() => setOpen(false)}
@@ -113,6 +114,7 @@ describe("highlight settings validation", () => {
         ],
       },
       formats: { v: { decimals: 1 } },
+      newVariables: [],
     })
   })
 
@@ -130,6 +132,7 @@ describe("highlight settings validation", () => {
     expect(onSave).toHaveBeenCalledWith({
       highlight: null,
       formats: { v: { decimals: 1 } },
+      newVariables: [],
     })
   })
 
@@ -151,6 +154,7 @@ describe("highlight settings validation", () => {
     expect(onSave).toHaveBeenCalledWith({
       highlight: { identityColumns: ["v"], rules: [] },
       formats: { v: { decimals: 1 } },
+      newVariables: [],
     })
   })
 
@@ -177,6 +181,7 @@ describe("highlight settings validation", () => {
     expect(onSave).toHaveBeenCalledWith({
       highlight: null,
       formats: { v: { decimals: 1 } },
+      newVariables: [],
     })
   })
 
@@ -208,6 +213,8 @@ describe("highlight settings validation", () => {
         highlight: { identityColumns: [], rules: [] },
         formats: { v: { decimals: 1 } },
         gridMode: "stable",
+        interactions: undefined,
+        newVariables: [],
       },
     ])
   })
@@ -240,5 +247,43 @@ describe("highlight settings validation", () => {
     const saved = (onSave.mock.calls[0] as [GridSettingsSave])[0]
     expect("gridMode" in saved).toBe(true)
     expect(saved.gridMode).toBeUndefined()
+  })
+
+  it("saves a click on the grid, and Clear rules waits for an unfinished one", async () => {
+    // Given
+    const onSave = vi.fn()
+    renderComponent(<Fixture onSave={onSave} />)
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+
+    // When the user turns clicks on without a variable and clears the rules
+    await userEvent.click(
+      await screen.findByRole("tab", { name: "Interactions" }),
+    )
+    fireEvent.click(screen.getByRole("checkbox", { name: /A click sets/ }))
+    await userEvent.click(screen.getByRole("tab", { name: "Highlights" }))
+    fireEvent.click(screen.getByRole("button", { name: "Clear rules" }))
+
+    // Then nothing is saved and Interactions shows what is missing
+    expect(onSave).not.toHaveBeenCalled()
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose a variable.")
+
+    // When the user picks the variable and the column, then saves
+    await userEvent.click(screen.getByRole("button", { name: /^Variable/ }))
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /^@sym/ }))
+    await userEvent.click(screen.getByRole("button", { name: /^Set it to/ }))
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: "The k of the clicked row" }),
+    )
+    expect(screen.getByText(/stays highlighted/)).toBeVisible()
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    // Then the click is saved with the rest
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interactions: { click: { variable: "sym", column: "k" } },
+        newVariables: [],
+      }),
+    )
   })
 })

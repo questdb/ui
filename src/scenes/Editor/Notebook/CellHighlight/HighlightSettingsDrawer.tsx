@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react"
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
@@ -19,7 +19,20 @@ import {
 import { FieldGroup } from "../CellChart/chartSettingsStyles"
 import { IdentitySection } from "./IdentitySection"
 import { LiveUpdatesSection } from "./LiveUpdatesSection"
-import type { GridMode } from "../../../../store/notebook"
+import {
+  InteractionsEditor,
+  interactionErrors,
+  newVariablesInUse,
+  serverInteractionErrors,
+  type InteractionsDraft,
+  type VariableSlot,
+} from "../interactions/InteractionsEditor"
+import { QuestContext } from "../../../../providers/QuestProvider"
+import type {
+  CellInteractions,
+  GridMode,
+  NotebookVariable,
+} from "../../../../store/notebook"
 import { RuleRow } from "./RuleRow"
 import {
   createUnsetRule,
@@ -44,11 +57,12 @@ import {
   type RuleErrors,
 } from "./ruleValidation"
 
-export type GridSection = "highlights" | "formats"
+export type GridSection = "highlights" | "formats" | "interactions"
 
 const SECTIONS: { id: GridSection; label: string }[] = [
   { id: "highlights", label: "Highlights" },
   { id: "formats", label: "Formats" },
+  { id: "interactions", label: "Interactions" },
 ]
 
 /** What the grid settings drawer saves. */
@@ -56,6 +70,8 @@ export type GridSettingsSave = {
   highlight: HighlightConfig | null
   formats: ColumnFormats | undefined
   gridMode: GridMode | undefined
+  interactions: CellInteractions | undefined
+  newVariables: NotebookVariable[]
 }
 
 type Props = {
@@ -69,6 +85,9 @@ type Props = {
   config: HighlightConfig
   formats?: ColumnFormats
   gridMode?: GridMode
+  interactions?: CellInteractions
+  // The notebook's variables, for the Interactions section.
+  variables?: NotebookVariable[]
   // A value per column of the current result, for format previews.
   samples?: Record<string, unknown>
   // Open on this section, and in Formats on this column.
@@ -113,6 +132,8 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   config,
   formats: savedFormats,
   gridMode: savedGridMode,
+  interactions: savedInteractions,
+  variables = [],
   samples = {},
   focus,
   defaultIdentity = [],
@@ -120,15 +141,36 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   onSave,
   onCancel,
 }) => {
-  const [{ config: draft, expandedRuleId, formats, gridMode }, setDraftState] =
-    useState<HighlightDraft>(
-      initialDraft ?? {
-        config,
-        expandedRuleId: null,
-        formats: savedFormats,
-        gridMode: savedGridMode,
-      },
-    )
+  const [
+    {
+      config: draft,
+      expandedRuleId,
+      formats,
+      gridMode,
+      interactions,
+      created = {},
+    },
+    setDraftState,
+  ] = useState<HighlightDraft>(
+    initialDraft ?? {
+      config,
+      expandedRuleId: null,
+      formats: savedFormats,
+      gridMode: savedGridMode,
+      interactions: savedInteractions,
+      created: {},
+    },
+  )
+  // After a save attempt, interaction problems show as the user fixes them.
+  const [interactionsChecked, setInteractionsChecked] = useState(false)
+  const [serverProblems, setServerProblems] = useState<Partial<
+    Record<VariableSlot, string>
+  > | null>(null)
+  const { quest } = useContext(QuestContext)
+  const interactionProblems = interactionsChecked
+    ? (interactionErrors({ interactions, created }, variables) ??
+      serverProblems)
+    : null
   const [section, setSection] = useState<GridSection>(() => sectionOf(focus))
   // A column a request asked for, until the Formats section has opened it.
   const [focusColumn, setFocusColumn] = useState<string | null>(null)
@@ -150,6 +192,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   const draftRef = useRef(draft)
   const formatsRef = useRef(formats)
   const gridModeRef = useRef(gridMode)
+  const interactionsRef = useRef<InteractionsDraft>({ interactions, created })
   const duplicateCount = useMemo(
     () => duplicateCountOf(draft.identityColumns),
     [duplicateCountOf, draft.identityColumns],
@@ -158,7 +201,15 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   // Every edit lands in the session store as well, so a cell remount
   // mid-session restores it.
   const updateDraft = (patch: Partial<HighlightDraft>) => {
-    const next = { config: draft, expandedRuleId, formats, gridMode, ...patch }
+    const next = {
+      config: draft,
+      expandedRuleId,
+      formats,
+      gridMode,
+      interactions,
+      created,
+      ...patch,
+    }
     setDraftState(next)
     onDraftChange(next)
   }
@@ -180,7 +231,33 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     setRules(draft.rules.map((rule) => (rule.id === next.id ? next : rule)))
   }
 
+  // Interactions are complete, and their new variables declare cleanly:
+  // they join every query of the notebook, so the server checks them.
+  // Synchronous unless there are new variables to check, so a plain save
+  // stays one step.
+  const interactionsComplete = (interactionDraft: InteractionsDraft) => {
+    setInteractionsChecked(true)
+    if (!interactionErrors(interactionDraft, variables)) return true
+    setSection("interactions")
+    return false
+  }
+
+  const serverAccepts = async (
+    interactionDraft: InteractionsDraft,
+  ): Promise<boolean> => {
+    setSaving(true)
+    const server = await serverInteractionErrors(
+      interactionDraft,
+      variables,
+      (q) => quest.validateQuery(q),
+    ).finally(() => setSaving(false))
+    setServerProblems(server)
+    if (server) setSection("interactions")
+    return server === null
+  }
+
   const commit = (current: DraftConfig) => {
+    const interactionDraft = interactionsRef.current
     const next = validateRules(current.rules, columns)
     const identity = validateIdentity(current)
     setErrors(next)
@@ -197,16 +274,29 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       ),
       formats: tidyFormats(formatsRef.current),
       gridMode: gridModeRef.current,
+      interactions: interactionDraft.interactions,
+      newVariables: newVariablesInUse(interactionDraft),
     })
   }
 
   // Clears the rules, keeps the identity, and saves the rest of the draft.
-  const clearRules = () =>
+  const clearRules = async () => {
+    if (saving) return
+    const interactionDraft = { interactions, created }
+    if (!interactionsComplete(interactionDraft)) return
+    if (
+      newVariablesInUse(interactionDraft).length > 0 &&
+      !((await serverAccepts(interactionDraft)) && acceptsSaveRef.current)
+    )
+      return
     onSave({
       highlight: highlightToSave(draft.identityColumns, [], defaultIdentity),
       formats: tidyFormats(formats),
       gridMode,
+      interactions,
+      newVariables: newVariablesInUse(interactionDraft),
     })
+  }
 
   const save = async () => {
     if (saving) return
@@ -216,6 +306,13 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       if (!acceptsSaveRef.current) return
       setSaving(false)
     }
+    const interactionDraft = interactionsRef.current
+    if (!interactionsComplete(interactionDraft)) return
+    if (
+      newVariablesInUse(interactionDraft).length > 0 &&
+      !((await serverAccepts(interactionDraft)) && acceptsSaveRef.current)
+    )
+      return
     commit(draftRef.current)
   }
 
@@ -230,7 +327,8 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     draftRef.current = draft
     formatsRef.current = formats
     gridModeRef.current = gridMode
-  }, [draft, formats, gridMode])
+    interactionsRef.current = { interactions, created }
+  }, [draft, formats, gridMode, interactions, created])
 
   return (
     <SettingsDrawerShell
@@ -246,7 +344,11 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       footerStart={
         section === "highlights" &&
         draft.rules.length > 0 && (
-          <Button type="button" variant="ghost" onClick={clearRules}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void clearRules()}
+          >
             Clear rules
           </Button>
         )
@@ -265,6 +367,24 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
         onChange={setSection}
         ariaLabel="Grid settings sections"
       />
+
+      {section === "interactions" && (
+        <InteractionsEditor
+          draft={{ interactions, created }}
+          onChange={(next) => {
+            setServerProblems(null)
+            updateDraft({
+              interactions: next.interactions,
+              created: next.created,
+            })
+          }}
+          variables={variables}
+          columns={columns}
+          clickTarget="cell"
+          brush={null}
+          errors={interactionProblems}
+        />
+      )}
 
       {section === "formats" && (
         <ColumnFormatsEditor
