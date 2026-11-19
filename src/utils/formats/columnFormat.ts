@@ -210,8 +210,8 @@ export const toneOf = (
 }
 
 const TONE_TOKENS: Record<Tone, keyof ColorShape> = {
-  positive: "dataPositive",
-  negative: "dataNegative",
+  positive: "chartUp",
+  negative: "chartDown",
   warning: "statusWarning",
   info: "statusInfo",
   accent: "contentAccent",

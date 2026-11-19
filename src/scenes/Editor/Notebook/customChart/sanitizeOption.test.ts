@@ -52,7 +52,7 @@ describe("sanitizeOption", () => {
 
     // Then
     expect(option.textStyle).toEqual({})
-    expect(series[0].itemStyle.color).toBe(lightColors.dataPositive)
+    expect(series[0].itemStyle.color).toBe(lightColors.chartUp)
     expect(series[1].itemStyle.color).toBeUndefined()
   })
 
