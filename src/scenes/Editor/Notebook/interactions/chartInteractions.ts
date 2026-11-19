@@ -96,6 +96,8 @@ export const withBrush = (
   const zooms = Array.isArray(option.dataZoom) ? option.dataZoom : []
   return {
     ...option,
+    // The brush's own toolbar buttons are not needed: dragging selects.
+    toolbox: { show: false },
     brush: {
       toolbox: [],
       xAxisIndex: 0,
