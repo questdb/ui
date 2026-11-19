@@ -4,7 +4,7 @@ import {
   getHook,
   queryHook,
 } from "../../../src/test/component"
-import React, { useState } from "react"
+import React, { useMemo, useState } from "react"
 import { act, fireEvent, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Button } from "../../../src/components/Button"
@@ -44,10 +44,11 @@ const requestOpen = () =>
   })
 const Fixture = ({ saved }: { saved: HighlightConfig }) => {
   const [overlay, setOverlay] = useState<HTMLDivElement | null>(null)
+  const settings = useMemo(() => ({ highlightConfig: saved }), [saved])
   const session = useSettingsDrawerSession({
     sessions: highlightSettingsSessions,
     cellId,
-    config: saved,
+    config: settings,
     openEvent: EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
     onOpen: noOp,
     onCancel: noOp,
@@ -72,7 +73,6 @@ const Fixture = ({ saved }: { saved: HighlightConfig }) => {
           config={saved}
           duplicateCountOf={() => 0}
           onSave={noOp}
-          onClear={noOp}
           onCancel={session.cancel}
         />
       </CellOverlayProvider>

@@ -5,7 +5,10 @@ import { fireEvent, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { Button } from "../../../../components/Button"
 import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
-import { HighlightSettingsDrawer } from "./HighlightSettingsDrawer"
+import {
+  HighlightSettingsDrawer,
+  type GridSettingsSave,
+} from "./HighlightSettingsDrawer"
 import {
   CellOverlayProvider,
   CellOverlaySlot,
@@ -28,32 +31,45 @@ const configuration: HighlightConfig = {
 }
 const Fixture = ({
   onSave,
-  onClear,
+  saved = configuration,
+  focus,
 }: {
-  onSave: (config: HighlightConfig) => void
-  onClear: () => void
+  onSave: (next: GridSettingsSave) => void
+  saved?: HighlightConfig
+  focus?: { section: string; column?: string }
 }) => {
   const [overlay, setOverlay] = useState<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button onClick={() => setOpen(true)}>Highlight rules</Button>
+      <Button onClick={() => setOpen(true)}>Grid settings</Button>
       <CellOverlaySlot ref={setOverlay} />
       <CellOverlayProvider value={overlay}>
         <HighlightSettingsDrawer
           open={open}
           appearInPlace
-          initialDraft={{ config: configuration, expandedRuleId: "change" }}
+          initialDraft={
+            saved === configuration
+              ? {
+                  config: configuration,
+                  expandedRuleId: "change",
+                  formats: { v: { decimals: 1 } },
+                }
+              : null
+          }
           onDraftChange={() => undefined}
           columns={[
             { name: "k", type: "STRING" },
             { name: "v", type: "LONG" },
           ]}
           columnRange={() => null}
-          config={configuration}
+          config={saved}
+          formats={{ v: { decimals: 1 } }}
+          samples={{ v: 12 }}
+          focus={focus}
+          defaultIdentity={["k"]}
           duplicateCountOf={() => 0}
           onSave={onSave}
-          onClear={onClear}
           onCancel={() => setOpen(false)}
         />
       </CellOverlayProvider>
@@ -65,8 +81,8 @@ describe("highlight settings validation", () => {
   it("keeps invalid thresholds editable and only submits a valid correction", async () => {
     // Given
     const onSave = vi.fn()
-    renderComponent(<Fixture onSave={onSave} onClear={vi.fn()} />)
-    fireEvent.click(screen.getByRole("button", { name: "Highlight rules" }))
+    renderComponent(<Fixture onSave={onSave} />)
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
     const input = await screen.findByLabelText("Change threshold")
     // When / Then
     fireEvent.change(input, { target: { value: "-5" } })
@@ -83,28 +99,80 @@ describe("highlight settings validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }))
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
     expect(onSave).toHaveBeenCalledWith({
-      ...configuration,
-      rules: [
-        {
-          ...configuration.rules[0],
-          condition: { op: "changedBy", threshold: 2, unit: "percent" },
-        },
-      ],
+      highlight: {
+        ...configuration,
+        rules: [
+          {
+            ...configuration.rules[0],
+            condition: { op: "changedBy", threshold: 2, unit: "percent" },
+          },
+        ],
+      },
+      formats: { v: { decimals: 1 } },
     })
   })
 
-  it("clears saved rules without submitting the edited draft", async () => {
+  it("clears the rules without submitting the edited rules", async () => {
     // Given
     const onSave = vi.fn()
-    const onClear = vi.fn()
-    renderComponent(<Fixture onSave={onSave} onClear={onClear} />)
-    fireEvent.click(screen.getByRole("button", { name: "Highlight rules" }))
+    renderComponent(<Fixture onSave={onSave} />)
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
     const input = await screen.findByLabelText("Change threshold")
     fireEvent.change(input, { target: { value: "99" } })
     // When
-    fireEvent.click(screen.getByRole("button", { name: "Clear all" }))
+    fireEvent.click(screen.getByRole("button", { name: "Clear rules" }))
     // Then
-    expect(onClear).toHaveBeenCalledOnce()
-    expect(onSave).not.toHaveBeenCalled()
+    expect(onSave).toHaveBeenCalledOnce()
+    expect(onSave).toHaveBeenCalledWith({
+      highlight: null,
+      formats: { v: { decimals: 1 } },
+    })
+  })
+
+  it("keeps a chosen identity when the rules are cleared", async () => {
+    // Given rules matched by a non-default identity
+    const onSave = vi.fn()
+    renderComponent(
+      <Fixture
+        saved={{ ...configuration, identityColumns: ["v"] }}
+        onSave={onSave}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+
+    // When
+    fireEvent.click(await screen.findByRole("button", { name: "Clear rules" }))
+
+    // Then
+    expect(onSave).toHaveBeenCalledWith({
+      highlight: { identityColumns: ["v"], rules: [] },
+      formats: { v: { decimals: 1 } },
+    })
+  })
+
+  it("opens on the column a header asked for and saves no highlight settings for a formats-only change", async () => {
+    // Given a grid without highlight settings
+    const onSave = vi.fn()
+    renderComponent(
+      <Fixture
+        saved={{ identityColumns: ["k"], rules: [] }}
+        focus={{ section: "formats", column: "v" }}
+        onSave={onSave}
+      />,
+    )
+
+    // When the drawer opens from the header and the user saves
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+    expect(
+      await screen.findByRole("button", { name: /^v: show as/ }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    // Then only the formats are saved
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave).toHaveBeenCalledWith({
+      highlight: null,
+      formats: { v: { decimals: 1 } },
+    })
   })
 })

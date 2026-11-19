@@ -11,7 +11,10 @@ import type { AutoRefresh } from "../../../store/notebook"
 
 /** Cell fields a settings drawer saves together. */
 export type CellSettingsPatch = Partial<
-  Pick<NotebookCell, "chartConfig" | "formats" | "interactions" | "gridMode">
+  Pick<
+    NotebookCell,
+    "chartConfig" | "formats" | "interactions" | "gridMode" | "highlightConfig"
+  >
 >
 
 type Options = {

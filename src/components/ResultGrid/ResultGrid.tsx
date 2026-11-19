@@ -46,6 +46,7 @@ import {
   DEFAULT_FLASH_DURATION_MS,
   GridContainer,
   HeaderCell,
+  HeaderFormatButton,
   HeaderName,
   HeaderNameRow,
   HeaderRow,
@@ -80,7 +81,9 @@ import {
 } from "./highlight/types"
 import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
 import { useTheme } from "styled-components"
+import { SlidersHorizontalIcon } from "@phosphor-icons/react"
 import {
+  formatTargetOf,
   formatsNumbers,
   formatValue,
   toneColor,
@@ -249,6 +252,8 @@ type Props = {
   columnFormats?: ColumnFormats
   // A click on a cell, with the row's values, after the grid's own handling.
   onCellActivate?: (row: ResultGridRow, column: number) => void
+  // Shows a "Format column" button in each header (notebooks).
+  onFormatColumn?: (column: string) => void
   runToken?: number // changes per run to reset focus/selection on the grid
   cellHighlights?: HighlightLookup
   // Flips on every highlighted result so a repeated flash restarts.
@@ -323,6 +328,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       maxColumnWidth,
       columnFormats,
       onCellActivate,
+      onFormatColumn,
       runToken,
       cellHighlights = EMPTY_HIGHLIGHT_LOOKUP,
       flashParity = 0,
@@ -862,6 +868,34 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               />
             </HeaderNameRow>
             <HeaderType title={formattedType}>{formattedType}</HeaderType>
+            {onFormatColumn &&
+              col &&
+              // Formats change how numbers and arrays read: those columns,
+              // or one that already has a format.
+              (formatTargetOf(col.type) !== null ||
+                columnFormats?.[col.name] !== undefined) && (
+                <HeaderFormatButton
+                  className="header-format-btn"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  $align={align}
+                  $formatted={columnFormats?.[col.name] !== undefined}
+                  aria-label={`Format column ${col.name}`}
+                  title={
+                    columnFormats?.[col.name]
+                      ? `${col.name} has a format: edit it`
+                      : `Format ${col.name}`
+                  }
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onFormatColumn(col.name)
+                  }}
+                >
+                  <SlidersHorizontalIcon size={12} />
+                </HeaderFormatButton>
+              )}
             {!pos.frozen && renderResizer(header)}
           </HeaderCell>
         )
@@ -891,6 +925,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       frozenCount,
       headers,
       onColumnCopy,
+      onFormatColumn,
+      columnFormats,
       renderResizer,
     ])
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  formatTargetOf,
   formatValue,
   sanitizeColumnFormats,
   thresholdBands,
@@ -97,5 +98,18 @@ describe("sanitizeColumnFormats", () => {
       price: { kind: "price", decimals: 5 },
       fill: { visual: "bar" },
     })
+  })
+})
+
+describe("formatTargetOf", () => {
+  it("formats numbers and arrays, and nothing else", () => {
+    // Given / When / Then
+    expect(formatTargetOf("DOUBLE")).toBe("number")
+    expect(formatTargetOf("long")).toBe("number")
+    expect(formatTargetOf("DECIMAL(18,2)")).toBe("number")
+    expect(formatTargetOf("ARRAY")).toBe("array")
+    expect(formatTargetOf("TIMESTAMP")).toBeNull()
+    expect(formatTargetOf("CHAR")).toBeNull()
+    expect(formatTargetOf("SYMBOL")).toBeNull()
   })
 })

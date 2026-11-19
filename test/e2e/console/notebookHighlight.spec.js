@@ -12,7 +12,7 @@ const RISING_VALUE_QUERY = "select 'A' as k, cast(now() as long) as v"
 
 const openHighlightDrawer = () => {
   cy.get("[data-notebook-cell] button[aria-label='More actions']").click()
-  cy.contains("[role='menuitem']", "Highlight rules").click()
+  cy.contains("[role='menuitem']", "Grid settings").click()
   cy.getByDataHook("highlight-settings-drawer").should("be.visible")
 }
 
@@ -303,7 +303,7 @@ describe("notebook highlight rules", () => {
     // When
     watchDrawerExit().then((exit) => {
       cy.wrap(exit.drawer)
-        .contains("button", "Clear all")
+        .contains("button", "Clear rules")
         .then(($clearAll) => {
           cy.contains("button", "Save").then(($save) => {
             const rect = $save[0].getBoundingClientRect()
@@ -392,7 +392,7 @@ describe("notebook highlight rules", () => {
         expect($cell.attr("data-highlight-color")).to.equal("dataSeries2")
       })
     openHighlightDrawer()
-    cy.contains("button", "Clear all").click()
+    cy.contains("button", "Clear rules").click()
     cy.get("[data-hook=grid-cell][data-highlight]").should("not.exist")
     openHighlightDrawer()
     cy.getByDataHook("highlight-rule").should("not.exist")

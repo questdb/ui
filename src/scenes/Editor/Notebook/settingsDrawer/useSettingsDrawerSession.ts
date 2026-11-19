@@ -42,6 +42,8 @@ export const useSettingsDrawerSession = <Config, Draft>({
   const [restored] = useState(() => sessions.get(cellId) !== undefined)
   const [open, setOpen] = useState(restored)
   const [generation, setGeneration] = useState(0)
+  // The last request that opened or refocused the drawer.
+  const [request, setRequest] = useState<SettingsDrawerRequest | null>(null)
 
   const openDrawer = useCallback(() => {
     onOpen()
@@ -88,8 +90,9 @@ export const useSettingsDrawerSession = <Config, Draft>({
   useEffect(() => {
     const respond = (payload?: SettingsDrawerRequest) => {
       if (payload?.cellId !== cellId) return
+      setRequest(payload)
       if (!open) openDrawer()
-      else if (payload.mode === "toggle") cancel("button")
+      else if (payload.mode === "toggle" && !payload.focus) cancel("button")
     }
     eventBus.subscribe(openEvent, respond)
     return () => eventBus.unsubscribe(openEvent, respond)
@@ -102,6 +105,7 @@ export const useSettingsDrawerSession = <Config, Draft>({
     appearInPlace: restored && generation === 0,
     generation,
     initialDraft: sessions.get(cellId)?.draft ?? null,
+    request,
     openDrawer,
     close,
     cancel,

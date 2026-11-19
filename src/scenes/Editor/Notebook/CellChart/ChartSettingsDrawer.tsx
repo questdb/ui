@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
-import { Input, SelectMenuControl, TabButton } from "../../../../components"
+import { Input, SelectMenuControl } from "../../../../components"
 import type { ChartConfig, QueryChart } from "./chartTypes"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
@@ -13,6 +13,7 @@ import {
 } from "./chartSettingsStyles"
 import { QueryControls } from "./QueryControls"
 import { SettingsDrawerShell } from "../settingsDrawer/SettingsDrawerShell"
+import { SettingsTab, SettingsTabStrip } from "../settingsDrawer/SettingsTabs"
 
 const Row = styled.div`
   display: flex;
@@ -25,22 +26,6 @@ const Row = styled.div`
 
 const Divider = styled.div`
   border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
-`
-
-const TabStrip = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.interactionNeutral};
-`
-
-const Tab = styled(TabButton)`
-  && {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    padding: 0.8rem 1.4rem;
-    margin-bottom: -1px;
-  }
 `
 
 const parseBound = (v: string): number | undefined => {
@@ -191,9 +176,9 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
         <>
           <Divider />
           <FieldLabel>Queries</FieldLabel>
-          <TabStrip role="tablist" aria-label="Chart queries">
+          <SettingsTabStrip role="tablist" aria-label="Chart queries">
             {tabs.map((t) => (
-              <Tab
+              <SettingsTab
                 key={t.index}
                 type="button"
                 $active={t.index === activeIndex}
@@ -207,9 +192,9 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
               >
                 {t.label}
                 {!t.compatible && <IncompatibleIcon size={14} weight="fill" />}
-              </Tab>
+              </SettingsTab>
             ))}
-          </TabStrip>
+          </SettingsTabStrip>
         </>
       )}
 

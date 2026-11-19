@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
 import { XCircleIcon } from "@phosphor-icons/react"
 import { Text } from "../../../../components"
@@ -21,6 +21,9 @@ import {
 } from "./ChartSettingsDrawer"
 import { ComponentSettings } from "./ComponentSettings"
 import { CustomOptionSettings } from "./CustomOptionSettings"
+import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
+import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
+import { columnsAndSamplesOf } from "../CellFormats/formatSummary"
 import {
   DRAW_KINDS,
   draftOf,
@@ -51,6 +54,13 @@ const SaveError = styled.div`
     color: ${({ theme }) => theme.color.statusDanger};
   }
 `
+
+type Section = "chart" | "formats"
+
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: "chart", label: "Chart" },
+  { id: "formats", label: "Formats" },
+]
 
 const KIND_HINTS: Record<DrawKind, string> = {
   chart: "A preset chart: lines, areas, bars, scatter, pie, candlesticks.",
@@ -95,6 +105,11 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [section, setSection] = useState<Section>("chart")
+  const { columns, samples } = useMemo(
+    () => columnsAndSamplesOf(statements),
+    [statements],
+  )
   // Mounting already open means a remount mid-session: keep the draft.
   const wasOpenRef = useRef(open)
 
@@ -114,6 +129,7 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     updateDraft(draftOf(saved, effective))
     setActiveIndex(tabs[0]?.index ?? 0)
     setSaveAttempted(false)
+    setSection("chart")
   }, [open, saved, effective, tabs, updateDraft])
 
   const dismiss = useCallback(
@@ -145,12 +161,14 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         telemetry?.onSaveBlocked?.("ohlc_incomplete")
         setSaveAttempted(true)
         setActiveIndex(badIdx)
+        setSection("chart")
         return
       }
     }
     const result = settingsOf(draft)
     if (!result.ok) {
       setSaveError(result.error)
+      setSection("chart")
       return
     }
     telemetry?.onSave?.({
@@ -168,7 +186,9 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
       appearInPlace={appearInPlace}
       title="Chart settings"
       dataHookBase="chart-settings"
-      drawerWidth={draft.kind === "custom" ? "52rem" : undefined}
+      drawerWidth={
+        draft.kind === "custom" && section === "chart" ? "52rem" : undefined
+      }
       onDismiss={dismiss}
       onCommit={commit}
       footerNote={
@@ -182,64 +202,85 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         )
       }
     >
-      <KindSwitch role="group" aria-label="Draw as">
-        {DRAW_KINDS.map(({ kind, label }) => (
-          <NotebookViewToggleSegment
-            key={kind}
-            type="button"
-            $size="sm"
-            $active={draft.kind === kind}
-            $activeTone="neutral"
-            aria-pressed={draft.kind === kind}
-            onClick={() => switchKind(kind)}
-          >
-            {label}
-          </NotebookViewToggleSegment>
-        ))}
-      </KindSwitch>
-      <Text color="contentSecondary" size="xs" lineHeight="1.4">
-        {KIND_HINTS[draft.kind]}
-      </Text>
+      <SettingsTabs
+        tabs={SECTIONS}
+        active={section}
+        onChange={setSection}
+        ariaLabel="Chart settings sections"
+      />
 
-      {draft.kind === "chart" && (
-        <PresetChartFields
-          tabs={tabs}
-          draft={draft.chart}
-          onChange={(chart) =>
-            updateDraft({ ...draft, chart, chartEdited: true })
-          }
-          activeIndex={activeIndex}
-          onActiveIndexChange={setActiveIndex}
-          saveAttempted={saveAttempted}
-          telemetry={telemetry}
-          offerEvents
+      {section === "formats" && (
+        <ColumnFormatsEditor
+          formats={draft.formats}
+          onChange={(formats) => updateDraft({ ...draft, formats })}
+          columns={columns}
+          samples={samples}
+          cellVisuals={false}
         />
       )}
 
-      {draft.kind === "component" && draft.visual && (
-        <ComponentSettings
-          visual={draft.visual}
-          statements={statements}
-          onChange={(visual) => updateDraft({ ...draft, visual })}
-        />
-      )}
+      {section === "chart" && (
+        <>
+          <KindSwitch role="group" aria-label="Draw as">
+            {DRAW_KINDS.map(({ kind, label }) => (
+              <NotebookViewToggleSegment
+                key={kind}
+                type="button"
+                $size="sm"
+                $active={draft.kind === kind}
+                $activeTone="neutral"
+                aria-pressed={draft.kind === kind}
+                onClick={() => switchKind(kind)}
+              >
+                {label}
+              </NotebookViewToggleSegment>
+            ))}
+          </KindSwitch>
+          <Text color="contentSecondary" size="xs" lineHeight="1.4">
+            {KIND_HINTS[draft.kind]}
+          </Text>
 
-      {draft.kind === "custom" && (
-        <CustomOptionSettings
-          json={draft.customJson}
-          statements={statements}
-          onChange={(customJson) => updateDraft({ ...draft, customJson })}
-          onStartFromChart={() =>
-            updateDraft({
-              ...draft,
-              customJson: JSON.stringify(
-                starterCustomOption(draft.chart, tabs),
-                null,
-                2,
-              ),
-            })
-          }
-        />
+          {draft.kind === "chart" && (
+            <PresetChartFields
+              tabs={tabs}
+              draft={draft.chart}
+              onChange={(chart) =>
+                updateDraft({ ...draft, chart, chartEdited: true })
+              }
+              activeIndex={activeIndex}
+              onActiveIndexChange={setActiveIndex}
+              saveAttempted={saveAttempted}
+              telemetry={telemetry}
+              offerEvents
+            />
+          )}
+
+          {draft.kind === "component" && draft.visual && (
+            <ComponentSettings
+              visual={draft.visual}
+              statements={statements}
+              onChange={(visual) => updateDraft({ ...draft, visual })}
+            />
+          )}
+
+          {draft.kind === "custom" && (
+            <CustomOptionSettings
+              json={draft.customJson}
+              statements={statements}
+              onChange={(customJson) => updateDraft({ ...draft, customJson })}
+              onStartFromChart={() =>
+                updateDraft({
+                  ...draft,
+                  customJson: JSON.stringify(
+                    starterCustomOption(draft.chart, tabs),
+                    null,
+                    2,
+                  ),
+                })
+              }
+            />
+          )}
+        </>
       )}
     </SettingsDrawerShell>
   )

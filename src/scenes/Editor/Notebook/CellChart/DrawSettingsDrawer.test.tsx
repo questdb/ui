@@ -348,4 +348,31 @@ describe("draw settings drawer", () => {
       within(drawer).getByRole("button", { name: "Cancel" }),
     )
   })
+
+  it("saves column formats with the chart", async () => {
+    // Given a preset chart
+    const onSave = vi.fn()
+    renderComponent(
+      <Fixture saved={{ chartConfig: effective }} onSave={onSave} />,
+    )
+    const drawer = await openDrawer()
+
+    // When the user gives price two decimals in the Formats section
+    await userEvent.click(within(drawer).getByRole("tab", { name: "Formats" }))
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^Format a column/ }),
+    )
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "price" }))
+    fireEvent.change(within(drawer).getByPlaceholderText("Auto"), {
+      target: { value: "2" },
+    })
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+
+    // Then the chart and its formats are saved together
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave).toHaveBeenCalledWith({
+      chartConfig: effective,
+      formats: { price: { decimals: 2 } },
+    })
+  })
 })

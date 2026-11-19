@@ -69,6 +69,28 @@ export type ColumnFormat = {
 
 export type ColumnFormats = Record<string, ColumnFormat>
 
+const NUMBER_TYPES = new Set([
+  "BYTE",
+  "SHORT",
+  "INT",
+  "LONG",
+  "FLOAT",
+  "DOUBLE",
+  "DECIMAL",
+])
+
+/**
+ * What a format can do with a column of `type`: format its numbers, draw its
+ * arrays as sparklines, or nothing.
+ */
+export const formatTargetOf = (type: string): "number" | "array" | null => {
+  const t = type.toUpperCase()
+  // The server reports a decimal with its precision and scale: DECIMAL(18,2).
+  if (NUMBER_TYPES.has(t) || t.startsWith("DECIMAL(")) return "number"
+  if (t === "ARRAY") return "array"
+  return null
+}
+
 const DASH = "—"
 
 const toNumber = (value: unknown): number | null => {

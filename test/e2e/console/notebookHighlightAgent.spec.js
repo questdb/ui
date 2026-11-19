@@ -77,7 +77,7 @@ const callTool = (name, args) =>
 
 const openHighlightDrawer = () => {
   cy.get("[data-notebook-cell] button[aria-label='More actions']").click()
-  cy.contains("[role='menuitem']", "Highlight rules").click()
+  cy.contains("[role='menuitem']", "Grid settings").click()
   cy.getByDataHook("highlight-settings-drawer").should("be.visible")
 }
 

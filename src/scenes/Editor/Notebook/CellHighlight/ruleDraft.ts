@@ -1,3 +1,4 @@
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   columnKindOf,
@@ -342,6 +343,8 @@ export type DraftConfig = {
 export type HighlightDraft = {
   config: DraftConfig
   expandedRuleId: string | null
+  // The cell's column formats, edited in the drawer's Formats section.
+  formats?: ColumnFormats
 }
 
 export const createUnsetRule = (id: string): UnsetRule => ({

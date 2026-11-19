@@ -1280,7 +1280,7 @@
               "visual": {
                 "type": ["string", "null"],
                 "enum": ["bar", "meter", "sparkline", null],
-                "description": "Result grid only: bar = scaled to the column's range (signed values grow from zero); meter = share of the column total; sparkline = draws an ARRAY value (e.g. array_agg(price))."
+                "description": "Result grid only: bar = scaled to the column's range (signed values grow from zero); meter = share of the column total; sparkline = draws an ARRAY column's values (e.g. array_agg(price)); on other columns it draws nothing."
               }
             },
             "required": [
@@ -2297,7 +2297,7 @@
                     "visual": {
                       "type": ["string", "null"],
                       "enum": ["bar", "meter", "sparkline", null],
-                      "description": "Result grid only: bar = scaled to the column's range (signed values grow from zero); meter = share of the column total; sparkline = draws an ARRAY value (e.g. array_agg(price))."
+                      "description": "Result grid only: bar = scaled to the column's range (signed values grow from zero); meter = share of the column total; sparkline = draws an ARRAY column's values (e.g. array_agg(price)); on other columns it draws nothing."
                     }
                   },
                   "required": [

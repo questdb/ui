@@ -3,6 +3,7 @@ import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, QueryChart, VisualConfig } from "./chartTypes"
 import { classifyColumn } from "./inferChartConfig"
+import { tidyFormats } from "../CellFormats/formatSummary"
 
 // What the chart settings drawer edits: everything a draw cell shows, saved in
 // one update. A draw cell is drawn as one of three kinds: a preset chart, a
@@ -128,11 +129,12 @@ export const settingsOf = (draft: DrawDraft): SaveResult => {
     if (!parsed.ok) return parsed
     chartConfig.custom = { option: parsed.option }
   }
+  const formats = tidyFormats(draft.formats)
   return {
     ok: true,
     settings: {
       chartConfig,
-      ...(draft.formats ? { formats: draft.formats } : {}),
+      ...(formats ? { formats } : {}),
       ...(draft.interactions ? { interactions: draft.interactions } : {}),
     },
   }

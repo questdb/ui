@@ -30,7 +30,12 @@ const Owner = ({
     onCancel: () => undefined,
     changedWhileOpenMessage: "changed",
   })
-  return <span>{drawer.open ? "open" : "closed"}</span>
+  return (
+    <>
+      <span>{drawer.open ? "open" : "closed"}</span>
+      <span data-testid="focus">{drawer.request?.focus?.column ?? ""}</span>
+    </>
+  )
 }
 
 describe("settings drawer session", () => {
@@ -79,5 +84,30 @@ describe("settings drawer session", () => {
 
     // Then it closes
     expect(screen.getByText("closed")).toBeVisible()
+  })
+
+  it("keeps the drawer open and passes on the column a later request asks for", () => {
+    // Given an open drawer
+    const sessions = createSettingsDrawerSessionStore<Session>()
+    renderComponent(<Owner sessions={sessions} config={{ chartConfig }} />)
+    act(() =>
+      eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, {
+        cellId: "c",
+        mode: "open",
+      }),
+    )
+
+    // When a grid header asks for a column with a toggle request
+    act(() =>
+      eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, {
+        cellId: "c",
+        mode: "toggle",
+        focus: { section: "formats", column: "price" },
+      }),
+    )
+
+    // Then it stays open and the request carries the column
+    expect(screen.getByText("open")).toBeVisible()
+    expect(screen.getByTestId("focus")).toHaveTextContent("price")
   })
 })

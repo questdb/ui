@@ -15,7 +15,12 @@ import {
   removeNotebookColumnLayout,
 } from "../notebookColumnLayoutStore"
 import { ResultActionsBar } from "./ResultActionsBar"
-import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawer"
+import {
+  HighlightSettingsDrawer,
+  type GridSettingsSave,
+} from "../CellHighlight/HighlightSettingsDrawer"
+import { columnsAndSamplesOf } from "../CellFormats/formatSummary"
+import { eventBus } from "../../../../modules/EventBus"
 import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
@@ -24,7 +29,11 @@ import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
 import { useResultTrendStore } from "./ResultTrendContext"
-import { resolveHighlightConfig } from "./highlightConfig"
+import {
+  resolveHighlightConfig,
+  sameGridSettings,
+  type GridSettings,
+} from "./highlightConfig"
 import { flashDurationFor } from "./flashDuration"
 import {
   columnRangeOf,
@@ -132,17 +141,29 @@ const ResultGridPanelInner: React.FC<Props> = ({
     viewportStore,
   })
   const { maxColumnWidth } = useLocalStorage()
-  const { setCellHighlightConfig, setVariableValues } = useNotebookActions()
+  const { setCellSettings, setVariableValues } = useNotebookActions()
   const trendStore = useResultTrendStore()
+  // What the grid drawer edits; compared field by field, so a remount
+  // keeps an open drawer and a change made elsewhere closes it.
+  const savedGridSettings: GridSettings = useMemo(
+    () => ({
+      highlightConfig: savedHighlightConfig,
+      formats,
+      gridMode,
+      interactions,
+    }),
+    [savedHighlightConfig, formats, gridMode, interactions],
+  )
   const highlightDrawer = useSettingsDrawerSession({
     sessions: highlightSettingsSessions,
     cellId,
-    config: savedHighlightConfig,
+    config: savedGridSettings,
+    sameConfig: sameGridSettings,
     openEvent: EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
     onOpen: trackHighlightOpen,
     onCancel: trackHighlightCancel,
     changedWhileOpenMessage:
-      "Highlight rules were updated since last check. Reopen highlight rules to edit.",
+      "Grid settings were updated since last check. Reopen grid settings to edit.",
   })
   const [hasSelection, setHasSelection] = useState(false)
   const [pinnedCount, setPinnedCount] = useState(
@@ -241,23 +262,49 @@ const ResultGridPanelInner: React.FC<Props> = ({
     [evaluated, isNew, isSelected],
   )
 
-  const saveHighlight = (next: typeof highlightConfig) => {
-    void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_SAVE, {
-      source: "notebook",
-      ruleCount: next.rules.length,
-      kinds: next.rules.map((rule) => rule.kind),
-    })
+  const defaultIdentity = useMemo(
+    () => resolveHighlightConfig(undefined, rawData).identityColumns,
+    [rawData],
+  )
+
+  const saveGridSettings = ({
+    highlight,
+    formats: nextFormats,
+  }: GridSettingsSave) => {
+    const highlightChanged =
+      JSON.stringify(highlight ?? null) !==
+      JSON.stringify(savedHighlightConfig ?? null)
+    if (highlightChanged && highlight && highlight.rules.length > 0)
+      void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_SAVE, {
+        source: "notebook",
+        ruleCount: highlight.rules.length,
+        kinds: highlight.rules.map((rule) => rule.kind),
+      })
+    else if (highlightChanged && (savedHighlightConfig?.rules.length ?? 0) > 0)
+      void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
     signalUserEdit(bufferId)
-    setCellHighlightConfig(cellId, next)
+    setCellSettings(cellId, {
+      highlightConfig: highlight ?? undefined,
+      formats: nextFormats,
+    })
     highlightDrawer.close()
   }
 
-  const clearHighlight = () => {
-    void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
-    signalUserEdit(bufferId)
-    setCellHighlightConfig(cellId, null)
-    highlightDrawer.close()
-  }
+  const formatColumn = useCallback(
+    (column: string) =>
+      eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, {
+        cellId,
+        mode: "open",
+        focus: { section: "formats", column },
+      }),
+    [cellId],
+  )
+  const samples = useMemo(
+    () =>
+      columnsAndSamplesOf([{ columns: data.columns, rows: data.dataset }])
+        .samples,
+    [data],
+  )
 
   return (
     <>
@@ -274,6 +321,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         dataSource={dataSource}
         maxColumnWidth={maxColumnWidth}
         columnFormats={formats}
+        onFormatColumn={formatColumn}
         onCellActivate={onCellActivate}
         runToken={runToken}
         cellHighlights={highlights.lookup}
@@ -325,9 +373,12 @@ const ResultGridPanelInner: React.FC<Props> = ({
         columns={cellColumns}
         columnRange={columnRange}
         config={highlightConfig}
+        formats={formats}
+        samples={samples}
+        focus={highlightDrawer.request?.focus}
+        defaultIdentity={defaultIdentity}
         duplicateCountOf={duplicateCountOf}
-        onSave={saveHighlight}
-        onClear={clearHighlight}
+        onSave={saveGridSettings}
         onCancel={highlightDrawer.cancel}
       />
     </>
