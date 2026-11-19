@@ -184,7 +184,8 @@ export const ResultChart: React.FC<Props> = ({
 
   const hasChartableColumns =
     resolution?.renderQueries.some(
-      (query) => query.yColumns.length > 0 || query.ohlc != null,
+      (query) =>
+        query.yColumns.length > 0 || query.ohlc != null || query.roles != null,
     ) ?? false
 
   const shownRowCount = chartResult?.dataset.length ?? 0

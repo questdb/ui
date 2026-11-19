@@ -40,6 +40,10 @@ export const clickedValue = (
       if (i >= 0) return (params.value as unknown[])[i]
     }
     const data = params.data
+    // Items built from rows carry them by column name (heatmap, boxplot).
+    const columns = (data as { columns?: unknown } | null)?.columns
+    if (typeof columns === "object" && columns !== null && column in columns)
+      return (columns as Record<string, unknown>)[column]
     if (typeof data === "object" && data !== null && column in data)
       return (data as Record<string, unknown>)[column]
   }

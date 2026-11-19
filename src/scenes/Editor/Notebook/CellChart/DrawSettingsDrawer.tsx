@@ -82,8 +82,15 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: "interactions", label: "Interactions" },
 ]
 
+const TYPE_NAMES: Partial<Record<string, string>> = {
+  pie: "pie",
+  heatmap: "heatmap",
+  boxplot: "box plot",
+}
+
 const KIND_HINTS: Record<DrawKind, string> = {
-  chart: "A preset chart: lines, areas, bars, scatter, pie, candlesticks.",
+  chart:
+    "A preset chart: lines, areas, bars, scatter, pie, candlesticks, heatmaps, bands, range bars, box plots.",
   component:
     "A dashboard component: stat tiles, gauges, an order book, uptime bars, maps and more.",
   custom: "An ECharts option you write as JSON, for charts no preset draws.",
@@ -176,6 +183,20 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
 
   // A drag sets a time window on a preset chart over time.
   const anchorX = tabs[0]?.columns.find((c) => c.name === draft.chart.xColumn)
+  const anchorQuery = draft.chart.queries[tabs[0]?.index ?? 0]
+  const rangeStart = tabs[0]?.columns.find(
+    (c) => c.name === anchorQuery?.range?.start,
+  )
+  // These draw on axes of their own, without a time x-axis to drag across.
+  const ownAxes =
+    anchorQuery?.type === "pie" ||
+    anchorQuery?.type === "heatmap" ||
+    anchorQuery?.type === "boxplot"
+  // Range bars with times lie along a time axis of their own.
+  const timeline =
+    anchorQuery?.type === "rangeBar" &&
+    rangeStart !== undefined &&
+    classifyColumn(rangeStart) === "temporal"
   const brushAvailability =
     draft.kind !== "chart"
       ? {
@@ -183,14 +204,17 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
           reason:
             "Dragging works on preset charts; components and custom options take clicks.",
         }
-      : !anchorX ||
-          classifyColumn(anchorX) !== "temporal" ||
-          draft.chart.queries[tabs[0]?.index ?? 0]?.type === "pie"
+      : ownAxes
         ? {
             available: false as const,
-            reason: "Dragging needs a time x-axis.",
+            reason: `Dragging needs a time x-axis; ${TYPE_NAMES[anchorQuery?.type ?? ""] ?? "these"} charts take clicks.`,
           }
-        : { available: true as const }
+        : !timeline && (!anchorX || classifyColumn(anchorX) !== "temporal")
+          ? {
+              available: false as const,
+              reason: "Dragging needs a time x-axis.",
+            }
+          : { available: true as const }
 
   const switchKind = (kind: DrawKind) => {
     if (kind === draft.kind) return

@@ -17,6 +17,16 @@ export type ToolQueryChart = {
   enabled?: boolean | null
   name?: string | null
   events?: EventsWire | null
+  heatmap?: { y: string; value: string } | null
+  band?: { lower: string; upper: string } | null
+  range?: { start: string; end: string } | null
+  box?: {
+    min: string
+    q1: string
+    median: string
+    q3: string
+    max: string
+  } | null
 }
 
 export type ToolRightAxis = {
@@ -33,6 +43,10 @@ export const mapQueryChart = (q: ToolQueryChart): QueryChart => {
   if (q.enabled === false) out.enabled = false
   if (q.name) out.name = q.name
   if (q.events) out.events = parseEvents(q.events)
+  if (q.heatmap) out.heatmap = q.heatmap
+  if (q.band) out.band = q.band
+  if (q.range) out.range = q.range
+  if (q.box) out.box = q.box
   return out
 }
 

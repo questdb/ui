@@ -843,6 +843,10 @@ const normalizeQueryChart = (q: QueryChart): QueryChart => {
   if (q.enabled === false) next.enabled = false
   if (q.name) next.name = q.name
   if (q.events) next.events = q.events
+  if (q.heatmap) next.heatmap = q.heatmap
+  if (q.band) next.band = q.band
+  if (q.range) next.range = q.range
+  if (q.box) next.box = q.box
   return next
 }
 

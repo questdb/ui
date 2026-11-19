@@ -14,7 +14,7 @@ import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSes
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
 import { DrawSettingsDrawer } from "../CellChart/DrawSettingsDrawer"
 import { sameDrawSettings, type DrawSettings } from "../CellChart/drawSettings"
-import { resolveDraw, toChartResult } from "./drawCanvasUtils"
+import { drawProblems, resolveDraw, toChartResult } from "./drawCanvasUtils"
 import { Button } from "../../../../components/Button"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
@@ -307,25 +307,7 @@ export const DrawCanvas: React.FC<Props> = ({
       name?: string
       data?: unknown[]
     }[]
-    const problems = resolution.tabs
-      .filter((t) => !t.compatible)
-      .map((t) => ({
-        message: `${t.label} was left out: its x-axis (${t.xColumn ?? "none"}) does not match the first query's.`,
-        severity: "warning" as const,
-      }))
-    for (const q of cell.chartConfig?.queries ?? []) {
-      const tab = resolution.tabs.find(
-        (t) => t.index === (cell.chartConfig?.queries ?? []).indexOf(q),
-      )
-      if (!q || !tab) continue
-      const names = new Set(tab.columns.map((c) => c.name))
-      for (const y of q.yColumns ?? [])
-        if (!names.has(y))
-          problems.push({
-            message: `${tab.label}: column "${y}" is not in the result and was left out.`,
-            severity: "warning",
-          })
-    }
+    const problems = drawProblems(resolution, cell.chartConfig)
     setRenderReport(bufferId, cell.id, {
       kind: "chart",
       drawn: {

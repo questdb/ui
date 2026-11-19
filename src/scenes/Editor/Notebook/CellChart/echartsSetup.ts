@@ -134,6 +134,7 @@ for (const installer of [
 /** Custom series names the console ships, usable from any chart option. */
 export const BUILTIN_CUSTOM_SERIES = [
   "barRange",
+  "areaRange",
   "lineRange",
   "stage",
   "violin",
@@ -144,7 +145,7 @@ export const BUILTIN_CUSTOM_SERIES = [
 // The official bar range draws its values as text in degrees Celsius; this one
 // draws only the bar, vertical or horizontal by `encode`: a range [low, high]
 // on y per x category, or on x per y category.
-const barRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
+export const barRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
   const encode = (params as unknown as { encode: { x: number[]; y: number[] } })
     .encode
   const horizontal = encode.x.length === 2
@@ -159,9 +160,20 @@ const barRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
         itemPayload?: { barWidth?: number | string; borderRadius?: number }
       }
     ).itemPayload ?? {}
-  const band = (api.size?.(horizontal ? [0, 1] : [1, 0]) as number[])[
+  // A category axis has a band per value; a time or value axis has none, so
+  // the bars share the plot's length between them.
+  const sized = (api.size?.(horizontal ? [0, 1] : [1, 0]) as number[])[
     horizontal ? 1 : 0
   ]
+  const coordSys = (
+    params as unknown as { coordSys?: { width?: number; height?: number } }
+  ).coordSys
+  const length = (horizontal ? coordSys?.height : coordSys?.width) ?? 0
+  const count = Math.max(
+    (params as unknown as { dataInsideLength?: number }).dataInsideLength ?? 1,
+    1,
+  )
+  const band = sized > 2 ? sized : length / count
   const raw = payload.barWidth ?? "60%"
   const thickness =
     typeof raw === "string" && raw.endsWith("%")
@@ -188,6 +200,57 @@ const barRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
 }
 
 echarts.registerCustomSeries("barRange", barRangeRenderItem)
+
+// The area between a low and a high value along x, on any x axis (the
+// official line range places points by index, so only on categories). Drawn
+// once, from the last item; rows without both values break the area.
+export const areaRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
+  const p = params as unknown as {
+    dataIndexInside: number
+    dataInsideLength: number
+    encode: { x: number[]; y: number[] }
+    itemPayload?: { opacity?: number }
+  }
+  const count = p.dataInsideLength
+  // dataIndexInside counts the rows a zoom leaves in view, like count.
+  if (p.dataIndexInside !== count - 1) return { type: "group", children: [] }
+  const [xDim] = p.encode.x
+  const [lowDim, highDim] = p.encode.y
+  const segments: number[][][] = []
+  let lows: number[][] = []
+  let highs: number[][] = []
+  const close = () => {
+    if (lows.length > 1) segments.push([...lows, ...highs.reverse()])
+    lows = []
+    highs = []
+  }
+  for (let i = 0; i < count; i++) {
+    const x = api.value(xDim, i)
+    const low = api.value(lowDim, i)
+    const high = api.value(highDim, i)
+    if ([low, high].some((v) => typeof v !== "number" || Number.isNaN(v))) {
+      close()
+      continue
+    }
+    lows.push(api.coord([x, low]))
+    highs.push(api.coord([x, high]))
+  }
+  close()
+  return {
+    type: "group",
+    children: segments.map((points) => ({
+      type: "polygon",
+      shape: { points },
+      style: {
+        fill: api.visual("color") as string,
+        opacity: p.itemPayload?.opacity ?? 0.2,
+      },
+      silent: true,
+    })),
+  }
+}
+
+echarts.registerCustomSeries("areaRange", areaRangeRenderItem)
 
 // Pair with `echarts-for-react/lib/core` — importing the default wrapper
 // instead would pull the full echarts catalog and undo the tree-shaking.

@@ -9,6 +9,8 @@ import type {
 } from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
 import type { ColorShape } from "../../../../types/styled"
+import { withAlpha } from "../../../../theme"
+import { escapeHtml } from "../../../../utils/escapeHtml"
 import {
   formatValue,
   isTone,
@@ -27,6 +29,8 @@ export type ResolvedQuery = {
   type: ChartType
   yColumns: string[]
   ohlc?: { open: string; high: string; low: string; close: string }
+  // The columns of a heatmap, band, range bar or boxplot, resolved.
+  roles?: Record<string, string>
   partitionByColumn?: string
   axis: SeriesAxis
   name?: string
@@ -255,6 +259,187 @@ const buildCartesianSeries = (
   return out
 }
 
+// Rows of [x, ...values] for a series over the chart's x axis: by time or
+// value, or aligned to the shared categories.
+const alignedRows = (
+  q: ResolvedQuery,
+  xIdx: number,
+  valueIdxs: number[],
+  ctx: SeriesContext,
+): unknown[][] => {
+  const values = (row: Dataset[number]) =>
+    valueIdxs.map((i) => toNumberOrNull(row[i]))
+  if (ctx.xMode === "time")
+    return q.dataset.map((row) => [row[xIdx], ...values(row)])
+  if (ctx.xMode === "value")
+    return q.dataset.map((row) => [toNumberOrNull(row[xIdx]), ...values(row)])
+  if (ctx.categoryUnion) {
+    const byLabel = new Map<string, (number | null)[]>()
+    for (const row of q.dataset)
+      byLabel.set(toCategoryLabel(row[xIdx]), values(row))
+    return ctx.categoryUnion.flatMap((label) => {
+      const v = byLabel.get(label)
+      return v ? [[label, ...v]] : []
+    })
+  }
+  return q.dataset.map((row) => [toCategoryLabel(row[xIdx]), ...values(row)])
+}
+
+// A data item that carries its row by column name, so a click can set a
+// variable from any column (see clickedValue).
+const rowItem = (
+  q: ResolvedQuery,
+  row: Dataset[number],
+  value: unknown[],
+  name?: string,
+) => {
+  const columns: Record<string, unknown> = {}
+  q.columns.forEach((c, i) => {
+    columns[c.name] = row[i]
+  })
+  return { value, columns, ...(name !== undefined ? { name } : {}) }
+}
+
+const roleIndexes = (
+  q: ResolvedQuery,
+  names: readonly string[],
+): number[] | null => {
+  const idx = buildColumnIndexMap(q.columns)
+  const out = names.map((role) => {
+    const column = q.roles?.[role]
+    return column !== undefined ? idx.get(column) : undefined
+  })
+  return out.every((i) => i !== undefined) ? out : null
+}
+
+// The area between two columns (areaRange), with the query's y columns as
+// lines inside it: forecast bands, percentile ranges, min-max envelopes.
+const buildBandSeries = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
+  const idx = buildColumnIndexMap(q.columns)
+  const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
+  const edges = roleIndexes(q, ["lower", "upper"])
+  if (xIdx === undefined || !edges) return []
+  const yAxisIndex = q.axis === "right" ? 1 : 0
+  const band: Series = {
+    name: q.name ?? `${q.roles?.lower} – ${q.roles?.upper}`,
+    type: "custom",
+    renderItem: "areaRange",
+    clip: true,
+    yAxisIndex,
+    data: alignedRows(q, xIdx, edges, ctx),
+    dimensions: [q.xColumn ?? "x", q.roles?.lower ?? "", q.roles?.upper ?? ""],
+    encode: { x: 0, y: [1, 2], tooltip: [1, 2] },
+    itemPayload: { opacity: 0.22 },
+    [Y_COLUMN]: q.roles?.lower,
+    animation: false,
+  }
+  const lines = buildCartesianSeries({ ...q, type: "line" }, ctx)
+  return [band, ...lines]
+}
+
+// A bar from start to end per x: daily high-low, spreads, any range.
+const buildRangeSeries = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
+  const idx = buildColumnIndexMap(q.columns)
+  const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
+  const ends = roleIndexes(q, ["start", "end"])
+  if (xIdx === undefined || !ends) return []
+  return [
+    {
+      name: q.name ?? `${q.roles?.start} – ${q.roles?.end}`,
+      type: "custom",
+      renderItem: "barRange",
+      // Bars partly outside a zoomed window are cut at the plot's edge.
+      clip: true,
+      yAxisIndex: q.axis === "right" ? 1 : 0,
+      data: alignedRows(q, xIdx, ends, ctx),
+      dimensions: [q.xColumn ?? "x", q.roles?.start ?? "", q.roles?.end ?? ""],
+      encode: { x: 0, y: [1, 2], tooltip: [1, 2] },
+      itemPayload: { barWidth: "60%", borderRadius: 2 },
+      [Y_COLUMN]: q.roles?.start,
+    },
+  ]
+}
+
+/** Types drawn on axes of their own: they show alone, not with others. */
+export const drawsAlone = (
+  q: Pick<ResolvedQuery, "type" | "columns" | "roles">,
+) =>
+  q.type === "pie" ||
+  q.type === "heatmap" ||
+  q.type === "boxplot" ||
+  (q.type === "rangeBar" && rangeIsTime(q))
+
+const rangeIsTime = (q: Pick<ResolvedQuery, "columns" | "roles">) => {
+  const start = q.columns.find((c) => c.name === q.roles?.start)
+  return start !== undefined && classifyColumn(start) === "temporal"
+}
+
+const isTimeColumn = (q: ResolvedQuery, name: string | null | undefined) => {
+  const column = q.columns.find((c) => c.name === name)
+  return column !== undefined && classifyColumn(column) === "temporal"
+}
+
+// Category labels for times: the date, the time of day, or both, whichever
+// tells the values apart.
+export const timeCategoryLabels = (values: unknown[]): string[] => {
+  const parsed = values.map((v) => {
+    const text = typeof v === "string" ? v : toCategoryLabel(v)
+    const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?/.exec(text)
+    return m ? { date: m[1], time: m[2], seconds: m[3] ?? "", text } : null
+  })
+  if (parsed.some((p) => p === null)) return values.map(toCategoryLabel)
+  const ok = parsed as { date: string; time: string; seconds: string }[]
+  const oneDay = ok.every((p) => p.date === ok[0].date)
+  const midnight = ok.every(
+    (p) => p.time === "00:00" && (p.seconds === "" || p.seconds === ":00"),
+  )
+  const withSeconds = new Set(ok.map((p) => p.date + p.time)).size < ok.length
+  return ok.map((p) =>
+    midnight
+      ? p.date
+      : oneDay
+        ? `${p.time}${withSeconds ? p.seconds : ""}`
+        : `${p.date.slice(5)} ${p.time}`,
+  )
+}
+
+const categoryLabelsOf = (q: ResolvedQuery, xIdx: number): string[] => {
+  const values = q.dataset.map((row) => row[xIdx])
+  return isTimeColumn(q, q.xColumn)
+    ? timeCategoryLabels(values)
+    : values.map(toCategoryLabel)
+}
+
+// The distinct labels of a column: numbers and times in order (a GROUP BY
+// without ORDER BY returns them shuffled), text in result order.
+const orderedLabels = (
+  q: ResolvedQuery,
+  index: number,
+  labels: string[],
+): string[] => {
+  const column = q.columns[index]
+  const kind = column ? classifyColumn(column) : "other"
+  const firstRaw = new Map<string, unknown>()
+  labels.forEach((label, i) => {
+    if (!firstRaw.has(label)) firstRaw.set(label, q.dataset[i]?.[index])
+  })
+  const distinct = [...firstRaw.keys()]
+  if (kind === "numeric")
+    return distinct.sort((a, b) => {
+      const x = toNumberOrNull(firstRaw.get(a))
+      const y = toNumberOrNull(firstRaw.get(b))
+      // Nulls last.
+      if (x === null || y === null)
+        return (x === null ? 1 : 0) - (y === null ? 1 : 0)
+      return x - y
+    })
+  if (kind === "temporal")
+    return distinct.sort((a, b) =>
+      String(firstRaw.get(a)).localeCompare(String(firstRaw.get(b))),
+    )
+  return distinct
+}
+
 const EMPTY_CANDLE: (number | string)[] = ["-", "-", "-", "-"]
 
 const buildCandlestickSeries = (
@@ -391,6 +576,287 @@ const buildScatterChartOption = (
   }
 }
 
+type StandaloneContext = {
+  events?: ResolvedEvents[]
+  chartText: { fontSize: number }
+  axisLabel: { fontSize: number; hideOverlap: boolean }
+  axisName: { fontSize: number }
+  legend: object
+  context: ChartContext
+}
+
+const STANDALONE_GRID = {
+  left: 24,
+  right: 24,
+  top: 24,
+  bottom: GRID_BOTTOM_NO_ZOOM,
+  containLabel: true,
+}
+
+const formatterOf = (context: ChartContext, column: string | undefined) => {
+  const format = column ? context.formats?.[column] : undefined
+  return (v: unknown) => formatValue(v, format)
+}
+
+// "09:00 → 10:30 · 1h 30m": a span's ends, as time labels, and its length.
+export const spanLabel = (from: unknown, to: unknown): string => {
+  const [a, b] = timeCategoryLabels([from, to])
+  const ms = Date.parse(String(to)) - Date.parse(String(from))
+  return Number.isFinite(ms)
+    ? `${a} → ${b} · ${formatValue(ms, { kind: "duration" })}`
+    : `${a} → ${b}`
+}
+
+// Cells of x × y coloured by a value: latency by hour and bucket, volume by
+// time and price. Both axes are categories: numbers and times in order, text
+// in the result's order.
+const buildHeatmapOption = (
+  q: ResolvedQuery,
+  { chartText, axisLabel, axisName, context }: StandaloneContext,
+): EChartsOption => {
+  const idx = buildColumnIndexMap(q.columns)
+  const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
+  const roles = roleIndexes(q, ["y", "value"])
+  if (xIdx === undefined || !roles) return { tooltip: { textStyle: chartText } }
+  const [yIdx, valueIdx] = roles
+  const xLabels = categoryLabelsOf(q, xIdx)
+  const xs = orderedLabels(q, xIdx, xLabels)
+  const yRaw = q.dataset.map((row) => row[yIdx])
+  const yLabels = isTimeColumn(q, q.roles?.y)
+    ? timeCategoryLabels(yRaw)
+    : yRaw.map(toCategoryLabel)
+  const ys = orderedLabels(q, yIdx, yLabels)
+  const xAt = new Map(xs.map((x, i) => [x, i]))
+  const yAt = new Map(ys.map((y, i) => [y, i]))
+  const data = q.dataset.map((row, i) =>
+    rowItem(
+      q,
+      row,
+      [xAt.get(xLabels[i]), yAt.get(yLabels[i]), toNumberOrNull(row[valueIdx])],
+      xLabels[i],
+    ),
+  )
+  const values = data
+    .map((d) => d.value[2])
+    .filter((v): v is number => typeof v === "number")
+  const format = formatterOf(context, q.roles?.value)
+  const colors = context.colors
+  return {
+    useUTC: true,
+    tooltip: {
+      trigger: "item",
+      textStyle: chartText,
+      formatter: (p: unknown) => {
+        const v = (p as { value: [number, number, number | null] }).value
+        return `${escapeHtml(`${xs[v[0]] ?? ""} · ${ys[v[1]] ?? ""}`)}<br/><b>${escapeHtml(format(v[2]))}</b>`
+      },
+    },
+    grid: { ...STANDALONE_GRID, top: 36 },
+    xAxis: {
+      type: "category",
+      data: xs,
+      name: q.xColumn ?? "",
+      nameLocation: "middle",
+      nameGap: X_AXIS_NAME_GAP,
+      axisLabel,
+      nameTextStyle: axisName,
+      splitArea: { show: false },
+    },
+    yAxis: {
+      type: "category",
+      data: ys,
+      name: q.roles?.y ?? "",
+      axisLabel,
+      nameTextStyle: axisName,
+      splitArea: { show: false },
+    },
+    visualMap: {
+      type: "continuous",
+      min: values.length ? Math.min(...values) : 0,
+      max: values.length ? Math.max(...values) : 1,
+      calculable: false,
+      orient: "horizontal",
+      left: "center",
+      bottom: LEGEND_BOTTOM,
+      itemWidth: 10,
+      itemHeight: 140,
+      textStyle: chartText,
+      formatter: (v: unknown) => format(v),
+      // A slider without handles shows no numbers, so label its ends.
+      text: values.length
+        ? [format(Math.max(...values)), format(Math.min(...values))]
+        : undefined,
+      ...(colors
+        ? {
+            inRange: {
+              color: [
+                withAlpha(colors.chartSeries1, 0.08),
+                withAlpha(colors.chartSeries1, 0.55),
+                colors.chartSeries1,
+              ],
+            },
+          }
+        : {}),
+    },
+    series: [
+      {
+        name: q.roles?.value,
+        type: "heatmap",
+        data,
+        itemStyle: { borderRadius: 2 },
+        emphasis: { itemStyle: { borderWidth: 1 } },
+      },
+    ] as EChartsOption["series"],
+  }
+}
+
+// A box and whiskers per x from quartiles the query computes.
+const buildBoxplotOption = (
+  q: ResolvedQuery,
+  { chartText, axisLabel, axisName, context }: StandaloneContext,
+): EChartsOption => {
+  const idx = buildColumnIndexMap(q.columns)
+  const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
+  const boxes = roleIndexes(q, ["min", "q1", "median", "q3", "max"])
+  if (xIdx === undefined || !boxes) return { tooltip: { textStyle: chartText } }
+  const format = formatterOf(context, q.roles?.median)
+  const colors = context.colors
+  return {
+    useUTC: true,
+    tooltip: {
+      trigger: "item",
+      textStyle: chartText,
+      formatter: (p: unknown) => {
+        const { name, value } = p as { name: string; value: unknown[] }
+        // ECharts puts the category index first.
+        const [, min, q1, median, q3, max] = value
+        const lines = [
+          ["max", max],
+          ["q3", q3],
+          ["median", median],
+          ["q1", q1],
+          ["min", min],
+        ].map(([label, v]) => `${label} ${escapeHtml(format(v))}`)
+        return `<b>${escapeHtml(name)}</b><br/>${lines.join("<br/>")}`
+      },
+    },
+    grid: STANDALONE_GRID,
+    xAxis: {
+      type: "category",
+      data: categoryLabelsOf(q, xIdx),
+      name: q.xColumn ?? "",
+      nameLocation: "middle",
+      nameGap: X_AXIS_NAME_GAP,
+      axisLabel,
+      nameTextStyle: axisName,
+    },
+    yAxis: {
+      type: "value",
+      scale: true,
+      axisLabel: { ...axisLabel, formatter: (v: number) => format(v) },
+      nameTextStyle: axisName,
+    },
+    series: [
+      {
+        name: q.name ?? q.roles?.median,
+        type: "boxplot",
+        // Wide enough to read, never a wall of colour with few categories.
+        boxWidth: [8, 56],
+        ...(colors
+          ? {
+              itemStyle: {
+                color: withAlpha(colors.chartSeries1, 0.18),
+                borderColor: colors.chartSeries1,
+                borderWidth: 1.5,
+              },
+            }
+          : {}),
+        data: q.dataset.map((row) =>
+          rowItem(
+            q,
+            row,
+            boxes.map((i) => toNumberOrNull(row[i])),
+          ),
+        ),
+      },
+    ] as EChartsOption["series"],
+  }
+}
+
+// One lane per x value with a bar from start to end along a time axis: jobs,
+// maintenance windows, shifts.
+const buildGanttOption = (
+  q: ResolvedQuery,
+  { chartText, axisLabel, axisName, context, events }: StandaloneContext,
+): EChartsOption => {
+  const idx = buildColumnIndexMap(q.columns)
+  const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
+  const ends = roleIndexes(q, ["start", "end"])
+  if (xIdx === undefined || !ends) return { tooltip: { textStyle: chartText } }
+  const lanes = [...new Set(q.dataset.map((row) => toCategoryLabel(row[xIdx])))]
+  const colors = context.colors
+  const markers = events?.length ? eventsSeries(events, context) : null
+  return {
+    useUTC: true,
+    tooltip: {
+      trigger: "item",
+      textStyle: chartText,
+      formatter: (p: unknown) => {
+        const { value, componentType } = p as {
+          value: [string, unknown, unknown]
+          componentType?: string
+        }
+        if (componentType !== "series") return ""
+        return `<b>${escapeHtml(value[0])}</b><br/>${escapeHtml(spanLabel(value[1], value[2]))}`
+      },
+    },
+    grid: STANDALONE_GRID,
+    xAxis: {
+      type: "time",
+      axisLabel,
+      nameTextStyle: axisName,
+      // A line under the pointer, which linked charts follow.
+      axisPointer: {
+        show: true,
+        type: "line",
+        label: { show: false },
+        // The bars' own tooltip shows; the line only marks the time.
+        triggerTooltip: false,
+      },
+    },
+    // Wheel to zoom, and linked charts zoom it; bars partly in view stay.
+    dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "weakFilter" }],
+    yAxis: {
+      type: "category",
+      data: lanes,
+      inverse: true,
+      axisLabel,
+      axisTick: { show: false },
+      nameTextStyle: axisName,
+    },
+    series: [
+      {
+        name: q.name ?? q.xColumn ?? "",
+        type: "custom",
+        renderItem: "barRange",
+        // Bars partly outside a zoomed window are cut at the plot's edge.
+        clip: true,
+        data: q.dataset.map((row) =>
+          rowItem(q, row, [
+            toCategoryLabel(row[xIdx]),
+            row[ends[0]],
+            row[ends[1]],
+          ]),
+        ),
+        encode: { y: 0, x: [1, 2] },
+        itemPayload: { barWidth: "56%", borderRadius: 3 },
+        ...(colors ? { itemStyle: { color: colors.chartSeries1 } } : {}),
+      },
+      ...(markers ? [markers] : []),
+    ] as EChartsOption["series"],
+  }
+}
+
 const eventsSeries = (
   events: ResolvedEvents[],
   context: ChartContext,
@@ -458,6 +924,19 @@ const eventsSeries = (
   }
 }
 
+// The columns a query draws on its y-axis.
+const drawnColumns = (q: ResolvedQuery): string[] => {
+  if (drawsAlone(q)) return []
+  const roles = q.roles ?? {}
+  if (q.type === "band")
+    return [...q.yColumns, roles.lower, roles.upper].filter(
+      (c): c is string => c !== undefined,
+    )
+  if (q.type === "rangeBar")
+    return [roles.start, roles.end].filter((c): c is string => c !== undefined)
+  return q.yColumns
+}
+
 const valueFormatterFor =
   (format: ColumnFormat) =>
   (value: unknown): string =>
@@ -488,6 +967,19 @@ export const buildEchartsOption = (
 
   if (single && anchor.type === "pie")
     return buildPieChartOption(anchor, chartText, baseLegend)
+  const standalone: StandaloneContext = {
+    chartText,
+    axisLabel,
+    axisName,
+    legend: baseLegend,
+    context,
+    events: chart.events,
+  }
+  // These draw on axes of their own, so they show alone.
+  if (anchor.type === "heatmap") return buildHeatmapOption(anchor, standalone)
+  if (anchor.type === "boxplot") return buildBoxplotOption(anchor, standalone)
+  if (anchor.type === "rangeBar" && rangeIsTime(anchor))
+    return buildGanttOption(anchor, standalone)
   if (single && anchor.type === "scatter" && anchorRole === "numeric")
     return buildScatterChartOption(
       anchor,
@@ -538,14 +1030,15 @@ export const buildEchartsOption = (
   const ctx: SeriesContext = { xMode, categoryUnion }
   const hasCandle = queries.some((q) => q.type === "candlestick")
   const hasBar = queries.some(
-    (q) => q.type === "bar" || q.type === "stackedBar",
+    (q) => q.type === "bar" || q.type === "stackedBar" || q.type === "rangeBar",
   )
 
   const series: Series[] = []
   for (const q of queries) {
+    if (drawsAlone(q)) continue // these can't share an axis
     if (q.type === "candlestick") series.push(...buildCandlestickSeries(q, ctx))
-    else if (q.type === "pie")
-      continue // pie can't share an axis
+    else if (q.type === "band") series.push(...buildBandSeries(q, ctx))
+    else if (q.type === "rangeBar") series.push(...buildRangeSeries(q, ctx))
     else series.push(...buildCartesianSeries(q, ctx)) // line/area/bar/stackedBar/scatter
   }
 
@@ -570,7 +1063,7 @@ export const buildEchartsOption = (
   const rightTitle =
     chart.rightAxis?.name ??
     (rightQueries.length === 1
-      ? (rightQueries[0].name ?? rightQueries[0].yColumns[0] ?? "")
+      ? (rightQueries[0].name ?? drawnColumns(rightQueries[0])[0] ?? "")
       : "")
 
   const rightPadding = 36
@@ -620,9 +1113,9 @@ export const buildEchartsOption = (
       ? {
           type: "time",
           ...xAxisName,
-          // Extend the time axis 5% on each side so candle bodies sit inside the
-          // plot (time axis is boundaryGap:false by default).
-          ...(hasCandle
+          // Extend the time axis 5% on each side so candle bodies and range
+          // bars sit inside the plot (time axis is boundaryGap:false by default).
+          ...(hasCandle || queries.some((q) => q.type === "rangeBar")
             ? {
                 min: (v: { min: number; max: number }) =>
                   v.min - (v.max - v.min) * 0.05,
@@ -654,7 +1147,7 @@ export const buildEchartsOption = (
   const axisFormats: (ColumnFormat | undefined)[][] = [[], []]
   for (const q of queries) {
     const target = axisFormats[q.axis === "right" ? 1 : 0]
-    for (const y of q.yColumns) target.push(formatOf(y))
+    for (const y of drawnColumns(q)) target.push(formatOf(y))
   }
   for (const s of series) {
     const format = formatOf(s[Y_COLUMN])
@@ -662,7 +1155,10 @@ export const buildEchartsOption = (
     if (format) s.tooltip = { valueFormatter: valueFormatterFor(format) }
   }
   const sharedFormat = (list: (ColumnFormat | undefined)[]) =>
-    list.length > 0 && list.every((f) => f !== undefined && f === list[0])
+    list.length > 0 &&
+    list.every(
+      (f) => f !== undefined && JSON.stringify(f) === JSON.stringify(list[0]),
+    )
       ? list[0]
       : undefined
   const withAxisFormat = (
@@ -724,6 +1220,10 @@ export const withZoomDensity = (
   density: ChartZoomDensity,
 ): EChartsOption => {
   if (option.xAxis == null) return option
+  // A chart that brings its own inside zoom (the timeline) keeps its settings.
+  const own = (Array.isArray(option.dataZoom) ? option.dataZoom : []).find(
+    (z) => (z as { type?: string }).type === "inside",
+  )
   return {
     ...option,
     grid: {
@@ -731,7 +1231,9 @@ export const withZoomDensity = (
       bottom: density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
     },
     dataZoom: [
-      { type: "inside", disabled: !density.wheel },
+      own
+        ? { ...(own as object), type: "inside", disabled: !density.wheel }
+        : { type: "inside", disabled: !density.wheel },
       {
         type: "slider",
         show: density.slider,

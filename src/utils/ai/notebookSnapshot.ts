@@ -38,6 +38,10 @@ type ChartQueryWire = {
   enabled?: boolean
   name?: string
   events?: { time?: string; end?: string; label?: string; tone?: string }
+  heatmap?: { y: string; value: string }
+  band?: { lower: string; upper: string }
+  range?: { start: string; end: string }
+  box?: { min: string; q1: string; median: string; q3: string; max: string }
 }
 import {
   toHighlightConfigWire,
@@ -149,6 +153,10 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.enabled === false ? { enabled: false } : {}),
           ...(q.name != null ? { name: q.name } : {}),
           ...(q.events ? { events: q.events } : {}),
+          ...(q.heatmap ? { heatmap: q.heatmap } : {}),
+          ...(q.band ? { band: q.band } : {}),
+          ...(q.range ? { range: q.range } : {}),
+          ...(q.box ? { box: q.box } : {}),
         },
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),

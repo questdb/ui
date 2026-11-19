@@ -69,11 +69,13 @@ const Fixture = ({
   onSave,
   statementsOverride,
   tabsOverride,
+  effectiveOverride,
 }: {
   saved: DrawSettings
   onSave: (next: DrawSettings) => void
   statementsOverride?: StatementRows[]
   tabsOverride?: QueryTab[]
+  effectiveOverride?: ChartConfig
 }) => {
   const [overlay, setOverlay] = useState<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
@@ -91,7 +93,8 @@ const Fixture = ({
           tabs={tabsOverride ?? tabs}
           saved={saved}
           effective={
-            tabsOverride
+            effectiveOverride ??
+            (tabsOverride
               ? {
                   ...effective,
                   queries: [
@@ -99,7 +102,7 @@ const Fixture = ({
                     { type: "line", yColumns: ["price"] },
                   ],
                 }
-              : effective
+              : effective)
           }
           statements={statementsOverride ?? statements}
           onSave={onSave}
@@ -490,5 +493,69 @@ describe("draw settings drawer", () => {
 
     // Then nothing is saved
     expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it("draws a statement as a band with the edges it guesses or the user picks", async () => {
+    // Given a time series with percentile columns, drawn as lines split by
+    // symbol
+    const onSave = vi.fn()
+    const bandColumns = [
+      { name: "ts", type: "TIMESTAMP" },
+      { name: "symbol", type: "SYMBOL" },
+      { name: "price", type: "DOUBLE" },
+      { name: "p05", type: "DOUBLE" },
+      { name: "p95", type: "DOUBLE" },
+      { name: "p99", type: "DOUBLE" },
+    ]
+    renderComponent(
+      <Fixture
+        saved={{ chartConfig: effective }}
+        tabsOverride={[{ ...tabs[0], columns: bandColumns }]}
+        effectiveOverride={{
+          xColumn: "ts",
+          queries: [
+            {
+              type: "line",
+              yColumns: ["price", "p05", "p95", "p99"],
+              partitionByColumn: "symbol",
+            },
+          ],
+        }}
+        onSave={onSave}
+      />,
+    )
+    const drawer = await openDrawer()
+
+    // When the user picks the band type
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^Chart type:/ }),
+    )
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /^Band/ }))
+
+    // Then the edges are guessed from their names
+    expect(
+      within(drawer).getByRole("button", { name: /^Lower edge column: p05/ }),
+    ).toBeVisible()
+    expect(
+      within(drawer).getByRole("button", { name: /^Upper edge column: p95/ }),
+    ).toBeVisible()
+
+    // When the user picks another upper edge
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^Upper edge column:/ }),
+    )
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "p99" }))
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+
+    // Then the band saves the picked edges, and they are not also lines
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    const saved = savedOf(onSave).chartConfig.queries[0]
+    expect(saved).toMatchObject({
+      type: "band",
+      band: { lower: "p05", upper: "p99" },
+    })
+    expect(saved?.yColumns).toEqual(["price"])
+    // A band reads its own columns, so the partition is gone
+    expect(saved?.partitionByColumn).toBeUndefined()
   })
 })

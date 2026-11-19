@@ -11,7 +11,13 @@ const Y_AXIS_LABEL_WIDTH_PX = 48
 // body is half its band.
 const CANDLE_FILL_RATIO = 0.5
 
-type SeriesSpec = { type?: string; stack?: string; data?: unknown[] }
+type SeriesSpec = {
+  type?: string
+  stack?: string
+  data?: unknown[]
+  renderItem?: unknown
+  encode?: { x?: unknown }
+}
 
 const seriesOf = (option: EChartsOption): SeriesSpec[] => {
   const raw = option.series
@@ -64,10 +70,22 @@ export const chartZoomDensity = (
   containerWidthPx: number,
 ): ChartZoomDensity => {
   const plotWidth = plotWidthOf(option, containerWidthPx)
-  if (plotWidth <= 0) return { slider: false, wheel: false }
+  // A chart that brings its own inside zoom (the timeline) always zooms.
+  const ownZoom = (Array.isArray(option.dataZoom) ? option.dataZoom : []).some(
+    (z) => (z as { type?: string }).type === "inside",
+  )
+  if (plotWidth <= 0) return { slider: false, wheel: ownZoom }
 
   const series = seriesOf(option)
-  const bars = series.filter((s) => s.type === "bar")
+  // Range bars standing on x are a custom series drawn like bars; lying
+  // along x (a timeline) their count says nothing about crowding.
+  const bars = series.filter(
+    (s) =>
+      s.type === "bar" ||
+      (s.type === "custom" &&
+        s.renderItem === "barRange" &&
+        !(Array.isArray(s.encode?.x) && s.encode.x.length === 2)),
+  )
   const candles = series.filter((s) => s.type === "candlestick")
   const points = series.filter((s) => s.type === "line" || s.type === "scatter")
   const xAxis = firstOf(option.xAxis) as { data?: unknown[] } | undefined
@@ -75,7 +93,7 @@ export const chartZoomDensity = (
   const bandSlots = (list: SeriesSpec[]) =>
     Math.max(categorySlots, maxDataLength(list))
 
-  const density = { slider: false, wheel: false }
+  const density = { slider: false, wheel: ownZoom }
   const include = (slots: number, fillRatio: number, minPx: number) => {
     if (slots <= 0) return
     const markPx = (plotWidth / slots) * fillRatio

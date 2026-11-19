@@ -9,9 +9,22 @@ import {
   Text,
 } from "../../../../components"
 import { HighlightedSql } from "../../../../components/HighlightedSql"
-import type { ChartType, QueryChart, SeriesAxis } from "./chartTypes"
+import {
+  ROLE_COLUMNS,
+  ROLE_FIELD,
+  isRoleChartType,
+  type ChartType,
+  type QueryChart,
+  type RoleChartType,
+  type SeriesAxis,
+} from "./chartTypes"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
-import { availableChartTypes, findOhlc, groupColumns } from "./inferChartConfig"
+import {
+  availableChartTypes,
+  findOhlc,
+  groupColumns,
+  guessRoleColumns,
+} from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
   CheckboxRow,
@@ -31,7 +44,36 @@ const TYPE_LABELS: Record<ChartType, string> = {
   scatter: "Scatter",
   pie: "Pie",
   candlestick: "Candlestick",
+  heatmap: "Heatmap",
+  band: "Band (area between two columns)",
+  rangeBar: "Range bars (start to end)",
+  boxplot: "Box plot",
   events: "Events (markers on the time axis)",
+}
+
+// What each role type draws, under its pickers.
+const ROLE_HINTS: Record<RoleChartType, string> = {
+  heatmap:
+    "One cell per x and y, coloured by the value. Shows as a chart of its own.",
+  band: "A shaded area between the two columns; the series below draw as lines inside it.",
+  rangeBar:
+    "A bar from start to end per x. With times for start and end, one lane per x along a time axis (a Gantt), as a chart of its own.",
+  boxplot:
+    "The query computes the five numbers per x, e.g. with approx_percentile. Shows as a chart of its own.",
+}
+
+const withoutColumns = (columns: string[], drop: string[]) =>
+  columns.filter((c) => !drop.includes(c))
+
+const roleCandidates = (
+  type: RoleChartType,
+  role: string,
+  groups: ReturnType<typeof groupColumns>,
+) => {
+  if (type === "heatmap" && role === "y")
+    return [...groups.categorical, ...groups.temporal, ...groups.numeric]
+  if (type === "rangeBar") return [...groups.temporal, ...groups.numeric]
+  return groups.numeric
 }
 
 const PARTITION_TYPES: ChartType[] = [
@@ -88,6 +130,63 @@ const IncompatibleNote = styled.div`
   gap: 0.5rem;
   padding: 0.5rem;
 `
+
+const RoleControls: React.FC<{
+  type: RoleChartType
+  query: QueryChart
+  groups: ReturnType<typeof groupColumns>
+  idx: number
+  onUpdateQuery: (patch: Partial<QueryChart>) => void
+}> = ({ type, query, groups, idx, onUpdateQuery }) => {
+  const field = ROLE_FIELD[type]
+  const current = (query[field] ?? {}) as Record<string, string>
+  return (
+    <FieldGroup>
+      <OhlcGrid>
+        {ROLE_COLUMNS[type].map(([role, label]) => (
+          <MiniField key={role}>
+            <Text color="contentSecondary" size="xs">
+              {label}
+            </Text>
+            <SelectMenuControl
+              name={`${type}-${role}-${idx}`}
+              ariaLabel={`${label} column`}
+              value={current[role] ?? ""}
+              onValueChange={(value) => {
+                if (!value) return
+                const roles = { ...current, [role]: value }
+                onUpdateQuery({
+                  [field]: roles,
+                  ...(type === "band"
+                    ? {
+                        yColumns: withoutColumns(
+                          query.yColumns,
+                          Object.values(roles),
+                        ),
+                      }
+                    : {}),
+                })
+              }}
+              options={[
+                // Only while nothing is picked: no column cannot be saved.
+                ...(current[role]
+                  ? []
+                  : [{ label: "Select column", value: "" }]),
+                ...roleCandidates(type, role, groups).map((c) => ({
+                  label: c.name,
+                  value: c.name,
+                })),
+              ]}
+            />
+          </MiniField>
+        ))}
+      </OhlcGrid>
+      <Text color="contentSecondary" size="xs" lineHeight="1.3">
+        {ROLE_HINTS[type]}
+      </Text>
+    </FieldGroup>
+  )
+}
 
 export type QueryControlsProps = {
   activeTab: QueryTab
@@ -205,6 +304,22 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
               const oh = findOhlc(groups.numeric)
               if (oh) patch.ohlc = oh
             }
+            if (isRoleChartType(type)) {
+              const roles =
+                (query[ROLE_FIELD[type]] as
+                  | Record<string, string>
+                  | undefined) ??
+                guessRoleColumns(type, activeTab.columns, xColumn)
+              if (roles) Object.assign(patch, { [ROLE_FIELD[type]]: roles })
+              // These read their own columns; a partition would split them.
+              patch.partitionByColumn = undefined
+              // The band's edges are not also lines inside it.
+              if (type === "band" && roles)
+                patch.yColumns = withoutColumns(
+                  query.yColumns,
+                  Object.values(roles),
+                )
+            }
             onUpdateQuery(patch)
           }}
           options={types.map((t) => ({ label: TYPE_LABELS[t], value: t }))}
@@ -321,6 +436,16 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </FieldGroup>
       )}
 
+      {isRoleChartType(query.type) && (
+        <RoleControls
+          type={query.type}
+          query={query}
+          groups={groups}
+          idx={idx}
+          onUpdateQuery={onUpdateQuery}
+        />
+      )}
+
       {query.type === "pie" && (
         <Field>
           <FieldLabel>Value</FieldLabel>
@@ -344,9 +469,12 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         query.type === "stepArea" ||
         query.type === "bar" ||
         query.type === "stackedBar" ||
-        query.type === "scatter") && (
+        query.type === "scatter" ||
+        query.type === "band") && (
         <Field>
-          <FieldLabel>Series</FieldLabel>
+          <FieldLabel>
+            {query.type === "band" ? "Lines inside the band" : "Series"}
+          </FieldLabel>
           <SearchableSelect
             ariaLabel="Series"
             options={numericOptions}

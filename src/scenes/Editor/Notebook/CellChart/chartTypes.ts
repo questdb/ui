@@ -8,6 +8,10 @@ export const CHART_TYPES = [
   "scatter",
   "pie",
   "candlestick",
+  "heatmap",
+  "band",
+  "rangeBar",
+  "boxplot",
   "events",
 ] as const
 
@@ -26,6 +30,16 @@ export type QueryChart = {
     low: string
     close: string
   }
+  // type "heatmap": cells of x × y, coloured by value.
+  heatmap?: HeatmapColumns
+  // type "band": the area between two columns; yColumns draw as lines in it.
+  band?: BandColumns
+  // type "rangeBar": a bar from start to end per x. With times for start and
+  // end it lies down: one lane per x value, along a time axis (a Gantt).
+  range?: RangeColumns
+  // type "boxplot": a box and whiskers per x, from quartiles the query
+  // computes (approx_percentile).
+  box?: BoxColumns
   partitionByColumn?: string
   axis?: SeriesAxis
   enabled?: boolean
@@ -34,6 +48,53 @@ export type QueryChart = {
   // series. Each column defaults by position: time, then label.
   events?: EventColumns
 }
+
+export type HeatmapColumns = { y: string; value: string }
+export type BandColumns = { lower: string; upper: string }
+export type RangeColumns = { start: string; end: string }
+export type BoxColumns = {
+  min: string
+  q1: string
+  median: string
+  q3: string
+  max: string
+}
+
+/** The columns each of these types reads, and what each is called. */
+export const ROLE_COLUMNS = {
+  heatmap: [
+    ["y", "Y (rows)"],
+    ["value", "Value (colour)"],
+  ],
+  band: [
+    ["lower", "Lower edge"],
+    ["upper", "Upper edge"],
+  ],
+  rangeBar: [
+    ["start", "Start"],
+    ["end", "End"],
+  ],
+  boxplot: [
+    ["min", "Min"],
+    ["q1", "Lower quartile"],
+    ["median", "Median"],
+    ["q3", "Upper quartile"],
+    ["max", "Max"],
+  ],
+} as const
+
+export type RoleChartType = keyof typeof ROLE_COLUMNS
+
+/** The QueryChart field holding a role chart's columns. */
+export const ROLE_FIELD = {
+  heatmap: "heatmap",
+  band: "band",
+  rangeBar: "range",
+  boxplot: "box",
+} as const
+
+export const isRoleChartType = (type: ChartType): type is RoleChartType =>
+  type in ROLE_COLUMNS
 
 export type EventColumns = {
   /** When the event happened, or when its range starts. */

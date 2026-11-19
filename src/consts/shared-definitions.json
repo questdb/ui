@@ -603,7 +603,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query). Type 'events' turns a statement into MARKERS on the time axis (deploys, rollouts, news, incidents): one dashed line per row, or a shaded range when `events.end` is set, labelled from `events.label` and coloured by `events.tone`. Setting `queries` replaces any visual or custom option on the cell (set_cell_visual / set_cell_custom_chart). Column formats (set_cell_formats) format the tooltip and the y-axis.",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick/heatmap/band/rangeBar/boxplot); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query). Type 'events' turns a statement into MARKERS on the time axis (deploys, rollouts, news, incidents): one dashed line per row, or a shaded range when `events.end` is set, labelled from `events.label` and coloured by `events.tone`. Setting `queries` replaces any visual or custom option on the cell (set_cell_visual / set_cell_custom_chart). Column formats (set_cell_formats) format the tooltip and the y-axis. Types heatmap / band / rangeBar / boxplot read the columns in `heatmap` / `band` / `range` / `box` (null = guessed from names and kinds). heatmap, boxplot and a time rangeBar (Gantt) show as a chart of their own; band and a numeric rangeBar combine with other series.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -637,6 +637,10 @@
                   "scatter",
                   "pie",
                   "candlestick",
+                  "heatmap",
+                  "band",
+                  "rangeBar",
+                  "boxplot",
                   "events"
                 ]
               },
@@ -704,6 +708,71 @@
                 },
                 "required": ["time", "end", "label", "tone"],
                 "description": "Only for type 'events': the statement's rows become markers on the time axis instead of a series. time = when (default the first column); end = range end (optional: without it each row is a line); label = text (default the second column)."
+              },
+              "heatmap": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                  "y": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": ["y", "value"],
+                "description": "Only for type 'heatmap': y = the row column (text or a bucket), value = the column that colours each cell; x is x_column. Null = guessed (first text column, first numeric)."
+              },
+              "band": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                  "lower": {
+                    "type": "string"
+                  },
+                  "upper": {
+                    "type": "string"
+                  }
+                },
+                "required": ["lower", "upper"],
+                "description": "Only for type 'band': the shaded area between lower and upper (p5/p95, min/max, a forecast range); y_columns draw as lines inside it. Null = guessed from names (low/high, min/max, p5/p95)."
+              },
+              "range": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                  "start": {
+                    "type": "string"
+                  },
+                  "end": {
+                    "type": "string"
+                  }
+                },
+                "required": ["start", "end"],
+                "description": "Only for type 'rangeBar': a bar from start to end per x (daily low/high). With TIMESTAMP start and end the chart lies down: one lane per x_column value along a time axis (jobs, windows: a Gantt). Null = guessed (start/end, low/high)."
+              },
+              "box": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                  "min": {
+                    "type": "string"
+                  },
+                  "q1": {
+                    "type": "string"
+                  },
+                  "median": {
+                    "type": "string"
+                  },
+                  "q3": {
+                    "type": "string"
+                  },
+                  "max": {
+                    "type": "string"
+                  }
+                },
+                "required": ["min", "q1", "median", "q3", "max"],
+                "description": "Only for type 'boxplot': five columns the QUERY computes per x (min, approx_percentile(v, 0.25), approx_percentile(v, 0.5), approx_percentile(v, 0.75), max). Null = guessed from names or the first five numeric columns."
               }
             },
             "required": [
@@ -714,7 +783,11 @@
               "axis",
               "enabled",
               "name",
-              "events"
+              "events",
+              "heatmap",
+              "band",
+              "range",
+              "box"
             ]
           }
         },
@@ -1716,6 +1789,10 @@
                             "scatter",
                             "pie",
                             "candlestick",
+                            "heatmap",
+                            "band",
+                            "rangeBar",
+                            "boxplot",
                             "events"
                           ]
                         },
@@ -1777,6 +1854,71 @@
                           },
                           "required": ["time", "end", "label", "tone"],
                           "description": "Only for type 'events': the statement's rows become markers on the time axis instead of a series. time = when (default the first column); end = range end (optional: without it each row is a line); label = text (default the second column)."
+                        },
+                        "heatmap": {
+                          "type": ["object", "null"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "y": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["y", "value"],
+                          "description": "Only for type 'heatmap': y = the row column (text or a bucket), value = the column that colours each cell; x is x_column. Null = guessed (first text column, first numeric)."
+                        },
+                        "band": {
+                          "type": ["object", "null"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "lower": {
+                              "type": "string"
+                            },
+                            "upper": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["lower", "upper"],
+                          "description": "Only for type 'band': the shaded area between lower and upper (p5/p95, min/max, a forecast range); y_columns draw as lines inside it. Null = guessed from names (low/high, min/max, p5/p95)."
+                        },
+                        "range": {
+                          "type": ["object", "null"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "start": {
+                              "type": "string"
+                            },
+                            "end": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["start", "end"],
+                          "description": "Only for type 'rangeBar': a bar from start to end per x (daily low/high). With TIMESTAMP start and end the chart lies down: one lane per x_column value along a time axis (jobs, windows: a Gantt). Null = guessed (start/end, low/high)."
+                        },
+                        "box": {
+                          "type": ["object", "null"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "min": {
+                              "type": "string"
+                            },
+                            "q1": {
+                              "type": "string"
+                            },
+                            "median": {
+                              "type": "string"
+                            },
+                            "q3": {
+                              "type": "string"
+                            },
+                            "max": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["min", "q1", "median", "q3", "max"],
+                          "description": "Only for type 'boxplot': five columns the QUERY computes per x (min, approx_percentile(v, 0.25), approx_percentile(v, 0.5), approx_percentile(v, 0.75), max). Null = guessed from names or the first five numeric columns."
                         }
                       },
                       "required": [
@@ -1787,7 +1929,11 @@
                         "axis",
                         "enabled",
                         "name",
-                        "events"
+                        "events",
+                        "heatmap",
+                        "band",
+                        "range",
+                        "box"
                       ]
                     }
                   },
