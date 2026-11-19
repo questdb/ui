@@ -819,15 +819,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@echarts-x/custom-bar-range@npm:^1.2.1":
-  version: 1.2.1
-  resolution: "@echarts-x/custom-bar-range@npm:1.2.1"
-  peerDependencies:
-    echarts: ^6.0.0
-  checksum: 10/f829811adc80fe96540db8728f032887d3e5d630356b9350853e6a190e3ffcc42593e0c7dcd80b249d4180e5a255d69e1727dc9d7ccebf14ab649fb060197706
-  languageName: node
-  linkType: hard
-
 "@echarts-x/custom-contour@npm:^1.2.1":
   version: 1.2.1
   resolution: "@echarts-x/custom-contour@npm:1.2.1"
@@ -1799,7 +1790,6 @@ __metadata:
     "@date-fns/tz": "npm:^1.2.0"
     "@docsearch/css": "npm:^3.5.2"
     "@docsearch/react": "npm:^3.5.2"
-    "@echarts-x/custom-bar-range": "npm:^1.2.1"
     "@echarts-x/custom-contour": "npm:^1.2.1"
     "@echarts-x/custom-line-range": "npm:^1.1.1"
     "@echarts-x/custom-segmented-doughnut": "npm:^1.1.1"

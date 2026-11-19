@@ -41,7 +41,6 @@
     "@date-fns/tz": "^1.2.0",
     "@docsearch/css": "^3.5.2",
     "@docsearch/react": "^3.5.2",
-    "@echarts-x/custom-bar-range": "^1.2.1",
     "@echarts-x/custom-contour": "^1.2.1",
     "@echarts-x/custom-line-range": "^1.1.1",
     "@echarts-x/custom-segmented-doughnut": "^1.1.1",

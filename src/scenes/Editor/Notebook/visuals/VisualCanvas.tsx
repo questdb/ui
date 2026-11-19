@@ -107,14 +107,15 @@ export const VisualCanvas = ({
 }: Props) => {
   const theme = useTheme()
   const builder = ECHARTS_VISUALS[visual.type]
+  const mapReady = useWorldMap(visual.type === "map")
+  // A map fits its view to the regions once the world map has loaded.
   const built = useMemo(
     () =>
-      builder
+      builder && mapReady
         ? builder({ visual, statements, colors: theme.color, formats })
         : null,
-    [builder, visual, statements, theme.color, formats],
+    [builder, visual, statements, theme.color, formats, mapReady],
   )
-  const mapReady = useWorldMap(visual.type === "map")
   const click = interactions?.click
   const select = click
     ? (value: unknown) => setVariables({ [click.variable]: sqlLiteral(value) })
@@ -187,13 +188,13 @@ export const VisualCanvas = ({
     default:
       break
   }
+  if (!mapReady) return <PaneEmptyState>Loading map…</PaneEmptyState>
   if (!built?.option)
     return (
       <PaneEmptyState>
         {built?.problems[0]?.message ?? "Nothing to draw."}
       </PaneEmptyState>
     )
-  if (!mapReady) return <PaneEmptyState>Loading map…</PaneEmptyState>
   return (
     <Fill>
       <ChartRenderer

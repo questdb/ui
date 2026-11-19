@@ -114,6 +114,7 @@ export const gaugeOption = ({
           max,
           startAngle: 210,
           endAngle: -30,
+          splitNumber: 4,
           radius: "92%",
           center: ["50%", "58%"],
           progress: {
@@ -565,6 +566,16 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
 export const sankeyOption = (ctx: VisualContext): VisualBuild => {
   const e = edges(ctx)
   if (typeof e === "string") return missing(e)
+  // Labels sit right of their node, except on the last column, where they
+  // would run off the chart.
+  const depth = new Map<string, number>()
+  for (let pass = 0; pass < e.nodes.length; pass++) {
+    for (const l of e.links) {
+      const d = (depth.get(l.source) ?? 0) + 1
+      if (d > (depth.get(l.target) ?? 0)) depth.set(l.target, d)
+    }
+  }
+  const lastDepth = Math.max(0, ...depth.values())
   const { colors, formats } = ctx
   const format = e.valueName ? formats[e.valueName] : undefined
   return {
@@ -577,7 +588,7 @@ export const sankeyOption = (ctx: VisualContext): VisualBuild => {
         {
           type: "sankey",
           left: 8,
-          right: "14%",
+          right: 8,
           top: 8,
           bottom: 8,
           nodeGap: 10,
@@ -586,6 +597,7 @@ export const sankeyOption = (ctx: VisualContext): VisualBuild => {
           label: { color: colors.contentPrimary, fontSize: 11 },
           lineStyle: { color: "gradient", opacity: 0.35, curveness: 0.5 },
           itemStyle: { borderWidth: 0 },
+          levels: [{ depth: lastDepth, label: { position: "left" } }],
           data: e.nodes.map((n, i) => ({
             ...n,
             itemStyle: { color: palette(colors)[i % 8] },
@@ -633,6 +645,74 @@ export const chordOption = (ctx: VisualContext): VisualBuild => {
 
 // ── Map ──────────────────────────────────────────────────────────────────
 
+type Bounds = [[number, number], [number, number]]
+
+const boundsOf = (points: [number, number][], pad: number): Bounds | null => {
+  if (points.length === 0) return null
+  let minLon = Infinity
+  let maxLon = -Infinity
+  let minLat = Infinity
+  let maxLat = -Infinity
+  for (const [lon, lat] of points) {
+    minLon = Math.min(minLon, lon)
+    maxLon = Math.max(maxLon, lon)
+    minLat = Math.min(minLat, lat)
+    maxLat = Math.max(maxLat, lat)
+  }
+  // A view that spans most of the world is the world.
+  if (maxLon - minLon > 250) return null
+  const dLon = Math.max((maxLon - minLon) * pad, 4)
+  const dLat = Math.max((maxLat - minLat) * pad, 3)
+  return [
+    [Math.max(minLon - dLon, -180), Math.min(maxLat + dLat, 85)],
+    [Math.min(maxLon + dLon, 180), Math.max(minLat - dLat, -60)],
+  ]
+}
+
+type WorldMap = {
+  geoJSON?: {
+    features?: {
+      properties?: { name?: string }
+      geometry?: { coordinates?: unknown }
+    }[]
+  }
+}
+
+/** The corners of the named countries on the world map, once it is loaded. */
+const regionBounds = (names: Set<string>): Bounds | null => {
+  const map = echarts.getMap("world") as WorldMap | undefined
+  const points: [number, number][] = []
+  const collect = (node: unknown) => {
+    if (!Array.isArray(node)) return
+    if (
+      node.length >= 2 &&
+      typeof node[0] === "number" &&
+      typeof node[1] === "number"
+    ) {
+      points.push([node[0], node[1]])
+      return
+    }
+    for (const child of node) collect(child)
+  }
+  for (const feature of map?.geoJSON?.features ?? []) {
+    if (names.has(feature.properties?.name ?? ""))
+      collect(feature.geometry?.coordinates)
+  }
+  if (points.length === 0) return null
+  // Trim the outer 3% on each side, so remote islands do not stretch the view.
+  const lons = points.map((p) => p[0]).sort((a, b) => a - b)
+  const lats = points.map((p) => p[1]).sort((a, b) => a - b)
+  const at = (list: number[], q: number) =>
+    list[Math.floor(q * (list.length - 1))]
+  return boundsOf(
+    [
+      [at(lons, 0.03), at(lats, 0.03)],
+      [at(lons, 0.97), at(lats, 0.97)],
+    ],
+    0.08,
+  )
+}
+
 export const mapOption = ({
   visual,
   statements,
@@ -677,6 +757,16 @@ export const mapOption = ({
     label: { show: false },
   }
   if (latIdx >= 0 && lonIdx >= 0) {
+    const bounds = boundsOf(
+      rows.rows.flatMap((r) => {
+        const lon = toNumber(r[lonIdx])
+        const lat = toNumber(r[latIdx])
+        return lon === null || lat === null
+          ? []
+          : [[lon, lat] as [number, number]]
+      }),
+      0.15,
+    )
     const values = rows.rows.map((r) =>
       valueIdx >= 0 ? (toNumber(r[valueIdx]) ?? 0) : 1,
     )
@@ -689,7 +779,7 @@ export const mapOption = ({
             return `${name.replace(/</g, "&lt;")}<br/>${formatValue(value[2], format)}`
           },
         },
-        geo,
+        geo: bounds ? { ...geo, zoom: 1, boundingCoords: bounds } : geo,
         series: [
           {
             type: "effectScatter",
@@ -724,6 +814,7 @@ export const mapOption = ({
     name: toLabel(r[regionIdx]),
     value: toNumber(r[valueIdx]),
   }))
+  const bounds = regionBounds(new Set(data.map((d) => d.name)))
   const values = data.map((d) => d.value ?? 0)
   return {
     option: {
@@ -752,6 +843,7 @@ export const mapOption = ({
         {
           type: "map",
           ...geo,
+          ...(bounds ? { zoom: 1, boundingCoords: bounds } : {}),
           data,
         },
       ] as EChartsOption["series"],
@@ -992,7 +1084,9 @@ export const volumeProfileOption = ({
       grid: { left: 12, right: 44, top: 8, bottom: 32, containLabel: true },
       xAxis: {
         type: "value",
+        splitNumber: 3,
         axisLabel: {
+          hideOverlap: true,
           formatter: (v: number) => formatValue(v, { compact: true }),
         },
       },

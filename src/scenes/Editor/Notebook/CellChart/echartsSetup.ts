@@ -56,7 +56,7 @@ import {
   ScatterJitter,
 } from "echarts/features"
 import { CanvasRenderer } from "echarts/renderers"
-import barRange from "@echarts-x/custom-bar-range"
+import type { CustomSeriesRenderItem } from "echarts"
 import lineRange from "@echarts-x/custom-line-range"
 import stage from "@echarts-x/custom-stage"
 import violin from "@echarts-x/custom-violin"
@@ -122,7 +122,6 @@ echarts.use([
 // Official custom series, referenced by name from an option
 // (`{ type: "custom", renderItem: "barRange" }`).
 for (const installer of [
-  barRange,
   lineRange,
   stage,
   violin,
@@ -141,6 +140,54 @@ export const BUILTIN_CUSTOM_SERIES = [
   "contour",
   "segmentedDoughnut",
 ] as const
+
+// The official bar range draws its values as text in degrees Celsius; this one
+// draws only the bar, vertical or horizontal by `encode`: a range [low, high]
+// on y per x category, or on x per y category.
+const barRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
+  const encode = (params as unknown as { encode: { x: number[]; y: number[] } })
+    .encode
+  const horizontal = encode.x.length === 2
+  const at = api.value(horizontal ? encode.y[0] : encode.x[0])
+  const from = api.value(horizontal ? encode.x[0] : encode.y[0])
+  const to = api.value(horizontal ? encode.x[1] : encode.y[1])
+  const start = api.coord(horizontal ? [from, at] : [at, from])
+  const end = api.coord(horizontal ? [to, at] : [at, to])
+  const payload =
+    (
+      params as unknown as {
+        itemPayload?: { barWidth?: number | string; borderRadius?: number }
+      }
+    ).itemPayload ?? {}
+  const band = (api.size?.(horizontal ? [0, 1] : [1, 0]) as number[])[
+    horizontal ? 1 : 0
+  ]
+  const raw = payload.barWidth ?? "60%"
+  const thickness =
+    typeof raw === "string" && raw.endsWith("%")
+      ? (parseFloat(raw) / 100) * band
+      : Number(raw)
+  const shape = horizontal
+    ? {
+        x: Math.min(start[0], end[0]),
+        y: start[1] - thickness / 2,
+        width: Math.max(Math.abs(end[0] - start[0]), 1),
+        height: thickness,
+      }
+    : {
+        x: start[0] - thickness / 2,
+        y: Math.min(start[1], end[1]),
+        width: thickness,
+        height: Math.max(Math.abs(end[1] - start[1]), 1),
+      }
+  return {
+    type: "rect",
+    shape: { ...shape, r: payload.borderRadius ?? 2 },
+    style: { fill: api.visual("color") as string },
+  }
+}
+
+echarts.registerCustomSeries("barRange", barRangeRenderItem)
 
 // Pair with `echarts-for-react/lib/core` — importing the default wrapper
 // instead would pull the full echarts catalog and undo the tree-shaking.
