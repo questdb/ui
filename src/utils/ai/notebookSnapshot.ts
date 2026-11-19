@@ -42,6 +42,9 @@ type ChartQueryWire = {
   band?: { lower: string; upper: string }
   range?: { start: string; end: string }
   box?: { min: string; q1: string; median: string; q3: string; max: string }
+  percent_stack?: boolean
+  pie_shape?: string
+  scatter?: { size?: string; color?: string }
 }
 import {
   toHighlightConfigWire,
@@ -59,6 +62,8 @@ export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
   right_axis?: { name?: string; min?: number; max?: number }
+  horizontal?: boolean
+  thresholds?: "lines" | "bands"
   visual?: ReturnType<typeof visualToWire>
   // The custom ECharts option, as the JSON text set_cell_custom_chart takes.
   custom_option_json?: string
@@ -157,9 +162,14 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.band ? { band: q.band } : {}),
           ...(q.range ? { range: q.range } : {}),
           ...(q.box ? { box: q.box } : {}),
+          ...(q.percentStack ? { percent_stack: true } : {}),
+          ...(q.pieShape ? { pie_shape: q.pieShape } : {}),
+          ...(q.scatter ? { scatter: q.scatter } : {}),
         },
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
+  ...(cfg.horizontal ? { horizontal: true } : {}),
+  ...(cfg.thresholds ? { thresholds: cfg.thresholds } : {}),
   ...(cfg.visual ? { visual: visualToWire(cfg.visual) } : {}),
   ...(cfg.custom
     ? { custom_option_json: JSON.stringify(cfg.custom.option) }

@@ -1,6 +1,7 @@
 import type {
   ChartConfig,
   ChartType,
+  PieShape,
   QueryChart,
 } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 
@@ -27,6 +28,29 @@ export type ToolQueryChart = {
     q3: string
     max: string
   } | null
+  percent_stack?: boolean | null
+  pie_shape?: PieShape | null
+  scatter?: { size?: string | null; color?: string | null } | null
+}
+
+/** Chart-wide switches, in the agent's words. */
+export type ToolChartOptions = {
+  horizontal?: boolean | null
+  thresholds?: "off" | "lines" | "bands" | null
+}
+
+/**
+ * The chart-wide switches an agent set, as a patch: null leaves a switch as
+ * it is, false and "off" clear it.
+ */
+export const mapChartOptions = (
+  o: ToolChartOptions,
+): Pick<ChartConfig, "horizontal" | "thresholds"> => {
+  const out: Pick<ChartConfig, "horizontal" | "thresholds"> = {}
+  if (o.horizontal != null) out.horizontal = o.horizontal || undefined
+  if (o.thresholds != null)
+    out.thresholds = o.thresholds === "off" ? undefined : o.thresholds
+  return out
 }
 
 export type ToolRightAxis = {
@@ -47,6 +71,13 @@ export const mapQueryChart = (q: ToolQueryChart): QueryChart => {
   if (q.band) out.band = q.band
   if (q.range) out.range = q.range
   if (q.box) out.box = q.box
+  if (q.percent_stack) out.percentStack = true
+  if (q.pie_shape) out.pieShape = q.pie_shape
+  if (q.scatter?.size || q.scatter?.color)
+    out.scatter = {
+      ...(q.scatter.size ? { size: q.scatter.size } : {}),
+      ...(q.scatter.color ? { color: q.scatter.color } : {}),
+    }
   return out
 }
 

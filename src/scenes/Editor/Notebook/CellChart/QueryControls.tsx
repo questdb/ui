@@ -10,10 +10,12 @@ import {
 } from "../../../../components"
 import { HighlightedSql } from "../../../../components/HighlightedSql"
 import {
+  PIE_SHAPES,
   ROLE_COLUMNS,
   ROLE_FIELD,
   isRoleChartType,
   type ChartType,
+  type PieShape,
   type QueryChart,
   type RoleChartType,
   type SeriesAxis,
@@ -49,6 +51,12 @@ const TYPE_LABELS: Record<ChartType, string> = {
   rangeBar: "Range bars (start to end)",
   boxplot: "Box plot",
   events: "Events (markers on the time axis)",
+}
+
+const PIE_SHAPE_LABELS: Record<PieShape, string> = {
+  pie: "Pie",
+  donut: "Donut",
+  halfDonut: "Half donut",
 }
 
 // What each role type draws, under its pickers.
@@ -463,6 +471,24 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </Field>
       )}
 
+      {query.type === "pie" && (
+        <Field>
+          <FieldLabel>Shape</FieldLabel>
+          <SelectMenuControl
+            name={`pie-shape-${idx}`}
+            ariaLabel="Pie shape"
+            value={query.pieShape ?? "donut"}
+            onValueChange={(value) =>
+              onUpdateQuery({ pieShape: value as PieShape })
+            }
+            options={PIE_SHAPES.map((shape) => ({
+              label: PIE_SHAPE_LABELS[shape],
+              value: shape,
+            }))}
+          />
+        </Field>
+      )}
+
       {(query.type === "line" ||
         query.type === "area" ||
         query.type === "stepLine" ||
@@ -496,6 +522,44 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </Field>
       )}
 
+      {query.type === "scatter" && (
+        <FieldGroup>
+          <OhlcGrid>
+            {(
+              [
+                ["size", "Point size"],
+                ["color", "Point colour"],
+              ] as const
+            ).map(([role, label]) => (
+              <MiniField key={role}>
+                <Text color="contentSecondary" size="xs">
+                  {label}
+                </Text>
+                <SelectMenuControl
+                  name={`scatter-${role}-${idx}`}
+                  ariaLabel={`${label} column`}
+                  value={query.scatter?.[role] ?? ""}
+                  onValueChange={(value) => {
+                    const scatter = {
+                      ...query.scatter,
+                      [role]: value || undefined,
+                    }
+                    onUpdateQuery({
+                      scatter:
+                        scatter.size || scatter.color ? scatter : undefined,
+                    })
+                  }}
+                  options={[{ label: "None", value: "" }, ...numericOptions]}
+                />
+              </MiniField>
+            ))}
+          </OhlcGrid>
+          <Text color="contentSecondary" size="xs" lineHeight="1.3">
+            Bigger points for bigger values; colour runs light to strong.
+          </Text>
+        </FieldGroup>
+      )}
+
       {PARTITION_TYPES.includes(query.type) &&
         partitionCandidates.length > 0 && (
           <Field>
@@ -519,6 +583,20 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
             />
           </Field>
         )}
+
+      {(query.type === "area" ||
+        query.type === "stepArea" ||
+        query.type === "stackedBar") && (
+        <CheckboxRow>
+          <Checkbox
+            checked={query.percentStack === true}
+            onChange={(e) =>
+              onUpdateQuery({ percentStack: e.target.checked || undefined })
+            }
+          />
+          Stack to 100% (each x shows shares)
+        </CheckboxRow>
+      )}
 
       {!isAnchorTab && query.type !== "events" && (
         <Field>

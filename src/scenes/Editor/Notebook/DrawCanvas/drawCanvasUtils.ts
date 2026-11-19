@@ -4,6 +4,7 @@ import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import { hasPendingResult } from "../statementIdentity"
 import { normalizeQueryText } from "../../Monaco/utils"
 import type { RenderProblem } from "../renderReports"
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import {
   ROLE_COLUMNS,
   ROLE_FIELD,
@@ -13,6 +14,7 @@ import {
 } from "../CellChart/chartTypes"
 import {
   drawsAlone,
+  thresholdSource,
   type ChartGlobals,
   type ResolvedEvents,
   type ResolvedQuery,
@@ -332,6 +334,9 @@ export const resolveDraw = (
       yColumns: it.qc.yColumns ?? [],
       ohlc: resolveOhlc(it.qc, it.r.columns),
       roles: resolveRoles(it.qc, it.r.columns, ownX),
+      percentStack: it.qc.percentStack,
+      pieShape: it.qc.pieShape,
+      scatter: it.qc.scatter,
       partitionByColumn: it.qc.partitionByColumn,
       axis: it.qc.axis ?? "left",
       name: it.qc.name,
@@ -375,12 +380,16 @@ export const resolveDraw = (
     chart: {
       xColumn: anchorX,
       rightAxis: config?.rightAxis,
+      horizontal: config?.horizontal,
+      thresholds: config?.thresholds,
       ...(events.length > 0 ? { events } : {}),
     },
     renderQueries,
     effectiveConfig: {
       xColumn: anchorX,
       rightAxis: config?.rightAxis,
+      ...(config?.horizontal ? { horizontal: true } : {}),
+      ...(config?.thresholds ? { thresholds: config.thresholds } : {}),
       queries: denseQueries,
     },
     tabs,
@@ -395,6 +404,7 @@ export const resolveDraw = (
 export const drawProblems = (
   resolution: DrawResolution,
   config: ChartConfig | undefined,
+  formats: ColumnFormats = {},
 ): RenderProblem[] => {
   const problems: RenderProblem[] = resolution.tabs
     .filter((t) => !t.compatible)
@@ -413,6 +423,13 @@ export const drawProblems = (
         if (!names.has(y))
           problems.push({
             message: `${tab.label}: column "${y}" is not in the result and was left out.`,
+            severity: "warning",
+          })
+    if (q.type === "scatter")
+      for (const c of [q.scatter?.size, q.scatter?.color])
+        if (c !== undefined && !names.has(c))
+          problems.push({
+            message: `${tab.label}: column "${c}" for the points' size or colour is not in the result; the points draw plain.`,
             severity: "warning",
           })
     if (!isRoleChartType(q.type)) return
@@ -439,6 +456,23 @@ export const drawProblems = (
         severity: "warning",
       })
   })
+  const drawnQueries = resolution.renderQueries
+  const notBars = drawnQueries.filter(
+    (q) => !(["bar", "stackedBar", "rangeBar"] as string[]).includes(q.type),
+  )
+  if (config?.horizontal && notBars.length > 0)
+    problems.push({
+      message: `horizontal is ignored: it lays down bars only, and ${notBars
+        .map((q) => `Q${q.index + 1} is ${q.type}`)
+        .join(", ")}.`,
+      severity: "warning",
+    })
+  if (config?.thresholds && !thresholdSource(drawnQueries, formats))
+    problems.push({
+      message:
+        "thresholds draws nothing: no column drawn on the left axis (in values, not percent_stack shares) has format thresholds (set_cell_formats).",
+      severity: "warning",
+    })
   // Types on axes of their own draw alone: the first query decides.
   const [anchor, ...rest] = resolution.renderQueries
   const labelOf = (index: number) =>

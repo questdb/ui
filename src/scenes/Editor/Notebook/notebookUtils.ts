@@ -847,6 +847,9 @@ const normalizeQueryChart = (q: QueryChart): QueryChart => {
   if (q.band) next.band = q.band
   if (q.range) next.range = q.range
   if (q.box) next.box = q.box
+  if (q.percentStack) next.percentStack = true
+  if (q.pieShape) next.pieShape = q.pieShape
+  if (q.scatter) next.scatter = q.scatter
   return next
 }
 
@@ -859,6 +862,8 @@ const normalizeChartConfig = (
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
+  if (cfg.horizontal) next.horizontal = true
+  if (cfg.thresholds) next.thresholds = cfg.thresholds
   if (cfg.visual) next.visual = cfg.visual
   if (cfg.custom) next.custom = cfg.custom
   return next

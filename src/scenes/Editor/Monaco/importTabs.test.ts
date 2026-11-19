@@ -1111,6 +1111,70 @@ describe("sanitizeBuffer", () => {
       })
     })
 
+    it("keeps valid chart options and drops malformed ones", () => {
+      // Given chart options, some of them malformed
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "c1",
+              value: "SELECT 1",
+              chartConfig: {
+                xColumn: "ts",
+                horizontal: true,
+                thresholds: "bands",
+                queries: [
+                  {
+                    type: "pie",
+                    yColumns: ["v"],
+                    pieShape: "halfDonut",
+                    percentStack: true,
+                    scatter: { size: "n", color: 7 },
+                  },
+                ],
+              },
+            },
+            {
+              id: "c2",
+              value: "SELECT 2",
+              chartConfig: {
+                xColumn: "ts",
+                horizontal: "yes",
+                thresholds: "zebra",
+                queries: [{ type: "pie", yColumns: ["v"], pieShape: "star" }],
+              },
+            },
+          ],
+        },
+      }
+
+      // When
+      const result = sanitizeBuffer(input)
+
+      // Then
+      expect(result.notebookViewState?.cells[0].chartConfig).toEqual({
+        xColumn: "ts",
+        horizontal: true,
+        thresholds: "bands",
+        queries: [
+          {
+            type: "pie",
+            yColumns: ["v"],
+            pieShape: "halfDonut",
+            percentStack: true,
+            scatter: { size: "n" },
+          },
+        ],
+      })
+      expect(result.notebookViewState?.cells[1].chartConfig).toEqual({
+        xColumn: "ts",
+        queries: [{ type: "pie", yColumns: ["v"] }],
+      })
+    })
+
     it("keeps valid highlight rules through pane migration and drops malformed rules", () => {
       // Given a legacy maximized cell with valid rules and another with an unknown rule kind
       const valid = {

@@ -233,9 +233,9 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       }
     }, [onZoomChange, extraEvents])
 
-    const measureDensity = useCallback((width: number) => {
+    const measureDensity = useCallback((width: number, height: number) => {
       if (width <= 0) return
-      const next = chartZoomDensity(optionRef.current, width)
+      const next = chartZoomDensity(optionRef.current, width, height)
       setZoomDensity((previous) =>
         previous?.slider === next.slider && previous.wheel === next.wheel
           ? previous
@@ -325,7 +325,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         const box = entries[0]?.contentRect
         if (!box) return
         resizeTo(box.width, box.height)
-        measureDensity(box.width)
+        measureDensity(box.width, box.height)
         measureSize(box.width, box.height)
       })
       observer.observe(wrapper)
@@ -349,7 +349,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     // already carries the right slider decision instead of remounting for it.
     useLayoutEffect(() => {
       const rect = wrapperRef.current?.getBoundingClientRect()
-      if (rect?.width) measureDensity(rect.width)
+      if (rect?.width) measureDensity(rect.width, rect.height)
       if (rect) measureSize(rect.width, rect.height)
     }, [measureDensity, measureSize, option])
 

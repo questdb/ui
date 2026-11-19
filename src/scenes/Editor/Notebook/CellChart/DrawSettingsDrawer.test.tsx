@@ -558,4 +558,98 @@ describe("draw settings drawer", () => {
     // A band reads its own columns, so the partition is gone
     expect(saved?.partitionByColumn).toBeUndefined()
   })
+
+  it("saves 100% stacking, and says where thresholds come from", async () => {
+    // Given a line chart without format thresholds
+    const onSave = vi.fn()
+    renderComponent(
+      <Fixture saved={{ chartConfig: effective }} onSave={onSave} />,
+    )
+    const drawer = await openDrawer()
+
+    // When the user makes it a 100% stacked area
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^Chart type:/ }),
+    )
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Area" }))
+    await userEvent.click(
+      within(drawer).getByRole("checkbox", { name: /Stack to 100%/ }),
+    )
+
+    // Then thresholds point to Formats, bars are not offered to lie down,
+    // and the stacking saves
+    expect(within(drawer).getByText(/add them under Formats/)).toBeVisible()
+    expect(
+      within(drawer).queryByRole("checkbox", { name: /Horizontal bars/ }),
+    ).toBeNull()
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(savedOf(onSave).chartConfig.queries[0]).toMatchObject({
+      type: "area",
+      percentStack: true,
+    })
+  })
+
+  it("does not save horizontal once the chart is no longer bars", async () => {
+    // Given a bar chart laid down
+    const onSave = vi.fn()
+    const bars: ChartConfig = {
+      ...effective,
+      horizontal: true,
+      queries: [{ type: "bar", yColumns: ["price"] }],
+    }
+    renderComponent(
+      <Fixture
+        saved={{ chartConfig: bars }}
+        effectiveOverride={bars}
+        onSave={onSave}
+      />,
+    )
+    const drawer = await openDrawer()
+    expect(
+      within(drawer).getByRole("checkbox", { name: /Horizontal bars/ }),
+    ).toBeChecked()
+
+    // When the user switches to a line
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^Chart type:/ }),
+    )
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Line" }))
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+
+    // Then
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(savedOf(onSave).chartConfig.horizontal).toBeUndefined()
+  })
+
+  it("offers horizontal bars when every series is a bar", async () => {
+    // Given a bar chart
+    const onSave = vi.fn()
+    renderComponent(
+      <Fixture
+        saved={{
+          chartConfig: {
+            ...effective,
+            queries: [{ type: "bar", yColumns: ["price"] }],
+          },
+        }}
+        effectiveOverride={{
+          ...effective,
+          queries: [{ type: "bar", yColumns: ["price"] }],
+        }}
+        onSave={onSave}
+      />,
+    )
+    const drawer = await openDrawer()
+
+    // When
+    await userEvent.click(
+      within(drawer).getByRole("checkbox", { name: /Horizontal bars/ }),
+    )
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+
+    // Then
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(savedOf(onSave).chartConfig.horizontal).toBe(true)
+  })
 })

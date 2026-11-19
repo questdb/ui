@@ -603,7 +603,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick/heatmap/band/rangeBar/boxplot); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query). Type 'events' turns a statement into MARKERS on the time axis (deploys, rollouts, news, incidents): one dashed line per row, or a shaded range when `events.end` is set, labelled from `events.label` and coloured by `events.tone`. Setting `queries` replaces any visual or custom option on the cell (set_cell_visual / set_cell_custom_chart). Column formats (set_cell_formats) format the tooltip and the y-axis. Types heatmap / band / rangeBar / boxplot read the columns in `heatmap` / `band` / `range` / `box` (null = guessed from names and kinds). heatmap, boxplot and a time rangeBar (Gantt) show as a chart of their own; band and a numeric rangeBar combine with other series.",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick/heatmap/band/rangeBar/boxplot); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query). Type 'events' turns a statement into MARKERS on the time axis (deploys, rollouts, news, incidents): one dashed line per row, or a shaded range when `events.end` is set, labelled from `events.label` and coloured by `events.tone`. Setting `queries` replaces any visual or custom option on the cell (set_cell_visual / set_cell_custom_chart). Column formats (set_cell_formats) format the tooltip and the y-axis. Types heatmap / band / rangeBar / boxplot read the columns in `heatmap` / `band` / `range` / `box` (null = guessed from names and kinds). heatmap, boxplot and a time rangeBar (Gantt) show as a chart of their own; band and a numeric rangeBar combine with other series. Options: `horizontal` lays bar charts down; `percent_stack` stacks area/stackedBar to 100 %; `pie_shape` pie/donut/halfDonut; `scatter.size`/`scatter.color` make a bubble chart; `thresholds` draws the y column's format thresholds as lines or bands.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -773,6 +773,29 @@
                 },
                 "required": ["min", "q1", "median", "q3", "max"],
                 "description": "Only for type 'boxplot': five columns the QUERY computes per x (min, approx_percentile(v, 0.25), approx_percentile(v, 0.5), approx_percentile(v, 0.75), max). Null = guessed from names or the first five numeric columns."
+              },
+              "percent_stack": {
+                "type": ["boolean", "null"],
+                "description": "Only for area / stepArea / stackedBar: each x's series add up to 100 % (shares of a total, e.g. a generation mix). Null = off."
+              },
+              "pie_shape": {
+                "type": ["string", "null"],
+                "enum": ["pie", "donut", "halfDonut", null],
+                "description": "Only for pie: a full pie, a ring (default) or a half ring standing on its flat side (one share of a whole, KPI-like)."
+              },
+              "scatter": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                  "size": {
+                    "type": ["string", "null"]
+                  },
+                  "color": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["size", "color"],
+                "description": "Only for scatter: numeric columns that size the points (area grows with the value) and colour them on a light-to-strong scale (bubble chart). Null = plain points."
               }
             },
             "required": [
@@ -787,7 +810,10 @@
               "heatmap",
               "band",
               "range",
-              "box"
+              "box",
+              "percent_stack",
+              "pie_shape",
+              "scatter"
             ]
           }
         },
@@ -809,9 +835,26 @@
             }
           },
           "required": ["name", "min", "max"]
+        },
+        "horizontal": {
+          "type": ["boolean", "null"],
+          "description": "Lay bars down: categories down the side, values across (long labels, rankings). Applies only when every drawn query is bar, stackedBar or a numeric rangeBar. Null preserves; false turns it off."
+        },
+        "thresholds": {
+          "type": ["string", "null"],
+          "enum": ["off", "lines", "bands", null],
+          "description": "Draw the thresholds of the first column drawn on the LEFT axis whose FORMAT has them (set_cell_formats thresholds + base_tone; y columns, band edges and range ends count, percent_stack shares do not): 'lines' = dashed lines with the value, 'bands' = shaded tone bands (ok / warning / breach zones). The axis stretches to show them. Null preserves; 'off' turns it off."
         }
       },
-      "required": ["buffer_id", "cell_id", "x_column", "queries", "right_axis"]
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "x_column",
+        "queries",
+        "right_axis",
+        "horizontal",
+        "thresholds"
+      ]
     }
   },
   {
@@ -1919,6 +1962,29 @@
                           },
                           "required": ["min", "q1", "median", "q3", "max"],
                           "description": "Only for type 'boxplot': five columns the QUERY computes per x (min, approx_percentile(v, 0.25), approx_percentile(v, 0.5), approx_percentile(v, 0.75), max). Null = guessed from names or the first five numeric columns."
+                        },
+                        "percent_stack": {
+                          "type": ["boolean", "null"],
+                          "description": "Only for area / stepArea / stackedBar: each x's series add up to 100 % (shares of a total, e.g. a generation mix). Null = off."
+                        },
+                        "pie_shape": {
+                          "type": ["string", "null"],
+                          "enum": ["pie", "donut", "halfDonut", null],
+                          "description": "Only for pie: a full pie, a ring (default) or a half ring standing on its flat side (one share of a whole, KPI-like)."
+                        },
+                        "scatter": {
+                          "type": ["object", "null"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "size": {
+                              "type": ["string", "null"]
+                            },
+                            "color": {
+                              "type": ["string", "null"]
+                            }
+                          },
+                          "required": ["size", "color"],
+                          "description": "Only for scatter: numeric columns that size the points (area grows with the value) and colour them on a light-to-strong scale (bubble chart). Null = plain points."
                         }
                       },
                       "required": [
@@ -1933,7 +1999,10 @@
                         "heatmap",
                         "band",
                         "range",
-                        "box"
+                        "box",
+                        "percent_stack",
+                        "pie_shape",
+                        "scatter"
                       ]
                     }
                   },
@@ -2120,6 +2189,15 @@
                   "custom_option_json": {
                     "type": ["string", "null"],
                     "description": "A custom ECharts option as JSON (see set_cell_custom_chart)."
+                  },
+                  "horizontal": {
+                    "type": ["boolean", "null"],
+                    "description": "Lay bars down: categories down the side, values across (long labels, rankings). Applies only when every drawn query is bar, stackedBar or a numeric rangeBar. Null = off."
+                  },
+                  "thresholds": {
+                    "type": ["string", "null"],
+                    "enum": ["off", "lines", "bands", null],
+                    "description": "Draw the thresholds of the first column drawn on the LEFT axis whose FORMAT has them (set_cell_formats thresholds + base_tone; y columns, band edges and range ends count, percent_stack shares do not): 'lines' = dashed lines with the value, 'bands' = shaded tone bands (ok / warning / breach zones). The axis stretches to show them. Null = off."
                   }
                 },
                 "required": [
@@ -2127,7 +2205,9 @@
                   "queries",
                   "right_axis",
                   "visual",
-                  "custom_option_json"
+                  "custom_option_json",
+                  "horizontal",
+                  "thresholds"
                 ]
               },
               "highlight_config": {

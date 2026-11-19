@@ -54,8 +54,10 @@ import { formatSql } from "../formatSql"
 import { dispatchApplyNotebookState } from "./applyNotebookState"
 import {
   mapQueryChart,
+  mapChartOptions,
   mapRightAxis,
   type ToolQueryChart,
+  type ToolChartOptions,
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
@@ -992,14 +994,22 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_chart_config": {
-        const { buffer_id, cell_id, x_column, queries, right_axis } =
+        const {
+          buffer_id,
+          cell_id,
+          x_column,
+          queries,
+          right_axis,
+          horizontal,
+          thresholds,
+        } =
           (input as {
             buffer_id: number
             cell_id: string
             x_column?: string | null
             queries?: (ToolQueryChart | null)[] | null
             right_axis?: ToolRightAxis | null
-          }) || {}
+          } & ToolChartOptions) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         const chartBaseline = getBufferActionSeq(buffer_id)
         // Patch: top-level null = preserve; a non-null queries array replaces
@@ -1015,6 +1025,7 @@ export const dispatchTool = async (
         }
         if (right_axis !== undefined && right_axis !== null)
           patch.rightAxis = mapRightAxis(right_axis)
+        Object.assign(patch, mapChartOptions({ horizontal, thresholds }))
         if (
           patch.queries?.some(
             (q) => q != null && q.type === "candlestick" && !q.ohlc,

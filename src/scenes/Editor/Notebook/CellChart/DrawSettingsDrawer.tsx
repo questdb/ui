@@ -27,6 +27,7 @@ import {
   savePayloadOf,
 } from "./ChartSettingsDrawer"
 import { ComponentSettings } from "./ComponentSettings"
+import { chartOptionsOffered, withoutUnofferedOptions } from "./chartOptions"
 import { CustomOptionSettings } from "./CustomOptionSettings"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
@@ -184,6 +185,9 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   // A drag sets a time window on a preset chart over time.
   const anchorX = tabs[0]?.columns.find((c) => c.name === draft.chart.xColumn)
   const anchorQuery = draft.chart.queries[tabs[0]?.index ?? 0]
+  const lying =
+    draft.chart.horizontal === true &&
+    chartOptionsOffered(draft.chart, tabs, {}).lieDown
   const rangeStart = tabs[0]?.columns.find(
     (c) => c.name === anchorQuery?.range?.start,
   )
@@ -204,10 +208,12 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
           reason:
             "Dragging works on preset charts; components and custom options take clicks.",
         }
-      : ownAxes
+      : ownAxes || lying
         ? {
             available: false as const,
-            reason: `Dragging needs a time x-axis; ${TYPE_NAMES[anchorQuery?.type ?? ""] ?? "these"} charts take clicks.`,
+            reason: lying
+              ? "Dragging needs a time x-axis; horizontal bars take clicks."
+              : `Dragging needs a time x-axis; ${TYPE_NAMES[anchorQuery?.type ?? ""] ?? "these"} charts take clicks.`,
           }
         : !timeline && (!anchorX || classifyColumn(anchorX) !== "temporal")
           ? {
@@ -279,7 +285,12 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         return
       }
     }
-    const result = settingsOf(draft)
+    // Options the chart no longer offers (bars lying down after a switch to
+    // lines, thresholds on a pie) are not saved.
+    const result = settingsOf({
+      ...draft,
+      chart: withoutUnofferedOptions(draft.chart, tabs),
+    })
     if (!result.ok) {
       setSaveError(result.error)
       setSection("chart")
@@ -382,6 +393,7 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
               saveAttempted={saveAttempted}
               telemetry={telemetry}
               offerEvents
+              formats={draft.formats ?? {}}
             />
           )}
 

@@ -263,6 +263,8 @@ export const dispatchApplyNotebookState = async (
           right_axis?: ToolRightAxis | null
           visual?: VisualWire | null
           custom_option_json?: string | null
+          horizontal?: boolean | null
+          thresholds?: "off" | "lines" | "bands" | null
         } | null
         formats?: FormatWire[] | null
         interactions?: InteractionsWire | null
@@ -473,6 +475,9 @@ export const dispatchApplyNotebookState = async (
           }
           if (cfg.right_axis)
             chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
+          if (cfg.horizontal) chartConfig.horizontal = true
+          if (cfg.thresholds && cfg.thresholds !== "off")
+            chartConfig.thresholds = cfg.thresholds
           if (cfg.visual)
             chartConfig.visual = parseVisual(
               cfg.visual,

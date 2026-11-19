@@ -17,7 +17,12 @@ import type {
   NotebookVariable,
   NotebookViewState,
 } from "../../../store/notebook"
-import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
+import {
+  PIE_SHAPES,
+  THRESHOLD_MARKS,
+  type ChartConfig,
+  type QueryChart,
+} from "../Notebook/CellChart/chartTypes"
 import { isAutoRefresh } from "../Notebook/notebookUtils"
 import {
   clampPaneHeight,
@@ -243,6 +248,17 @@ const sanitizeMetricsViewState = (
   return state
 }
 
+const sanitizeScatterColumns = (
+  value: unknown,
+): QueryChart["scatter"] | undefined => {
+  if (typeof value !== "object" || value === null) return undefined
+  const { size, color } = value as Record<string, unknown>
+  const out: NonNullable<QueryChart["scatter"]> = {}
+  if (typeof size === "string" && size) out.size = size
+  if (typeof color === "string" && color) out.color = color
+  return out.size || out.color ? out : undefined
+}
+
 const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
   if (typeof item !== "object" || item === null) return undefined
   const obj = item as Record<string, unknown>
@@ -255,12 +271,21 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
       if (typeof q !== "object" || q === null) return null
       const query = q as QueryChart
       const events = sanitizeEventColumns(query.events)
-      const { events: _raw, ...rest } = query
-      return events ? { ...rest, events } : rest
+      const { events: _raw, percentStack, pieShape, scatter, ...rest } = query
+      const next: QueryChart = events ? { ...rest, events } : rest
+      if (percentStack === true) next.percentStack = true
+      if ((PIE_SHAPES as readonly unknown[]).includes(pieShape))
+        next.pieShape = pieShape
+      const points = sanitizeScatterColumns(scatter)
+      if (points) next.scatter = points
+      return next
     }),
   }
   if (typeof obj.rightAxis === "object" && obj.rightAxis !== null)
     config.rightAxis = obj.rightAxis as ChartConfig["rightAxis"]
+  if (obj.horizontal === true) config.horizontal = true
+  if ((THRESHOLD_MARKS as readonly unknown[]).includes(obj.thresholds))
+    config.thresholds = obj.thresholds as ChartConfig["thresholds"]
   const visual = sanitizeVisualConfig(obj.visual)
   if (visual) config.visual = visual
   const custom = sanitizeCustomChart(obj.custom)

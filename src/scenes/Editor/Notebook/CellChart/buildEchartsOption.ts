@@ -5,6 +5,8 @@ import type {
   ChartConfig,
   ChartType,
   EventColumns,
+  PieShape,
+  ScatterColumns,
   SeriesAxis,
 } from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
@@ -14,9 +16,11 @@ import { escapeHtml } from "../../../../utils/escapeHtml"
 import {
   formatValue,
   isTone,
+  thresholdBands,
   toneColor,
   type ColumnFormat,
   type ColumnFormats,
+  type Tone,
 } from "../../../../utils/formats/columnFormat"
 
 type Dataset = (boolean | string | number | null)[][]
@@ -31,6 +35,9 @@ export type ResolvedQuery = {
   ohlc?: { open: string; high: string; low: string; close: string }
   // The columns of a heatmap, band, range bar or boxplot, resolved.
   roles?: Record<string, string>
+  percentStack?: boolean
+  pieShape?: PieShape
+  scatter?: ScatterColumns
   partitionByColumn?: string
   axis: SeriesAxis
   name?: string
@@ -46,6 +53,8 @@ export type ResolvedEvents = {
 export type ChartGlobals = {
   xColumn: string | null
   rightAxis?: ChartConfig["rightAxis"]
+  horizontal?: boolean
+  thresholds?: ChartConfig["thresholds"]
   events?: ResolvedEvents[]
 }
 
@@ -161,12 +170,175 @@ const alignRowsToCategoryUnion = (
   return union.map((lbl) => (m.has(lbl) ? (m.get(lbl) ?? null) : null))
 }
 
+// Marks a series whose values were turned into shares of 100.
+const PERCENT = "__percent"
+// Marks a scatter series coloured by a column: [min, max] of its values.
+const COLOR_SCALE = "__colorScale"
+// Marks a scatter series sized or coloured by columns: what each value is.
+const POINT_COLUMNS = "__pointColumns"
+
+type PointColumns = { x: string; y: string; size?: string; color?: string }
+
+// A value in its format; a number whose format sets no rounding reads with
+// at most two decimals, not with every digit of a double.
+const readableValue = (value: unknown, format: ColumnFormat | undefined) => {
+  const rounds =
+    format?.decimals !== undefined ||
+    format?.compact === true ||
+    (format?.kind !== undefined && format.kind !== "number")
+  return formatValue(
+    !rounds && typeof value === "number"
+      ? Math.round(value * 100) / 100
+      : value,
+    format,
+  )
+}
+
+// A point's tooltip: each of its values in its own column's format.
+const pointTooltip =
+  (columns: PointColumns, formats: ColumnFormats) => (params: unknown) => {
+    const { marker, seriesName, value } = params as {
+      marker?: string
+      seriesName?: string
+      value: unknown[]
+    }
+    const lines = (
+      [
+        [columns.x, value[0]],
+        [columns.y, value[1]],
+        [columns.size, value[2]],
+        [columns.color, value[3]],
+      ] as const
+    )
+      .filter(([column]) => column !== undefined)
+      .map(
+        ([column, v]) =>
+          `${escapeHtml(column ?? "")} <b>${escapeHtml(readableValue(v, formats[column ?? ""]))}</b>`,
+      )
+    return `${marker ?? ""}${escapeHtml(seriesName ?? "")}<br/>${lines.join("<br/>")}`
+  }
+
+const isPercentStack = (q: Pick<ResolvedQuery, "type" | "percentStack">) =>
+  q.percentStack === true &&
+  (q.type === "area" || q.type === "stepArea" || q.type === "stackedBar")
+
+const numericExtent = (values: (number | null)[]): [number, number] | null => {
+  const finite = values.filter((v): v is number => v !== null)
+  return finite.length ? [Math.min(...finite), Math.max(...finite)] : null
+}
+
+const MIN_POINT = 6
+const MAX_POINT = 32
+
+// Points sized and coloured by columns: [x, y, size, colour] per row.
+const scatterEncoding = (q: ResolvedQuery) => {
+  if (q.type !== "scatter" || !q.scatter) return null
+  const idx = buildColumnIndexMap(q.columns)
+  const sizeIdx = q.scatter.size ? idx.get(q.scatter.size) : undefined
+  const colorIdx = q.scatter.color ? idx.get(q.scatter.color) : undefined
+  if (sizeIdx === undefined && colorIdx === undefined) return null
+  const valuesOf = (i: number | undefined) =>
+    i === undefined ? [] : q.dataset.map((row) => toNumberOrNull(row[i]))
+  const sizes = numericExtent(valuesOf(sizeIdx))
+  const colors = numericExtent(valuesOf(colorIdx))
+  // Area grows with the value, so the radius with its square root.
+  const symbolSize = (value: unknown) => {
+    const v = Array.isArray(value) ? toNumberOrNull(value[2]) : null
+    if (v === null || !sizes) return MIN_POINT
+    const [lo, hi] = sizes
+    const t = hi > lo ? Math.sqrt((v - lo) / (hi - lo)) : 0.5
+    return MIN_POINT + t * (MAX_POINT - MIN_POINT)
+  }
+  return {
+    tuple: (x: unknown, row: Dataset[number], yIdx: number) => [
+      x,
+      toNumberOrNull(row[yIdx]),
+      sizeIdx === undefined ? null : toNumberOrNull(row[sizeIdx]),
+      colorIdx === undefined ? null : toNumberOrNull(row[colorIdx]),
+    ],
+    extras: (yName: string): Series => ({
+      dimensions: [
+        q.xColumn ?? "x",
+        yName,
+        q.scatter?.size ?? "size",
+        q.scatter?.color ?? "colour",
+      ],
+      encode: {
+        x: 0,
+        y: 1,
+        tooltip: [
+          1,
+          ...(sizeIdx !== undefined ? [2] : []),
+          ...(colorIdx !== undefined ? [3] : []),
+        ],
+      },
+      ...(sizeIdx !== undefined ? { symbolSize } : {}),
+      [POINT_COLUMNS]: {
+        x: q.xColumn ?? "x",
+        y: yName,
+        ...(sizeIdx !== undefined ? { size: q.scatter?.size } : {}),
+        ...(colorIdx !== undefined ? { color: q.scatter?.color } : {}),
+      } satisfies PointColumns,
+      ...(colorIdx !== undefined && colors ? { [COLOR_SCALE]: colors } : {}),
+      // Sized points overlap; let the ones behind show through.
+      itemStyle: { opacity: 0.8 },
+      large: false,
+    }),
+  }
+}
+
+// Turns each x's stacked values into shares of their total, in place.
+const toPercentShares = (series: Series[]) => {
+  const keyOf = (point: unknown, i: number) =>
+    Array.isArray(point) ? String(point[0]) : String(i)
+  const valueOf = (point: unknown) =>
+    toNumberOrNull(Array.isArray(point) ? point[1] : point)
+  const totals = new Map<string, number>()
+  for (const s of series)
+    (s.data as unknown[]).forEach((point, i) => {
+      const v = valueOf(point)
+      if (v !== null)
+        totals.set(
+          keyOf(point, i),
+          (totals.get(keyOf(point, i)) ?? 0) + Math.abs(v),
+        )
+    })
+  for (const s of series) {
+    s.data = (s.data as unknown[]).map((point, i) => {
+      const v = valueOf(point)
+      const total = totals.get(keyOf(point, i)) ?? 0
+      const share =
+        v === null || total === 0 ? null : (Math.abs(v) / total) * 100
+      return Array.isArray(point) ? [point[0], share] : share
+    })
+    s[PERCENT] = true
+  }
+}
+
 const buildCartesianSeries = (
   q: ResolvedQuery,
   ctx: SeriesContext,
 ): Series[] => {
+  const out = cartesianSeriesOf(q, ctx)
+  if (isPercentStack(q)) {
+    // Areas stack only when asked; shares of a total always stack.
+    for (const s of out) s.stack = `stack-${q.index}`
+    toPercentShares(out)
+  }
+  return out
+}
+
+const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
   const { seriesType, lineExtras, perfExtras, isStacked } =
     resolveSeriesRenderSpec(q.type)
+  const scatter = scatterEncoding(q)
+  // A sized or coloured point carries its x in every mode.
+  const xValue = (row: Dataset[number], xIdx: number) =>
+    ctx.xMode === "time"
+      ? row[xIdx]
+      : ctx.xMode === "value"
+        ? toNumberOrNull(row[xIdx])
+        : toCategoryLabel(row[xIdx])
   const yAxisIndex = q.axis === "right" ? 1 : 0
   const idx = buildColumnIndexMap(q.columns)
   const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
@@ -205,8 +377,9 @@ const buildCartesianSeries = (
       for (const [yName, rows] of metricMap) {
         const yIdx = idx.get(yName)
         if (yIdx === undefined) continue
-        const data =
-          ctx.xMode === "time"
+        const data = scatter
+          ? rows.map((row) => scatter.tuple(xValue(row, xIdx), row, yIdx))
+          : ctx.xMode === "time"
             ? rows.map((row) => [row[xIdx], toNumberOrNull(row[yIdx])])
             : ctx.xMode === "value"
               ? rows.map((row) => [
@@ -224,6 +397,7 @@ const buildCartesianSeries = (
           data,
           ...lineExtras,
           ...perfExtras,
+          ...(scatter ? scatter.extras(yName) : {}),
           ...(stack ? { stack } : {}),
         })
       }
@@ -234,8 +408,9 @@ const buildCartesianSeries = (
   for (const name of q.yColumns) {
     const yIdx = idx.get(name)
     if (yIdx === undefined) continue
-    const data =
-      ctx.xMode === "time"
+    const data = scatter
+      ? q.dataset.map((row) => scatter.tuple(xValue(row, xIdx), row, yIdx))
+      : ctx.xMode === "time"
         ? q.dataset.map((row) => [row[xIdx], toNumberOrNull(row[yIdx])])
         : ctx.xMode === "value"
           ? q.dataset.map((row) => [
@@ -253,6 +428,7 @@ const buildCartesianSeries = (
       data,
       ...lineExtras,
       ...perfExtras,
+      ...(scatter ? scatter.extras(name) : {}),
       ...(stack ? { stack } : {}),
     })
   }
@@ -493,10 +669,23 @@ const buildCandlestickSeries = (
   ]
 }
 
+// A full pie, a ring, or a half ring standing on its flat side.
+const PIE_GEOMETRY: Record<PieShape, Record<string, unknown>> = {
+  pie: { radius: "70%" },
+  donut: { radius: ["35%", "70%"] },
+  halfDonut: {
+    radius: ["45%", "90%"],
+    center: ["50%", "78%"],
+    startAngle: 180,
+    endAngle: 360,
+  },
+}
+
 const buildPieChartOption = (
   q: ResolvedQuery,
   chartText: { fontSize: number },
   legend: object,
+  context: ChartContext,
 ): EChartsOption => {
   const idx = buildColumnIndexMap(q.columns)
   const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
@@ -508,71 +697,30 @@ const buildPieChartOption = (
     value: toNumberOrNull(row[yIdx]) ?? 0,
   }))
   return {
-    tooltip: { trigger: "item", textStyle: chartText },
+    tooltip: {
+      trigger: "item",
+      textStyle: chartText,
+      valueFormatter: (v: unknown) =>
+        formatValue(v, context.formats?.[q.yColumns[0]]),
+    },
     legend,
     series: [
       {
         name: q.yColumns[0],
         type: "pie",
-        radius: ["35%", "70%"],
+        ...PIE_GEOMETRY[q.pieShape ?? "donut"],
         avoidLabelOverlap: true,
         label: {
           show: true,
           formatter: "{b}: {d}%",
           fontSize: CHART_FONT_SIZE,
+          // Labels sit at the sides, using the width the circle leaves.
+          alignTo: "edge",
+          edgeDistance: 8,
         },
         data,
       },
     ],
-  }
-}
-
-const buildScatterChartOption = (
-  q: ResolvedQuery,
-  chartText: { fontSize: number },
-  legend: object,
-  axisLabel: { fontSize: number },
-  axisName: { fontSize: number },
-): EChartsOption => {
-  const idx = buildColumnIndexMap(q.columns)
-  const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
-  if (xIdx === undefined)
-    return { tooltip: { trigger: "item", textStyle: chartText } }
-  const series = q.yColumns
-    .map((name) => {
-      const yIdx = idx.get(name)
-      if (yIdx === undefined) return null
-      return {
-        name,
-        type: "scatter" as const,
-        large: true,
-        animation: false,
-        data: q.dataset.map((row) => [
-          toNumberOrNull(row[xIdx]),
-          toNumberOrNull(row[yIdx]),
-        ]),
-      }
-    })
-    .filter((s): s is NonNullable<typeof s> => s !== null)
-  return {
-    tooltip: { trigger: "item", textStyle: chartText },
-    legend,
-    grid: {
-      left: 24,
-      right: 24,
-      top: 40,
-      bottom: 48,
-      containLabel: true,
-    },
-    xAxis: {
-      type: "value",
-      scale: true,
-      name: q.xColumn ?? "",
-      axisLabel,
-      nameTextStyle: axisName,
-    },
-    yAxis: { type: "value", scale: true, axisLabel, nameTextStyle: axisName },
-    series,
   }
 }
 
@@ -925,7 +1073,12 @@ const eventsSeries = (
 }
 
 // The columns a query draws on its y-axis.
-const drawnColumns = (q: ResolvedQuery): string[] => {
+type DrawnQuery = Pick<
+  ResolvedQuery,
+  "type" | "yColumns" | "roles" | "columns" | "axis" | "percentStack"
+>
+
+const drawnColumns = (q: DrawnQuery): string[] => {
   if (drawsAlone(q)) return []
   const roles = q.roles ?? {}
   if (q.type === "band")
@@ -935,6 +1088,25 @@ const drawnColumns = (q: ResolvedQuery): string[] => {
   if (q.type === "rangeBar")
     return [roles.start, roles.end].filter((c): c is string => c !== undefined)
   return q.yColumns
+}
+
+/**
+ * The column whose format thresholds a chart draws: the first column drawn
+ * on the left axis, in values (not shares of 100), whose format has them.
+ * The renderer, the drawer and the render report all ask this.
+ */
+export const thresholdSource = (
+  queries: DrawnQuery[],
+  formats: ColumnFormats,
+): { column: string; format: ColumnFormat } | undefined => {
+  for (const q of queries) {
+    if (q.axis === "right" || isPercentStack(q)) continue
+    for (const column of drawnColumns(q)) {
+      const format = formats[column]
+      if ((format?.thresholds?.length ?? 0) > 0) return { column, format }
+    }
+  }
+  return undefined
 }
 
 const valueFormatterFor =
@@ -966,7 +1138,7 @@ export const buildEchartsOption = (
   const anchorRole = anchorCol ? classifyColumn(anchorCol) : "other"
 
   if (single && anchor.type === "pie")
-    return buildPieChartOption(anchor, chartText, baseLegend)
+    return buildPieChartOption(anchor, chartText, baseLegend, context)
   const standalone: StandaloneContext = {
     chartText,
     axisLabel,
@@ -980,14 +1152,6 @@ export const buildEchartsOption = (
   if (anchor.type === "boxplot") return buildBoxplotOption(anchor, standalone)
   if (anchor.type === "rangeBar" && rangeIsTime(anchor))
     return buildGanttOption(anchor, standalone)
-  if (single && anchor.type === "scatter" && anchorRole === "numeric")
-    return buildScatterChartOption(
-      anchor,
-      chartText,
-      baseLegend,
-      axisLabel,
-      axisName,
-    )
 
   const xMode: XMode =
     anchorRole === "temporal"
@@ -1076,9 +1240,18 @@ export const buildEchartsOption = (
     containLabel: true,
   }
 
+  // Bars measure from zero, so an axis of bars alone starts there; anything
+  // else fits the axis to its values.
+  const barsOnly = (side: SeriesAxis) => {
+    const onSide = queries.filter((q) => (q.axis ?? "left") === side)
+    return (
+      onSide.length > 0 &&
+      onSide.every((q) => q.type === "bar" || q.type === "stackedBar")
+    )
+  }
   const leftAxis = {
     type: "value" as const,
-    scale: true,
+    scale: !barsOnly("left"),
     axisLabel,
     nameTextStyle: axisName,
   }
@@ -1087,7 +1260,7 @@ export const buildEchartsOption = (
         leftAxis,
         {
           type: "value",
-          scale: true,
+          scale: !barsOnly("right"),
           position: "right",
           name: rightTitle,
           nameTextStyle: axisName,
@@ -1113,9 +1286,10 @@ export const buildEchartsOption = (
       ? {
           type: "time",
           ...xAxisName,
-          // Extend the time axis 5% on each side so candle bodies and range
-          // bars sit inside the plot (time axis is boundaryGap:false by default).
-          ...(hasCandle || queries.some((q) => q.type === "rangeBar")
+          // Extend the time axis 5% on each side so range bars sit inside the
+          // plot. Candles and bars need no room: ECharts 6.1 keeps their
+          // shapes inside the axis (containShape).
+          ...(queries.some((q) => q.type === "rangeBar")
             ? {
                 min: (v: { min: number; max: number }) =>
                   v.min - (v.max - v.min) * 0.05,
@@ -1133,8 +1307,11 @@ export const buildEchartsOption = (
             boundaryGap: hasBar || hasCandle,
           }
 
+  // Points are read one at a time; everything else across x.
+  const onlyPoints =
+    series.length > 0 && series.every((s) => s.type === "scatter")
   const tooltip: EChartsOption["tooltip"] = {
-    trigger: "axis",
+    trigger: onlyPoints ? "item" : "axis",
     textStyle: chartText,
     ...(hasCandle ? { axisPointer: { type: "cross" } } : {}),
   }
@@ -1147,25 +1324,43 @@ export const buildEchartsOption = (
   const axisFormats: (ColumnFormat | undefined)[][] = [[], []]
   for (const q of queries) {
     const target = axisFormats[q.axis === "right" ? 1 : 0]
-    for (const y of drawnColumns(q)) target.push(formatOf(y))
+    for (const y of drawnColumns(q))
+      target.push(isPercentStack(q) ? PERCENT_FORMAT : formatOf(y))
   }
   for (const s of series) {
-    const format = formatOf(s[Y_COLUMN])
+    const format = s[PERCENT] ? PERCENT_FORMAT : formatOf(s[Y_COLUMN])
+    const points = s[POINT_COLUMNS] as PointColumns | undefined
     delete s[Y_COLUMN]
-    if (format) s.tooltip = { valueFormatter: valueFormatterFor(format) }
+    delete s[PERCENT]
+    delete s[POINT_COLUMNS]
+    if (points) s.tooltip = { formatter: pointTooltip(points, formats) }
+    else if (format) s.tooltip = { valueFormatter: valueFormatterFor(format) }
   }
   const sharedFormat = (list: (ColumnFormat | undefined)[]) =>
     list.length > 0 &&
     list.every(
       (f) => f !== undefined && JSON.stringify(f) === JSON.stringify(list[0]),
     )
-      ? list[0]
+      ? list[0] === PERCENT_FORMAT || list.every((f) => f !== PERCENT_FORMAT)
+        ? list[0]
+        : undefined
       : undefined
   const withAxisFormat = (
     axis: Record<string, unknown>,
     list: (ColumnFormat | undefined)[],
   ) => {
     const format = sharedFormat(list)
+    // Shares of 100 run from 0 to 100 and read as percentages.
+    if (format === PERCENT_FORMAT)
+      return {
+        ...axis,
+        min: 0,
+        max: 100,
+        axisLabel: {
+          ...(axis.axisLabel as object),
+          formatter: (v: number) => `${v}%`,
+        },
+      }
     return format
       ? {
           ...axis,
@@ -1183,20 +1378,68 @@ export const buildEchartsOption = (
       )
     : withAxisFormat(yAxis as Record<string, unknown>, axisFormats[0])
 
+  // Bars lying down, when every series is a bar of some kind.
+  const horizontal =
+    chart.horizontal === true &&
+    series.length > 0 &&
+    queries.every((q) => HORIZONTAL_TYPES.has(q.type))
+
+  // The left axis's thresholds, from the first drawn column that has them.
+  const thresholdFormat = chart.thresholds
+    ? thresholdSource(queries, formats)?.format
+    : undefined
+  const thresholdSeries =
+    chart.thresholds && thresholdFormat
+      ? thresholdMarks(
+          chart.thresholds,
+          thresholdFormat,
+          series,
+          horizontal,
+          context,
+        )
+      : null
+
   const markers =
-    xMode === "time" && chart.events?.length
+    xMode === "time" && chart.events?.length && !horizontal
       ? eventsSeries(chart.events, context)
       : null
-  if (markers) series.push(markers)
-  // The events series only carries markers: keep it out of the legend.
-  const legend = markers
+  const helpers = [markers, thresholdSeries].filter(
+    (s): s is Series => s !== null,
+  )
+  series.push(...helpers)
+  // Marker series carry no data: keep them out of the legend.
+  const legend = helpers.length
     ? {
         ...baseLegend,
-        data: series.filter((s) => s !== markers).map((s) => s.name as string),
+        data: series
+          .filter((s) => !helpers.includes(s))
+          .map((s) => s.name as string),
       }
     : baseLegend
 
-  return {
+  // Thresholds stay in view even when every value is below them.
+  const valueAxes = (
+    Array.isArray(formattedYAxis) ? formattedYAxis : [formattedYAxis]
+  ).map((a, i) =>
+    i === 0 && thresholdSeries && thresholdFormat?.thresholds
+      ? {
+          ...(a as object),
+          dataMin: Math.min(...thresholdFormat.thresholds.map((t) => t.value)),
+          dataMax: Math.max(...thresholdFormat.thresholds.map((t) => t.value)),
+        }
+      : a,
+  )
+  const yAxisOut = Array.isArray(formattedYAxis) ? valueAxes : valueAxes[0]
+
+  const colorColumn = queries.find((q) => q.scatter?.color)?.scatter?.color
+  const colorScale = colorScaleOf(
+    series,
+    context,
+    colorColumn ?? "",
+    colorColumn ? formats[colorColumn] : undefined,
+  )
+
+  const option: EChartsOption = {
     // The server sends UTC and every result grid prints it verbatim, so the
     // axis and tooltip must not re-render those instants in the browser's zone.
     useUTC: true,
@@ -1204,7 +1447,153 @@ export const buildEchartsOption = (
     legend,
     grid,
     xAxis,
-    yAxis: formattedYAxis as EChartsOption["yAxis"],
+    yAxis: yAxisOut as EChartsOption["yAxis"],
+    ...(colorScale ? { visualMap: colorScale } : {}),
+    series: series as EChartsOption["series"],
+  }
+  return horizontal ? layDown(option) : option
+}
+
+const HORIZONTAL_TYPES = new Set<ChartType>(["bar", "stackedBar", "rangeBar"])
+
+const PERCENT_FORMAT: ColumnFormat = { decimals: 1, suffix: "%" }
+
+// One colour scale for the points coloured by a column, light to strong.
+const colorScaleOf = (
+  series: Series[],
+  context: ChartContext,
+  colorColumn: string,
+  colorFormat: ColumnFormat | undefined,
+): EChartsOption["visualMap"] | null => {
+  const scaled = series
+    .map((s, i) => ({
+      i,
+      extent: s[COLOR_SCALE] as [number, number] | undefined,
+    }))
+    .filter((s): s is { i: number; extent: [number, number] } => !!s.extent)
+  for (const s of series) delete s[COLOR_SCALE]
+  if (scaled.length === 0) return null
+  const colors = context.colors
+  return {
+    type: "continuous",
+    seriesIndex: scaled.map((s) => s.i),
+    dimension: 3,
+    min: Math.min(...scaled.map((s) => s.extent[0])),
+    max: Math.max(...scaled.map((s) => s.extent[1])),
+    calculable: false,
+    orient: "horizontal",
+    right: 8,
+    top: 0,
+    itemWidth: 10,
+    itemHeight: 100,
+    textStyle: { fontSize: CHART_FONT_SIZE },
+    // A scale without handles shows no numbers, so label its ends.
+    // The low end names what the colour shows: "score 10 ▬▬ 90".
+    text: [
+      readableValue(Math.max(...scaled.map((s) => s.extent[1])), colorFormat),
+      `${colorColumn}  ${readableValue(Math.min(...scaled.map((s) => s.extent[0])), colorFormat)}`,
+    ],
+    ...(colors
+      ? {
+          inRange: {
+            color: [withAlpha(colors.chartSeries1, 0.25), colors.chartSeries1],
+          },
+        }
+      : {}),
+  }
+}
+
+// Lines at, or shaded bands between, a format's thresholds, on the value axis.
+const thresholdMarks = (
+  marks: NonNullable<ChartGlobals["thresholds"]>,
+  format: ColumnFormat,
+  series: Series[],
+  horizontal: boolean,
+  context: ChartContext,
+): Series => {
+  const axis = horizontal ? "xAxis" : "yAxis"
+  const colorOf = (tone: Tone | undefined) =>
+    tone && context.colors ? toneColor(tone, context.colors) : undefined
+  const thresholds = [...(format.thresholds ?? [])].sort(
+    (a, b) => a.value - b.value,
+  )
+  if (marks === "lines")
+    return {
+      name: "Thresholds",
+      type: "line",
+      data: [],
+      silent: true,
+      markLine: {
+        symbol: "none",
+        animation: false,
+        data: thresholds.map((t) => ({
+          [axis]: t.value,
+          lineStyle: { color: colorOf(t.tone), type: "dashed", width: 1 },
+          label: {
+            formatter: formatValue(t.value, format),
+            position: "insideEndTop",
+            color: colorOf(t.tone),
+            fontSize: 11,
+          },
+        })),
+      },
+    }
+  // Bands reach past the data so they fill the plot; the grid clips them.
+  const values = series
+    .flatMap((s) => (Array.isArray(s.data) ? (s.data as unknown[]) : []))
+    .map((p) => toNumberOrNull(Array.isArray(p) ? p[1] : p))
+    .filter((v): v is number => v !== null)
+  const lo = Math.min(...values, ...thresholds.map((t) => t.value))
+  const hi = Math.max(...values, ...thresholds.map((t) => t.value))
+  const reach = Math.max(hi - lo, Math.abs(hi), 1) * 10
+  return {
+    name: "Thresholds",
+    type: "line",
+    data: [],
+    silent: true,
+    markArea: {
+      silent: true,
+      animation: false,
+      data: thresholdBands(format, lo - reach, hi + reach).map((band) => [
+        {
+          [axis]: band.from,
+          itemStyle: {
+            color: colorOf(band.tone),
+            opacity: band.tone === "muted" ? 0 : 0.1,
+          },
+        },
+        { [axis]: band.to },
+      ]),
+    },
+  }
+}
+
+// Swaps the axes of a bar chart: categories down the side, values across.
+const layDown = (option: EChartsOption): EChartsOption => {
+  const values = (
+    Array.isArray(option.yAxis) ? option.yAxis : [option.yAxis]
+  ) as Record<string, unknown>[]
+  const across = values.map((a, i) => (i === 1 ? { ...a, position: "top" } : a))
+  const side = option.xAxis as Record<string, unknown>
+  const down = {
+    ...side,
+    // The axis labels name the rows; a title beside them only crowds them.
+    name: "",
+    // Rows read top to bottom in the result's order.
+    ...(side.type === "category" ? { inverse: true } : {}),
+  }
+  const series = (option.series as Series[]).map((s) => {
+    const { yAxisIndex, ...rest } = s as Series & { yAxisIndex?: number }
+    const next: Series = { ...rest, xAxisIndex: yAxisIndex ?? 0 }
+    if (s.type === "custom") next.encode = { y: 0, x: [1, 2], tooltip: [1, 2] }
+    else if ((s.data as unknown[] | undefined)?.some(Array.isArray))
+      next.encode = { x: 1, y: 0 }
+    return next
+  })
+  return {
+    ...option,
+    xAxis: (across.length === 1 ? across[0] : across) as EChartsOption["xAxis"],
+    yAxis: down as EChartsOption["yAxis"],
     series: series as EChartsOption["series"],
   }
 }
@@ -1220,6 +1609,20 @@ export const withZoomDensity = (
   density: ChartZoomDensity,
 ): EChartsOption => {
   if (option.xAxis == null) return option
+  const typeOf = (axis: unknown) =>
+    (Array.isArray(axis) ? axis[0] : axis) as { type?: string } | undefined
+  // Bars lying down zoom along their rows, by wheel only.
+  if (
+    typeOf(option.xAxis)?.type === "value" &&
+    typeOf(option.yAxis)?.type !== "value"
+  )
+    return {
+      ...option,
+      dataZoom: [
+        { type: "inside", yAxisIndex: 0, disabled: !density.wheel },
+        { type: "slider", yAxisIndex: 0, show: false },
+      ],
+    }
   // A chart that brings its own inside zoom (the timeline) keeps its settings.
   const own = (Array.isArray(option.dataZoom) ? option.dataZoom : []).find(
     (z) => (z as { type?: string }).type === "inside",

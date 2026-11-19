@@ -1,11 +1,24 @@
 import React, { useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
-import { Input, SelectMenuControl } from "../../../../components"
-import type { ChartConfig, QueryChart } from "./chartTypes"
+import {
+  Checkbox,
+  Input,
+  SelectMenuControl,
+  Text,
+} from "../../../../components"
+import {
+  THRESHOLD_MARKS,
+  type ChartConfig,
+  type QueryChart,
+  type ThresholdMarks,
+} from "./chartTypes"
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
+import { chartOptionsOffered, withoutUnofferedOptions } from "./chartOptions"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
+  CheckboxRow,
   Field,
   FieldGroup,
   FieldLabel,
@@ -49,6 +62,13 @@ type PresetFieldsProps = {
   saveAttempted: boolean
   telemetry?: ChartSettingsTelemetry
   offerEvents?: boolean
+  // The cell's column formats; thresholds are offered only with them.
+  formats?: ColumnFormats
+}
+
+const THRESHOLD_LABELS: Record<ThresholdMarks, string> = {
+  lines: "Lines",
+  bands: "Shaded bands",
 }
 
 /** The preset chart's settings: x-axis, right axis and each query's series. */
@@ -61,6 +81,7 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
   saveAttempted,
   telemetry,
   offerEvents,
+  formats,
 }) => {
   const anchorTab = tabs[0]
   const anchorGroups = anchorTab
@@ -100,6 +121,9 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
       ),
     })
 
+  const offered = chartOptionsOffered(draft, tabs, formats ?? {})
+  const thresholdColumn = offered.thresholdColumn
+
   const setQuery = (index: number, next: QueryChart) =>
     updateDraft({
       ...draft,
@@ -122,6 +146,54 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
           }))}
         />
       </Field>
+
+      {offered.lieDown && (
+        <CheckboxRow>
+          <Checkbox
+            checked={draft.horizontal === true}
+            onChange={(e) =>
+              updateDraft({
+                ...draft,
+                horizontal: e.target.checked || undefined,
+              })
+            }
+          />
+          Horizontal bars ({draft.xColumn ?? "x"} down the side)
+        </CheckboxRow>
+      )}
+
+      {formats && offered.thresholds && (
+        <FieldGroup>
+          <Field>
+            <FieldLabel>Thresholds</FieldLabel>
+            <SelectMenuControl
+              name="thresholds"
+              ariaLabel="Thresholds"
+              value={draft.thresholds ?? ""}
+              onValueChange={(value) =>
+                updateDraft({
+                  ...draft,
+                  thresholds: (value || undefined) as
+                    | ThresholdMarks
+                    | undefined,
+                })
+              }
+              options={[
+                { label: "Off", value: "" },
+                ...THRESHOLD_MARKS.map((mark) => ({
+                  label: THRESHOLD_LABELS[mark],
+                  value: mark,
+                })),
+              ]}
+            />
+          </Field>
+          <Text color="contentSecondary" size="xs" lineHeight="1.3">
+            {thresholdColumn
+              ? `From the thresholds in ${thresholdColumn}'s format.`
+              : "Drawn from the format thresholds of a column on the left axis; add them under Formats."}
+          </Text>
+        </FieldGroup>
+      )}
 
       {hasRight && (
         <FieldGroup>
@@ -263,7 +335,7 @@ export const ChartSettingsPanel: React.FC<PanelProps> = ({
       return
     }
     telemetry?.onSave?.(savePayloadOf(draft, tabs))
-    onSave(draft)
+    onSave(withoutUnofferedOptions(draft, tabs))
   }
 
   return (

@@ -307,11 +307,13 @@ export const DrawCanvas: React.FC<Props> = ({
       name?: string
       data?: unknown[]
     }[]
-    const problems = drawProblems(resolution, cell.chartConfig)
+    const problems = drawProblems(resolution, cell.chartConfig, formats)
     setRenderReport(bufferId, cell.id, {
       kind: "chart",
       drawn: {
-        series: series.filter((s) => s.name !== "Events").length,
+        series: series.filter(
+          (s) => s.name !== "Events" && s.name !== "Thresholds",
+        ).length,
         points: series.reduce((n, s) => n + (s.data?.length ?? 0), 0),
         events: (resolution.chart.events ?? []).reduce(
           (n, e) => n + e.dataset.length,
@@ -324,6 +326,7 @@ export const DrawCanvas: React.FC<Props> = ({
     bufferId,
     cell.id,
     cell.chartConfig,
+    formats,
     option,
     resolution,
     results,

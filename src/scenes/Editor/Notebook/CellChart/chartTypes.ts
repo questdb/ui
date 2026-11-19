@@ -40,6 +40,12 @@ export type QueryChart = {
   // type "boxplot": a box and whiskers per x, from quartiles the query
   // computes (approx_percentile).
   box?: BoxColumns
+  // area / stackedBar: each x's series add up to 100 %.
+  percentStack?: boolean
+  // pie: a full pie, a ring, or a half ring.
+  pieShape?: PieShape
+  // scatter: columns for the points' size and colour (a number scale).
+  scatter?: ScatterColumns
   partitionByColumn?: string
   axis?: SeriesAxis
   enabled?: boolean
@@ -48,6 +54,14 @@ export type QueryChart = {
   // series. Each column defaults by position: time, then label.
   events?: EventColumns
 }
+
+export const PIE_SHAPES = ["pie", "donut", "halfDonut"] as const
+export type PieShape = (typeof PIE_SHAPES)[number]
+
+export type ScatterColumns = { size?: string; color?: string }
+
+export const THRESHOLD_MARKS = ["lines", "bands"] as const
+export type ThresholdMarks = (typeof THRESHOLD_MARKS)[number]
 
 export type HeatmapColumns = { y: string; value: string }
 export type BandColumns = { lower: string; upper: string }
@@ -110,6 +124,11 @@ export type ChartConfig = {
   xColumn: string | null
   queries: (QueryChart | null)[]
   rightAxis?: { name?: string; min?: number; max?: number }
+  // Bars lying along y: the x column runs down the side. Only when every
+  // series is a bar, stacked bar or range bar.
+  horizontal?: boolean
+  // The left axis's format thresholds drawn as lines or shaded bands.
+  thresholds?: ThresholdMarks
   // A component (stat tile, order book, gauge, ...) drawn from the cell's
   // statements instead of the preset chart.
   visual?: VisualConfig
