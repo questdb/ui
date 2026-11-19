@@ -88,10 +88,13 @@ export const checkToolPermission = (
   }
 }
 
+// EXPLAIN reads nothing and writes nothing: it is safe wherever a SELECT is,
+// so a chart can draw a query plan.
 const isDqlResult = (
   res: ValidateQuerySuccessResult,
 ): res is Extract<ValidateQuerySuccessResult, { columns: unknown }> =>
-  "columns" in res
+  "columns" in res ||
+  (res as { queryType?: string }).queryType?.toUpperCase() === "EXPLAIN"
 
 export type StatementClass = "DQL" | "DDL_DML" | "ERROR"
 

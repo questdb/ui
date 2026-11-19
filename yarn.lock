@@ -1835,7 +1835,7 @@ __metadata:
     "@types/react-transition-group": "npm:4.4.0"
     "@types/styled-components": "npm:5.1.36"
     "@types/throttle-debounce": "npm:2.1.0"
-    "@types/topojson-client": "npm:^3"
+    "@types/topojson-client": "npm:^3.1.5"
     "@vitejs/plugin-react": "npm:^5.1.0"
     allotment: "npm:^1.20.6"
     babel-plugin-styled-components: "npm:^2.0.7"
@@ -3340,7 +3340,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/topojson-client@npm:^3":
+"@types/topojson-client@npm:^3.1.5":
   version: 3.1.5
   resolution: "@types/topojson-client@npm:3.1.5"
   dependencies:

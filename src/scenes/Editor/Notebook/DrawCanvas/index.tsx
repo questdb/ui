@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import styled from "styled-components"
+import styled, { useTheme } from "styled-components"
+import type { EChartsType } from "echarts"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
@@ -34,7 +35,21 @@ import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { ChartSettingsTelemetry } from "../CellChart/chartSettingsTelemetry"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
-import { useNotebookBufferId } from "../NotebookProvider"
+import {
+  useNotebookActions,
+  useNotebookBufferId,
+  useNotebookState,
+} from "../NotebookProvider"
+import { statementResultsOf } from "../visuals/statementRows"
+import { VisualCanvas } from "../visuals/VisualCanvas"
+import { CustomChart } from "../customChart/CustomChart"
+import {
+  armBrush,
+  interactionEvents,
+  withBrush,
+} from "../interactions/chartInteractions"
+import { joinChartSync, setChartSync } from "../interactions/chartSync"
+import { setRenderReport } from "../renderReports"
 import { PaneEmptyState } from "../PaneEmptyState"
 
 const NO_RESULTS: QueryExecResult[] = []
@@ -204,13 +219,110 @@ export const DrawCanvas: React.FC<Props> = ({
     eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
   }
 
+  const theme = useTheme()
+  const formats = useMemo(() => cell.formats ?? {}, [cell.formats])
   const option = useMemo(
-    () => buildEchartsOption(resolution.chart, resolution.renderQueries),
-    [resolution],
+    () =>
+      withBrush(
+        buildEchartsOption(resolution.chart, resolution.renderQueries, {
+          colors: theme.color,
+          formats,
+        }),
+        cell.interactions,
+      ),
+    [resolution, theme.color, formats, cell.interactions],
   )
 
+  const { settings } = useNotebookState()
+  const { setVariableValues } = useNotebookActions()
+  const visual = cell.chartConfig?.visual
+  const custom = cell.chartConfig?.custom
+  const statementResults = useMemo(
+    () => statementResultsOf(cell.result, queries),
+    [cell.result, queries],
+  )
+  const statements =
+    statementResults.kind === "settled" ? statementResults.statements : []
+  const live = !animatesAt(refreshIntervalMs)
+
+  useEffect(() => {
+    setChartSync(bufferId, settings.chartSync)
+  }, [bufferId, settings.chartSync])
+
+  const events = useMemo(
+    () => interactionEvents(cell.interactions, setVariableValues),
+    [cell.interactions, setVariableValues],
+  )
+  const leaveSyncRef = useRef<(() => void) | null>(null)
+  const handleInstance = useCallback(
+    (instance: EChartsType | null) => {
+      leaveSyncRef.current?.()
+      leaveSyncRef.current = null
+      if (!instance) return
+      armBrush(instance, cell.interactions)
+      leaveSyncRef.current = joinChartSync(bufferId, instance)
+    },
+    [bufferId, cell.interactions],
+  )
+  useEffect(() => () => leaveSyncRef.current?.(), [])
+
+  // What the preset chart drew, for the agent (visuals and custom charts
+  // report their own).
+  useEffect(() => {
+    if (visual || custom || results.length === 0) return
+    const series = (Array.isArray(option.series) ? option.series : []) as {
+      name?: string
+      data?: unknown[]
+    }[]
+    const problems = resolution.tabs
+      .filter((t) => !t.compatible)
+      .map((t) => ({
+        message: `${t.label} was left out: its x-axis (${t.xColumn ?? "none"}) does not match the first query's.`,
+        severity: "warning" as const,
+      }))
+    for (const q of cell.chartConfig?.queries ?? []) {
+      const tab = resolution.tabs.find(
+        (t) => t.index === (cell.chartConfig?.queries ?? []).indexOf(q),
+      )
+      if (!q || !tab) continue
+      const names = new Set(tab.columns.map((c) => c.name))
+      for (const y of q.yColumns ?? [])
+        if (!names.has(y))
+          problems.push({
+            message: `${tab.label}: column "${y}" is not in the result and was left out.`,
+            severity: "warning",
+          })
+    }
+    setRenderReport(bufferId, cell.id, {
+      kind: "chart",
+      drawn: {
+        series: series.filter((s) => s.name !== "Events").length,
+        points: series.reduce((n, s) => n + (s.data?.length ?? 0), 0),
+        events: (resolution.chart.events ?? []).reduce(
+          (n, e) => n + e.dataset.length,
+          0,
+        ),
+      },
+      problems,
+    })
+  }, [
+    bufferId,
+    cell.id,
+    cell.chartConfig,
+    option,
+    resolution,
+    results,
+    visual,
+    custom,
+  ])
+
   const empty =
-    classifyBlock !== null || queries.length === 0 || results.length === 0
+    classifyBlock !== null ||
+    queries.length === 0 ||
+    (visual || custom
+      ? statementResults.kind !== "settled" ||
+        statements.every((s) => s === null)
+      : results.length === 0)
   const settledForCurrentQueries = settledKey === queriesKey
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
@@ -267,14 +379,44 @@ export const DrawCanvas: React.FC<Props> = ({
         <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
       ) : (
         <Canvas data-hook="draw-canvas">
-          <ChartRenderer
-            ref={chartRendererRef}
-            option={option}
-            onZoomChange={handleZoomChange}
-            isFocused={isFocused}
-            animate={animatesAt(refreshIntervalMs)}
-            zoomWindow={{ start: zoomStart, end: zoomEnd }}
-          />
+          {visual ? (
+            <VisualCanvas
+              bufferId={bufferId}
+              cellId={cell.id}
+              visual={visual}
+              statements={statements}
+              formats={formats}
+              interactions={cell.interactions}
+              setVariables={setVariableValues}
+              live={live}
+              isFocused={isFocused}
+              events={events}
+              onInstance={handleInstance}
+            />
+          ) : custom ? (
+            <CustomChart
+              bufferId={bufferId}
+              cellId={cell.id}
+              rawOption={custom.option}
+              statements={statements}
+              chartTypes={settings.chartTypes}
+              live={live}
+              isFocused={isFocused}
+              events={events}
+              onInstance={handleInstance}
+            />
+          ) : (
+            <ChartRenderer
+              ref={chartRendererRef}
+              option={option}
+              onZoomChange={handleZoomChange}
+              isFocused={isFocused}
+              animate={animatesAt(refreshIntervalMs)}
+              zoomWindow={{ start: zoomStart, end: zoomEnd }}
+              events={events}
+              onInstance={handleInstance}
+            />
+          )}
         </Canvas>
       )}
       <ChartSettingsDrawer
