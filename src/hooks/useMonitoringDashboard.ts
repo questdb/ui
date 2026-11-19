@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useReducer } from "react"
 import { useEditor } from "../providers/EditorProvider"
 import { toast } from "../components/Toast"
 import {
@@ -41,20 +41,28 @@ const firstRunFailure = (outcome: CellRunOutcome): string | null => {
   return "query_error"
 }
 
+// One open at a time, shared by every instance: the drawer's action unmounts
+// when the drawer switches to its Details tab, and the action shown again
+// must still see the open in progress (and ignore clicks during it).
+const openState = { inFlight: false, busy: false }
+const openListeners = new Set<() => void>()
+const setOpenState = (next: Partial<typeof openState>) => {
+  Object.assign(openState, next)
+  openListeners.forEach((listener) => listener())
+}
+
 export const useMonitoringDashboard = () => {
   const { addBuffer, setActiveBuffer, tabsDisabled } = useEditor()
-  const [busy, setBusy] = useState(false)
-  const inFlight = useRef(false)
+  const [, rerender] = useReducer((count: number) => count + 1, 0)
+  useEffect(() => {
+    openListeners.add(rerender)
+    return () => {
+      openListeners.delete(rerender)
+    }
+  }, [])
   // Read after the first runs, seconds after the click: a script or query
   // started meanwhile would be aborted by activating the dashboard.
   const isEditorBusy = useEditorBusy()
-  const mounted = useRef(true)
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-    }
-  }, [])
 
   const open = async (
     request: MonitoringRequest,
@@ -62,11 +70,11 @@ export const useMonitoringDashboard = () => {
     onOpened: () => void,
   ) => {
     // A script owns the tabs: no dashboard can be opened during it.
-    if (inFlight.current || tabsDisabled) return
+    if (openState.inFlight || tabsDisabled) return
     // Repeated clicks are ignored for the whole open, but the button shows
     // progress only while a new dashboard is created: activating an open one
     // is immediate and must not flash a disabled spinner.
-    inFlight.current = true
+    setOpenState({ inFlight: true })
     const session = authSessionState.capture()
     let notebookId: number | undefined
     let stage = "create_or_reuse"
@@ -81,7 +89,7 @@ export const useMonitoringDashboard = () => {
     }
     try {
       const result = await openMonitoringDashboard(request, addBuffer, () => {
-        if (mounted.current) setBusy(true)
+        setOpenState({ busy: true })
       })
       if (!session.isCurrent()) return
       if (!result) {
@@ -158,12 +166,11 @@ export const useMonitoringDashboard = () => {
         )
       return
     } finally {
-      inFlight.current = false
-      if (mounted.current) setBusy(false)
+      setOpenState({ inFlight: false, busy: false })
     }
   }
 
   // `busy` means a dashboard is opening. `unavailable` means it can't be
   // opened right now (a script owns the tabs), which is not progress.
-  return { open, busy, unavailable: tabsDisabled }
+  return { open, busy: openState.busy, unavailable: tabsDisabled }
 }

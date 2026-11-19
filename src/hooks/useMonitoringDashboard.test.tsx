@@ -126,6 +126,32 @@ describe("monitoring dashboard opening lock", () => {
     expect(mocks.openDashboard).toHaveBeenCalledTimes(2)
   })
 
+  // The drawer's action unmounts when the drawer switches to Details and
+  // back, and the one shown again must still see the open in progress.
+  it("keeps an open in progress across a remount of the action", async () => {
+    const activation = deferred<void>()
+    mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
+    const first = mount()
+    let initial!: Promise<void>
+    act(() => {
+      initial = first().open(request, () => true, vi.fn())
+    })
+    act(() => renderer?.unmount())
+    const second = mount()
+    expect(second().busy).toBe(true)
+    await act(async () => {
+      await second().open(request, () => true, vi.fn())
+    })
+    expect(mocks.openDashboard).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      activation.resolve()
+      await initial
+    })
+    expect(second().busy).toBe(false)
+    expect(mocks.editor.setActiveBuffer).toHaveBeenCalledTimes(1)
+  })
+
   it("does not unlock a later opening when an earlier one finishes", async () => {
     const activation = deferred<void>()
     mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
