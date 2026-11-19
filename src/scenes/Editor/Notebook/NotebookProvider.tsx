@@ -12,6 +12,7 @@ import type { MutableRefObject } from "react"
 import { unstable_batchedUpdates } from "react-dom"
 import {
   hasTransferSnapshot,
+  newerTransferSnapshot,
   takeTransferSnapshot,
 } from "../../../utils/notebooks/notebookTransferState"
 import { useEditor } from "../../../providers/EditorProvider"
@@ -340,11 +341,13 @@ export const NotebookProvider: React.FC<{
   const resultHydration = useMemo(
     () =>
       new CellResultHydrationEngine({
-        loadSnapshot: (cellId) => {
+        loadSnapshot: async (cellId) => {
           const transferred = takeTransferSnapshot(bufferId, cellId)
-          return transferred
-            ? Promise.resolve(transferred)
-            : loadCellSnapshot(bufferId, cellId)
+          if (!transferred) return loadCellSnapshot(bufferId, cellId)
+          const saved = await loadCellSnapshot(bufferId, cellId).catch(
+            () => undefined,
+          )
+          return newerTransferSnapshot(transferred, saved)
         },
         rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
         deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),

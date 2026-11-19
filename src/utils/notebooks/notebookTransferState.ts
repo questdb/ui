@@ -61,6 +61,14 @@ export const takeTransferSnapshot = (
     : undefined
 }
 
+// A cell's staged transfer frame, unless the cell ran again since (e.g. an
+// agent's run while the notebook was not open) and saved a newer result.
+export const newerTransferSnapshot = (
+  staged: NotebookResultSnapshot,
+  saved: NotebookResultSnapshot | undefined,
+): NotebookResultSnapshot =>
+  saved && saved.savedAt > staged.savedAt ? saved : staged
+
 export const hasTransferSnapshot = (
   bufferId: number,
   cellId: string,

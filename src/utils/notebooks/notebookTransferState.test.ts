@@ -4,6 +4,7 @@ import type { NotebookResultSnapshot } from "../../store/notebookResults"
 import {
   consumeTransferMonitor,
   hasTransferSnapshot,
+  newerTransferSnapshot,
   requestTransferMonitor,
   stageTransferSnapshot,
   subscribeTransferMonitor,
@@ -82,5 +83,24 @@ describe("notebook transfer handoff", () => {
     stageTransferSnapshot(large("second"))
     expect(takeTransferSnapshot(1, "first")).toBeUndefined()
     expect(takeTransferSnapshot(1, "second")).toBeDefined()
+  })
+})
+
+describe("newerTransferSnapshot", () => {
+  const at = (savedAt: number): NotebookResultSnapshot => ({
+    ...snapshot(),
+    savedAt,
+  })
+
+  it("prefers a result saved after the transfer", () => {
+    // The cell ran again, e.g. by an agent while the notebook was not open.
+    const saved = at(200)
+    expect(newerTransferSnapshot(at(123), saved)).toBe(saved)
+  })
+
+  it("keeps the staged frame otherwise", () => {
+    const staged = at(123)
+    expect(newerTransferSnapshot(staged, at(123))).toBe(staged)
+    expect(newerTransferSnapshot(staged, undefined)).toBe(staged)
   })
 })
