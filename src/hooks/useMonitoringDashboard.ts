@@ -10,7 +10,6 @@ import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import { bufferStore } from "../store/buffers"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
-import { activateBuffer } from "../utils/notebooks/activateBuffer"
 import { NotebookToolError } from "../utils/notebooks/notebookToolError"
 import type { CellRunOutcome } from "../utils/notebooks/runCellsAfterApply"
 import { isFailClosedClassifyDenial } from "../utils/tools/permissions"
@@ -47,9 +46,6 @@ export const useMonitoringDashboard = () => {
   const { addBuffer, setActiveBuffer, tabsDisabled } = useEditor()
   const [busy, setBusy] = useState(false)
   const inFlight = useRef(false)
-  // A script owns the tabs: no dashboard can be opened during it.
-  const tabsDisabledRef = useRef(tabsDisabled)
-  tabsDisabledRef.current = tabsDisabled
   // Read after the first runs, seconds after the click: a script or query
   // started meanwhile would be aborted by activating the dashboard.
   const isEditorBusy = useEditorBusy()
@@ -66,11 +62,11 @@ export const useMonitoringDashboard = () => {
     isCurrentTarget: () => boolean,
     onOpened: () => void,
   ) => {
-    if (inFlight.current || tabsDisabledRef.current) return
+    // A script owns the tabs: no dashboard can be opened during it.
+    if (inFlight.current || tabsDisabled) return
     // Repeated clicks are ignored for the whole open, but the button shows
-    // progress only while first queries run (a new dashboard, or an open one
-    // whose first runs never landed): activating an open one is immediate and
-    // must not flash a disabled spinner.
+    // progress only while a new dashboard is created: activating an open one
+    // is immediate and must not flash a disabled spinner.
     inFlight.current = true
     const session = authSessionState.capture()
     let notebookId: number | undefined
@@ -139,7 +135,7 @@ export const useMonitoringDashboard = () => {
           )
           return
         }
-        await activateBuffer(setActiveBuffer, current)
+        await setActiveBuffer(current)
         if (!session.isCurrent()) return
         onOpened()
         void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_OPEN, {

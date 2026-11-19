@@ -10,16 +10,12 @@ import {
   LeftPanelType,
   type LeftPanelState,
 } from "../../../providers/LocalStorageProvider/types"
-import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import {
   catalog,
   click,
-  deferred,
-  flush,
   hook,
   mountDrawer,
   queryHook,
-  raw,
 } from "./test/drawerHarness"
 
 const opener = vi.hoisted(() => ({
@@ -122,95 +118,22 @@ describe("drawer monitoring dashboard action", () => {
     ).toEqual({ type: null, width: 600 })
   })
 
-  // The startup telemetry config read runs once and is never retried. The
-  // dashboard identity must not depend on it, and a missing config is read
-  // again instead of being taken for disabled telemetry.
-  it.each([
-    ["enabled", true, { telemetryEnabled: true, telemetryUnknown: false }],
-    ["disabled", false, { telemetryEnabled: false, telemetryUnknown: false }],
-    [
-      "unreadable",
-      undefined,
-      { telemetryEnabled: false, telemetryUnknown: true },
-    ],
-  ] as const)(
-    "re-reads a missing telemetry config (%s) before building a dashboard",
-    async (_label, enabled, expected) => {
-      const server = catalog()
-      server.reply = (query) =>
-        query.startsWith("telemetry_config")
-          ? enabled === undefined
-            ? new Response("unavailable", { status: 503 })
-            : Response.json(raw([{ id: "0x1", enabled }]))
-          : undefined
-      opener.open.mockClear()
-      const store = await mountDrawer("trades_mv", "matview")
-      expect(selectors.telemetry.getConfig(store.getState())).toBeUndefined()
-      await click("monitoring-dashboard")
-      expect(
-        server.requests.some(({ query }) =>
-          query.startsWith("telemetry_config"),
-        ),
-      ).toBe(true)
-      const [request] = opener.open.mock.calls[0]
-      expect(request).toMatchObject(expected)
-    },
-  )
-
-  it("shows progress and ignores clicks while it reads the telemetry config", async () => {
+  // The startup telemetry config read runs once. If it failed, the setting is
+  // unknown: the dashboard says so instead of taking it for disabled.
+  it("passes an unknown telemetry setting when the config was never read", async () => {
     const server = catalog()
-    const pending = deferred()
-    server.reply = (query) =>
-      query.startsWith("telemetry_config") ? pending.promise : undefined
     opener.open.mockClear()
-    await mountDrawer("trades_mv", "matview")
-    await click("monitoring-dashboard")
-    // Locked without native disabled, which would drop the keyboard focus.
-    expect(hook("monitoring-dashboard")).not.toBeDisabled()
-    expect(hook("monitoring-dashboard")).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    )
-    expect(hook("monitoring-dashboard")).toHaveAttribute("aria-busy", "true")
-    await click("monitoring-dashboard")
-    await pending.respond(Response.json(raw([{ id: "0x1", enabled: true }])))
-    await flush()
-    expect(opener.open).toHaveBeenCalledTimes(1)
-    expect(
-      server.requests.filter(({ query }) =>
-        query.startsWith("telemetry_config"),
-      ),
-    ).toHaveLength(1)
-    expect(hook("monitoring-dashboard")).toBeEnabled()
-  })
-
-  it("reports a target change during the telemetry read and opens nothing", async () => {
-    const server = catalog()
-    const pending = deferred()
-    server.reply = (query) =>
-      query.startsWith("telemetry_config") ? pending.promise : undefined
-    opener.open.mockClear()
-    // Mocked by the drawer harness, which registers the mock after this
-    // file's own imports were resolved.
-    const { trackEvent } = await import("../../../modules/ConsoleEventTracker")
-    vi.mocked(trackEvent).mockClear()
     const store = await mountDrawer("trades_mv", "matview")
+    expect(selectors.telemetry.getConfig(store.getState())).toBeUndefined()
     await click("monitoring-dashboard")
-    act(() => {
-      store.dispatch(
-        actions.console.pushSidebarHistory({
-          type: "tableDetails",
-          payload: { tableName: "trades", kind: "table" },
-        }),
-      )
+    expect(
+      server.requests.some(({ query }) => query.startsWith("telemetry_config")),
+    ).toBe(false)
+    const [request] = opener.open.mock.calls[0]
+    expect(request).toMatchObject({
+      telemetryEnabled: false,
+      telemetryUnknown: true,
     })
-    await pending.respond(Response.json(raw([{ id: "0x1", enabled: true }])))
-    await flush()
-    expect(opener.open).not.toHaveBeenCalled()
-    expect(trackEvent).toHaveBeenCalledWith(
-      ConsoleEvent.MONITORING_DASHBOARD_FAILED,
-      { kind: "matview", stage: "prepare", reason: "target_changed" },
-    )
   })
 
   it("uses a loaded telemetry config without reading it again", async () => {

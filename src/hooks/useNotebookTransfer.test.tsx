@@ -2,7 +2,6 @@ import React from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 import { useNotebookTransfer } from "./useNotebookTransfer"
-import type { Buffer } from "../store/buffers"
 import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import { authSessionState } from "../modules/OAuth2/authSessionState"
@@ -39,13 +38,6 @@ vi.mock("../scenes/Editor/Notebook/persistCellSnapshot", () => ({
 vi.mock("../store/buffers", () => ({
   bufferStore: {
     getById: mocks.getById,
-    // The activation landed (see activateBuffer).
-    getActiveId: () =>
-      Promise.resolve({
-        value: (
-          mocks.setActiveBuffer.mock.lastCall as [Buffer] | undefined
-        )?.[0].id,
-      }),
   },
   MAX_BUFFER_NAME_LENGTH: 100,
 }))

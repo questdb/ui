@@ -64,7 +64,6 @@ describe("CellResultHydrationEngine", () => {
   let pendingRewrites: Array<(saved: boolean) => void>
   let deletedSnapshots: string[]
   let seededRefreshState: Array<[string, SnapshotRefreshState]>
-  let inMemoryOnly: Set<NotebookResultSnapshot>
 
   const ranCell = (id: string): NotebookCell => ({
     id,
@@ -100,9 +99,7 @@ describe("CellResultHydrationEngine", () => {
     pendingRewrites = []
     deletedSnapshots = []
     seededRefreshState = []
-    inMemoryOnly = new Set()
     engine = new CellResultHydrationEngine({
-      isDurable: (loaded) => !inMemoryOnly.has(loaded),
       loadSnapshot: (cellId) =>
         new Promise((resolve, reject) => {
           loadCounts.set(cellId, (loadCounts.get(cellId) ?? 0) + 1)
@@ -601,26 +598,6 @@ describe("CellResultHydrationEngine", () => {
     expect(engine.statusOf("c1")).toBe("unrequested")
     engine.request("c1")
     expect(engine.statusOf("c1")).toBe("loading")
-  })
-
-  it("keeps a snapshot that is not on disk in memory", async () => {
-    // Given a cell hydrated from a frame held only in memory (a transfer
-    // whose save failed)
-    seedCell(ranCell("c1"))
-    const frame = snapshot("c1", [dqlResult("select 1")])
-    snapshots.set("c1", frame)
-    inMemoryOnly.add(frame)
-    engine.request("c1")
-    await resolveLoad("c1")
-
-    // When it becomes releasable and the idle tick runs
-    releasableCellIds.add("c1")
-    engine.noteReleasable("c1")
-    await vi.advanceTimersByTimeAsync(1)
-
-    // Then its rows stay: a reload could not bring them back
-    expect(released).toEqual([])
-    expect(engine.statusOf("c1")).toBe("loaded")
   })
 
   it("defers releasing a fresh run result until its save confirms", async () => {

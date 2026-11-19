@@ -12,7 +12,6 @@ import type { MutableRefObject } from "react"
 import { unstable_batchedUpdates } from "react-dom"
 import {
   hasTransferSnapshot,
-  resolveTransferSnapshot,
   takeTransferSnapshot,
 } from "../../../utils/notebooks/notebookTransferState"
 import { useEditor } from "../../../providers/EditorProvider"
@@ -90,7 +89,6 @@ import {
   loadSnapshotCellIds,
   pinNotebookSnapshots,
   pruneToRecentNotebooks,
-  type NotebookResultSnapshot,
 } from "../../../store/notebookResults"
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import { persistCellSnapshot } from "./persistCellSnapshot"
@@ -339,46 +337,41 @@ export const NotebookProvider: React.FC<{
   // A refreshing cell never releases: its visible frame is the refresh
   // round's swap target.
   const virtualizationEngineRef = useRef<CellVirtualizationEngine | null>(null)
-  const resultHydration = useMemo(() => {
-    // Staged transfer frames shown without a matching disk copy.
-    const inMemoryOnly = new WeakSet<NotebookResultSnapshot>()
-    return new CellResultHydrationEngine({
-      loadSnapshot: async (cellId) => {
-        const staged = takeTransferSnapshot(bufferId, cellId)
-        if (!staged) return loadCellSnapshot(bufferId, cellId)
-        const saved = await loadCellSnapshot(bufferId, cellId).catch(
-          () => undefined,
-        )
-        const { snapshot, durable } = resolveTransferSnapshot(staged, saved)
-        if (!durable) inMemoryOnly.add(snapshot)
-        return snapshot
-      },
-      isDurable: (snapshot) => !inMemoryOnly.has(snapshot),
-      rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
-      deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
-      getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
-      applyResult: (cellId, result) => {
-        restoredResults.add(result)
-        hydrateCells((prev) =>
-          prev.map((c) =>
-            c.id === cellId && c.result == null ? { ...c, result } : c,
-          ),
-        )
-      },
-      releaseResult: (cellId) => {
-        hydrateCells((prev) =>
-          prev.map((c) =>
-            c.id === cellId ? { ...c, ...releaseCellResultPatch(c) } : c,
-          ),
-        )
-      },
-      canRelease: (cellId) =>
-        (virtualizationEngineRef.current?.canReleaseData(cellId) ?? false) &&
-        !(cellRefreshEngineRef.current?.isRefreshing(cellId) ?? false),
-      seedRefreshState: (cellId, seed) =>
-        cellRefreshEngineRef.current?.seedRefreshState(cellId, seed),
-    })
-  }, [])
+  const resultHydration = useMemo(
+    () =>
+      new CellResultHydrationEngine({
+        loadSnapshot: (cellId) => {
+          const transferred = takeTransferSnapshot(bufferId, cellId)
+          return transferred
+            ? Promise.resolve(transferred)
+            : loadCellSnapshot(bufferId, cellId)
+        },
+        rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
+        deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
+        getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
+        applyResult: (cellId, result) => {
+          restoredResults.add(result)
+          hydrateCells((prev) =>
+            prev.map((c) =>
+              c.id === cellId && c.result == null ? { ...c, result } : c,
+            ),
+          )
+        },
+        releaseResult: (cellId) => {
+          hydrateCells((prev) =>
+            prev.map((c) =>
+              c.id === cellId ? { ...c, ...releaseCellResultPatch(c) } : c,
+            ),
+          )
+        },
+        canRelease: (cellId) =>
+          (virtualizationEngineRef.current?.canReleaseData(cellId) ?? false) &&
+          !(cellRefreshEngineRef.current?.isRefreshing(cellId) ?? false),
+        seedRefreshState: (cellId, seed) =>
+          cellRefreshEngineRef.current?.seedRefreshState(cellId, seed),
+      }),
+    [],
+  )
   useEffect(() => () => resultHydration.destroy(), [])
   useEffect(() => {
     resultHydration.sync(store.cells)

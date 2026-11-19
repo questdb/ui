@@ -20,7 +20,6 @@ import { authSessionState } from "../modules/OAuth2/authSessionState"
 import { SessionEndedError } from "../modules/OAuth2/session"
 import { NotebookToolError } from "../utils/notebooks/notebookToolError"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
-import { activateBuffer } from "../utils/notebooks/activateBuffer"
 import { useEditorBusy } from "./useEditorBusy"
 
 // Transfers always create a new notebook next to the source tab.
@@ -150,7 +149,7 @@ export const useNotebookTransfer = () => {
         )
         return
       }
-      await activateBuffer(setActiveBuffer, current, { focus: true })
+      await setActiveBuffer(current, { focus: true })
       requireSession()
       void trackEvent(ConsoleEvent.NOTEBOOK_TRANSFER, {
         source: request.source,

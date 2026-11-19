@@ -186,44 +186,23 @@ const Console = () => {
     }
   }
 
-  // A result change while the result is hidden (it belongs to another tab)
-  // must not take over the bottom panel: the pane would collapse and hide
-  // whatever the user has open there (e.g. Import). The change applies once
-  // the result is visible, unless the user picked a panel in the meantime.
-  const pendingResultRef = React.useRef<{ result: typeof result }>()
-  const showResult = () =>
+  // The bottom panel follows each new result, as it does for a result run
+  // on screen, but only once the result is visible: one that belongs to
+  // another tab must not collapse the pane over what the user has open (e.g.
+  // Import). It applies when its tab is shown again. The first render applies
+  // too, so a console mounted on a notebook tab (e.g. after signing in again)
+  // corrects a panel left by the previous session.
+  const appliedResultRef = React.useRef<{ result: typeof result }>()
+  useEffect(() => {
+    const applied = appliedResultRef.current
+    if (hideResult || (applied && applied.result === result)) return
+    appliedResultRef.current = { result }
     dispatch(
       actions.console.setActiveBottomPanel(
         resultRef.current && result ? "result" : "zeroState",
       ),
     )
-
-  useEffect(() => {
-    if (hideResult) {
-      pendingResultRef.current = { result }
-      return
-    }
-    pendingResultRef.current = undefined
-    showResult()
-  }, [result])
-
-  useEffect(() => {
-    const pending = pendingResultRef.current
-    if (hideResult || !pending || pending.result !== result) return
-    pendingResultRef.current = undefined
-    showResult()
-  }, [hideResult])
-
-  // Any panel change while a result is pending is the user's choice: it wins.
-  // Mounting is not a change: a console that mounts on a notebook tab (e.g.
-  // after signing in again) keeps the result it deferred, so the stored panel
-  // is corrected once the result is visible.
-  const previousBottomPanelRef = React.useRef(activeBottomPanel)
-  useEffect(() => {
-    if (previousBottomPanelRef.current === activeBottomPanel) return
-    previousBottomPanelRef.current = activeBottomPanel
-    pendingResultRef.current = undefined
-  }, [activeBottomPanel])
+  }, [result, hideResult])
 
   useEffect(() => {
     showPanel(activeBottomPanel, hideResult)

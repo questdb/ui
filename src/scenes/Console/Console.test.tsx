@@ -164,7 +164,7 @@ describe("result pane on notebook tabs", () => {
     expect(resultPaneVisible()).toBe(true)
   })
 
-  it("keeps an Import panel the user opens after a hidden result arrived", () => {
+  it("shows a hidden result on its tab, as a result run there would", () => {
     active.summary = { id: 2, isNotebook: true }
     const { store, rerender } = mountConsole()
     act(() => {
@@ -176,7 +176,7 @@ describe("result pane on notebook tabs", () => {
 
     active.summary = { id: 1, isNotebook: false }
     rerender()
-    expect(store.getState().console.activeBottomPanel).toBe("import")
+    expect(store.getState().console.activeBottomPanel).toBe("result")
   })
 
   it("takes a hidden result out of the layout, so its controls can't take focus", () => {

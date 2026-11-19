@@ -54,9 +54,6 @@ const MAX_LOAD_RETRIES = 2
 
 export type CellResultHydrationDeps = {
   loadSnapshot: (cellId: string) => Promise<NotebookResultSnapshot | undefined>
-  // False for a loaded snapshot that is not on disk (a staged transfer frame
-  // whose save failed or has not landed): its rows must stay in memory.
-  isDurable?: (snapshot: NotebookResultSnapshot) => boolean
   rewriteSnapshot: (snapshot: NotebookResultSnapshot) => Promise<boolean>
   deleteSnapshot: (cellId: string) => Promise<void>
   getCell: (cellId: string) => NotebookCell | undefined
@@ -299,7 +296,7 @@ export class CellResultHydrationEngine {
           if (saved) this.persisted.add(reconciled.results)
         })
         .catch(() => undefined)
-    } else if (this.deps.isDurable?.(snapshot) ?? true) {
+    } else {
       this.persisted.add(reconciled.results)
     }
     this.deps.applyResult(cellId, {

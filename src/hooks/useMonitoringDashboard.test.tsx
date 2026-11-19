@@ -38,13 +38,6 @@ vi.mock("../utils/monitoring/openDashboard", () => ({
 vi.mock("../store/buffers", () => ({
   bufferStore: {
     getById: mocks.getById,
-    // The activation landed (see activateBuffer).
-    getActiveId: () =>
-      Promise.resolve({
-        value: (
-          mocks.editor.setActiveBuffer.mock.lastCall as [Buffer] | undefined
-        )?.[0].id,
-      }),
   },
 }))
 vi.mock("../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))

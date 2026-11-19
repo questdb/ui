@@ -1,11 +1,4 @@
-import React, {
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-} from "react"
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import styled from "styled-components"
 import { selectors, actions } from "../../../store"
@@ -25,8 +18,7 @@ import {
   truncateLongDDL,
 } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
-import { QuestContext, useSettings } from "../../../providers"
-import { queryTelemetryConfig } from "../../../utils/telemetryQueries"
+import { useSettings } from "../../../providers"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import * as QuestDB from "../../../utils/questdb"
 import {
@@ -228,7 +220,6 @@ export const TableDetailsDrawer = () => {
   leftPanelStateRef.current = leftPanelState
   const monitoringDashboard = useMonitoringDashboard()
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const { quest } = useContext(QuestContext)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const target = useSelector(selectors.console.getTableDetailsTarget)
   const targetRef = useRef(target)
@@ -449,61 +440,16 @@ export const TableDetailsDrawer = () => {
     kindSourceLoading
   const tablesUnavailable = tableSource.state.status === "unavailable"
 
-  // The startup telemetry config read runs once and is not retried, so it may
-  // be missing (failed, or not answered yet). Read it again rather than guess.
-  // Undefined means the setting is unknown.
-  const readTelemetryEnabled = async (): Promise<boolean | undefined> => {
-    if (telemetryConfig) return telemetryConfig.enabled === true
-    try {
-      const response = await queryTelemetryConfig(quest)
-      return response.type === QuestDB.Type.DQL && response.data[0]
-        ? response.data[0].enabled === true
-        : undefined
-    } catch {
-      return undefined
-    }
-  }
-
-  // Covers the telemetry re-read before the dashboard opener takes over: the
-  // button shows progress and ignores repeated clicks during it.
-  const [preparingDashboard, setPreparingDashboard] = useState(false)
-  const preparingDashboardRef = useRef(false)
-  const drawerMountedRef = useRef(true)
-  useEffect(
-    () => () => {
-      drawerMountedRef.current = false
-    },
-    [],
-  )
-
-  const openMonitoringDashboard = async () => {
+  const openMonitoringDashboard = () => {
     if (!tableData || (kind !== "table" && kind !== "matview")) return
-    if (monitoringDashboard.busy || preparingDashboardRef.current) return
     const name = tableName
-    preparingDashboardRef.current = true
-    setPreparingDashboard(true)
-    let telemetryEnabled: boolean | undefined
-    try {
-      telemetryEnabled = await readTelemetryEnabled()
-    } finally {
-      preparingDashboardRef.current = false
-      if (drawerMountedRef.current) setPreparingDashboard(false)
-    }
-    if (!isCurrentTarget(name, kind)) {
-      // The opener reports a target change once it has started; this one
-      // happened before it.
-      void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_FAILED, {
-        kind,
-        stage: "prepare",
-        reason: "target_changed",
-      })
-      return
-    }
     void monitoringDashboard.open(
       {
         target: { kind, name },
-        telemetryEnabled: telemetryEnabled === true,
-        telemetryUnknown: telemetryEnabled === undefined,
+        // The startup read of the telemetry config may have failed: then the
+        // setting is unknown, and the dashboard says so.
+        telemetryEnabled: telemetryConfig?.enabled === true,
+        telemetryUnknown: telemetryConfig === undefined,
         refreshSchedule: matViewData ?? undefined,
       },
       () => isCurrentTarget(name, kind),
@@ -955,7 +901,7 @@ export const TableDetailsDrawer = () => {
                   (kind === "matview" ||
                     (kind === "table" && tableData?.walEnabled === true)) && (
                     <MonitoringDashboardButton
-                      busy={monitoringDashboard.busy || preparingDashboard}
+                      busy={monitoringDashboard.busy}
                       disabled={
                         monitoringDashboard.unavailable || tablesUnavailable
                       }
