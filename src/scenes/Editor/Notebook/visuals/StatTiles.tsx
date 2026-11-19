@@ -24,6 +24,7 @@ import type { VisualConfig } from "../CellChart/chartTypes"
 
 type Tile = {
   label: string
+  caption: string | null
   value: unknown
   change: number | null
   spark: number[]
@@ -34,22 +35,24 @@ const pulse = keyframes`
   to { opacity: 1; }
 `
 
-const Grid = styled.div<{ $count: number }>`
+const Grid = styled.div<{ $count: number; $compact: boolean }>`
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
     minmax(${({ $count }) => ($count > 4 ? "15rem" : "18rem")}, 1fr)
   );
-  grid-auto-rows: minmax(9rem, 1fr);
+  grid-auto-rows: ${({ $compact }) =>
+    $compact ? "minmax(9rem, auto)" : "minmax(9rem, 1fr)"};
+  align-content: ${({ $compact }) => ($compact ? "center" : "stretch")};
   height: 100%;
   overflow: auto;
 `
 
-const TileRoot = styled.div`
+const TileRoot = styled.div<{ $centred: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  justify-content: ${({ $centred }) => ($centred ? "center" : "flex-start")};
   gap: 0.2rem;
   padding: 1.2rem 1.6rem;
   background: ${({ theme }) => theme.color.surfaceInset};
@@ -86,6 +89,13 @@ const Value = styled.span<{ $color?: string; $flash: number }>`
   @media (prefers-reduced-motion: reduce) {
     animation: none;
   }
+`
+
+const Caption = styled.span`
+  position: relative;
+  z-index: 1;
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const Change = styled.span<{ $color: string }>`
@@ -162,6 +172,7 @@ export const statTiles = (
     c.label !== undefined
       ? columnIndex(rows, c.label)
       : firstColumnOf(rows, "categorical")
+  const captionIdx = columnIndex(rows, c.caption)
   const changeIdx = columnIndex(
     rows,
     c.change ??
@@ -208,6 +219,7 @@ export const statTiles = (
       labelIdx >= 0 ? toLabel(row[labelIdx]) : rows.columns[valueIdx].name
     return {
       label,
+      caption: captionIdx >= 0 ? toLabel(row[captionIdx]) : null,
       value: row[valueIdx],
       change: changeIdx >= 0 ? toNumber(row[changeIdx]) : null,
       spark: sparks.get(labelIdx >= 0 ? label : "") ?? sparks.get("") ?? [],
@@ -248,7 +260,11 @@ export const StatTiles = ({ visual, statements, formats, onSelect }: Props) => {
   }, [tiles])
 
   return (
-    <Grid $count={tiles.length} data-hook="stat-tiles">
+    <Grid
+      $count={tiles.length}
+      $compact={tiles.every((t) => t.spark.length < 2)}
+      data-hook="stat-tiles"
+    >
       {tiles.map((tile) => {
         const tone = toneOf(tile.value, format)
         const changeTone =
@@ -267,6 +283,7 @@ export const StatTiles = ({ visual, statements, formats, onSelect }: Props) => {
         return (
           <TileRoot
             key={tile.label}
+            $centred={tile.spark.length < 2}
             onClick={onSelect ? () => onSelect(tile.label) : undefined}
             style={onSelect ? { cursor: "pointer" } : undefined}
             data-hook="stat-tile"
@@ -280,6 +297,7 @@ export const StatTiles = ({ visual, statements, formats, onSelect }: Props) => {
             >
               {formatValue(tile.value, format ?? { kind: "number" })}
             </Value>
+            {tile.caption && <Caption>{tile.caption}</Caption>}
             {tile.change !== null && changeTone && (
               <Change $color={toneColor(changeTone, theme.color)}>
                 {tile.change > 0 ? "▲ " : tile.change < 0 ? "▼ " : ""}

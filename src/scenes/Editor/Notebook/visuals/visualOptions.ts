@@ -3,10 +3,12 @@ import type { ColorShape } from "../../../../types/styled"
 import type { VisualConfig } from "../CellChart/chartTypes"
 import { echarts } from "../CellChart/echartsSetup"
 import { classifyColumn } from "../CellChart/inferChartConfig"
+import { withAlpha } from "../../../../theme"
 import {
   formatValue,
   thresholdBands,
   toneColor,
+  toneOf,
   type ColumnFormats,
 } from "../../../../utils/formats/columnFormat"
 import {
@@ -96,67 +98,99 @@ export const gaugeOption = ({
   const min = visual.min ?? 0
   const max =
     visual.max ?? (format?.kind === "percent" ? 1 : Math.max(100, value))
+  const span = max - min || 1
+  const clamped = Math.min(Math.max(value, min), max)
+  const tone = toneOf(value, format)
+  const valueColor = tone ? toneColor(tone, colors) : colors.chartSeries1
+  // Threshold zones: a thin outer ring, quiet below the value's own colour.
   const bands = thresholdBands(format, min, max)
-  const axisColor: [number, string][] =
+  const zones: [number, string][] =
     bands.length > 0
       ? bands.map((b) => [
-          (b.to - min) / (max - min),
-          toneColor(b.tone, colors),
+          (b.to - min) / span,
+          withAlpha(toneColor(b.tone, colors), 0.55),
         ])
-      : [[1, colors.borderDefault]]
+      : [[1, colors.dataGrid]]
   const label = labelIdx >= 0 ? toLabel(rows.rows[0][labelIdx]) : valueName
+  const plain = format ? { ...format, prefix: "", suffix: "" } : undefined
+  const common = {
+    type: "gauge" as const,
+    min,
+    max,
+    startAngle: 220,
+    endAngle: -40,
+    center: ["50%", "56%"],
+    splitNumber: 1,
+    axisTick: { show: false },
+    splitLine: { show: false },
+  }
   return {
     option: {
       series: [
         {
-          type: "gauge",
-          min,
-          max,
-          startAngle: 210,
-          endAngle: -30,
-          splitNumber: 4,
-          radius: "92%",
-          center: ["50%", "58%"],
+          // The zones, as a thin ring outside the track.
+          ...common,
+          radius: "94%",
+          axisLine: { lineStyle: { width: 3, color: zones } },
+          axisLabel: { show: false },
+          pointer: { show: false },
+          progress: { show: false },
+          detail: { show: false },
+          title: { show: false },
+          data: [{ value: clamped }],
+          silent: true,
+        },
+        {
+          ...common,
+          radius: "86%",
+          axisLine: {
+            roundCap: true,
+            lineStyle: { width: 14, color: [[1, colors.dataGrid]] },
+          },
           progress: {
             show: true,
-            width: 10,
-            itemStyle: { color: colors.contentPrimary, opacity: 0.85 },
+            roundCap: true,
+            width: 14,
+            itemStyle: { color: valueColor },
           },
-          axisLine: { lineStyle: { width: 10, color: axisColor } },
           pointer: { show: false },
           anchor: { show: false },
-          axisTick: { show: false },
-          splitLine: {
-            distance: 4,
-            length: 6,
-            lineStyle: { color: colors.borderStrong, width: 1 },
-          },
+          // Only the ends are labelled.
           axisLabel: {
-            distance: 16,
-            color: colors.contentSecondary,
-            fontSize: 11,
-            formatter: (v: number) =>
-              formatValue(v, format ? { ...format, suffix: "" } : undefined),
-          },
-          title: {
-            offsetCenter: [0, "38%"],
+            distance: -34,
             color: colors.contentSecondary,
             fontSize: 12,
+            formatter: (v: number) =>
+              v === min || v === max ? formatValue(v, plain) : "",
+          },
+          title: {
+            show: labelIdx >= 0,
+            offsetCenter: [0, "34%"],
+            color: colors.contentSecondary,
+            fontSize: 13,
           },
           detail: {
-            offsetCenter: [0, "5%"],
+            offsetCenter: [0, "2%"],
             valueAnimation: true,
-            fontSize: 28,
+            fontSize: 30,
             fontWeight: 600,
             color: colors.contentPrimary,
-            formatter: (v: number) => formatValue(v, format),
+            formatter: () => formatValue(value, format),
           },
-          data: [{ value, name: label }],
+          data: [{ value: clamped, name: label }],
         },
       ],
     },
     drawn: { value, min, max, bands: bands.length },
-    problems: [],
+    problems:
+      value < min || value > max
+        ? [
+            {
+              message: `The value ${value} is outside min ${min} … max ${max}; set min and max on the visual.`,
+              severity: "warning",
+            },
+          ]
+        : [],
   }
 }
 
@@ -168,9 +202,10 @@ const stateTimelineRenderItem: CustomSeriesRenderItem = (params, api) => {
   const lane = api.value(2)
   const start = api.coord([api.value(0), lane])
   const end = api.coord([api.value(1), lane])
-  const height = (api.size?.([0, 1]) as number[])[1] * 0.62
-  const x = start[0]
-  const width = Math.max(end[0] - start[0], 1)
+  const height = Math.min((api.size?.([0, 1]) as number[])[1] * 0.56, 22)
+  // A hairline gap between consecutive states keeps their edges visible.
+  const x = start[0] + 1
+  const width = Math.max(end[0] - start[0] - 2, 1)
   const coordSys = params.coordSys as unknown as {
     x: number
     y: number
@@ -192,6 +227,10 @@ const stateTimelineRenderItem: CustomSeriesRenderItem = (params, api) => {
 }
 
 echarts.registerCustomSeries(STATE_TIMELINE, stateTimelineRenderItem)
+
+const GOOD_STATE = /^(ok|up|active|running|healthy|on|true|online|moving)$/
+const WARN_STATE = /^(warn|warning|degraded|paused|lagging|pending|charging)$/
+const BAD_STATE = /^(error|down|failed|fault|suspended|critical|false|offline)$/
 
 export const stateTimelineOption = ({
   visual,
@@ -245,18 +284,44 @@ export const stateTimelineOption = ({
       s.end ??= list[i + 1]?.start ?? maxTime
     })
   }
-  const lanes = [...byLane.keys()]
-  const states = [...new Set(segs.map((s) => s.state))]
-  const colorOf = (state: string) => {
+  const lanes = [...byLane.keys()].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true }),
+  )
+  // Good states first, then warnings, then failures, then the rest, so the
+  // legend reads in order of severity.
+  const severity = (state: string) => {
     const lower = state.toLowerCase()
-    if (/^(ok|up|active|running|healthy|on|true)$/.test(lower))
-      return colors.dataPositive
-    if (/^(error|down|failed|fault|suspended|critical|false)$/.test(lower))
-      return colors.dataNegative
-    if (/^(warn|warning|degraded|paused|lagging|pending)$/.test(lower))
-      return colors.statusWarning
-    return palette(colors)[states.indexOf(state) % 8]
+    if (GOOD_STATE.test(lower)) return 0
+    if (WARN_STATE.test(lower)) return 2
+    if (BAD_STATE.test(lower)) return 3
+    return 1
   }
+  const states = [...new Set(segs.map((s) => s.state))].sort(
+    (a, b) => severity(a) - severity(b) || a.localeCompare(b),
+  )
+  const neutral = [
+    colors.chartSeries1,
+    colors.chartSeries4,
+    colors.chartSeries3,
+    colors.chartSeries6,
+    colors.chartSeries5,
+  ]
+  let nextNeutral = 0
+  const stateColors = new Map(
+    states.map((state) => {
+      const level = severity(state)
+      const color =
+        level === 0
+          ? colors.chartUp
+          : level === 2
+            ? colors.statusWarning
+            : level === 3
+              ? colors.chartDown
+              : neutral[nextNeutral++ % neutral.length]
+      return [state, color]
+    }),
+  )
+  const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16)
   return {
     option: {
       useUTC: true,
@@ -265,7 +330,7 @@ export const stateTimelineOption = ({
           const v = (p as { value: [number, number, number, number] }).value
           const s = states[v[3]]
           const minutes = Math.round((v[1] - v[0]) / 60000)
-          return `${lanes[v[2]]}<br/><b>${s.replace(/</g, "&lt;")}</b> · ${minutes} min`
+          return `${lanes[v[2]]}<br/><b>${s.replace(/</g, "&lt;")}</b><br/>${clock(v[0])}–${clock(v[1])} · ${minutes} min`
         },
       },
       grid: { left: 12, right: 24, top: 12, bottom: 36, containLabel: true },
@@ -275,7 +340,9 @@ export const stateTimelineOption = ({
         data: lanes,
         inverse: true,
         axisTick: { show: false },
+        axisLine: { show: false },
         splitLine: { show: false },
+        splitArea: { show: true },
       },
       legend: { bottom: 0, data: states },
       series: states.map((state) => ({
@@ -283,7 +350,7 @@ export const stateTimelineOption = ({
         name: state,
         renderItem: STATE_TIMELINE,
         encode: { x: [0, 1], y: 2 },
-        itemStyle: { color: colorOf(state) },
+        itemStyle: { color: stateColors.get(state) },
         data: segs
           .filter((s) => s.state === state)
           .map((s) => [
@@ -347,7 +414,13 @@ const divergingVisualMap = (colors: ColorShape, values: number[]) => {
     min: -extent,
     max: extent,
     inRange: {
-      color: [colors.dataNegative, colors.surfaceRaised, colors.dataPositive],
+      color: [
+        withAlpha(colors.chartDown, 0.8),
+        withAlpha(colors.chartDown, 0.35),
+        colors.surfaceRaised,
+        withAlpha(colors.chartUp, 0.35),
+        withAlpha(colors.chartUp, 0.8),
+      ],
     },
   }
 }
@@ -362,68 +435,136 @@ export const treemapOption = (ctx: VisualContext): VisualBuild => {
   const h = hierarchy(ctx)
   if (typeof h === "string") return missing(h)
   const { colors, formats } = ctx
-  const valueFormat = formats[h.valueName]
-  const colorFormat = h.colorName ? formats[h.colorName] : undefined
+  const valueFormat = formats[h.valueName] ?? { compact: true }
+  const colorFormat = h.colorName
+    ? (formats[h.colorName] ?? { kind: "percent" as const, decimals: 1 })
+    : undefined
   const changes = colorValues(h.tree)
+  const diverging = changes.length > 0
+  const grouped = h.tree.some((n) => n.children && n.children.length > 0)
+  const esc = (t: string) => t.replace(/</g, "&lt;")
+  // Without a change column, each group takes a palette colour and its tiles
+  // shade by size.
+  const data = withColorValues(h.tree).map((node, i) =>
+    diverging
+      ? node
+      : {
+          ...(node as object),
+          itemStyle: { color: withAlpha(palette(colors)[i % 8], 0.72) },
+        },
+  )
   return {
     option: {
       tooltip: {
         formatter: (p: unknown) => {
-          const { name, value } = p as {
+          const { name, value, treePathInfo } = p as {
             name: string
             value: number | number[]
+            treePathInfo?: { name: string }[]
           }
           const [v, c] = Array.isArray(value) ? value : [value, undefined]
-          return `${name.replace(/</g, "&lt;")}<br/>${formatValue(v, valueFormat)}${c !== undefined ? ` · ${formatValue(c, colorFormat ?? { kind: "percent" })}` : ""}`
+          const path = (treePathInfo ?? [])
+            .map((t) => t.name)
+            .filter(Boolean)
+            .join(" › ")
+          return `<b>${esc(path || name)}</b><br/>${formatValue(v, valueFormat)}${
+            c !== undefined && colorFormat
+              ? ` · ${formatValue(c, colorFormat)}`
+              : ""
+          }`
         },
       },
-      ...(changes.length > 0
-        ? { visualMap: divergingVisualMap(colors, changes) }
-        : {}),
+      ...(diverging ? { visualMap: divergingVisualMap(colors, changes) } : {}),
       series: [
         {
           type: "treemap",
           roam: false,
           nodeClick: false,
           breadcrumb: { show: false },
-          width: "100%",
-          height: "100%",
-          top: 0,
-          left: 0,
+          top: 2,
+          left: 2,
+          right: 2,
+          bottom: 2,
+          squareRatio: 1.2,
           label: {
             show: true,
-            color: colors.contentPrimary,
-            fontSize: 12,
+            position: "insideTopLeft",
+            padding: [6, 8],
+            textBorderWidth: 0,
             formatter: (p: unknown) => {
               const { name, value } = p as {
                 name: string
                 value: number | number[]
               }
-              const c = Array.isArray(value) ? value[1] : undefined
-              return c !== undefined
-                ? `${name}\n${formatValue(c, colorFormat ?? { kind: "percent", signTone: true })}`
-                : name
+              const [v, c] = Array.isArray(value) ? value : [value, undefined]
+              const second =
+                c !== undefined && colorFormat
+                  ? formatValue(c, { ...colorFormat, signTone: false })
+                  : formatValue(v, valueFormat)
+              return `{name|${name}}\n{value|${second}}`
+            },
+            rich: {
+              name: {
+                fontSize: 12,
+                fontWeight: 600,
+                color: colors.contentPrimary,
+                lineHeight: 16,
+                textBorderWidth: 0,
+              },
+              value: {
+                fontSize: 11,
+                color: colors.contentPrimary,
+                opacity: 0.75,
+                lineHeight: 14,
+                textBorderWidth: 0,
+              },
             },
           },
           upperLabel: {
-            show: true,
-            height: 18,
+            show: grouped,
+            formatter: "{b}",
+            height: 20,
+            padding: [0, 8],
             color: colors.contentSecondary,
             fontSize: 11,
+            fontWeight: 600,
           },
           itemStyle: {
             borderColor: colors.surfaceInset,
-            borderWidth: 1,
-            gapWidth: 1,
+            borderWidth: 0,
+            gapWidth: 2,
+            borderRadius: 4,
           },
-          levels: [
-            { itemStyle: { borderWidth: 0, gapWidth: 3 } },
-            { itemStyle: { gapWidth: 1 } },
-          ],
-          ...(changes.length === 0
-            ? { colorMappingBy: "index" }
-            : { visualDimension: 1 }),
-          data: withColorValues(h.tree),
+          levels: grouped
+            ? [
+                {
+                  itemStyle: {
+                    borderColor: colors.surfaceInset,
+                    borderWidth: 3,
+                    gapWidth: 3,
+                    borderRadius: 4,
+                  },
+                },
+                {
+                  itemStyle: {
+                    borderColor: colors.surfaceRaised,
+                    borderWidth: 0,
+                    gapWidth: 2,
+                    borderRadius: 4,
+                  },
+                  ...(diverging
+                    ? {}
+                    : { colorAlpha: [0.35, 0.8], colorMappingBy: "value" }),
+                },
+                { itemStyle: { gapWidth: 2, borderRadius: 4 } },
+              ]
+            : [],
+          ...(diverging
+            ? { visualDimension: 1 }
+            : grouped
+              ? {}
+              : { colorMappingBy: "index" }),
+          data,
         },
       ] as EChartsOption["series"],
     },
@@ -987,10 +1128,10 @@ export const liquidityHeatmapOption = ({
           formatValue(v, valueFormat ?? { compact: true }),
         inRange: {
           color: [
-            colors.surfaceInset,
+            withAlpha(colors.chartSeries1, 0.08),
+            withAlpha(colors.chartSeries1, 0.55),
             colors.chartSeries1,
             colors.statusWarning,
-            colors.dataNegative,
           ],
         },
       },

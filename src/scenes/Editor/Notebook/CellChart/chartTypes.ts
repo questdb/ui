@@ -81,6 +81,8 @@ export type VisualType = (typeof VISUAL_TYPES)[number]
 export type VisualColumns = {
   value?: string
   label?: string
+  // stat: a line of context under the value, e.g. "254 use WAL".
+  caption?: string
   change?: string
   target?: string
   time?: string

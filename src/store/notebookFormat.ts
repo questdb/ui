@@ -71,6 +71,7 @@ const isName = (value: unknown): value is string =>
 const ROLE_KEYS: (keyof VisualColumns)[] = [
   "value",
   "label",
+  "caption",
   "change",
   "target",
   "time",

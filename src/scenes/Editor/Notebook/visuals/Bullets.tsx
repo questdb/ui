@@ -2,11 +2,12 @@ import React from "react"
 import styled, { useTheme } from "styled-components"
 import {
   formatValue,
-  thresholdBands,
   toneColor,
   toneOf,
   type ColumnFormats,
+  type Tone,
 } from "../../../../utils/formats/columnFormat"
+import { withAlpha } from "../../../../theme"
 import {
   columnIndex,
   firstColumnOf,
@@ -16,78 +17,155 @@ import {
 } from "./statementRows"
 import type { VisualConfig } from "../CellChart/chartTypes"
 
-// Bullet bars: each row's value against its target (a limit, a budget) on a
-// shared scale, over the value format's threshold bands. For limit usage,
-// VaR against limit, exposure against a line.
+// Each row's value against its target (a limit, a budget) on a shared scale:
+// a bar coloured by the value format's thresholds, a marker for the target,
+// and the use of the target in words, so the colour never has to be decoded.
 
 const List = styled.div`
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 1.2rem;
+  gap: 0.4rem;
   height: 100%;
-  padding: 1.2rem 1.6rem;
+  padding: 1rem 1.2rem;
   overflow: auto;
+  font-variant-numeric: tabular-nums;
 `
 
 const Item = styled.div`
-  display: grid;
-  grid-template-columns: minmax(8rem, 22%) 1fr minmax(7rem, auto);
-  align-items: center;
-  gap: 1.2rem;
-  font-size: 1.25rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.8rem 0.8rem 1rem;
+  border-radius: 0.6rem;
+
+  &:hover {
+    background: ${({ theme }) => theme.color.interactionHover};
+  }
+
+  &:hover > [data-card] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`
+
+const Top = styled.div`
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  font-size: 1.3rem;
 `
 
 const Name = styled.span`
-  color: ${({ theme }) => theme.color.contentSecondary};
+  font-weight: 600;
+  color: ${({ theme }) => theme.color.contentPrimary};
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `
 
+const Status = styled.span<{ $color: string }>`
+  padding: 0.1rem 0.6rem;
+  border-radius: 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: ${({ $color }) => $color};
+  background: ${({ $color }) => withAlpha($color, 0.12)};
+`
+
+const Figures = styled.span`
+  margin-left: auto;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  white-space: nowrap;
+
+  small {
+    font-size: 1.15rem;
+    color: ${({ theme }) => theme.color.contentSecondary};
+  }
+`
+
 const Track = styled.div`
   position: relative;
-  height: 1.8rem;
-  border-radius: 0.3rem;
-  background: ${({ theme }) => theme.color.surfaceRaised};
-  overflow: hidden;
+  height: 0.8rem;
+  border-radius: 0.4rem;
+  background: ${({ theme }) => theme.color.dataGrid};
 `
 
-const Band = styled.i`
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  opacity: 0.18;
-`
-
-const Bar = styled.i`
+const Fill = styled.i`
   position: absolute;
   left: 0;
-  top: 30%;
-  bottom: 30%;
-  border-radius: 0.2rem;
+  top: 0;
+  bottom: 0;
+  border-radius: 0.4rem;
   transition: width 300ms ease-out;
+`
+
+const Notch = styled.i`
+  position: absolute;
+  top: -0.2rem;
+  bottom: -0.2rem;
+  width: 1px;
+  background: ${({ theme }) => theme.color.contentMuted};
+  opacity: 0.6;
 `
 
 const Target = styled.i`
   position: absolute;
-  top: 12%;
-  bottom: 12%;
+  top: -0.5rem;
+  bottom: -0.5rem;
   width: 0.3rem;
   margin-left: -0.15rem;
-  border-radius: 0.1rem;
+  border-radius: 0.2rem;
   background: ${({ theme }) => theme.color.contentPrimary};
 `
 
-const Figure = styled.span`
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: ${({ theme }) => theme.color.contentPrimary};
+const Card = styled.div`
+  position: absolute;
+  z-index: 3;
+  right: 0.8rem;
+  top: calc(100% - 0.4rem);
+  min-width: 18rem;
+  padding: 0.8rem 1rem;
+  border-radius: 0.6rem;
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
+  background: ${({ theme }) => theme.color.surfaceRaised};
+  box-shadow: 0 6px 20px ${({ theme }) => theme.color.shadowMedium};
+  font-size: 1.2rem;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-0.4rem);
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out;
 
-  small {
-    color: ${({ theme }) => theme.color.contentMuted};
+  dl {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.3rem 1.6rem;
+    margin: 0;
+  }
+
+  dt {
+    color: ${({ theme }) => theme.color.contentSecondary};
+  }
+
+  dd {
+    margin: 0;
+    text-align: right;
+    color: ${({ theme }) => theme.color.contentPrimary};
   }
 `
+
+const STATUS: Record<"positive" | "warning" | "negative", string> = {
+  positive: "OK",
+  warning: "Near limit",
+  negative: "Breach",
+}
+
+const statusOf = (tone: Tone | undefined) =>
+  tone === "positive" || tone === "warning" || tone === "negative"
+    ? STATUS[tone]
+    : undefined
 
 const TARGET_NAMES = ["target", "limit", "budget", "max"]
 
@@ -139,11 +217,13 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
   const min = visual.min ?? 0
   const max =
     visual.max ??
-    Math.max(...values, ...targets.map((t) => (t ?? 0) * 1.15), 1e-12)
+    Math.max(...values, ...targets.map((t) => (t ?? 0) * 1.1), 1e-12)
   const span = max - min || 1
   const pct = (v: number) =>
     `${Math.max(0, Math.min(100, ((v - min) / span) * 100))}%`
-  const bands = thresholdBands(format, min, max)
+  const notches = (format?.thresholds ?? []).filter(
+    (t) => t.value > min && t.value < max,
+  )
 
   return (
     <List data-hook="bullets">
@@ -154,29 +234,58 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
         const color = tone
           ? toneColor(tone, theme.color)
           : theme.color.chartSeries1
+        const status = statusOf(tone)
+        const use = target ? value / target : null
+        const name = labelIdx >= 0 ? toLabel(row[labelIdx]) : valueName
         return (
-          <Item key={labelIdx >= 0 ? toLabel(row[labelIdx]) : i}>
-            <Name>{labelIdx >= 0 ? toLabel(row[labelIdx]) : valueName}</Name>
+          <Item key={name}>
+            <Top>
+              <Name>{name}</Name>
+              {status && <Status $color={color}>{status}</Status>}
+              <Figures>
+                {formatValue(value, format)}
+                {target !== null && (
+                  <small> of {formatValue(target, format)}</small>
+                )}
+                {use !== null && (
+                  <small>
+                    {" "}
+                    · {formatValue(use, { kind: "percent", decimals: 0 })}
+                  </small>
+                )}
+              </Figures>
+            </Top>
             <Track>
-              {bands.map((b) => (
-                <Band
-                  key={b.from}
-                  style={{
-                    left: pct(b.from),
-                    width: `calc(${pct(b.to)} - ${pct(b.from)})`,
-                    background: toneColor(b.tone, theme.color),
-                  }}
-                />
+              {notches.map((n) => (
+                <Notch key={n.value} style={{ left: pct(n.value) }} />
               ))}
-              <Bar style={{ width: pct(value), background: color }} />
+              <Fill style={{ width: pct(value), background: color }} />
               {target !== null && <Target style={{ left: pct(target) }} />}
             </Track>
-            <Figure>
-              {formatValue(value, format)}
-              {target !== null && (
-                <small> / {formatValue(target, format)}</small>
-              )}
-            </Figure>
+            <Card data-card>
+              <dl>
+                <dt>{valueName}</dt>
+                <dd>{formatValue(value, format)}</dd>
+                {target !== null && (
+                  <>
+                    <dt>Limit</dt>
+                    <dd>{formatValue(target, format)}</dd>
+                    <dt>Used</dt>
+                    <dd>
+                      {formatValue(use, { kind: "percent", decimals: 1 })}
+                    </dd>
+                    <dt>Headroom</dt>
+                    <dd>{formatValue(target - value, format)}</dd>
+                  </>
+                )}
+                {notches.map((n) => (
+                  <React.Fragment key={n.value}>
+                    <dt>{statusOf(n.tone) ?? n.tone} from</dt>
+                    <dd>{formatValue(n.value, format)}</dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+            </Card>
           </Item>
         )
       })}
