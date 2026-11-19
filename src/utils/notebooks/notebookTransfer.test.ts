@@ -45,6 +45,28 @@ describe("notebook transfer", () => {
     expect(splitEditorScript("-- only a comment")).toEqual([])
   })
 
+  it("keeps a same-line comment with its statement and drops stray delimiters", () => {
+    expect(
+      splitEditorScript("select 1; -- note one\nselect 2; -- note two"),
+    ).toEqual(["select 1; -- note one", "select 2; -- note two"])
+    expect(splitEditorScript("select 1;;select 2")).toEqual([
+      "select 1;",
+      "select 2",
+    ])
+    expect(splitEditorScript("select 1;; -- one\n-- two\nselect 2;")).toEqual([
+      "select 1;; -- one",
+      "-- two\nselect 2;",
+    ])
+    expect(splitEditorScript("select 1; -- one\r\nselect 2;")).toEqual([
+      "select 1; -- one",
+      "select 2;",
+    ])
+    expect(splitEditorScript("select 1; select 2;")).toEqual([
+      "select 1;",
+      "select 2;",
+    ])
+  })
+
   it("trims separator whitespace instead of adding blank lines to converted cells", () => {
     expect(splitEditorScript("select 1;\n\nselect 2;\n\nselect 3;")).toEqual([
       "select 1;",

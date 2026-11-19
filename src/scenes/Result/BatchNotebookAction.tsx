@@ -15,6 +15,8 @@ const Row = styled.div`
   color: ${({ theme }) => theme.color.contentSecondary};
   font-size: 1.2rem;
   flex-shrink: 0;
+  background: ${({ theme }) => theme.color.surfaceRaised};
+  border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
 export const BatchNotebookAction = () => {
@@ -35,16 +37,18 @@ export const BatchNotebookAction = () => {
       <Button
         variant="secondary"
         size="sm"
-        disabled={busy}
+        aria-disabled={busy || undefined}
+        aria-busy={busy}
         data-hook="batch-open-notebook"
-        onClick={() =>
+        onClick={() => {
+          if (busy) return
           void transfer({
             queries: batch.queries,
             source: "script_results",
             sourceBufferId: activeBuffer.id,
             compare: true,
           })
-        }
+        }}
       >
         {batch.hasAllResults
           ? `Open ${batch.queries.length} results in a notebook`

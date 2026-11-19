@@ -404,6 +404,9 @@ export const NotebookProvider: React.FC<{
             (cell) =>
               cell.result == null &&
               hasRunMarker(cell) &&
+              // A load in flight settles the cell itself; it may hold a
+              // transferred frame whose disk write has not landed yet.
+              resultHydration.statusOf(cell.id) !== "loading" &&
               !hasTransferSnapshot(bufferId, cell.id) &&
               !snapshotIds.has(cell.id),
           )
@@ -772,6 +775,16 @@ export const NotebookProvider: React.FC<{
       const runId = ++notebookRunIdRef.current
       const queryKey = createNotebookQueryKey(bufferId, cellId, runId)
       const scopeKey = createNotebookScopeKey(bufferId, cellId)
+      // An automatic run the console starts for the user (e.g. a dashboard's
+      // first run) never replaces a run of the cell already going, the user's
+      // or an agent's.
+      if (
+        gate?.kind === "autoRun" &&
+        gate.initiator === "user" &&
+        (questExecution.getActive(scopeKey) ||
+          questExecution.getPending(scopeKey))
+      )
+        return { ok: false, superseded: true }
 
       const session = authSessionState.capture()
       const startedAt = performance.now()

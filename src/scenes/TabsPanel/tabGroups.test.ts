@@ -99,6 +99,19 @@ describe("buildTabGroups", () => {
     expect(labels(groups)).toEqual([["Editors", ["Q1"]]])
   })
 
+  it("lists an unedited monitoring dashboard, which has no example row", () => {
+    const groups = buildTabGroups(
+      [
+        notebook(1, "trades · monitoring", {
+          templateId: "monitoring:table",
+          monitoring: { target: { kind: "table", name: "trades" } },
+        }),
+      ],
+      { includeClosed: true, filter: "" },
+    )
+    expect(labels(groups)).toEqual([["Notebooks", ["trades · monitoring"]]])
+  })
+
   it("filters by label, case-insensitive, across all folders", () => {
     const groups = buildTabGroups(
       [sql(1, "Trades query"), notebook(2, "trades dash"), metrics(3, "CPU")],

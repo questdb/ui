@@ -3,6 +3,7 @@ import {
   sortClosedBuffers,
   sortPinnedBuffers,
 } from "../../utils/buffers/tabOrder"
+import { isMonitoringDashboard } from "../../utils/monitoring/identity"
 
 export type TabGroup = {
   type: BufferType
@@ -24,8 +25,9 @@ export const matchesFilter = (label: string, filter: string) =>
 
 // Groups the user's tabs by kind. The AI diff tab is not a user tab and never
 // appears; a notebook opened from an example dashboard is represented by its
-// example row instead. Closed tabs are listed only when asked for, except the
-// one being previewed: it is on screen, so the panel must be able to explain it.
+// example row instead (a monitoring dashboard has no such row, so it is
+// listed). Closed tabs are listed only when asked for, except the one being
+// previewed: it is on screen, so the panel must be able to explain it.
 export const buildTabGroups = (
   buffers: Buffer[],
   { includeClosed, filter }: { includeClosed: boolean; filter: string },
@@ -33,7 +35,7 @@ export const buildTabGroups = (
   const userTabs = buffers.filter(
     (buffer) =>
       !buffer.isPreviewBuffer &&
-      buffer.templateId === undefined &&
+      (buffer.templateId === undefined || isMonitoringDashboard(buffer)) &&
       matchesFilter(buffer.label, filter),
   )
   const open = sortPinnedBuffers(userTabs)

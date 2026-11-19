@@ -159,6 +159,8 @@ export type EditorContext = {
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string) => void
   tabsDisabled: boolean
+  // Live read for async flows that outlive the component that started them.
+  isTabsDisabled: () => boolean
   setTabsDisabled: (disabled: boolean) => void
   buffers: Buffer[]
   activeBuffer: Buffer
@@ -221,6 +223,7 @@ const defaultValues = {
   insertTextAtCursor: () => undefined,
   appendQuery: () => undefined,
   tabsDisabled: false,
+  isTabsDisabled: () => false,
   setTabsDisabled: () => undefined,
   buffers: [],
   activeBuffer: fallbackBuffer,
@@ -294,6 +297,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     tabsDisabledRef.current = disabled
     setTabsDisabledState(disabled)
   }, [])
+  const isTabsDisabled = useCallback(() => tabsDisabledRef.current, [])
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
     if (!rawBuffers) return undefined
@@ -1508,6 +1512,7 @@ export const EditorProvider: React.FC = ({ children }) => {
           }
         },
         tabsDisabled,
+        isTabsDisabled,
         setTabsDisabled,
         buffers,
         activeBuffer,

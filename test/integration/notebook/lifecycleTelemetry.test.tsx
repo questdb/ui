@@ -208,6 +208,7 @@ describe("UI notebook lifecycle telemetry", () => {
       createdAt: 1,
       updatedAt: 1,
       notebookBufferId: 41,
+      hasMessages: true,
     } as never)
     try {
       await mount()
@@ -217,6 +218,28 @@ describe("UI notebook lifecycle telemetry", () => {
       const archived = await db.buffers.get(41)
       expect(archived?.archived).toBe(true)
       expect(archived).not.toHaveProperty("templateId")
+    } finally {
+      await db.ai_conversations.clear()
+    }
+  })
+
+  it("deletes an unedited dashboard whose AI chat has no messages", async () => {
+    await seedDashboard()
+    // Opening the notebook chat saves an empty conversation right away.
+    await db.ai_conversations.put({
+      id: "chat",
+      conversationName: "About trades",
+      createdAt: 1,
+      updatedAt: 1,
+      notebookBufferId: 41,
+      hasMessages: false,
+    } as never)
+    try {
+      await mount()
+      await act(async () => {
+        await editor.closeBuffer(41)
+      })
+      expect(await db.buffers.get(41)).toBeUndefined()
     } finally {
       await db.ai_conversations.clear()
     }

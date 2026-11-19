@@ -277,6 +277,48 @@ describe("NotebookProvider execution telemetry", () => {
     },
   )
 
+  it("never lets a console auto-run replace a run of the cell already going", async () => {
+    let finish!: (result: CellRunOutcome) => void
+    mocks.runCell.mockReturnValueOnce(
+      new Promise<CellRunOutcome>((resolve) => {
+        finish = resolve
+      }),
+    )
+    const { actions } = mount()
+    let manual!: Promise<CellRunOutcome>
+    act(() => {
+      manual = actions().runCell("c1")
+    })
+    let auto!: CellRunOutcome
+    await act(async () => {
+      auto = await actions().runCell(
+        "c1",
+        undefined,
+        new AbortController().signal,
+        true,
+        { kind: "autoRun", initiator: "user" },
+      )
+    })
+    expect(auto).toEqual({ ok: false, superseded: true })
+    expect(mocks.cancelCell).not.toHaveBeenCalled()
+    expect(mocks.runCell).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      finish(success())
+      await manual
+    })
+    // With the cell idle, the same auto-run executes.
+    await act(async () => {
+      await actions().runCell(
+        "c1",
+        undefined,
+        new AbortController().signal,
+        true,
+        { kind: "autoRun", initiator: "user" },
+      )
+    })
+    expect(mocks.runCell).toHaveBeenCalledTimes(2)
+  })
+
   it("drops a completion from a session that ended while SQL was in flight", async () => {
     let finish!: (result: CellRunOutcome) => void
     mocks.runCell.mockReturnValue(

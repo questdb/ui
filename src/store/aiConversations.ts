@@ -13,6 +13,8 @@ export const aiConversationStore = {
     (await db.ai_conversations
       .where("notebookBufferId")
       .equals(bufferId)
+      // An empty chat (opened, nothing sent) gives nothing to point at.
+      .filter((meta) => meta.hasMessages)
       .count()) > 0,
 
   getMeta: (conversationId: ConversationId) =>

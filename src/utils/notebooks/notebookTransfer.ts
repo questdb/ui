@@ -110,8 +110,11 @@ export const buildBatchTransfer = (
 }
 
 // Use the editor's SQL-aware offsets, but retain the source between statements
-// (comments and delimiters). Only trim whitespace around each new cell;
-// whitespace inside SQL, literals and explanations must remain untouched.
+// (comments and delimiters). A statement keeps the rest of its own line when
+// that is only a comment or extra delimiters, and a cell never starts with a
+// stray delimiter. Only trim whitespace around each new cell; whitespace
+// inside SQL, literals and explanations must remain untouched.
+const LINE_TAIL = /^[\s;]*(--[^\n]*)?$/
 export const splitEditorScript = (sql: string): string[] => {
   const lines = sql.split("\n")
   const { sqlTextStack, nextSql } = getQueriesFromPositionInText(sql, {
@@ -122,13 +125,16 @@ export const splitEditorScript = (sql: string): string[] => {
   let start = 0
   return statements
     .map((statement, index) => {
-      const end =
+      let end =
         index === statements.length - 1
           ? sql.length
           : statement.limit + (sql[statement.limit] === ";" ? 1 : 0)
+      const lineEnd = sql.indexOf("\n", end)
+      const tailEnd = lineEnd === -1 ? sql.length : lineEnd
+      if (LINE_TAIL.test(sql.slice(end, tailEnd))) end = tailEnd
       const value = sql.slice(start, end)
       start = end
-      return value.trim()
+      return value.trim().replace(/^;[\s;]*/, "")
     })
     .filter((value) => value.length > 0)
 }

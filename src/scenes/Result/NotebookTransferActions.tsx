@@ -32,6 +32,11 @@ const ActionButton = styled(Button)<{ $iconOnly: boolean }>`
 
 const NotebookGlyph = styled(NotebookIcon)`
   color: ${({ theme }) => theme.color.statusInfo};
+
+  button:disabled &,
+  button[aria-disabled="true"] & {
+    color: ${({ theme }) => theme.color.contentDisabled};
+  }
 `
 
 export type TransferActionDensity = "full" | "compact" | "icon"
@@ -110,7 +115,11 @@ export const NotebookTransferActions: React.FC<{
         <ActionButton
           $iconOnly={iconOnly}
           variant="secondary"
-          disabled={!request || busy}
+          disabled={!request}
+          // Busy is aria-disabled, not disabled: a native disabled control
+          // drops the keyboard focus of the user who just pressed it.
+          aria-disabled={busy || undefined}
+          aria-busy={busy}
           aria-label={label}
           leadingIcon={icon}
           data-hook={
