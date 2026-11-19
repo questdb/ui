@@ -18,8 +18,9 @@ describe("legacy editor events", () => {
       onRefresh,
       toggleRunning: vi.fn(),
       getRunning: () => RunningType.NONE,
-      // Only the options this event reads.
-    } as unknown as Parameters<typeof registerLegacyEventBusEvents>[0])
+      isPreviewing: () => false,
+      openQueryInNewTab: vi.fn(),
+    })
     eventBus.publish(EventType.MSG_QUERY_EXEC, { q: "select 2" })
     expect(onRefresh).toHaveBeenCalledWith("select 2")
   })

@@ -19,7 +19,6 @@ import {
 } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import { useSettings } from "../../../providers"
-import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import * as QuestDB from "../../../utils/questdb"
 import {
   getTableKind,
@@ -54,8 +53,7 @@ import {
   type SourceState,
 } from "../../../hooks/catalogSource"
 import { MonitoringTab } from "./MonitoringTab"
-import { MonitoringDashboardButton } from "./MonitoringDashboardButton"
-import { useMonitoringDashboard } from "../../../hooks/useMonitoringDashboard"
+import { MonitoringDashboardAction } from "./MonitoringDashboardAction"
 import { DetailsTab } from "./DetailsTab"
 import { ErrorBanner } from "./ErrorBanner"
 import type { BaseTableStatus, TableKindData } from "./types"
@@ -213,13 +211,6 @@ const TabBadge = styled(Badge).attrs({
 
 export const TableDetailsDrawer = () => {
   const dispatch = useDispatch()
-  const { leftPanelState, updateLeftPanelState } = useLocalStorage()
-  // Read when a dashboard finishes opening, which can be seconds after the
-  // click: the user may have resized, opened or closed the panel meanwhile.
-  const leftPanelStateRef = useRef(leftPanelState)
-  leftPanelStateRef.current = leftPanelState
-  const monitoringDashboard = useMonitoringDashboard()
-  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const target = useSelector(selectors.console.getTableDetailsTarget)
   const targetRef = useRef(target)
@@ -439,28 +430,6 @@ export const TableDetailsDrawer = () => {
     (tableSource.state.status === "loading" && tableData === null) ||
     kindSourceLoading
   const tablesUnavailable = tableSource.state.status === "unavailable"
-
-  const openMonitoringDashboard = () => {
-    if (!tableData || (kind !== "table" && kind !== "matview")) return
-    const name = tableName
-    void monitoringDashboard.open(
-      {
-        target: { kind, name },
-        // The startup read of the telemetry config may have failed: then the
-        // setting is unknown, and the dashboard says so.
-        telemetryEnabled: telemetryConfig?.enabled === true,
-        telemetryUnknown: telemetryConfig === undefined,
-        refreshSchedule: matViewData ?? undefined,
-      },
-      () => isCurrentTarget(name, kind),
-      () => {
-        const current = leftPanelStateRef.current
-        if (current.type !== null) {
-          updateLeftPanelState({ type: null, width: current.width })
-        }
-      },
-    )
-  }
   const kindSourceUnavailable =
     (isView && viewSource.state.status === "unavailable") ||
     (isMatView && matViewSource.state.status === "unavailable") ||
@@ -898,14 +867,15 @@ export const TableDetailsDrawer = () => {
                 onAskAI={handleAskAIForIssue}
                 dashboardAction={
                   // Dashboards read WAL telemetry; views are always WAL.
+                  tableData &&
                   (kind === "matview" ||
-                    (kind === "table" && tableData?.walEnabled === true)) && (
-                    <MonitoringDashboardButton
-                      busy={monitoringDashboard.busy}
-                      disabled={
-                        monitoringDashboard.unavailable || tablesUnavailable
-                      }
-                      onClick={() => void openMonitoringDashboard()}
+                    (kind === "table" && tableData.walEnabled === true)) && (
+                    <MonitoringDashboardAction
+                      kind={kind}
+                      name={tableName}
+                      refreshSchedule={matViewData ?? undefined}
+                      tablesUnavailable={tablesUnavailable}
+                      isCurrentTarget={isCurrentTarget}
                     />
                   )
                 }

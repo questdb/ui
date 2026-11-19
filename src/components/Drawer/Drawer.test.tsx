@@ -3,7 +3,7 @@ import React from "react"
 import { Provider, useDispatch, useSelector } from "react-redux"
 import { createStore } from "redux"
 import { renderComponent, getHook } from "../../test/component"
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi } from "vitest"
 import { fireEvent } from "@testing-library/react"
@@ -174,6 +174,17 @@ describe("side drawer focus", () => {
     await userEvent.click(getHook("panel-toggle"))
     // Then
     expect(getHook("panel-input")).toHaveFocus()
+  })
+
+  it("returns focus to the control that opened it when it closes", async () => {
+    // Given a panel opened from a button, with focus moved into it
+    renderSidePanel(<SidePanel />)
+    await userEvent.click(getHook("panel-toggle"))
+    expect(getHook("sidebar-close-button")).toHaveFocus()
+    // When it is closed from inside
+    await userEvent.click(getHook("sidebar-close-button"))
+    // Then focus is back on the opener
+    await waitFor(() => expect(getHook("panel-toggle")).toHaveFocus())
   })
 
   it("points the trigger's aria-controls at the open panel", async () => {

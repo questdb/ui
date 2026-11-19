@@ -37,7 +37,7 @@ export const registerLegacyEventBusEvents = ({
 }: {
   editor: editor.IStandaloneCodeEditor
   // Re-runs the given query (the result grid's), else the last executed one.
-  onRefresh?: (query?: string) => void
+  onRefresh: (query?: string) => void
   toggleRunning: (runningType?: RunningType) => void
   getRunning: () => RunningType
   isPreviewing: () => boolean
@@ -61,8 +61,7 @@ export const registerLegacyEventBusEvents = ({
   )
 
   eventBus.subscribe<{ q: string }>(EventType.MSG_QUERY_EXEC, (payload) => {
-    if (onRefresh) onRefresh(payload?.q)
-    else toggleRunning(RunningType.REFRESH)
+    onRefresh(payload?.q)
   })
 
   eventBus.subscribe(EventType.MSG_EDITOR_FOCUS, () => {

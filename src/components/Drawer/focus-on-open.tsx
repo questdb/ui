@@ -29,7 +29,8 @@ const firstTabbable = (container: HTMLElement) =>
 // focus on open the way Radix's non-modal FocusScope did: the first tabbable
 // element, else the panel itself, unless something inside already has focus.
 // Rendered as the panel's last child, its effect runs after the panel's own
-// content has focused what it wants.
+// content has focused what it wants. On close, focus that was left in the
+// panel (or dropped to the page with it) returns to where it came from.
 export const FocusOnOpen = ({
   container,
 }: {
@@ -37,10 +38,26 @@ export const FocusOnOpen = ({
 }) => {
   useEffect(() => {
     const panel = container.current
-    if (!panel || panel.contains(document.activeElement)) return
-    const target = firstTabbable(panel) ?? panel
-    target.focus({ preventScroll: true })
-    if (target instanceof HTMLInputElement) target.select()
+    if (!panel) return
+    const previous = document.activeElement
+    if (!panel.contains(previous)) {
+      const target = firstTabbable(panel) ?? panel
+      target.focus({ preventScroll: true })
+      if (target instanceof HTMLInputElement) target.select()
+    }
+    return () => {
+      const active = document.activeElement
+      const leftInPanel =
+        !active || active === document.body || panel.contains(active)
+      if (
+        leftInPanel &&
+        previous instanceof HTMLElement &&
+        previous !== document.body &&
+        previous.isConnected &&
+        !panel.contains(previous)
+      )
+        previous.focus({ preventScroll: true })
+    }
   }, [container])
   return null
 }
