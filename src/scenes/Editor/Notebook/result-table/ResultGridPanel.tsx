@@ -19,7 +19,7 @@ import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawe
 import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
-import { useNotebookActions } from "../NotebookProvider"
+import { useNotebookActions, useNotebookState } from "../NotebookProvider"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
@@ -42,6 +42,11 @@ import type { ResultGridRow } from "../../../../components/ResultGrid"
 import type { CellHighlight } from "../../../../components/ResultGrid/highlight/types"
 import { sqlLiteral } from "../interactions/chartInteractions"
 import { useLiveRows } from "./liveRows"
+
+const SELECTED_ROW_HIGHLIGHT: CellHighlight = {
+  color: "dataSeries9",
+  display: "always",
+}
 
 const NEW_ROW_HIGHLIGHT: CellHighlight = {
   color: "dataSeries2",
@@ -201,20 +206,39 @@ const ResultGridPanelInner: React.FC<Props> = ({
       }),
     [data, highlightConfig, previous, re2Ready],
   )
+  // The row a click selected: its column holds the variable's value.
+  const { settings } = useNotebookState()
+  const selectedValue = interactions?.click
+    ? settings.variables?.find((v) => v.name === interactions.click?.variable)
+        ?.value
+    : undefined
+  const selectedColumn = interactions?.click?.column
+    ? data.columns.findIndex((c) => c.name === interactions.click?.column)
+    : -1
+  const isSelected = useMemo(() => {
+    if (selectedValue === undefined || selectedColumn < 0) return null
+    const rows = new Set(
+      data.dataset.flatMap((row, i) =>
+        sqlLiteral(row[selectedColumn]) === selectedValue ? [i] : [],
+      ),
+    )
+    return rows.size > 0 ? (row: number) => rows.has(row) : null
+  }, [data.dataset, selectedColumn, selectedValue])
   const highlights = useMemo(
     () =>
-      isNew
+      isNew || isSelected
         ? {
             ...evaluated,
             lookup: {
               ...evaluated.lookup,
               row: (row: number) =>
+                (isSelected?.(row) ? SELECTED_ROW_HIGHLIGHT : undefined) ??
                 evaluated.lookup.row(row) ??
-                (isNew(row) ? NEW_ROW_HIGHLIGHT : undefined),
+                (isNew?.(row) ? NEW_ROW_HIGHLIGHT : undefined),
             },
           }
         : evaluated,
-    [evaluated, isNew],
+    [evaluated, isNew, isSelected],
   )
 
   const saveHighlight = (next: typeof highlightConfig) => {
