@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react"
 import ReactECharts from "echarts-for-react/lib/core"
-import type { EChartsOption } from "echarts"
+import type { EChartsOption, EChartsType } from "echarts"
 import { useTheme } from "styled-components"
 import { echarts } from "./echartsSetup"
 import { withZoomDensity } from "./buildEchartsOption"
@@ -24,6 +24,8 @@ export type ChartRendererHandle = {
   resetZoom: () => void
 }
 
+export type ChartEventHandler = (params: unknown, instance: EChartsType) => void
+
 type Props = {
   option: EChartsOption
   height?: number | string
@@ -32,7 +34,19 @@ type Props = {
   animateEntry?: boolean
   animate?: boolean
   zoomWindow: ZoomWindow
+  // False for options that manage their own zoom (custom options, visuals):
+  // the renderer then adds no zoom controls.
+  zoomable?: boolean
+  // Changes when the chart's specification changes, so a new spec draws on a
+  // fresh instance instead of merging into the previous one.
+  specKey?: string
+  // ECharts events (click, brushEnd, datazoom, …) besides the zoom tracking.
+  events?: Record<string, ChartEventHandler>
+  // Called with the live instance after it mounts, and with null on unmount.
+  onInstance?: (instance: EChartsType | null) => void
 }
+
+const NO_ZOOM: ChartZoomDensity = { slider: false, wheel: false }
 
 // Structural fingerprint — we remount on changes here so stale series from
 // the prior option don't linger; routine data refreshes keep the key stable
@@ -102,6 +116,10 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       animateEntry = true,
       animate = true,
       zoomWindow,
+      zoomable = true,
+      specKey,
+      events: extraEvents,
+      onInstance,
     },
     ref,
   ) {
@@ -121,17 +139,27 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     )
     const firstInstanceDoneRef = useRef(false)
     const onZoomChangeRef = useRef(onZoomChange)
+    const onInstanceRef = useRef(onInstance)
+    useEffect(() => {
+      onInstanceRef.current = onInstance
+    }, [onInstance])
 
     const chartTheme = useMemo(
       () => createQuestdbTheme(theme.color),
       [theme.color],
     )
+    const density = zoomable ? zoomDensity : NO_ZOOM
     const optionToDraw = useMemo(
       () =>
-        zoomDensity === null ? option : withZoomDensity(option, zoomDensity),
-      [option, zoomDensity],
+        !zoomable || density === null
+          ? option
+          : withZoomDensity(option, density),
+      [option, density, zoomable],
     )
-    const key = useMemo(() => structuralKey(optionToDraw), [optionToDraw])
+    const key = useMemo(
+      () => `${specKey ?? ""}::${structuralKey(optionToDraw)}`,
+      [optionToDraw, specKey],
+    )
     // The theme an instance starts with: the current one when the structural
     // key mounts a new instance. Later theme changes (light and dark mode) go
     // through `setTheme`, which restyles the live instance instead of
@@ -151,10 +179,28 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       }),
       [optionToDraw, suppressEntryAnimation, animate],
     )
+    const instanceRef = useRef<EChartsType | null>(null)
+    useEffect(
+      () => () => {
+        instanceRef.current = null
+        onInstanceRef.current?.(null)
+      },
+      [key],
+    )
     const events = useMemo(() => {
-      if (!onZoomChange) return undefined
+      const bound: Record<string, (params: unknown) => void> = {}
+      for (const [name, handler] of Object.entries(extraEvents ?? {})) {
+        bound[name] = (params: unknown) => {
+          const instance = instanceRef.current
+          if (instance) handler(params, instance)
+        }
+      }
+      if (!onZoomChange) return bound
+      const zoomHandler = bound.datazoom
       return {
+        ...bound,
         datazoom: (evt: unknown) => {
+          zoomHandler?.(evt)
           const e = evt as DataZoomEvent
           const first = e.batch?.[0] ?? e
           if (
@@ -165,7 +211,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           }
         },
       }
-    }, [onZoomChange])
+    }, [onZoomChange, extraEvents])
 
     const measureDensity = useCallback((width: number) => {
       if (width <= 0) return
@@ -189,6 +235,8 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       NonNullable<React.ComponentProps<typeof ReactECharts>["onChartReady"]>
     >(
       (instance) => {
+        instanceRef.current = instance
+        onInstanceRef.current?.(instance)
         firstInstanceDoneRef.current = true
         const zoom = zoomWindowRef.current
         if (isZoomed(zoom)) {
@@ -286,11 +334,12 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     // Without a slider or a wheel nothing can move the window back, so a
     // window that outlives its controls resets and the owner hears it go.
     useEffect(() => {
+      if (!zoomable) return
       if (zoomDensity === null || !zoomControlsHidden(zoomDensity)) return
       if (!isZoomed(zoomWindowRef.current)) return
       resetZoom()
       onZoomChangeRef.current?.(0, 100)
-    }, [zoomDensity, resetZoom])
+    }, [zoomDensity, resetZoom, zoomable])
 
     useEffect(() => {
       const instance = reactEchartsRef.current?.getEchartsInstance()
@@ -308,7 +357,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           height: typeof height === "number" ? `${height}px` : height,
         }}
       >
-        {zoomDensity !== null && (
+        {density !== null && (
           <ReactECharts
             key={key}
             ref={reactEchartsRef}

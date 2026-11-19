@@ -25,6 +25,7 @@ import {
 import { emitUserAction } from "../../../utils/notebooks/notebookAIBridge"
 import { VariablesPopover } from "./globals/VariablesPopover"
 import { NotebookRefreshControl } from "./NotebookRefreshControl"
+import { NotebookChartSyncControl } from "./NotebookChartSyncControl"
 import { NotebookLayoutToggle } from "./NotebookViewToggle"
 import { NotebookRenameInput } from "./NotebookRenameInput"
 
@@ -335,6 +336,7 @@ export const NotebookToolbar: React.FC = () => {
           </Button>
         </TooltipButton>
         <VariablesPopover />
+        <NotebookChartSyncControl />
         <NotebookRefreshControl />
         <NotebookLayoutToggle
           mode={mode}

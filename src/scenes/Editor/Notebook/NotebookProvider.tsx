@@ -150,6 +150,9 @@ export type NotebookActions = {
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
+  // Sets variables to SQL expressions (adding missing ones) and refreshes the
+  // read cells that use them.
+  setVariableValues: (values: Record<string, string>) => void
   setCellPaneView: (cellId: string, view: CellPaneView) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
@@ -182,6 +185,7 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
   refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
+  setVariableValues: () => undefined,
   setCellPaneView: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
@@ -638,6 +642,7 @@ export const NotebookProvider: React.FC<{
     [hydrateCells],
   )
 
+  const pendingVariableRefreshRef = useRef<string[]>([])
   const cellRefreshEngine = useCellRefreshEngine({
     bufferId,
     cells: store.cells,
@@ -661,6 +666,18 @@ export const NotebookProvider: React.FC<{
         resultHydration.notePersisted(cellId, results),
     },
   })
+
+  // Cells that use variables a click or drag just set re-run once the new
+  // values reached the query runner.
+  useEffect(() => {
+    const names = pendingVariableRefreshRef.current
+    if (names.length === 0) return
+    pendingVariableRefreshRef.current = []
+    const uses = new RegExp(
+      `@(${names.map((n) => n.replace(/[^A-Za-z0-9_]/g, "")).join("|")})\\b`,
+    )
+    cellRefreshEngine.refreshWhere((_cellId, sql) => uses.test(sql))
+  }, [settings.variables, cellRefreshEngine])
   cellRefreshEngineRef.current = cellRefreshEngine
 
   const cellVirtualizationEngine = createVirtualizationEngine({
@@ -931,6 +948,24 @@ export const NotebookProvider: React.FC<{
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
+    setVariableValues: (values) => {
+      const names = Object.keys(values)
+      if (names.length === 0) return
+      const current = settingsRef.current.variables ?? []
+      const next = current.map((v) =>
+        v.name in values ? { ...v, value: values[v.name] } : v,
+      )
+      for (const name of names) {
+        if (!current.some((v) => v.name === name))
+          next.push({ name, value: values[name] })
+      }
+      // The refresh waits for the render that hands the new values to the
+      // query runner (the effect below).
+      pendingVariableRefreshRef.current = [
+        ...new Set([...pendingVariableRefreshRef.current, ...names]),
+      ]
+      updateSettings({ variables: next })
+    },
     setCellPaneView,
     setFocusedCell,
     setMaximizedCellId,

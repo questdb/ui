@@ -540,6 +540,23 @@ export class CellRefreshEngine {
     return { refreshed, skippedWrites }
   }
 
+  /**
+   * Refreshes the read cells whose SQL matches, e.g. those that use a
+   * variable a click just changed. Write cells are never re-run.
+   */
+  refreshWhere(match: (cellId: string, sql: string) => boolean): number {
+    let refreshed = 0
+    for (const entry of this.entries.values()) {
+      if (!match(entry.cellId, entry.pendingSql ?? entry.sql)) continue
+      if (entry.kind === "grid" && entry.state.classifyBlock?.kind === "write")
+        continue
+      refreshed++
+      if (entry.inFlight && entry.manualRefreshInFlight) continue
+      this.forceRefresh(entry)
+    }
+    return refreshed
+  }
+
   private forceRefresh(entry: Entry) {
     if (!entry.visible || this.documentHidden) {
       entry.pendingManualRefresh = true
