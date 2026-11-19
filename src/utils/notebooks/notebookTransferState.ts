@@ -4,9 +4,11 @@ import {
 } from "../../modules/OAuth2/authSessionState"
 import type { NotebookResultSnapshot } from "../../store/notebookResults"
 
-// A bounded, one-use bridge for live chart frames that exceed the disk snapshot
-// limit. Eviction is safe: transferred draw cells wait for explicit refresh if
-// no faithful frame is left. SQL/query data never becomes persistent history.
+// A bounded, one-use bridge for transferred results: a notebook opened while
+// they are still being written finds them here, and a live chart frame larger
+// than the disk snapshot limit is kept whole. Eviction is safe: transferred
+// draw cells wait for explicit refresh if no faithful frame is left. SQL/query
+// data never becomes persistent history.
 const MAX_BYTES = 32_000_000
 const MAX_AGE_MS = 10 * 60 * 1000
 const snapshots = new Map<

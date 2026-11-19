@@ -15,7 +15,8 @@
  *       topmost overlay always closes first.
  *    b. Focused controls (a text field that clears itself, an inline rename,
  *       a grid cell selection) handle Escape on the element itself.
- *    c. Ambient layers (notebook cell focus, a side panel) register with
+ *    c. Ambient layers (notebook cell focus, a pending AI suggestion, a side
+ *       panel) register with
  *       `useEscapeLayer` and receive only Escapes that nothing above
  *       claimed. A layer whose element contains the focus goes first;
  *       otherwise the highest `EscapePriority` wins.

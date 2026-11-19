@@ -104,9 +104,9 @@ export type Buffer = {
   isTemporary?: boolean
   isPreviewBuffer?: boolean
   previewContent?: PreviewContent
-  // Set on notebooks opened from the Tabs panel's example dashboards, so a
-  // second click on the same example activates the open tab instead of
-  // creating another copy.
+  // Set on notebooks opened from the Tabs panel's example dashboards, or
+  // created as a table's monitoring dashboard, so a second open of the same
+  // one activates the open tab instead of creating another copy.
   templateId?: string
 }
 
