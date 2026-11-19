@@ -132,6 +132,14 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       [option, zoomDensity],
     )
     const key = useMemo(() => structuralKey(optionToDraw), [optionToDraw])
+    // The theme an instance starts with: the current one when the structural
+    // key mounts a new instance. Later theme changes (light and dark mode) go
+    // through `setTheme`, which restyles the live instance instead of
+    // re-creating it, so zoom and legend state survive.
+    const mountThemeRef = useRef({ key, theme: chartTheme })
+    if (mountThemeRef.current.key !== key) {
+      mountThemeRef.current = { key, theme: chartTheme }
+    }
     const suppressEntryAnimation =
       !animateEntryRef.current && !firstInstanceDoneRef.current
     const renderOption = useMemo(
@@ -284,6 +292,12 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       onZoomChangeRef.current?.(0, 100)
     }, [zoomDensity, resetZoom])
 
+    useEffect(() => {
+      const instance = reactEchartsRef.current?.getEchartsInstance()
+      if (!instance || instance.isDisposed()) return
+      instance.setTheme(chartTheme)
+    }, [chartTheme])
+
     useImperativeHandle(ref, () => ({ resetZoom }), [resetZoom])
 
     return (
@@ -296,11 +310,11 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       >
         {zoomDensity !== null && (
           <ReactECharts
-            key={`${theme.mode}:${key}`}
+            key={key}
             ref={reactEchartsRef}
             echarts={echarts}
             option={renderOption}
-            theme={chartTheme}
+            theme={mountThemeRef.current.theme}
             notMerge={false}
             lazyUpdate
             autoResize={false}
