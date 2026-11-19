@@ -2,6 +2,7 @@
 import { renderComponent } from "../../../../test/component"
 import React, { useState } from "react"
 import { fireEvent, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { Button } from "../../../../components/Button"
 import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
@@ -33,10 +34,12 @@ const Fixture = ({
   onSave,
   saved = configuration,
   focus,
+  gridMode,
 }: {
   onSave: (next: GridSettingsSave) => void
   saved?: HighlightConfig
   focus?: { section: string; column?: string }
+  gridMode?: "stable" | "stream"
 }) => {
   const [overlay, setOverlay] = useState<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
@@ -65,6 +68,7 @@ const Fixture = ({
           columnRange={() => null}
           config={saved}
           formats={{ v: { decimals: 1 } }}
+          gridMode={gridMode}
           samples={{ v: 12 }}
           focus={focus}
           defaultIdentity={["k"]}
@@ -174,5 +178,67 @@ describe("highlight settings validation", () => {
       highlight: null,
       formats: { v: { decimals: 1 } },
     })
+  })
+
+  it("saves the live update mode the user picks, and warns while no columns match rows", async () => {
+    // Given a grid with no identity columns
+    const onSave = vi.fn()
+    renderComponent(
+      <Fixture saved={{ identityColumns: [], rules: [] }} onSave={onSave} />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+
+    // When the user keeps rows in place
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^Live updates:/ }),
+    )
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: /^Keep rows in place/ }),
+    )
+
+    // Then it explains the mode, warns about the missing columns and saves it
+    expect(screen.getByText(/A row stays where it was/)).toBeVisible()
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /Choose the columns that match rows/,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave.mock.calls[0]).toEqual([
+      {
+        highlight: { identityColumns: [], rules: [] },
+        formats: { v: { decimals: 1 } },
+        gridMode: "stable",
+      },
+    ])
+  })
+
+  it("turns a live mode off", async () => {
+    // Given a grid that keeps rows in place
+    const onSave = vi.fn()
+    renderComponent(
+      <Fixture
+        saved={{ identityColumns: ["k"], rules: [] }}
+        gridMode="stable"
+        onSave={onSave}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+
+    // When the user goes back to the query's order
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^Live updates:/ }),
+    )
+    await userEvent.click(
+      screen.getByRole("menuitemradio", {
+        name: /^Rows as the query returns them/,
+      }),
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    // Then the mode is saved as unset, so the cell drops it
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    const saved = (onSave.mock.calls[0] as [GridSettingsSave])[0]
+    expect("gridMode" in saved).toBe(true)
+    expect(saved.gridMode).toBeUndefined()
   })
 })

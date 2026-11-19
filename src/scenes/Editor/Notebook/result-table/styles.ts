@@ -139,6 +139,17 @@ export const ActionButton = styled(Button)`
   gap: 0.3rem;
 `
 
+export const LiveBadge = styled(ActionButton)<{ $inactive: boolean }>`
+  && {
+    margin-right: 0.8rem;
+    gap: 0.5rem;
+    padding: 0 0.8rem;
+    font-size: 1.2rem;
+    color: ${({ $inactive }) =>
+      $inactive ? color("statusWarning") : color("contentSecondary")};
+  }
+`
+
 export const FreezeToggle = styled(PrimaryToggleButton).attrs({
   activeTone: "info" as const,
 })`

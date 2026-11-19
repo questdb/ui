@@ -51,6 +51,7 @@ import type { ResultGridRow } from "../../../../components/ResultGrid"
 import type { CellHighlight } from "../../../../components/ResultGrid/highlight/types"
 import { sqlLiteral } from "../interactions/chartInteractions"
 import { useLiveRows } from "./liveRows"
+import { identityColumnIndexes } from "../../../../components/ResultGrid/highlight/identityIndex"
 
 const SELECTED_ROW_HIGHLIGHT: CellHighlight = {
   color: "dataSeries9",
@@ -270,6 +271,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   const saveGridSettings = ({
     highlight,
     formats: nextFormats,
+    gridMode: nextGridMode,
   }: GridSettingsSave) => {
     const highlightChanged =
       JSON.stringify(highlight ?? null) !==
@@ -286,6 +288,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
     setCellSettings(cellId, {
       highlightConfig: highlight ?? undefined,
       formats: nextFormats,
+      gridMode: nextGridMode,
     })
     highlightDrawer.close()
   }
@@ -296,6 +299,15 @@ const ResultGridPanelInner: React.FC<Props> = ({
         cellId,
         mode: "open",
         focus: { section: "formats", column },
+      }),
+    [cellId],
+  )
+  const openLiveUpdates = useCallback(
+    () =>
+      eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, {
+        cellId,
+        mode: "open",
+        focus: { section: "highlights" },
       }),
     [cellId],
   )
@@ -315,6 +327,15 @@ const ResultGridPanelInner: React.FC<Props> = ({
         hasSelection={hasSelection}
         isRunning={isRunning}
         onReRun={() => onReRun(statementKey)}
+        gridMode={gridMode}
+        liveInactive={
+          gridMode !== undefined &&
+          identityColumnIndexes(
+            data.columns,
+            highlightConfig.identityColumns,
+          ) === null
+        }
+        onOpenLiveUpdates={openLiveUpdates}
       />
       <ResultGrid
         ref={gridRef}
@@ -374,6 +395,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         columnRange={columnRange}
         config={highlightConfig}
         formats={formats}
+        gridMode={gridMode}
         samples={samples}
         focus={highlightDrawer.request?.focus}
         defaultIdentity={defaultIdentity}

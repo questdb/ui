@@ -18,6 +18,8 @@ import {
 } from "../settingsDrawer/SettingsDrawerShell"
 import { FieldGroup } from "../CellChart/chartSettingsStyles"
 import { IdentitySection } from "./IdentitySection"
+import { LiveUpdatesSection } from "./LiveUpdatesSection"
+import type { GridMode } from "../../../../store/notebook"
 import { RuleRow } from "./RuleRow"
 import {
   createUnsetRule,
@@ -53,6 +55,7 @@ const SECTIONS: { id: GridSection; label: string }[] = [
 export type GridSettingsSave = {
   highlight: HighlightConfig | null
   formats: ColumnFormats | undefined
+  gridMode: GridMode | undefined
 }
 
 type Props = {
@@ -65,6 +68,7 @@ type Props = {
   columnRange: (column: string) => ColumnRange | null
   config: HighlightConfig
   formats?: ColumnFormats
+  gridMode?: GridMode
   // A value per column of the current result, for format previews.
   samples?: Record<string, unknown>
   // Open on this section, and in Formats on this column.
@@ -108,6 +112,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   columnRange,
   config,
   formats: savedFormats,
+  gridMode: savedGridMode,
   samples = {},
   focus,
   defaultIdentity = [],
@@ -115,9 +120,14 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   onSave,
   onCancel,
 }) => {
-  const [{ config: draft, expandedRuleId, formats }, setDraftState] =
+  const [{ config: draft, expandedRuleId, formats, gridMode }, setDraftState] =
     useState<HighlightDraft>(
-      initialDraft ?? { config, expandedRuleId: null, formats: savedFormats },
+      initialDraft ?? {
+        config,
+        expandedRuleId: null,
+        formats: savedFormats,
+        gridMode: savedGridMode,
+      },
     )
   const [section, setSection] = useState<GridSection>(() => sectionOf(focus))
   // A column a request asked for, until the Formats section has opened it.
@@ -139,6 +149,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   const acceptsSaveRef = useRef(open)
   const draftRef = useRef(draft)
   const formatsRef = useRef(formats)
+  const gridModeRef = useRef(gridMode)
   const duplicateCount = useMemo(
     () => duplicateCountOf(draft.identityColumns),
     [duplicateCountOf, draft.identityColumns],
@@ -147,7 +158,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   // Every edit lands in the session store as well, so a cell remount
   // mid-session restores it.
   const updateDraft = (patch: Partial<HighlightDraft>) => {
-    const next = { config: draft, expandedRuleId, formats, ...patch }
+    const next = { config: draft, expandedRuleId, formats, gridMode, ...patch }
     setDraftState(next)
     onDraftChange(next)
   }
@@ -185,6 +196,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
         defaultIdentity,
       ),
       formats: tidyFormats(formatsRef.current),
+      gridMode: gridModeRef.current,
     })
   }
 
@@ -193,6 +205,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     onSave({
       highlight: highlightToSave(draft.identityColumns, [], defaultIdentity),
       formats: tidyFormats(formats),
+      gridMode,
     })
 
   const save = async () => {
@@ -216,7 +229,8 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   useEffect(() => {
     draftRef.current = draft
     formatsRef.current = formats
-  }, [draft, formats])
+    gridModeRef.current = gridMode
+  }, [draft, formats, gridMode])
 
   return (
     <SettingsDrawerShell
@@ -274,6 +288,13 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
             onChange={(identityColumns) =>
               setDraft({ ...draft, identityColumns })
             }
+          />
+
+          <LiveUpdatesSection
+            mode={gridMode}
+            identityColumns={draft.identityColumns}
+            columns={columns}
+            onChange={(next) => updateDraft({ gridMode: next })}
           />
 
           <FieldGroup>

@@ -1,4 +1,5 @@
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
+import type { GridMode } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   columnKindOf,
@@ -345,6 +346,8 @@ export type HighlightDraft = {
   expandedRuleId: string | null
   // The cell's column formats, edited in the drawer's Formats section.
   formats?: ColumnFormats
+  // How the grid treats rows on refresh.
+  gridMode?: GridMode
 }
 
 export const createUnsetRule = (id: string): UnsetRule => ({
