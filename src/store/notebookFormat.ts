@@ -254,8 +254,8 @@ export const sanitizeChartTypes = (
       name: item.name,
       renderItem: item.renderItem,
     }
-    if (typeof item.description === "string")
-      type.description = item.description.slice(0, 500)
+    if (typeof item.description === "string" && item.description.trim())
+      type.description = item.description.trim().slice(0, 500)
     out.push(type)
     if (out.length >= MAX_CHART_TYPES) break
   }

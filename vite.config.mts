@@ -139,6 +139,18 @@ export default defineConfig(({ mode }) => {
             src: path.join(monacoPath, "min", "vs", "language", "json"),
             dest: "assets/vs/language",
           },
+          // JavaScript tokens (notebook chart types), without the TypeScript
+          // language service.
+          {
+            src: path.join(
+              monacoPath,
+              "min",
+              "vs",
+              "basic-languages",
+              "javascript",
+            ),
+            dest: "assets/vs/basic-languages",
+          },
           ...(isProduction
             ? []
             : [

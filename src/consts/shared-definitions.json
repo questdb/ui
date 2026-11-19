@@ -1506,7 +1506,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Read a notebook chart type's renderItem source (names are listed in get_notebook_state chart_types).",
+    "description": "Read a notebook chart type's renderItem source and description, and `used_by`: the ids of the cells whose custom option draws with it (names are listed in get_notebook_state chart_types). People edit, rename and delete chart types in the notebook toolbar's Chart types dialog; a rename there renames the uses too.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -1527,7 +1527,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Delete a notebook chart type. Custom options that still use it stop drawing those series.",
+    "description": "Delete a notebook chart type. Custom options that still use it stop drawing those series; the result's note names those cells.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,

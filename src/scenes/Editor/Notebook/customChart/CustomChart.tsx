@@ -14,22 +14,11 @@ import { drawErrorsOf, resolveChartTypes } from "./chartTypeRegistry"
 import { MAP_NAMES, ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
 import { problemsOf } from "./prepareCustomOption"
 import { PaneEmptyState } from "../PaneEmptyState"
+import { chartTypesUsedBy } from "./chartTypeUsage"
 
 const MAPS = new Set<string>(MAP_NAMES)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
-
-const customTypesUsed = (option: Record<string, unknown>): string[] => {
-  const series = Array.isArray(option.series) ? option.series : []
-  return series.flatMap((s) =>
-    typeof s === "object" &&
-    s !== null &&
-    (s as { type?: unknown }).type === "custom" &&
-    typeof (s as { renderItem?: unknown }).renderItem === "string"
-      ? [(s as { renderItem: string }).renderItem]
-      : [],
-  )
-}
 
 type Props = {
   bufferId: number
@@ -102,7 +91,7 @@ export const CustomChart = ({
   }, [neededMaps])
 
   useEffect(() => {
-    const used = customTypesUsed(rawOption)
+    const used = chartTypesUsedBy(rawOption)
     // Chart types throw while drawing, after this render; read them once the
     // frame is out.
     const timer = window.setTimeout(() => {

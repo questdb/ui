@@ -1,6 +1,6 @@
 import React from "react"
 import styled, { useTheme } from "styled-components"
-import { Editor as MonacoEditor } from "@monaco-editor/react"
+import { Editor as MonacoEditor, type Monaco } from "@monaco-editor/react"
 import { getMonacoThemeName } from "../../../../utils/monacoInit"
 
 const Frame = styled.div<{ $height: string; $invalid: boolean }>`
@@ -28,6 +28,36 @@ const Wrapper = styled.div`
   flex-direction: column;
   gap: 0.4rem;
 `
+
+// JavaScript highlighting without Monaco's TypeScript service (megabytes,
+// not shipped): a language of our own with Monaco's JavaScript tokens.
+export const JAVASCRIPT_TOKENS_ID = "qdb-javascript"
+let javascriptRegistered = false
+const registerJavascript = (monaco: Monaco) => {
+  if (javascriptRegistered) return
+  javascriptRegistered = true
+  monaco.languages.register({ id: JAVASCRIPT_TOKENS_ID })
+  const amdRequire = (
+    window as unknown as {
+      require?: (
+        deps: string[],
+        done: (module: {
+          language: Parameters<
+            Monaco["languages"]["setMonarchTokensProvider"]
+          >[1]
+          conf: Parameters<Monaco["languages"]["setLanguageConfiguration"]>[1]
+        }) => void,
+      ) => void
+    }
+  ).require
+  amdRequire?.(["vs/basic-languages/javascript/javascript"], (module) => {
+    monaco.languages.setMonarchTokensProvider(
+      JAVASCRIPT_TOKENS_ID,
+      module.language,
+    )
+    monaco.languages.setLanguageConfiguration(JAVASCRIPT_TOKENS_ID, module.conf)
+  })
+}
 
 type Props = {
   value: string
@@ -59,7 +89,10 @@ export const CodeEditorField: React.FC<Props> = ({
       >
         <MonacoEditor
           value={value}
-          language={language}
+          language={language === "javascript" ? JAVASCRIPT_TOKENS_ID : language}
+          beforeMount={
+            language === "javascript" ? registerJavascript : undefined
+          }
           theme={getMonacoThemeName(theme.mode)}
           onChange={(next) => onChange(next ?? "")}
           options={{

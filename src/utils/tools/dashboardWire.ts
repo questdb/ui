@@ -316,7 +316,8 @@ export const parseChartType = (
     name: wire.name,
     renderItem: wire.render_item,
   }
-  if (wire.description) type.description = wire.description.slice(0, 500)
+  const description = wire.description?.trim()
+  if (description) type.description = description.slice(0, 500)
   return type
 }
 

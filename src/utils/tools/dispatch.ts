@@ -1,6 +1,7 @@
 import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
 import { loadRe2 } from "../../components/ResultGrid/highlight"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
+import { cellsUsingChartType } from "../../scenes/Editor/Notebook/customChart/chartTypeUsage"
 import {
   getQuestDBTableOfContents,
   getSpecificDocumentation,
@@ -1311,6 +1312,10 @@ export const dispatchTool = async (
               `No chart type "${name}". Defined: ${types.map((t) => t.name).join(", ") || "none"}.`,
             )
           const rest = types.filter((t) => t.name !== name)
+          const users = cellsUsingChartType(
+            await readCells(buffer_id, signal),
+            name,
+          ).map((c) => c.id)
           await runTransition(
             buffer_id,
             (parts) =>
@@ -1320,7 +1325,14 @@ export const dispatchTool = async (
             signal,
             baseline,
           )
-          return { ok: true }
+          return {
+            ok: true,
+            ...(users.length > 0
+              ? {
+                  note: `Cells ${users.join(", ")} still draw with "${name}" and now show an error: change their custom option.`,
+                }
+              : {}),
+          }
         }, toolContext)
       }
       case "get_chart_type": {
@@ -1338,6 +1350,10 @@ export const dispatchTool = async (
             name: type.name,
             render_item: type.renderItem,
             description: type.description ?? null,
+            used_by: cellsUsingChartType(
+              await readCells(buffer_id, signal),
+              name,
+            ).map((c) => c.id),
           }
         }, toolContext)
       }

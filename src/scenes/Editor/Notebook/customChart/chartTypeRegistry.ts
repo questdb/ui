@@ -27,13 +27,20 @@ const hash = (text: string): string => {
   return (h >>> 0).toString(36)
 }
 
+const LEADING_COMMENTS = /^(?:\s*(?:\/\/[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/))*\s*/
+
 const compile = (source: string): CustomSeriesRenderItem => {
   const trimmed = source.trim()
+  // Comments above the function do not change what it is.
+  const head = trimmed.replace(LEADING_COMMENTS, "")
   // A function expression (function (params, api) {…} or (params, api) => …),
   // else a function body that receives `params` and `api`.
-  if (/^(async\s+)?function\b|^\(?[\w\s,]*\)?\s*=>/.test(trimmed)) {
+  if (/^(async\s+)?function\b|^\(?[\w\s,]*\)?\s*=>/.test(head)) {
+    // On lines of their own, so a comment after the function stays closed.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const fn = new Function(`"use strict"; return (${trimmed})`)() as unknown
+    const fn = new Function(
+      `"use strict"; return (\n${trimmed}\n)`,
+    )() as unknown
     if (typeof fn !== "function") throw new Error("not a function")
     return fn as CustomSeriesRenderItem
   }
