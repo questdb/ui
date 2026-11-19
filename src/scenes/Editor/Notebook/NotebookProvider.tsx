@@ -20,10 +20,9 @@ import type {
   CellMode,
   CellType,
 } from "../../../store/notebook"
-import type { ChartConfig } from "./CellChart/chartTypes"
 import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
 import { useQueryExecution } from "../../../hooks/useQueryExecution"
-import { useCellsStore } from "./useCellsStore"
+import { useCellsStore, type CellSettingsPatch } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
 import type { DrawGateOutcome } from "./useCellExecution"
 import { useNotebookPersistence } from "./useNotebookPersistence"
@@ -142,7 +141,9 @@ export type NotebookActions = {
   setActiveStatement: (cellId: string, statementKey: string) => void
   setCellMode: (cellId: string, mode: CellMode) => void
   clearCellResult: (cellId: string) => void
-  setCellChartConfig: (cellId: string, config: ChartConfig) => void
+  // Sets the given fields and removes those passed as undefined, in one
+  // update: a settings drawer's save.
+  setCellSettings: (cellId: string, patch: CellSettingsPatch) => void
   setCellHighlightConfig: (
     cellId: string,
     config: HighlightConfig | null,
@@ -180,7 +181,7 @@ const NOOP_ACTIONS: NotebookActions = {
   setActiveStatement: () => undefined,
   setCellMode: () => undefined,
   clearCellResult: () => undefined,
-  setCellChartConfig: () => undefined,
+  setCellSettings: () => undefined,
   setCellHighlightConfig: () => undefined,
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
@@ -943,7 +944,7 @@ export const NotebookProvider: React.FC<{
     setActiveStatement: execution.setActiveStatement,
     setCellMode,
     clearCellResult,
-    setCellChartConfig: store.setCellChartConfig,
+    setCellSettings: store.setCellSettings,
     setCellHighlightConfig: store.setCellHighlightConfig,
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,

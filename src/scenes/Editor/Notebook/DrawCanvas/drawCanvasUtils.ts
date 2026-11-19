@@ -249,8 +249,9 @@ export const resolveDraw = (
 
   // Event statements mark the time axis; they never anchor or add series.
   const eventItems = items.filter((it) => it.qc.type === "events")
+  const drawnEventItems = eventItems.filter((it) => it.qc.enabled !== false)
   const seriesItems = items.filter((it) => it.qc.type !== "events")
-  const events: ResolvedEvents[] = eventItems.map((it) => ({
+  const events: ResolvedEvents[] = drawnEventItems.map((it) => ({
     index: it.idx,
     columns: it.r.columns,
     dataset: it.r.dataset,

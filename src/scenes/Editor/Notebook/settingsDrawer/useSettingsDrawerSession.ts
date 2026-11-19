@@ -20,6 +20,10 @@ type Options<Config, Draft> = {
   onCancel: (method: SettingsDismissMethod) => void
   // Shown when the saved config changed under an open drawer, which closes.
   changedWhileOpenMessage: string
+  // Whether two configs are the same saved settings. Defaults to identity;
+  // a config assembled from several cell fields compares them one by one,
+  // since a remounted owner (maximize, restore) assembles a new object.
+  sameConfig?: (a: Config | undefined, b: Config | undefined) => boolean
 }
 
 // One drawer lifecycle per cell: open on the toolbar's request, keep the
@@ -33,6 +37,7 @@ export const useSettingsDrawerSession = <Config, Draft>({
   onOpen,
   onCancel,
   changedWhileOpenMessage,
+  sameConfig = Object.is,
 }: Options<Config, Draft>) => {
   const [restored] = useState(() => sessions.get(cellId) !== undefined)
   const [open, setOpen] = useState(restored)
@@ -66,11 +71,19 @@ export const useSettingsDrawerSession = <Config, Draft>({
   useEffect(() => {
     if (!open) return
     const session = sessions.get(cellId)
-    if (session && session.configAtOpen !== config) {
+    if (session && !sameConfig(session.configAtOpen, config)) {
       close()
       toast.info(changedWhileOpenMessage)
     }
-  }, [sessions, cellId, open, config, close, changedWhileOpenMessage])
+  }, [
+    sessions,
+    cellId,
+    open,
+    config,
+    close,
+    changedWhileOpenMessage,
+    sameConfig,
+  ])
 
   useEffect(() => {
     const respond = (payload?: SettingsDrawerRequest) => {

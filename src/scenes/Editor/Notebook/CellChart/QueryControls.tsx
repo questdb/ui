@@ -99,6 +99,9 @@ export type QueryControlsProps = {
   onUpdateQuery: (patch: Partial<QueryChart>) => void
   onSetQuery: (next: QueryChart) => void
   telemetry?: ChartSettingsTelemetry
+  // Offer "Events" for statements after the first that have a timestamp:
+  // their rows mark the chart's time axis (notebook charts).
+  offerEvents?: boolean
 }
 
 type ColumnOption = { label: string; value: string }
@@ -133,10 +136,16 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
   onUpdateQuery,
   onSetQuery,
   telemetry,
+  offerEvents = false,
 }) => {
   const groups = groupColumns(activeTab.columns)
   const hasOhlc = !!findOhlc(groups.numeric)
-  const baseTypes = availableChartTypes(groups, hasOhlc)
+  const baseTypes: ChartType[] = [
+    ...availableChartTypes(groups, hasOhlc),
+    ...(offerEvents && !isAnchorTab && groups.temporal.length > 0
+      ? (["events"] as const)
+      : []),
+  ]
   const types = baseTypes.includes(query.type)
     ? baseTypes
     : [query.type, ...baseTypes]
@@ -252,6 +261,66 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </FieldGroup>
       )}
 
+      {query.type === "events" && (
+        <FieldGroup>
+          <OhlcGrid>
+            {(
+              [
+                ["time", "Time", groups.temporal, "Default: column 1"],
+                [
+                  "end",
+                  "End (ranges)",
+                  groups.temporal,
+                  "None: single moments",
+                ],
+                [
+                  "label",
+                  "Label",
+                  [...groups.categorical, ...groups.other],
+                  "Default: column 2",
+                ],
+                [
+                  "tone",
+                  "Tone column",
+                  [...groups.categorical, ...groups.other],
+                  "None: neutral",
+                ],
+              ] as const
+            ).map(([k, label, candidates, fallback]) => (
+              <MiniField key={k}>
+                <Text color="contentSecondary" size="xs">
+                  {label}
+                </Text>
+                <SelectMenuControl
+                  name={`events-${k}-${idx}`}
+                  ariaLabel={`Events ${label.toLowerCase()} column`}
+                  value={query.events?.[k] ?? ""}
+                  onValueChange={(value) => {
+                    const events = { ...query.events, [k]: value || undefined }
+                    if (!value) delete events[k]
+                    onUpdateQuery({
+                      events:
+                        Object.keys(events).length > 0 ? events : undefined,
+                    })
+                  }}
+                  options={[
+                    { label: fallback, value: "" },
+                    ...candidates.map((c) => ({
+                      label: c.name,
+                      value: c.name,
+                    })),
+                  ]}
+                />
+              </MiniField>
+            ))}
+          </OhlcGrid>
+          <Text color="contentSecondary" size="xs" lineHeight="1.3">
+            Each row marks the time axis of the chart. A tone column holds
+            positive, negative, warning, info or neutral.
+          </Text>
+        </FieldGroup>
+      )}
+
       {query.type === "pie" && (
         <Field>
           <FieldLabel>Value</FieldLabel>
@@ -323,7 +392,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           </Field>
         )}
 
-      {!isAnchorTab && (
+      {!isAnchorTab && query.type !== "events" && (
         <Field>
           <FieldLabel>Y-axis</FieldLabel>
           <SelectMenuControl

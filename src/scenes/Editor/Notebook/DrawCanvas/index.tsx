@@ -12,7 +12,8 @@ import {
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
-import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
+import { DrawSettingsDrawer } from "../CellChart/DrawSettingsDrawer"
+import { sameDrawSettings, type DrawSettings } from "../CellChart/drawSettings"
 import { resolveDraw, toChartResult } from "./drawCanvasUtils"
 import { Button } from "../../../../components/Button"
 import { CircleNotchSpinner } from "../../Monaco/icons"
@@ -137,17 +138,30 @@ type Props = {
   cell: NotebookCell
   isFocused: boolean
   refreshIntervalMs: number | undefined
-  onConfigChange: (config: ChartConfig) => void
+  onSettingsChange: (settings: DrawSettings) => void
   onRetryUnmountWhileFocused: () => void
 }
+
+const NO_CHART: ChartConfig = { xColumn: null, queries: [] }
 
 export const DrawCanvas: React.FC<Props> = ({
   cell,
   isFocused,
   refreshIntervalMs,
-  onConfigChange,
+  onSettingsChange,
   onRetryUnmountWhileFocused,
 }) => {
+  // What the drawer edits. An open drawer closes when one of these fields
+  // changes elsewhere (the assistant), compared field by field so a remount
+  // (maximize, restore) keeps the drawer and its draft.
+  const savedSettings: DrawSettings = useMemo(
+    () => ({
+      chartConfig: cell.chartConfig ?? NO_CHART,
+      ...(cell.formats ? { formats: cell.formats } : {}),
+      ...(cell.interactions ? { interactions: cell.interactions } : {}),
+    }),
+    [cell.chartConfig, cell.formats, cell.interactions],
+  )
   const trackSettingsOpen = useCallback(() => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
       chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
@@ -156,7 +170,8 @@ export const DrawCanvas: React.FC<Props> = ({
   const settingsDrawer = useSettingsDrawerSession({
     sessions: chartSettingsSessions,
     cellId: cell.id,
-    config: cell.chartConfig,
+    config: savedSettings,
+    sameConfig: sameDrawSettings,
     openEvent: EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS,
     onOpen: trackSettingsOpen,
     onCancel: trackChartSettingsCancel,
@@ -419,15 +434,17 @@ export const DrawCanvas: React.FC<Props> = ({
           )}
         </Canvas>
       )}
-      <ChartSettingsDrawer
+      <DrawSettingsDrawer
         open={settingsDrawer.open}
         appearInPlace={settingsDrawer.appearInPlace}
         onClose={settingsDrawer.close}
         initialDraft={settingsDrawer.initialDraft}
         onDraftChange={settingsDrawer.keepDraft}
         tabs={resolution.tabs}
-        config={resolution.effectiveConfig}
-        onSave={onConfigChange}
+        saved={savedSettings}
+        effective={resolution.effectiveConfig}
+        statements={statements}
+        onSave={onSettingsChange}
         telemetry={notebookChartSettingsTelemetry}
       />
     </Wrapper>

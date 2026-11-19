@@ -17,7 +17,7 @@ import { useCellToolbarTier } from "./useCellToolbarTier"
 import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
 import { ResizeHandle } from "../resize"
 import { CellWrapper } from "./CellWrapper"
-import type { ChartConfig } from "../CellChart/chartTypes"
+import type { DrawSettings } from "../CellChart/drawSettings"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { exceedsCellLineLimit } from "../../../../store/notebook"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
@@ -139,7 +139,7 @@ const CellInner: React.FC<Props> = ({
   isMaximized,
   isRunning,
 }) => {
-  const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
+  const { setCellSettings, clearCellResult, updateCell, setFocusedCell } =
     useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
@@ -282,9 +282,13 @@ const CellInner: React.FC<Props> = ({
       ?.focus()
   }
 
-  const handleChartConfigChange = (config: ChartConfig) => {
+  const handleDrawSettingsChange = (settings: DrawSettings) => {
     signalUserEdit(bufferIdForEvents)
-    setCellChartConfig(cell.id, config)
+    setCellSettings(cell.id, {
+      chartConfig: settings.chartConfig,
+      formats: settings.formats,
+      interactions: settings.interactions,
+    })
   }
 
   // Install the content-height getter that `topResize.resetHeight`
@@ -634,7 +638,7 @@ const CellInner: React.FC<Props> = ({
               isFocused={isFocused}
               isRunning={isRunning}
               refreshIntervalMs={autoRefreshIntervalMs(effectiveAutoRefresh)}
-              onConfigChange={handleChartConfigChange}
+              onSettingsChange={handleDrawSettingsChange}
               onRetryUnmountWhileFocused={focusCellToolbar}
               onYieldFocus={() => editorRef.current?.focus()}
             />

@@ -486,3 +486,43 @@ describe("resolveDraw — partition on the x column", () => {
     expect(effectiveConfig.queries[0]?.partitionByColumn).toBeUndefined()
   })
 })
+
+describe("resolveDraw events", () => {
+  it("leaves out an events statement the user excluded from the chart", () => {
+    // Given a series and an events statement switched off
+    const series = dql(
+      [
+        { name: "ts", type: "TIMESTAMP" },
+        { name: "v", type: "DOUBLE" },
+      ],
+      [["2026-01-01T00:00:00.000000Z", 1]],
+      "a",
+    )
+    const deploys = dql(
+      [
+        { name: "ts", type: "TIMESTAMP" },
+        { name: "note", type: "STRING" },
+      ],
+      [["2026-01-01T00:00:00.000000Z", "deploy"]],
+      "b",
+    )
+    const config: ChartConfig = {
+      xColumn: "ts",
+      queries: [
+        { type: "line", yColumns: ["v"] },
+        { type: "events", yColumns: [], enabled: false },
+      ],
+    }
+
+    // When
+    const on = resolveDraw(["a", "b"], [series, deploys], {
+      ...config,
+      queries: [config.queries[0], { type: "events", yColumns: [] }],
+    })
+    const off = resolveDraw(["a", "b"], [series, deploys], config)
+
+    // Then
+    expect(on.chart.events).toHaveLength(1)
+    expect(off.chart.events).toBeUndefined()
+  })
+})

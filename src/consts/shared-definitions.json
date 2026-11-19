@@ -1098,7 +1098,7 @@
             },
             "buckets": {
               "type": ["integer", "null"],
-              "minimum": 1,
+              "minimum": 10,
               "maximum": 365,
               "description": "uptime: bars the time range splits into (e.g. 90 for 90 days of daily rows). Fewer are drawn when the panel is narrow. Null = 90."
             },
@@ -1937,7 +1937,7 @@
                       },
                       "buckets": {
                         "type": ["integer", "null"],
-                        "minimum": 1,
+                        "minimum": 10,
                         "maximum": 365,
                         "description": "uptime: bars the time range splits into (e.g. 90 for 90 days of daily rows). Fewer are drawn when the panel is narrow. Null = 90."
                       },

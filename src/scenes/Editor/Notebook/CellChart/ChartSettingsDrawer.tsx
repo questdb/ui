@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
 import { Input, SelectMenuControl, TabButton } from "../../../../components"
 import type { ChartConfig, QueryChart } from "./chartTypes"
@@ -12,11 +12,7 @@ import {
   IncompatibleIcon,
 } from "./chartSettingsStyles"
 import { QueryControls } from "./QueryControls"
-import {
-  SettingsDrawerShell,
-  type SettingsDismissMethod,
-  type SettingsPresentation,
-} from "../settingsDrawer/SettingsDrawerShell"
+import { SettingsDrawerShell } from "../settingsDrawer/SettingsDrawerShell"
 
 const Row = styled.div`
   display: flex;
@@ -52,94 +48,35 @@ const parseBound = (v: string): number | undefined => {
   return v === "" || !Number.isFinite(n) ? undefined : n
 }
 
-const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
+export const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
   if (!q || q.type !== "candlestick" || q.enabled === false) return false
   const o = q.ohlc
   if (!o || !o.open || !o.high || !o.low || !o.close) return true
   return new Set([o.open, o.high, o.low, o.close]).size !== 4
 }
 
-type SharedProps = {
+type PresetFieldsProps = {
   tabs: QueryTab[]
-  config: ChartConfig
-  onSave: (next: ChartConfig) => void
+  draft: ChartConfig
+  onChange: (next: ChartConfig) => void
+  activeIndex: number
+  onActiveIndexChange: (index: number) => void
+  saveAttempted: boolean
   telemetry?: ChartSettingsTelemetry
+  offerEvents?: boolean
 }
 
-type SettingsProps = SharedProps & {
-  presentation: SettingsPresentation
-  open: boolean
-  onClose?: () => void
-  // Drawer only: a draft carried across a cell remount, where edits go, and
-  // whether this mount is that remount.
-  initialDraft?: ChartConfig | null
-  onDraftChange?: (draft: ChartConfig) => void
-  appearInPlace?: boolean
-}
-
-const ChartSettings: React.FC<SettingsProps> = ({
-  presentation,
-  open,
-  onClose,
+/** The preset chart's settings: x-axis, right axis and each query's series. */
+export const PresetChartFields: React.FC<PresetFieldsProps> = ({
   tabs,
-  config,
-  onSave,
+  draft,
+  onChange: updateDraft,
+  activeIndex,
+  onActiveIndexChange: setActiveIndex,
+  saveAttempted,
   telemetry,
-  initialDraft,
-  onDraftChange,
-  appearInPlace,
+  offerEvents,
 }) => {
-  const [draft, setDraft] = useState<ChartConfig>(initialDraft ?? config)
-  const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
-  const [saveAttempted, setSaveAttempted] = useState(false)
-  // Mounting already open means a remount mid-session: keep the draft.
-  const drawerWasOpenRef = useRef(open)
-
-  // Every edit lands in the session store as well, so a cell remount
-  // mid-session restores it.
-  const updateDraft = useCallback(
-    (next: ChartConfig) => {
-      setDraft(next)
-      onDraftChange?.(next)
-    },
-    [onDraftChange],
-  )
-
-  const resetDraft = useCallback(() => {
-    updateDraft(config)
-    setActiveIndex(tabs[0]?.index ?? 0)
-    setSaveAttempted(false)
-  }, [config, tabs, updateDraft])
-
-  useEffect(() => {
-    const drawerIsOpen = presentation === "drawer" && open
-    const drawerJustOpened = drawerIsOpen && !drawerWasOpenRef.current
-    drawerWasOpenRef.current = drawerIsOpen
-
-    if (drawerJustOpened) {
-      resetDraft()
-      return
-    }
-
-    if (presentation === "panel") {
-      updateDraft(config)
-      setActiveIndex((current) =>
-        tabs.some((tab) => tab.index === current)
-          ? current
-          : (tabs[0]?.index ?? 0),
-      )
-      setSaveAttempted(false)
-    }
-  }, [config, open, presentation, resetDraft, tabs, updateDraft])
-
-  const dismiss = useCallback(
-    (method: SettingsDismissMethod) => {
-      telemetry?.onCancel?.(method)
-      onClose?.()
-    },
-    [telemetry, onClose],
-  )
-
   const anchorTab = tabs[0]
   const anchorGroups = anchorTab
     ? groupColumns(anchorTab.columns)
@@ -184,38 +121,8 @@ const ChartSettings: React.FC<SettingsProps> = ({
       queries: draft.queries.map((q, i) => (i === index ? next : q)),
     })
 
-  const commit = () => {
-    const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
-    if (badIdx >= 0) {
-      telemetry?.onSaveBlocked?.("ohlc_incomplete")
-      setSaveAttempted(true)
-      setActiveIndex(badIdx)
-      return
-    }
-    const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
-    telemetry?.onSave?.({
-      chartType: primary?.type,
-      seriesCount: primary?.yColumns.length ?? 0,
-      queryCount: draft.queries.filter((q) => q != null).length,
-      hasRightAxis: hasRight,
-      partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
-    })
-    onSave(draft)
-    if (presentation === "drawer") onClose?.()
-  }
-
   return (
-    <SettingsDrawerShell
-      {...(presentation === "panel"
-        ? { presentation, onReset: resetDraft }
-        : { presentation })}
-      open={open}
-      appearInPlace={appearInPlace}
-      title="Chart settings"
-      dataHookBase="chart-settings"
-      onDismiss={dismiss}
-      onCommit={commit}
-    >
+    <>
       <Field>
         <FieldLabel>X-axis</FieldLabel>
         <SelectMenuControl
@@ -317,22 +224,94 @@ const ChartSettings: React.FC<SettingsProps> = ({
           onUpdateQuery={(patch) => updateQuery(activeTab.index, patch)}
           onSetQuery={(next) => setQuery(activeTab.index, next)}
           telemetry={telemetry}
+          // Markers need a time axis to sit on.
+          offerEvents={
+            offerEvents &&
+            anchorGroups.temporal.some((c) => c.name === draft.xColumn)
+          }
         />
       )}
+    </>
+  )
+}
+
+type PanelProps = {
+  tabs: QueryTab[]
+  config: ChartConfig
+  onSave: (next: ChartConfig) => void
+  telemetry?: ChartSettingsTelemetry
+}
+
+/** The preset chart's settings beside a result chart (the Result view). */
+export const ChartSettingsPanel: React.FC<PanelProps> = ({
+  tabs,
+  config,
+  onSave,
+  telemetry,
+}) => {
+  const [draft, setDraft] = useState<ChartConfig>(config)
+  const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
+  const [saveAttempted, setSaveAttempted] = useState(false)
+
+  const resetDraft = useCallback(() => {
+    setDraft(config)
+    setActiveIndex(tabs[0]?.index ?? 0)
+    setSaveAttempted(false)
+  }, [config, tabs])
+
+  useEffect(() => {
+    setDraft(config)
+    setActiveIndex((current) =>
+      tabs.some((tab) => tab.index === current)
+        ? current
+        : (tabs[0]?.index ?? 0),
+    )
+    setSaveAttempted(false)
+  }, [config, tabs])
+
+  const commit = () => {
+    const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
+    if (badIdx >= 0) {
+      telemetry?.onSaveBlocked?.("ohlc_incomplete")
+      setSaveAttempted(true)
+      setActiveIndex(badIdx)
+      return
+    }
+    telemetry?.onSave?.(savePayloadOf(draft, tabs))
+    onSave(draft)
+  }
+
+  return (
+    <SettingsDrawerShell
+      presentation="panel"
+      onReset={resetDraft}
+      open
+      title="Chart settings"
+      dataHookBase="chart-settings"
+      onDismiss={(method) => telemetry?.onCancel?.(method)}
+      onCommit={commit}
+    >
+      <PresetChartFields
+        tabs={tabs}
+        draft={draft}
+        onChange={setDraft}
+        activeIndex={activeIndex}
+        onActiveIndexChange={setActiveIndex}
+        saveAttempted={saveAttempted}
+        telemetry={telemetry}
+      />
     </SettingsDrawerShell>
   )
 }
 
-export const ChartSettingsDrawer: React.FC<
-  SharedProps & {
-    open: boolean
-    onClose: () => void
-    initialDraft: ChartConfig | null
-    onDraftChange: (draft: ChartConfig) => void
-    appearInPlace: boolean
+export const savePayloadOf = (draft: ChartConfig, tabs: QueryTab[]) => {
+  const anchorTab = tabs[0]
+  const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
+  return {
+    chartType: primary?.type,
+    seriesCount: primary?.yColumns.length ?? 0,
+    queryCount: draft.queries.filter((q) => q != null).length,
+    hasRightAxis: draft.queries.some((q) => q?.axis === "right"),
+    partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
   }
-> = (props) => <ChartSettings {...props} presentation="drawer" />
-
-export const ChartSettingsPanel: React.FC<SharedProps> = (props) => (
-  <ChartSettings {...props} presentation="panel" open />
-)
+}

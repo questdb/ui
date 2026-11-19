@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from "react"
-import type { ChartConfig } from "./CellChart/chartTypes"
 import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
 import { withHighlightConfig } from "./result-table/highlightConfig"
 import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
@@ -9,6 +8,11 @@ import {
   setResultAt,
 } from "./notebookUtils"
 import type { AutoRefresh } from "../../../store/notebook"
+
+/** Cell fields a settings drawer saves together. */
+export type CellSettingsPatch = Partial<
+  Pick<NotebookCell, "chartConfig" | "formats" | "interactions" | "gridMode">
+>
 
 type Options = {
   initialCells: NotebookCell[]
@@ -96,10 +100,22 @@ export const useCellsStore = ({
     [updateCells],
   )
 
-  const setCellChartConfig = useCallback(
-    (cellId: string, config: ChartConfig) =>
-      updateCell(cellId, { chartConfig: config }),
-    [updateCell],
+  // A drawer's save: the given fields, removed when undefined.
+  const setCellSettings = useCallback(
+    (cellId: string, patch: CellSettingsPatch) =>
+      updateCells((prev) =>
+        prev.map((c) => {
+          if (c.id !== cellId) return c
+          const next: NotebookCell = { ...c }
+          for (const key of Object.keys(patch) as (keyof CellSettingsPatch)[]) {
+            const value = patch[key]
+            if (value === undefined) delete next[key]
+            else (next as Record<string, unknown>)[key] = value
+          }
+          return next
+        }),
+      ),
+    [updateCells],
   )
 
   const setCellHighlightConfig = useCallback(
@@ -131,7 +147,7 @@ export const useCellsStore = ({
     updateCell,
     updateCellResult,
     setScriptSummary,
-    setCellChartConfig,
+    setCellSettings,
     setCellHighlightConfig,
     setCellRefresh,
   }

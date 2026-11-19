@@ -1,4 +1,5 @@
 import type { ChartType } from "./chartTypes"
+import type { DrawKind } from "./drawSettings"
 
 export type ChartSettingsCancelMethod =
   | "backdrop"
@@ -12,6 +13,8 @@ export type ChartSettingsSavePayload = {
   queryCount: number
   hasRightAxis: boolean
   partitioned: boolean
+  // Notebook draw cells: what the cell is drawn as.
+  kind?: DrawKind
 }
 
 export type ChartSettingsTelemetry = {

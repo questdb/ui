@@ -133,6 +133,12 @@ export default defineConfig(({ mode }) => {
             src: path.join(monacoPath, "min", "vs", "base"),
             dest: "assets/vs",
           },
+          // JSON language (custom chart options): highlighting, validation
+          // and folding. Loaded on first use.
+          {
+            src: path.join(monacoPath, "min", "vs", "language", "json"),
+            dest: "assets/vs/language",
+          },
           ...(isProduction
             ? []
             : [

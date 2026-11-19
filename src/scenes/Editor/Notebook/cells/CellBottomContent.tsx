@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from "react"
 import type { NotebookCell } from "../../../../store/notebook"
-import type { ChartConfig } from "../CellChart/chartTypes"
+import type { DrawSettings } from "../CellChart/drawSettings"
 import type { CellContentMode } from "../cellVirtualization/cellVirtualizationEngine"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import {
@@ -46,7 +46,7 @@ type Props = {
   isFocused: boolean
   isRunning: boolean
   refreshIntervalMs: number | undefined
-  onConfigChange: (config: ChartConfig) => void
+  onSettingsChange: (settings: DrawSettings) => void
   onRetryUnmountWhileFocused: () => void
   onYieldFocus: () => void
 }
@@ -58,7 +58,7 @@ export const CellBottomContent: React.FC<Props> = ({
   isFocused,
   isRunning,
   refreshIntervalMs,
-  onConfigChange,
+  onSettingsChange,
   onRetryUnmountWhileFocused,
   onYieldFocus,
 }) => {
@@ -127,7 +127,7 @@ export const CellBottomContent: React.FC<Props> = ({
         cell={cell}
         isFocused={isFocused}
         refreshIntervalMs={refreshIntervalMs}
-        onConfigChange={onConfigChange}
+        onSettingsChange={onSettingsChange}
         onRetryUnmountWhileFocused={onRetryUnmountWhileFocused}
       />
     ) : (

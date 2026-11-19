@@ -87,10 +87,10 @@ export const parseVisual = (wire: VisualWire, at: string): VisualConfig => {
   if (typeof wire.buckets === "number") {
     if (
       !Number.isInteger(wire.buckets) ||
-      wire.buckets < 1 ||
+      wire.buckets < 10 ||
       wire.buckets > 365
     )
-      fail(`${at}.buckets must be a whole number from 1 to 365.`)
+      fail(`${at}.buckets must be a whole number from 10 to 365.`)
     visual.buckets = wire.buckets
   }
   if (Array.isArray(wire.severity) && wire.severity.length > 0) {

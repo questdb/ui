@@ -12,6 +12,7 @@ import { sanitizeOption } from "./sanitizeOption"
 import { buildCustomOption } from "./buildCustomOption"
 import { drawErrorsOf, resolveChartTypes } from "./chartTypeRegistry"
 import { MAP_NAMES, ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
+import { problemsOf } from "./prepareCustomOption"
 import { PaneEmptyState } from "../PaneEmptyState"
 
 const MAPS = new Set<string>(MAP_NAMES)
@@ -106,12 +107,7 @@ export const CustomChart = ({
     // frame is out.
     const timer = window.setTimeout(() => {
       const problems: RenderProblem[] = [
-        ...sanitized.problems,
-        ...built.problems,
-        ...[...resolution.errors.values()].map((message) => ({
-          message,
-          severity: "error" as const,
-        })),
+        ...problemsOf({ resolution, sanitized, built }),
         ...[...drawErrorsOf(resolution, used)].map(([name, message]) => ({
           path: `chartTypes.${name}`,
           message: `Chart type "${name}" threw while drawing: ${message}`,

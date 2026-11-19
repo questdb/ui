@@ -126,7 +126,7 @@ export const sanitizeVisualConfig = (
     Number.isInteger(value.buckets) &&
     value.buckets >= 1
   )
-    visual.buckets = Math.min(value.buckets, 365)
+    visual.buckets = Math.min(Math.max(value.buckets, 10), 365)
   if (isRecord(value.severity)) {
     const severity: Record<string, StateSeverity> = {}
     for (const [state, level] of Object.entries(value.severity).slice(0, 50))

@@ -114,6 +114,11 @@ const Body = styled.form`
   display: flex;
   flex-direction: column;
   gap: 1.4rem;
+
+  /* A long form scrolls; its fields keep their height. */
+  & > * {
+    flex-shrink: 0;
+  }
 `
 
 const Footer = styled.div`
@@ -127,6 +132,30 @@ const Footer = styled.div`
 const FooterStart = styled.div`
   margin-right: auto;
 `
+
+// Monaco widgets that Escape closes before it leaves the editor.
+const MONACO_OPEN_WIDGET =
+  ".suggest-widget.visible, .find-widget.visible, .parameter-hints-widget.visible"
+
+// A code editor field's frame, focusable so Escape can leave the editor.
+const CODE_EDITOR_FRAME = "[data-hook='code-editor-field']"
+
+const FOCUSABLE =
+  "button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex='-1'])"
+
+/** The first focusable control after `element` in `panel`, outside it. */
+const controlAfter = (
+  panel: HTMLElement | null,
+  element: HTMLElement,
+): HTMLElement | null =>
+  Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).find(
+    (candidate) =>
+      !element.contains(candidate) &&
+      Boolean(
+        element.compareDocumentPosition(candidate) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+  ) ?? null
 
 // How long after opening a menu may still hand focus back to its trigger.
 const OPENER_HANDBACK_WINDOW_MS = 1000
@@ -268,8 +297,34 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
   useEffect(() => {
     if (!open || !isDrawer) return
     const onKey = (e: KeyboardEvent) => {
+      // Tab from a code editor's frame (where Escape left the editor) moves
+      // on to the next control instead of back into the editor.
+      if (
+        e.key === "Tab" &&
+        !e.shiftKey &&
+        e.target instanceof HTMLElement &&
+        e.target.matches(CODE_EDITOR_FRAME)
+      ) {
+        const next = controlAfter(panelRef.current, e.target)
+        if (next) {
+          e.preventDefault()
+          next.focus()
+        }
+        return
+      }
       if (e.key !== "Escape") return
       if (isRadixPopperOpen()) return
+      // In a code editor, Escape first closes the editor's own widgets
+      // (suggestions, find), then leaves the editor; the next one dismisses.
+      const editor =
+        e.target instanceof Element ? e.target.closest(".monaco-editor") : null
+      if (editor) {
+        if (editor.querySelector(MONACO_OPEN_WIDGET)) return
+        editor.closest<HTMLElement>(CODE_EDITOR_FRAME)?.focus()
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
       onDismiss("escape")
       e.stopImmediatePropagation()
     }
