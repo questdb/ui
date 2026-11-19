@@ -154,9 +154,6 @@ describe("drawer monitoring dashboard action", () => {
       ).toBe(true)
       const [request] = opener.open.mock.calls[0]
       expect(request).toMatchObject(expected)
-      expect(request.target.instanceKey).toBe(
-        new URL(".", window.location.href).href,
-      )
     },
   )
 
@@ -236,7 +233,7 @@ describe("drawer monitoring dashboard action", () => {
     expect(request).toMatchObject({
       telemetryEnabled: true,
       telemetryUnknown: false,
-      target: { instanceKey: new URL(".", window.location.href).href },
+      target: { kind: "matview", name: "trades_mv" },
     })
   })
 

@@ -190,7 +190,9 @@ describe("monitoring dashboards on a real server", () => {
 
       readBuffers().then((buffers) => {
         const dashboard = buffers.find(
-          (buffer) => buffer.monitoring?.target.name === name,
+          (buffer) =>
+            buffer.templateId?.startsWith("monitoring:") &&
+            buffer.monitoring?.target.name === name,
         )
         expect(dashboard, "dashboard notebook").to.exist
         const statements = statementsOf(dashboard.notebookViewState)

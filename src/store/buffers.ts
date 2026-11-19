@@ -24,7 +24,10 @@ import { RefreshRate } from "../scenes/Editor/Metrics/utils"
  ******************************************************************************/
 
 import { db } from "./db"
-import { updateWithMonitoringCustomization } from "./monitoringCustomization"
+import { Dexie } from "dexie"
+import { examplePersonalizationReason } from "../utils/examples/examplePersonalization"
+import { trackEvent } from "../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import type { editor } from "monaco-editor"
 import {
   MetricType,
@@ -101,6 +104,10 @@ export type Buffer = {
   isTemporary?: boolean
   isPreviewBuffer?: boolean
   previewContent?: PreviewContent
+  // Set on notebooks opened from the Tabs panel's example dashboards, so a
+  // second click on the same example activates the open tab instead of
+  // creating another copy.
+  templateId?: string
 }
 
 export const MAX_BUFFER_NAME_LENGTH = 100
@@ -155,6 +162,7 @@ export const makeBuffer = ({
   isTemporary,
   isPreviewBuffer,
   previewContent,
+  templateId,
 }: {
   label: string
   value?: string
@@ -168,6 +176,7 @@ export const makeBuffer = ({
   isTemporary?: boolean
   isPreviewBuffer?: boolean
   previewContent?: PreviewContent
+  templateId?: string
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
@@ -184,6 +193,7 @@ export const makeBuffer = ({
   isTemporary,
   isPreviewBuffer,
   previewContent,
+  templateId,
 })
 
 export const makeFallbackBuffer = (bufferType: BufferType): Buffer => {
@@ -241,8 +251,35 @@ export const bufferStore = {
             : BufferType.SQL,
       ),
 
-  update: (id: number, buffer: Partial<Buffer>) =>
-    updateWithMonitoringCustomization(id, buffer),
+  update: async (id: number, buffer: Partial<Buffer>) => {
+    // The comparison and detachment share a transaction. Both live edits and
+    // headless MCP edits use this path, and concurrent writes cannot report
+    // the same first customization twice.
+    const { count, templateId, reason } = await db.transaction(
+      "rw",
+      db.buffers,
+      async () => {
+        const before = await db.buffers.get(id)
+        const reason = before && examplePersonalizationReason(before, buffer)
+        const count = await db.buffers.update(id, {
+          ...buffer,
+          ...(reason ? { templateId: undefined } : {}),
+        })
+        return { count, templateId: before?.templateId, reason }
+      },
+    )
+    if (count && reason) {
+      // An agent may call this inside its document transaction, whose table
+      // scope excludes telemetry. Record independently after the write.
+      void Dexie.ignoreTransaction(() =>
+        trackEvent(ConsoleEvent.NOTEBOOK_EXAMPLE_PERSONALIZE, {
+          templateId,
+          reason,
+        }),
+      )
+    }
+    return count
+  },
 
   delete: (id: number) => db.buffers.delete(id),
 

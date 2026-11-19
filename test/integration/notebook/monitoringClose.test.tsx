@@ -14,13 +14,11 @@ import {
   type NotebookActions,
 } from "../../../src/scenes/Editor/Notebook/NotebookProvider"
 import { db } from "../../../src/store/db"
-import { makeBuffer, BufferType } from "../../../src/store/buffers"
+import { makeBuffer } from "../../../src/store/buffers"
 import type { NotebookViewState } from "../../../src/store/notebook"
-import { trackEvent } from "../../../src/modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../../src/modules/ConsoleEventTracker/events"
 import {
   buildMonitoringDashboard,
-  monitoringFingerprint,
+  monitoringTemplateId,
 } from "../../../src/utils/monitoring/dashboard"
 import {
   beginNotebookMount,
@@ -56,11 +54,6 @@ const panelId = () => view.cells.find((cell) => cell.name === PANEL)!.id
 const storedPanelValue = async () =>
   (await stored())?.notebookViewState?.cells.find((c) => c.id === panelId())
     ?.value
-const archiveEvents = () =>
-  vi
-    .mocked(trackEvent)
-    .mock.calls.filter(([event]) => event === ConsoleEvent.TAB_ARCHIVE)
-
 // Mounts the dashboard as the console does: a seeded mount claim, then a live
 // NotebookProvider (real persistence, real controller) inside EditorProvider.
 const mount = async () => {
@@ -113,10 +106,10 @@ beforeEach(async () => {
         label: LABEL,
         position: 0,
         notebookViewState: view,
+        templateId: monitoringTemplateId("table"),
         monitoring: {
-          target: { instanceKey: "test", kind: "table", name: "trades" },
+          target: { kind: "table", name: "trades" },
           templateVersion: 1,
-          initialFingerprint: monitoringFingerprint(LABEL, view),
         },
       }),
     },
@@ -144,7 +137,7 @@ describe("closing an open monitoring dashboard", () => {
       signalUserEdit(DASHBOARD)
     })
     expect(await storedPanelValue()).toBe(original)
-    expect((await stored())?.monitoring).toBeDefined()
+    expect((await stored())?.templateId).toBeDefined()
 
     await act(async () => {
       await editor.archiveBuffer(DASHBOARD)
@@ -152,18 +145,8 @@ describe("closing an open monitoring dashboard", () => {
 
     const archived = await stored()
     expect(archived?.archived).toBe(true)
-    expect(archived).not.toHaveProperty("monitoring")
+    expect(archived).not.toHaveProperty("templateId")
     expect(await storedPanelValue()).toBe("select 42")
-    expect(archiveEvents()).toEqual([
-      [
-        ConsoleEvent.TAB_ARCHIVE,
-        {
-          type: BufferType.NOTEBOOK,
-          notebookId: DASHBOARD,
-          outcome: "archived",
-        },
-      ],
-    ])
   })
 
   it("still discards an untouched dashboard that is open with a live controller", async () => {
@@ -172,15 +155,5 @@ describe("closing an open monitoring dashboard", () => {
       await editor.archiveBuffer(DASHBOARD)
     })
     expect(await stored()).toBeUndefined()
-    expect(archiveEvents()).toEqual([
-      [
-        ConsoleEvent.TAB_ARCHIVE,
-        {
-          type: BufferType.NOTEBOOK,
-          notebookId: DASHBOARD,
-          outcome: "discarded_template",
-        },
-      ],
-    ])
   })
 })

@@ -847,7 +847,7 @@ describe("createDexieNotebookController — runCell", () => {
     ["an agent's auto-run", { kind: "autoRun" } as const, 1],
     [
       "the console's own dashboard run",
-      { kind: "autoRun", source: "monitoring" } as const,
+      { kind: "autoRun", initiator: "user" } as const,
       0,
     ],
   ])(

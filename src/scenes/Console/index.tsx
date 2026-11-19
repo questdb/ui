@@ -141,9 +141,13 @@ const Console = () => {
   const horizontalSplitterRef = React.useRef<AllotmentHandle>(null)
   const previousScreenSizeRef = React.useRef(ScreenSize.XL)
 
-  const showPanel = (panel: BottomPanel) => {
+  // A hidden result is also taken out of the layout, not only collapsed: its
+  // controls would otherwise stay focusable and announced while invisible,
+  // and act on another tab's result.
+  const showPanel = (panel: BottomPanel, resultHidden: boolean) => {
     if (resultRef.current) {
-      resultRef.current.style.display = panel === "result" ? "flex" : "none"
+      resultRef.current.style.display =
+        panel === "result" && !resultHidden ? "flex" : "none"
     }
     if (importRef.current) {
       importRef.current.style.display = panel === "import" ? "flex" : "none"
@@ -179,13 +183,19 @@ const Console = () => {
   }, [hideResult])
 
   // Any panel change while a result is pending is the user's choice: it wins.
+  // Mounting is not a change: a console that mounts on a notebook tab (e.g.
+  // after signing in again) keeps the result it deferred, so the stored panel
+  // is corrected once the result is visible.
+  const previousBottomPanelRef = React.useRef(activeBottomPanel)
   useEffect(() => {
+    if (previousBottomPanelRef.current === activeBottomPanel) return
+    previousBottomPanelRef.current = activeBottomPanel
     pendingResultRef.current = undefined
   }, [activeBottomPanel])
 
   useEffect(() => {
-    showPanel(activeBottomPanel)
-  }, [activeBottomPanel])
+    showPanel(activeBottomPanel, hideResult)
+  }, [activeBottomPanel, hideResult])
 
   useEffect(() => {
     const previousScreenSize = previousScreenSizeRef.current

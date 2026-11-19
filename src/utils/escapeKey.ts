@@ -29,6 +29,8 @@
 export const EscapePriority = {
   // A focused notebook cell is cleared before anything around it closes.
   notebookCell: 30,
+  // A pending AI suggestion in the SQL editor (the Reject button shows Esc).
+  editorDiff: 20,
   // A docked side panel (AI chat) closes last.
   sidePanel: 10,
 } as const
@@ -76,10 +78,36 @@ export const isTextFieldWithValue = (target: EventTarget | null) =>
 const layers: EscapeLayer[] = []
 const ownedByTextField = new WeakSet<Event>()
 
-const onCapture = (event: KeyboardEvent) => {
-  if (isEscape(event) && isTextFieldWithValue(event.target))
-    ownedByTextField.add(event)
+// Monaco calls preventDefault on every Escape in its input, handled or not.
+// When a binding handles it (a widget closes, a selection collapses), Monaco
+// also stops propagation, so the press never reaches the ambient layers. An
+// Escape from the editor that does reach them is therefore unhandled, and its
+// claim is whatever was made before the editor saw it. That is read by a
+// capture listener on the target itself: it runs after every ancestor's
+// capture listener (Radix layers included) and before Monaco's own listener.
+const claimedBeforeEditor = new WeakMap<Event, boolean>()
+
+const watchEditorEscape = (event: KeyboardEvent) => {
+  const target = event.target
+  if (!(target instanceof Element) || !target.closest(".monaco-editor")) return
+  target.addEventListener(
+    "keydown",
+    (atTarget) => {
+      if (atTarget === event)
+        claimedBeforeEditor.set(event, event.defaultPrevented)
+    },
+    { capture: true, once: true },
+  )
 }
+
+const onCapture = (event: KeyboardEvent) => {
+  if (!isEscape(event)) return
+  if (isTextFieldWithValue(event.target)) ownedByTextField.add(event)
+  else watchEditorEscape(event)
+}
+
+const isClaimedForLayers = (event: KeyboardEvent) =>
+  claimedBeforeEditor.get(event) ?? isEscapeClaimed(event)
 
 const contains = (layer: EscapeLayer, target: EventTarget | null) => {
   const scope = layer.scope?.()
@@ -101,7 +129,11 @@ const dispatchOrder = (target: EventTarget | null): EscapeLayer[] => {
 
 // A press a text field owns reaches no ambient layer.
 const onBubble = (event: KeyboardEvent) => {
-  if (!isEscape(event) || isEscapeClaimed(event) || ownedByTextField.has(event))
+  if (
+    !isEscape(event) ||
+    isClaimedForLayers(event) ||
+    ownedByTextField.has(event)
+  )
     return
   for (const layer of dispatchOrder(event.target)) {
     if (layer.onEscape(event)) {

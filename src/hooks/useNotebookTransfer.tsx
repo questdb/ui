@@ -20,6 +20,8 @@ import { authSessionState } from "../modules/OAuth2/authSessionState"
 import { SessionEndedError } from "../modules/OAuth2/session"
 import { NotebookToolError } from "../utils/notebooks/notebookToolError"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
+import { activateBuffer } from "../utils/notebooks/activateBuffer"
+import { useEditorBusy } from "./useEditorBusy"
 
 // Transfers always create a new notebook next to the source tab.
 export type NotebookTransferRequest = {
@@ -34,6 +36,7 @@ export type NotebookTransferRequest = {
 
 export const useNotebookTransfer = () => {
   const { addBuffer, buffers, setActiveBuffer } = useEditor()
+  const isEditorBusy = useEditorBusy()
   const inFlight = useRef(false)
   const mounted = useRef(true)
   const [busy, setBusy] = useState(false)
@@ -137,7 +140,17 @@ export const useNotebookTransfer = () => {
           current ? "archived" : "deleted",
           "The destination notebook is no longer open.",
         )
-      await setActiveBuffer(current, { focus: true, throwOnError: true })
+      // A script or query started while the results were saved would be
+      // aborted by switching away from the editor. The notebook stays in the
+      // tab bar instead.
+      if (isEditorBusy()) {
+        trackFailure("editor_running")
+        toast.info(
+          `${current.label} is ready. Open its tab once the editor finishes running.`,
+        )
+        return
+      }
+      await activateBuffer(setActiveBuffer, current, { focus: true })
       requireSession()
       void trackEvent(ConsoleEvent.NOTEBOOK_TRANSFER, {
         source: request.source,

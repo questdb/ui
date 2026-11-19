@@ -38,7 +38,7 @@ import {
   TransitionDuration,
   SetupAIAssistant,
 } from "../../../components"
-import { ScreenSize, useScreenSize } from "../../../hooks"
+import { ScreenSize, useKeyPress, useScreenSize } from "../../../hooks"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 import QueryPicker from "../QueryPicker"
@@ -168,6 +168,7 @@ const MenuItems = styled.div<{ $hidden: boolean }>`
 const Menu = () => {
   const dispatch = useDispatch()
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
+  const escPress = useKeyPress("Escape")
   const { consoleConfig } = useSettings()
   const opened = useSelector(selectors.console.getSideMenuOpened)
   const isSmallScreen = useScreenSize() === ScreenSize.SM
@@ -184,6 +185,10 @@ const Menu = () => {
   const handleSideMenuButtonClick = useCallback(() => {
     dispatch(actions.console.toggleSideMenu())
   }, [dispatch])
+
+  useEffect(() => {
+    setQueriesPopperActive(false)
+  }, [escPress])
 
   useEffect(() => {
     if (!isSmallScreen && opened) {

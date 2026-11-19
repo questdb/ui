@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
 import {
   buildMonitoringDashboard,
-  isUnmodifiedMonitoring,
   MONITORING_MAX_WINDOW_MINUTES,
-  monitoringFingerprint,
+  monitoringTemplateId,
   monitoringWindowMinutes,
 } from "./dashboard"
+import { examplePersonalizationReason } from "../examples/examplePersonalization"
 import { NOTEBOOK_ROW_CAP } from "../../scenes/Editor/Notebook/notebookUtils"
 import { makeBuffer } from "../../store/buffers"
 import type { NotebookViewState } from "../../store/notebook"
@@ -257,43 +257,11 @@ describe("monitoring templates", () => {
       view.cells.find((c) => c.name === "Reading the data")?.value,
     ).toContain("hidden because telemetry is disabled")
   })
-
-  it("recognizes user customization while ignoring query results and inspection", () => {
-    const view = build()
-    const buffer = makeBuffer({
-      label: "trades · monitoring",
-      position: 0,
-      notebookViewState: view,
-      monitoring: {
-        target: { instanceKey: "db", kind: "table", name: "trades" },
-        templateVersion: 1,
-        initialFingerprint: monitoringFingerprint("trades · monitoring", view),
-      },
-    })
-    expect(isUnmodifiedMonitoring(buffer)).toBe(true)
-    const inspected = structuredClone(view)
-    inspected.focusedCellId = inspected.cells[1].id
-    inspected.cells[1].lastRunStatus = "success"
-    inspected.cells[1].paneView = "editor_result"
-    expect(isUnmodifiedMonitoring(buffer, inspected)).toBe(true)
-    inspected.cells[1].value += " limit 5"
-    expect(isUnmodifiedMonitoring(buffer, inspected)).toBe(false)
-    expect(isUnmodifiedMonitoring({ ...buffer, label: "My dashboard" })).toBe(
-      false,
-    )
-    const configured = structuredClone(view)
-    configured.settings!.variables![0].value = "60"
-    expect(isUnmodifiedMonitoring(buffer, configured)).toBe(false)
-    const resized = structuredClone(view)
-    resized.cells.find((c) => c.name === "Ingestion · rows/s")!.bottomHeight =
-      500
-    expect(isUnmodifiedMonitoring(buffer, resized)).toBe(false)
-  })
 })
 
-describe("monitoring customization fingerprint", () => {
-  // Closing a dashboard that still matches its template deletes it for good,
-  // so every authored edit must change the fingerprint.
+describe("monitoring dashboard customization", () => {
+  // Closing a dashboard that still has its template deletes it for good, so
+  // every authored edit of a generated dashboard must detach it.
   type Edit = (view: NotebookViewState) => void
   const chart = (view: NotebookViewState) =>
     view.cells.find((cell) => cell.mode === "draw")!
@@ -345,17 +313,33 @@ describe("monitoring customization fingerprint", () => {
   ]
 
   const template = build()
-  const fingerprint = (edit?: Edit) => {
+  const buffer = makeBuffer({
+    label: "trades · monitoring",
+    position: 0,
+    notebookViewState: template,
+    templateId: monitoringTemplateId("table"),
+    monitoring: {
+      target: { kind: "table", name: "trades" },
+      templateVersion: 1,
+    },
+  })
+  const customizes = (edit: Edit) => {
     const view = structuredClone(template)
-    edit?.(view)
-    return monitoringFingerprint("trades · monitoring", view)
+    edit(view)
+    return examplePersonalizationReason(buffer, { notebookViewState: view })
   }
 
   it.each(authored)("counts %s as customization", (_name, edit) => {
-    expect(fingerprint(edit)).not.toBe(fingerprint())
+    expect(customizes(edit)).toBe("content")
   })
 
   it.each(unauthored)("ignores %s", (_name, edit) => {
-    expect(fingerprint(edit)).toBe(fingerprint())
+    expect(customizes(edit)).toBeUndefined()
+  })
+
+  it("counts a rename as customization", () => {
+    expect(examplePersonalizationReason(buffer, { label: "Mine" })).toBe(
+      "rename",
+    )
   })
 })

@@ -4,8 +4,12 @@ import {
   type Buffer,
 } from "../../store/buffers"
 import type { EditorContext } from "../../providers/EditorProvider"
-import { monitoringFingerprint } from "./fingerprint"
-import { monitoringTargetKey, MONITORING_TEMPLATE_VERSION } from "./identity"
+import {
+  isMonitoringDashboard,
+  monitoringTargetKey,
+  monitoringTemplateId,
+  MONITORING_TEMPLATE_VERSION,
+} from "./identity"
 import type { MonitoringTarget, MonitoringRefreshSchedule } from "./types"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { SessionEndedError } from "../../modules/OAuth2/session"
@@ -52,7 +56,7 @@ const requests = new Map<string, Promise<MonitoringOpenResult | undefined>>()
 // Shared by every entry point. Web Locks also serialize separate browser tabs
 // sharing this IndexedDB; the fresh lookup inside the lock is authoritative.
 // Like an example dashboard, only an open, unedited dashboard is reused. An
-// edited or archived one has left the template (`monitoring` is gone) and is
+// edited or archived one has left the template (`templateId` is gone) and is
 // the user's notebook, so the button then creates a fresh dashboard.
 // A created dashboard is filled the way apply_notebook_state fills an agent's
 // notebook: the state is committed, then its run-mode cells run before the
@@ -82,7 +86,7 @@ export const openMonitoringDashboard = (
     toRun: NotebookCell[],
   ): Promise<CellRunOutcome[]> => {
     const cells = toRun.map((cell) => ({ cellId: cell.id, sql: cell.value }))
-    const gate = { kind: "autoRun", source: "monitoring" } as const
+    const gate = { kind: "autoRun", initiator: "user" } as const
     let runs = await runCellsAfterApply(bufferId, cells, abort.signal, gate)
     // The tab is in the tab bar while its first runs are in flight. If the user
     // opens it then, a background run's result is refused at commit (the live
@@ -115,17 +119,18 @@ export const openMonitoringDashboard = (
     requireSession()
     const buffers = await bufferStore.getAll()
     requireSession()
+    const templateId = monitoringTemplateId(request.target.kind)
     const existing = buffers.find(
       (buffer) =>
         buffer.id !== undefined &&
         buffer.notebookViewState &&
-        buffer.monitoring &&
+        isMonitoringDashboard(buffer) &&
+        buffer.templateId === templateId &&
         !buffer.archived &&
         !buffer.isTemporary &&
-        monitoringTargetKey(buffer.monitoring.target) === key &&
-        // The key ignores case, but the dashboard SQL matches the name exactly:
-        // a table re-created under another case needs its own dashboard.
-        buffer.monitoring.target.name === request.target.name,
+        // The lock key ignores case, but the dashboard SQL matches the name
+        // exactly: a table re-created under another case needs its own.
+        buffer.monitoring?.target.name === request.target.name,
     )
     if (existing) {
       const pending = withoutFirstRun(existing.notebookViewState?.cells ?? [])
@@ -156,10 +161,10 @@ export const openMonitoringDashboard = (
       {
         label,
         notebookViewState,
+        templateId,
         monitoring: {
           target: request.target,
           templateVersion: MONITORING_TEMPLATE_VERSION,
-          initialFingerprint: monitoringFingerprint(label, notebookViewState),
         },
       },
       { activate: false, signal: abort.signal },

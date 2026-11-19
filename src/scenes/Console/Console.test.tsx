@@ -50,6 +50,8 @@ vi.mock("allotment", () => {
 })
 vi.mock("../Editor", () => ({ default: () => null }))
 vi.mock("../Schema", () => ({ default: () => null }))
+// The Tabs panel (when present) is outside what these tests cover.
+vi.mock("../TabsPanel", () => ({ TabsPanel: () => null }))
 vi.mock("../Search", () => ({
   SearchPanel: React.forwardRef(() => null),
 }))
@@ -89,8 +91,7 @@ const dql = {
   timings: { compiler: 0, authentication: 0, count: 0, execute: 0, fetch: 0 },
 }
 
-const mountConsole = () => {
-  const store = createStore(rootReducer)
+const mountConsole = (store = createStore(rootReducer)) => {
   const tree = () => (
     <ThemeProvider theme={darkTheme}>
       <TooltipProvider>
@@ -176,5 +177,36 @@ describe("result pane on notebook tabs", () => {
     active.summary = { id: 1, isNotebook: false }
     rerender()
     expect(store.getState().console.activeBottomPanel).toBe("import")
+  })
+
+  it("takes a hidden result out of the layout, so its controls can't take focus", () => {
+    active.summary = { id: 1, isNotebook: false }
+    const { store, rerender } = mountConsole()
+    act(() => {
+      store.dispatch(queryActions.setResult(dql, 1))
+    })
+    const resultTab = () => screen.getByTestId("result").parentElement!
+    expect(resultTab()).toHaveStyle({ display: "flex" })
+
+    active.summary = { id: 2, isNotebook: true }
+    rerender()
+    expect(resultTab()).toHaveStyle({ display: "none" })
+
+    active.summary = { id: 1, isNotebook: false }
+    rerender()
+    expect(resultTab()).toHaveStyle({ display: "flex" })
+  })
+
+  it("clears a result panel left by a previous session when it mounts on a notebook", () => {
+    // The session ended on a notebook tab: the result was cleared, but the
+    // stored panel still reads "result". Signing in again remounts the console.
+    const store = createStore(rootReducer)
+    store.dispatch(consoleActions.setActiveBottomPanel("result"))
+    active.summary = { id: 2, isNotebook: true }
+    const { rerender } = mountConsole(store)
+
+    active.summary = { id: 1, isNotebook: false }
+    rerender()
+    expect(store.getState().console.activeBottomPanel).toBe("zeroState")
   })
 })

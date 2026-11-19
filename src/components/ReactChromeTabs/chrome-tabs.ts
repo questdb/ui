@@ -26,7 +26,6 @@ import Draggabilly from "draggabilly"
 import { createLiquidLensMap } from "../LiquidGlass/createLiquidLensMap"
 import { clamp } from "../../utils/clamp"
 import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
-import { claimEscape, isEscape, isEscapeClaimed } from "../../utils/escapeKey"
 
 const TAB_CONTENT_MIN_WIDTH = 150
 const TAB_CONTENT_MAX_WIDTH = 240
@@ -516,8 +515,7 @@ class ChromeTabs {
         tabEl.setAttribute("data-tab-title", input.value)
         this.emit("tabRename", { tabEl, title: input.value })
         this.toggleRenameTab(tabEl)
-      } else if (isEscape(e) && !isEscapeClaimed(e)) {
-        claimEscape(e)
+      } else if (e.key === "Escape") {
         this.toggleRenameTab(tabEl)
       }
     })

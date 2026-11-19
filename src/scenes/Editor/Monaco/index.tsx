@@ -1033,14 +1033,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     cleanupActionsRef.current.push(
       registerLegacyEventBusEvents({
         editor,
-        toggleRunning,
-        getRunning: () => runningValueRef.current,
         onRefresh: (query) => {
           pendingQueryRequestRef.current = query
             ? getQueryRequestFromLastExecutedQuery(query)
             : undefined
           toggleRunning(RunningType.REFRESH)
         },
+        toggleRunning,
+        getRunning: () => runningValueRef.current,
       }),
     )
     cleanupActionsRef.current.push(

@@ -2,8 +2,8 @@
 import "fake-indexeddb/auto"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { db } from "../../store/db"
-import { makeBuffer } from "../../store/buffers"
-import { buildMonitoringDashboard, monitoringFingerprint } from "./dashboard"
+import { bufferStore, makeBuffer } from "../../store/buffers"
+import { buildMonitoringDashboard, monitoringTemplateId } from "./dashboard"
 import { closeUnmodifiedMonitoring } from "./closeDashboard"
 import { saveNotebookColumnLayout } from "../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 
@@ -35,10 +35,10 @@ const setup = async () => {
       label,
       position: 1,
       notebookViewState: view,
+      templateId: monitoringTemplateId("table"),
       monitoring: {
-        target: { instanceKey: "db", kind: "table", name: "trades" },
+        target: { kind: "table", name: "trades" },
         templateVersion: 1,
-        initialFingerprint: monitoringFingerprint(label, view),
       },
     }),
   )
@@ -64,6 +64,10 @@ describe("closing a monitoring dashboard", () => {
     saveNotebookColumnLayout(id, view.cells[1].id, "query", {
       columnOrder: ["Rows", "Table"],
     })
+    // Arranging columns detaches the dashboard from its template.
+    await vi.waitFor(async () =>
+      expect((await db.buffers.get(id))?.templateId).toBeUndefined(),
+    )
     expect(await closeUnmodifiedMonitoring(id, remove)).toBe(false)
     expect(remove).not.toHaveBeenCalled()
   })
@@ -80,15 +84,20 @@ describe("closing a monitoring dashboard", () => {
     live.readView.mockResolvedValue(edited)
     expect(await closeUnmodifiedMonitoring(id, remove)).toBe(false)
     expect(remove).not.toHaveBeenCalled()
-    expect((await db.buffers.get(id))?.notebookViewState?.cells[1].value).toBe(
-      "select 42",
-    )
+    const stored = await db.buffers.get(id)
+    expect(stored?.notebookViewState?.cells[1].value).toBe("select 42")
+    expect(stored?.templateId).toBeUndefined()
   })
 
-  it("preserves a renamed dashboard and one whose live content cannot be read", async () => {
+  it("preserves a renamed dashboard", async () => {
     const { id, remove } = await setup()
-    await db.buffers.update(id, { label: "Keep this investigation" })
+    await bufferStore.update(id, { label: "Keep this investigation" })
     expect(await closeUnmodifiedMonitoring(id, remove)).toBe(false)
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it("preserves a dashboard whose live content cannot be read", async () => {
+    const { id, remove } = await setup()
     live.readView.mockRejectedValue(new Error("unmounting"))
     expect(await closeUnmodifiedMonitoring(id, remove)).toBe(false)
     expect(remove).not.toHaveBeenCalled()

@@ -244,7 +244,7 @@ describe("SQL work → notebook", () => {
   it("converts an editor script into one cell per query without executing it", () => {
     const source = `${SQL}\n${SQL_TWO}`
     const executions = load(source)
-    cy.getByDataHook("new-tab-button").click()
+    cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("notebook-from-editor").click()
     cy.get("[data-notebook-cell]").should("have.length", 2)
     readBuffers().then((buffers) => {

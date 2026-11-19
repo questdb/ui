@@ -443,6 +443,9 @@ export const Tabs = () => {
         buffer.metricsViewState.metrics.length > 0) ||
       buffer.notebookViewState != null
     ) {
+      void trackEvent(ConsoleEvent.TAB_ARCHIVE, {
+        type: bufferTypeOf(buffer),
+      })
       await archiveBuffer(parseInt(id))
     } else {
       await deleteBuffer(parseInt(id))
@@ -626,12 +629,7 @@ export const Tabs = () => {
                     key={buffer.id}
                     title={buffer.label}
                     onClick={async () => {
-                      void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE, {
-                        type: bufferTypeOf(buffer),
-                        ...(buffer.notebookViewState
-                          ? { notebookId: buffer.id }
-                          : {}),
-                      })
+                      void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
                       await updateBuffer(buffer.id as number, {
                         archived: false,
                         archivedAt: undefined,
@@ -786,7 +784,6 @@ export const Tabs = () => {
             >
               New notebook
             </DropdownMenu.Item>
-            <NotebookFromEditorMenu />
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>

@@ -29,14 +29,15 @@ import { RunningType } from "../../../store/Query/types"
 
 export const registerLegacyEventBusEvents = ({
   editor,
+  onRefresh,
   toggleRunning,
   getRunning,
-  onRefresh,
 }: {
   editor: editor.IStandaloneCodeEditor
+  // Re-runs the given query (the result grid's), else the last executed one.
+  onRefresh?: (query?: string) => void
   toggleRunning: (runningType?: RunningType) => void
   getRunning: () => RunningType
-  onRefresh: (query?: string) => void
 }) => {
   eventBus.subscribe<{ query: string }>(
     EventType.MSG_QUERY_FIND_N_EXEC,
@@ -51,7 +52,8 @@ export const registerLegacyEventBusEvents = ({
   )
 
   eventBus.subscribe<{ q: string }>(EventType.MSG_QUERY_EXEC, (payload) => {
-    onRefresh(payload?.q)
+    if (onRefresh) onRefresh(payload?.q)
+    else toggleRunning(RunningType.REFRESH)
   })
 
   eventBus.subscribe(EventType.MSG_EDITOR_FOCUS, () => {

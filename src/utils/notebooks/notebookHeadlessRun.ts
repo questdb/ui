@@ -628,9 +628,9 @@ export const runHeadlessCell = async (
 
     const summary = summarizeCellResults({ ...prep.cell, result: ranResult })
     if (outcome.committed) {
-      const startedByConsole =
-        gate?.kind === "autoRun" && gate.source !== undefined
-      if (!signal?.aborted && !startedByConsole)
+      const startedByUser =
+        gate?.kind === "autoRun" && gate.initiator === "user"
+      if (!signal?.aborted && !startedByUser)
         emitAgentEdit({ bufferId, cellId })
       return outcome.snapshotSaved
         ? summary

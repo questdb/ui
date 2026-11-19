@@ -2,6 +2,7 @@ import React from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 import { useNotebookTransfer } from "./useNotebookTransfer"
+import type { Buffer } from "../store/buffers"
 import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import { authSessionState } from "../modules/OAuth2/authSessionState"
@@ -21,15 +22,31 @@ const mocks = vi.hoisted(() => ({
   setActiveBuffer: vi.fn(),
   getById: vi.fn(),
   error: vi.fn(),
+  info: vi.fn(),
+  editorBusy: false,
 }))
 vi.mock("../providers/EditorProvider", () => ({ useEditor: () => mocks }))
-vi.mock("../components", () => ({ toast: { error: mocks.error } }))
+vi.mock("./useEditorBusy", () => ({
+  useEditorBusy: () => () => mocks.editorBusy,
+}))
+vi.mock("../components", () => ({
+  toast: { error: mocks.error, info: mocks.info },
+}))
 vi.mock("../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
 vi.mock("../scenes/Editor/Notebook/persistCellSnapshot", () => ({
   persistCellSnapshot: vi.fn().mockResolvedValue(true),
 }))
 vi.mock("../store/buffers", () => ({
-  bufferStore: { getById: mocks.getById },
+  bufferStore: {
+    getById: mocks.getById,
+    // The activation landed (see activateBuffer).
+    getActiveId: () =>
+      Promise.resolve({
+        value: (
+          mocks.setActiveBuffer.mock.lastCall as [Buffer] | undefined
+        )?.[0].id,
+      }),
+  },
   MAX_BUFFER_NAME_LENGTH: 100,
 }))
 vi.mock("../utils/notebooks/notebookTransferState", () => ({
@@ -254,6 +271,50 @@ describe("notebook transfer telemetry", () => {
       expect.anything(),
     )
     expect(mocks.error).not.toHaveBeenCalled()
+  })
+
+  it("leaves the notebook in the tab bar when editor work started during the transfer", async () => {
+    const saving = deferred<boolean>()
+    vi.mocked(createTransferCells).mockReturnValue([
+      {
+        id: "c1",
+        position: 0,
+        value: "select 1",
+        result: { results: [], timestamp: 1, activeResultIndex: 0 },
+      },
+    ])
+    vi.mocked(persistCellSnapshot).mockReturnValueOnce(saving.promise)
+    const hook = mount()
+    let transfer!: Promise<void>
+    act(() => {
+      transfer = hook().transfer(request)
+    })
+    // A script or query starts while the results are saved: switching tabs
+    // now would unmount the editor and abort it.
+    mocks.editorBusy = true
+    try {
+      await act(async () => {
+        saving.resolve(true)
+        await transfer
+      })
+      expect(mocks.setActiveBuffer).not.toHaveBeenCalled()
+      expect(mocks.info).toHaveBeenCalledTimes(1)
+      expect(trackEvent).toHaveBeenCalledWith(
+        ConsoleEvent.NOTEBOOK_TRANSFER_FAILED,
+        expect.objectContaining({
+          stage: "activate",
+          reason: "editor_running",
+        }),
+      )
+      expect(trackEvent).not.toHaveBeenCalledWith(
+        ConsoleEvent.NOTEBOOK_TRANSFER,
+        expect.anything(),
+      )
+      expect(mocks.error).not.toHaveBeenCalled()
+      expect(hook().busy).toBe(false)
+    } finally {
+      mocks.editorBusy = false
+    }
   })
 
   it("records disappearance before activation instead of reporting success", async () => {

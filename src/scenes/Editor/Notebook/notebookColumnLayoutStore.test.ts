@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { markMonitoringColumnsCustomized } from "../../../store/monitoringCustomization"
+import { markTemplateColumnsCustomized } from "../../../store/templateColumns"
 import {
   loadNotebookColumnLayout,
   saveNotebookColumnLayout,
@@ -8,8 +8,8 @@ import {
   removeNotebookBufferLayouts,
 } from "./notebookColumnLayoutStore"
 
-vi.mock("../../../store/monitoringCustomization", () => ({
-  markMonitoringColumnsCustomized: vi.fn(() => Promise.resolve()),
+vi.mock("../../../store/templateColumns", () => ({
+  markTemplateColumnsCustomized: vi.fn(() => Promise.resolve()),
 }))
 
 // The store reads/writes this single localStorage entry.
@@ -44,7 +44,7 @@ const OTHER_CELL = "cell-b"
 
 beforeEach(() => {
   installMemoryLocalStorage()
-  vi.mocked(markMonitoringColumnsCustomized).mockClear()
+  vi.mocked(markTemplateColumnsCustomized).mockClear()
 })
 
 describe("notebookColumnLayoutStore", () => {
@@ -226,13 +226,13 @@ describe("notebookColumnLayoutStore", () => {
 describe("monitoring customization from column layouts", () => {
   it("marks the notebook when a layout change holds an arrangement", () => {
     saveNotebookColumnLayout(1, CELL, q(0), { pinnedColumns: ["col_0"] })
-    expect(markMonitoringColumnsCustomized).toHaveBeenCalledWith(1)
+    expect(markTemplateColumnsCustomized).toHaveBeenCalledWith(1)
   })
 
   it("does not mark the notebook for Reset layout on an untouched grid", () => {
     // Reset commits an empty pin list, then removes the entry.
     saveNotebookColumnLayout(1, CELL, q(0), { pinnedColumns: [] })
     removeNotebookColumnLayout(1, CELL, q(0))
-    expect(markMonitoringColumnsCustomized).not.toHaveBeenCalled()
+    expect(markTemplateColumnsCustomized).not.toHaveBeenCalled()
   })
 })

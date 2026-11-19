@@ -12,6 +12,7 @@ import type { MutableRefObject } from "react"
 import { unstable_batchedUpdates } from "react-dom"
 import {
   hasTransferSnapshot,
+  resolveTransferSnapshot,
   takeTransferSnapshot,
 } from "../../../utils/notebooks/notebookTransferState"
 import { useEditor } from "../../../providers/EditorProvider"
@@ -70,6 +71,7 @@ import { signalUserEdit } from "../../../utils/notebooks/notebookAIBridge"
 import {
   notebookRunOutcome,
   trackNotebookExecution,
+  type NotebookExecutionOutcome,
 } from "../../../modules/ConsoleEventTracker/notebookExecutionEvents"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
@@ -88,6 +90,7 @@ import {
   loadSnapshotCellIds,
   pinNotebookSnapshots,
   pruneToRecentNotebooks,
+  type NotebookResultSnapshot,
 } from "../../../store/notebookResults"
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import { persistCellSnapshot } from "./persistCellSnapshot"
@@ -336,40 +339,46 @@ export const NotebookProvider: React.FC<{
   // A refreshing cell never releases: its visible frame is the refresh
   // round's swap target.
   const virtualizationEngineRef = useRef<CellVirtualizationEngine | null>(null)
-  const resultHydration = useMemo(
-    () =>
-      new CellResultHydrationEngine({
-        loadSnapshot: async (cellId) => {
-          const transferred = takeTransferSnapshot(bufferId, cellId)
-          if (transferred) return transferred
-          return loadCellSnapshot(bufferId, cellId)
-        },
-        rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
-        deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
-        getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
-        applyResult: (cellId, result) => {
-          restoredResults.add(result)
-          hydrateCells((prev) =>
-            prev.map((c) =>
-              c.id === cellId && c.result == null ? { ...c, result } : c,
-            ),
-          )
-        },
-        releaseResult: (cellId) => {
-          hydrateCells((prev) =>
-            prev.map((c) =>
-              c.id === cellId ? { ...c, ...releaseCellResultPatch(c) } : c,
-            ),
-          )
-        },
-        canRelease: (cellId) =>
-          (virtualizationEngineRef.current?.canReleaseData(cellId) ?? false) &&
-          !(cellRefreshEngineRef.current?.isRefreshing(cellId) ?? false),
-        seedRefreshState: (cellId, seed) =>
-          cellRefreshEngineRef.current?.seedRefreshState(cellId, seed),
-      }),
-    [],
-  )
+  const resultHydration = useMemo(() => {
+    // Staged transfer frames shown without a matching disk copy.
+    const inMemoryOnly = new WeakSet<NotebookResultSnapshot>()
+    return new CellResultHydrationEngine({
+      loadSnapshot: async (cellId) => {
+        const staged = takeTransferSnapshot(bufferId, cellId)
+        if (!staged) return loadCellSnapshot(bufferId, cellId)
+        const saved = await loadCellSnapshot(bufferId, cellId).catch(
+          () => undefined,
+        )
+        const { snapshot, durable } = resolveTransferSnapshot(staged, saved)
+        if (!durable) inMemoryOnly.add(snapshot)
+        return snapshot
+      },
+      isDurable: (snapshot) => !inMemoryOnly.has(snapshot),
+      rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
+      deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
+      getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
+      applyResult: (cellId, result) => {
+        restoredResults.add(result)
+        hydrateCells((prev) =>
+          prev.map((c) =>
+            c.id === cellId && c.result == null ? { ...c, result } : c,
+          ),
+        )
+      },
+      releaseResult: (cellId) => {
+        hydrateCells((prev) =>
+          prev.map((c) =>
+            c.id === cellId ? { ...c, ...releaseCellResultPatch(c) } : c,
+          ),
+        )
+      },
+      canRelease: (cellId) =>
+        (virtualizationEngineRef.current?.canReleaseData(cellId) ?? false) &&
+        !(cellRefreshEngineRef.current?.isRefreshing(cellId) ?? false),
+      seedRefreshState: (cellId, seed) =>
+        cellRefreshEngineRef.current?.seedRefreshState(cellId, seed),
+    })
+  }, [])
   useEffect(() => () => resultHydration.destroy(), [])
   useEffect(() => {
     resultHydration.sync(store.cells)
@@ -770,21 +779,24 @@ export const NotebookProvider: React.FC<{
 
       const session = authSessionState.capture()
       const startedAt = performance.now()
+      // Explicit agent runs are already reported by the MCP tool event.
+      const track = (outcome: NotebookExecutionOutcome) => {
+        if (gate?.kind === "explicit" || !session.isCurrent()) return
+        trackNotebookExecution({
+          notebookId: bufferId,
+          cellId,
+          mode: "grid",
+          trigger: gate?.kind === "autoRun" ? "auto_run" : "run",
+          ...(gate?.kind === "autoRun" && gate.initiator
+            ? { initiator: gate.initiator }
+            : {}),
+          outcome,
+          durationMs: performance.now() - startedAt,
+        })
+      }
       return new Promise<CellRunOutcome>((resolve, reject) => {
         const finish = (outcome: CellRunOutcome, dismissed = false) => {
-          // Explicit agent runs are already reported by the MCP tool event.
-          if (gate?.kind !== "explicit" && session.isCurrent())
-            trackNotebookExecution({
-              notebookId: bufferId,
-              cellId,
-              mode: "grid",
-              trigger: gate?.kind === "autoRun" ? "auto_run" : "run",
-              ...(gate?.kind === "autoRun" && gate.source
-                ? { source: gate.source }
-                : {}),
-              outcome: dismissed ? "cancelled" : notebookRunOutcome(outcome),
-              durationMs: performance.now() - startedAt,
-            })
+          track(dismissed ? "cancelled" : notebookRunOutcome(outcome))
           resolve(outcome)
         }
         const execute = () => {
@@ -797,18 +809,7 @@ export const NotebookProvider: React.FC<{
             expectFullValue,
             gate,
           ).then(finish, (error: unknown) => {
-            if (gate?.kind !== "explicit" && session.isCurrent())
-              trackNotebookExecution({
-                notebookId: bufferId,
-                cellId,
-                mode: "grid",
-                trigger: gate?.kind === "autoRun" ? "auto_run" : "run",
-                ...(gate?.kind === "autoRun" && gate.source
-                  ? { source: gate.source }
-                  : {}),
-                outcome: "error",
-                durationMs: performance.now() - startedAt,
-              })
+            track("error")
             reject(error)
           })
         }

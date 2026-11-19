@@ -1,4 +1,5 @@
 import { bufferStore } from "../../store/buffers"
+import { isMonitoringDashboard } from "./identity"
 import { authSessionState } from "../../modules/OAuth2/authSessionState"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -19,11 +20,12 @@ export const trackMonitoringChartFailure = async (
   const session = authSessionState.capture()
   try {
     const buffer = await bufferStore.getById(notebookId)
-    if (!session.isCurrent() || !buffer?.monitoring) return
+    if (!session.isCurrent() || !buffer || !isMonitoringDashboard(buffer))
+      return
     await trackEvent(ConsoleEvent.MONITORING_DASHBOARD_FAILED, {
       notebookId,
       cellId,
-      kind: buffer.monitoring.target.kind,
+      kind: buffer.monitoring?.target.kind,
       stage: "initial_query",
       mode: "chart",
       reason,

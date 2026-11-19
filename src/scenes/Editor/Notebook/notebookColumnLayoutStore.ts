@@ -1,6 +1,6 @@
 import type { ColumnLayout } from "../../../components/ResultGrid/types"
 
-import { markMonitoringColumnsCustomized } from "../../../store/monitoringCustomization"
+import { markTemplateColumnsCustomized } from "../../../store/templateColumns"
 
 const STORAGE_KEY = "notebook.grid.layout"
 const LRU_MAX = 20
@@ -66,7 +66,7 @@ export const saveNotebookColumnLayout = (
     isCustomLayout(cell[queryKey]) &&
     JSON.stringify(existing) !== JSON.stringify(cell[queryKey])
   )
-    void markMonitoringColumnsCustomized(bufferId).catch(() => undefined)
+    void markTemplateColumnsCustomized(bufferId).catch(() => undefined)
 }
 
 export const removeNotebookColumnLayout = (
@@ -99,8 +99,3 @@ export const removeNotebookBufferLayouts = (bufferId: number): void => {
   delete store[bufferId]
   writeStore(store)
 }
-
-export const hasNotebookBufferLayouts = (bufferId: number): boolean =>
-  Object.values(readStore()[bufferId] ?? {}).some(
-    (cell) => Object.keys(cell).length > 0,
-  )

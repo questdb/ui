@@ -10,9 +10,11 @@ import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import { bufferStore } from "../store/buffers"
 import { notebookFailureReason } from "../utils/notebooks/notebookFailureReason"
+import { activateBuffer } from "../utils/notebooks/activateBuffer"
 import { NotebookToolError } from "../utils/notebooks/notebookToolError"
 import type { CellRunOutcome } from "../utils/notebooks/runCellsAfterApply"
 import { isFailClosedClassifyDenial } from "../utils/tools/permissions"
+import { useEditorBusy } from "./useEditorBusy"
 
 // Why a first run did not fill its cell, or null when it ran or was only
 // interrupted (the dashboard was opened or closed, or the session ended
@@ -45,11 +47,12 @@ export const useMonitoringDashboard = () => {
   const { addBuffer, setActiveBuffer, tabsDisabled } = useEditor()
   const [busy, setBusy] = useState(false)
   const inFlight = useRef(false)
-  // Read after the first runs, seconds after the click: a script started
-  // meanwhile owns the tabs, and activating the dashboard would unmount its
-  // editor and abort the statement in flight.
+  // A script owns the tabs: no dashboard can be opened during it.
   const tabsDisabledRef = useRef(tabsDisabled)
   tabsDisabledRef.current = tabsDisabled
+  // Read after the first runs, seconds after the click: a script or query
+  // started meanwhile would be aborted by activating the dashboard.
+  const isEditorBusy = useEditorBusy()
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -128,15 +131,15 @@ export const useMonitoringDashboard = () => {
           return
         }
         // The dashboard stays in the tab bar for the user to open once the
-        // script is done.
-        if (tabsDisabledRef.current) {
-          trackFailure("script_running")
+        // editor's script or query is done.
+        if (isEditorBusy()) {
+          trackFailure("editor_running")
           toast.info(
-            `${current.label} is ready. Open its tab once the script finishes.`,
+            `${current.label} is ready. Open its tab once the editor finishes running.`,
           )
           return
         }
-        await setActiveBuffer(current, { throwOnError: true })
+        await activateBuffer(setActiveBuffer, current)
         if (!session.isCurrent()) return
         onOpened()
         void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_OPEN, {

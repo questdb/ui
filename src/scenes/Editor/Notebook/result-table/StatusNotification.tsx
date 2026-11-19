@@ -48,7 +48,8 @@ const liveRegionMessage = (slot: StatementSlotView): string => {
 }
 
 type Props = {
-  cellId: string
+  // Labels this cell's telemetry.
+  cellId?: string
   slot: StatementSlotView
   onCancelQuery?: (statementKey: string) => void
 }

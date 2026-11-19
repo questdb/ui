@@ -33,7 +33,7 @@ vi.mock("../notebooks/runCellsAfterApply", async (importOriginal) => ({
 }))
 
 const request: MonitoringRequest = {
-  target: { instanceKey: "instance-a", kind: "table", name: "trades" },
+  target: { kind: "table", name: "trades" },
   telemetryEnabled: true,
 }
 const add = vi.fn(async (partial?: Partial<Buffer>) => {
@@ -104,7 +104,7 @@ describe("opening a monitoring dashboard", () => {
     const mine = await db.buffers.get(first!.buffer.id!)
     expect(mine?.label).toBe("My investigation")
     expect(mine?.notebookViewState?.cells[1].value).toBe("select 42")
-    expect(mine).not.toHaveProperty("monitoring")
+    expect(mine).not.toHaveProperty("templateId")
   })
 
   it("never restores an archived dashboard, even an unedited one", async () => {
@@ -126,7 +126,7 @@ describe("opening a monitoring dashboard", () => {
     const [bufferId, cells, signal, gate] = runner.run.mock.calls[0]
     expect(bufferId).toBe(created?.buffer.id)
     expect(signal).toBeInstanceOf(AbortSignal)
-    expect(gate).toEqual({ kind: "autoRun", source: "monitoring" })
+    expect(gate).toEqual({ kind: "autoRun", initiator: "user" })
     // Grid SQL cells only: charts draw themselves, markdown is prose.
     const view = created!.buffer.notebookViewState!
     const grids = view.cells.filter(
@@ -171,7 +171,7 @@ describe("opening a monitoring dashboard", () => {
     const [firstCells] = [runner.run.mock.calls[0][1]]
     const [, retriedCells, , gate] = runner.run.mock.calls[1]
     expect(retriedCells).toEqual([firstCells[0]])
-    expect(gate).toEqual({ kind: "autoRun", source: "monitoring" })
+    expect(gate).toEqual({ kind: "autoRun", initiator: "user" })
     expect(created?.runs).toHaveLength(firstCells.length)
     expect(
       created?.runs?.every(
@@ -233,7 +233,7 @@ describe("opening a monitoring dashboard", () => {
     expect(runner.run).toHaveBeenCalledTimes(2)
     const [bufferId, cells, , gate] = runner.run.mock.calls[1]
     expect(bufferId).toBe(id)
-    expect(gate).toEqual({ kind: "autoRun", source: "monitoring" })
+    expect(gate).toEqual({ kind: "autoRun", initiator: "user" })
     expect(cells).toEqual(
       grids.slice(1).map((cell) => ({ cellId: cell.id, sql: cell.value })),
     )
@@ -247,11 +247,10 @@ describe("opening a monitoring dashboard", () => {
     expect(onProgress).toHaveBeenCalledTimes(1)
   })
 
-  it("isolates instances, kinds and names", async () => {
+  it("isolates kinds and names", async () => {
     const first = await openMonitoringDashboard(request, add)
     const ids = [first?.buffer.id]
     for (const target of [
-      { ...request.target, instanceKey: "instance-b" },
       { ...request.target, kind: "matview" as const },
       { ...request.target, name: "trades_renamed" },
     ]) {
@@ -259,7 +258,7 @@ describe("opening a monitoring dashboard", () => {
         (await openMonitoringDashboard({ ...request, target }, add))?.buffer.id,
       )
     }
-    expect(new Set(ids).size).toBe(4)
+    expect(new Set(ids).size).toBe(3)
   })
 
   it("reuses the dashboard for a re-created table with the same name", async () => {
@@ -305,11 +304,22 @@ describe("opening a monitoring dashboard", () => {
       position: 1,
     })
     const copyId = await db.buffers.add(copy)
-    expect(copy.monitoring).toBeUndefined()
+    expect(copy.templateId).toBeUndefined()
     await db.buffers.delete(first!.buffer.id!)
     const next = await openMonitoringDashboard(request, add)
     expect(next?.buffer.id).not.toBe(copyId)
     expect(next?.outcome).toBe("created")
+  })
+
+  it("marks a created dashboard with its template, not its table", async () => {
+    const created = await openMonitoringDashboard(request, add)
+    const stored = await db.buffers.get(created!.buffer.id!)
+    // The template id goes to template telemetry, which carries no names.
+    expect(stored?.templateId).toBe("monitoring:table")
+    expect(stored?.monitoring).toEqual({
+      target: { kind: "table", name: "trades" },
+      templateVersion: 1,
+    })
   })
 
   it("allows a retry after creation fails", async () => {

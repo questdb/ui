@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
     setActiveBuffer: vi.fn(),
     tabsDisabled: false,
   },
+  // A single editor query in flight (redux `running`), not a script.
+  editorQueryRunning: false,
   openDashboard: vi.fn(),
   getById: vi.fn(),
   error: vi.fn(),
@@ -26,11 +28,24 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../providers/EditorProvider", () => ({
   useEditor: () => mocks.editor,
 }))
+vi.mock("./useEditorBusy", () => ({
+  useEditorBusy: () => () =>
+    mocks.editor.tabsDisabled || mocks.editorQueryRunning,
+}))
 vi.mock("../utils/monitoring/openDashboard", () => ({
   openMonitoringDashboard: mocks.openDashboard,
 }))
 vi.mock("../store/buffers", () => ({
-  bufferStore: { getById: mocks.getById },
+  bufferStore: {
+    getById: mocks.getById,
+    // The activation landed (see activateBuffer).
+    getActiveId: () =>
+      Promise.resolve({
+        value: (
+          mocks.editor.setActiveBuffer.mock.lastCall as [Buffer] | undefined
+        )?.[0].id,
+      }),
+  },
 }))
 vi.mock("../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
 vi.mock("../components/Toast", () => ({
@@ -38,7 +53,7 @@ vi.mock("../components/Toast", () => ({
 }))
 
 const request: MonitoringRequest = {
-  target: { instanceKey: "instance", kind: "table", name: "trades" },
+  target: { kind: "table", name: "trades" },
   telemetryEnabled: true,
 }
 const buffer: Buffer = {
@@ -370,44 +385,52 @@ describe("monitoring telemetry", () => {
     expect(mocks.editor.setActiveBuffer).not.toHaveBeenCalled()
   })
 
-  it("leaves the dashboard in the tab bar when a script started during its first runs", async () => {
-    const opening = deferred<MonitoringOpenResult>()
-    mocks.openDashboard.mockReset()
-    mocks.openDashboard.mockReturnValueOnce(opening.promise)
-    let hook!: ReturnType<typeof useMonitoringDashboard>
-    const Harness = () => {
-      hook = useMonitoringDashboard()
-      return null
-    }
-    act(() => {
-      renderer = create(<Harness />)
-    })
-    const onOpened = vi.fn()
-    let pending!: Promise<void>
-    act(() => {
-      pending = hook.open(request, () => true, onOpened)
-    })
-    // The user starts a script while the first runs are in flight.
-    mocks.editor.tabsDisabled = true
-    try {
-      act(() => renderer?.update(<Harness />))
-      await act(async () => {
-        opening.resolve({ buffer, outcome: "created" })
-        await pending
+  it.each([
+    ["a script", () => (mocks.editor.tabsDisabled = true)],
+    ["a single query", () => (mocks.editorQueryRunning = true)],
+  ])(
+    "leaves the dashboard in the tab bar when %s started during its first runs",
+    async (_label, startEditorWork) => {
+      const opening = deferred<MonitoringOpenResult>()
+      mocks.openDashboard.mockReset()
+      mocks.openDashboard.mockReturnValueOnce(opening.promise)
+      let hook!: ReturnType<typeof useMonitoringDashboard>
+      const Harness = () => {
+        hook = useMonitoringDashboard()
+        return null
+      }
+      act(() => {
+        renderer = create(<Harness />)
       })
-      expect(mocks.editor.setActiveBuffer).not.toHaveBeenCalled()
-      expect(onOpened).not.toHaveBeenCalled()
-      expect(mocks.info).toHaveBeenCalledTimes(1)
-      expect(trackEvent).toHaveBeenCalledWith(
-        ConsoleEvent.MONITORING_DASHBOARD_FAILED,
-        expect.objectContaining({
-          stage: "activate",
-          reason: "script_running",
-        }),
-      )
-      expect(hook.busy).toBe(false)
-    } finally {
-      mocks.editor.tabsDisabled = false
-    }
-  })
+      const onOpened = vi.fn()
+      let pending!: Promise<void>
+      act(() => {
+        pending = hook.open(request, () => true, onOpened)
+      })
+      // The user starts editor work while the first runs are in flight:
+      // activating the dashboard would unmount the editor and abort it.
+      startEditorWork()
+      try {
+        act(() => renderer?.update(<Harness />))
+        await act(async () => {
+          opening.resolve({ buffer, outcome: "created" })
+          await pending
+        })
+        expect(mocks.editor.setActiveBuffer).not.toHaveBeenCalled()
+        expect(onOpened).not.toHaveBeenCalled()
+        expect(mocks.info).toHaveBeenCalledTimes(1)
+        expect(trackEvent).toHaveBeenCalledWith(
+          ConsoleEvent.MONITORING_DASHBOARD_FAILED,
+          expect.objectContaining({
+            stage: "activate",
+            reason: "editor_running",
+          }),
+        )
+        expect(hook.busy).toBe(false)
+      } finally {
+        mocks.editor.tabsDisabled = false
+        mocks.editorQueryRunning = false
+      }
+    },
+  )
 })

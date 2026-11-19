@@ -501,14 +501,7 @@ export const TableDetailsDrawer = () => {
     }
     void monitoringDashboard.open(
       {
-        target: {
-          // The console's own URL, not a server-reported id: the identity must
-          // not depend on whether a telemetry read succeeded, or one table could
-          // get two dashboards. Dashboards address the target by name.
-          instanceKey: new URL(".", window.location.href).href,
-          kind,
-          name,
-        },
+        target: { kind, name },
         telemetryEnabled: telemetryEnabled === true,
         telemetryUnknown: telemetryEnabled === undefined,
         refreshSchedule: matViewData ?? undefined,

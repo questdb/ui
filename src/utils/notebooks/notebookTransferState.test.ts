@@ -5,6 +5,7 @@ import {
   consumeTransferMonitor,
   hasTransferSnapshot,
   requestTransferMonitor,
+  resolveTransferSnapshot,
   stageTransferSnapshot,
   subscribeTransferMonitor,
   takeTransferSnapshot,
@@ -82,5 +83,37 @@ describe("notebook transfer handoff", () => {
     stageTransferSnapshot(large("second"))
     expect(takeTransferSnapshot(1, "first")).toBeUndefined()
     expect(takeTransferSnapshot(1, "second")).toBeDefined()
+  })
+})
+
+describe("resolveTransferSnapshot", () => {
+  const at = (savedAt: number): NotebookResultSnapshot => ({
+    ...snapshot(),
+    savedAt,
+  })
+
+  it("prefers a disk snapshot saved after the transfer", () => {
+    // A later run of the cell (e.g. an agent's, while it was off screen)
+    const saved = at(200)
+    expect(resolveTransferSnapshot(at(123), saved)).toEqual({
+      snapshot: saved,
+      durable: true,
+    })
+  })
+
+  it("keeps the staged frame, durable once the transfer's own save landed", () => {
+    const staged = at(123)
+    expect(resolveTransferSnapshot(staged, at(123))).toEqual({
+      snapshot: staged,
+      durable: true,
+    })
+  })
+
+  it("marks a staged frame without a disk copy as memory-only", () => {
+    const staged = at(123)
+    expect(resolveTransferSnapshot(staged, undefined)).toEqual({
+      snapshot: staged,
+      durable: false,
+    })
   })
 })

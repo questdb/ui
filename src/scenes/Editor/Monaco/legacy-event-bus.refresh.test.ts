@@ -15,10 +15,11 @@ describe("legacy editor events", () => {
     const onRefresh = vi.fn()
     cleanup = registerLegacyEventBusEvents({
       editor: {} as editor.IStandaloneCodeEditor,
+      onRefresh,
       toggleRunning: vi.fn(),
       getRunning: () => RunningType.NONE,
-      onRefresh,
-    })
+      // Only the options this event reads.
+    } as unknown as Parameters<typeof registerLegacyEventBusEvents>[0])
     eventBus.publish(EventType.MSG_QUERY_EXEC, { q: "select 2" })
     expect(onRefresh).toHaveBeenCalledWith("select 2")
   })

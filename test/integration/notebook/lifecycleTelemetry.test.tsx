@@ -11,12 +11,12 @@ import {
 } from "../../../src/providers/EditorProvider"
 import { NotebookToolbar } from "../../../src/scenes/Editor/Notebook/NotebookToolbar"
 import { db } from "../../../src/store/db"
-import { bufferStore, makeBuffer, BufferType } from "../../../src/store/buffers"
+import { bufferStore, makeBuffer } from "../../../src/store/buffers"
 import { trackEvent } from "../../../src/modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../src/modules/ConsoleEventTracker/events"
 import {
   buildMonitoringDashboard,
-  monitoringFingerprint,
+  monitoringTemplateId,
 } from "../../../src/utils/monitoring/dashboard"
 
 vi.mock("../../../src/providers/AIConversationProvider", () => ({
@@ -168,115 +168,64 @@ describe("UI notebook lifecycle telemetry", () => {
     expect(await db.buffers.count()).toBe(100)
   })
 
-  it("reports the notebook being archived, even when another notebook is active", async () => {
-    await mount()
-    await act(async () => {
-      await editor.setActiveBuffer((await db.buffers.get(99))!)
-    })
-    await act(async () => {
-      await editor.archiveBuffer(41)
-    })
-    expect((await db.buffers.get(41))?.archived).toBe(true)
-    expect(events(ConsoleEvent.TAB_ARCHIVE)).toEqual([
-      [
-        ConsoleEvent.TAB_ARCHIVE,
-        { type: BufferType.NOTEBOOK, notebookId: 41, outcome: "archived" },
-      ],
-    ])
-  })
-
-  it("records an unmodified monitoring dashboard as discarded_template after deletion", async () => {
-    const view = buildMonitoringDashboard({
-      name: "trades",
-      kind: "table",
-      telemetryEnabled: false,
-    })
-    await db.buffers.update(41, {
-      notebookViewState: view,
+  const seedDashboard = () =>
+    db.buffers.update(41, {
+      notebookViewState: buildMonitoringDashboard({
+        name: "trades",
+        kind: "table",
+        telemetryEnabled: false,
+      }),
+      templateId: monitoringTemplateId("table"),
       monitoring: {
-        target: { instanceKey: "test", kind: "table", name: "trades" },
+        target: { kind: "table", name: "trades" },
         templateVersion: 1,
-        initialFingerprint: monitoringFingerprint("Source", view),
       },
     })
+
+  it("discards an unmodified monitoring dashboard the user closes", async () => {
+    await seedDashboard()
     await mount()
     await act(async () => {
       await editor.archiveBuffer(41)
     })
     expect(await db.buffers.get(41)).toBeUndefined()
-    expect(events(ConsoleEvent.TAB_ARCHIVE)).toEqual([
-      [
-        ConsoleEvent.TAB_ARCHIVE,
-        {
-          type: BufferType.NOTEBOOK,
-          notebookId: 41,
-          outcome: "discarded_template",
-        },
-      ],
-    ])
   })
 
   it("archives an unmodified dashboard an agent closes instead of deleting it", async () => {
-    const view = buildMonitoringDashboard({
-      name: "trades",
-      kind: "table",
-      telemetryEnabled: false,
-    })
-    await db.buffers.update(41, {
-      notebookViewState: view,
-      monitoring: {
-        target: { instanceKey: "test", kind: "table", name: "trades" },
-        templateVersion: 1,
-        initialFingerprint: monitoringFingerprint("Source", view),
-      },
-    })
+    await seedDashboard()
     await mount()
     await act(async () => {
       await editor.archiveBuffer(41, "agent")
     })
     const archived = await db.buffers.get(41)
     expect(archived?.archived).toBe(true)
-    expect(archived).not.toHaveProperty("monitoring")
-    expect(events(ConsoleEvent.TAB_ARCHIVE)).toHaveLength(0)
+    expect(archived).not.toHaveProperty("templateId")
   })
 
-  it.each(["user", "agent"] as const)(
-    "detaches a dashboard the %s archives, keeping it as a personal notebook",
-    async (initiator) => {
-      const view = buildMonitoringDashboard({
-        name: "trades",
-        kind: "table",
-        telemetryEnabled: false,
-      })
-      await db.buffers.update(41, {
-        notebookViewState: view,
-        monitoring: {
-          target: { instanceKey: "test", kind: "table", name: "trades" },
-          templateVersion: 1,
-          // Customized: a user close archives it instead of discarding it.
-          initialFingerprint: "customized",
-        },
-      })
+  it("detaches a dashboard the user archives, keeping it as a personal notebook", async () => {
+    await seedDashboard()
+    // An AI chat about it keeps it: a user close archives it.
+    await db.ai_conversations.put({
+      id: "chat",
+      conversationName: "About trades",
+      createdAt: 1,
+      updatedAt: 1,
+      notebookBufferId: 41,
+    } as never)
+    try {
       await mount()
       await act(async () => {
-        await editor.archiveBuffer(41, initiator)
+        await editor.archiveBuffer(41)
       })
       const archived = await db.buffers.get(41)
       expect(archived?.archived).toBe(true)
-      expect(archived).not.toHaveProperty("monitoring")
-    },
-  )
-
-  it("does not report an agent archive as a UI gesture", async () => {
-    await mount()
-    await act(async () => {
-      await editor.archiveBuffer(41, "agent")
-    })
-    expect((await db.buffers.get(41))?.archived).toBe(true)
-    expect(events(ConsoleEvent.TAB_ARCHIVE)).toHaveLength(0)
+      expect(archived).not.toHaveProperty("templateId")
+    } finally {
+      await db.ai_conversations.clear()
+    }
   })
 
-  it("does not report archive success when persistence fails", async () => {
+  it("does not archive when persistence fails", async () => {
     await mount()
     const error = new Error("disk unavailable")
     vi.spyOn(bufferStore, "update").mockRejectedValueOnce(error)
@@ -284,6 +233,5 @@ describe("UI notebook lifecycle telemetry", () => {
       await expect(editor.archiveBuffer(41)).rejects.toBe(error)
     })
     expect((await db.buffers.get(41))?.archived).not.toBe(true)
-    expect(events(ConsoleEvent.TAB_ARCHIVE)).toHaveLength(0)
   })
 })

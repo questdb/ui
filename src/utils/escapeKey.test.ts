@@ -132,6 +132,50 @@ describe("ambient Escape layers", () => {
     expect(calls).toEqual(["panel"])
   })
 
+  describe("from a Monaco editor", () => {
+    // Monaco's input listener prevents the default of every Escape, and its
+    // keybindings also stop propagation when they handle one.
+    const monacoInput = (handles = false) => {
+      const editor = element()
+      editor.className = "monaco-editor"
+      const textarea = element("textarea", editor) as HTMLTextAreaElement
+      textarea.value = "select 1"
+      textarea.addEventListener("keydown", (event) => {
+        event.preventDefault()
+        if (handles) event.stopPropagation()
+      })
+      return textarea
+    }
+
+    it("reaches the layers when no editor binding handled it", () => {
+      const calls: string[] = []
+      layer("panel", calls)
+      press(monacoInput())
+      expect(calls).toEqual(["panel"])
+    })
+
+    it("stays with the editor when a binding handled it", () => {
+      const calls: string[] = []
+      layer("panel", calls)
+      press(monacoInput(true))
+      expect(calls).toEqual([])
+    })
+
+    it("respects a claim made before the editor saw it", () => {
+      const calls: string[] = []
+      layer("panel", calls)
+      // An overlay, e.g. a Radix layer, claims it in the capture phase.
+      const overlay = (event: KeyboardEvent) => event.preventDefault()
+      document.addEventListener("keydown", overlay, true)
+      try {
+        press(monacoInput())
+      } finally {
+        document.removeEventListener("keydown", overlay, true)
+      }
+      expect(calls).toEqual([])
+    })
+  })
+
   it("ignores other keys and stops listening once every layer is gone", () => {
     const onEscape = vi.fn(() => true)
     const unregister = registerEscapeLayer({ priority: 1, onEscape })

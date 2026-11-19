@@ -12,19 +12,17 @@ export type MonitoringKind = "table" | "matview"
 // a renamed table gets a new dashboard, one re-created under the same name
 // reuses its dashboard.
 export type MonitoringTarget = {
-  instanceKey: string
   kind: MonitoringKind
   name: string
 }
 
-// Present only while the notebook is an unedited dashboard, like an example
-// dashboard's `templateId`. The first authored edit, a rename or an archive
-// removes it for good: the notebook is then the user's own, and opening the
-// dashboard again creates a fresh one.
+// The table a dashboard monitors. The notebook is an unedited dashboard only
+// while it also has the dashboard's `templateId` (identity.ts), as an example
+// dashboard is: the first authored edit, a rename or an archive removes that
+// for good, and opening the dashboard again creates a fresh one.
 export type MonitoringSource = {
   target: MonitoringTarget
   templateVersion: number
-  initialFingerprint: string
 }
 
 // Values a template inserts once, as plain interpolation: nothing rescans the

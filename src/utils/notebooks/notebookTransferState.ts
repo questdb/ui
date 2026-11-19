@@ -59,6 +59,23 @@ export const takeTransferSnapshot = (
     : undefined
 }
 
+// Chooses between a cell's staged transfer frame and its IndexedDB snapshot.
+// A later disk save (the cell ran again after the transfer, e.g. by an agent
+// while it was off screen) wins: the staged frame is older. Otherwise the
+// staged frame is shown, and it is durable only if the transfer's own save of
+// it landed; a frame that exists only in memory must never be released.
+export const resolveTransferSnapshot = (
+  staged: NotebookResultSnapshot,
+  saved: NotebookResultSnapshot | undefined,
+): { snapshot: NotebookResultSnapshot; durable: boolean } => {
+  if (saved && saved.savedAt > staged.savedAt)
+    return { snapshot: saved, durable: true }
+  return {
+    snapshot: staged,
+    durable: saved !== undefined && saved.savedAt === staged.savedAt,
+  }
+}
+
 export const hasTransferSnapshot = (
   bufferId: number,
   cellId: string,
