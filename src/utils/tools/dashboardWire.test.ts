@@ -25,6 +25,31 @@ describe("dashboard wire", () => {
     expect(visual).toEqual({ type: "orderBook", columns: { price: "px" } })
   })
 
+  it("parses uptime buckets and state severities", () => {
+    // Given / When
+    const visual = parseVisual(
+      {
+        type: "uptime",
+        buckets: 30,
+        severity: [{ state: "charging", level: "warning" }],
+      },
+      "visual",
+    )
+
+    // Then
+    expect(visual).toEqual({
+      type: "uptime",
+      buckets: 30,
+      severity: { charging: "warning" },
+    })
+    expect(() =>
+      parseVisual(
+        { type: "uptime", severity: [{ state: "x", level: "fine" }] },
+        "visual",
+      ),
+    ).toThrow(WireError)
+  })
+
   it("rejects an unknown visual type", () => {
     // Given / When / Then
     expect(() => parseVisual({ type: "pie3d" }, "visual")).toThrow(WireError)

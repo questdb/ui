@@ -1,0 +1,190 @@
+import type { VisualConfig } from "../CellChart/chartTypes"
+import {
+  columnIndex,
+  firstColumnOf,
+  toLabel,
+  toTime,
+  type StatementRows,
+} from "./statementRows"
+
+// States over time, per lane, as the state timeline and the uptime bars read
+// them: rows of (time, lane, state[, end]). Without an end column a state
+// lasts until the lane's next row.
+
+export type Severity = "good" | "neutral" | "warning" | "bad"
+
+export type Segment = {
+  lane: string
+  state: string
+  start: number
+  end: number
+}
+
+export type StateSegments = {
+  lanes: string[]
+  states: string[]
+  segments: Segment[]
+  from: number
+  to: number
+}
+
+const GOOD_STATE =
+  /^(ok|up|active|running|healthy|on|true|online|moving|operational)$/
+const WARN_STATE =
+  /^(warn|warning|degraded|paused|lagging|pending|charging|maintenance|partial)$/
+const BAD_STATE =
+  /^(error|down|failed|fault|suspended|critical|false|offline|outage)$/
+
+export const SEVERITY_RANK: Record<Severity, number> = {
+  good: 0,
+  neutral: 1,
+  warning: 2,
+  bad: 3,
+}
+
+export const severityOf = (
+  state: string,
+  overrides?: Record<string, Severity>,
+): Severity => {
+  const set = overrides?.[state]
+  if (set) return set
+  const lower = state.toLowerCase()
+  if (GOOD_STATE.test(lower)) return "good"
+  if (WARN_STATE.test(lower)) return "warning"
+  if (BAD_STATE.test(lower)) return "bad"
+  return "neutral"
+}
+
+export const naturalOrder = (a: string, b: string) =>
+  a.localeCompare(b, undefined, { numeric: true })
+
+export const readStateSegments = (
+  visual: VisualConfig,
+  rows: StatementRows | null,
+): StateSegments | string => {
+  if (!rows || rows.rows.length === 0) return "The query returned no rows."
+  const c = visual.columns ?? {}
+  const names = () => rows.columns.map((x) => x.name).join(", ")
+  const timeIdx =
+    c.time !== undefined
+      ? columnIndex(rows, c.time)
+      : firstColumnOf(rows, "temporal")
+  const endIdx = c.end !== undefined ? columnIndex(rows, c.end) : -1
+  const laneIdx =
+    c.lane !== undefined
+      ? columnIndex(rows, c.lane)
+      : firstColumnOf(rows, "categorical")
+  const stateIdx =
+    c.state !== undefined
+      ? columnIndex(rows, c.state)
+      : rows.columns.findIndex(
+          (_, i) => i !== timeIdx && i !== laneIdx && i !== endIdx,
+        )
+  for (const [idx, role, set] of [
+    [timeIdx, "time", c.time],
+    [laneIdx, "lane", c.lane],
+    [stateIdx, "state", c.state],
+  ] as const) {
+    if (idx < 0)
+      return `${role}: column ${JSON.stringify(set ?? `(default ${role})`)} not found. Columns: ${names()}.`
+  }
+
+  const open: (Omit<Segment, "end"> & { end: number | null })[] = []
+  for (const row of rows.rows) {
+    const start = toTime(row[timeIdx])
+    if (start === null) continue
+    open.push({
+      lane: toLabel(row[laneIdx]),
+      state: toLabel(row[stateIdx]),
+      start,
+      end: endIdx >= 0 ? toTime(row[endIdx]) : null,
+    })
+  }
+  if (open.length === 0) return "No row has a valid time."
+  const to = Math.max(...open.map((s) => s.end ?? s.start))
+  const from = Math.min(...open.map((s) => s.start))
+  const byLane = new Map<string, typeof open>()
+  for (const s of open) byLane.set(s.lane, [...(byLane.get(s.lane) ?? []), s])
+  const segments: Segment[] = []
+  for (const list of byLane.values()) {
+    list.sort((a, b) => a.start - b.start)
+    list.forEach((s, i) =>
+      segments.push({ ...s, end: s.end ?? list[i + 1]?.start ?? to }),
+    )
+  }
+  return {
+    lanes: [...byLane.keys()].sort(naturalOrder),
+    states: [...new Set(segments.map((s) => s.state))],
+    segments,
+    from,
+    to,
+  }
+}
+
+export type Bucket = {
+  from: number
+  to: number
+  /** Milliseconds spent in each state inside the bucket. */
+  time: Map<string, number>
+}
+
+/** Splits [from, to) into equal buckets and adds up each lane's state time. */
+export const bucketLanes = (
+  read: StateSegments,
+  count: number,
+): Map<string, Bucket[]> => {
+  const n = Math.max(1, Math.floor(count))
+  const width = Math.max(read.to - read.from, 1) / n
+  const out = new Map<string, Bucket[]>()
+  for (const lane of read.lanes) {
+    out.set(
+      lane,
+      Array.from({ length: n }, (_, i) => ({
+        from: read.from + i * width,
+        to: read.from + (i + 1) * width,
+        time: new Map(),
+      })),
+    )
+  }
+  for (const s of read.segments) {
+    const buckets = out.get(s.lane)
+    if (!buckets || s.end <= s.start) continue
+    const first = Math.max(0, Math.floor((s.start - read.from) / width))
+    const last = Math.min(n - 1, Math.floor((s.end - read.from) / width))
+    for (let i = first; i <= last; i++) {
+      const b = buckets[i]
+      const overlap = Math.min(s.end, b.to) - Math.max(s.start, b.from)
+      if (overlap > 0) b.time.set(s.state, (b.time.get(s.state) ?? 0) + overlap)
+    }
+  }
+  return out
+}
+
+/** The worst severity with any time in the bucket, or null for no data. */
+export const bucketSeverity = (
+  bucket: Bucket,
+  overrides?: Record<string, Severity>,
+): Severity | null => {
+  let worst: Severity | null = null
+  for (const [state, ms] of bucket.time) {
+    if (ms <= 0) continue
+    const s = severityOf(state, overrides)
+    if (worst === null || SEVERITY_RANK[s] > SEVERITY_RANK[worst]) worst = s
+  }
+  return worst
+}
+
+/** Share of covered time not spent in a bad state. */
+export const uptimeOf = (
+  buckets: Bucket[],
+  overrides?: Record<string, Severity>,
+): number | null => {
+  let covered = 0
+  let down = 0
+  for (const b of buckets)
+    for (const [state, ms] of b.time) {
+      covered += ms
+      if (severityOf(state, overrides) === "bad") down += ms
+    }
+  return covered > 0 ? (covered - down) / covered : null
+}

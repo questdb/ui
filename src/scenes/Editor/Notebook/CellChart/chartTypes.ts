@@ -63,6 +63,7 @@ export const VISUAL_TYPES = [
   "bullet",
   "orderBook",
   "stateTimeline",
+  "uptime",
   "treemap",
   "sunburst",
   "graph",
@@ -109,7 +110,14 @@ export type VisualConfig = {
   max?: number
   // stat: the statement whose rows draw the sparkline (time, value).
   sparklineQuery?: number
+  // uptime: how many bars the time range splits into (fewer when narrow).
+  buckets?: number
+  // stateTimeline / uptime: what a state means, when its name does not say.
+  severity?: Record<string, StateSeverity>
 }
+
+export const STATE_SEVERITIES = ["good", "neutral", "warning", "bad"] as const
+export type StateSeverity = (typeof STATE_SEVERITIES)[number]
 
 export type CustomChartConfig = {
   option: Record<string, unknown>

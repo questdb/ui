@@ -7,8 +7,10 @@ import {
   type ColumnFormats,
 } from "../formats/columnFormat"
 import {
+  STATE_SEVERITIES,
   VISUAL_TYPES,
   type EventColumns,
+  type StateSeverity,
   type VisualColumns,
   type VisualConfig,
 } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
@@ -47,6 +49,8 @@ export type VisualWire = {
   min?: number | null
   max?: number | null
   sparkline_query?: number | null
+  buckets?: number | null
+  severity?: { state: string; level: string }[] | null
 }
 
 export const parseVisual = (wire: VisualWire, at: string): VisualConfig => {
@@ -80,6 +84,29 @@ export const parseVisual = (wire: VisualWire, at: string): VisualConfig => {
       fail(`${at}.sparkline_query must be a statement index (0-based).`)
     visual.sparklineQuery = wire.sparkline_query
   }
+  if (typeof wire.buckets === "number") {
+    if (
+      !Number.isInteger(wire.buckets) ||
+      wire.buckets < 1 ||
+      wire.buckets > 365
+    )
+      fail(`${at}.buckets must be a whole number from 1 to 365.`)
+    visual.buckets = wire.buckets
+  }
+  if (Array.isArray(wire.severity) && wire.severity.length > 0) {
+    const severity: Record<string, StateSeverity> = {}
+    wire.severity.forEach((item, i) => {
+      if (
+        typeof item?.state !== "string" ||
+        !(STATE_SEVERITIES as readonly string[]).includes(item.level)
+      )
+        fail(
+          `${at}.severity[${i}] needs a state and a level (${STATE_SEVERITIES.join(", ")}).`,
+        )
+      severity[item.state] = item.level as StateSeverity
+    })
+    visual.severity = severity
+  }
   return visual
 }
 
@@ -89,6 +116,13 @@ export const visualToWire = (visual: VisualConfig) => ({
   min: visual.min ?? null,
   max: visual.max ?? null,
   sparkline_query: visual.sparklineQuery ?? null,
+  buckets: visual.buckets ?? null,
+  severity: visual.severity
+    ? Object.entries(visual.severity).map(([state, level]) => ({
+        state,
+        level,
+      }))
+    : null,
 })
 
 // ── Custom ECharts options ────────────────────────────────────────────────

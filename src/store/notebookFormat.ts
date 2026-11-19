@@ -6,8 +6,10 @@ import type {
   NotebookViewState,
 } from "./notebook"
 import {
+  STATE_SEVERITIES,
   VISUAL_TYPES,
   type CustomChartConfig,
+  type StateSeverity,
   type EventColumns,
   type VisualColumns,
   type VisualConfig,
@@ -119,6 +121,22 @@ export const sanitizeVisualConfig = (
     value.sparklineQuery >= 0
   )
     visual.sparklineQuery = value.sparklineQuery
+  if (
+    typeof value.buckets === "number" &&
+    Number.isInteger(value.buckets) &&
+    value.buckets >= 1
+  )
+    visual.buckets = Math.min(value.buckets, 365)
+  if (isRecord(value.severity)) {
+    const severity: Record<string, StateSeverity> = {}
+    for (const [state, level] of Object.entries(value.severity).slice(0, 50))
+      if (
+        state.length <= 200 &&
+        (STATE_SEVERITIES as readonly unknown[]).includes(level)
+      )
+        severity[state] = level as StateSeverity
+    if (Object.keys(severity).length > 0) visual.severity = severity
+  }
   return visual
 }
 

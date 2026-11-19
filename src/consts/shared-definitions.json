@@ -957,7 +957,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Draw a draw-mode cell as a COMPONENT instead of a chart: stat tiles, gauge, bullet, order book, state timeline, treemap, sunburst, graph, Sankey, chord, map, liquidity heatmap, volume profile or query plan tree. The console styles it; the QUERY does the shaping (aggregation, bucketing, sorting) and the component maps as little as possible. Roles map columns by name; every role has a default, so a query that returns the documented column order needs no mapping. The cell must be in draw mode (set_cell_mode 'draw'). Column formats (set_cell_formats) set number formats and colour thresholds; set_cell_interactions makes clicks set a variable. visual:null removes the visual (back to the preset chart). After it draws, get_cell returns render_report with what was drawn and any missing columns.\n\nTYPES (statements are the cell's ;-separated SELECTs, first = statement 0):\n- stat: one tile per row of statement 0. value (default: first numeric), label (default: first text column), caption (optional text under the value, e.g. '254 use WAL'), change (a FRACTION, e.g. 0.012 = +1.2%; default: a column named change). Sparkline: statement `sparkline_query` (default statement 1) with rows (time, value[, label]); rows whose label matches the tile's draw its line. Tip: SELECT symbol, last(price) price, last(price)/first(price)-1 change FROM t WHERE ts > dateadd('d',-1,now()); SELECT ts, symbol, last(price) price FROM t SAMPLE BY 5m.\n- gauge: first row of statement 0. value, label; min/max (default 0..100, or 0..1 when the value's format is percent); colour bands from the value column's format thresholds.\n- bullet: one bar per row: label, value, target (default: a column named target, limit, budget or max); min/max; bands from thresholds. For limit usage, VaR vs limit.\n- orderBook: statement 0 = ASKS, best (lowest price) first; statement 1 = BIDS, best (highest price) first. price and size = first two columns (or columns.price/size); a third column shows as is (cumulative size, order count). Spread and mid are shown; size changes flash. Use formats for price decimals (kind price) and size (compact).\n- stateTimeline: coloured state bands per lane. time (default: first timestamp), lane (default: first text), state; end optional (default: the lane's next row). States named ok/up/active colour positive, down/error/failed negative, warning/degraded warning.\n- treemap / sunburst: path = text columns from outer to inner level (default: all text columns in order), value (default: first numeric) sizes the leaf; change (optional, a number) colours leaves on a red-to-green diverging scale (market movers).\n- graph / sankey / chord: from, to, value (default: columns 1, 2, 3). graph = force layout sized by flow; sankey = flows left to right; chord = flows around a circle.\n- map: world map. Either region (country name as in Natural Earth, e.g. 'Germany', 'United States of America') + value, coloured on a scale; or lat + lon (+ value, label) as sized points.\n- liquidityHeatmap: time x price cells coloured by value (time, price, value; default first timestamp, first and second numerics). Bucket in SQL (SAMPLE BY, round(price, n)). Optional statement 1 (time, price) draws a price line on top.\n- volumeProfile: horizontal volume per price level: price, buy, sell (default columns 1-3) or value; marks the point of control.\n- planTree: statement 0 is EXPLAIN <query>; draws the plan as an operator tree with attributes.",
+    "description": "Draw a draw-mode cell as a COMPONENT instead of a chart: stat tiles, gauge, bullet, order book, state timeline, treemap, sunburst, graph, Sankey, chord, map, liquidity heatmap, volume profile or query plan tree. The console styles it; the QUERY does the shaping (aggregation, bucketing, sorting) and the component maps as little as possible. Roles map columns by name; every role has a default, so a query that returns the documented column order needs no mapping. The cell must be in draw mode (set_cell_mode 'draw'). Column formats (set_cell_formats) set number formats and colour thresholds; set_cell_interactions makes clicks set a variable. visual:null removes the visual (back to the preset chart). After it draws, get_cell returns render_report with what was drawn and any missing columns.\n\nTYPES (statements are the cell's ;-separated SELECTs, first = statement 0):\n- stat: one tile per row of statement 0. value (default: first numeric), label (default: first text column), caption (optional text under the value, e.g. '254 use WAL'), change (a FRACTION, e.g. 0.012 = +1.2%; default: a column named change). Sparkline: statement `sparkline_query` (default statement 1) with rows (time, value[, label]); rows whose label matches the tile's draw its line. Tip: SELECT symbol, last(price) price, last(price)/first(price)-1 change FROM t WHERE ts > dateadd('d',-1,now()); SELECT ts, symbol, last(price) price FROM t SAMPLE BY 5m.\n- gauge: first row of statement 0. value, label; min/max (default 0..100, or 0..1 when the value's format is percent); colour bands from the value column's format thresholds.\n- bullet: one bar per row: label, value, target (default: a column named target, limit, budget or max); min/max; bands from thresholds. For limit usage, VaR vs limit.\n- orderBook: statement 0 = ASKS, best (lowest price) first; statement 1 = BIDS, best (highest price) first. price and size = first two columns (or columns.price/size); a third column shows as is (cumulative size, order count). Spread and mid are shown; size changes flash. Use formats for price decimals (kind price) and size (compact).\n- stateTimeline: coloured state bands per lane. time (default: first timestamp), lane (default: first text), state; end optional (default: the lane's next row). States named ok/up/active colour positive, down/error/failed negative, warning/degraded warning; `severity` overrides.\n- uptime: a status page. Same rows as stateTimeline (time, lane, state[, end]); per lane the current state, `buckets` bars over the time range each coloured by the worst state inside it (hover lists the time per state), and the uptime %. For service, replication or device health.\n- treemap / sunburst: path = text columns from outer to inner level (default: all text columns in order), value (default: first numeric) sizes the leaf; change (optional, a number) colours leaves on a red-to-green diverging scale (market movers).\n- graph / sankey / chord: from, to, value (default: columns 1, 2, 3). graph = force layout sized by flow; sankey = flows left to right; chord = flows around a circle.\n- map: world map. Either region (country name as in Natural Earth, e.g. 'Germany', 'United States of America') + value, coloured on a scale; or lat + lon (+ value, label) as sized points.\n- liquidityHeatmap: time x price cells coloured by value (time, price, value; default first timestamp, first and second numerics). Bucket in SQL (SAMPLE BY, round(price, n)). Optional statement 1 (time, price) draws a price line on top.\n- volumeProfile: horizontal volume per price level: price, buy, sell (default columns 1-3) or value; marks the point of control.\n- planTree: statement 0 is EXPLAIN <query>; draws the plan as an operator tree with attributes.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -980,6 +980,7 @@
                 "bullet",
                 "orderBook",
                 "stateTimeline",
+                "uptime",
                 "treemap",
                 "sunburst",
                 "graph",
@@ -1094,9 +1095,41 @@
             "sparkline_query": {
               "type": ["integer", "null"],
               "description": "stat: 0-based index of the statement whose rows (time, value[, label]) draw each tile's sparkline. Null = the second statement when there is one."
+            },
+            "buckets": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "maximum": 365,
+              "description": "uptime: bars the time range splits into (e.g. 90 for 90 days of daily rows). Fewer are drawn when the panel is narrow. Null = 90."
+            },
+            "severity": {
+              "type": ["array", "null"],
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "state": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": ["good", "neutral", "warning", "bad"]
+                  }
+                },
+                "required": ["state", "level"]
+              },
+              "description": "stateTimeline / uptime: what a state means when its name does not say (e.g. {state:'charging', level:'warning'}). Uptime = time not in a bad state. Null = by name."
             }
           },
-          "required": ["type", "columns", "min", "max", "sparkline_query"],
+          "required": [
+            "type",
+            "columns",
+            "min",
+            "max",
+            "sparkline_query",
+            "buckets",
+            "severity"
+          ],
           "description": "The component to draw."
         }
       },
@@ -1786,6 +1819,7 @@
                           "bullet",
                           "orderBook",
                           "stateTimeline",
+                          "uptime",
                           "treemap",
                           "sunburst",
                           "graph",
@@ -1900,6 +1934,30 @@
                       "sparkline_query": {
                         "type": ["integer", "null"],
                         "description": "stat: 0-based index of the statement whose rows (time, value[, label]) draw each tile's sparkline. Null = the second statement when there is one."
+                      },
+                      "buckets": {
+                        "type": ["integer", "null"],
+                        "minimum": 1,
+                        "maximum": 365,
+                        "description": "uptime: bars the time range splits into (e.g. 90 for 90 days of daily rows). Fewer are drawn when the panel is narrow. Null = 90."
+                      },
+                      "severity": {
+                        "type": ["array", "null"],
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "state": {
+                              "type": "string"
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": ["good", "neutral", "warning", "bad"]
+                            }
+                          },
+                          "required": ["state", "level"]
+                        },
+                        "description": "stateTimeline / uptime: what a state means when its name does not say (e.g. {state:'charging', level:'warning'}). Uptime = time not in a bad state. Null = by name."
                       }
                     },
                     "required": [
@@ -1907,7 +1965,9 @@
                       "columns",
                       "min",
                       "max",
-                      "sparkline_query"
+                      "sparkline_query",
+                      "buckets",
+                      "severity"
                     ],
                     "description": "The component to draw."
                   },

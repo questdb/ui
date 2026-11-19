@@ -11,6 +11,7 @@ import {
   toneOf,
   type ColumnFormats,
 } from "../../../../utils/formats/columnFormat"
+import { SEVERITY_RANK, readStateSegments, severityOf } from "./stateSegments"
 import {
   columnIndex,
   firstColumnOf,
@@ -228,75 +229,19 @@ const stateTimelineRenderItem: CustomSeriesRenderItem = (params, api) => {
 
 echarts.registerCustomSeries(STATE_TIMELINE, stateTimelineRenderItem)
 
-const GOOD_STATE = /^(ok|up|active|running|healthy|on|true|online|moving)$/
-const WARN_STATE = /^(warn|warning|degraded|paused|lagging|pending|charging)$/
-const BAD_STATE = /^(error|down|failed|fault|suspended|critical|false|offline)$/
-
 export const stateTimelineOption = ({
   visual,
   statements,
   colors,
 }: VisualContext): VisualBuild => {
-  const rows = statements[0]
-  if (!rows || rows.rows.length === 0)
-    return missing("The query returned no rows.")
-  const c = visual.columns ?? {}
-  const timeIdx =
-    c.time !== undefined
-      ? columnIndex(rows, c.time)
-      : firstColumnOf(rows, "temporal")
-  const endIdx = c.end !== undefined ? columnIndex(rows, c.end) : -1
-  const laneIdx =
-    c.lane !== undefined
-      ? columnIndex(rows, c.lane)
-      : firstColumnOf(rows, "categorical")
-  const stateIdx =
-    c.state !== undefined
-      ? columnIndex(rows, c.state)
-      : rows.columns.findIndex(
-          (_, i) => i !== timeIdx && i !== laneIdx && i !== endIdx,
-        )
-  const err =
-    need(rows, timeIdx, "time", c.time) ??
-    need(rows, laneIdx, "lane", c.lane) ??
-    need(rows, stateIdx, "state", c.state)
-  if (err) return missing(err)
-
-  type Seg = { lane: string; state: string; start: number; end: number | null }
-  const segs: Seg[] = []
-  for (const row of rows.rows) {
-    const start = toTime(row[timeIdx])
-    if (start === null) continue
-    segs.push({
-      lane: toLabel(row[laneIdx]),
-      state: toLabel(row[stateIdx]),
-      start,
-      end: endIdx >= 0 ? toTime(row[endIdx]) : null,
-    })
-  }
-  // Without an end column a state lasts until the lane's next row.
-  const maxTime = Math.max(...segs.map((s) => s.end ?? s.start))
-  const byLane = new Map<string, Seg[]>()
-  for (const s of segs) byLane.set(s.lane, [...(byLane.get(s.lane) ?? []), s])
-  for (const list of byLane.values()) {
-    list.sort((a, b) => a.start - b.start)
-    list.forEach((s, i) => {
-      s.end ??= list[i + 1]?.start ?? maxTime
-    })
-  }
-  const lanes = [...byLane.keys()].sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true }),
-  )
-  // Good states first, then warnings, then failures, then the rest, so the
+  const read = readStateSegments(visual, statements[0])
+  if (typeof read === "string") return missing(read)
+  const { lanes, segments: segs } = read
+  const severity = (state: string) =>
+    SEVERITY_RANK[severityOf(state, visual.severity)]
+  // Good states first, then the rest, then warnings, then failures, so the
   // legend reads in order of severity.
-  const severity = (state: string) => {
-    const lower = state.toLowerCase()
-    if (GOOD_STATE.test(lower)) return 0
-    if (WARN_STATE.test(lower)) return 2
-    if (BAD_STATE.test(lower)) return 3
-    return 1
-  }
-  const states = [...new Set(segs.map((s) => s.state))].sort(
+  const states = [...read.states].sort(
     (a, b) => severity(a) - severity(b) || a.localeCompare(b),
   )
   const neutral = [

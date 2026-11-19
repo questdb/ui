@@ -59,6 +59,17 @@ describe("sanitizers", () => {
       min: 0,
     })
     expect(sanitizeVisualConfig({ type: "iframe" })).toBeUndefined()
+    expect(
+      sanitizeVisualConfig({
+        type: "uptime",
+        buckets: 9000,
+        severity: { charging: "warning", idle: "purple" },
+      }),
+    ).toEqual({
+      type: "uptime",
+      buckets: 365,
+      severity: { charging: "warning" },
+    })
   })
 
   it("copies plain options and refuses functions and prototype keys", () => {

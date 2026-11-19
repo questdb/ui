@@ -32,6 +32,8 @@ import { OrderBook, orderBookDrawn } from "./OrderBook"
 import { StatTiles, statTiles } from "./StatTiles"
 import { Bullets, bulletRows } from "./Bullets"
 import { PlanTree, parsePlan, planLines } from "./PlanTree"
+import { UptimeBars } from "./UptimeBars"
+import { readStateSegments } from "./stateSegments"
 import { MAP_NAMES, ensureMaps, isMapLoaded } from "../customChart/maps"
 
 const ECHARTS_VISUALS: Partial<
@@ -142,6 +144,17 @@ export const VisualCanvas = ({
       if ("error" in read)
         problems = [{ message: read.error ?? "", severity: "error" }]
       else drawn = { bars: read.rows.rows.length, targets: read.targetIdx >= 0 }
+    } else if (visual.type === "uptime") {
+      const read = readStateSegments(visual, statements[0])
+      if (typeof read === "string")
+        problems = [{ message: read, severity: "error" }]
+      else
+        drawn = {
+          lanes: read.lanes.length,
+          states: read.states.length,
+          segments: read.segments.length,
+          buckets: visual.buckets ?? 90,
+        }
     } else if (visual.type === "planTree") {
       const nodes = parsePlan(planLines(visual, statements[0]))
       drawn = { operators: nodes.length }
@@ -185,6 +198,10 @@ export const VisualCanvas = ({
       )
     case "planTree":
       return <PlanTree visual={visual} statements={statements} />
+    case "uptime":
+      return (
+        <UptimeBars visual={visual} statements={statements} onSelect={select} />
+      )
     default:
       break
   }
