@@ -6,6 +6,7 @@ import { normalizeQueryText } from "../../Monaco/utils"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
   ChartGlobals,
+  ResolvedEvents,
   ResolvedQuery,
 } from "../CellChart/buildEchartsOption"
 import {
@@ -246,7 +247,17 @@ export const resolveDraw = (
     }
   })
 
-  const anchor = items[0]
+  // Event statements mark the time axis; they never anchor or add series.
+  const eventItems = items.filter((it) => it.qc.type === "events")
+  const seriesItems = items.filter((it) => it.qc.type !== "events")
+  const events: ResolvedEvents[] = eventItems.map((it) => ({
+    index: it.idx,
+    columns: it.r.columns,
+    dataset: it.r.dataset,
+    columnsRole: it.qc.events ?? {},
+  }))
+
+  const anchor = seriesItems[0]
   // Drop a stale x-axis (a removed column) by falling back to inference.
   const savedX = config?.xColumn
   const anchorX: string | null =
@@ -258,7 +269,7 @@ export const resolveDraw = (
   const anchorRole = anchor ? xRoleOf(anchor.r.columns, anchorX) : "other"
   const canCombine = anchorRole === "temporal" || anchorRole === "categorical"
 
-  const placedItems = items.map((it, i) => {
+  const placedItems = seriesItems.map((it, i) => {
     const ownX = i === 0 ? anchorX : it.inferred.xColumn
     return { ...it, ownX, qc: dropPartitionOnX(it.qc, ownX) }
   })
@@ -297,9 +308,25 @@ export const resolveDraw = (
     })
   })
 
+  for (const it of eventItems) {
+    if (it.idx < 0) continue
+    tabs.push({
+      index: it.idx,
+      label: `Q${it.idx + 1}`,
+      query: it.r.query,
+      columns: it.r.columns,
+      xColumn: it.inferred.xColumn,
+      compatible: true,
+      inferredChart: it.inferred.chart,
+    })
+  }
+  tabs.sort((a, b) => a.index - b.index)
+
   // Dense, statement-aligned config for the drawer: a concrete QueryChart per
   // statement that ran, else the saved override, else `null` for unresolved statements.
   const denseQueries: (QueryChart | null)[] = statements.map((_stmt, i) => {
+    const eventItem = eventItems.find((x) => x.idx === i)
+    if (eventItem) return { ...eventItem.qc }
     const it = placedItems.find((x) => x.idx === i)
     if (it) {
       const qc: QueryChart = { ...it.qc }
@@ -314,6 +341,7 @@ export const resolveDraw = (
     chart: {
       xColumn: anchorX,
       rightAxis: config?.rightAxis,
+      ...(events.length > 0 ? { events } : {}),
     },
     renderQueries,
     effectiveConfig: {

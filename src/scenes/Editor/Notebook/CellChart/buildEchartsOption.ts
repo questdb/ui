@@ -1,8 +1,21 @@
 import type { EChartsOption } from "echarts"
 import type { ChartZoomDensity } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import type { ChartConfig, ChartType, SeriesAxis } from "./chartTypes"
+import type {
+  ChartConfig,
+  ChartType,
+  EventColumns,
+  SeriesAxis,
+} from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
+import type { ColorShape } from "../../../../types/styled"
+import {
+  formatValue,
+  isTone,
+  toneColor,
+  type ColumnFormat,
+  type ColumnFormats,
+} from "../../../../utils/formats/columnFormat"
 
 type Dataset = (boolean | string | number | null)[][]
 
@@ -19,12 +32,30 @@ export type ResolvedQuery = {
   name?: string
 }
 
+export type ResolvedEvents = {
+  index: number
+  columns: ColumnDefinition[]
+  dataset: Dataset
+  columnsRole: EventColumns
+}
+
 export type ChartGlobals = {
   xColumn: string | null
   rightAxis?: ChartConfig["rightAxis"]
+  events?: ResolvedEvents[]
+}
+
+// Theme colours and column formats; without them the chart draws with the
+// theme defaults and unformatted values.
+export type ChartContext = {
+  colors?: ColorShape
+  formats?: ColumnFormats
 }
 
 type Series = Record<string, unknown>
+
+// The y column a series draws, for its format; removed before drawing.
+const Y_COLUMN = "__yColumn"
 
 type XMode = "time" | "value" | "category"
 
@@ -183,6 +214,7 @@ const buildCartesianSeries = (
                 : rows.map((row) => toNumberOrNull(row[yIdx]))
         out.push({
           name: q.yColumns.length > 1 ? `${partVal} · ${yName}` : partVal,
+          [Y_COLUMN]: yName,
           type: seriesType,
           yAxisIndex,
           data,
@@ -211,6 +243,7 @@ const buildCartesianSeries = (
             : q.dataset.map((row) => toNumberOrNull(row[yIdx]))
     out.push({
       name,
+      [Y_COLUMN]: name,
       type: seriesType,
       yAxisIndex,
       data,
@@ -358,9 +391,84 @@ const buildScatterChartOption = (
   }
 }
 
+const eventsSeries = (
+  events: ResolvedEvents[],
+  context: ChartContext,
+): Series | null => {
+  const lines: Record<string, unknown>[] = []
+  const areas: Record<string, unknown>[][] = []
+  const colorOf = (tone: unknown): string | undefined =>
+    context.colors && isTone(tone) ? toneColor(tone, context.colors) : undefined
+  for (const ev of events) {
+    const idx = buildColumnIndexMap(ev.columns)
+    const at = (name: string | undefined, fallback: number) =>
+      name !== undefined
+        ? idx.get(name)
+        : fallback < ev.columns.length
+          ? fallback
+          : undefined
+    const timeIdx = at(ev.columnsRole.time, 0)
+    if (timeIdx === undefined) continue
+    const labelIdx = at(ev.columnsRole.label, 1)
+    const endIdx =
+      ev.columnsRole.end !== undefined ? idx.get(ev.columnsRole.end) : undefined
+    const toneIdx =
+      ev.columnsRole.tone !== undefined
+        ? idx.get(ev.columnsRole.tone)
+        : undefined
+    for (const row of ev.dataset) {
+      const label = labelIdx !== undefined ? toCategoryLabel(row[labelIdx]) : ""
+      const color =
+        (toneIdx !== undefined ? colorOf(row[toneIdx]) : undefined) ??
+        context.colors?.contentAccent
+      if (endIdx !== undefined && row[endIdx] !== null) {
+        areas.push([
+          {
+            xAxis: row[timeIdx],
+            name: label,
+            itemStyle: { color, opacity: 0.12 },
+            label: { color, fontSize: 11 },
+          },
+          { xAxis: row[endIdx] },
+        ])
+      } else {
+        lines.push({
+          xAxis: row[timeIdx],
+          name: label,
+          lineStyle: { color, type: "dashed", width: 1 },
+          label: { formatter: label, color, fontSize: 11 },
+        })
+      }
+    }
+  }
+  if (lines.length === 0 && areas.length === 0) return null
+  return {
+    name: "Events",
+    type: "line",
+    data: [],
+    silent: false,
+    markLine: {
+      symbol: "none",
+      animation: false,
+      label: { position: "end", fontSize: 11 },
+      emphasis: { label: { show: true } },
+      data: lines,
+    },
+    markArea: { silent: false, data: areas, animation: false },
+  }
+}
+
+const valueFormatterFor =
+  (format: ColumnFormat) =>
+  (value: unknown): string =>
+    Array.isArray(value)
+      ? value.map((v) => formatValue(v, format)).join(" ")
+      : formatValue(value, format)
+
 export const buildEchartsOption = (
   chart: ChartGlobals,
   queries: ResolvedQuery[],
+  context: ChartContext = {},
 ): EChartsOption => {
   const chartText = { fontSize: CHART_FONT_SIZE }
   const axisLabel = { fontSize: CHART_FONT_SIZE, hideOverlap: true }
@@ -538,15 +646,69 @@ export const buildEchartsOption = (
     ...(hasCandle ? { axisPointer: { type: "cross" } } : {}),
   }
 
+  const formats = context.formats ?? {}
+  // Series named after a column take that column's format in the tooltip;
+  // an axis whose series all share one format labels with it.
+  const formatOf = (name: unknown): ColumnFormat | undefined =>
+    typeof name === "string" ? formats[name] : undefined
+  const axisFormats: (ColumnFormat | undefined)[][] = [[], []]
+  for (const q of queries) {
+    const target = axisFormats[q.axis === "right" ? 1 : 0]
+    for (const y of q.yColumns) target.push(formatOf(y))
+  }
+  for (const s of series) {
+    const format = formatOf(s[Y_COLUMN])
+    delete s[Y_COLUMN]
+    if (format) s.tooltip = { valueFormatter: valueFormatterFor(format) }
+  }
+  const sharedFormat = (list: (ColumnFormat | undefined)[]) =>
+    list.length > 0 && list.every((f) => f !== undefined && f === list[0])
+      ? list[0]
+      : undefined
+  const withAxisFormat = (
+    axis: Record<string, unknown>,
+    list: (ColumnFormat | undefined)[],
+  ) => {
+    const format = sharedFormat(list)
+    return format
+      ? {
+          ...axis,
+          axisLabel: {
+            ...(axis.axisLabel as object),
+            formatter: (v: number) =>
+              formatValue(v, { ...format, prefix: "", suffix: "" }),
+          },
+        }
+      : axis
+  }
+  const formattedYAxis = Array.isArray(yAxis)
+    ? yAxis.map((a, i) =>
+        withAxisFormat(a as Record<string, unknown>, axisFormats[i] ?? []),
+      )
+    : withAxisFormat(yAxis as Record<string, unknown>, axisFormats[0])
+
+  const markers =
+    xMode === "time" && chart.events?.length
+      ? eventsSeries(chart.events, context)
+      : null
+  if (markers) series.push(markers)
+  // The events series only carries markers: keep it out of the legend.
+  const legend = markers
+    ? {
+        ...baseLegend,
+        data: series.filter((s) => s !== markers).map((s) => s.name as string),
+      }
+    : baseLegend
+
   return {
     // The server sends UTC and every result grid prints it verbatim, so the
     // axis and tooltip must not re-render those instants in the browser's zone.
     useUTC: true,
     tooltip,
-    legend: baseLegend,
+    legend,
     grid,
     xAxis,
-    yAxis,
+    yAxis: formattedYAxis as EChartsOption["yAxis"],
     series: series as EChartsOption["series"],
   }
 }
