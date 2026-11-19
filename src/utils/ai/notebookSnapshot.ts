@@ -37,11 +37,17 @@ type ChartQueryWire = {
   axis?: "left" | "right"
   enabled?: boolean
   name?: string
+  events?: { time?: string; end?: string; label?: string; tone?: string }
 }
 import {
   toHighlightConfigWire,
   type HighlightConfigWire,
 } from "../tools/highlightConfigWire"
+import { cellDashboardWire, visualToWire } from "../tools/dashboardWire"
+import {
+  getRenderReport,
+  renderReportWire,
+} from "../../scenes/Editor/Notebook/renderReports"
 
 export type { HighlightConfigWire }
 
@@ -49,6 +55,9 @@ export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
   right_axis?: { name?: string; min?: number; max?: number }
+  visual?: ReturnType<typeof visualToWire>
+  // The custom ECharts option, as the JSON text set_cell_custom_chart takes.
+  custom_option_json?: string
 }
 
 // Structural data only — previews ≤ 120 chars, error summaries ≤ 200 chars.
@@ -91,6 +100,10 @@ export type NotebookContextSnapshot =
       auto_refresh_default?: AutoRefresh
       maximized_cell_id: string | null
       variables?: Array<{ name: string; value: string }>
+      // Chart types the notebook defines (names and descriptions; read the
+      // source with get_chart_type).
+      chart_types?: Array<{ name: string; description?: string }>
+      chart_sync?: { crosshair: "off" | "line" | "tooltip"; zoom: boolean }
       cells: NotebookContextCell[]
     }
   | {
@@ -135,9 +148,14 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.axis ? { axis: q.axis } : {}),
           ...(q.enabled === false ? { enabled: false } : {}),
           ...(q.name != null ? { name: q.name } : {}),
+          ...(q.events ? { events: q.events } : {}),
         },
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
+  ...(cfg.visual ? { visual: visualToWire(cfg.visual) } : {}),
+  ...(cfg.custom
+    ? { custom_option_json: JSON.stringify(cfg.custom.option) }
+    : {}),
 })
 
 const highlightConfigWire = (
@@ -217,6 +235,7 @@ const buildCell = (
   }
   const highlightConfig = highlightConfigWire(cell)
   if (highlightConfig) out.highlight_config = highlightConfig
+  Object.assign(out, cellDashboardWire(cell))
   if (layoutMode === "grid") {
     const g = gridByCellId.get(cell.id)
     if (g) {
@@ -283,6 +302,13 @@ export const buildSnapshot = async (
   if (variables.length > 0) {
     out.variables = variables
   }
+  if (settings.chartTypes && settings.chartTypes.length > 0) {
+    out.chart_types = settings.chartTypes.map((t) => ({
+      name: t.name,
+      ...(t.description ? { description: t.description } : {}),
+    }))
+  }
+  if (settings.chartSync) out.chart_sync = settings.chartSync
   return out
 }
 
@@ -492,6 +518,11 @@ export type NotebookCellDetails = {
   result_height: number | "auto" | null
   view: AgentCellView | null
   chart_config?: ChartConfigWire
+  // What the cell's chart last drew and what went wrong (mounted notebooks).
+  render_report?: ReturnType<typeof renderReportWire>
+  formats?: unknown
+  interactions?: unknown
+  grid_mode?: string
   highlight_config?: HighlightConfigWire
   last_run_status?: RunStatus
   last_run_error?: string
@@ -571,6 +602,9 @@ export const serializeCell = (
     out.chart_config = toChartConfigWire(cell.chartConfig)
   const highlightConfig = highlightConfigWire(cell)
   if (highlightConfig) out.highlight_config = highlightConfig
+  Object.assign(out, cellDashboardWire(cell))
+  const report = getRenderReport(bufferId, cell.id)
+  if (report) out.render_report = renderReportWire(report)
   return out
 }
 

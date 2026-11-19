@@ -1,4 +1,11 @@
 import { NOTEBOOK_FORMAT_VERSION } from "../../../store/notebookFormat"
+import type { ColumnFormats } from "../../../utils/formats/columnFormat"
+import type {
+  CellInteractions,
+  ChartSync,
+  GridMode,
+  NotebookChartType,
+} from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
@@ -720,6 +727,9 @@ type ApplyCellRequest = {
   view?: AgentCellView | null
   chartConfig?: ChartConfig | null
   highlightConfig?: HighlightConfig | null
+  formats?: ColumnFormats | null
+  interactions?: CellInteractions | null
+  gridMode?: GridMode | null
   grid?: { x: number; y: number; w: number } | null
 }
 
@@ -728,6 +738,8 @@ type ApplyRequest = {
   autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
+  chartTypes?: NotebookChartType[] | null
+  chartSync?: ChartSync | null
   cells: ApplyCellRequest[]
 }
 
@@ -830,6 +842,7 @@ const normalizeQueryChart = (q: QueryChart): QueryChart => {
   if (q.axis) next.axis = q.axis
   if (q.enabled === false) next.enabled = false
   if (q.name) next.name = q.name
+  if (q.events) next.events = q.events
   return next
 }
 
@@ -842,6 +855,8 @@ const normalizeChartConfig = (
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
+  if (cfg.visual) next.visual = cfg.visual
+  if (cfg.custom) next.custom = cfg.custom
   return next
 }
 
@@ -980,7 +995,14 @@ export const buildAppliedCells = (
         "cells",
       )
     }
-    if (req.chartConfig && req.chartConfig.queries.length === 0) {
+    const drawsOwnChart = Boolean(
+      req.chartConfig?.visual || req.chartConfig?.custom,
+    )
+    if (
+      req.chartConfig &&
+      req.chartConfig.queries.length === 0 &&
+      !drawsOwnChart
+    ) {
       throw new ApplyNotebookStateError(
         `Cell at index ${index} has a chart_config with no queries. Provide one entry per ;-split query (apply replaces the chart wholesale).`,
         "cells",
@@ -1111,6 +1133,13 @@ export const buildAppliedCells = (
       else delete next.chartConfig
       if (highlightConfig !== undefined) next.highlightConfig = highlightConfig
       else delete next.highlightConfig
+      // PUT like highlightConfig: omitted clears.
+      if (req.formats) next.formats = req.formats
+      else delete next.formats
+      if (req.interactions) next.interactions = req.interactions
+      else delete next.interactions
+      if (req.gridMode) next.gridMode = req.gridMode
+      else delete next.gridMode
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
       if (req.view === "editor" && cellHasRunOutcome(existing)) {
@@ -1154,6 +1183,9 @@ export const buildAppliedCells = (
     if (resolvedMode === "draw") created.mode = "draw"
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (highlightConfig !== undefined) created.highlightConfig = highlightConfig
+    if (req.formats) created.formats = req.formats
+    if (req.interactions) created.interactions = req.interactions
+    if (req.gridMode) created.gridMode = req.gridMode
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
     // Draw cells are double-view from creation (chart visible immediately),
     // so seed bottomHeight with the chart default. Run cells stay single-
@@ -1280,6 +1312,12 @@ export const buildAppliedNotebookState = (
   }
   if (request.variables !== undefined) {
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }
+  }
+  if (request.chartTypes !== undefined && request.chartTypes !== null) {
+    nextSettings = { ...nextSettings, chartTypes: request.chartTypes }
+  }
+  if (request.chartSync !== undefined && request.chartSync !== null) {
+    nextSettings = { ...nextSettings, chartSync: request.chartSync }
   }
 
   let nextMaximizedCellId = current.maximizedCellId

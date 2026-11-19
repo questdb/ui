@@ -4,6 +4,8 @@ import type {
   QueryChart,
 } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 
+import { parseEvents, type EventsWire } from "./dashboardWire"
+
 // Snake-case shapes the agent tools speak, and their mapping to the internal
 // camelCase ChartConfig. Shared by set_cell_chart_config and apply_notebook_state.
 export type ToolQueryChart = {
@@ -14,6 +16,7 @@ export type ToolQueryChart = {
   axis?: "left" | "right" | null
   enabled?: boolean | null
   name?: string | null
+  events?: EventsWire | null
 }
 
 export type ToolRightAxis = {
@@ -29,6 +32,7 @@ export const mapQueryChart = (q: ToolQueryChart): QueryChart => {
   if (q.axis) out.axis = q.axis
   if (q.enabled === false) out.enabled = false
   if (q.name) out.name = q.name
+  if (q.events) out.events = parseEvents(q.events)
   return out
 }
 

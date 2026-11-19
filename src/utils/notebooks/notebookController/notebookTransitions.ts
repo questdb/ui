@@ -5,6 +5,7 @@ import {
   type CellPaneView,
   type CellType,
   type NotebookCell,
+  type NotebookSettings,
 } from "../../../store/notebook"
 import { NotebookToolError } from "../notebookToolError"
 import type { ViewParts } from "../notebookDexieView"
@@ -606,4 +607,54 @@ export const applyNotebookStateTransition = (
       ? { deleteSnapshots: { cellIds: [...invalidatedResultIds] } }
       : {}),
   }
+}
+
+// ── Dashboard fields ───────────────────────────────────────────────────────
+
+/**
+ * Sets or clears dashboard fields of one SQL cell: column formats,
+ * interactions and the grid mode. An `undefined` value clears the field;
+ * fields not in the patch stay as they are.
+ */
+export const setCellDashboardTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  cellId: string,
+  patch: Partial<Pick<NotebookCell, "formats" | "interactions" | "gridMode">>,
+): NotebookTransitionResult => {
+  const cell = requireCellIn(parts.cells, cellId, bufferId)
+  if (cell.type === "markdown") {
+    throw new NotebookToolError(
+      "validation",
+      "Markdown cells have no result to format.",
+    )
+  }
+  const next: NotebookCell = { ...cell }
+  for (const key of Object.keys(patch) as (keyof typeof patch)[]) {
+    const value = patch[key]
+    if (value === undefined) delete next[key]
+    else (next as Record<string, unknown>)[key] = value
+  }
+  return {
+    parts: {
+      ...parts,
+      cells: parts.cells.map((c) => (c.id === cellId ? next : c)),
+    },
+    result: undefined,
+    touchedCellId: cellId,
+  }
+}
+
+/** Replaces notebook settings: chart types or chart sync. */
+export const setNotebookSettingsTransition = (
+  parts: ViewParts,
+  patch: Partial<Pick<NotebookSettings, "chartTypes" | "chartSync">>,
+): NotebookTransitionResult => {
+  const settings: NotebookSettings = { ...parts.settings }
+  for (const key of Object.keys(patch) as (keyof typeof patch)[]) {
+    const value = patch[key]
+    if (value === undefined) delete settings[key]
+    else (settings as Record<string, unknown>)[key] = value
+  }
+  return { parts: { ...parts, settings }, result: undefined }
 }

@@ -1,3 +1,10 @@
+import type { ColumnFormats } from "../../formats/columnFormat"
+import type {
+  CellInteractions,
+  ChartSync,
+  GridMode,
+  NotebookChartType,
+} from "../../../store/notebook"
 import type {
   AgentCellView,
   AutoRefresh,
@@ -164,6 +171,9 @@ export type ApplyNotebookStateCellRequest = {
   view?: AgentCellView | null
   chartConfig?: ChartConfig | null
   highlightConfig?: HighlightConfig | null
+  formats?: ColumnFormats | null
+  interactions?: CellInteractions | null
+  gridMode?: GridMode | null
   grid?: { x: number; y: number; w: number } | null
 }
 
@@ -172,6 +182,9 @@ export type ApplyNotebookStateRequest = {
   autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
+  // Null or omitted keeps the notebook's current value.
+  chartTypes?: NotebookChartType[] | null
+  chartSync?: ChartSync | null
   cells: ApplyNotebookStateCellRequest[]
 }
 

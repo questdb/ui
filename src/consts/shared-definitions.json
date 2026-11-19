@@ -518,24 +518,47 @@
         },
         "editor_height": {
           "anyOf": [
-            { "type": "number", "minimum": 56, "maximum": 2400 },
-            { "type": "string", "enum": ["auto"] },
-            { "type": "null" }
+            {
+              "type": "number",
+              "minimum": 56,
+              "maximum": 2400
+            },
+            {
+              "type": "string",
+              "enum": ["auto"]
+            },
+            {
+              "type": "null"
+            }
           ],
           "description": "Editor pane height in CSS pixels; for markdown, rendered content height. Null preserves, \"auto\" restores content-driven sizing. SQL editors are at least 72px, markdown at least 56px, and every pane at most 2400px. Use 86px for a polished markdown title."
         },
         "result_height": {
           "anyOf": [
-            { "type": "number", "minimum": 100, "maximum": 2400 },
-            { "type": "string", "enum": ["auto"] },
-            { "type": "null" }
+            {
+              "type": "number",
+              "minimum": 100,
+              "maximum": 2400
+            },
+            {
+              "type": "string",
+              "enum": ["auto"]
+            },
+            {
+              "type": "null"
+            }
           ],
           "description": "Result/chart pane height in CSS pixels. Null preserves, \"auto\" restores result-driven sizing. Maximum 2400px."
         },
         "view": {
           "anyOf": [
-            { "type": "string", "enum": ["editor", "result", "editor_result"] },
-            { "type": "null" }
+            {
+              "type": "string",
+              "enum": ["editor", "result", "editor_result"]
+            },
+            {
+              "type": "null"
+            }
           ],
           "description": "The cell's pane view. Null preserves. result and editor_result store the arrangement. editor DISCARDS the cell's result and snapshot, clears its presented mode, and hides the result pane (the toggle-off gesture); on a cell with nothing to show it is a no-op."
         }
@@ -580,7 +603,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query). Type 'events' turns a statement into MARKERS on the time axis (deploys, rollouts, news, incidents): one dashed line per row, or a shaded range when `events.end` is set, labelled from `events.label` and coloured by `events.tone`. Setting `queries` replaces any visual or custom option on the cell (set_cell_visual / set_cell_custom_chart). Column formats (set_cell_formats) format the tooltip and the y-axis.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -613,7 +636,8 @@
                   "stackedBar",
                   "scatter",
                   "pie",
-                  "candlestick"
+                  "candlestick",
+                  "events"
                 ]
               },
               "y_columns": {
@@ -659,6 +683,27 @@
               "name": {
                 "type": ["string", "null"],
                 "description": "Legend label for this query."
+              },
+              "events": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                  "time": {
+                    "type": ["string", "null"]
+                  },
+                  "end": {
+                    "type": ["string", "null"]
+                  },
+                  "label": {
+                    "type": ["string", "null"]
+                  },
+                  "tone": {
+                    "type": ["string", "null"],
+                    "description": "A column holding tone names (positive, warning, negative, info, accent, muted)."
+                  }
+                },
+                "required": ["time", "end", "label", "tone"],
+                "description": "Only for type 'events': the statement's rows become markers on the time axis instead of a series. time = when (default the first column); end = range end (optional: without it each row is a line); label = text (default the second column)."
               }
             },
             "required": [
@@ -668,7 +713,8 @@
               "partition_by_column",
               "axis",
               "enabled",
-              "name"
+              "name",
+              "events"
             ]
           }
         },
@@ -906,6 +952,469 @@
     }
   },
   {
+    "name": "set_cell_visual",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Draw a draw-mode cell as a COMPONENT instead of a chart: stat tiles, gauge, bullet, order book, state timeline, treemap, sunburst, graph, Sankey, chord, map, liquidity heatmap, volume profile or query plan tree. The console styles it; the QUERY does the shaping (aggregation, bucketing, sorting) and the component maps as little as possible. Roles map columns by name; every role has a default, so a query that returns the documented column order needs no mapping. The cell must be in draw mode (set_cell_mode 'draw'). Column formats (set_cell_formats) set number formats and colour thresholds; set_cell_interactions makes clicks set a variable. visual:null removes the visual (back to the preset chart). After it draws, get_cell returns render_report with what was drawn and any missing columns.\n\nTYPES (statements are the cell's ;-separated SELECTs, first = statement 0):\n- stat: one tile per row of statement 0. value (default: first numeric), label (default: first text column), change (a FRACTION, e.g. 0.012 = +1.2%; default: a column named change). Sparkline: statement `sparkline_query` (default statement 1) with rows (time, value[, label]); rows whose label matches the tile's draw its line. Tip: SELECT symbol, last(price) price, last(price)/first(price)-1 change FROM t WHERE ts > dateadd('d',-1,now()); SELECT ts, symbol, last(price) price FROM t SAMPLE BY 5m.\n- gauge: first row of statement 0. value, label; min/max (default 0..100, or 0..1 when the value's format is percent); colour bands from the value column's format thresholds.\n- bullet: one bar per row: label, value, target (default: a column named target, limit, budget or max); min/max; bands from thresholds. For limit usage, VaR vs limit.\n- orderBook: statement 0 = ASKS, best (lowest price) first; statement 1 = BIDS, best (highest price) first. price and size = first two columns (or columns.price/size); a third column shows as is (cumulative size, order count). Spread and mid are shown; size changes flash. Use formats for price decimals (kind price) and size (compact).\n- stateTimeline: coloured state bands per lane. time (default: first timestamp), lane (default: first text), state; end optional (default: the lane's next row). States named ok/up/active colour positive, down/error/failed negative, warning/degraded warning.\n- treemap / sunburst: path = text columns from outer to inner level (default: all text columns in order), value (default: first numeric) sizes the leaf; change (optional, a number) colours leaves on a red-to-green diverging scale (market movers).\n- graph / sankey / chord: from, to, value (default: columns 1, 2, 3). graph = force layout sized by flow; sankey = flows left to right; chord = flows around a circle.\n- map: world map. Either region (country name as in Natural Earth, e.g. 'Germany', 'United States of America') + value, coloured on a scale; or lat + lon (+ value, label) as sized points.\n- liquidityHeatmap: time x price cells coloured by value (time, price, value; default first timestamp, first and second numerics). Bucket in SQL (SAMPLE BY, round(price, n)). Optional statement 1 (time, price) draws a price line on top.\n- volumeProfile: horizontal volume per price level: price, buy, sell (default columns 1-3) or value; marks the point of control.\n- planTree: statement 0 is EXPLAIN <query>; draws the plan as an operator tree with attributes.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "visual": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "stat",
+                "gauge",
+                "bullet",
+                "orderBook",
+                "stateTimeline",
+                "treemap",
+                "sunburst",
+                "graph",
+                "sankey",
+                "chord",
+                "map",
+                "liquidityHeatmap",
+                "volumeProfile",
+                "planTree"
+              ]
+            },
+            "columns": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "properties": {
+                "value": {
+                  "type": ["string", "null"]
+                },
+                "label": {
+                  "type": ["string", "null"]
+                },
+                "change": {
+                  "type": ["string", "null"]
+                },
+                "target": {
+                  "type": ["string", "null"]
+                },
+                "time": {
+                  "type": ["string", "null"]
+                },
+                "end": {
+                  "type": ["string", "null"]
+                },
+                "lane": {
+                  "type": ["string", "null"]
+                },
+                "state": {
+                  "type": ["string", "null"]
+                },
+                "from": {
+                  "type": ["string", "null"]
+                },
+                "to": {
+                  "type": ["string", "null"]
+                },
+                "lat": {
+                  "type": ["string", "null"]
+                },
+                "lon": {
+                  "type": ["string", "null"]
+                },
+                "region": {
+                  "type": ["string", "null"]
+                },
+                "price": {
+                  "type": ["string", "null"]
+                },
+                "size": {
+                  "type": ["string", "null"]
+                },
+                "buy": {
+                  "type": ["string", "null"]
+                },
+                "sell": {
+                  "type": ["string", "null"]
+                },
+                "text": {
+                  "type": ["string", "null"]
+                },
+                "path": {
+                  "type": ["array", "null"],
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "value",
+                "label",
+                "change",
+                "target",
+                "time",
+                "end",
+                "lane",
+                "state",
+                "from",
+                "to",
+                "lat",
+                "lon",
+                "region",
+                "price",
+                "size",
+                "buy",
+                "sell",
+                "text",
+                "path"
+              ],
+              "description": "Column roles, by column name. Null = the default (by position or kind, see the tool description)."
+            },
+            "min": {
+              "type": ["number", "null"],
+              "description": "Scale minimum (gauge, bullet). Null = 0."
+            },
+            "max": {
+              "type": ["number", "null"],
+              "description": "Scale maximum (gauge, bullet). Null = automatic."
+            },
+            "sparkline_query": {
+              "type": ["integer", "null"],
+              "description": "stat: 0-based index of the statement whose rows (time, value[, label]) draw each tile's sparkline. Null = the second statement when there is one."
+            }
+          },
+          "required": ["type", "columns", "min", "max", "sparkline_query"],
+          "description": "The component to draw."
+        }
+      },
+      "required": ["buffer_id", "cell_id", "visual"]
+    }
+  },
+  {
+    "name": "set_cell_custom_chart",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Draw a draw-mode cell from an ECharts option you write as JSON (option_json, a JSON string), for charts no preset or visual covers: radar, polar bars, funnel, boxplot, parallel, themeRiver, calendar heatmap, pictorialBar, matrix, broken axes, custom series, combinations. option_json:null removes it (back to the preset chart). The cell must be in draw mode.\n\nDATA: never put rows in the option. Each statement of the cell is a dataset with id \"q0\", \"q1\", … whose dimensions are the column names; series bind with {\"datasetId\":\"q0\",\"encode\":{\"x\":\"ts\",\"y\":\"price\"}} (timestamps become a time axis). For series that do not read datasets (graph, sankey, chord, tree, treemap, sunburst, gauge, radar, funnel, heatmap tuples, axis category lists), put a placeholder where the data goes: {\"$rows\":{\"query\":0,\"shape\":S,…}} with shape: tuples (columns:[…]) → [[a,b,c],…]; column (column) → [v,…]; value (column) → first row's number; items (name, value or [values]) → [{name,value}]; tree (path:[…], value, color) → nested children; links (source,target,value) → [{source,target,value}]; nodes (source,target) → [{name}]. You may add your own datasets with transforms ({\"fromDatasetId\":\"q0\",\"transform\":{\"type\":\"filter\",…}}) using other ids.\n\nSTYLE: the console theme sets fonts, palette, axes, tooltips and background; fonts and literal colours are REMOVED. Colour with tones: \"$positive\", \"$negative\", \"$warning\", \"$info\", \"$accent\", \"$neutral\", \"$muted\", \"$series1\"…\"$series8\", optionally with opacity \"$positive:0.3\" (anywhere a colour goes, including visualMap inRange.color and gradient colorStops).\n\nNO JAVASCRIPT: functions cannot be expressed. Formatters are string templates ({a} series, {b} name, {c} value, {d} percent, label templates also {@column}); HTML in tooltip templates is shown as text. Title links, tooltip DOM options and the toolbox are removed; images must be data: URIs. custom series name a renderItem: built-in barRange, lineRange, stage, violin, contour, segmentedDoughnut, or a notebook chart type from define_chart_type. Maps: \"world\" (geo or map series; country names as in Natural Earth).\n\nThe response lists problems found now (removed colours, unknown series types); get_cell's render_report adds problems found while drawing (e.g. encode columns missing from a dataset). Example: {\"radar\":{\"indicator\":{\"$rows\":{\"query\":0,\"shape\":\"items\",\"name\":\"metric\",\"value\":\"max\"}}},\"series\":[{\"type\":\"radar\",\"data\":[{\"name\":\"today\",\"value\":{\"$rows\":{\"query\":0,\"shape\":\"column\",\"column\":\"value\"}},\"areaStyle\":{\"color\":\"$series2:0.25\"}}]}]}",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "option_json": {
+          "type": ["string", "null"],
+          "description": "The ECharts option as a JSON string, or null to remove it."
+        }
+      },
+      "required": ["buffer_id", "cell_id", "option_json"]
+    }
+  },
+  {
+    "name": "set_cell_formats",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Set how a cell's columns read, by column name, everywhere the cell shows them: result grid text, colours and in-cell bars/meters/sparklines; preset chart tooltips and y-axis labels; stat tiles, gauges, bullets, the order book and other visuals. Also sets the grid's live mode. formats: a non-null array REPLACES all formats ([] clears them); null keeps them. grid_mode: 'stable' keeps each row in place across refreshes (by the highlight identity columns; for watchlists sorted by a moving value), 'stream' flashes rows that are new since the last refresh (trade tapes, logs; order the query newest first and LIMIT it), 'default' clears; null keeps it.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "formats": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "column": {
+                "type": "string"
+              },
+              "kind": {
+                "type": ["string", "null"],
+                "enum": [
+                  "number",
+                  "percent",
+                  "price",
+                  "bytes",
+                  "duration",
+                  "text",
+                  null
+                ],
+                "description": "number: grouped digits. percent: the value is a FRACTION (0.05 shows 5%). price: fixed decimals. bytes: KB/MB/GB. duration: the value is MILLISECONDS. text: as returned."
+              },
+              "decimals": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "maximum": 12
+              },
+              "compact": {
+                "type": ["boolean", "null"],
+                "description": "1.2K, 3.4M, 5.6B."
+              },
+              "prefix": {
+                "type": ["string", "null"],
+                "description": "E.g. \"$\". Max 16 characters."
+              },
+              "suffix": {
+                "type": ["string", "null"],
+                "description": "A unit, e.g. \" ms\" or \" USD\". Max 16 characters."
+              },
+              "thresholds": {
+                "type": ["array", "null"],
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "positive",
+                        "negative",
+                        "warning",
+                        "info",
+                        "accent",
+                        "neutral",
+                        "muted",
+                        "series1",
+                        "series2",
+                        "series3",
+                        "series4",
+                        "series5",
+                        "series6",
+                        "series7",
+                        "series8"
+                      ]
+                    }
+                  },
+                  "required": ["value", "tone"]
+                },
+                "description": "Ascending: a value at or above `value` takes `tone`. Colours grid text, stat values, gauge and bullet bands."
+              },
+              "base_tone": {
+                "type": ["string", "null"],
+                "enum": [
+                  "positive",
+                  "negative",
+                  "warning",
+                  "info",
+                  "accent",
+                  "neutral",
+                  "muted",
+                  "series1",
+                  "series2",
+                  "series3",
+                  "series4",
+                  "series5",
+                  "series6",
+                  "series7",
+                  "series8",
+                  null
+                ],
+                "description": "Tone below the first threshold."
+              },
+              "sign_tone": {
+                "type": ["boolean", "null"],
+                "description": "Positive values positive (green), negative negative (red)."
+              },
+              "visual": {
+                "type": ["string", "null"],
+                "enum": ["bar", "meter", "sparkline", null],
+                "description": "Result grid only: bar = scaled to the column's range (signed values grow from zero); meter = share of the column total; sparkline = draws an ARRAY value (e.g. array_agg(price))."
+              }
+            },
+            "required": [
+              "column",
+              "kind",
+              "decimals",
+              "compact",
+              "prefix",
+              "suffix",
+              "thresholds",
+              "base_tone",
+              "sign_tone",
+              "visual"
+            ]
+          }
+        },
+        "grid_mode": {
+          "type": ["string", "null"],
+          "enum": ["default", "stable", "stream", null]
+        }
+      },
+      "required": ["buffer_id", "cell_id", "formats", "grid_mode"]
+    }
+  },
+  {
+    "name": "set_cell_interactions",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Make a cell's result drive notebook variables (cross-filtering): click sets a variable from the clicked item, brush sets two variables from a dragged time window. Cells whose SQL uses @variable refresh right away. Full replace: both null removes the interactions. Works on preset charts, visuals, custom charts and run-mode grids (click only). Variables a click creates start empty; declare them with a default in apply_notebook_state `variables` so dependent cells have a value before the first click.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "click": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "variable": {
+              "type": "string",
+              "description": "Variable name, without @."
+            },
+            "column": {
+              "type": ["string", "null"],
+              "description": "Column whose value the click sets. Null = the clicked item's name (category, slice, node, tile label) or, in a grid, the clicked cell."
+            }
+          },
+          "required": ["variable", "column"],
+          "description": "A click on a bar, slice, point, node, tile, order book level or grid row sets @variable to the clicked value (as a SQL literal: text quoted, numbers as they are). Cells that use the variable refresh."
+        },
+        "brush": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "from_variable": {
+              "type": "string"
+            },
+            "to_variable": {
+              "type": "string"
+            }
+          },
+          "required": ["from_variable", "to_variable"],
+          "description": "Dragging across a time chart (preset or custom, time x-axis) sets the two variables to the window's bounds as quoted ISO timestamps, e.g. '2026-01-01T10:02:00.000Z'. Use them as WHERE ts BETWEEN @from AND @to."
+        }
+      },
+      "required": ["buffer_id", "cell_id", "click", "brush"]
+    }
+  },
+  {
+    "name": "define_chart_type",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Define (or replace) a notebook chart type: an ECharts custom-series renderItem written as JavaScript, usable by name from any custom chart option in this notebook ({\"type\":\"custom\",\"renderItem\":\"<name>\",\"datasetId\":\"q0\",\"encode\":{…}}). Use it for marks no built-in series draws (lanes, ranges, glyphs, annotated boxes). render_item is a function expression `function (params, api) { … }` or a function body using params and api. It is called once per data item and returns a graphic element or null, e.g. {type:'rect', shape:{x,y,width,height}, style:{fill: api.visual('color')}}. Useful api: api.value(dim) (dimension index or column name), api.coord([x, y]) → pixel point, api.size([dx, dy]) → pixel size of a data step, api.visual('color'); params.coordSys has x, y, width, height of the plot; params.itemPayload is the series' itemPayload object. Return group elements ({type:'group', children:[…]}) for several shapes. Colours: take them from api.visual('color') or the series itemStyle (where tones like \"$accent\" work), not literals. Errors thrown while drawing show in get_cell's render_report. EXPERIMENTAL: the function runs in the console page.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string",
+          "description": "Letters, digits, _; starts with a letter; max 64."
+        },
+        "render_item": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["buffer_id", "name", "render_item", "description"]
+    }
+  },
+  {
+    "name": "get_chart_type",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
+    "description": "Read a notebook chart type's renderItem source (names are listed in get_notebook_state chart_types).",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": ["buffer_id", "name"]
+    }
+  },
+  {
+    "name": "delete_chart_type",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Delete a notebook chart type. Custom options that still use it stop drawing those series.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": ["buffer_id", "name"]
+    }
+  },
+  {
+    "name": "set_notebook_chart_sync",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Link the notebook's time charts (a notebook editor setting): crosshair 'line' shows the hovered time on every other time chart, 'tooltip' also opens their tooltips, 'off' none; zoom true zooms every time chart to the same window when one is zoomed.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "crosshair": {
+          "type": "string",
+          "enum": ["off", "line", "tooltip"]
+        },
+        "zoom": {
+          "type": "boolean"
+        }
+      },
+      "required": ["buffer_id", "crosshair", "zoom"]
+    }
+  },
+  {
     "name": "set_cell_autorefresh",
     "category": "free",
     "surfaces": ["ai", "mcp"],
@@ -1003,7 +1512,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use this for bulk edits spanning multiple cells or creating a notebook from scratch. Use update_cell or set_cell_* for small operations. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config only when composing a multi-cell layout from scratch, changing many cells at once, or restructuring an existing notebook. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged). A changed `value` carries results over by content: a statement whose text is unchanged keeps its result, an edited or added one starts empty, and a rewrite that leaves nothing unchanged clears the cell's results — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...): those are NEVER auto-executed (their `runs` entry gets `skipped: true`), so applying state can never trigger a write's side effects. Take consent from the user, then call run_cell explicitly to execute them. Markdown cells (type:\"markdown\") are rendered prose and are likewise never auto-run. Auto-executed read-only cells run their statements in PARALLEL (one failure skips nothing; a statement rejected at validation is skipped with its validation error). Each cell also accepts `auto_refresh` — the same per-cell override set_cell_autorefresh writes. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed. The response also carries `results_cleared`: the ids of cells whose whole result this apply discarded (view:\"editor\", or a changed value that kept no statement unchanged); it is empty when nothing was cleared, and a cell that keeps some statement results is not listed. Always call get_workspace_state first; the state-freshness gate applies.",
+    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use this for bulk edits spanning multiple cells or creating a notebook from scratch. Use update_cell or set_cell_* for small operations. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config only when composing a multi-cell layout from scratch, changing many cells at once, or restructuring an existing notebook. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged). A changed `value` carries results over by content: a statement whose text is unchanged keeps its result, an edited or added one starts empty, and a rewrite that leaves nothing unchanged clears the cell's results — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...): those are NEVER auto-executed (their `runs` entry gets `skipped: true`), so applying state can never trigger a write's side effects. Take consent from the user, then call run_cell explicitly to execute them. Markdown cells (type:\"markdown\") are rendered prose and are likewise never auto-run. Auto-executed read-only cells run their statements in PARALLEL (one failure skips nothing; a statement rejected at validation is skipped with its validation error). Each cell also accepts `auto_refresh` — the same per-cell override set_cell_autorefresh writes. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed. The response also carries `results_cleared`: the ids of cells whose whole result this apply discarded (view:\"editor\", or a changed value that kept no statement unchanged); it is empty when nothing was cleared, and a cell that keeps some statement results is not listed. Always call get_workspace_state first; the state-freshness gate applies. Dashboard fields: chart_config.visual / chart_config.custom_option_json draw a component or a custom ECharts option (a draw cell with one of them may send queries:[]); formats, interactions and grid_mode are per cell (PUT, like highlight_config); chart_types and chart_sync are notebook-wide (null keeps them).",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -1099,17 +1608,35 @@
               },
               "editor_height": {
                 "anyOf": [
-                  { "type": "number", "minimum": 56, "maximum": 2400 },
-                  { "type": "string", "enum": ["auto"] },
-                  { "type": "null" }
+                  {
+                    "type": "number",
+                    "minimum": 56,
+                    "maximum": 2400
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["auto"]
+                  },
+                  {
+                    "type": "null"
+                  }
                 ],
                 "description": "Editor pane height in CSS pixels; for markdown, rendered content height. Null preserves an existing setting (default auto for a new cell); \"auto\" restores content-driven sizing. SQL editors are at least 72px, markdown at least 56px, and every pane at most 2400px. Use 86px for a polished markdown title."
               },
               "result_height": {
                 "anyOf": [
-                  { "type": "number", "minimum": 100, "maximum": 2400 },
-                  { "type": "string", "enum": ["auto"] },
-                  { "type": "null" }
+                  {
+                    "type": "number",
+                    "minimum": 100,
+                    "maximum": 2400
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["auto"]
+                  },
+                  {
+                    "type": "null"
+                  }
                 ],
                 "description": "Result/chart pane height in CSS pixels. Null preserves an existing setting (default auto for a new cell); \"auto\" restores result-driven sizing. Charts require at least 296px; tables 100px; maximum 2400px. Ignored for markdown; keep it null."
               },
@@ -1119,7 +1646,9 @@
                     "type": "string",
                     "enum": ["editor", "result", "editor_result"]
                   },
-                  { "type": "null" }
+                  {
+                    "type": "null"
+                  }
                 ],
                 "description": "The cell's pane view. Null preserves an existing setting. result and editor_result store the arrangement. editor is authoritative: it DISCARDS an existing cell's result and snapshot, clears its presented mode, and hides the result pane (the toggle-off gesture; the cell is then listed in results_cleared). Send mode:null with view:'editor'; an explicit mode 'run' or 'draw' is rejected as contradictory. New draw cells default to result; other new SQL cells default to editor_result but report editor with mode null until a result exists. Ignored for markdown; keep it null."
               },
@@ -1149,7 +1678,8 @@
                             "stackedBar",
                             "scatter",
                             "pie",
-                            "candlestick"
+                            "candlestick",
+                            "events"
                           ]
                         },
                         "y_columns": {
@@ -1189,6 +1719,27 @@
                         },
                         "name": {
                           "type": ["string", "null"]
+                        },
+                        "events": {
+                          "type": ["object", "null"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "time": {
+                              "type": ["string", "null"]
+                            },
+                            "end": {
+                              "type": ["string", "null"]
+                            },
+                            "label": {
+                              "type": ["string", "null"]
+                            },
+                            "tone": {
+                              "type": ["string", "null"],
+                              "description": "A column holding tone names (positive, warning, negative, info, accent, muted)."
+                            }
+                          },
+                          "required": ["time", "end", "label", "tone"],
+                          "description": "Only for type 'events': the statement's rows become markers on the time axis instead of a series. time = when (default the first column); end = range end (optional: without it each row is a line); label = text (default the second column)."
                         }
                       },
                       "required": [
@@ -1198,7 +1749,8 @@
                         "partition_by_column",
                         "axis",
                         "enabled",
-                        "name"
+                        "name",
+                        "events"
                       ]
                     }
                   },
@@ -1217,9 +1769,152 @@
                       }
                     },
                     "required": ["name", "min", "max"]
+                  },
+                  "visual": {
+                    "type": ["object", "null"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "stat",
+                          "gauge",
+                          "bullet",
+                          "orderBook",
+                          "stateTimeline",
+                          "treemap",
+                          "sunburst",
+                          "graph",
+                          "sankey",
+                          "chord",
+                          "map",
+                          "liquidityHeatmap",
+                          "volumeProfile",
+                          "planTree"
+                        ]
+                      },
+                      "columns": {
+                        "type": ["object", "null"],
+                        "additionalProperties": false,
+                        "properties": {
+                          "value": {
+                            "type": ["string", "null"]
+                          },
+                          "label": {
+                            "type": ["string", "null"]
+                          },
+                          "change": {
+                            "type": ["string", "null"]
+                          },
+                          "target": {
+                            "type": ["string", "null"]
+                          },
+                          "time": {
+                            "type": ["string", "null"]
+                          },
+                          "end": {
+                            "type": ["string", "null"]
+                          },
+                          "lane": {
+                            "type": ["string", "null"]
+                          },
+                          "state": {
+                            "type": ["string", "null"]
+                          },
+                          "from": {
+                            "type": ["string", "null"]
+                          },
+                          "to": {
+                            "type": ["string", "null"]
+                          },
+                          "lat": {
+                            "type": ["string", "null"]
+                          },
+                          "lon": {
+                            "type": ["string", "null"]
+                          },
+                          "region": {
+                            "type": ["string", "null"]
+                          },
+                          "price": {
+                            "type": ["string", "null"]
+                          },
+                          "size": {
+                            "type": ["string", "null"]
+                          },
+                          "buy": {
+                            "type": ["string", "null"]
+                          },
+                          "sell": {
+                            "type": ["string", "null"]
+                          },
+                          "text": {
+                            "type": ["string", "null"]
+                          },
+                          "path": {
+                            "type": ["array", "null"],
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "label",
+                          "change",
+                          "target",
+                          "time",
+                          "end",
+                          "lane",
+                          "state",
+                          "from",
+                          "to",
+                          "lat",
+                          "lon",
+                          "region",
+                          "price",
+                          "size",
+                          "buy",
+                          "sell",
+                          "text",
+                          "path"
+                        ],
+                        "description": "Column roles, by column name. Null = the default (by position or kind, see the tool description)."
+                      },
+                      "min": {
+                        "type": ["number", "null"],
+                        "description": "Scale minimum (gauge, bullet). Null = 0."
+                      },
+                      "max": {
+                        "type": ["number", "null"],
+                        "description": "Scale maximum (gauge, bullet). Null = automatic."
+                      },
+                      "sparkline_query": {
+                        "type": ["integer", "null"],
+                        "description": "stat: 0-based index of the statement whose rows (time, value[, label]) draw each tile's sparkline. Null = the second statement when there is one."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "columns",
+                      "min",
+                      "max",
+                      "sparkline_query"
+                    ],
+                    "description": "The component to draw."
+                  },
+                  "custom_option_json": {
+                    "type": ["string", "null"],
+                    "description": "A custom ECharts option as JSON (see set_cell_custom_chart)."
                   }
                 },
-                "required": ["x_column", "queries", "right_axis"]
+                "required": [
+                  "x_column",
+                  "queries",
+                  "right_axis",
+                  "visual",
+                  "custom_option_json"
+                ]
               },
               "highlight_config": {
                 "type": ["object", "null"],
@@ -1431,6 +2126,169 @@
                   }
                 },
                 "required": ["x", "y", "w"]
+              },
+              "formats": {
+                "type": ["array", "null"],
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": ["string", "null"],
+                      "enum": [
+                        "number",
+                        "percent",
+                        "price",
+                        "bytes",
+                        "duration",
+                        "text",
+                        null
+                      ],
+                      "description": "number: grouped digits. percent: the value is a FRACTION (0.05 shows 5%). price: fixed decimals. bytes: KB/MB/GB. duration: the value is MILLISECONDS. text: as returned."
+                    },
+                    "decimals": {
+                      "type": ["integer", "null"],
+                      "minimum": 0,
+                      "maximum": 12
+                    },
+                    "compact": {
+                      "type": ["boolean", "null"],
+                      "description": "1.2K, 3.4M, 5.6B."
+                    },
+                    "prefix": {
+                      "type": ["string", "null"],
+                      "description": "E.g. \"$\". Max 16 characters."
+                    },
+                    "suffix": {
+                      "type": ["string", "null"],
+                      "description": "A unit, e.g. \" ms\" or \" USD\". Max 16 characters."
+                    },
+                    "thresholds": {
+                      "type": ["array", "null"],
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "value": {
+                            "type": "number"
+                          },
+                          "tone": {
+                            "type": "string",
+                            "enum": [
+                              "positive",
+                              "negative",
+                              "warning",
+                              "info",
+                              "accent",
+                              "neutral",
+                              "muted",
+                              "series1",
+                              "series2",
+                              "series3",
+                              "series4",
+                              "series5",
+                              "series6",
+                              "series7",
+                              "series8"
+                            ]
+                          }
+                        },
+                        "required": ["value", "tone"]
+                      },
+                      "description": "Ascending: a value at or above `value` takes `tone`. Colours grid text, stat values, gauge and bullet bands."
+                    },
+                    "base_tone": {
+                      "type": ["string", "null"],
+                      "enum": [
+                        "positive",
+                        "negative",
+                        "warning",
+                        "info",
+                        "accent",
+                        "neutral",
+                        "muted",
+                        "series1",
+                        "series2",
+                        "series3",
+                        "series4",
+                        "series5",
+                        "series6",
+                        "series7",
+                        "series8",
+                        null
+                      ],
+                      "description": "Tone below the first threshold."
+                    },
+                    "sign_tone": {
+                      "type": ["boolean", "null"],
+                      "description": "Positive values positive (green), negative negative (red)."
+                    },
+                    "visual": {
+                      "type": ["string", "null"],
+                      "enum": ["bar", "meter", "sparkline", null],
+                      "description": "Result grid only: bar = scaled to the column's range (signed values grow from zero); meter = share of the column total; sparkline = draws an ARRAY value (e.g. array_agg(price))."
+                    }
+                  },
+                  "required": [
+                    "column",
+                    "kind",
+                    "decimals",
+                    "compact",
+                    "prefix",
+                    "suffix",
+                    "thresholds",
+                    "base_tone",
+                    "sign_tone",
+                    "visual"
+                  ]
+                },
+                "description": "Column formats (see set_cell_formats). PUT: null/omitted clears them."
+              },
+              "interactions": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                  "click": {
+                    "type": ["object", "null"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "variable": {
+                        "type": "string",
+                        "description": "Variable name, without @."
+                      },
+                      "column": {
+                        "type": ["string", "null"],
+                        "description": "Column whose value the click sets. Null = the clicked item's name (category, slice, node, tile label) or, in a grid, the clicked cell."
+                      }
+                    },
+                    "required": ["variable", "column"],
+                    "description": "A click on a bar, slice, point, node, tile, order book level or grid row sets @variable to the clicked value (as a SQL literal: text quoted, numbers as they are). Cells that use the variable refresh."
+                  },
+                  "brush": {
+                    "type": ["object", "null"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "from_variable": {
+                        "type": "string"
+                      },
+                      "to_variable": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["from_variable", "to_variable"],
+                    "description": "Dragging across a time chart (preset or custom, time x-axis) sets the two variables to the window's bounds as quoted ISO timestamps, e.g. '2026-01-01T10:02:00.000Z'. Use them as WHERE ts BETWEEN @from AND @to."
+                  }
+                },
+                "required": ["click", "brush"],
+                "description": "Click and drag interactions (see set_cell_interactions). PUT: null clears them."
+              },
+              "grid_mode": {
+                "type": ["string", "null"],
+                "enum": ["default", "stable", "stream", null],
+                "description": "Grid live mode (see set_cell_formats). PUT: null clears it."
               }
             },
             "required": [
@@ -1446,9 +2304,47 @@
               "view",
               "chart_config",
               "grid",
-              "highlight_config"
+              "highlight_config",
+              "formats",
+              "interactions",
+              "grid_mode"
             ]
           }
+        },
+        "chart_types": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "render_item": {
+                "type": "string"
+              },
+              "description": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["name", "render_item", "description"]
+          },
+          "description": "Notebook chart types (see define_chart_type). Null keeps the current ones; an array replaces them all."
+        },
+        "chart_sync": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "crosshair": {
+              "type": ["string", "null"],
+              "enum": ["off", "line", "tooltip", null]
+            },
+            "zoom": {
+              "type": ["boolean", "null"]
+            }
+          },
+          "required": ["crosshair", "zoom"],
+          "description": "Linked time charts (see set_notebook_chart_sync). Null keeps the current setting."
         }
       },
       "required": [
@@ -1457,7 +2353,9 @@
         "auto_refresh_default",
         "maximized_cell_id",
         "variables",
-        "cells"
+        "cells",
+        "chart_types",
+        "chart_sync"
       ]
     }
   },
