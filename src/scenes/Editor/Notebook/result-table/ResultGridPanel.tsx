@@ -36,6 +36,17 @@ import {
 } from "../../../../components/ResultGrid/highlight"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
+import type { CellInteractions, GridMode } from "../../../../store/notebook"
+import type { ResultGridRow } from "../../../../components/ResultGrid"
+import type { CellHighlight } from "../../../../components/ResultGrid/highlight/types"
+import { sqlLiteral } from "../interactions/chartInteractions"
+import { useLiveRows } from "./liveRows"
+
+const NEW_ROW_HIGHLIGHT: CellHighlight = {
+  color: "dataSeries2",
+  display: "temporary",
+}
 
 type Props = {
   data: DqlQueryResult
@@ -55,6 +66,9 @@ type Props = {
   // Every column any result of the cell has, for the rule pickers.
   cellColumns: ColumnDefinition[]
   refreshIntervalMs: number | undefined
+  formats?: ColumnFormats
+  gridMode?: GridMode
+  interactions?: CellInteractions
 }
 
 const trackHighlightOpen = () =>
@@ -87,7 +101,7 @@ const useInitialGridState = ({
   }, [bufferId, cellId, data.query, statementKey, runToken, viewportStore])
 
 const ResultGridPanelInner: React.FC<Props> = ({
-  data,
+  data: rawData,
   statementKey,
   runToken,
   isFocused,
@@ -100,17 +114,20 @@ const ResultGridPanelInner: React.FC<Props> = ({
   highlightConfig: savedHighlightConfig,
   cellColumns,
   refreshIntervalMs,
+  formats,
+  gridMode,
+  interactions,
 }) => {
   const { queryKey, columnLayout, viewport } = useInitialGridState({
     bufferId,
     cellId,
-    data,
+    data: rawData,
     statementKey,
     runToken,
     viewportStore,
   })
   const { maxColumnWidth } = useLocalStorage()
-  const { setCellHighlightConfig } = useNotebookActions()
+  const { setCellHighlightConfig, setVariableValues } = useNotebookActions()
   const trendStore = useResultTrendStore()
   const highlightDrawer = useSettingsDrawerSession({
     sessions: highlightSettingsSessions,
@@ -127,18 +144,36 @@ const ResultGridPanelInner: React.FC<Props> = ({
     columnLayout?.pinnedColumns?.length ?? 0,
   )
   const gridRef = useRef<ResultGridHandle | null>(null)
+  const highlightConfig = useMemo(
+    () => resolveHighlightConfig(savedHighlightConfig, rawData),
+    [savedHighlightConfig, rawData],
+  )
+  // Live grid modes reorder rows by identity, and mark rows that are new.
+  const {
+    data,
+    isNew,
+    at: liveAt,
+    revision: liveRevision,
+  } = useLiveRows(rawData, highlightConfig.identityColumns, gridMode)
   const dataSource = useMemo(
     () => inMemoryDataSource(data.columns, data.dataset, data.timestamp ?? -1),
     [data.columns, data.dataset, data.timestamp],
   )
+  const onCellActivate = useMemo(() => {
+    const click = interactions?.click
+    if (!click) return undefined
+    return (row: ResultGridRow, column: number) => {
+      const index = click.column
+        ? data.columns.findIndex((c) => c.name === click.column)
+        : column
+      if (index < 0) return
+      setVariableValues({ [click.variable]: sqlLiteral(row[index]) })
+    }
+  }, [interactions, data.columns, setVariableValues])
   const saveViewport = useCallback(
     (nextViewport: ResultGridViewport) =>
       viewportStore.save(statementKey, runToken, nextViewport),
     [viewportStore, statementKey, runToken],
-  )
-  const highlightConfig = useMemo(
-    () => resolveHighlightConfig(savedHighlightConfig, data),
-    [savedHighlightConfig, data],
   )
   // Captured when the cells state changed, before this render.
   const trend = trendStore.get(cellId, statementKey)
@@ -156,7 +191,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   )
   // Pattern rules match nothing until RE2 has loaded, then evaluate again.
   const re2Ready = useRe2Ready(usesPatterns(highlightConfig))
-  const highlights = useMemo(
+  const evaluated = useMemo(
     () =>
       evaluateHighlights({
         columns: data.columns,
@@ -165,6 +200,21 @@ const ResultGridPanelInner: React.FC<Props> = ({
         previous,
       }),
     [data, highlightConfig, previous, re2Ready],
+  )
+  const highlights = useMemo(
+    () =>
+      isNew
+        ? {
+            ...evaluated,
+            lookup: {
+              ...evaluated.lookup,
+              row: (row: number) =>
+                evaluated.lookup.row(row) ??
+                (isNew(row) ? NEW_ROW_HIGHLIGHT : undefined),
+            },
+          }
+        : evaluated,
+    [evaluated, isNew],
   )
 
   const saveHighlight = (next: typeof highlightConfig) => {
@@ -199,10 +249,12 @@ const ResultGridPanelInner: React.FC<Props> = ({
         ref={gridRef}
         dataSource={dataSource}
         maxColumnWidth={maxColumnWidth}
+        columnFormats={formats}
+        onCellActivate={onCellActivate}
         runToken={runToken}
         cellHighlights={highlights.lookup}
-        flashParity={revision % 2 === 0 ? 0 : 1}
-        flashStartedAt={capturedAt}
+        flashParity={(revision + liveRevision) % 2 === 0 ? 0 : 1}
+        flashStartedAt={Math.max(capturedAt, liveAt)}
         flashDurationMs={flashDurationFor(refreshIntervalMs)}
         isFocused={isFocused}
         initialColumnSizing={columnLayout?.columnSizing}

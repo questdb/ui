@@ -161,6 +161,9 @@ export const CellBottomContent: React.FC<Props> = ({
         highlightConfig={cell.highlightConfig}
         cellColumns={cellColumns}
         refreshIntervalMs={refreshIntervalMs}
+        formats={cell.formats}
+        gridMode={cell.gridMode}
+        interactions={cell.interactions}
       />
     ) : (
       <GridShimmer

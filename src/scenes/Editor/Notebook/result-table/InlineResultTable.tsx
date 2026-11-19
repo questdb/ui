@@ -1,3 +1,5 @@
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
+import type { CellInteractions, GridMode } from "../../../../store/notebook"
 import React, { useEffect } from "react"
 import { ResultGridPanel } from "./ResultGridPanel"
 import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
@@ -25,6 +27,9 @@ type Props = {
   highlightConfig: HighlightConfig | undefined
   cellColumns: ColumnDefinition[]
   refreshIntervalMs: number | undefined
+  formats?: ColumnFormats
+  gridMode?: GridMode
+  interactions?: CellInteractions
 }
 
 export const InlineResultTable: React.FC<Props> = ({
@@ -43,6 +48,9 @@ export const InlineResultTable: React.FC<Props> = ({
   highlightConfig,
   cellColumns,
   refreshIntervalMs,
+  formats,
+  gridMode,
+  interactions,
 }) => {
   const activeSlot = slots[activeSlotIndex] ?? slots[0]
   const activeResult = activeSlot?.result
@@ -96,6 +104,9 @@ export const InlineResultTable: React.FC<Props> = ({
           highlightConfig={highlightConfig}
           cellColumns={cellColumns}
           refreshIntervalMs={refreshIntervalMs}
+          formats={formats}
+          gridMode={gridMode}
+          interactions={interactions}
         />
       )}
     </ResultWrapper>
