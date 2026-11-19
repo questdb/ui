@@ -253,7 +253,14 @@ export const sanitizeOption = (
     }
     if (Array.isArray(value)) {
       const colors = value
-        .map((v, i) => walkColor(v, `${path}[${i}]`))
+        .map((v, i) =>
+          // Gauge bands: [[0.6, "$positive"], [1, "$negative"]].
+          Array.isArray(v) && v.length === 2 && typeof v[0] === "number"
+            ? ((c) => (c === undefined ? undefined : [v[0], c]))(
+                walkColor(v[1], `${path}[${i}][1]`),
+              )
+            : walkColor(v, `${path}[${i}]`),
+        )
         .filter((v) => v !== undefined)
       return colors.length > 0 ? colors : undefined
     }

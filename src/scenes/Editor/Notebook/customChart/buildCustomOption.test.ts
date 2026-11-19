@@ -147,4 +147,87 @@ describe("buildCustomOption", () => {
       { name: "Energy", value: 5, children: [{ name: "C", value: 5 }] },
     ])
   })
+
+  it("shapes routes for a lines series", () => {
+    // Given
+    const routes = rows(
+      [
+        ["route", "STRING"],
+        ["lon1", "DOUBLE"],
+        ["lat1", "DOUBLE"],
+        ["lon2", "DOUBLE"],
+        ["lat2", "DOUBLE"],
+        ["flights", "LONG"],
+      ],
+      [["LHR-JFK", -0.45, 51.47, -73.78, 40.64, 42]],
+    )
+
+    // When
+    const { option } = buildCustomOption(
+      {
+        series: [
+          {
+            type: "lines",
+            data: {
+              $rows: {
+                shape: "lines",
+                columns: ["lon1", "lat1", "lon2", "lat2"],
+                name: "route",
+                value: "flights",
+              },
+            },
+          },
+        ],
+      },
+      [routes],
+      false,
+    )
+
+    // Then
+    const series = option.series as { data: unknown[] }[]
+    expect(series[0].data).toEqual([
+      {
+        name: "LHR-JFK",
+        coords: [
+          [-0.45, 51.47],
+          [-73.78, 40.64],
+        ],
+        value: 42,
+      },
+    ])
+  })
+
+  it("turns LONG strings into numbers in tuples", () => {
+    // Given LONG values as the HTTP client returns them
+    const counts = rows(
+      [
+        ["hour", "LONG"],
+        ["day", "SYMBOL"],
+      ],
+      [["7", "Mon"]],
+    )
+
+    // When
+    const { option } = buildCustomOption(
+      { series: [{ type: "heatmap", data: { $rows: { shape: "tuples" } } }] },
+      [counts],
+      false,
+    )
+
+    // Then
+    const series = option.series as { data: unknown[] }[]
+    expect(series[0].data).toEqual([[7, "Mon"]])
+  })
+
+  it("drops float noise from numbers in datasets", () => {
+    // Given a rounded double as QuestDB returns it
+    const latency = rows([["ms", "DOUBLE"]], [[4.1000000000000005]])
+
+    // When
+    const { option } = buildCustomOption({}, [latency], false)
+
+    // Then
+    const [q0] = option.dataset as { source: unknown[][] }[]
+    expect(q0.source).toEqual([[4.1]])
+  })
 })

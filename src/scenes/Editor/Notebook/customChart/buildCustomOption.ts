@@ -27,15 +27,36 @@ const dimensionType = (type: string): "time" | "float" | "ordinal" => {
 
 export const datasetId = (index: number) => `q${index}`
 
+// A number as a chart shows it: LONG values arrive as strings (to keep their
+// precision) and doubles carry float noise (round(x, 1) can return
+// 4.1000000000000005), which templates such as "{@[2]}" would print.
+export const chartNumber = (value: unknown): number | null => {
+  const n = toNumber(value)
+  return n === null ? null : Number(n.toPrecision(15))
+}
+
 const datasetsOf = (statements: (StatementRows | null)[]) =>
-  statements.map((s, i) => ({
-    id: datasetId(i),
-    dimensions: (s?.columns ?? []).map((c) => ({
-      name: c.name,
-      type: dimensionType(c.type),
-    })),
-    source: s?.rows ?? [],
-  }))
+  statements.map((s, i) => {
+    const columns = s?.columns ?? []
+    const numeric = columns.flatMap((c, k) =>
+      classifyColumn(c) === "numeric" ? [k] : [],
+    )
+    return {
+      id: datasetId(i),
+      dimensions: columns.map((c) => ({
+        name: c.name,
+        type: dimensionType(c.type),
+      })),
+      source:
+        numeric.length === 0
+          ? (s?.rows ?? [])
+          : (s?.rows ?? []).map((row) => {
+              const copy = row.slice()
+              for (const k of numeric) copy[k] = chartNumber(row[k])
+              return copy
+            }),
+    }
+  })
 
 const ROWS_KEY = "$rows"
 
@@ -73,20 +94,30 @@ const resolveRows = (
       )
     return i
   }
+  // LONG values arrive as strings (to keep their precision); a chart wants
+  // numbers.
+  const cell = (row: unknown[], i: number) =>
+    i < 0
+      ? null
+      : classifyColumn(rows.columns[i]) === "numeric"
+        ? chartNumber(row[i])
+        : row[i]
   switch (spec.shape ?? "tuples") {
     case "tuples": {
       const idx = (spec.columns ?? rows.columns.map((c) => c.name)).map((n) =>
         col(n, "column"),
       )
-      return rows.rows.map((row) => idx.map((i) => (i < 0 ? null : row[i])))
+      return rows.rows.map((row) => idx.map((i) => cell(row, i)))
     }
     case "column": {
       const i = col(spec.column, "column", 0)
-      return rows.rows.map((row) => (i < 0 ? null : row[i]))
+      return rows.rows.map((row) => cell(row, i))
     }
     case "value": {
       const i = col(spec.column, "column", 0)
-      return i < 0 || rows.rows.length === 0 ? null : toNumber(rows.rows[0][i])
+      return i < 0 || rows.rows.length === 0
+        ? null
+        : chartNumber(rows.rows[0][i])
     }
     case "items": {
       const nameIdx = col(spec.name, "name", 0)
@@ -96,8 +127,8 @@ const resolveRows = (
         name: nameIdx < 0 ? "" : toLabel(row[nameIdx]),
         value:
           valueIdx.length === 1
-            ? toNumber(row[valueIdx[0]])
-            : valueIdx.map((i) => toNumber(row[i])),
+            ? chartNumber(row[valueIdx[0]])
+            : valueIdx.map((i) => chartNumber(row[i])),
       }))
     }
     case "tree": {
@@ -117,6 +148,30 @@ const resolveRows = (
         }))
       return withColor(tree)
     }
+    case "lines": {
+      // Routes for a `lines` series: columns = from lon, from lat, to lon,
+      // to lat.
+      const idx = (spec.columns ?? []).map((n) => col(n, "column"))
+      if (idx.length !== 4 || idx.some((i) => i < 0)) {
+        report(
+          path,
+          "shape lines needs columns: [from lon, from lat, to lon, to lat].",
+        )
+        return []
+      }
+      const nameIdx = spec.name !== undefined ? col(spec.name, "name") : -1
+      const valueIdx =
+        typeof spec.value === "string" ? col(spec.value, "value") : -1
+      const [a, b, c, d] = idx
+      return rows.rows.map((row) => ({
+        ...(nameIdx >= 0 ? { name: toLabel(row[nameIdx]) } : {}),
+        coords: [
+          [toNumber(row[a]), toNumber(row[b])],
+          [toNumber(row[c]), toNumber(row[d])],
+        ],
+        ...(valueIdx >= 0 ? { value: toNumber(row[valueIdx]) } : {}),
+      }))
+    }
     case "links":
     case "nodes": {
       const fromIdx = col(spec.source, "source", 0)
@@ -132,7 +187,7 @@ const resolveRows = (
     default:
       report(
         `${path}.shape`,
-        `Unknown shape ${JSON.stringify(spec.shape)}: use tuples, column, value, items, tree, links or nodes.`,
+        `Unknown shape ${JSON.stringify(spec.shape)}: use tuples, column, value, items, tree, links, nodes or lines.`,
       )
       return []
   }

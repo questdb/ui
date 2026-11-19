@@ -43,7 +43,7 @@ export const createQuestdbTheme = (colors: ColorShape) => {
   const axis = {
     axisLine: { show: true, lineStyle: { color: colors.borderDefault } },
     axisTick: { show: false, lineStyle: { color: colors.borderDefault } },
-    axisLabel: { color: quiet, fontSize: 11 },
+    axisLabel: { color: quiet, fontSize: 11, hideOverlap: true },
     splitLine: { lineStyle: { color: grid, type: [3, 3] } },
     splitArea: {
       show: false,
@@ -144,7 +144,6 @@ export const createQuestdbTheme = (colors: ColorShape) => {
       axisLine: { lineStyle: { color: [[1, colors.borderDefault]] } },
       splitLine: { lineStyle: { color: colors.borderStrong } },
       axisTick: { lineStyle: { color: colors.borderDefault } },
-      pointer: { itemStyle: { color: text } },
       anchor: { itemStyle: { color: text } },
     },
     radar: {

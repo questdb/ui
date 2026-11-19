@@ -56,6 +56,36 @@ describe("sanitizeOption", () => {
     expect(series[1].itemStyle.color).toBeUndefined()
   })
 
+  it("resolves tokens in gauge colour bands", () => {
+    // Given
+    const raw = {
+      series: [
+        {
+          type: "gauge",
+          axisLine: {
+            lineStyle: {
+              color: [
+                [0.6, "$positive"],
+                [1, "#ff0000"],
+              ],
+            },
+          },
+        },
+      ],
+    }
+
+    // When
+    const { option } = sanitizeOption(raw, context)
+    const series = option.series as {
+      axisLine: { lineStyle: { color: unknown } }
+    }[]
+
+    // Then
+    expect(series[0].axisLine.lineStyle.color).toEqual([
+      [0.6, lightColors.chartUp],
+    ])
+  })
+
   it("adds opacity to a token", () => {
     // Given / When / Then
     expect(resolveToken("$series1:0.5", lightColors)).toMatch(
