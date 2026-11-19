@@ -116,11 +116,21 @@ const contains = (layer: EscapeLayer, target: EventTarget | null) => {
 
 // Layers containing the target, innermost first, then the rest by priority.
 // Ties go to the most recently registered layer.
+const depth = (element: Element | null | undefined): number => {
+  let count = 0
+  for (let node = element; node; node = node.parentElement) count++
+  return count
+}
+
 const dispatchOrder = (target: EventTarget | null): EscapeLayer[] => {
   const latestFirst = [...layers].reverse()
+  // Scopes that contain the target are its ancestors: the deepest is the
+  // innermost. The sort is stable, so equal depths keep the latest first.
   const scoped = latestFirst
     .filter((layer) => contains(layer, target))
-    .sort((a, b) => (a.scope?.()?.contains(b.scope?.() ?? null) ? 1 : -1))
+    .map((layer) => ({ layer, depth: depth(layer.scope?.()) }))
+    .sort((a, b) => b.depth - a.depth)
+    .map(({ layer }) => layer)
   const rest = latestFirst
     .filter((layer) => !scoped.includes(layer))
     .sort((a, b) => b.priority - a.priority)

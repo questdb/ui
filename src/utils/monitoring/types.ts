@@ -35,6 +35,13 @@ export type MonitoringTemplateValues = {
   // Clamped chart windows for 1-minute and 5-second buckets.
   window1m: string
   window5s: string
+  // The most buckets a chart holds, and the minutes a 5-second chart covers,
+  // formatted for prose.
+  maxBuckets: string
+  maxMinutes5s: string
+  // Why a view's refresh charts and incidents are left out (telemetry is
+  // off, or its setting unknown); unset when they are shown.
+  hiddenRefreshReason?: string
 }
 
 export type MonitoringCellTemplate = {

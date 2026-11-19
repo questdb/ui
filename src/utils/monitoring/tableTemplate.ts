@@ -11,6 +11,8 @@ export const tableTemplate = ({
   targetName,
   window1m,
   window5s,
+  maxBuckets,
+  maxMinutes5s,
 }: MonitoringTemplateValues): MonitoringCellTemplate[] => [
   {
     name: "Live table monitoring",
@@ -323,6 +325,6 @@ WHERE w.created>=dateadd('m',-${window1m},timestamp_floor('m',now())) AND w.crea
     w: 12,
     height: 116,
     value: `### Reading the data
-The charts come from telemetry, which the server keeps for one week. Rate charts show 0 when nothing happened. Latency, size and ratio charts only have points where something happened, so "No data to plot" means there were no events in the window. A chart holds at most 10,000 buckets, so 5-second charts cover at most the latest 833 minutes of **window_minutes** and 1-minute charts the latest 10,000. The grids show the current state and keep no history. **Write age** is the time since the server last applied WAL data to the table. After a restart it counts from the newest row's timestamp.`,
+The charts come from telemetry, which the server keeps for one week. Rate charts show 0 when nothing happened. Latency, size and ratio charts only have points where something happened, so an empty chart means there were no events in the window. A chart holds at most ${maxBuckets} buckets, so 5-second charts cover at most the latest ${maxMinutes5s} minutes of **window_minutes** and 1-minute charts the latest ${maxBuckets}. The grids show the current state and keep no history. **Write age** is the time since the server last applied WAL data to the table. After a restart it counts from the newest row's timestamp.`,
   },
 ]

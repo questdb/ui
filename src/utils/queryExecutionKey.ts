@@ -1,5 +1,7 @@
 import { sha256 } from "js-sha256"
+import { tokenize } from "@questdb/sql-parser"
 import { normalizeQueryText } from "../scenes/Editor/Monaco/utils"
+import { maskParserBlockComments } from "./parserSql"
 
 // Keep bounded session counters, not another store of the user's SQL text.
 // Preserve literals and identifiers; only trim the editor's outer delimiter.
@@ -8,27 +10,7 @@ export const queryExecutionKey = (sql: string): string =>
 
 export const MAX_TRACKED_QUERY_EXECUTIONS = 100
 
-const WHITESPACE = /\s/
-const EXPLAIN = /^explain\b/i
-
-// A query plan is not data to monitor. Leading comments are skipped with a
-// linear scan: a block comment ends at its first "*/", as in SQL.
-export const isExplainQuery = (sql: string): boolean => {
-  let i = 0
-  while (i < sql.length) {
-    if (WHITESPACE.test(sql.charAt(i))) {
-      i++
-    } else if (sql.startsWith("--", i)) {
-      const end = sql.indexOf("\n", i + 2)
-      if (end === -1) return false
-      i = end + 1
-    } else if (sql.startsWith("/*", i)) {
-      const end = sql.indexOf("*/", i + 2)
-      if (end === -1) return false
-      i = end + 2
-    } else {
-      return EXPLAIN.test(sql.slice(i))
-    }
-  }
-  return false
-}
+// A query plan is not data to monitor. The SQL lexer skips leading comments,
+// as it does for the notebook's DECLARE handling.
+export const isExplainQuery = (sql: string): boolean =>
+  tokenize(maskParserBlockComments(sql)).tokens[0]?.tokenType.name === "Explain"

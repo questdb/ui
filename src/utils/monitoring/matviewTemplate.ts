@@ -10,6 +10,8 @@ export const matviewTemplate = ({
   targetSql,
   targetName,
   window1m,
+  maxBuckets,
+  hiddenRefreshReason,
 }: MonitoringTemplateValues): MonitoringCellTemplate[] => [
   {
     name: "Live view monitoring",
@@ -18,7 +20,10 @@ export const matviewTemplate = ({
     x: 0,
     w: 12,
     height: 86,
-    value: `# Materialized view monitoring · ${targetName}
+    value: hiddenRefreshReason
+      ? `# Materialized view monitoring · ${targetName}
+Live health, output and storage. You can change the chart window (**window_minutes**) in **Variables**.`
+      : `# Materialized view monitoring · ${targetName}
 Live health, refresh behavior, output and storage. You can change the chart window (**window_minutes**) and the incident window (**incident_hours**) in **Variables**.`,
   },
   {
@@ -289,7 +294,10 @@ LEFT JOIN (SELECT event_name,count() AS events,max(observed_at) AS last_seen FRO
     x: 0,
     w: 12,
     height: 116,
-    value: `### Reading the data
-Charts use completed 1-minute buckets from telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes. Duration and ratio charts only have points for minutes with events, so an empty chart or log means nothing happened in its window. A chart holds at most 10,000 buckets, so charts cover at most the latest 10,000 minutes of **window_minutes**. Views that refresh weekly or less often, and manual views, will show few refreshes or none.`,
+    value: hiddenRefreshReason
+      ? `### Reading the data
+Charts use completed 1-minute buckets from WAL telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes, and an empty chart means nothing happened in its window. A chart holds at most ${maxBuckets} buckets, so charts cover at most the latest ${maxBuckets} minutes of **window_minutes**. Refresh charts and incidents are hidden because ${hiddenRefreshReason}. **Refresh age** is the time since the last refresh finished, whether it succeeded or failed.`
+      : `### Reading the data
+Charts use completed 1-minute buckets from telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes. Duration and ratio charts only have points for minutes with events, so an empty chart or log means nothing happened in its window. A chart holds at most ${maxBuckets} buckets, so charts cover at most the latest ${maxBuckets} minutes of **window_minutes**. Views that refresh weekly or less often, and manual views, will show few refreshes or none.`,
   },
 ]

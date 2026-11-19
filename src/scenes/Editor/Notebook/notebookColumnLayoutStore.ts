@@ -1,3 +1,4 @@
+import isEqual from "lodash.isequal"
 import type { ColumnLayout } from "../../../components/ResultGrid/types"
 
 import { markTemplateColumnsCustomized } from "../../../store/templateColumns"
@@ -62,10 +63,7 @@ export const saveNotebookColumnLayout = (
     delete cell[keys[i]]
   }
   writeStore(store)
-  if (
-    isCustomLayout(cell[queryKey]) &&
-    JSON.stringify(existing) !== JSON.stringify(cell[queryKey])
-  )
+  if (isCustomLayout(cell[queryKey]) && !isEqual(existing, cell[queryKey]))
     void markTemplateColumnsCustomized(bufferId).catch(() => undefined)
 }
 

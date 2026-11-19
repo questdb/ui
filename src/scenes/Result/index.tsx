@@ -199,15 +199,19 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | null>(null)
   const resultActionsRef = useRef<HTMLDivElement | null>(null)
-  // The widest breakpoint the toolbar reaches. Storing the raw width would
+  // The widest breakpoint the toolbar reaches, in rem. Storing the raw width would
   // re-render the whole result view on every frame of a splitter drag.
   const [toolbarWidth, setToolbarWidth] = useState(0)
   useLayoutEffect(() => {
     const toolbar = resultActionsRef.current
     if (!toolbar) return
+    const rootFontSize =
+      parseFloat(getComputedStyle(document.documentElement).fontSize) || 10
     const measure = (width: number) =>
       setToolbarWidth(
-        TRANSFER_ACTION_BREAKPOINTS.filter((step) => width >= step).pop() ?? 0,
+        TRANSFER_ACTION_BREAKPOINTS.filter(
+          (step) => width / rootFontSize >= step,
+        ).pop() ?? 0,
       )
     // Size the action before the first paint, so it doesn't swap its
     // element when the observer reports.

@@ -36,12 +36,13 @@ const NotebookGlyph = styled(NotebookIcon)`
 
 export type TransferActionDensity = "full" | "compact" | "icon"
 
-// Result toolbar widths (px) from which each label still fits beside the other
-// toolbar controls without clipping them. Measured with the real styles and a
-// seven-digit row count; below `compact` only the icon is shown.
+// Result toolbar widths (rem, so they follow the font size) from which each
+// label still fits beside the other toolbar controls without clipping them.
+// Measured with the real styles and a seven-digit row count; below `compact`
+// only the icon is shown.
 const MIN_TOOLBAR_WIDTH = {
-  grid: { full: 820, compact: 680 },
-  chart: { full: 520, compact: 480 },
+  grid: { full: 82, compact: 68 },
+  chart: { full: 52, compact: 48 },
 }
 
 // Every width at which the density can change, ascending. The toolbar only
@@ -55,6 +56,7 @@ export const TRANSFER_ACTION_BREAKPOINTS = [
   ),
 ].sort((a, b) => a - b)
 
+// `toolbarWidth` is in rem.
 export const transferActionDensity = (
   chart: boolean,
   toolbarWidth: number,

@@ -80,6 +80,8 @@ export const buildMonitoringDashboard = ({
   telemetryUnknown?: boolean
   refreshSchedule?: MonitoringRefreshSchedule
 }): NotebookViewState => {
+  // Only a view's refresh charts and incidents need enabled telemetry.
+  const refreshHistory = kind === "table" || telemetryEnabled
   const values: MonitoringTemplateValues = {
     targetSql: `'${name.replace(/'/g, "''")}'`,
     // The name is shown as a code span: its text renders literally, and GFM
@@ -89,27 +91,22 @@ export const buildMonitoringDashboard = ({
     targetName: markdownCodeSpan(name),
     window1m: clampedWindow(MONITORING_MAX_WINDOW_MINUTES),
     window5s: clampedWindow(MONITORING_MAX_5S_WINDOW_MINUTES),
+    maxBuckets: NOTEBOOK_ROW_CAP.toLocaleString("en-US"),
+    maxMinutes5s: MONITORING_MAX_5S_WINDOW_MINUTES.toLocaleString("en-US"),
+    ...(refreshHistory
+      ? {}
+      : {
+          hiddenRefreshReason: telemetryUnknown
+            ? "the server's telemetry setting could not be read"
+            : "telemetry is disabled",
+        }),
   }
   const templates = (
     kind === "matview" ? matviewTemplate(values) : tableTemplate(values)
   ).filter((cell) => telemetryEnabled || !cell.telemetry)
-  // Only a view's refresh charts and incidents need enabled telemetry.
-  const refreshHistory = kind === "table" || telemetryEnabled
-  const hiddenReason = telemetryUnknown
-    ? "the server's telemetry setting could not be read"
-    : "telemetry is disabled"
   const cells = templates.map((template, position) => {
-    let value = template.value
-    if (!refreshHistory && template.name === "Reading the data") {
-      value = `### Reading the data
-Charts use completed 1-minute buckets from WAL telemetry, which the server keeps for one week. Rate charts show 0 for idle minutes, and an empty chart means nothing happened in its window. A chart holds at most 10,000 buckets, so charts cover at most the latest 10,000 minutes of **window_minutes**. Refresh charts and incidents are hidden because ${hiddenReason}. **Refresh age** is the time since the last refresh finished, whether it succeeded or failed.`
-    }
-    if (!refreshHistory && position === 0) {
-      value = `# Materialized view monitoring · ${values.targetName}
-Live health, output and storage. You can change the chart window (**window_minutes**) in **Variables**.`
-    }
     return {
-      ...createCell(position, value),
+      ...createCell(position, template.value),
       name: template.name,
       type: template.type,
       topHeight: template.type === "markdown" ? template.height : 176,

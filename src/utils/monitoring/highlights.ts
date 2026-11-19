@@ -23,6 +23,8 @@ const trends = (columns: string[]): HighlightRule[] =>
     })),
   )
 
+// Server status texts, matched regardless of case, so a server that changes
+// how it capitalises a state still gets highlighted.
 const status = (columns: string[]): HighlightRule[] =>
   columns.flatMap((column) => [
     {
@@ -30,7 +32,7 @@ const status = (columns: string[]): HighlightRule[] =>
       kind: "value" as const,
       condition: {
         op: "matches" as const,
-        pattern: "^(Suspended|invalid|failed|Invalid|Backoff)$",
+        pattern: "(?i)^(suspended|invalid|failed|backoff)$",
       },
     },
     {
@@ -39,7 +41,7 @@ const status = (columns: string[]): HighlightRule[] =>
       condition: {
         op: "matches" as const,
         // `retrying`: a view refresh deferred after a transient error.
-        pattern: "^(Unknown|Reduced parallelism|refreshing|retrying)$",
+        pattern: "(?i)^(unknown|reduced parallelism|refreshing|retrying)$",
       },
     },
   ])
