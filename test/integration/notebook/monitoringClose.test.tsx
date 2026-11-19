@@ -149,6 +149,26 @@ describe("closing an open monitoring dashboard", () => {
     expect(await storedPanelValue()).toBe("select 42")
   })
 
+  it("keeps the focused cell when it archives a live edit", async () => {
+    const focused = view.cells.find((cell) => cell.name === PANEL)!.id
+    await db.buffers.update(DASHBOARD, {
+      notebookViewState: { ...view, focusedCellId: focused },
+    })
+    await mount()
+    act(() => {
+      actions.updateCell(panelId(), { value: "select 42" })
+      signalUserEdit(DASHBOARD)
+    })
+
+    await act(async () => {
+      await editor.closeBuffer(DASHBOARD)
+    })
+
+    const archived = await stored()
+    expect(archived?.archived).toBe(true)
+    expect(archived?.notebookViewState?.focusedCellId).toBe(focused)
+  })
+
   it("still discards an untouched dashboard that is open with a live controller", async () => {
     await mount()
     await act(async () => {

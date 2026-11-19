@@ -100,7 +100,7 @@ import {
 } from "../../utils/notebooks/notebookController"
 import { enqueueBufferTask } from "../../utils/notebooks/notebookBufferQueue"
 import { aiConversationStore } from "../../store/aiConversations"
-import { isMonitoringTemplateId } from "../../utils/monitoring/identity"
+import { isMonitoringDashboard } from "../../utils/monitoring/identity"
 
 import { useLiveQuery } from "dexie-react-hooks"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -379,7 +379,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         typeof buffer.id === "number" &&
         buffer.templateId !== undefined &&
         !exampleIds.has(buffer.templateId) &&
-        !isMonitoringTemplateId(buffer.templateId),
+        !isMonitoringDashboard(buffer),
     )
     if (stale.length === 0) return
     void db
@@ -1188,10 +1188,10 @@ export const EditorProvider: React.FC = ({ children }) => {
 
     if (sortPinnedBuffers(buffers).length === 1) return
 
-    const isTemplate = (templateId: string | undefined) =>
-      templateId !== undefined &&
-      (exampleIds.has(templateId) || isMonitoringTemplateId(templateId))
-    if (isTemplate(buffer.templateId)) {
+    const isTemplate = (target: Buffer) =>
+      target.templateId !== undefined &&
+      (exampleIds.has(target.templateId) || isMonitoringDashboard(target))
+    if (isTemplate(buffer)) {
       // Keep the live handle if a tab switch unmounts it while close waits for
       // another removal. Its refs still contain any not-yet-persisted edit.
       const liveAtClose = getController(id)
@@ -1203,7 +1203,7 @@ export const EditorProvider: React.FC = ({ children }) => {
           // buffer snapshot may still carry a link that an edit just removed.
           const current = await bufferStore.getById(id)
           if (!current || current.archived) return
-          if (!isTemplate(current.templateId)) {
+          if (!isTemplate(current)) {
             archive = true
             return
           }
@@ -1219,6 +1219,10 @@ export const EditorProvider: React.FC = ({ children }) => {
               await bufferStore.update(id, {
                 notebookViewState: {
                   ...view,
+                  // The live view carries no focus; keep the stored one.
+                  focusedCellId:
+                    view.focusedCellId ??
+                    current.notebookViewState?.focusedCellId,
                   cells: stripCellResults(view.cells),
                 },
               })
