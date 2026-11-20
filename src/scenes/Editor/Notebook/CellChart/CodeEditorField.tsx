@@ -18,17 +18,6 @@ const Frame = styled.div<{ $height: string; $invalid: boolean }>`
   }
 `
 
-const Hint = styled.span`
-  font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.contentSecondary};
-`
-
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-`
-
 // JavaScript highlighting without Monaco's TypeScript service (megabytes,
 // not shipped): a language of our own with Monaco's JavaScript tokens.
 export const JAVASCRIPT_TOKENS_ID = "qdb-javascript"
@@ -79,41 +68,36 @@ export const CodeEditorField: React.FC<Props> = ({
 }) => {
   const theme = useTheme()
   return (
-    <Wrapper>
-      <Frame
-        $height={height}
-        $invalid={invalid}
-        data-hook="code-editor-field"
-        // Escape leaves the editor by focusing its frame (see the drawer).
-        tabIndex={-1}
-      >
-        <MonacoEditor
-          value={value}
-          language={language === "javascript" ? JAVASCRIPT_TOKENS_ID : language}
-          beforeMount={
-            language === "javascript" ? registerJavascript : undefined
-          }
-          theme={getMonacoThemeName(theme.mode)}
-          onChange={(next) => onChange(next ?? "")}
-          options={{
-            ariaLabel,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            lineNumbers: "off",
-            folding: true,
-            wordWrap: "on",
-            fontSize: 12,
-            tabSize: 2,
-            automaticLayout: true,
-            renderLineHighlight: "none",
-            overviewRulerLanes: 0,
-            padding: { top: 8, bottom: 8 },
-            // A form around the editor scrolls past it.
-            scrollbar: { alwaysConsumeMouseWheel: false },
-          }}
-        />
-      </Frame>
-      <Hint>Esc leaves the editor; Tab indents.</Hint>
-    </Wrapper>
+    <Frame
+      $height={height}
+      $invalid={invalid}
+      data-hook="code-editor-field"
+      // Escape leaves the editor by focusing its frame (see the drawer).
+      tabIndex={-1}
+    >
+      <MonacoEditor
+        value={value}
+        language={language === "javascript" ? JAVASCRIPT_TOKENS_ID : language}
+        beforeMount={language === "javascript" ? registerJavascript : undefined}
+        theme={getMonacoThemeName(theme.mode)}
+        onChange={(next) => onChange(next ?? "")}
+        options={{
+          ariaLabel,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          lineNumbers: "off",
+          folding: true,
+          wordWrap: "on",
+          fontSize: 12,
+          tabSize: 2,
+          automaticLayout: true,
+          renderLineHighlight: "none",
+          overviewRulerLanes: 0,
+          padding: { top: 8, bottom: 8 },
+          // A form around the editor scrolls past it.
+          scrollbar: { alwaysConsumeMouseWheel: false },
+        }}
+      />
+    </Frame>
   )
 }

@@ -1,7 +1,8 @@
 import React, { useMemo } from "react"
 import styled, { useTheme } from "styled-components"
-import { WarningIcon, XCircleIcon } from "@phosphor-icons/react"
-import { Button, Text } from "../../../../components"
+import { QuestionIcon, WarningIcon, XCircleIcon } from "@phosphor-icons/react"
+import { Button, IconButton, Text, Tooltip } from "../../../../components"
+import { useToggletip } from "../../../../components/Tooltip/useToggletip"
 import { Field, FieldGroup, FieldLabel } from "./chartSettingsStyles"
 import { CodeEditorField } from "./CodeEditorField"
 import { parseCustomJson } from "./drawSettings"
@@ -13,8 +14,16 @@ import {
 import { useNotebookBufferId, useNotebookState } from "../NotebookProvider"
 import type { RenderProblem } from "../renderReports"
 
-const Help = styled(Text)`
+const Help = styled.span`
+  display: grid;
+  gap: 0.8rem;
+  font-size: 1.2rem;
   line-height: 1.45;
+
+  strong {
+    color: ${({ theme }) => theme.color.contentPrimary};
+    font-weight: 600;
+  }
 
   code {
     padding: 0 0.3rem;
@@ -63,6 +72,50 @@ const HeaderRow = styled.div`
   gap: 0.8rem;
 `
 
+const TitleGroup = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+`
+
+const JsonSpecHelp = () => {
+  const { tooltipProps, triggerProps } = useToggletip()
+
+  return (
+    <Tooltip
+      {...tooltipProps}
+      placement="bottom-start"
+      maxWidth="32rem"
+      onEscapeKeyDown={(event) => {
+        tooltipProps.onEscapeKeyDown()
+        event.stopPropagation()
+      }}
+      content={
+        <Help>
+          <span>
+            <strong>Data:</strong> SQL statements become datasets{" "}
+            <code>q0</code>, <code>q1</code>, and so on. Bind a series with{" "}
+            <code>datasetId</code> and map its columns with <code>encode</code>.
+          </span>
+          <span>
+            <strong>Style:</strong> Use theme tones such as{" "}
+            <code>$series1</code> or <code>$positive:0.3</code>. The console
+            fits the layout, so skip padding.
+          </span>
+          <span>
+            <strong>Start from a chart:</strong> Replace with the chart uses the
+            first query&apos;s chart. Undo in the editor with ⌘Z or Ctrl+Z.
+          </span>
+        </Help>
+      }
+    >
+      <IconButton label="About the JSON spec" size="sm" {...triggerProps}>
+        <QuestionIcon size={16} aria-hidden />
+      </IconButton>
+    </Tooltip>
+  )
+}
+
 type Props = {
   json: string
   statements: (StatementRows | null)[]
@@ -101,7 +154,10 @@ export const CustomOptionSettings: React.FC<Props> = ({
     <>
       <FieldGroup>
         <HeaderRow>
-          <FieldLabel>ECharts option (JSON)</FieldLabel>
+          <TitleGroup>
+            <FieldLabel>JSON spec</FieldLabel>
+            <JsonSpecHelp />
+          </TitleGroup>
           <Button
             type="button"
             variant="secondary"
@@ -118,15 +174,6 @@ export const CustomOptionSettings: React.FC<Props> = ({
           ariaLabel="ECharts option"
           invalid={!parsed.ok && json.trim() !== ""}
         />
-        <Help color="contentSecondary" size="xs">
-          Each statement is a dataset: <code>q0</code>, <code>q1</code>, … Bind
-          series with <code>{'"datasetId": "q0", "encode": {…}'}</code>. Colour
-          with theme tones such as <code>$series1</code> or{" "}
-          <code>$positive:0.3</code>. The layout is fitted to the panel, so
-          leave out paddings. “Replace with the chart” writes the first
-          query&apos;s chart as an option; to undo, click into the editor and
-          press ⌘Z / Ctrl+Z.
-        </Help>
       </FieldGroup>
 
       <Field as="div">

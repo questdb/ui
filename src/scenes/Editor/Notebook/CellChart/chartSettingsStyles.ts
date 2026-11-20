@@ -19,8 +19,9 @@ export const FieldGroup = styled.div`
 `
 
 export const FieldLabel = styled.span`
-  font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 export const CheckboxRow = styled.label`
