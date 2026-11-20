@@ -94,6 +94,37 @@ describe("draw settings", () => {
     })
   })
 
+  it("starts a pie as a pie, and stacked bars stacked", () => {
+    // Given
+    const statements = [
+      {
+        index: 0,
+        columns: [
+          { name: "venue", type: "SYMBOL" },
+          { name: "volume", type: "DOUBLE" },
+        ],
+      },
+    ]
+    const as = (type: "pie" | "stackedBar") => ({
+      xColumn: "venue",
+      queries: [{ type, yColumns: ["volume"] }],
+    })
+
+    // When / Then
+    expect(starterCustomOption(as("pie"), statements)).toMatchObject({
+      series: [
+        {
+          type: "pie",
+          datasetId: "q0",
+          encode: { itemName: "venue", value: "volume" },
+        },
+      ],
+    })
+    expect(starterCustomOption(as("stackedBar"), statements)).toMatchObject({
+      series: [{ type: "bar", stack: "total" }],
+    })
+  })
+
   it("describes every component type in the settings catalog", () => {
     // Given / When / Then
     expect(VISUAL_CATALOG.map((s) => s.type).sort()).toEqual(

@@ -173,8 +173,23 @@ export const starterCustomOption = (
       ? yColumnsOf(query)
       : numeric.slice(0, 1).map((c) => c.name)
   const dataset = `q${first?.index ?? 0}`
+  // A pie names its slices by x and sizes them by the first value.
+  if (query?.type === "pie")
+    return {
+      tooltip: { trigger: "item" },
+      series: [
+        {
+          type: "pie",
+          radius: ["35%", "70%"],
+          datasetId: dataset,
+          encode: { itemName: x, value: ys[0] },
+        },
+      ],
+    }
+  const isBar = query?.type === "bar" || query?.type === "stackedBar"
+  const isArea = query?.type === "area" || query?.type === "stepArea"
   return {
-    tooltip: { trigger: "axis" },
+    tooltip: { trigger: query?.type === "scatter" ? "item" : "axis" },
     xAxis: {
       type:
         xRole === "temporal"
@@ -185,12 +200,16 @@ export const starterCustomOption = (
     },
     yAxis: { type: "value" },
     series: ys.map((y) => ({
-      type:
-        query?.type === "bar" || query?.type === "stackedBar" ? "bar" : "line",
+      type: isBar ? "bar" : query?.type === "scatter" ? "scatter" : "line",
       name: y,
       datasetId: dataset,
       encode: { x, y },
-      showSymbol: false,
+      ...(isBar || query?.type === "scatter" ? {} : { showSymbol: false }),
+      ...(query?.type === "stackedBar" || isArea ? { stack: "total" } : {}),
+      ...(isArea ? { areaStyle: {} } : {}),
+      ...(query?.type === "stepLine" || query?.type === "stepArea"
+        ? { step: "end" }
+        : {}),
     })),
   }
 }
