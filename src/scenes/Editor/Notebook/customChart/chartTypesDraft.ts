@@ -1,6 +1,6 @@
 import type { NotebookChartType } from "../../../../store/notebook"
 import { isChartTypeName } from "../../../../store/notebookFormat"
-import { compileError } from "./chartTypeRegistry"
+import { compileError } from "./chartTypeCompile"
 
 // The chart types dialog edits a draft of every type at once and saves it in
 // one update. A type keeps the name it was saved under (`original`), so a

@@ -1,6 +1,7 @@
 import type { CustomSeriesRenderItem } from "echarts"
 import { BUILTIN_CUSTOM_SERIES, echarts } from "../CellChart/echartsSetup"
 import type { NotebookChartType } from "../../../../store/notebook"
+import { compile } from "./chartTypeCompile"
 
 // Notebook chart types: ECharts custom series whose `renderItem` an agent
 // wrote as JavaScript. Each is compiled once and registered with ECharts under
@@ -25,31 +26,6 @@ const hash = (text: string): string => {
   for (let i = 0; i < text.length; i++)
     h = ((h << 5) + h + text.charCodeAt(i)) | 0
   return (h >>> 0).toString(36)
-}
-
-const LEADING_COMMENTS = /^(?:\s*(?:\/\/[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/))*\s*/
-
-const compile = (source: string): CustomSeriesRenderItem => {
-  const trimmed = source.trim()
-  // Comments above the function do not change what it is.
-  const head = trimmed.replace(LEADING_COMMENTS, "")
-  // A function expression (function (params, api) {…} or (params, api) => …),
-  // else a function body that receives `params` and `api`.
-  if (/^(async\s+)?function\b|^\(?[\w\s,]*\)?\s*=>/.test(head)) {
-    // On lines of their own, so a comment after the function stays closed.
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const fn = new Function(
-      `"use strict"; return (\n${trimmed}\n)`,
-    )() as unknown
-    if (typeof fn !== "function") throw new Error("not a function")
-    return fn as CustomSeriesRenderItem
-  }
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  return new Function(
-    "params",
-    "api",
-    `"use strict";\n${trimmed}`,
-  ) as CustomSeriesRenderItem
 }
 
 const ensureRegistered = (
@@ -125,12 +101,4 @@ export const drawErrorsOf = (
   return out
 }
 
-/** Checks that a chart type's source compiles, without registering it. */
-export const compileError = (source: string): string | null => {
-  try {
-    compile(source)
-    return null
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e)
-  }
-}
+export { compileError } from "./chartTypeCompile"

@@ -7,6 +7,7 @@ import type { EChartsOption } from "echarts"
 import { Client, Type } from "../../../utils/questdb"
 import { QuestContext } from "../../../providers"
 import { ResultChart } from "."
+import { preloadChartCode } from "../../Editor/Notebook/CellChart/lazyCharts"
 
 vi.mock("../../../providers", async () => {
   const { createContext } = await import("react")
@@ -28,6 +29,15 @@ vi.mock("../../Editor/Notebook/CellChart/ChartRenderer", async () => {
     }),
   }
 })
+vi.mock(
+  "../../Editor/Notebook/CellChart/lazyCharts",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("../../Editor/Notebook/CellChart/lazyCharts")
+    >()),
+    preloadChartCode: vi.fn(),
+  }),
+)
 vi.mock("../../../components/HighlightedSql", () => ({
   HighlightedSql: () => null,
 }))
@@ -94,5 +104,35 @@ describe("result chart settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }))
     await waitFor(() => expect(series()[0].type).toBe("bar"))
     expect(series()[0].data).toEqual(result.dataset)
+  })
+
+  it("starts loading the chart code once the chart view shows", () => {
+    // Given a result whose chart view is hidden
+    const quest = {
+      quest: new Client(),
+      questExecution: {} as React.ContextType<
+        typeof QuestContext
+      >["questExecution"],
+      buildVersion: { type: "oss" as const, version: "test" },
+      commitHash: "test",
+    }
+    const view = (visible: boolean) => (
+      <QuestContext.Provider value={quest}>
+        <ResultChart
+          result={result}
+          visible={visible}
+          onResetZoomFocus={() => undefined}
+        />
+      </QuestContext.Provider>
+    )
+    vi.mocked(preloadChartCode).mockClear()
+    const { rerender } = renderComponent(view(false))
+    expect(preloadChartCode).not.toHaveBeenCalled()
+
+    // When the user switches to the chart
+    rerender(view(true))
+
+    // Then the chart code starts loading while the query runs
+    expect(preloadChartCode).toHaveBeenCalledOnce()
   })
 })

@@ -9,10 +9,12 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
 import { buildEchartsOption } from "../../Editor/Notebook/CellChart/buildEchartsOption"
+import type { ChartRendererHandle } from "../../Editor/Notebook/CellChart/ChartRenderer"
 import {
-  ChartRenderer,
-  type ChartRendererHandle,
-} from "../../Editor/Notebook/CellChart/ChartRenderer"
+  ChartSuspense,
+  LazyChartRenderer,
+  preloadChartCode,
+} from "../../Editor/Notebook/CellChart/lazyCharts"
 import { ChartSettingsPanel } from "../../Editor/Notebook/CellChart/ChartSettingsDrawer"
 import type { ChartSettingsTelemetry } from "../../Editor/Notebook/CellChart/chartSettingsTelemetry"
 import type { ChartConfig } from "../../Editor/Notebook/CellChart/chartTypes"
@@ -150,6 +152,10 @@ export const ResultChart: React.FC<Props> = ({
   onResetZoomFocus,
 }) => {
   const chartQuery = useChartQuery({ seed: result, enabled: visible })
+  // The chart code loads while the chart's query runs, not after it.
+  useEffect(() => {
+    if (visible) preloadChartCode()
+  }, [visible])
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null)
   const [zoomStart, setZoomStart] = useState(0)
   const [zoomEnd, setZoomEnd] = useState(100)
@@ -307,13 +313,15 @@ export const ResultChart: React.FC<Props> = ({
               </IconButton>
             </ChartActions>
           )}
-          <ChartRenderer
-            ref={chartRendererRef}
-            option={option}
-            onZoomChange={handleZoomChange}
-            animateEntry={false}
-            zoomWindow={{ start: zoomStart, end: zoomEnd }}
-          />
+          <ChartSuspense>
+            <LazyChartRenderer
+              ref={chartRendererRef}
+              option={option}
+              onZoomChange={handleZoomChange}
+              animateEntry={false}
+              zoomWindow={{ start: zoomStart, end: zoomEnd }}
+            />
+          </ChartSuspense>
         </ChartArea>
       </Canvas>
     )

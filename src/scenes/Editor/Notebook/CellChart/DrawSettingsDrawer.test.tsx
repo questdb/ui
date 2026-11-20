@@ -3,7 +3,7 @@ import { renderComponent } from "../../../../test/component"
 import React, { useState } from "react"
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { Button } from "../../../../components/Button"
 import { DrawSettingsDrawer } from "./DrawSettingsDrawer"
 import { questClient } from "../../../../utils/questdb/queryClient"
@@ -36,6 +36,12 @@ vi.mock("@monaco-editor/react", () => ({
     </div>
   ),
 }))
+
+// The custom option editor loads with the chart code; load it up front so
+// the tests that open it do not wait on ECharts inside a findBy timeout.
+beforeAll(async () => {
+  await import("./CustomOptionSettings")
+})
 
 const columns = [
   { name: "ts", type: "TIMESTAMP" },
@@ -189,7 +195,7 @@ describe("draw settings drawer", () => {
 
     // When the user switches to a custom option
     fireEvent.click(within(drawer).getByRole("button", { name: "Custom" }))
-    const editor = within(drawer).getByLabelText("ECharts option")
+    const editor = await within(drawer).findByLabelText("ECharts option")
 
     // Then it starts from the current chart
     expect((editor as HTMLTextAreaElement).value).toContain('"datasetId": "q0"')
@@ -341,7 +347,7 @@ describe("draw settings drawer", () => {
       />,
     )
     const drawer = await openDrawer()
-    const editor = within(drawer).getByLabelText("ECharts option")
+    const editor = await within(drawer).findByLabelText("ECharts option")
     editor.focus()
 
     // When the user presses Escape

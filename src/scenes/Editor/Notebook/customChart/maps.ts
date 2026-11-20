@@ -3,9 +3,7 @@ import { echarts } from "../CellChart/echartsSetup"
 // Base maps a chart can draw on. They load on first use, so the GeoJSON is
 // not part of the main bundle.
 
-export const MAP_NAMES = ["world"] as const
-
-export type MapName = (typeof MAP_NAMES)[number]
+export { MAP_NAMES, type MapName } from "./mapNames"
 
 let worldLoad: Promise<void> | null = null
 

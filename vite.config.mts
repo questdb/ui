@@ -359,7 +359,8 @@ export default defineConfig(({ mode }) => {
               "redux-observable",
               "rxjs",
               "styled-components",
-              "echarts",
+              // ECharts is not here: it loads with the first chart
+              // (Notebook/CellChart/lazyCharts.tsx).
             ],
             tiktoken: ["js-tiktoken/lite", "js-tiktoken/ranks/o200k_base"],
           },

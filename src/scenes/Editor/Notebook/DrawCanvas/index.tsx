@@ -5,10 +5,7 @@ import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import { buildEchartsOption } from "../CellChart/buildEchartsOption"
-import {
-  ChartRenderer,
-  type ChartRendererHandle,
-} from "../CellChart/ChartRenderer"
+import type { ChartRendererHandle } from "../CellChart/ChartRenderer"
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
@@ -42,8 +39,13 @@ import {
   useNotebookState,
 } from "../NotebookProvider"
 import { statementResultsOf } from "../visuals/statementRows"
-import { VisualCanvas } from "../visuals/VisualCanvas"
-import { CustomChart } from "../customChart/CustomChart"
+import {
+  ChartSuspense,
+  LazyChartRenderer,
+  LazyCustomChart,
+  LazyVisualCanvas,
+  preloadChartCode,
+} from "../CellChart/lazyCharts"
 import {
   armBrush,
   interactionEvents,
@@ -271,6 +273,9 @@ export const DrawCanvas: React.FC<Props> = ({
   )
   const visual = cell.chartConfig?.visual
   const custom = cell.chartConfig?.custom
+  const drawKind = visual ? "visual" : custom ? "custom" : "chart"
+  // The chart code loads while the query runs, not after it.
+  useEffect(() => preloadChartCode(drawKind), [drawKind])
   const statementResults = useMemo(
     () => statementResultsOf(cell.result, queries),
     [cell.result, queries],
@@ -404,44 +409,46 @@ export const DrawCanvas: React.FC<Props> = ({
         <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
       ) : (
         <Canvas data-hook="draw-canvas">
-          {visual ? (
-            <VisualCanvas
-              bufferId={bufferId}
-              cellId={cell.id}
-              visual={visual}
-              statements={statements}
-              formats={formats}
-              interactions={cell.interactions}
-              setVariables={setVariableValues}
-              live={live}
-              isFocused={isFocused}
-              events={events}
-              onInstance={handleInstance}
-            />
-          ) : custom ? (
-            <CustomChart
-              bufferId={bufferId}
-              cellId={cell.id}
-              rawOption={custom.option}
-              statements={statements}
-              chartTypes={settings.chartTypes}
-              live={live}
-              isFocused={isFocused}
-              events={events}
-              onInstance={handleInstance}
-            />
-          ) : (
-            <ChartRenderer
-              ref={chartRendererRef}
-              option={option}
-              onZoomChange={handleZoomChange}
-              isFocused={isFocused}
-              animate={animatesAt(refreshIntervalMs)}
-              zoomWindow={{ start: zoomStart, end: zoomEnd }}
-              events={events}
-              onInstance={handleInstance}
-            />
-          )}
+          <ChartSuspense>
+            {visual ? (
+              <LazyVisualCanvas
+                bufferId={bufferId}
+                cellId={cell.id}
+                visual={visual}
+                statements={statements}
+                formats={formats}
+                interactions={cell.interactions}
+                setVariables={setVariableValues}
+                live={live}
+                isFocused={isFocused}
+                events={events}
+                onInstance={handleInstance}
+              />
+            ) : custom ? (
+              <LazyCustomChart
+                bufferId={bufferId}
+                cellId={cell.id}
+                rawOption={custom.option}
+                statements={statements}
+                chartTypes={settings.chartTypes}
+                live={live}
+                isFocused={isFocused}
+                events={events}
+                onInstance={handleInstance}
+              />
+            ) : (
+              <LazyChartRenderer
+                ref={chartRendererRef}
+                option={option}
+                onZoomChange={handleZoomChange}
+                isFocused={isFocused}
+                animate={animatesAt(refreshIntervalMs)}
+                zoomWindow={{ start: zoomStart, end: zoomEnd }}
+                events={events}
+                onInstance={handleInstance}
+              />
+            )}
+          </ChartSuspense>
         </Canvas>
       )}
       <DrawSettingsDrawer

@@ -100,9 +100,9 @@ import {
 } from "./dashboardWire"
 import { lightColors } from "../../theme"
 import { sanitizeOption } from "../../scenes/Editor/Notebook/customChart/sanitizeOption"
-import { BUILTIN_CUSTOM_SERIES } from "../../scenes/Editor/Notebook/CellChart/echartsSetup"
-import { compileError } from "../../scenes/Editor/Notebook/customChart/chartTypeRegistry"
-import { MAP_NAMES } from "../../scenes/Editor/Notebook/customChart/maps"
+import { BUILTIN_CUSTOM_SERIES } from "../../scenes/Editor/Notebook/CellChart/customSeriesNames"
+import { compileError } from "../../scenes/Editor/Notebook/customChart/chartTypeCompile"
+import { MAP_NAMES } from "../../scenes/Editor/Notebook/customChart/mapNames"
 import {
   invalidBufferIdResult,
   notebookErrorHint,

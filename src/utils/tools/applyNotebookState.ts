@@ -55,7 +55,7 @@ import {
   type InteractionsWire,
   type VisualWire,
 } from "./dashboardWire"
-import { compileError } from "../../scenes/Editor/Notebook/customChart/chartTypeRegistry"
+import { compileError } from "../../scenes/Editor/Notebook/customChart/chartTypeCompile"
 import {
   type HighlightConfigWire,
   parseHighlightConfigFor,

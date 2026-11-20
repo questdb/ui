@@ -131,16 +131,7 @@ for (const installer of [
   echarts.use(installer)
 }
 
-/** Custom series names the console ships, usable from any chart option. */
-export const BUILTIN_CUSTOM_SERIES = [
-  "barRange",
-  "areaRange",
-  "lineRange",
-  "stage",
-  "violin",
-  "contour",
-  "segmentedDoughnut",
-] as const
+export { BUILTIN_CUSTOM_SERIES } from "./customSeriesNames"
 
 // The official bar range draws its values as text in degrees Celsius; this one
 // draws only the bar, vertical or horizontal by `encode`: a range [low, high]

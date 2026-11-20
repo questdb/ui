@@ -1,4 +1,6 @@
 import React, {
+  lazy,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -8,7 +10,7 @@ import React, {
 } from "react"
 import styled from "styled-components"
 import { XCircleIcon } from "@phosphor-icons/react"
-import { Text } from "../../../../components"
+import { Spinner, Text } from "../../../../components"
 import {
   NotebookViewToggle,
   NotebookViewToggleSegment,
@@ -27,8 +29,8 @@ import {
   savePayloadOf,
 } from "./ChartSettingsDrawer"
 import { ComponentSettings } from "./ComponentSettings"
+import { ChartCodeBoundary } from "./lazyCharts"
 import { chartOptionsOffered, withoutUnofferedOptions } from "./chartOptions"
-import { CustomOptionSettings } from "./CustomOptionSettings"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
 import { columnsAndSamplesOf } from "../CellFormats/formatSummary"
@@ -53,6 +55,14 @@ import {
   type DrawKind,
   type DrawSettings,
 } from "./drawSettings"
+
+// The custom option editor checks options with the chart code, which loads
+// with the first chart; the drawer opens without it.
+const CustomOptionSettings = lazy(() =>
+  import("./CustomOptionSettings").then((m) => ({
+    default: m.CustomOptionSettings,
+  })),
+)
 
 const KindSwitch = styled(NotebookViewToggle)`
   display: flex;
@@ -406,21 +416,27 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
           )}
 
           {draft.kind === "custom" && (
-            <CustomOptionSettings
-              json={draft.customJson}
-              statements={statements}
-              onChange={(customJson) => updateDraft({ ...draft, customJson })}
-              onStartFromChart={() =>
-                updateDraft({
-                  ...draft,
-                  customJson: JSON.stringify(
-                    starterCustomOption(draft.chart, tabs),
-                    null,
-                    2,
-                  ),
-                })
-              }
-            />
+            <ChartCodeBoundary reloadNote="Reloading drops the changes not saved in this drawer.">
+              <Suspense fallback={<Spinner size={18} />}>
+                <CustomOptionSettings
+                  json={draft.customJson}
+                  statements={statements}
+                  onChange={(customJson) =>
+                    updateDraft({ ...draft, customJson })
+                  }
+                  onStartFromChart={() =>
+                    updateDraft({
+                      ...draft,
+                      customJson: JSON.stringify(
+                        starterCustomOption(draft.chart, tabs),
+                        null,
+                        2,
+                      ),
+                    })
+                  }
+                />
+              </Suspense>
+            </ChartCodeBoundary>
           )}
         </>
       )}
