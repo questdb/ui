@@ -321,9 +321,7 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
       appearInPlace={appearInPlace}
       title="Chart settings"
       dataHookBase="chart-settings"
-      drawerWidth={
-        draft.kind === "custom" && section === "chart" ? "52rem" : undefined
-      }
+      drawerWidth="52rem"
       onDismiss={dismiss}
       onCommit={() => void commit()}
       committing={committing}
