@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import React, { useLayoutEffect, useMemo, useRef } from "react"
 import styled, { css } from "styled-components"
 import {
   formatValue,
@@ -8,6 +8,7 @@ import {
 import { withAlpha } from "../../../../theme"
 import { columnIndex, toNumber, type StatementRows } from "./statementRows"
 import type { VisualColumns } from "../CellChart/chartTypes"
+import { OrderBookMidPrice } from "./OrderBookMidPrice"
 
 // An order book ladder: asks above, bids below, the mid price between them.
 // The query does the work: statement 1 returns the asks and statement 2 the
@@ -152,17 +153,6 @@ const Mid = styled.div`
   border-block: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
-const MidPrice = styled.span<{ $dir: "up" | "down" | null }>`
-  font-size: 1.7rem;
-  font-weight: 600;
-  color: ${({ $dir, theme }) =>
-    $dir === "up"
-      ? theme.color.chartUp
-      : $dir === "down"
-        ? theme.color.chartDown
-        : theme.color.contentPrimary};
-`
-
 const SpreadText = styled.span`
   color: ${({ theme }) => theme.color.contentSecondary};
   font-size: 1.15rem;
@@ -178,22 +168,11 @@ const Empty = styled.div`
   color: ${({ theme }) => theme.color.contentMuted};
 `
 
-/** Which way the mid price moved since the last result. */
-const useDirection = (mid: number | null) => {
-  const previous = useRef<number | null>(null)
-  const direction = useRef<"up" | "down" | null>(null)
-  if (mid !== null && previous.current !== null && mid !== previous.current)
-    direction.current = mid > previous.current ? "up" : "down"
-  useEffect(() => {
-    previous.current = mid
-  }, [mid])
-  return direction.current
-}
-
 type Props = {
   statements: (StatementRows | null)[]
   columns?: VisualColumns
   formats: ColumnFormats
+  queriesKey?: string
   // A click on a level reports its price.
   onSelect?: (price: number) => void
 }
@@ -202,6 +181,7 @@ export const OrderBook = ({
   statements,
   columns,
   formats,
+  queriesKey,
   onSelect,
 }: Props) => {
   const asks = useMemo(
@@ -245,7 +225,6 @@ export const OrderBook = ({
     bestAsk !== undefined && bestBid !== undefined
       ? (bestAsk + bestBid) / 2
       : null
-  const direction = useDirection(mid)
 
   // Start with the mid price in the middle of the ladder.
   useLayoutEffect(() => {
@@ -293,10 +272,11 @@ export const OrderBook = ({
           [...asks.levels].reverse().map((l) => row(l, "ask"))
         )}
         <Mid ref={midRef}>
-          <MidPrice $dir={direction}>
-            {mid === null ? "—" : formatValue(mid, priceFormat)}
-            {direction === "up" ? " ↑" : direction === "down" ? " ↓" : ""}
-          </MidPrice>
+          <OrderBookMidPrice
+            key={queriesKey}
+            value={mid}
+            format={priceFormat}
+          />
           <SpreadText>
             Spread{" "}
             <b>{spread === null ? "—" : formatValue(spread, priceFormat)}</b>

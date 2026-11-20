@@ -87,6 +87,7 @@ type Props = {
   formats: ColumnFormats
   interactions: CellInteractions | undefined
   clickVariableValue?: string
+  queriesKey?: string
   setVariables: SetVariables
   live: boolean
   isFocused: boolean
@@ -103,6 +104,7 @@ export const VisualCanvas = ({
   formats,
   interactions,
   clickVariableValue,
+  queriesKey,
   setVariables,
   live,
   isFocused,
@@ -192,6 +194,7 @@ export const VisualCanvas = ({
           statements={statements}
           columns={visual.columns}
           formats={formats}
+          queriesKey={queriesKey}
           onSelect={select}
         />
       )

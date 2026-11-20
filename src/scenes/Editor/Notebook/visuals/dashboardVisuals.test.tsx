@@ -49,6 +49,49 @@ describe("dashboard visuals", () => {
     expect(eth).toHaveFocus()
   })
 
+  it("rolls only changed mid-price digits and resets for a different query", () => {
+    // Given a book with a mid price of 100.10 at two decimal places
+    const columns = [
+      { name: "price", type: "DOUBLE" },
+      { name: "size", type: "DOUBLE" },
+    ]
+    const book = (mid: number, queriesKey = "BTC") => (
+      <OrderBook
+        queriesKey={queriesKey}
+        formats={{ price: { kind: "price", decimals: 2 } }}
+        statements={[
+          { columns, rows: [[mid + 1, 2]] },
+          { columns, rows: [[mid - 1, 10]] },
+        ]}
+      />
+    )
+    const { container, rerender } = renderComponent(book(100.1))
+    const selector = '[data-hook="order-book-mid-digit"]'
+    const digit = () => container.querySelector(selector)
+    expect(digit()).toBeNull()
+
+    // When a refresh changes the last displayed digit and the next rounds away
+    rerender(book(100.12))
+    const rollingDigit = digit()
+    rerender(book(100.121))
+
+    // Then only that digit rolls, and the rounded update does not restart it
+    expect(container.querySelectorAll(selector)).toHaveLength(1)
+    expect(rollingDigit).toHaveTextContent("02")
+    expect(digit()).toBe(rollingDigit)
+
+    // When the price falls and then the selected symbol changes
+    rerender(book(100.11))
+    expect(digit()).toHaveTextContent("21")
+    expect(
+      container.querySelector('[data-hook="order-book-mid-price"]'),
+    ).toHaveTextContent("↓")
+    rerender(book(100.15, "ETH"))
+
+    // Then the new book's first price is static
+    expect(digit()).toBeNull()
+  })
+
   it("keeps a price level mounted while its depth changes", () => {
     // Given an order book with a smaller ask than bid
     const columns = [

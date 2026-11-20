@@ -424,6 +424,7 @@ export const DrawCanvas: React.FC<Props> = ({
                       variable.name === cell.interactions?.click?.variable,
                   )?.value
                 }
+                queriesKey={queriesKey}
                 setVariables={setVariableValues}
                 live={live}
                 isFocused={isFocused}
