@@ -18,6 +18,7 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import {
+  CHART_TYPES,
   PIE_SHAPES,
   THRESHOLD_MARKS,
   type ChartConfig,
@@ -270,6 +271,8 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
     queries: obj.queries.map((q) => {
       if (typeof q !== "object" || q === null) return null
       const query = q as QueryChart
+      // An unknown type would reach code that looks it up by name.
+      if (!(CHART_TYPES as readonly unknown[]).includes(query.type)) return null
       const events = sanitizeEventColumns(query.events)
       const { events: _raw, percentStack, pieShape, scatter, ...rest } = query
       const next: QueryChart = events ? { ...rest, events } : rest

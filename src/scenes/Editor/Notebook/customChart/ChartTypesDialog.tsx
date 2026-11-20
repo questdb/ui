@@ -5,6 +5,7 @@ import {
   AlertDialog,
   Box,
   Button,
+  Checkbox,
   Dialog,
   ForwardRef,
   Input,
@@ -17,6 +18,7 @@ import type {
   NotebookChartType,
 } from "../../../../store/notebook"
 import { CodeEditorField } from "../CellChart/CodeEditorField"
+import { CheckboxRow } from "../CellChart/chartSettingsStyles"
 import {
   escapeInCodeEditor,
   tabPastCodeEditor,
@@ -375,6 +377,11 @@ export const ChartTypesDialog: React.FC<Props> = ({
                                   ? "Not used"
                                   : `Used by ${users.length} cell${users.length === 1 ? "" : "s"}`}
                               </Text>
+                              {!d.allowed && (
+                                <Text color="statusWarning" size="xs">
+                                  Not allowed to run
+                                </Text>
+                              )}
                             </TypeButton>
                           </li>
                         )
@@ -444,6 +451,22 @@ export const ChartTypesDialog: React.FC<Props> = ({
                             {selectedErrors.source}
                           </ErrorText>
                         )}
+                      </Field>
+                      <Field as="div">
+                        <CheckboxRow>
+                          <Checkbox
+                            checked={selected.allowed}
+                            onChange={(e) =>
+                              update({ allowed: e.target.checked })
+                            }
+                          />
+                          Allow this code to run
+                        </CheckboxRow>
+                        <Text color="contentSecondary" size="xs">
+                          {selected.allowed
+                            ? "It runs in the console with your rights whenever a chart uses it."
+                            : "It came from an import or from an agent without the write permission, so it does not run. It would run with your rights: allow it only once you have read it."}
+                        </Text>
                       </Field>
                       <Box justifyContent="space-between" align="center">
                         <Text color="contentSecondary" size="sm">

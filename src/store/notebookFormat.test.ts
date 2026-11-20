@@ -94,14 +94,14 @@ describe("sanitizers", () => {
   })
 
   it("dedupes chart types by name and drops invalid ones", () => {
-    // Given / When
+    // Given / When: an imported type that claims to be allowed
     const types = sanitizeChartTypes([
-      { name: "lanes", renderItem: "return null" },
+      { name: "lanes", renderItem: "return null", allowed: true },
       { name: "lanes", renderItem: "return 1" },
       { name: "bad name", renderItem: "" },
     ])
 
-    // Then
+    // Then it arrives not allowed: imported code waits for the user
     expect(types).toEqual([{ name: "lanes", renderItem: "return null" }])
   })
 

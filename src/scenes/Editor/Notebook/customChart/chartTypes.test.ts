@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { NotebookCell } from "../../../../store/notebook"
 import {
   cellsUsingChartType,
   chartTypesUsedBy,
+  keepAllowed,
   renameChartTypesIn,
 } from "./chartTypeUsage"
+import { resolveChartTypes } from "./chartTypeRegistry"
 import {
   draftOfTypes,
   newTypeDraft,
@@ -102,6 +104,21 @@ describe("chart type usage", () => {
 })
 
 describe("chart types draft", () => {
+  it("checks a source without running any of it", () => {
+    // Given a source whose expression has side effects
+    const ran = vi.fn()
+    ;(globalThis as { __ranChartType?: () => void }).__ranChartType = ran
+
+    // When
+    const error = compileError(
+      "function () {}, globalThis.__ranChartType(), function (p, a) {}",
+    )
+
+    // Then it parses, and nothing ran
+    expect(error).toBeNull()
+    expect(ran).not.toHaveBeenCalled()
+  })
+
   it("accepts comments above a function", () => {
     // Given / When / Then
     expect(
@@ -159,5 +176,52 @@ describe("chart types draft", () => {
       { name: "glyph", renderItem: "return null", description: "Dots " },
     ]
     expect(typesChanged(draftOfTypes(spaced), spaced)).toBe(false)
+  })
+})
+
+describe("chart types allowed to run", () => {
+  it("compiles and registers only allowed types", () => {
+    // Given one allowed type and one waiting for the user
+    const ran = vi.fn()
+    ;(globalThis as { __ranWaiting?: () => void }).__ranWaiting = ran
+
+    // When
+    const resolution = resolveChartTypes(42, [
+      {
+        name: "allowedType",
+        renderItem: "function (p, a) { return null }",
+        allowed: true,
+      },
+      {
+        name: "waiting",
+        renderItem:
+          "function () {}, globalThis.__ranWaiting(), function (p, a) {}",
+      },
+    ])
+
+    // Then the waiting one never ran and says why
+    expect(ran).not.toHaveBeenCalled()
+    expect(resolution.renderItems.has("allowedType")).toBe(true)
+    expect(resolution.renderItems.has("waiting")).toBe(false)
+    expect(resolution.errors.get("waiting")).toMatch(/not allowed to run/)
+  })
+
+  it("keeps the user's allowance when an agent resends the same code", () => {
+    // Given an allowed type
+    const previous = [{ name: "a", renderItem: "return null", allowed: true }]
+
+    // When an agent sends it back unchanged, and once changed
+    const same = keepAllowed(
+      [{ name: "a", renderItem: "return null" }],
+      previous,
+    )
+    const changed = keepAllowed(
+      [{ name: "a", renderItem: "return 1", allowed: false }],
+      previous,
+    )
+
+    // Then
+    expect(same[0].allowed).toBe(true)
+    expect(changed[0].allowed).toBe(false)
   })
 })

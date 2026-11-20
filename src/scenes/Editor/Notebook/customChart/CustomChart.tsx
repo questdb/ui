@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react"
 import type { EChartsOption } from "echarts"
-import { useTheme } from "styled-components"
+import styled, { useTheme } from "styled-components"
 import type { NotebookChartType } from "../../../../store/notebook"
 import {
   ChartRenderer,
@@ -19,6 +19,12 @@ import { chartTypesUsedBy } from "./chartTypeUsage"
 const MAPS = new Set<string>(MAP_NAMES)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
+
+const Waiting = styled(PaneEmptyState)`
+  padding: 1.6rem;
+  text-align: center;
+  line-height: 1.5;
+`
 
 type Props = {
   bufferId: number
@@ -122,6 +128,17 @@ export const CustomChart = ({
   if (sanitized.problems.some((p) => p.severity === "error" && p.path === ""))
     return <PaneEmptyState>{sanitized.problems[0].message}</PaneEmptyState>
   if (!mapsReady) return <PaneEmptyState>Loading map…</PaneEmptyState>
+  // A chart type whose code is not allowed draws nothing: say why.
+  const waiting = chartTypesUsedBy(rawOption).filter(
+    (name) =>
+      chartTypes?.some((t) => t.name === name && t.allowed !== true) ?? false,
+  )
+  if (waiting.length > 0)
+    return (
+      <Waiting role="status">
+        {`This chart uses ${waiting.map((n) => `"${n}"`).join(", ")}, JavaScript that does not run until you allow it: notebook toolbar → Chart types.`}
+      </Waiting>
+    )
 
   return (
     <ChartRenderer

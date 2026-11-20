@@ -56,6 +56,8 @@ import {
   type VisualWire,
 } from "./dashboardWire"
 import { compileError } from "../../scenes/Editor/Notebook/customChart/chartTypeCompile"
+import { MAX_CHART_TYPES } from "../../scenes/Editor/Notebook/customChart/chartTypesDraft"
+import type { NotebookChartType } from "../../store/notebook"
 import {
   type HighlightConfigWire,
   parseHighlightConfigFor,
@@ -221,6 +223,36 @@ const runAppliedCells = async (
 // The apply_notebook_state handler: wholesale-PUT validation, the draw-cell
 // DQL invariant, the stale re-check around server round-trips, and the
 // post-apply auto-run loop.
+/**
+ * The notebook's chart types from the agent: names unique, at most 32, each
+ * one parsing. Code from an agent without write waits for the user to allow
+ * it (see NotebookChartType.allowed).
+ */
+const parseChartTypes = (
+  wire: ChartTypeWire[],
+  canWrite: boolean,
+): NotebookChartType[] => {
+  if (wire.length > MAX_CHART_TYPES)
+    throw new WireError(
+      `chart_types has ${wire.length} entries; a notebook holds at most ${MAX_CHART_TYPES}.`,
+    )
+  const seen = new Set<string>()
+  return wire.map((t, i) => {
+    const type = parseChartType(t, `chart_types[${i}]`)
+    if (seen.has(type.name))
+      throw new WireError(
+        `chart_types[${i}].name "${type.name}" is used twice; names are unique.`,
+      )
+    seen.add(type.name)
+    const error = compileError(type.renderItem)
+    if (error)
+      throw new WireError(
+        `chart_types[${i}].render_item does not compile: ${error}`,
+      )
+    return { ...type, allowed: canWrite }
+  })
+}
+
 export const dispatchApplyNotebookState = async (
   input: unknown,
   setStatus: StatusCallback,
@@ -505,17 +537,7 @@ export const dispatchApplyNotebookState = async (
         return cell
       }),
       ...(chart_types
-        ? {
-            chartTypes: chart_types.map((t, i) => {
-              const type = parseChartType(t, `chart_types[${i}]`)
-              const error = compileError(type.renderItem)
-              if (error)
-                throw new WireError(
-                  `chart_types[${i}].render_item does not compile: ${error}`,
-                )
-              return type
-            }),
-          }
+        ? { chartTypes: parseChartTypes(chart_types, perms.write) }
         : {}),
       ...(chart_sync ? { chartSync: parseChartSync(chart_sync) } : {}),
     }

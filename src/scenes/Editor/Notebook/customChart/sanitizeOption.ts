@@ -1,6 +1,7 @@
 import type { ColorShape } from "../../../../types/styled"
 import { isTone, toneColor } from "../../../../utils/formats/columnFormat"
 import { copyPlainOption } from "../../../../store/notebookFormat"
+import { escapeHtml } from "../../../../utils/escapeHtml"
 
 // Makes an agent-written ECharts option safe and on-style before it is drawn.
 //
@@ -113,13 +114,6 @@ export const resolveToken = (
     : color
 }
 
-const escapeHtml = (text: string): string =>
-  text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -192,6 +186,11 @@ export const sanitizeOption = (
         out[key] = walkTooltip(value, at)
         continue
       }
+      // ECharts takes a string tooltip as its template, inserted as HTML.
+      if (key === "tooltip" && typeof value === "string") {
+        out[key] = escapedTemplate(value, at)
+        continue
+      }
       if (
         (key === "image" || key === "backgroundImage") &&
         typeof value === "string"
@@ -213,6 +212,15 @@ export const sanitizeOption = (
     return out
   }
 
+  // A tooltip template is inserted as HTML; data values are escaped by
+  // ECharts, the template itself is not.
+  const escapedTemplate = (value: string, at: string): string => {
+    const escaped = escapeHtml(value.slice(0, MAX_STRING))
+    if (escaped !== value)
+      report(at, "HTML in tooltip templates is shown as text.")
+    return escaped
+  }
+
   const walkTooltip = (
     tooltip: Record<string, unknown>,
     path: string,
@@ -225,12 +233,7 @@ export const sanitizeOption = (
         continue
       }
       if (key === "formatter" && typeof value === "string") {
-        // The template is inserted as HTML; data values are escaped by
-        // ECharts, the template itself is not.
-        const escaped = escapeHtml(value.slice(0, MAX_STRING))
-        if (escaped !== value)
-          report(at, "HTML in tooltip templates is shown as text.")
-        out[key] = escaped
+        out[key] = escapedTemplate(value, at)
         continue
       }
       out[key] = walk(value, at, { tooltip: true, title: false })

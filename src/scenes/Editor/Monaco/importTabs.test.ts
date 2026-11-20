@@ -1144,7 +1144,10 @@ describe("sanitizeBuffer", () => {
                 xColumn: "ts",
                 horizontal: "yes",
                 thresholds: "zebra",
-                queries: [{ type: "pie", yColumns: ["v"], pieShape: "star" }],
+                queries: [
+                  { type: "pie", yColumns: ["v"], pieShape: "star" },
+                  { type: "toString", yColumns: ["v"] },
+                ],
               },
             },
           ],
@@ -1169,9 +1172,10 @@ describe("sanitizeBuffer", () => {
           },
         ],
       })
+      // An unknown type is dropped, not looked up by name later
       expect(result.notebookViewState?.cells[1].chartConfig).toEqual({
         xColumn: "ts",
-        queries: [{ type: "pie", yColumns: ["v"] }],
+        queries: [{ type: "pie", yColumns: ["v"] }, null],
       })
     })
 

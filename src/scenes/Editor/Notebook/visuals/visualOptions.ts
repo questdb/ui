@@ -1,4 +1,5 @@
 import type { CustomSeriesRenderItem, EChartsOption } from "echarts"
+import { escapeHtml } from "../../../../utils/escapeHtml"
 import type { ColorShape } from "../../../../types/styled"
 import type { VisualConfig } from "../CellChart/chartTypes"
 import { echarts } from "../CellChart/echartsSetup"
@@ -275,7 +276,7 @@ export const stateTimelineOption = ({
           const v = (p as { value: [number, number, number, number] }).value
           const s = states[v[3]]
           const minutes = Math.round((v[1] - v[0]) / 60000)
-          return `${lanes[v[2]]}<br/><b>${s.replace(/</g, "&lt;")}</b><br/>${clock(v[0])}–${clock(v[1])} · ${minutes} min`
+          return `${escapeHtml(lanes[v[2]] ?? "")}<br/><b>${escapeHtml(s)}</b><br/>${clock(v[0])}–${clock(v[1])} · ${minutes} min`
         },
       },
       grid: { left: 12, right: 24, top: 12, bottom: 36, containLabel: true },
@@ -387,7 +388,7 @@ export const treemapOption = (ctx: VisualContext): VisualBuild => {
   const changes = colorValues(h.tree)
   const diverging = changes.length > 0
   const grouped = h.tree.some((n) => n.children && n.children.length > 0)
-  const esc = (t: string) => t.replace(/</g, "&lt;")
+  const esc = escapeHtml
   // Without a change column, each group takes a palette colour and its tiles
   // shade by size.
   const data = withColorValues(h.tree).map((node, i) =>
@@ -412,9 +413,9 @@ export const treemapOption = (ctx: VisualContext): VisualBuild => {
             .map((t) => t.name)
             .filter(Boolean)
             .join(" › ")
-          return `<b>${esc(path || name)}</b><br/>${formatValue(v, valueFormat)}${
+          return `<b>${esc(path || name)}</b><br/>${esc(formatValue(v, valueFormat))}${
             c !== undefined && colorFormat
-              ? ` · ${formatValue(c, colorFormat)}`
+              ? ` · ${esc(formatValue(c, colorFormat))}`
               : ""
           }`
         },
@@ -533,7 +534,7 @@ export const sunburstOption = (ctx: VisualContext): VisualBuild => {
             value: number | number[]
           }
           const v = Array.isArray(value) ? value[0] : value
-          return `${name.replace(/</g, "&lt;")}<br/>${formatValue(v, valueFormat)}`
+          return `${escapeHtml(name)}<br/>${escapeHtml(formatValue(v, valueFormat))}`
         },
       },
       ...(changes.length > 0
@@ -604,10 +605,10 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
               value?: number
             }
           }
-          const esc = (t: string | undefined) => (t ?? "").replace(/</g, "&lt;")
+          const esc = (t: string | undefined) => escapeHtml(t ?? "")
           return dataType === "edge"
-            ? `${esc(data.source)} → ${esc(data.target)}<br/>${formatValue(data.value, format)}`
-            : `${esc(data.name)}<br/>${formatValue(weight.get(data.name ?? ""), format)}`
+            ? `${esc(data.source)} → ${esc(data.target)}<br/>${esc(formatValue(data.value, format))}`
+            : `${esc(data.name)}<br/>${esc(formatValue(weight.get(data.name ?? ""), format))}`
         },
       },
       series: [
@@ -862,7 +863,7 @@ export const mapOption = ({
         tooltip: {
           formatter: (p: unknown) => {
             const { name, value } = p as { name: string; value: number[] }
-            return `${name.replace(/</g, "&lt;")}<br/>${formatValue(value[2], format)}`
+            return `${escapeHtml(name)}<br/>${escapeHtml(formatValue(value[2], format))}`
           },
         },
         geo: bounds ? { ...geo, zoom: 1, boundingCoords: bounds } : geo,
@@ -1048,7 +1049,7 @@ export const liquidityHeatmapOption = ({
         trigger: "item",
         formatter: (p: unknown) => {
           const v = (p as { value: number[] }).value
-          return `${formatValue(v[1], priceFormat)}<br/>${formatValue(v[2], valueFormat)}`
+          return `${escapeHtml(formatValue(v[1], priceFormat))}<br/>${escapeHtml(formatValue(v[2], valueFormat))}`
         },
       },
       grid: { left: 12, right: 72, top: 12, bottom: 32, containLabel: true },

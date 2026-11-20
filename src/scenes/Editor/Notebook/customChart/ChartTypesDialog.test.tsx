@@ -95,7 +95,14 @@ describe("ChartTypesDialog", () => {
     ).toBeVisible()
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }))
     expect(onSave).toHaveBeenCalledWith(
-      [{ name: "dots", renderItem: "return null", description: "Dots" }],
+      [
+        {
+          name: "dots",
+          renderItem: "return null",
+          description: "Dots",
+          allowed: false,
+        },
+      ],
       { glyph: "dots" },
     )
   })
@@ -175,5 +182,25 @@ describe("ChartTypesDialog", () => {
     )
     expect(within(dialog).getByDisplayValue("glyph")).toBeVisible()
     expect(within(dialog).getByDisplayValue("Squares")).toBeVisible()
+  })
+
+  it("keeps code it did not come from the user off until allowed", async () => {
+    // Given an imported type, which is not allowed to run
+    const { dialog, onSave } = renderDialog()
+    expect(within(dialog).getByText("Not allowed to run")).toBeVisible()
+    const allow = within(dialog).getByRole("checkbox", {
+      name: "Allow this code to run",
+    })
+    expect(allow).not.toBeChecked()
+
+    // When the user allows it and saves
+    await userEvent.click(allow)
+    await userEvent.click(within(dialog).getByRole("button", { name: "Save" }))
+
+    // Then it is saved as allowed
+    expect(onSave).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: "glyph", allowed: true })],
+      {},
+    )
   })
 })

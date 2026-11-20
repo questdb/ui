@@ -4,9 +4,9 @@ import type { NotebookVariable } from "../../../store/notebook"
 import type { Client } from "../../../utils/questdb/client"
 import { maskParserBlockComments } from "../../../utils/parserSql"
 
-const NAME_RE = /^[a-zA-Z\u0080-\uFFFF_][a-zA-Z0-9\u0080-\uFFFF_]*$/
+import { isValidVariableName } from "./variableName"
 
-export const isValidVariableName = (name: string): boolean => NAME_RE.test(name)
+export { isValidVariableName }
 
 const isVariableLike = (value: unknown): value is NotebookVariable => {
   if (!value || typeof value !== "object") return false

@@ -29,6 +29,16 @@ import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import { loadPassiveResultStatusReader } from "../notebooks/notebookResultStatus"
 
+import {
+  toHighlightConfigWire,
+  type HighlightConfigWire,
+} from "../tools/highlightConfigWire"
+import { cellDashboardWire, visualToWire } from "../tools/dashboardWire"
+import {
+  getRenderReport,
+  renderReportWire,
+} from "../../scenes/Editor/Notebook/renderReports"
+
 type ChartQueryWire = {
   type: string
   y_columns: string[]
@@ -46,15 +56,6 @@ type ChartQueryWire = {
   pie_shape?: string
   scatter?: { size?: string; color?: string }
 }
-import {
-  toHighlightConfigWire,
-  type HighlightConfigWire,
-} from "../tools/highlightConfigWire"
-import { cellDashboardWire, visualToWire } from "../tools/dashboardWire"
-import {
-  getRenderReport,
-  renderReportWire,
-} from "../../scenes/Editor/Notebook/renderReports"
 
 export type { HighlightConfigWire }
 
@@ -89,6 +90,11 @@ export type NotebookContextCell = {
   view: AgentCellView | null
   chart_config?: ChartConfigWire
   highlight_config?: HighlightConfigWire
+  // The dashboard fields (see cellDashboardWire): apply_notebook_state
+  // replaces them, so they are shown to be sent back.
+  formats?: Record<string, unknown>
+  interactions?: Record<string, unknown>
+  grid_mode?: string
   last_run_status?: RunStatus
   last_run_error_summary?: string
   // Live-only: present for the mounted notebook alone. Absence never means
@@ -111,7 +117,11 @@ export type NotebookContextSnapshot =
       variables?: Array<{ name: string; value: string }>
       // Chart types the notebook defines (names and descriptions; read the
       // source with get_chart_type).
-      chart_types?: Array<{ name: string; description?: string }>
+      chart_types?: Array<{
+        name: string
+        description?: string
+        allowed: boolean
+      }>
       chart_sync?: { crosshair: "off" | "line" | "tooltip"; zoom: boolean }
       cells: NotebookContextCell[]
     }
@@ -324,6 +334,8 @@ export const buildSnapshot = async (
     out.chart_types = settings.chartTypes.map((t) => ({
       name: t.name,
       ...(t.description ? { description: t.description } : {}),
+      // False: its code does not run until the user allows it.
+      allowed: t.allowed === true,
     }))
   }
   if (settings.chartSync) out.chart_sync = settings.chartSync
@@ -331,6 +343,19 @@ export const buildSnapshot = async (
 }
 
 // YAML-ish shape — stable regardless of escape characters in cell values.
+// Custom options can be long; every turn carries this block, so a long one is
+// named, not repeated.
+const CONTEXT_OPTION_MAX = 2000
+
+const contextChartConfig = (config: ChartConfigWire) =>
+  config.custom_option_json &&
+  config.custom_option_json.length > CONTEXT_OPTION_MAX
+    ? {
+        ...config,
+        custom_option_json: `(${config.custom_option_json.length} characters: read it with get_cell, and send it back unchanged in apply_notebook_state to keep it)`,
+      }
+    : config
+
 export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
   if (snap.status !== "ok") {
     const lines = [
@@ -361,6 +386,10 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
     }`,
   )
+  if (snap.chart_types && snap.chart_types.length > 0)
+    lines.push(`  chart_types: ${stringifyForPromptContext(snap.chart_types)}`)
+  if (snap.chart_sync)
+    lines.push(`  chart_sync: ${stringifyForPromptContext(snap.chart_sync)}`)
   if (snap.variables && snap.variables.length > 0) {
     lines.push("  variables:")
     for (const { name, value } of snap.variables) {
@@ -392,7 +421,7 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
     lines.push(`      view: ${c.view}`)
     if (c.chart_config) {
       lines.push(
-        `      chart_config: ${stringifyForPromptContext(c.chart_config)}`,
+        `      chart_config: ${stringifyForPromptContext(contextChartConfig(c.chart_config))}`,
       )
     }
     if (c.highlight_config) {
@@ -400,6 +429,13 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
         `      highlight_config: ${stringifyForPromptContext(c.highlight_config)}`,
       )
     }
+    if (c.formats)
+      lines.push(`      formats: ${stringifyForPromptContext(c.formats)}`)
+    if (c.interactions)
+      lines.push(
+        `      interactions: ${stringifyForPromptContext(c.interactions)}`,
+      )
+    if (c.grid_mode) lines.push(`      grid_mode: ${c.grid_mode}`)
     if (c.last_run_status)
       lines.push(`      last_run_status: ${c.last_run_status}`)
     if (c.last_run_error_summary)

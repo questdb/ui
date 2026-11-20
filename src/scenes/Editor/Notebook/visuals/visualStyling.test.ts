@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { lightColors } from "../../../../theme"
-import { gaugeOption, stateTimelineOption } from "./visualOptions"
+import {
+  gaugeOption,
+  graphOption,
+  stateTimelineOption,
+  treemapOption,
+} from "./visualOptions"
 import { statTiles } from "./StatTiles"
 import { bulletRows } from "./Bullets"
 import type { StatementRows } from "./statementRows"
@@ -30,6 +35,37 @@ describe("stateTimelineOption", () => {
       ["2026-01-01T01:00:00.000000Z", "R-1", "moving"],
     ],
   )
+
+  it("escapes lane and state names in its tooltip", () => {
+    // Given a lane named with markup, as any writer could ingest
+    const ctx = {
+      visual: { type: "stateTimeline" as const },
+      statements: [
+        rows(
+          [
+            ["ts", "TIMESTAMP"],
+            ["robot", "SYMBOL"],
+            ["state", "SYMBOL"],
+          ],
+          [["2026-01-01T00:00:00.000000Z", "<img src=x>", "<b>up"]],
+        ),
+      ],
+      colors: lightColors,
+      formats: {},
+    }
+
+    // When
+    const { option } = stateTimelineOption(ctx)
+    const formatter = (
+      option as { tooltip: { formatter: (p: unknown) => string } }
+    ).tooltip.formatter
+    const html = formatter({ value: [0, 60000, 0, 0] })
+
+    // Then
+    expect(html).not.toContain("<img")
+    expect(html).toContain("&lt;img src=x&gt;")
+    expect(html).toContain("&lt;b&gt;up")
+  })
 
   it("orders lanes naturally and states by severity, coloured by meaning", () => {
     // Given
@@ -122,5 +158,59 @@ describe("bulletRows", () => {
 
     // Then
     expect(read).toMatchObject({ valueIdx: 1, targetIdx: 2, labelIdx: 0 })
+  })
+})
+
+describe("visual tooltips", () => {
+  it("escape formatted values, whose prefix and suffix come from formats", () => {
+    // Given formats whose affixes are markup, as an import could carry
+    const formats = {
+      size: { prefix: "<img src=x ", suffix: " onerror=a>" },
+      w: { prefix: "<b>" },
+    }
+    const tree = treemapOption({
+      visual: { type: "treemap" as const },
+      statements: [
+        rows(
+          [
+            ["name", "SYMBOL"],
+            ["size", "DOUBLE"],
+          ],
+          [["a", 1]],
+        ),
+      ],
+      colors: lightColors,
+      formats,
+    })
+    const graph = graphOption({
+      visual: { type: "graph" as const },
+      statements: [
+        rows(
+          [
+            ["src", "SYMBOL"],
+            ["dst", "SYMBOL"],
+            ["w", "DOUBLE"],
+          ],
+          [["a", "b", 2]],
+        ),
+      ],
+      colors: lightColors,
+      formats,
+    })
+    const tooltip = (option: unknown) =>
+      (option as { tooltip: { formatter: (p: unknown) => string } }).tooltip
+        .formatter
+
+    // When
+    const treeHtml = tooltip(tree.option)({ name: "a", value: 1 })
+    const edgeHtml = tooltip(graph.option)({
+      dataType: "edge",
+      data: { source: "a", target: "b", value: 2 },
+    })
+
+    // Then
+    expect(treeHtml).not.toContain("<img")
+    expect(treeHtml).toContain("&lt;img src=x")
+    expect(edgeHtml).not.toContain("<b>2")
   })
 })

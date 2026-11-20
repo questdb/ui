@@ -1,3 +1,4 @@
+import { isValidVariableName } from "../scenes/Editor/Notebook/variableName"
 import type {
   ChartSync,
   CellInteractions,
@@ -151,8 +152,8 @@ export const sanitizeEventColumns = (
   return out
 }
 
-const MAX_OPTION_DEPTH = 32
-const MAX_OPTION_NODES = 20_000
+export const MAX_OPTION_DEPTH = 32
+export const MAX_OPTION_NODES = 20_000
 
 /**
  * A deep copy of a JSON-like option, or undefined when it is not plain data
@@ -204,10 +205,9 @@ export const sanitizeCustomChart = (
   return option ? { option } : undefined
 }
 
-const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
-
+/** A variable name as notebooks allow it, at most 64 characters. */
 export const isVariableName = (value: unknown): value is string =>
-  typeof value === "string" && value.length <= 64 && VARIABLE_NAME.test(value)
+  typeof value === "string" && value.length <= 64 && isValidVariableName(value)
 
 export const sanitizeInteractions = (
   value: unknown,

@@ -4,6 +4,7 @@ import {
   Button,
   Checkbox,
   CopyButton,
+  Input,
   SearchableSelect,
   SelectMenuControl,
   Text,
@@ -52,6 +53,10 @@ const TYPE_LABELS: Record<ChartType, string> = {
   boxplot: "Box plot",
   events: "Events (markers on the time axis)",
 }
+
+// Types drawn as one series, whose legend name the user can set (the others
+// name their series after their columns).
+const NAMED_TYPES: ChartType[] = ["candlestick", "band", "rangeBar", "boxplot"]
 
 const PIE_SHAPE_LABELS: Record<PieShape, string> = {
   pie: "Pie",
@@ -596,6 +601,20 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           />
           Stack to 100% (each x shows shares)
         </CheckboxRow>
+      )}
+
+      {NAMED_TYPES.includes(query.type) && (
+        <Field>
+          <FieldLabel>Series name</FieldLabel>
+          <Input
+            name={`series-name-${idx}`}
+            placeholder="From the columns"
+            value={query.name ?? ""}
+            onChange={(e) =>
+              onUpdateQuery({ name: e.target.value || undefined })
+            }
+          />
+        </Field>
       )}
 
       {!isAnchorTab && query.type !== "events" && (

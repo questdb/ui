@@ -146,6 +146,11 @@ type Props = {
 }
 
 /** The settings of a component: its type, the columns it reads, its options. */
+
+const ScaleError = styled.span`
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.color.statusDanger};
+`
 export const ComponentSettings: React.FC<Props> = ({
   visual,
   statements,
@@ -291,6 +296,13 @@ export const ComponentSettings: React.FC<Props> = ({
               />
             </Field>
           </Row>
+          {visual.min !== undefined &&
+            visual.max !== undefined &&
+            visual.min >= visual.max && (
+              <ScaleError role="alert">
+                The minimum must be below the maximum.
+              </ScaleError>
+            )}
         </FieldGroup>
       )}
 

@@ -36,6 +36,22 @@ describe("sanitizeOption", () => {
     )
   })
 
+  it("escapes a tooltip given as a string, which ECharts takes as a template", () => {
+    // Given a series-level string tooltip
+    const raw = {
+      series: [{ type: "line", tooltip: "<img src=x onerror=alert(1)>" }],
+    }
+
+    // When
+    const { option, problems } = sanitizeOption(raw, context)
+
+    // Then
+    expect((option.series as { tooltip: string }[])[0].tooltip).toBe(
+      "&lt;img src=x onerror=alert(1)&gt;",
+    )
+    expect(problems.map((p) => p.path)).toContain("series[0].tooltip")
+  })
+
   it("resolves tone tokens and removes literal colours and fonts", () => {
     // Given
     const raw = {

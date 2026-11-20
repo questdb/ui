@@ -93,7 +93,8 @@ export const interactionErrors = (
     if (!name) {
       errors[slot] = created ? "Name the variable." : "Choose a variable."
     } else if (!isVariableName(name)) {
-      errors[slot] = "Letters, digits and _, starting with a letter or _."
+      errors[slot] =
+        "Letters, digits and _, starting with a letter or _ (at most 64)."
     } else if (created) {
       const clash = slots.some(
         (other) =>

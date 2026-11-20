@@ -1,3 +1,4 @@
+import { isVariableName } from "../../../../store/notebookFormat"
 import { describe, expect, it } from "vitest"
 import {
   draftOf,
@@ -64,6 +65,36 @@ describe("draw settings", () => {
       ok: true,
       option: { series: [] },
     })
+  })
+
+  it("holds the drawer to the rules the agent tools and import apply", () => {
+    // Given
+    const draft = draftOf({ chartConfig: preset }, preset)
+    const huge = JSON.stringify({
+      data: Array.from({ length: 25_000 }, () => 1),
+    })
+
+    // When / Then: a custom option past the size limit is refused
+    expect(
+      settingsOf({ ...draft, kind: "custom", customJson: huge }),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/too large/) as string,
+    })
+    // and a component scale whose minimum is not below its maximum
+    expect(
+      settingsOf({
+        ...draft,
+        kind: "component",
+        visual: { type: "gauge", min: 10, max: 10 },
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/minimum/) as string,
+    })
+    // while notebook variable names in any script are accepted
+    expect(isVariableName("größe")).toBe(true)
+    expect(isVariableName("9lives")).toBe(false)
   })
 
   it("starts a custom option from the chart the cell draws", () => {

@@ -6,6 +6,11 @@ import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, QueryChart, VisualConfig } from "./chartTypes"
 import { classifyColumn } from "./inferChartConfig"
+import {
+  MAX_OPTION_DEPTH,
+  MAX_OPTION_NODES,
+  copyPlainOption,
+} from "../../../../store/notebookFormat"
 import { tidyFormats } from "../CellFormats/formatSummary"
 import type { VariableSlot } from "../interactions/InteractionsEditor"
 
@@ -113,7 +118,14 @@ export const parseCustomJson = (text: string): CustomParse => {
   }
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return { ok: false, error: "The option must be a JSON object: { … }." }
-  return { ok: true, option: value as Record<string, unknown> }
+  // The limits every other way in (agent tools, import) applies.
+  const plain = copyPlainOption(value)
+  if (!plain)
+    return {
+      ok: false,
+      error: `The option is too large or too deeply nested (at most ${MAX_OPTION_NODES.toLocaleString("en-US")} values, ${MAX_OPTION_DEPTH} levels).`,
+    }
+  return { ok: true, option: plain }
 }
 
 export type SaveResult =
@@ -130,6 +142,9 @@ export const settingsOf = (draft: DrawDraft): SaveResult => {
   if (draft.kind === "component") {
     if (!draft.visual)
       return { ok: false, error: "Choose a component to draw." }
+    const { min, max } = draft.visual
+    if (min !== undefined && max !== undefined && min >= max)
+      return { ok: false, error: "The minimum must be below the maximum." }
     chartConfig.visual = draft.visual
   } else if (draft.kind === "custom") {
     const parsed = parseCustomJson(draft.customJson)

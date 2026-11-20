@@ -339,15 +339,126 @@ describe("dispatchTool — dashboard tools", () => {
         name: "lanes",
         renderItem: "function (params, api) { return null }",
         description: "Lanes",
+        // An agent with write may run its code
+        allowed: true,
       },
     ])
     expect(parsed(read).render_item).toContain("function")
+    expect(parsed(read)).toMatchObject({ allowed: true, used_by: [] })
 
     // When it is deleted
     await call("delete_chart_type", { buffer_id: 1, name: "lanes" })
 
     // Then
     expect(state.parts.settings.chartTypes).toBeUndefined()
+  })
+
+  it("define_chart_type from an agent without write waits for the user to allow it", async () => {
+    // Given an agent that may read but not write, and a cell that draws
+    // with the type
+    const { state } = mountLive(1, [
+      {
+        ...cell("c"),
+        mode: "draw",
+        chartConfig: {
+          xColumn: null,
+          queries: [],
+          custom: {
+            option: { series: [{ type: "custom", renderItem: "lanes" }] },
+          },
+        },
+      } as NotebookCell,
+    ])
+
+    // When
+    const defined = await dispatchTool(
+      "define_chart_type",
+      {
+        buffer_id: 1,
+        name: "lanes",
+        render_item: "function (params, api) { return null }",
+        description: null,
+      },
+      makeClient(),
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: false },
+      dqlValidator,
+    )
+    const read = await call("get_chart_type", { buffer_id: 1, name: "lanes" })
+
+    // Then it is stored but not allowed, and the agent is told
+    expect(state.parts.settings.chartTypes?.[0].allowed).toBe(false)
+    expect(parsed(defined).note).toMatch(/until the user allows it/)
+    expect(parsed(read)).toMatchObject({ allowed: false, used_by: ["c"] })
+  })
+
+  it("an agent without write resending allowed code does not switch it off", async () => {
+    // Given a type the user allowed
+    const source = "function (params, api) { return null }"
+    const { state } = mountLive(1, [cell("c")], {
+      settings: {
+        chartTypes: [{ name: "lanes", renderItem: source, allowed: true }],
+      },
+    })
+
+    // When an agent without write defines it again with the same code
+    await dispatchTool(
+      "define_chart_type",
+      { buffer_id: 1, name: "lanes", render_item: source, description: null },
+      makeClient(),
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: false },
+      dqlValidator,
+    )
+
+    // Then it stays allowed
+    expect(state.parts.settings.chartTypes?.[0].allowed).toBe(true)
+  })
+
+  it("apply_notebook_state runs chart type code only with write, or when the user allowed it unchanged", async () => {
+    // Given a type the user allowed
+    const allowed = "function (params, api) { return null }"
+    const { state } = mountLive(1, [cell("c")], {
+      settings: {
+        chartTypes: [{ name: "kept", renderItem: allowed, allowed: true }],
+      },
+    })
+    const apply = (write: boolean) =>
+      dispatchTool(
+        "apply_notebook_state",
+        {
+          buffer_id: 1,
+          cells: [{ id: "c", preserve_value: true }],
+          chart_types: [
+            { name: "kept", render_item: allowed, description: null },
+            {
+              name: "fresh",
+              render_item: "function (p, a) { return null }",
+              description: null,
+            },
+          ],
+        },
+        makeClient(),
+        noopStatus,
+        { grantSchemaAccess: true, read: true, write },
+        dqlValidator,
+      )
+    const allowedOf = () =>
+      Object.fromEntries(
+        (state.parts.settings.chartTypes ?? []).map((t) => [t.name, t.allowed]),
+      )
+
+    // When an agent without write sends them
+    await apply(false)
+
+    // Then the unchanged one stays allowed and the new one waits
+    expect(allowedOf()).toEqual({ kept: true, fresh: false })
+
+    // When an agent with write sends them
+    await apply(true)
+
+    // Then both run
+    expect(allowedOf()).toEqual({ kept: true, fresh: true })
   })
 
   it("define_chart_type rejects source that does not compile", async () => {

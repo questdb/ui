@@ -1,4 +1,7 @@
-import type { NotebookCell } from "../../../../store/notebook"
+import type {
+  NotebookCell,
+  NotebookChartType,
+} from "../../../../store/notebook"
 
 // Where a notebook's chart types are used: custom chart options name them in
 // a custom series' `renderItem`.
@@ -55,3 +58,18 @@ export const renameChartTypesIn = (
       : rename(option.series),
   }
 }
+
+/**
+ * Chart types as an agent sends them, keeping the user's allowance for any
+ * type whose code did not change: resending a type does not switch it off.
+ */
+export const keepAllowed = (
+  next: NotebookChartType[],
+  previous: NotebookChartType[] | undefined,
+): NotebookChartType[] =>
+  next.map((type) => {
+    const before = previous?.find((t) => t.name === type.name)
+    return before?.allowed === true && before.renderItem === type.renderItem
+      ? { ...type, allowed: true }
+      : type
+  })

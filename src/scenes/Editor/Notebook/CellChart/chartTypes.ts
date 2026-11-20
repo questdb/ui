@@ -108,7 +108,7 @@ export const ROLE_FIELD = {
 } as const
 
 export const isRoleChartType = (type: ChartType): type is RoleChartType =>
-  type in ROLE_COLUMNS
+  Object.hasOwn(ROLE_COLUMNS, type)
 
 export type EventColumns = {
   /** When the event happened, or when its range starts. */

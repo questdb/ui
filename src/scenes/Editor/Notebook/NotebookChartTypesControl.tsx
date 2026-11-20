@@ -1,5 +1,6 @@
 import React, { useState } from "react"
-import { ShapesIcon } from "@phosphor-icons/react"
+import { ShapesIcon, WarningIcon } from "@phosphor-icons/react"
+import { useTheme } from "styled-components"
 import { Button, Tooltip } from "../../../components"
 import {
   useNotebookActions,
@@ -15,8 +16,16 @@ export const NotebookChartTypesControl: React.FC = () => {
   const { saveChartTypes } = useNotebookActions()
   const bufferId = useNotebookBufferId()
   const [open, setOpen] = useState(false)
+  const theme = useTheme()
   const count = settings.chartTypes?.length ?? 0
-  const label = count === 0 ? "Chart types" : `Chart types (${count} defined)`
+  const waiting =
+    settings.chartTypes?.filter((t) => t.allowed !== true).length ?? 0
+  const label =
+    count === 0
+      ? "Chart types"
+      : waiting > 0
+        ? `Chart types (${count} defined, ${waiting} not allowed to run)`
+        : `Chart types (${count} defined)`
 
   return (
     <>
@@ -29,6 +38,14 @@ export const NotebookChartTypesControl: React.FC = () => {
         >
           <ShapesIcon size={18} />
           {count > 0 && count}
+          {waiting > 0 && (
+            <WarningIcon
+              size={14}
+              weight="fill"
+              color={theme.color.statusWarning}
+              aria-hidden
+            />
+          )}
         </Button>
       </Tooltip>
       <ChartTypesDialog

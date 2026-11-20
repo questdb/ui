@@ -1,7 +1,10 @@
 import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
 import { loadRe2 } from "../../components/ResultGrid/highlight"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
-import { cellsUsingChartType } from "../../scenes/Editor/Notebook/customChart/chartTypeUsage"
+import {
+  cellsUsingChartType,
+  keepAllowed,
+} from "../../scenes/Editor/Notebook/customChart/chartTypeUsage"
 import {
   backgroundOf,
   bringCellIntoView,
@@ -1347,11 +1350,16 @@ export const dispatchTool = async (
           return validationResult(
             `render_item does not compile: ${error}. Send a function expression such as "function (params, api) { ... }" or a function body that uses params and api.`,
           )
+        // Code from an agent without write waits for the user to allow it.
+        type.allowed = perms.write
+
         return routeNotebookTool(async () => {
           const settings = await readSettings(buffer_id, signal)
           const others = (settings.chartTypes ?? []).filter(
             (t) => t.name !== type.name,
           )
+          // The same code the user already allowed stays allowed.
+          Object.assign(type, keepAllowed([type], settings.chartTypes)[0])
           if (others.length >= 32)
             throw new NotebookToolError(
               "validation",
@@ -1369,6 +1377,11 @@ export const dispatchTool = async (
           return {
             ok: true,
             usage: `Use it in a custom chart option: {"series":[{"type":"custom","renderItem":"${type.name}","datasetId":"q0","encode":{...}}]}.`,
+            ...(type.allowed
+              ? {}
+              : {
+                  note: "Without the write permission the code does not run until the user allows it in the notebook's Chart types dialog; until then charts using it report that in render_report.",
+                }),
           }
         }, toolContext)
       }
@@ -1424,6 +1437,7 @@ export const dispatchTool = async (
             name: type.name,
             render_item: type.renderItem,
             description: type.description ?? null,
+            allowed: type.allowed === true,
             used_by: cellsUsingChartType(
               await readCells(buffer_id, signal),
               name,

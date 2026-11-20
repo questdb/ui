@@ -1499,7 +1499,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Define (or replace) a notebook chart type: an ECharts custom-series renderItem written as JavaScript, usable by name from any custom chart option in this notebook ({\"type\":\"custom\",\"renderItem\":\"<name>\",\"datasetId\":\"q0\",\"encode\":{…}}). Draw INSIDE the plot: the console fits the plot area to the panel and only knows about axis labels, so marks or text a renderItem draws past api.coord of the axis range overflow the panel. Leave room in data space instead (e.g. xAxis max 120 for a 0-100 bar with its value written after it). Use it for marks no built-in series draws (lanes, ranges, glyphs, annotated boxes). render_item is a function expression `function (params, api) { … }` or a function body using params and api. It is called once per data item and returns a graphic element or null, e.g. {type:'rect', shape:{x,y,width,height}, style:{fill: api.visual('color')}}. Useful api: api.value(dim) (dimension index or column name), api.coord([x, y]) → pixel point, api.size([dx, dy]) → pixel size of a data step, api.visual('color'); params.coordSys has x, y, width, height of the plot; params.itemPayload is the series' itemPayload object. Return group elements ({type:'group', children:[…]}) for several shapes. Colours: take them from api.visual('color') or the series itemStyle (where tones like \"$accent\" work), not literals. Errors thrown while drawing show in get_cell's render_report. EXPERIMENTAL: the function runs in the console page.",
+    "description": "Define (or replace) a notebook chart type: an ECharts custom-series renderItem written as JavaScript, usable by name from any custom chart option in this notebook ({\"type\":\"custom\",\"renderItem\":\"<name>\",\"datasetId\":\"q0\",\"encode\":{…}}). Draw INSIDE the plot: the console fits the plot area to the panel and only knows about axis labels, so marks or text a renderItem draws past api.coord of the axis range overflow the panel. Leave room in data space instead (e.g. xAxis max 120 for a 0-100 bar with its value written after it). Use it for marks no built-in series draws (lanes, ranges, glyphs, annotated boxes). render_item is a function expression `function (params, api) { … }` or a function body using params and api. It is called once per data item and returns a graphic element or null, e.g. {type:'rect', shape:{x,y,width,height}, style:{fill: api.visual('color')}}. Useful api: api.value(dim) (dimension index or column name), api.coord([x, y]) → pixel point, api.size([dx, dy]) → pixel size of a data step, api.visual('color'); params.coordSys has x, y, width, height of the plot; params.itemPayload is the series' itemPayload object. Return group elements ({type:'group', children:[…]}) for several shapes. Colours: take them from api.visual('color') or the series itemStyle (where tones like \"$accent\" work), not literals. Errors thrown while drawing show in get_cell's render_report. EXPERIMENTAL: the function runs in the console page with the user's rights, so it runs only when allowed: types defined with the 'write' permission are allowed; otherwise (and for imported notebooks) the user allows them in the notebook's Chart types dialog, and charts using them show that they wait. get_chart_type and get_notebook_state report `allowed`.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -1527,7 +1527,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Read a notebook chart type's renderItem source and description, and `used_by`: the ids of the cells whose custom option draws with it (names are listed in get_notebook_state chart_types). People edit, rename and delete chart types in the notebook toolbar's Chart types dialog; a rename there renames the uses too.",
+    "description": "Read a notebook chart type's renderItem source and description, `allowed` (false: its code does not run until the user allows it), and `used_by`: the ids of the cells whose custom option draws with it (names are listed in get_notebook_state chart_types). People edit, rename and delete chart types in the notebook toolbar's Chart types dialog; a rename there renames the uses too.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -2644,7 +2644,7 @@
             },
             "required": ["name", "render_item", "description"]
           },
-          "description": "Notebook chart types (see define_chart_type). Null keeps the current ones; an array replaces them all."
+          "description": "Notebook chart types (see define_chart_type). Null keeps the current ones; an array replaces them all. A type keeps the user's allowance when its code is unchanged; new or changed code runs only with the 'write' permission, else after the user allows it (get_notebook_state shows `allowed`)."
         },
         "chart_sync": {
           "type": ["object", "null"],

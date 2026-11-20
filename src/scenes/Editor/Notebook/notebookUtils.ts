@@ -1,4 +1,5 @@
 import { NOTEBOOK_FORMAT_VERSION } from "../../../store/notebookFormat"
+import { keepAllowed } from "./customChart/chartTypeUsage"
 import type { ColumnFormats } from "../../../utils/formats/columnFormat"
 import type {
   CellInteractions,
@@ -1323,7 +1324,10 @@ export const buildAppliedNotebookState = (
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }
   }
   if (request.chartTypes !== undefined && request.chartTypes !== null) {
-    nextSettings = { ...nextSettings, chartTypes: request.chartTypes }
+    nextSettings = {
+      ...nextSettings,
+      chartTypes: keepAllowed(request.chartTypes, current.settings.chartTypes),
+    }
   }
   if (request.chartSync !== undefined && request.chartSync !== null) {
     nextSettings = { ...nextSettings, chartSync: request.chartSync }

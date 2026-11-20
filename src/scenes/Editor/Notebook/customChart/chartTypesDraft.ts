@@ -13,6 +13,8 @@ export type ChartTypeDraft = {
   name: string
   description: string
   renderItem: string
+  // Whether its code may run (see NotebookChartType.allowed).
+  allowed: boolean
 }
 
 export const MAX_CHART_TYPES = 32
@@ -45,6 +47,7 @@ export const draftOfTypes = (
     name: t.name,
     description: t.description ?? "",
     renderItem: t.renderItem,
+    allowed: t.allowed === true,
   }))
 
 /** A name not taken yet: chartType1, chartType2, … */
@@ -61,6 +64,8 @@ export const newTypeDraft = (drafts: ChartTypeDraft[]): ChartTypeDraft => ({
   name: freshTypeName(drafts),
   description: "",
   renderItem: NEW_CHART_TYPE_SOURCE,
+  // The user writes it here, so it runs.
+  allowed: true,
 })
 
 export type ChartTypeErrors = { name?: string; source?: string }
@@ -98,6 +103,7 @@ export const typesToSave = (
     ...(d.description.trim()
       ? { description: d.description.trim().slice(0, 500) }
       : {}),
+    allowed: d.allowed,
   })),
   renames: Object.fromEntries(
     drafts
@@ -120,5 +126,6 @@ export const typesChanged = (
       ...(t.description?.trim()
         ? { description: t.description.trim().slice(0, 500) }
         : {}),
+      allowed: t.allowed === true,
     })),
   )
