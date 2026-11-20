@@ -17,7 +17,12 @@ export type RoleSpec = {
   optional?: boolean
 }
 
-export type VisualOption = "range" | "sparkline" | "buckets" | "severity"
+export type VisualOption =
+  | "range"
+  | "sparkline"
+  | "buckets"
+  | "severity"
+  | "animateDigits"
 
 export type VisualSpec = {
   type: VisualType
@@ -102,7 +107,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
         optional: true,
       },
     ],
-    options: ["sparkline"],
+    options: ["sparkline", "animateDigits"],
   },
   {
     type: "gauge",
@@ -144,7 +149,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       },
       { role: "size", label: "Size", accepts: "numeric", fallback: "Column 2" },
     ],
-    options: [],
+    options: ["animateDigits"],
   },
   {
     type: "uptime",

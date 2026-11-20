@@ -5,6 +5,7 @@ import {
   parseFormats,
   parseInteractions,
   parseVisual,
+  visualToWire,
 } from "./dashboardWire"
 
 describe("dashboard wire", () => {
@@ -23,6 +24,17 @@ describe("dashboard wire", () => {
 
     // Then
     expect(visual).toEqual({ type: "orderBook", columns: { price: "px" } })
+  })
+
+  it.each([true, false, null])("round-trips digit animation %s", (enabled) => {
+    // Given / When
+    const visual = parseVisual(
+      { type: "stat", animate_digits: enabled },
+      "visual",
+    )
+
+    // Then
+    expect(visualToWire(visual).animate_digits).toBe(enabled)
   })
 
   it("parses uptime buckets and state severities", () => {

@@ -122,6 +122,8 @@ export const sanitizeVisualConfig = (
     value.sparklineQuery >= 0
   )
     visual.sparklineQuery = value.sparklineQuery
+  if (typeof value.animateDigits === "boolean")
+    visual.animateDigits = value.animateDigits
   if (
     typeof value.buckets === "number" &&
     Number.isInteger(value.buckets) &&

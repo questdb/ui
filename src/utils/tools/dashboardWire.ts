@@ -49,6 +49,7 @@ export type VisualWire = {
   min?: number | null
   max?: number | null
   sparkline_query?: number | null
+  animate_digits?: boolean | null
   buckets?: number | null
   severity?: { state: string; level: string }[] | null
 }
@@ -84,6 +85,8 @@ export const parseVisual = (wire: VisualWire, at: string): VisualConfig => {
       fail(`${at}.sparkline_query must be a statement index (0-based).`)
     visual.sparklineQuery = wire.sparkline_query
   }
+  if (typeof wire.animate_digits === "boolean")
+    visual.animateDigits = wire.animate_digits
   if (typeof wire.buckets === "number") {
     if (
       !Number.isInteger(wire.buckets) ||
@@ -116,6 +119,7 @@ export const visualToWire = (visual: VisualConfig) => ({
   min: visual.min ?? null,
   max: visual.max ?? null,
   sparkline_query: visual.sparklineQuery ?? null,
+  animate_digits: visual.animateDigits ?? null,
   buckets: visual.buckets ?? null,
   severity: visual.severity
     ? Object.entries(visual.severity).map(([state, level]) => ({

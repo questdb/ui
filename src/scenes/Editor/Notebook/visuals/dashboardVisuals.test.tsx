@@ -57,6 +57,7 @@ describe("dashboard visuals", () => {
     ]
     const book = (mid: number, queriesKey = "BTC") => (
       <OrderBook
+        animateDigits
         queriesKey={queriesKey}
         formats={{ price: { kind: "price", decimals: 2 } }}
         statements={[
@@ -66,7 +67,7 @@ describe("dashboard visuals", () => {
       />
     )
     const { container, rerender } = renderComponent(book(100.1))
-    const selector = '[data-hook="order-book-mid-digit"]'
+    const selector = '[data-hook="rolling-digit"]'
     const digit = () => container.querySelector(selector)
     expect(digit()).toBeNull()
 
@@ -89,6 +90,31 @@ describe("dashboard visuals", () => {
     rerender(book(100.15, "ETH"))
 
     // Then the new book's first price is static
+    expect(digit()).toBeNull()
+  })
+
+  it("rolls stat tile values only when enabled", () => {
+    // Given a stat tile with the default motion setting
+    const columns = [{ name: "price", type: "DOUBLE" }]
+    const tile = (price: number, animateDigits?: boolean) => (
+      <StatTiles
+        visual={{ type: "stat", animateDigits }}
+        formats={{ price: { kind: "price", decimals: 2 } }}
+        statements={[{ columns, rows: [[price]] }]}
+      />
+    )
+    const { container, rerender } = renderComponent(tile(12.1))
+    const digit = () => container.querySelector('[data-hook="rolling-digit"]')
+
+    // When it refreshes with no setting, then with motion enabled
+    rerender(tile(12.11))
+    expect(digit()).toBeNull()
+    rerender(tile(12.11, true))
+    rerender(tile(12.12, true))
+
+    // Then only the new last digit rolls, and turning it off removes the motion
+    expect(digit()).toHaveTextContent("12")
+    rerender(tile(12.12, false))
     expect(digit()).toBeNull()
   })
 

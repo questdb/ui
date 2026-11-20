@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react"
 import styled from "styled-components"
 import {
+  Checkbox,
   Input,
   MultiSelect,
   SelectMenuControl,
@@ -14,7 +15,12 @@ import type {
 } from "./chartTypes"
 import { STATE_SEVERITIES } from "./chartTypes"
 import { classifyColumn } from "./inferChartConfig"
-import { Field, FieldGroup, FieldLabel } from "./chartSettingsStyles"
+import {
+  CheckboxRow,
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "./chartSettingsStyles"
 import type { StatementRows } from "../visuals/statementRows"
 import {
   VISUAL_CATALOG,
@@ -335,6 +341,18 @@ export const ComponentSettings: React.FC<Props> = ({
             Rows of time and value, plus a label column matching the tiles.
           </Shape>
         </Field>
+      )}
+
+      {spec.options.includes("animateDigits") && (
+        <CheckboxRow>
+          <Checkbox
+            checked={visual.animateDigits === true}
+            onChange={(event) => set("animateDigits", event.target.checked)}
+          />
+          {visual.type === "orderBook"
+            ? "Animate mid-price digits"
+            : "Animate value digits"}
+        </CheckboxRow>
       )}
 
       {spec.options.includes("buckets") && (

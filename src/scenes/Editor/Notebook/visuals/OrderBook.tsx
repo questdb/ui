@@ -8,7 +8,7 @@ import {
 import { withAlpha } from "../../../../theme"
 import { columnIndex, toNumber, type StatementRows } from "./statementRows"
 import type { VisualColumns } from "../CellChart/chartTypes"
-import { OrderBookMidPrice } from "./OrderBookMidPrice"
+import { RollingNumber } from "./RollingNumber"
 
 // An order book ladder: asks above, bids below, the mid price between them.
 // The query does the work: statement 1 returns the asks and statement 2 the
@@ -153,6 +153,20 @@ const Mid = styled.div`
   border-block: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
+const MidPrice = styled.span`
+  font-size: 1.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+
+  [data-direction="up"] {
+    color: ${({ theme }) => theme.color.chartUp};
+  }
+
+  [data-direction="down"] {
+    color: ${({ theme }) => theme.color.chartDown};
+  }
+`
+
 const SpreadText = styled.span`
   color: ${({ theme }) => theme.color.contentSecondary};
   font-size: 1.15rem;
@@ -172,6 +186,7 @@ type Props = {
   statements: (StatementRows | null)[]
   columns?: VisualColumns
   formats: ColumnFormats
+  animateDigits?: boolean
   queriesKey?: string
   // A click on a level reports its price.
   onSelect?: (price: number) => void
@@ -181,6 +196,7 @@ export const OrderBook = ({
   statements,
   columns,
   formats,
+  animateDigits = false,
   queriesKey,
   onSelect,
 }: Props) => {
@@ -272,11 +288,15 @@ export const OrderBook = ({
           [...asks.levels].reverse().map((l) => row(l, "ask"))
         )}
         <Mid ref={midRef}>
-          <OrderBookMidPrice
-            key={queriesKey}
-            value={mid}
-            format={priceFormat}
-          />
+          <MidPrice data-hook="order-book-mid-price">
+            <RollingNumber
+              key={`${queriesKey ?? ""}:${animateDigits}`}
+              value={mid}
+              text={mid === null ? "—" : formatValue(mid, priceFormat)}
+              enabled={animateDigits}
+              showDirection
+            />
+          </MidPrice>
           <SpreadText>
             Spread{" "}
             <b>{spread === null ? "—" : formatValue(spread, priceFormat)}</b>

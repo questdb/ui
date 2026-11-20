@@ -1,23 +1,6 @@
 import React, { useState } from "react"
 import styled, { keyframes } from "styled-components"
-import {
-  formatValue,
-  type ColumnFormat,
-} from "../../../../utils/formats/columnFormat"
-
 type Direction = "up" | "down"
-
-const Price = styled.span<{ $direction?: Direction }>`
-  font-size: 1.7rem;
-  font-weight: 600;
-  white-space: nowrap;
-  color: ${({ $direction, theme }) =>
-    $direction === "up"
-      ? theme.color.chartUp
-      : $direction === "down"
-        ? theme.color.chartDown
-        : theme.color.contentPrimary};
-`
 
 const AccessiblePrice = styled.span`
   position: absolute;
@@ -77,14 +60,17 @@ type PriceFrame = {
 
 const digitLayout = (text: string) => text.replace(/\d/g, "0")
 
-export const OrderBookMidPrice = ({
+export const RollingNumber = ({
   value,
-  format,
+  text,
+  enabled,
+  showDirection,
 }: {
   value: number | null
-  format: ColumnFormat
+  text: string
+  enabled: boolean
+  showDirection?: boolean
 }) => {
-  const text = value === null ? "—" : formatValue(value, format)
   const [frame, setFrame] = useState<PriceFrame>({ value, text, revision: 0 })
   // Compare visible prices so rounding doesn't trigger motion or flip the arrow.
   if (frame.text !== text) {
@@ -99,48 +85,60 @@ export const OrderBookMidPrice = ({
       text,
       direction,
       previousText:
-        direction && digitLayout(frame.text) === digitLayout(text)
+        enabled && direction && digitLayout(frame.text) === digitLayout(text)
           ? frame.text
           : undefined,
       revision: frame.revision + 1,
     })
   }
   const { previousText, direction, revision } = frame
-  const arrow = direction === "up" ? " ↑" : direction === "down" ? " ↓" : ""
+  const arrow = !showDirection
+    ? ""
+    : direction === "up"
+      ? " ↑"
+      : direction === "down"
+        ? " ↓"
+        : ""
+  if (!enabled || !previousText || !direction)
+    return (
+      <span data-direction={showDirection ? direction : undefined}>
+        {text}
+        {arrow}
+      </span>
+    )
+
   return (
-    <Price $direction={direction} data-hook="order-book-mid-price">
+    <span data-direction={showDirection ? direction : undefined}>
       <AccessiblePrice>
         {text}
         {arrow}
       </AccessiblePrice>
       <span aria-hidden="true">
-        {previousText && direction
-          ? Array.from(
-              text.matchAll(/\d|\D+/g),
-              ({ 0: character, index: offset }) => {
-                const previous = previousText.slice(
-                  offset,
-                  offset + character.length,
-                )
-                return previous !== character ? (
-                  <Digit
-                    key={`digit:${offset}:${revision}`}
-                    $direction={direction}
-                    data-hook="order-book-mid-digit"
-                  >
-                    <span>{previous}</span>
-                    <span>{character}</span>
-                  </Digit>
-                ) : (
-                  <React.Fragment key={`character:${offset}`}>
-                    {character}
-                  </React.Fragment>
-                )
-              },
+        {Array.from(
+          text.matchAll(/\d|\D+/g),
+          ({ 0: character, index: offset }) => {
+            const previous = previousText.slice(
+              offset,
+              offset + character.length,
             )
-          : text}
+            return previous !== character ? (
+              <Digit
+                key={`digit:${offset}:${revision}`}
+                $direction={direction}
+                data-hook="rolling-digit"
+              >
+                <span>{previous}</span>
+                <span>{character}</span>
+              </Digit>
+            ) : (
+              <React.Fragment key={`character:${offset}`}>
+                {character}
+              </React.Fragment>
+            )
+          },
+        )}
         {arrow}
       </span>
-    </Price>
+    </span>
   )
 }

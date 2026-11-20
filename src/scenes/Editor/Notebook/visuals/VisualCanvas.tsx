@@ -184,6 +184,7 @@ export const VisualCanvas = ({
           visual={visual}
           statements={statements}
           formats={formats}
+          queriesKey={queriesKey}
           selectedValue={click ? clickVariableValue : undefined}
           onSelect={select}
         />
@@ -194,6 +195,7 @@ export const VisualCanvas = ({
           statements={statements}
           columns={visual.columns}
           formats={formats}
+          animateDigits={visual.animateDigits}
           queriesKey={queriesKey}
           onSelect={select}
         />

@@ -190,6 +190,7 @@ export type VisualConfig = {
   max?: number
   // stat: the statement whose rows draw the sparkline (time, value).
   sparklineQuery?: number
+  animateDigits?: boolean
   // uptime: how many bars the time range splits into (fewer when narrow).
   buckets?: number
   // stateTimeline / uptime: what a state means, when its name does not say.

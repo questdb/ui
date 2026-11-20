@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef } from "react"
-import styled, { css, keyframes, useTheme } from "styled-components"
+import React, { useMemo } from "react"
+import styled, { useTheme } from "styled-components"
+import { RollingNumber } from "./RollingNumber"
 import { Check } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../components/Button"
 import { sqlLiteral } from "../interactions/chartInteractions"
@@ -32,11 +33,6 @@ type Tile = {
   change: number | null
   spark: number[]
 }
-
-const pulse = keyframes`
-  from { opacity: 0.45; }
-  to { opacity: 1; }
-`
 
 const Grid = styled.div<{ $count: number; $compact: boolean }>`
   display: grid;
@@ -103,7 +99,7 @@ const Label = styled.span`
   }
 `
 
-const Value = styled.span<{ $color?: string; $flash: number }>`
+const Value = styled.span<{ $color?: string }>`
   position: relative;
   z-index: 1;
   font-size: clamp(2.2rem, 3.2vw, 3.6rem);
@@ -111,15 +107,6 @@ const Value = styled.span<{ $color?: string; $flash: number }>`
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   color: ${({ $color, theme }) => $color ?? theme.color.contentPrimary};
-  ${({ $flash }) =>
-    $flash > 0 &&
-    css`
-      animation: ${pulse} 600ms ease-out;
-    `}
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-  }
 `
 
 const Caption = styled.span`
@@ -263,6 +250,7 @@ type Props = {
   visual: VisualConfig
   statements: (StatementRows | null)[]
   formats: ColumnFormats
+  queriesKey?: string
   selectedValue?: string
   onSelect?: (label: string) => void
 }
@@ -271,6 +259,7 @@ export const StatTiles = ({
   visual,
   statements,
   formats,
+  queriesKey,
   selectedValue,
   onSelect,
 }: Props) => {
@@ -283,20 +272,6 @@ export const StatTiles = ({
   const changeFormat = visual.columns?.change
     ? formats[visual.columns.change]
     : undefined
-  const previous = useRef(new Map<string, unknown>())
-  const flashes = useRef(new Map<string, number>())
-  for (const tile of tiles) {
-    const before = previous.current.get(tile.label)
-    if (before !== undefined && before !== tile.value)
-      flashes.current.set(
-        tile.label,
-        (flashes.current.get(tile.label) ?? 0) + 1,
-      )
-  }
-  useEffect(() => {
-    previous.current = new Map(tiles.map((t) => [t.label, t.value]))
-  }, [tiles])
-
   return (
     <Grid
       $count={tiles.length}
@@ -317,7 +292,7 @@ export const StatTiles = ({
           changeTone && changeTone !== "muted"
             ? toneColor(changeTone, theme.color)
             : theme.color.chartSeries1
-        const flash = flashes.current.get(tile.label) ?? 0
+        const text = formatValue(tile.value, format ?? { kind: "number" })
         const selected = onSelect && sqlLiteral(tile.label) === selectedValue
         return (
           <TileRoot
@@ -334,12 +309,17 @@ export const StatTiles = ({
               <span>{tile.label}</span>
               {selected && <Check size={12} weight="bold" aria-hidden />}
             </Label>
-            <Value
-              key={flash}
-              $flash={flash}
-              $color={tone ? toneColor(tone, theme.color) : undefined}
-            >
-              {formatValue(tile.value, format ?? { kind: "number" })}
+            <Value $color={tone ? toneColor(tone, theme.color) : undefined}>
+              {visual.animateDigits ? (
+                <RollingNumber
+                  key={queriesKey}
+                  enabled
+                  value={toNumber(tile.value)}
+                  text={text}
+                />
+              ) : (
+                text
+              )}
             </Value>
             {tile.caption && <Caption>{tile.caption}</Caption>}
             {tile.change !== null && changeTone && (
