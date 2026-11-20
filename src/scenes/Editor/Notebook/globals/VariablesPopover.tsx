@@ -20,7 +20,7 @@ import { CopyButton } from "../../../../components/CopyButton"
 import { Input } from "../../../../components/Input"
 import { toast } from "../../../../components/Toast"
 import { QuestContext } from "../../../../providers/QuestProvider"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { color } from "../../../../utils"
 import {
@@ -289,6 +289,7 @@ export const VariablesPopover: React.FC = () => {
   const { settings } = useNotebookState()
   const { updateSettings } = useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry()
   const [open, setOpen] = useState(false)
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({})

@@ -27,6 +27,7 @@ describe("registerLegacyEventBusEvents MSG_QUERY_FIND_N_EXEC", () => {
     running = RunningType.NONE
     cleanup = registerLegacyEventBusEvents({
       editor: fakeEditor,
+      onRefresh: vi.fn(),
       toggleRunning,
       getRunning: () => running,
       isPreviewing: () => previewing,

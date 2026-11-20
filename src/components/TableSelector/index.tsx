@@ -270,17 +270,6 @@ export const TableSelector = ({
           handleSelect(item)
           inputRef.current?.blur()
         }
-      } else if (e.key === "Escape") {
-        e.preventDefault()
-        if (query) {
-          setQuery("")
-          setFocusedIndex(0)
-        } else {
-          setOpen(false)
-          setQuery("")
-          setFocusedIndex(null)
-          inputRef.current?.blur()
-        }
       }
     },
     [open, filtered, focusedIndex, handleSelect, focusTree, handleOpen],
@@ -296,13 +285,6 @@ export const TableSelector = ({
       if (e.key === "Enter") {
         e.preventDefault()
         handleSelect(item)
-        return
-      }
-      if (e.key === "Escape") {
-        e.preventDefault()
-        setOpen(false)
-        setQuery("")
-        setFocusedIndex(null)
         return
       }
       // Printable character → redirect to input
@@ -424,7 +406,23 @@ export const TableSelector = ({
             sideOffset={4}
             data-hook="table-selector-dropdown"
             onOpenAutoFocus={(e) => e.preventDefault()}
-            onEscapeKeyDown={(e) => e.preventDefault()}
+            // The open dropdown is the topmost layer: Radix delivers Escape
+            // here in the capture phase, before the input or tree handlers,
+            // and preventDefault claims it for outer layers
+            // (utils/escapeKey.ts). From the input, the first press clears
+            // the search; otherwise it closes.
+            onEscapeKeyDown={(e) => {
+              e.preventDefault()
+              if (e.target === inputRef.current && query) {
+                setQuery("")
+                setFocusedIndex(0)
+                return
+              }
+              setOpen(false)
+              setQuery("")
+              setFocusedIndex(null)
+              inputRef.current?.blur()
+            }}
             onInteractOutside={(e) => {
               if (triggerRef.current?.contains(e.target as Node)) {
                 e.preventDefault()

@@ -66,6 +66,16 @@ const snap = (
 
 beforeEach(async () => {
   await db.notebook_results.clear()
+  // Snapshots belong to existing notebooks; prune drops the others.
+  await db.buffers.clear()
+  await db.buffers.bulkPut(
+    [1, 2, 3, 4].map((id) => ({
+      id,
+      label: `n${id}`,
+      value: "",
+      position: id,
+    })),
+  )
 })
 
 describe("notebookResults", () => {
@@ -145,6 +155,25 @@ describe("notebookResults", () => {
     expect(await loadSnapshotCellIds(1)).toEqual(["c2"])
     await deleteNotebookSnapshots(1)
     expect(await loadSnapshotCellIds(1)).toHaveLength(0)
+  })
+
+  it("drops a deleted notebook's late save when it prunes", async () => {
+    // Given a notebook deleted with its snapshots, whose unmounting provider
+    // then flushed a pending frame, and two live notebooks
+    await db.buffers.put({ id: 77, label: "n77", value: "", position: 77 })
+    await saveCellSnapshot(snap(77, "c1", 100))
+    await db.buffers.delete(77)
+    await deleteNotebookSnapshots(77)
+    await saveCellSnapshot(snap(77, "c1", 300))
+    await saveCellSnapshot(snap(1, "c1", 10))
+    await saveCellSnapshot(snap(2, "c1", 20))
+
+    // When the budget is exceeded
+    await pruneToRecentNotebooks(1)
+
+    // Then the orphan is gone and took no slot from a live notebook
+    expect(await loadSnapshotCellIds(77)).toEqual([])
+    expect(await loadSnapshotCellIds(2)).toEqual(["c1"])
   })
 
   it("copies mapped snapshots under new ids without coupling them to the source", async () => {

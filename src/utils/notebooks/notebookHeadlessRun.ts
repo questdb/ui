@@ -521,7 +521,11 @@ export const runHeadlessCell = async (
       return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
     }
     if (barrier.action === "denied") {
-      return { ...emptySummary(), denied: barrier.reason }
+      return {
+        ...emptySummary(),
+        denied: barrier.reason,
+        deniedCode: barrier.code,
+      }
     }
     if (barrier.action === "skipped") {
       return { ...emptySummary(), skipped: barrier.reason }
@@ -638,11 +642,18 @@ export const runHeadlessCell = async (
     }
     switch (outcome.reason) {
       case "mounted":
-        return { ...summary, unverified: true, note: MOUNTED_MID_RUN_NOTE }
       case "user_changed":
-        return { ...summary, unverified: true, note: USER_CHANGED_MID_RUN_NOTE }
       case "cell_changed":
-        return { ...summary, unverified: true, note: CELL_CHANGED_MID_RUN_NOTE }
+        return {
+          ...summary,
+          unverified: true,
+          interruption: outcome.reason,
+          note: {
+            mounted: MOUNTED_MID_RUN_NOTE,
+            user_changed: USER_CHANGED_MID_RUN_NOTE,
+            cell_changed: CELL_CHANGED_MID_RUN_NOTE,
+          }[outcome.reason],
+        }
       case "storage_full":
         return { ...summary, unverified: true, note: STORAGE_FULL_RUN_NOTE }
       case "cell_gone":

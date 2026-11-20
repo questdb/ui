@@ -153,14 +153,31 @@ export const pruneToRecentNotebooks = async (
   try {
     const bufferIds = await db.notebook_results.orderBy("bufferId").uniqueKeys()
     if (bufferIds.length <= keep) return
-    await db.transaction("rw", db.notebook_results, async () => {
+    await db.transaction("rw", db.buffers, db.notebook_results, async () => {
+      // Snapshots of a deleted notebook take no slot: a late write from its
+      // unmounting provider (a chart frame flushed on teardown) can land after
+      // the delete, and nothing else would ever remove it.
+      const existing = new Set<unknown>(
+        await db.buffers.toCollection().primaryKeys(),
+      )
+      const orphans = new Set(
+        (bufferIds as number[]).filter(
+          (bufferId) => !existing.has(bufferId) && !pinCounts.has(bufferId),
+        ),
+      )
+      if (orphans.size > 0)
+        await db.notebook_results
+          .where("bufferId")
+          .anyOf([...orphans])
+          .delete()
       const latestByBuffer = new Map<number, number>()
       await db.notebook_results
         .orderBy("savedAt")
         .eachKey((savedAt, { primaryKey }) => {
           // Ascending key order: the last write per buffer is its latest savedAt.
           const [bufferId] = primaryKey
-          latestByBuffer.set(bufferId, savedAt as number)
+          if (!orphans.has(bufferId))
+            latestByBuffer.set(bufferId, savedAt as number)
         })
       if (latestByBuffer.size <= keep) return
       const staleBuffers = Array.from(latestByBuffer.entries())

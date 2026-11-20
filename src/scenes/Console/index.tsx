@@ -34,6 +34,7 @@ import { SearchPanel } from "../Search"
 import { TabsPanel } from "../TabsPanel"
 import { LeftPanelType } from "../../providers/LocalStorageProvider/types"
 import { AIStatusIndicator } from "../../components/AIStatusIndicator"
+import { useActiveBufferSummary } from "../../providers/EditorProvider"
 
 const Root = styled.div`
   display: flex;
@@ -128,6 +129,14 @@ const Console = () => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const { consoleConfig } = useSettings()
+  const resultSource = useSelector(selectors.query.getResultSource)
+  const activeBufferSummary = useActiveBufferSummary()
+  // A notebook uses the full workspace, so the SQL editor's result stays
+  // mounted but hidden for the return trip. A result produced while the
+  // notebook is active (e.g. an AI chat run) belongs to it and is shown.
+  const hideResult =
+    activeBufferSummary.isNotebook &&
+    resultSource?.bufferId !== activeBufferSummary.id
   const { isSearchPanelOpen, setSearchPanelOpen, searchPanelRef } = useSearch()
 
   const isDataSourcesPanelOpen =
@@ -164,26 +173,50 @@ const Console = () => {
   const horizontalSplitterRef = React.useRef<AllotmentHandle>(null)
   const previousScreenSizeRef = React.useRef(ScreenSize.XL)
 
-  const showPanel = (panel: BottomPanel) => {
+  // A hidden result is also taken out of the layout, not only collapsed: its
+  // controls would otherwise stay focusable and announced while invisible,
+  // and act on another tab's result.
+  const showPanel = (panel: BottomPanel, resultHidden: boolean) => {
     if (resultRef.current) {
-      resultRef.current.style.display = panel === "result" ? "flex" : "none"
+      resultRef.current.style.display =
+        panel === "result" && !resultHidden ? "flex" : "none"
     }
     if (importRef.current) {
       importRef.current.style.display = panel === "import" ? "flex" : "none"
     }
   }
 
+  // The bottom panel follows each new result, as it does for a result run
+  // on screen, but only once the result is visible: one that belongs to
+  // another tab must not collapse the pane over what the user has open (e.g.
+  // Import). It applies when its tab is shown again. The first render applies
+  // too, so a console mounted on a notebook tab (e.g. after signing in again)
+  // corrects a panel left by the previous session.
+  const appliedResultRef = React.useRef<{ result: typeof result }>()
+  const mountResultRef = React.useRef(result)
   useEffect(() => {
+    const applied = appliedResultRef.current
+    if (hideResult || (applied && applied.result === result)) return
+    appliedResultRef.current = { result }
+    // The first apply corrects a panel left by a previous session. With no
+    // new result since mounting, an Import panel open now was opened by the
+    // user, not left over.
+    if (
+      !applied &&
+      result === mountResultRef.current &&
+      activeBottomPanel === "import"
+    )
+      return
     dispatch(
       actions.console.setActiveBottomPanel(
         resultRef.current && result ? "result" : "zeroState",
       ),
     )
-  }, [result])
+  }, [result, hideResult])
 
   useEffect(() => {
-    showPanel(activeBottomPanel)
-  }, [activeBottomPanel])
+    showPanel(activeBottomPanel, hideResult)
+  }, [activeBottomPanel, hideResult])
 
   useEffect(() => {
     const previousScreenSize = previousScreenSizeRef.current
@@ -288,6 +321,7 @@ const Console = () => {
                 </Tooltip>
                 <SidebarSpacer />
                 {result &&
+                  !hideResult &&
                   viewModes.map(({ icon, mode, tooltipText }) => (
                     <Tooltip key={mode} placement="right" content={tooltipText}>
                       <Navigation
@@ -407,7 +441,10 @@ const Console = () => {
 
                 <Allotment.Pane
                   minSize={0}
-                  visible={activeBottomPanel !== "zeroState"}
+                  visible={
+                    activeBottomPanel !== "zeroState" &&
+                    !(hideResult && activeBottomPanel === "result")
+                  }
                 >
                   <Bottom>
                     <Tab ref={resultRef}>

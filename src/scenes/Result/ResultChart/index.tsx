@@ -22,6 +22,12 @@ import type { QueryRawResult } from "../../../utils/questdb"
 import { Type } from "../../../utils/questdb"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { useChartQuery } from "./useChartQuery"
+import type { TransferQuery } from "../../../utils/notebooks/notebookTransfer"
+
+export type ResultChartTransfer = {
+  seed: ResultChartData
+  query: TransferQuery
+}
 
 type ResultChartData = Extract<QueryRawResult, { type: Type.DQL }>
 
@@ -29,6 +35,7 @@ type Props = {
   result: ResultChartData | null
   visible: boolean
   onResetZoomFocus: () => void
+  onTransferChange?: (value: ResultChartTransfer | undefined) => void
 }
 
 type SavedConfig = {
@@ -148,6 +155,7 @@ export const ResultChart: React.FC<Props> = ({
   result,
   visible,
   onResetZoomFocus,
+  onTransferChange,
 }) => {
   const chartQuery = useChartQuery({ seed: result, enabled: visible })
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null)
@@ -220,6 +228,37 @@ export const ResultChart: React.FC<Props> = ({
     chartResult !== null &&
     chartResult.dataset.length > 0 &&
     hasChartableColumns
+
+  useEffect(() => {
+    onTransferChange?.(
+      canDraw &&
+        chartResult &&
+        result &&
+        chartQuery.status === "ready" &&
+        resolution
+        ? {
+            seed: result,
+            query: {
+              sql: chartResult.query,
+              chartConfig: resolution.effectiveConfig,
+              result: {
+                ...chartResult,
+                type: "dql",
+                fetchedAt: chartQuery.fetchedAt,
+              },
+            },
+          }
+        : undefined,
+    )
+  }, [
+    canDraw,
+    chartResult,
+    result,
+    resolution,
+    chartQuery.status,
+    chartQuery.status === "ready" ? chartQuery.fetchedAt : undefined,
+    onTransferChange,
+  ])
 
   useEffect(() => {
     if (

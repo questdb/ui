@@ -1,10 +1,169 @@
 import { describe, it, expect } from "vitest"
 import query, { initialState } from "./reducers"
 import actions from "./actions"
+import selectors from "./selectors"
+import type { StoreShape } from "../../types"
+import { RunningType } from "../../types"
 import { NotificationType } from "./types"
 import type { QueryKey, QueryNotifications, QueryStateShape } from "./types"
+import { Type } from "../../utils/questdb"
+import {
+  queryExecutionKey,
+  MAX_TRACKED_QUERY_EXECUTIONS,
+} from "../../utils/queryExecutionKey"
+
+it("ties transfer metadata to the displayed result and clears it with the result", () => {
+  const result = {
+    type: Type.DQL as const,
+    query: "select 1",
+    columns: [],
+    dataset: [],
+    count: 0,
+    error: undefined,
+    notice: undefined,
+    timings: { compiler: 0, authentication: 0, count: 0, execute: 0, fetch: 0 },
+  }
+  const fromEditor = query(initialState, actions.setResult(result, 7, 42))
+  expect(fromEditor.resultSource).toEqual({ bufferId: 7, fetchedAt: 42 })
+  const withBatch = query(
+    fromEditor,
+    actions.setBatchTransfer({
+      bufferId: 7,
+      queries: [{ sql: "select 1" }, { sql: "select 2" }],
+      writeCount: 0,
+      hasAllResults: false,
+    }),
+  )
+  const fromConversation = query(
+    withBatch,
+    actions.setResult(result, undefined, 99),
+  )
+  expect(fromConversation.resultSource).toEqual({
+    bufferId: undefined,
+    fetchedAt: 99,
+  })
+  expect(fromConversation.batchTransfer).toBeUndefined()
+  expect(
+    query(fromConversation, actions.setResult(undefined)).resultSource,
+  ).toBeUndefined()
+})
+
+it("clears a script's batch transfer when the next run starts", () => {
+  const withBatch = query(
+    initialState,
+    actions.setBatchTransfer({
+      bufferId: 7,
+      queries: [{ sql: "select 1" }, { sql: "select 2" }],
+      writeCount: 0,
+      hasAllResults: false,
+    }),
+  )
+  expect(withBatch.batchTransfer).toBeDefined()
+  expect(
+    query(withBatch, actions.toggleRunning(RunningType.QUERY)).batchTransfer,
+  ).toBeUndefined()
+  expect(query(withBatch, actions.stopRunning()).batchTransfer).toBeDefined()
+})
 
 const BUFFER_ID = 1
+
+describe("manual query execution counters", () => {
+  it("counts repeated executions independently from publishing results", () => {
+    const first = query(
+      initialState,
+      actions.recordQueryExecution(" select 1; "),
+    )
+    expect(first.executionCounts?.[queryExecutionKey("select 1")]).toBe(1)
+    const clearedResult = query(first, actions.setResult(undefined))
+    const second = query(
+      clearedResult,
+      actions.recordQueryExecution("select 1"),
+    )
+    const another = query(second, actions.recordQueryExecution("select 2"))
+    expect(another.executionCounts?.[queryExecutionKey("select 1")]).toBe(2)
+    expect(another.executionCounts?.[queryExecutionKey("select 2")]).toBe(1)
+    expect(
+      query(another, actions.recordQueryExecution("select 1"))
+        .executionCounts?.[queryExecutionKey("select 1")],
+    ).toBe(2)
+    expect(
+      query(another, actions.clearQueryExecutions()).executionCounts,
+    ).toBeUndefined()
+  })
+
+  it("bounds session memory without conflating SQL literals", () => {
+    expect(queryExecutionKey("select 'A'")).not.toBe(
+      queryExecutionKey("select 'a'"),
+    )
+    let state = initialState
+    for (let i = 0; i <= MAX_TRACKED_QUERY_EXECUTIONS; i++)
+      state = query(state, actions.recordQueryExecution(`select ${i}`))
+    expect(Object.keys(state.executionCounts ?? {})).toHaveLength(
+      MAX_TRACKED_QUERY_EXECUTIONS,
+    )
+    expect(
+      state.executionCounts?.[queryExecutionKey("select 0")],
+    ).toBeUndefined()
+    expect(
+      state.executionCounts?.[
+        queryExecutionKey(`select ${MAX_TRACKED_QUERY_EXECUTIONS}`)
+      ],
+    ).toBe(1)
+  })
+})
+
+describe("repeated execution offer", () => {
+  const dql = (sql: string) => ({
+    type: Type.DQL as const,
+    query: sql,
+    columns: [],
+    dataset: [],
+    count: 0,
+    timestamp: -1,
+    explain: undefined,
+  })
+  const repeated = (sql: string) => {
+    let state = query(initialState, actions.recordQueryExecution(sql))
+    state = query(state, actions.recordQueryExecution(sql))
+    state = query(state, actions.setResult(dql(sql) as never, BUFFER_ID))
+    return selectors.getResultHasRepeatedExecution({
+      query: state,
+    } as unknown as StoreShape)
+  }
+
+  it("offers monitoring for a query run twice", () => {
+    expect(repeated("select * from trades")).toBe(true)
+  })
+
+  // A plan from the Re-run button or a typed EXPLAIN is not data to monitor.
+  it.each([
+    "EXPLAIN select * from trades",
+    "  explain select 1",
+    "-- plan\nEXPLAIN select 1",
+    "/* plan */ explain select 1",
+  ])("never offers monitoring for the query plan %j", (sql) => {
+    expect(repeated(sql)).toBe(false)
+  })
+
+  it("still offers monitoring for a query that only mentions explain", () => {
+    expect(repeated("select 'explain' from trades")).toBe(true)
+    expect(repeated("select * from explained")).toBe(true)
+  })
+
+  // The key is cached per result object; the counts must still be read fresh.
+  it("offers monitoring once the displayed result's query runs again", () => {
+    const sql = "select * from trades"
+    let state = query(initialState, actions.recordQueryExecution(sql))
+    state = query(state, actions.setResult(dql(sql) as never, BUFFER_ID))
+    const offered = () =>
+      selectors.getResultHasRepeatedExecution({
+        query: state,
+      } as unknown as StoreShape)
+    expect(offered()).toBe(false)
+    state = query(state, actions.recordQueryExecution(sql))
+    expect(offered()).toBe(true)
+  })
+})
 
 const notificationGroup = (
   queryKey: QueryKey,

@@ -68,6 +68,7 @@ export const InlineResultTable: React.FC<Props> = ({
     <ResultWrapper>
       {isMultiQuery && (
         <TabBar
+          cellId={cellId}
           slots={slots}
           activeSlotIndex={activeSlotIndex}
           onTabChange={onTabChange}
@@ -75,6 +76,7 @@ export const InlineResultTable: React.FC<Props> = ({
       )}
 
       <StatusNotification
+        cellId={cellId}
         key={`status-${activeSlot.key}`}
         slot={activeSlot}
         onCancelQuery={onCancelQuery}

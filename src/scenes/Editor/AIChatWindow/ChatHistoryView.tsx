@@ -22,6 +22,11 @@ import { ChatHistoryItem } from "./ChatHistoryItem"
 import { DateSeparator } from "./DateSeparator"
 import { useGroupedConversations, filterConversations } from "./historyUtils"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
+import {
+  claimEscape,
+  isEscape,
+  isEscapeClaimed,
+} from "../../../utils/escapeKey"
 
 const Container = styled.div`
   display: flex;
@@ -229,7 +234,9 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Escape" && searchQuery) setSearchQuery("")
+            if (!isEscape(e) || isEscapeClaimed(e) || !searchQuery) return
+            claimEscape(e)
+            setSearchQuery("")
           }}
           data-hook="chat-history-search"
         />

@@ -53,6 +53,7 @@ import {
   type SourceState,
 } from "../../../hooks/catalogSource"
 import { MonitoringTab } from "./MonitoringTab"
+import { MonitoringDashboardAction } from "./MonitoringDashboardAction"
 import { DetailsTab } from "./DetailsTab"
 import { ErrorBanner } from "./ErrorBanner"
 import type { BaseTableStatus, TableKindData } from "./types"
@@ -864,6 +865,20 @@ export const TableDetailsDrawer = () => {
                 onWalExpandedChange={setWalExpanded}
                 onOpenSuspensionDialog={() => setSuspensionDialogOpen(true)}
                 onAskAI={handleAskAIForIssue}
+                dashboardAction={
+                  // Dashboards read WAL telemetry; views are always WAL.
+                  tableData &&
+                  (kind === "matview" ||
+                    (kind === "table" && tableData.walEnabled === true)) && (
+                    <MonitoringDashboardAction
+                      kind={kind}
+                      name={tableName}
+                      refreshSchedule={matViewData ?? undefined}
+                      tablesUnavailable={tablesUnavailable}
+                      isCurrentTarget={isCurrentTarget}
+                    />
+                  )
+                }
               />
             )}
 

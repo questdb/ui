@@ -1,0 +1,410 @@
+import React from "react"
+import { act, create, type ReactTestRenderer } from "react-test-renderer"
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
+import { useNotebookTransfer } from "./useNotebookTransfer"
+import { trackEvent } from "../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
+import { authSessionState } from "../modules/OAuth2/authSessionState"
+import {
+  requestTransferMonitor,
+  stageTransferSnapshot,
+} from "../utils/notebooks/notebookTransferState"
+import { persistCellSnapshot } from "../scenes/Editor/Notebook/persistCellSnapshot"
+import {
+  createTransferCells,
+  createTransferView,
+} from "../utils/notebooks/notebookTransfer"
+
+const mocks = vi.hoisted(() => ({
+  buffers: [],
+  addBuffer: vi.fn(),
+  setActiveBuffer: vi.fn(),
+  getById: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  editorBusy: false,
+}))
+vi.mock("../providers/EditorProvider", () => ({ useEditor: () => mocks }))
+vi.mock("./useEditorBusy", () => ({
+  useEditorBusy: () => () => mocks.editorBusy,
+}))
+vi.mock("../components", () => ({
+  toast: { error: mocks.error, info: mocks.info },
+}))
+vi.mock("../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
+vi.mock("../scenes/Editor/Notebook/persistCellSnapshot", () => ({
+  persistCellSnapshot: vi.fn().mockResolvedValue(true),
+}))
+vi.mock("../store/buffers", () => ({
+  bufferStore: {
+    getById: mocks.getById,
+  },
+  MAX_BUFFER_NAME_LENGTH: 100,
+}))
+vi.mock("../utils/notebooks/notebookTransferState", () => ({
+  markTransferSnapshotWritten: vi.fn(),
+  requestTransferMonitor: vi.fn(),
+  stageTransferSnapshot: vi.fn(),
+}))
+vi.mock("../utils/notebooks/notebookTransfer", () => ({
+  createTransferCells: vi.fn(),
+  createTransferView: vi.fn(),
+}))
+vi.mock("../scenes/Editor/Notebook/notebookUtils", () => ({
+  buildPersistPayload: (cells: unknown) => ({ cells }),
+}))
+
+const request = {
+  source: "result_grid" as const,
+  queries: [{ sql: "select 1" }],
+}
+let renderer: ReactTestRenderer | undefined
+const mount = () => {
+  let hook!: ReturnType<typeof useNotebookTransfer>
+  const Harness = () => {
+    hook = useNotebookTransfer()
+    return null
+  }
+  act(() => {
+    renderer = create(<Harness />)
+  })
+  return () => hook
+}
+beforeEach(() => {
+  vi.resetAllMocks()
+  const buffer = {
+    id: 42,
+    label: "Notebook",
+    value: "",
+    position: 0,
+    notebookViewState: { cells: [] },
+  }
+  mocks.addBuffer.mockResolvedValue(buffer)
+  mocks.getById.mockResolvedValue(buffer)
+  vi.mocked(createTransferCells).mockReturnValue([
+    { id: "c1", position: 0, value: "select 1" },
+  ])
+  vi.mocked(createTransferView).mockImplementation((cells) => ({ cells }))
+})
+afterEach(() => {
+  act(() => renderer?.unmount())
+})
+
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+describe("notebook transfer telemetry", () => {
+  it("aborts a pending creation on logout and ignores its late response after a new login", async () => {
+    const pending = deferred<unknown>()
+    mocks.addBuffer.mockReturnValue(pending.promise)
+    const hook = mount()
+    let transfer!: Promise<void>
+    act(() => {
+      transfer = hook().transfer({ ...request, monitor: true })
+    })
+    const [, options] = mocks.addBuffer.mock.calls[0] as [
+      unknown,
+      { signal: AbortSignal },
+    ]
+    const signal = options.signal
+    expect(signal.aborted).toBe(false)
+    authSessionState.endSession()
+    expect(signal.aborted).toBe(true)
+    authSessionState.markNonSSOAuthenticated()
+    await act(async () => {
+      pending.resolve({ id: 42 })
+      await transfer
+    })
+    expect(mocks.getById).not.toHaveBeenCalled()
+    expect(persistCellSnapshot).not.toHaveBeenCalled()
+    expect(mocks.setActiveBuffer).not.toHaveBeenCalled()
+    expect(requestTransferMonitor).not.toHaveBeenCalled()
+    expect(trackEvent).not.toHaveBeenCalled()
+    expect(mocks.error).not.toHaveBeenCalled()
+    expect(hook().busy).toBe(false)
+  })
+
+  it("stops after an in-flight snapshot save when the session ends", async () => {
+    const pending = deferred<boolean>()
+    vi.mocked(createTransferCells).mockReturnValue([
+      {
+        id: "c1",
+        position: 0,
+        value: "select 1",
+        result: { results: [], timestamp: 1, activeResultIndex: 0 },
+      },
+      {
+        id: "c2",
+        position: 1,
+        value: "select 2",
+        result: { results: [], timestamp: 1, activeResultIndex: 0 },
+      },
+    ])
+    vi.mocked(persistCellSnapshot).mockReturnValue(pending.promise)
+    const hook = mount()
+    let transfer!: Promise<void>
+    await act(async () => {
+      transfer = hook().transfer({ ...request, monitor: true })
+      await Promise.resolve()
+    })
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    // Creation was committed before logout; subsequent work must not be reported.
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_CREATE,
+      expect.objectContaining({ notebookId: 42 }),
+    )
+    vi.mocked(trackEvent).mockClear()
+    authSessionState.endSession()
+    await act(async () => {
+      pending.resolve(true)
+      await transfer
+    })
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    // Staged before the first write; the session end discards staged copies.
+    expect(stageTransferSnapshot).toHaveBeenCalledTimes(2)
+    expect(requestTransferMonitor).not.toHaveBeenCalled()
+    expect(mocks.setActiveBuffer).not.toHaveBeenCalled()
+    expect(trackEvent).not.toHaveBeenCalled()
+    expect(mocks.error).not.toHaveBeenCalled()
+    expect(hook().busy).toBe(false)
+  })
+
+  it("stages every result before writing any, so a notebook opened mid-write finds them all", async () => {
+    const firstWrite = deferred<boolean>()
+    vi.mocked(createTransferCells).mockReturnValue(
+      ["c1", "c2", "c3"].map((id, position) => ({
+        id,
+        position,
+        value: `select ${position}`,
+        result: { results: [], timestamp: 1, activeResultIndex: 0 },
+      })),
+    )
+    vi.mocked(persistCellSnapshot)
+      .mockReturnValueOnce(firstWrite.promise)
+      .mockResolvedValue(true)
+    const hook = mount()
+    let transfer!: Promise<void>
+    await act(async () => {
+      transfer = hook().transfer({ ...request, compare: true })
+      await Promise.resolve()
+    })
+    // The tab exists and the first write is still pending.
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    expect(
+      vi.mocked(stageTransferSnapshot).mock.calls.map(([s]) => s.cellId),
+    ).toEqual(["c1", "c2", "c3"])
+    await act(async () => {
+      firstWrite.resolve(true)
+      await transfer
+    })
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(3)
+    expect(stageTransferSnapshot).toHaveBeenCalledTimes(3)
+  })
+
+  it("does not activate a target whose lookup completes after logout", async () => {
+    const pending = deferred<unknown>()
+    mocks.getById.mockReturnValue(pending.promise)
+    const hook = mount()
+    let transfer!: Promise<void>
+    await act(async () => {
+      transfer = hook().transfer(request)
+      await Promise.resolve()
+    })
+    expect(mocks.getById).toHaveBeenCalledWith(42)
+    vi.mocked(trackEvent).mockClear()
+    authSessionState.endSession()
+    await act(async () => {
+      pending.resolve({ id: 42 })
+      await transfer
+    })
+    expect(mocks.setActiveBuffer).not.toHaveBeenCalled()
+    expect(trackEvent).not.toHaveBeenCalled()
+    expect(mocks.error).not.toHaveBeenCalled()
+    expect(hook().busy).toBe(false)
+  })
+
+  it("joins successful creation and transfer without duplicating generic opens", async () => {
+    const hook = mount()
+    await act(async () => {
+      await hook().transfer(request)
+    })
+    expect(trackEvent).toHaveBeenCalledWith(ConsoleEvent.NOTEBOOK_CREATE, {
+      source: "result_grid",
+      notebookId: 42,
+    })
+    expect(trackEvent).toHaveBeenCalledWith(ConsoleEvent.NOTEBOOK_TRANSFER, {
+      source: "result_grid",
+      notebookId: 42,
+      cellCount: 1,
+      capturedResults: 0,
+    })
+    expect(trackEvent).not.toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TAB_OPEN,
+      expect.anything(),
+    )
+  })
+
+  it("reports the tab limit without a misleading success or duplicate toast", async () => {
+    mocks.addBuffer.mockResolvedValue(undefined)
+    const hook = mount()
+    await act(async () => {
+      await hook().transfer(request)
+    })
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TRANSFER_FAILED,
+      expect.objectContaining({ stage: "create", reason: "tab_limit" }),
+    )
+    expect(trackEvent).not.toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TRANSFER,
+      expect.anything(),
+    )
+    expect(mocks.error).not.toHaveBeenCalled()
+  })
+
+  it("leaves the notebook in the tab bar when editor work started during the transfer", async () => {
+    const saving = deferred<boolean>()
+    vi.mocked(createTransferCells).mockReturnValue([
+      {
+        id: "c1",
+        position: 0,
+        value: "select 1",
+        result: { results: [], timestamp: 1, activeResultIndex: 0 },
+      },
+    ])
+    vi.mocked(persistCellSnapshot).mockReturnValueOnce(saving.promise)
+    const hook = mount()
+    let transfer!: Promise<void>
+    act(() => {
+      transfer = hook().transfer(request)
+    })
+    // A script or query starts while the results are saved: switching tabs
+    // now would unmount the editor and abort it.
+    mocks.editorBusy = true
+    try {
+      await act(async () => {
+        saving.resolve(true)
+        await transfer
+      })
+      expect(mocks.setActiveBuffer).not.toHaveBeenCalled()
+      expect(mocks.info).toHaveBeenCalledTimes(1)
+      expect(trackEvent).toHaveBeenCalledWith(
+        ConsoleEvent.NOTEBOOK_TRANSFER_FAILED,
+        expect.objectContaining({
+          stage: "activate",
+          reason: "editor_running",
+        }),
+      )
+      expect(trackEvent).not.toHaveBeenCalledWith(
+        ConsoleEvent.NOTEBOOK_TRANSFER,
+        expect.anything(),
+      )
+      expect(mocks.error).not.toHaveBeenCalled()
+      expect(hook().busy).toBe(false)
+    } finally {
+      mocks.editorBusy = false
+    }
+  })
+
+  it("records disappearance before activation instead of reporting success", async () => {
+    mocks.getById.mockResolvedValue(undefined)
+    const hook = mount()
+    await act(async () => {
+      await hook().transfer(request)
+    })
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TRANSFER_FAILED,
+      expect.objectContaining({
+        notebookId: 42,
+        stage: "activate",
+        reason: "deleted",
+      }),
+    )
+    expect(trackEvent).not.toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TRANSFER,
+      expect.anything(),
+    )
+  })
+
+  it("reports activation errors with stage and sanitized reason", async () => {
+    mocks.setActiveBuffer.mockRejectedValue(
+      new DOMException("private SQL", "QuotaExceededError"),
+    )
+    const hook = mount()
+    await act(async () => {
+      await hook().transfer(request)
+    })
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TRANSFER_FAILED,
+      {
+        notebookId: 42,
+        source: "result_grid",
+        stage: "activate",
+        reason: "storage_quota",
+      },
+    )
+    expect(trackEvent).not.toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TRANSFER,
+      expect.anything(),
+    )
+  })
+
+  it("reports a soft result-save failure even when the live transfer succeeds", async () => {
+    vi.mocked(createTransferCells).mockReturnValue([
+      {
+        id: "c1",
+        position: 0,
+        value: "select 1",
+        result: { results: [], activeResultIndex: 0, timestamp: 1 },
+      },
+    ])
+    vi.mocked(persistCellSnapshot).mockResolvedValue(false)
+    const hook = mount()
+    await act(async () => {
+      await hook().transfer(request)
+    })
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TRANSFER_FAILED,
+      expect.objectContaining({
+        notebookId: 42,
+        stage: "persist_results",
+        reason: "result_not_saved",
+      }),
+    )
+    expect(trackEvent).toHaveBeenCalledWith(
+      ConsoleEvent.NOTEBOOK_TRANSFER,
+      expect.objectContaining({ notebookId: 42 }),
+    )
+  })
+})
+
+describe("notebook transfer re-entry", () => {
+  it("keeps a transfer in progress across a remount, so a reopened menu cannot start a second one", async () => {
+    const pending = deferred<unknown>()
+    mocks.addBuffer.mockReturnValue(pending.promise)
+    authSessionState.markNonSSOAuthenticated()
+    const first = mount()
+    let transfer!: Promise<void>
+    act(() => {
+      transfer = first().transfer(request)
+    })
+    // The menu closes on select, unmounting the item; reopening mounts a new one.
+    act(() => renderer?.unmount())
+    const second = mount()
+    expect(second().busy).toBe(true)
+    await act(async () => {
+      await second().transfer(request)
+    })
+    expect(mocks.addBuffer).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      pending.resolve(undefined)
+      await transfer
+    })
+    expect(second().busy).toBe(false)
+    authSessionState.endSession()
+  })
+})

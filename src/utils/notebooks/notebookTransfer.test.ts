@@ -1,0 +1,279 @@
+import { describe, expect, it, vi } from "vitest"
+import { Type, type QueryRawResult } from "../questdb"
+import {
+  buildBatchTransfer,
+  createTransferCells,
+  createTransferView,
+  splitEditorScript,
+  toTransferResult,
+} from "./notebookTransfer"
+import { MAX_NOTEBOOK_CELLS } from "../../store/notebook"
+import { toChartResult } from "../../scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
+import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
+import {
+  computeCellHeights,
+  computeResultBottomHeight,
+  DEFAULT_CHART_BOTTOM_HEIGHT,
+  patchCellRunResult,
+} from "../../scenes/Editor/Notebook/cellSizing"
+
+const raw = (query: string, dataset: number[][] = [[1]]) => ({
+  type: Type.DQL as const,
+  query,
+  dataset,
+  error: undefined,
+  notice: undefined,
+  columns: [{ name: "x", type: "LONG" }],
+  count: dataset.length,
+  timings: { compiler: 0, authentication: 0, count: 0, execute: 0, fetch: 0 },
+})
+
+describe("notebook transfer", () => {
+  it("splits on SQL statement boundaries without losing comments or literal whitespace", () => {
+    const sql =
+      "-- first\nDECLARE @a := ';' SELECT @a;\n/* explanation; */\nSELECT 'it''s;fine'; -- trailing\n"
+    const cells = splitEditorScript(sql)
+    expect(cells).toHaveLength(2)
+    expect(cells).toEqual([
+      "-- first\nDECLARE @a := ';' SELECT @a;",
+      "/* explanation; */\nSELECT 'it''s;fine'; -- trailing",
+    ])
+    expect(cells[0]).toContain("DECLARE @a")
+    expect(cells[1]).toContain("/* explanation; */")
+    expect(cells[1]).toContain("-- trailing")
+    expect(cells.flatMap(getQueriesFromText)).toEqual(getQueriesFromText(sql))
+    expect(splitEditorScript("-- only a comment")).toEqual([])
+  })
+
+  it("keeps a same-line comment with its statement and drops stray delimiters", () => {
+    expect(
+      splitEditorScript("select 1; -- note one\nselect 2; -- note two"),
+    ).toEqual(["select 1; -- note one", "select 2; -- note two"])
+    expect(splitEditorScript("select 1;;select 2")).toEqual([
+      "select 1;",
+      "select 2",
+    ])
+    expect(splitEditorScript("select 1;; -- one\n-- two\nselect 2;")).toEqual([
+      "select 1;; -- one",
+      "-- two\nselect 2;",
+    ])
+    expect(splitEditorScript("select 1; -- one\r\nselect 2;")).toEqual([
+      "select 1; -- one",
+      "select 2;",
+    ])
+    expect(splitEditorScript("select 1; select 2;")).toEqual([
+      "select 1;",
+      "select 2;",
+    ])
+  })
+
+  it("trims separator whitespace instead of adding blank lines to converted cells", () => {
+    expect(splitEditorScript("select 1;\n\nselect 2;\n\nselect 3;")).toEqual([
+      "select 1;",
+      "select 2;",
+      "select 3;",
+    ])
+    expect(
+      splitEditorScript("\r\n  select 'a\r\n\r\nb';\r\n\r\n  select 2;\r\n"),
+    ).toEqual(["select 'a\r\n\r\nb';", "select 2;"])
+  })
+
+  it("captures only read results from a successful mixed batch, including empty results", () => {
+    const batch = buildBatchTransfer(
+      3,
+      [
+        { success: true, result: { type: Type.DDL } as QueryRawResult },
+        { success: true, result: raw("select 1"), fetchedAt: 123 },
+        {
+          success: true,
+          result: raw("select 2 where false", []),
+          fetchedAt: 456,
+        },
+      ],
+      3,
+    )!
+    expect(batch.writeCount).toBe(1)
+    expect(batch.hasAllResults).toBe(true)
+    expect(batch.queries.map((q) => q.sql)).toEqual([
+      "select 1",
+      "select 2 where false",
+    ])
+    expect(batch.queries[0].result?.fetchedAt).toBe(123)
+    expect(batch.queries[1].result?.dataset).toEqual([])
+  })
+
+  it("does not offer partial, failed, single-result or write-only batches", () => {
+    const results = [{ success: true, result: raw("select 1") }]
+    expect(buildBatchTransfer(1, results, 2)).toBeUndefined()
+    expect(buildBatchTransfer(1, results, 1)).toBeUndefined()
+    expect(
+      buildBatchTransfer(1, [...results, { success: false }], 2),
+    ).toBeUndefined()
+    expect(
+      buildBatchTransfer(
+        1,
+        [{ success: true, result: { type: Type.DDL } as QueryRawResult }],
+        1,
+      ),
+    ).toBeUndefined()
+  })
+
+  it("does not serialize results it is going to discard", () => {
+    const stringify = vi.spyOn(JSON, "stringify")
+    const many = Array.from({ length: MAX_NOTEBOOK_CELLS + 1 }, (_, i) => ({
+      success: true,
+      result: raw(`select ${i}`),
+    }))
+    expect(buildBatchTransfer(1, many, many.length)).toBeUndefined()
+    expect(stringify).not.toHaveBeenCalled()
+
+    const large = { ...raw("select huge"), dataset: [["x".repeat(2_000_001)]] }
+    const batch = buildBatchTransfer(
+      1,
+      [large, raw("select 2"), raw("select 3")].map((result) => ({
+        success: true,
+        result,
+      })),
+      3,
+    )!
+    expect(batch.hasAllResults).toBe(false)
+    expect(stringify).toHaveBeenCalledTimes(1)
+    stringify.mockRestore()
+  })
+
+  it("keeps oversized batch SQL without pretending its results were captured", () => {
+    const large = { ...raw("select huge"), dataset: [["x".repeat(2_000_001)]] }
+    const batch = buildBatchTransfer(
+      1,
+      [
+        { success: true, result: large },
+        { success: true, result: raw("select 2") },
+      ],
+      2,
+    )!
+    expect(batch.hasAllResults).toBe(false)
+    expect(batch.queries).toEqual([{ sql: "select huge" }, { sql: "select 2" }])
+  })
+
+  it("carries the executed SQL and fetch time with refresh explicitly off", () => {
+    const result = toTransferResult(raw("select 1"), 123)
+    const [cell] = createTransferCells([{ sql: result.query, result }])
+    expect(cell.value).toBe("select 1")
+    expect(cell.autoRefresh).toBe(false)
+    expect(cell.result?.results[0]).toBe(result)
+    expect(cell.result?.timestamp).toBe(123)
+    expect(cell.mode).toBeUndefined()
+  })
+
+  it("marks a first-page editor result truncated, so drawing it refetches the full frame", () => {
+    const page = { ...raw("select x", [[1], [2]]), count: 50_000 }
+    const partial = toTransferResult(page, 1)
+    expect(partial.truncated).toBe(true)
+    const [cell] = createTransferCells([{ sql: page.query, result: partial }])
+    expect(toChartResult(cell.result, [page.query]).kind).not.toBe("settled")
+
+    const complete = toTransferResult(raw("select x", [[1], [2]]), 1)
+    expect(complete.truncated).toBeUndefined()
+    const [full] = createTransferCells([{ sql: "select x", result: complete }])
+    expect(toChartResult(full.result, ["select x"]).kind).toBe("settled")
+  })
+
+  it("focuses the first transferred cell, where the auto-refresh menu opens", () => {
+    const cells = createTransferCells([
+      { sql: "select 1" },
+      { sql: "select 2" },
+    ])
+    for (const compare of [false, true])
+      expect(createTransferView(cells, compare).focusedCellId).toBe(cells[0].id)
+  })
+
+  it("aligns editors and result panes in each comparison row", () => {
+    const sql = ["select 1", "-- note\n-- details\nselect 2", "select 3"]
+    const cells = createTransferCells(
+      sql.map((query) => ({
+        sql: query,
+        result: toTransferResult(raw(query), 1),
+      })),
+    )
+    const view = createTransferView(cells, true)
+    expect(view.cells[0].topHeight).toBe(view.cells[1].topHeight)
+    expect(view.cells[0].bottomHeight).toBe(view.cells[1].bottomHeight)
+    expect(view.settings?.layout?.[0]).toMatchObject({ x: 0, y: 0, w: 6 })
+    expect(view.settings?.layout?.[1]).toMatchObject({
+      x: 6,
+      y: 0,
+      w: 6,
+      h: view.settings?.layout?.[0].h,
+    })
+    expect(view.settings?.layout?.[2].y).toBe(view.settings?.layout?.[0].h)
+  })
+
+  it("sizes transferred grids to their rows, keeps charts tall and leaves results automatic", () => {
+    const [grid] = createTransferCells([
+      { sql: "select 1", result: toTransferResult(raw("select 1"), 1) },
+    ])
+    expect(computeCellHeights(grid).bottomHeight).toBe(154)
+    expect(grid.bottomResized).not.toBe(true)
+    const [chart] = createTransferCells([
+      {
+        sql: "select 1",
+        result: toTransferResult(raw("select 1"), 1),
+        chartConfig: { xColumn: null, queries: [] },
+      },
+    ])
+    expect(computeCellHeights(chart).bottomHeight).toBe(
+      DEFAULT_CHART_BOTTOM_HEIGHT,
+    )
+
+    const larger = {
+      results: [toTransferResult(raw("select 1", [[1], [2], [3]]), 2)],
+      activeResultIndex: 0,
+      timestamp: 2,
+    }
+    const [rerun] = patchCellRunResult([grid], grid.id, larger)
+    expect(rerun.bottomHeight).toBe(214)
+  })
+
+  it("fits comparison rows to the taller result and caps large results at ten visible rows", () => {
+    const counts = [0, 1, 3, 30, 1]
+    const cells = createTransferCells(
+      counts.map((count, i) => ({
+        sql: `select ${i}`,
+        result: toTransferResult(
+          raw(
+            `select ${i}`,
+            Array.from({ length: count }, () => [i]),
+          ),
+          1,
+        ),
+      })),
+    )
+    const view = createTransferView(cells, true)
+    expect(view.cells.map((c) => computeCellHeights(c).bottomHeight)).toEqual([
+      154, 154, 424, 424, 154,
+    ])
+    expect(view.cells.every((c) => !c.bottomResized)).toBe(true)
+    expect(view.cells[3].bottomHeight).toBe(
+      computeResultBottomHeight(cells[3].result, cells[3].value),
+    )
+    const layout = view.settings!.layout!
+    expect(layout[0].h).toBe(layout[1].h)
+    expect(layout[2].h).toBe(layout[3].h)
+    expect(layout[2].y).toBe(layout[0].h)
+    expect(layout[4].y).toBe(layout[0].h + layout[2].h)
+  })
+
+  it("preserves a whole script without running it, and rejects capacity overflow", () => {
+    const sql =
+      "CREATE TABLE t(x int); INSERT INTO t VALUES(1); SELECT * FROM t;"
+    const [cell] = createTransferCells([{ sql }])
+    expect(cell.value).toBe(sql)
+    expect(cell.result).toBeUndefined()
+    expect(cell.mode).toBeUndefined()
+    expect(() =>
+      createTransferCells(
+        Array.from({ length: 201 }, () => ({ sql: "select 1" })),
+      ),
+    ).toThrow("200")
+  })
+})

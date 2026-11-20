@@ -1,3 +1,4 @@
+import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 import React, {
   createContext,
   useCallback,
@@ -9,6 +10,12 @@ import React, {
 } from "react"
 import type { MutableRefObject } from "react"
 import { unstable_batchedUpdates } from "react-dom"
+import {
+  hasTransferSnapshot,
+  newerTransferSnapshot,
+  peekTransferSnapshot,
+  takeTransferSnapshot,
+} from "../../../utils/notebooks/notebookTransferState"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
 import type {
@@ -62,6 +69,11 @@ import {
 } from "./statementIdentity"
 import type { RunCellGate } from "../../../utils/tools/permissions"
 import { signalUserEdit } from "../../../utils/notebooks/notebookAIBridge"
+import {
+  notebookRunOutcome,
+  trackNotebookExecution,
+  type NotebookExecutionOutcome,
+} from "../../../modules/ConsoleEventTracker/notebookExecutionEvents"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { getQueriesFromText } from "../Monaco/utils"
@@ -330,7 +342,22 @@ export const NotebookProvider: React.FC<{
   const resultHydration = useMemo(
     () =>
       new CellResultHydrationEngine({
-        loadSnapshot: (cellId) => loadCellSnapshot(bufferId, cellId),
+        loadSnapshot: async (cellId) => {
+          const staged = peekTransferSnapshot(bufferId, cellId)
+          if (!staged) return loadCellSnapshot(bufferId, cellId)
+          const saved = await loadCellSnapshot(bufferId, cellId).catch(
+            () => undefined,
+          )
+          // The staged frame is released once the disk has (or had) its copy:
+          // until its write lands, a later hydration of this cell (a remount,
+          // or a release and re-request) still finds it instead of marking it
+          // missing. After that, a snapshot deleted since stays deleted.
+          if (saved || staged.written) {
+            takeTransferSnapshot(bufferId, cellId)
+            if (!saved) return undefined
+          }
+          return newerTransferSnapshot(staged.snapshot, saved)
+        },
         rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
         deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
         getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
@@ -386,6 +413,10 @@ export const NotebookProvider: React.FC<{
             (cell) =>
               cell.result == null &&
               hasRunMarker(cell) &&
+              // A load in flight settles the cell itself; it may hold a
+              // transferred frame whose disk write has not landed yet.
+              resultHydration.statusOf(cell.id) !== "loading" &&
+              !hasTransferSnapshot(bufferId, cell.id) &&
               !snapshotIds.has(cell.id),
           )
           .forEach((cell) => resultHydration.noteMissing(cell.id))
@@ -753,8 +784,39 @@ export const NotebookProvider: React.FC<{
       const runId = ++notebookRunIdRef.current
       const queryKey = createNotebookQueryKey(bufferId, cellId, runId)
       const scopeKey = createNotebookScopeKey(bufferId, cellId)
+      // An automatic run the console starts for the user (e.g. a dashboard's
+      // first run) never replaces a run of the cell already going, the user's
+      // or an agent's.
+      if (
+        gate?.kind === "autoRun" &&
+        gate.initiator === "user" &&
+        (questExecution.getActive(scopeKey) ||
+          questExecution.getPending(scopeKey))
+      )
+        return { ok: false, superseded: true }
 
-      return new Promise<CellRunOutcome>((resolve) => {
+      const session = authSessionState.capture()
+      const startedAt = performance.now()
+      // Explicit agent runs are already reported by the MCP tool event.
+      const track = (outcome: NotebookExecutionOutcome) => {
+        if (gate?.kind === "explicit" || !session.isCurrent()) return
+        trackNotebookExecution({
+          notebookId: bufferId,
+          cellId,
+          mode: "grid",
+          trigger: gate?.kind === "autoRun" ? "auto_run" : "run",
+          ...(gate?.kind === "autoRun" && gate.initiator
+            ? { initiator: gate.initiator }
+            : {}),
+          outcome,
+          durationMs: performance.now() - startedAt,
+        })
+      }
+      return new Promise<CellRunOutcome>((resolve, reject) => {
+        const finish = (outcome: CellRunOutcome, dismissed = false) => {
+          track(dismissed ? "cancelled" : notebookRunOutcome(outcome))
+          resolve(outcome)
+        }
         const execute = () => {
           void runCellNow(
             cellId,
@@ -764,14 +826,17 @@ export const NotebookProvider: React.FC<{
             signal,
             expectFullValue,
             gate,
-          ).then(resolve)
+          ).then(finish, (error: unknown) => {
+            track("error")
+            reject(error)
+          })
         }
         const request = () =>
           questExecution.requestExecution({
             abort: (reason) => cancelCell(cellId, runCancelReasonOf(reason)),
             bufferId,
             execute,
-            onDismiss: () => resolve({ ok: false, superseded: false }),
+            onDismiss: () => finish({ ok: false, superseded: false }, true),
             queryKey,
             scopeKey,
           })
@@ -886,6 +951,7 @@ export const NotebookProvider: React.FC<{
     signalUserEdit(bufferId)
     store.updateCells((prev) => prev.map(clearCellAutoRefresh))
     void trackEvent(ConsoleEvent.NOTEBOOK_AUTOREFRESH_RESET_OVERRIDES, {
+      notebookId: bufferId,
       count,
     })
   }, [bufferId, store])

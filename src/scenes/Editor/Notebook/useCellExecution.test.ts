@@ -1,3 +1,4 @@
+import { trackNotebookExecution } from "../../../modules/ConsoleEventTracker/notebookExecutionEvents"
 import { createElement } from "react"
 import { act, create } from "react-test-renderer"
 import { describe, expect, it, vi } from "vitest"
@@ -15,6 +16,10 @@ import {
   launchStatement,
   useCellExecution,
 } from "./useCellExecution"
+
+vi.mock("../../../modules/ConsoleEventTracker/notebookExecutionEvents", () => ({
+  trackNotebookExecution: vi.fn(),
+}))
 
 vi.mock("./persistCellSnapshot", () => ({
   persistCellSnapshot: vi.fn().mockResolvedValue(true),
@@ -174,4 +179,100 @@ describe("launchStatement", () => {
       exec: { type: "error", error: "Cancelled by user" },
     })
   })
+})
+
+describe("per-result refresh telemetry", () => {
+  it.each(["success", "error", "unverified", "cancelled"] as const)(
+    "records %s for the owning notebook and cell",
+    async (expected) => {
+      vi.mocked(trackNotebookExecution).mockClear()
+      const query = "select private_value from private_table"
+      const cellsRef: { current: NotebookCell[] } = {
+        current: [
+          {
+            id: "result-cell",
+            position: 0,
+            value: query,
+            result: {
+              activeResultIndex: 0,
+              timestamp: 0,
+              results: [{ type: "ddl", query }],
+            },
+          },
+        ],
+      }
+      let finish!: (value: QueryExecResult) => void
+      const executeSingle = vi.fn(
+        () =>
+          new Promise<QueryExecResult>((resolve) => {
+            finish = resolve
+          }),
+      )
+      const updateCell = (cellId: string, patch: Partial<NotebookCell>) => {
+        cellsRef.current = cellsRef.current.map((cell) =>
+          cell.id === cellId ? { ...cell, ...patch } : cell,
+        )
+      }
+      let actions!: ReturnType<typeof useCellExecution>
+      const Harness = () => {
+        actions = useCellExecution({
+          bufferId: 21,
+          cellsRef,
+          executeSingle,
+          validateWithGlobals: vi.fn(),
+          updateCell,
+          updateCellResult: (cellId, index, result) => {
+            const cell = cellsRef.current.find((cell) => cell.id === cellId)!
+            const frame = cell.result!
+            updateCell(cellId, {
+              result: {
+                ...frame,
+                results: frame.results.map((old, i) =>
+                  i === index ? result : old,
+                ),
+              },
+            })
+          },
+          updateCells: vi.fn(),
+          setScriptSummary: vi.fn(),
+          onSnapshotPersisted: vi.fn(),
+        })
+        return null
+      }
+      const renderer = create(createElement(Harness))
+      try {
+        let promise!: Promise<{ committed: boolean; ok: boolean }>
+        await act(async () => {
+          promise = actions.reRunResultAt("result-cell", 0)
+          await vi.waitFor(() => expect(executeSingle).toHaveBeenCalledOnce())
+          if (expected === "cancelled") actions.cancelCell("result-cell")
+          finish({
+            type: expected === "success" ? "dql" : "error",
+            query,
+            dataset: [],
+            columns: [],
+            count: 0,
+            ...(expected === "unverified" ? { requestNotSent: true } : {}),
+            error: "private server details",
+          })
+          await promise
+        })
+        expect(trackNotebookExecution).toHaveBeenCalledTimes(1)
+        expect(trackNotebookExecution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            notebookId: 21,
+            cellId: "result-cell",
+            mode: "grid",
+            trigger: "manual_refresh",
+            outcome: expected,
+          }),
+        )
+        expect(
+          JSON.stringify(vi.mocked(trackNotebookExecution).mock.calls),
+        ).not.toContain("private")
+      } finally {
+        act(() => renderer.unmount())
+      }
+    },
+  )
 })

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react"
+import React from "react"
 import { Chat3, Command, ExternalLink, Question } from "../../components/icons"
 import { Discourse, Github, Slack, StackOverflow } from "../../components/icons"
 import {
@@ -12,7 +12,6 @@ import {
 import { MenuItemIcon } from "../../components/menuStyles"
 import { SIDEBAR_ICON_SIZE } from "../../consts"
 import { IconWithTooltip } from "../../components"
-import { useKeyPress } from "../../hooks"
 import { useState, useCallback, useContext } from "react"
 import { QuestContext } from "../../providers"
 import { useSelector } from "react-redux"
@@ -66,13 +65,6 @@ export const Help = () => {
   }, [])
   const [open, setOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
-  const escPress = useKeyPress("Escape")
-
-  useEffect(() => {
-    if (escPress && shortcutsPopperActive) {
-      setShortcutsPopperActive(false)
-    }
-  }, [escPress])
 
   return (
     <React.Fragment>

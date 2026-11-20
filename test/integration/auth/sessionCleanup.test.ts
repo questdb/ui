@@ -40,6 +40,7 @@ describe("clearLoginDataOnSessionEnd", () => {
     // Given what a login read: a result, the schema, and the query's outcome
     let state = [
       queryActions.setResult(lastResult),
+      queryActions.recordQueryExecution(lastResult.query),
       queryActions.setTables([payroll]),
       queryActions.setColumns([salary]),
       queryActions.addNotification(
@@ -59,6 +60,7 @@ describe("clearLoginDataOnSessionEnd", () => {
 
     // Then whoever signs in next sees none of the data, as in a new console
     expect(state.result).toBeUndefined()
+    expect(state.executionCounts).toBeUndefined()
     expect(state.tables).toEqual(initialState.tables)
     expect(state.columns).toEqual(initialState.columns)
     // And the log still reports what the end of the session interrupted

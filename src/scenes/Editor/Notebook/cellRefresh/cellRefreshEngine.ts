@@ -56,6 +56,14 @@ import {
 import { persistCellSnapshot } from "../persistCellSnapshot"
 import { PerKeyListeners } from "../perKeyListeners"
 import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
+import {
+  trackNotebookExecution,
+  type NotebookExecutionOutcome,
+} from "../../../../modules/ConsoleEventTracker/notebookExecutionEvents"
+import {
+  trackMonitoringChartFailure,
+  type InitialChartFailure,
+} from "../../../../utils/monitoring/telemetry"
 
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
@@ -257,7 +265,10 @@ const entryKindFor = (cell: NotebookCell): CellEntryKind | null => {
   return null
 }
 
-type EntrySyncKey = Pick<NotebookCell, "id" | "value" | "autoRefresh"> & {
+type EntrySyncKey = Pick<
+  NotebookCell,
+  "id" | "value" | "autoRefresh" | "deferInitialDraw"
+> & {
   kind: CellEntryKind
 }
 
@@ -271,6 +282,7 @@ const sameEntryCells = (
       previous[index].id === cell.id &&
       previous[index].value === cell.value &&
       previous[index].autoRefresh === cell.autoRefresh &&
+      previous[index].deferInitialDraw === cell.deferInitialDraw &&
       previous[index].kind === kind,
   )
 
@@ -319,6 +331,7 @@ type Entry = {
   cellId: string
   sql: string
   autoRefresh: AutoRefresh
+  deferInitialDraw: boolean
   visible: boolean
   pendingManualRefresh: boolean
   manualRefreshInFlight: boolean
@@ -350,6 +363,8 @@ type Entry = {
 }
 
 export class CellRefreshEngine {
+  private initialExecutions = new Set<string>()
+  private initialChartOutcomes = new Set<string>()
   private entries = new Map<string, Entry>()
   private listeners = new PerKeyListeners()
   private visibilityByCell = new Map<string, boolean>()
@@ -450,6 +465,7 @@ export class CellRefreshEngine {
       id: cell.id,
       value: cell.value,
       autoRefresh: cell.autoRefresh,
+      deferInitialDraw: cell.deferInitialDraw,
       kind,
     }))
     const present = new Set<string>()
@@ -760,6 +776,7 @@ export class CellRefreshEngine {
     const entry: Entry = {
       kind,
       cellId: cell.id,
+      deferInitialDraw: cell.deferInitialDraw === true,
       sql: cell.value,
       autoRefresh: resolveAutoRefresh(
         cell.autoRefresh,
@@ -799,6 +816,10 @@ export class CellRefreshEngine {
   }
 
   private updateEntry(entry: Entry, cell: NotebookCell) {
+    // Deferral belongs to the initial transfer. applySqlState clears it when
+    // the user edits the SQL, and so does a drawn frame clearing the cell's
+    // flag; later unrelated syncs must not re-arm it.
+    if (cell.deferInitialDraw !== true) entry.deferInitialDraw = false
     const autoRefresh = resolveAutoRefresh(
       cell.autoRefresh,
       this.autoRefreshDefault,
@@ -859,6 +880,7 @@ export class CellRefreshEngine {
   }
 
   private applySqlState(entry: Entry, sql: string) {
+    entry.deferInitialDraw = false
     this.abortRound(entry)
     entry.manualRefreshInFlight = false
     this.stopResultLoadWait(entry)
@@ -1013,6 +1035,10 @@ export class CellRefreshEngine {
       entry.poll = null
       entry.pollKey = null
       this.updatePoll(entry)
+      return
+    }
+    if (entry.deferInitialDraw) {
+      this.setState(entry, { settledKey: queriesKey })
       return
     }
     if (entry.visible && !this.documentHidden && !entry.state.fetchCancelled)
@@ -1215,9 +1241,32 @@ export class CellRefreshEngine {
     // A refresh-all click on a polling cell redeems itself through the poll
     // loop's first tick, so the manual intent rides on the entry, not the call.
     const userAsked = manual || entry.manualRefreshInFlight
-    if (entry.kind === "grid") await this.runGridRound(entry, ac, userAsked)
-    else await this.runChartFetch(entry, ac, reason)
-    return performance.now() - start
+    const initial = !this.initialExecutions.has(entry.cellId)
+    this.initialExecutions.add(entry.cellId)
+    const session = authSessionState.capture()
+    const execution: { outcome: NotebookExecutionOutcome } = {
+      outcome: "not_started",
+    }
+    try {
+      if (entry.kind === "grid")
+        await this.runGridRound(entry, ac, userAsked, execution)
+      else await this.runChartFetch(entry, ac, reason, execution)
+      return performance.now() - start
+    } catch (error) {
+      execution.outcome = "error"
+      throw error
+    } finally {
+      // Report manual actions and the first fetch, never recurring poll ticks.
+      if ((userAsked || initial) && session.isCurrent())
+        trackNotebookExecution({
+          notebookId: this.bufferId,
+          cellId: entry.cellId,
+          mode: entry.kind,
+          trigger: userAsked ? "manual_refresh" : "initial_load",
+          outcome: ac.signal.aborted ? "cancelled" : execution.outcome,
+          durationMs: performance.now() - start,
+        })
+    }
   }
 
   // One classification per launch: the barrier result is the single decision
@@ -1240,6 +1289,7 @@ export class CellRefreshEngine {
     entry: Entry,
     ac: AbortController,
     reason: FetchReason,
+    execution: { outcome: NotebookExecutionOutcome },
   ) {
     const deps = this.getDeps()
     const { queries, queriesKey } = entry.state
@@ -1254,16 +1304,19 @@ export class CellRefreshEngine {
         classified = await this.classifyForRound(entry, ac)
       } catch (e) {
         if (ac.signal.aborted) return
+        execution.outcome = "validation_failed"
         const message = e instanceof Error ? e.message : "validate failed"
         this.setState(entry, {
           classifyBlock: { kind: "failed", message },
           settledKey: queriesKey,
         })
+        this.recordInitialChartOutcome(entry, "validation_failed")
         return
       }
       if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
       const offender = classified.find((s) => s.klass === "DDL_DML")
       if (offender) {
+        execution.outcome = "skipped"
         this.setState(entry, {
           classifyBlock: {
             kind: "write",
@@ -1273,6 +1326,7 @@ export class CellRefreshEngine {
           settledKey: queriesKey,
         })
         // The cell now holds a write — drop any stale rows the grid would show.
+        this.recordInitialChartOutcome(entry, "write_blocked")
         this.clearCellData(entry)
         return
       }
@@ -1312,6 +1366,19 @@ export class CellRefreshEngine {
       // SQL, or one without rows), it shows the failure, but still leaves the
       // snapshot.
       const notExecuted = out.some(isNotExecuted)
+      execution.outcome = notExecuted
+        ? "unverified"
+        : out.some((result) => result.type === "error")
+          ? "error"
+          : "success"
+      this.recordInitialChartOutcome(
+        entry,
+        notExecuted
+          ? "request_not_sent"
+          : out.some((result) => result.type === "error")
+            ? "query_error"
+            : undefined,
+      )
       // Compare against the CURRENT cell.result, not a retained copy — the
       // hydration engine may have released or replaced it since the last tick,
       // and an unchanged frame must still be re-written in that case.
@@ -1401,6 +1468,7 @@ export class CellRefreshEngine {
     entry: Entry,
     round: AbortController,
     manual: boolean,
+    execution: { outcome: NotebookExecutionOutcome },
   ) {
     const deps = this.getDeps()
     const { queries, queriesKey } = entry.state
@@ -1410,6 +1478,7 @@ export class CellRefreshEngine {
         classified = await this.classifyForRound(entry, round)
       } catch (e) {
         if (round.signal.aborted) return
+        execution.outcome = "validation_failed"
         const message = e instanceof Error ? e.message : "validate failed"
         this.setState(entry, {
           classifyBlock: { kind: "failed", message },
@@ -1420,6 +1489,7 @@ export class CellRefreshEngine {
       if (round.signal.aborted) return
       const offender = classified.find((s) => s.klass === "DDL_DML")
       if (offender) {
+        execution.outcome = "skipped"
         // A write cell is a blocked entry: no execution, old rows stay.
         this.setState(entry, {
           classifyBlock: {
@@ -1433,6 +1503,7 @@ export class CellRefreshEngine {
         return
       }
       const slotKeys = statementKeysFor(queries)
+      execution.outcome = "success"
       const invalidSlots: Array<{ key: StatementKey; message: string }> = []
       const launchSlots: Array<{ key: StatementKey; index: number }> = []
       slotKeys.forEach((key, index) => {
@@ -1449,6 +1520,7 @@ export class CellRefreshEngine {
         classifiedKey: queriesKey,
       }
       if (invalidSlots.length > 0) {
+        execution.outcome = "error"
         const slotErrors = new Map(entry.state.slotErrors)
         invalidSlots.forEach(({ key, message }) =>
           slotErrors.set(key, message.trim()),
@@ -1487,6 +1559,7 @@ export class CellRefreshEngine {
             }
             this.batchUpdates(() => {
               if (exec.type === "error") {
+                execution.outcome = "error"
                 this.setSlotError(entry, key, exec.error ?? "Query failed")
               } else {
                 // Changed rows are written with their fetch time. Identical
@@ -1503,6 +1576,7 @@ export class CellRefreshEngine {
             })
           } catch (e) {
             if (slotAbort.signal.aborted || round.signal.aborted) return
+            execution.outcome = "error"
             this.batchUpdates(() =>
               this.setSlotError(entry, key, errorMessage(e)),
             )
@@ -1518,6 +1592,8 @@ export class CellRefreshEngine {
         }),
       )
       if (round.signal.aborted) return
+      if (notExecutedSlots.size > 0) execution.outcome = "unverified"
+      if (entry.state.cancelledSlots.size > 0) execution.outcome = "cancelled"
       this.setState(entry, { settledKey: queriesKey })
       // A round that could not execute a statement changes nothing on disk.
       if (notExecutedSlots.size === 0) this.persistGridFrame(entry, manual)
@@ -1612,6 +1688,16 @@ export class CellRefreshEngine {
     const slotErrors = new Map(entry.state.slotErrors)
     slotErrors.set(key, message.trim())
     this.setState(entry, { slotErrors })
+  }
+
+  private recordInitialChartOutcome(
+    entry: Entry,
+    failure?: InitialChartFailure,
+  ) {
+    if (this.initialChartOutcomes.has(entry.cellId)) return
+    this.initialChartOutcomes.add(entry.cellId)
+    if (failure)
+      void trackMonitoringChartFailure(this.bufferId, entry.cellId, failure)
   }
 
   private clearSlotError(entry: Entry, key: StatementKey) {

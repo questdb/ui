@@ -29,12 +29,15 @@ import { RunningType } from "../../../store/Query/types"
 
 export const registerLegacyEventBusEvents = ({
   editor,
+  onRefresh,
   toggleRunning,
   getRunning,
   isPreviewing,
   openQueryInNewTab,
 }: {
   editor: editor.IStandaloneCodeEditor
+  // Re-runs the given query (the result grid's), else the last executed one.
+  onRefresh: (query?: string) => void
   toggleRunning: (runningType?: RunningType) => void
   getRunning: () => RunningType
   isPreviewing: () => boolean
@@ -57,8 +60,8 @@ export const registerLegacyEventBusEvents = ({
     },
   )
 
-  eventBus.subscribe(EventType.MSG_QUERY_EXEC, () => {
-    toggleRunning(RunningType.REFRESH)
+  eventBus.subscribe<{ q: string }>(EventType.MSG_QUERY_EXEC, (payload) => {
+    onRefresh(payload?.q)
   })
 
   eventBus.subscribe(EventType.MSG_EDITOR_FOCUS, () => {

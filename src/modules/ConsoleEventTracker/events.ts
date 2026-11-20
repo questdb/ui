@@ -78,6 +78,8 @@ export enum ConsoleEvent {
   SCHEMA_COPY_MULTIPLE = "schema.copy_multiple",
 
   TABLE_DETAILS_TAB_SWITCH = "table_details.tab_switch",
+  MONITORING_DASHBOARD_OPEN = "table_details.monitoring_dashboard_open",
+  MONITORING_DASHBOARD_FAILED = "table_details.monitoring_dashboard_failed",
   TABLE_DETAILS_OPEN = "table_details.open",
   TABLE_DETAILS_SCHEMA_EXPLAIN = "table_details.schema_explain",
   TABLE_DETAILS_ASK_AI = "table_details.ask_ai",
@@ -124,6 +126,9 @@ export enum ConsoleEvent {
   NEWS_OPEN = "news.open",
 
   NOTEBOOK_CREATE = "notebook.create",
+  NOTEBOOK_TRANSFER = "notebook.transfer",
+  NOTEBOOK_TRANSFER_FAILED = "notebook.transfer_failed",
+  NOTEBOOK_OPEN_FAILED = "notebook.open_failed",
   NOTEBOOK_TAB_OPEN = "notebook.tab_open",
   NOTEBOOK_DUPLICATE = "notebook.duplicate",
   NOTEBOOK_EXAMPLE_PERSONALIZE = "notebook.example_personalize",
@@ -139,6 +144,7 @@ export enum ConsoleEvent {
   NOTEBOOK_CELL_MOVE = "notebook.cell_move",
   NOTEBOOK_CELL_RENAME = "notebook.cell_rename",
   NOTEBOOK_CELL_RUN = "notebook.cell_run",
+  NOTEBOOK_CELL_EXECUTION = "notebook.cell_execution",
   NOTEBOOK_CELL_DRAW = "notebook.cell_draw",
   NOTEBOOK_CELL_RUN_CANCEL = "notebook.cell_run_cancel",
   NOTEBOOK_CELL_AUTOREFRESH_CHANGE = "notebook.cell_autorefresh_change",

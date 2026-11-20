@@ -206,6 +206,8 @@ export const mountDrawer = async (
   name = "trades",
   kind: TableKind = "table",
   ai: "enabled" | "no-schema" | "disabled" = "disabled",
+  // Rendered next to the drawer, inside the same providers.
+  sibling?: React.ReactNode,
 ) => {
   if (ai !== "disabled")
     localStorage.setItem(
@@ -238,6 +240,7 @@ export const mountDrawer = async (
               <AIConversationProvider>
                 <AIStatusProvider>
                   <TableDetailsDrawer />
+                  {sibling}
                 </AIStatusProvider>
               </AIConversationProvider>
             </LocalStorageProvider>

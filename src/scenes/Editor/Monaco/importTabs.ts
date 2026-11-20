@@ -304,6 +304,7 @@ const sanitizeNotebookCell = (
     const highlightConfig = sanitizeHighlightConfig(item.highlightConfig)
     if (highlightConfig) cell.highlightConfig = highlightConfig
     if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+    if (item.deferInitialDraw === true) cell.deferInitialDraw = true
     cell.paneView = isCellPaneView(item.paneView)
       ? item.paneView
       : inferredMaximized

@@ -81,6 +81,12 @@ const cell = (
   overrides: Partial<NotebookCell> = {},
 ): NotebookCell => ({ id, position: 0, value, ...overrides })
 
+// Snapshot rows of notebooks that exist; pruning drops those of deleted ones.
+const seedOtherNotebooks = (ids: number[]) =>
+  db.buffers.bulkPut(
+    ids.map((id) => ({ id, label: `nb ${id}`, value: "", position: id })),
+  )
+
 const seedNotebook = (
   view: NotebookViewState,
   opts: { archived?: boolean } = {},
@@ -843,6 +849,33 @@ describe("createDexieNotebookController — runCell", () => {
     timestamp: 0,
   }
 
+  it.each([
+    ["an agent's auto-run", { kind: "autoRun" } as const, 1],
+    [
+      "the console's own dashboard run",
+      { kind: "autoRun", initiator: "user" } as const,
+      0,
+    ],
+  ])(
+    "reports %s as an agent change only when the agent started it",
+    async (_, gate, agentEdits) => {
+      await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+      const { quest, respondNext } = makeQuest({
+        validate: () => dqlValidation,
+      })
+      const controller = makeController({}, quest)
+      const seen: AgentEdit[] = []
+      onAgentEdit((e) => seen.push(e))
+
+      const run = controller.runCell("a", undefined, undefined, gate)
+      await vi.waitFor(() => respondNext(dqlResult))
+
+      expect((await run).success).toBe(true)
+      expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
+      expect(seen).toHaveLength(agentEdits)
+    },
+  )
+
   it("runs a non-write multi-statement cell in parallel — one failure skips nothing", async () => {
     // Given a classified all-DQL script
     await seedNotebook({ cells: [cell("a", "SELECT 1; SELECT 2; SELECT 3")] })
@@ -1106,6 +1139,7 @@ describe("createDexieNotebookController — runCell", () => {
     // snapshot store was touched
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/opened this notebook/)
+    expect(summary.interruption).toBe("mounted")
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
@@ -1127,6 +1161,7 @@ describe("createDexieNotebookController — runCell", () => {
     // Then the stale result is reported unverified and nothing was recorded
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/changed this notebook/)
+    expect(summary.interruption).toBe("user_changed")
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
@@ -1958,6 +1993,7 @@ describe("createDexieNotebookController — runCell", () => {
 
     // Then the archived buffer is no longer pinned and prunes like any passive
     // notebook once newer ones exceed the budget
+    await seedOtherNotebooks([2, 3])
     await saveCellSnapshot({
       bufferId: 2,
       cellId: "a",
@@ -2225,6 +2261,7 @@ describe("createDexieNotebookController — field preservation", () => {
 describe("createDexieNotebookController — persisted snapshot cap", () => {
   it("a headless run commit evicts results beyond the 10 most recent notebooks", async () => {
     // Given 11 other notebooks already holding persisted results
+    await seedOtherNotebooks(Array.from({ length: 11 }, (_, i) => 101 + i))
     for (let bufferId = 101; bufferId <= 111; bufferId++) {
       await saveCellSnapshot({
         bufferId,

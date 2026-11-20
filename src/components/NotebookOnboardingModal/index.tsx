@@ -154,10 +154,8 @@ export const NotebookOnboardingModal = () => {
       if (buffer) {
         void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
           source: "onboarding_modal",
+          notebookId: buffer.id,
           step,
-        })
-        void trackEvent(ConsoleEvent.NOTEBOOK_TAB_OPEN, {
-          source: "onboarding_modal",
         })
       }
     })

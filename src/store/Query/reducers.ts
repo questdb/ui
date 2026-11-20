@@ -28,6 +28,7 @@ import {
 } from "../../scenes/Editor/Monaco/utils"
 import { QueryAction, QueryAT, QueryStateShape, RunningType } from "../../types"
 import type { InformationSchemaColumn } from "utils/questdb"
+import { MAX_TRACKED_QUERY_EXECUTIONS } from "../../utils/queryExecutionKey"
 
 export const initialState: QueryStateShape = {
   notifications: [],
@@ -41,6 +42,17 @@ export const initialState: QueryStateShape = {
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
   switch (action.type) {
+    case QueryAT.RECORD_QUERY_EXECUTION: {
+      const counts = { ...state.executionCounts }
+      const count = counts[action.payload] ?? 0
+      delete counts[action.payload]
+      counts[action.payload] = Math.min(2, count + 1)
+      const keys = Object.keys(counts)
+      if (keys.length > MAX_TRACKED_QUERY_EXECUTIONS) delete counts[keys[0]]
+      return { ...state, executionCounts: counts }
+    }
+    case QueryAT.CLEAR_QUERY_EXECUTIONS:
+      return { ...state, executionCounts: undefined }
     case QueryAT.ADD_NOTIFICATION: {
       const {
         query: queryText,
@@ -311,8 +323,13 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         result: action.payload,
+        resultSource: action.source,
+        batchTransfer: undefined,
       }
     }
+
+    case QueryAT.SET_BATCH_TRANSFER:
+      return { ...state, batchTransfer: action.payload }
 
     case QueryAT.STOP_RUNNING: {
       return {
@@ -325,6 +342,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       if (action.payload !== undefined) {
         return {
           ...state,
+          batchTransfer: undefined,
           running: action.payload,
         }
       }

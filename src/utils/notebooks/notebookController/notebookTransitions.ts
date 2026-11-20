@@ -445,7 +445,12 @@ export const setCellModeTransition = (
     ...cellModeChangePatch(cell, mode),
   }
   if (mode === "draw") nextCell.mode = "draw"
-  else delete nextCell.mode
+  else {
+    delete nextCell.mode
+    // A transferred chart defers only its first draw; once the cell leaves
+    // draw mode it is an ordinary cell.
+    delete nextCell.deferInitialDraw
+  }
   return {
     parts: {
       ...parts,

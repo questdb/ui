@@ -10,7 +10,7 @@ import QueryResult from "../../QueryResult"
 import { QueryInNotification } from "../../Monaco/query-in-notification"
 import type { StatementSlotView } from "./statementSlotView"
 import { CancelButton, LiveRegion, NotificationContainer } from "./styles"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 // A fast refresh still shows "Refreshing..." long enough to read.
@@ -48,14 +48,18 @@ const liveRegionMessage = (slot: StatementSlotView): string => {
 }
 
 type Props = {
+  // Labels this cell's telemetry.
+  cellId?: string
   slot: StatementSlotView
   onCancelQuery?: (statementKey: string) => void
 }
 
 export const StatusNotification: React.FC<Props> = ({
+  cellId,
   slot,
   onCancelQuery,
 }) => {
+  const trackEvent = useNotebookTelemetry(cellId)
   const refreshingHeld = useHeldFlag(slot.refreshing, REFRESHING_MIN_VISIBLE_MS)
   const activeResult: SingleQueryResult = slot.result ?? {
     type: "queued",

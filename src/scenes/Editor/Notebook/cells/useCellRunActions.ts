@@ -20,7 +20,7 @@ import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
 import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 type Options = {
@@ -54,6 +54,7 @@ export const useCellRunActions = ({
     getCellsSnapshot,
   } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cell.id)
   const { runWithSelectionMode } = useLocalStorage()
   const isDrawMode = cell.mode === "draw"
 
@@ -78,10 +79,17 @@ export const useCellRunActions = ({
     // the phase the Stop button can end.
     firstRunRef.current = cell.result == null
     signalUserEdit(bufferIdForEvents)
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW, {
+      phase: "requested",
+      trigger: "manual",
+    })
     const gate = await validateForDraw(cell.id)
     if (!gate.granted) {
       if (gate.reason !== undefined) {
-        void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_REFUSED)
+        void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_REFUSED, {
+          outcome: "denied",
+          trigger: "manual",
+        })
         toast.error(gate.reason)
       }
       return
@@ -94,6 +102,7 @@ export const useCellRunActions = ({
       mode: "draw",
     })
   }, [
+    trackEvent,
     cell.id,
     cell.result,
     isRunning,
@@ -112,12 +121,16 @@ export const useCellRunActions = ({
     clearHighlight()
     if (resolution.kind === "no-query") return "no-query"
 
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN)
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN, {
+      phase: "requested",
+      trigger: "manual",
+    })
     void runCell(cell.id, resolution.sql).then(({ ok }) => {
       if (runWithSelectionMode === "partial") applyHighlight(ok)
     })
     return "run"
   }, [
+    trackEvent,
     runWithSelectionMode,
     cell.id,
     runCell,
@@ -128,7 +141,6 @@ export const useCellRunActions = ({
 
   const emitRanEvent = useCallback(
     (status: RanStatus) => {
-      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN)
       emitUserAction({
         kind: "user_ran_cell",
         bufferId: bufferIdForEvents,
@@ -140,6 +152,10 @@ export const useCellRunActions = ({
   )
 
   const handleRunAll = useCallback(async () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN, {
+      phase: "requested",
+      trigger: "manual",
+    })
     if (editorRef.current) clearHighlight()
 
     const priorResult =
@@ -149,6 +165,7 @@ export const useCellRunActions = ({
       getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
     emitRanEvent(createRunStatus(priorResult, freshResult, outcome))
   }, [
+    trackEvent,
     cell.id,
     runCell,
     editorRef,
@@ -182,6 +199,10 @@ export const useCellRunActions = ({
       clearHighlight()
       const priorResult =
         getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN, {
+        phase: "requested",
+        trigger: "manual",
+      })
       void runCell(cell.id, normalizeQueryText(sql)).then((outcome) => {
         const freshResult =
           getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
@@ -190,6 +211,7 @@ export const useCellRunActions = ({
       return true
     },
     [
+      trackEvent,
       cell.id,
       cell.value,
       cell.result,
@@ -213,7 +235,10 @@ export const useCellRunActions = ({
       // seq now makes a stale-read apply fail instead of cancelling the run.
       signalUserEdit(bufferIdForEvents)
       if (plan.kind === "chart") {
-        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
+        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW, {
+          phase: "requested",
+          trigger: "manual",
+        })
         firstRunRef.current = false
         eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, {
           cellId: cell.id,
@@ -230,6 +255,7 @@ export const useCellRunActions = ({
       handleRunSingle(request.source)
     },
     [
+      trackEvent,
       cell.id,
       cell.mode,
       cell.result,
@@ -263,6 +289,10 @@ export const useCellRunActions = ({
       state.classifiedKey === state.queriesKey &&
       state.classifyBlock === null
     if (engineRefreshable) {
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN, {
+        phase: "requested",
+        trigger: "manual",
+      })
       signalUserEdit(bufferIdForEvents)
       void cellRefresh.refresh(cell.id).then(() => {
         const settled = cellRefresh.getState(cell.id)
@@ -276,6 +306,7 @@ export const useCellRunActions = ({
     }
     runResolved({ kind: "all" })
   }, [
+    trackEvent,
     cell.id,
     cell.mode,
     cell.result,

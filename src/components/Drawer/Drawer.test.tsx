@@ -3,9 +3,11 @@ import React from "react"
 import { Provider, useDispatch, useSelector } from "react-redux"
 import { createStore } from "redux"
 import { renderComponent, getHook } from "../../test/component"
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi } from "vitest"
+import { fireEvent } from "@testing-library/react"
+import { useEscapeLayer } from "../../hooks/useEscapeLayer"
 import rootReducer from "../../store/reducers"
 import { actions, selectors } from "../../store"
 import { Button } from "../Button"
@@ -114,5 +116,112 @@ describe("drawer history controls", () => {
     // Then
     expect(getHook("current-panel")).toHaveTextContent("prices")
     expect(getHook("sidebar-forward-button")).toBeDisabled()
+  })
+})
+
+const SidePanel = ({
+  autoFocusInput = false,
+  onDismiss,
+}: {
+  autoFocusInput?: boolean
+  onDismiss?: () => void
+}) => {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <>
+      <Button data-hook="panel-toggle" onClick={() => setOpen(true)}>
+        Open panel
+      </Button>
+      <Drawer
+        mode="side"
+        title="Side panel"
+        withCloseButton
+        trigger={<span data-hook="panel-trigger" />}
+        open={open}
+        onDismiss={() => {
+          onDismiss?.()
+          setOpen(false)
+        }}
+      >
+        <p data-hook="panel-text">Plain text</p>
+        {autoFocusInput && <input data-hook="panel-input" autoFocus />}
+      </Drawer>
+    </>
+  )
+}
+
+const renderSidePanel = (panel: React.ReactElement) =>
+  renderComponent(
+    <Provider store={createStore(rootReducer)}>
+      <DrawerHost>{panel}</DrawerHost>
+    </Provider>,
+  )
+
+describe("side drawer focus", () => {
+  it("moves focus into the panel when it opens", async () => {
+    // Given
+    renderSidePanel(<SidePanel />)
+    // When
+    await userEvent.click(getHook("panel-toggle"))
+    // Then
+    expect(getHook("sidebar-close-button")).toHaveFocus()
+  })
+
+  it("keeps the focus a panel's own content took on open", async () => {
+    // Given
+    renderSidePanel(<SidePanel autoFocusInput />)
+    // When
+    await userEvent.click(getHook("panel-toggle"))
+    // Then
+    expect(getHook("panel-input")).toHaveFocus()
+  })
+
+  it("returns focus to the control that opened it when it closes", async () => {
+    // Given a panel opened from a button, with focus moved into it
+    renderSidePanel(<SidePanel />)
+    await userEvent.click(getHook("panel-toggle"))
+    expect(getHook("sidebar-close-button")).toHaveFocus()
+    // When it is closed from inside
+    await userEvent.click(getHook("sidebar-close-button"))
+    // Then focus is back on the opener
+    await waitFor(() => expect(getHook("panel-toggle")).toHaveFocus())
+  })
+
+  it("points the trigger's aria-controls at the open panel", async () => {
+    // Given
+    renderSidePanel(<SidePanel />)
+    // When
+    await userEvent.click(getHook("panel-toggle"))
+    // Then
+    // Radix puts the trigger attributes on the wrapper around `trigger`.
+    const controls =
+      getHook("panel-trigger").parentElement!.getAttribute("aria-controls")
+    expect(controls).toBeTruthy()
+    expect(document.getElementById(controls!)).toHaveAttribute("role", "dialog")
+  })
+
+  it("closes the panel before a higher-priority layer when focus is on the panel itself", async () => {
+    // A click on plain text focuses the panel container (tabIndex -1).
+    const cellEscape = vi.fn(() => true)
+    const FocusedCell = () => {
+      useEscapeLayer(true, { priority: 30, onEscape: cellEscape })
+      return null
+    }
+    const dismiss = vi.fn()
+    renderSidePanel(
+      <>
+        <FocusedCell />
+        <SidePanel onDismiss={dismiss} />
+      </>,
+    )
+    await userEvent.click(getHook("panel-toggle"))
+    const panel = screen.getByRole("dialog")
+    expect(panel).toHaveAttribute("tabindex", "-1")
+    panel.focus()
+    // When
+    fireEvent.keyDown(panel, { key: "Escape" })
+    // Then
+    expect(dismiss).toHaveBeenCalledTimes(1)
+    expect(cellEscape).not.toHaveBeenCalled()
   })
 })

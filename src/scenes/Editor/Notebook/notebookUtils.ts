@@ -1,3 +1,4 @@
+import type { RunDenialCode } from "../../../utils/tools/permissions"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
@@ -438,6 +439,7 @@ export type CellRunOutcome = {
   // Barrier decisions for gated (agent) runs: a permission denial or an
   // auto-run write skip. Nothing executed when either is set.
   denied?: string
+  deniedCode?: RunDenialCode
   skipped?: string
   // The result THIS run produced, set only when it committed. Consumers that
   // report the run's output must read this instead of cell.result — a draw
@@ -1101,7 +1103,10 @@ export const buildAppliedCells = (
         resultsCleared.push(existing.id)
       }
       if (isDraw) next.mode = "draw"
-      else delete next.mode
+      else {
+        delete next.mode
+        delete next.deferInitialDraw
+      }
       if ((existing.mode === "draw") !== isDraw) {
         Object.assign(next, cellModeChangePatch(next, resolvedMode ?? "run"))
       }

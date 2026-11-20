@@ -5,7 +5,8 @@ import { runDetachedQuery } from "./runDetachedQuery"
 import type { Client } from "./questdb/client"
 import type { ExecutionRefs } from "../scenes/Editor/index"
 import type { QueryAction } from "../store/Query/types"
-import { NotificationType } from "../store/Query/types"
+import { NotificationType, QueryAT } from "../store/Query/types"
+import * as QuestDB from "./questdb"
 import { SESSION_ENDED_MESSAGE } from "../modules/OAuth2/session"
 
 vi.mock("../components", () => ({ Text: "span" }))
@@ -72,5 +73,40 @@ describe("runDetachedQuery failure notification", () => {
         error: "table does not exist [table=trades]",
       }),
     ).toBe("table does not exist [table=trades]")
+  })
+})
+
+describe("runDetachedQuery result source", () => {
+  // Console hides a result that belongs to another tab while a notebook is
+  // active, so an AI chat run must tag its result with the tab it ran from.
+  it("tags a read result with the tab the query was run from", async () => {
+    const dispatch = vi.fn()
+    const result = {
+      type: QuestDB.Type.DQL,
+      query: "select 1",
+      columns: [{ name: "1", type: "INT" }],
+      dataset: [[1]],
+      count: 1,
+      timestamp: -1,
+    }
+    await runDetachedQuery({
+      normalizedSQL: "select 1",
+      queryKey: "select 1@0-0",
+      namespaceKey: "conversation",
+      quest: {
+        queryRaw: () => ({ queryId: 1, promise: Promise.resolve(result) }),
+      } as unknown as Client,
+      dispatch: dispatch as Dispatch<QueryAction>,
+      executionRefs: { current: {} } as React.MutableRefObject<ExecutionRefs>,
+      releaseExecution: vi.fn(),
+      sourceBufferId: 7,
+    })
+    const setResult = dispatch.mock.calls
+      .map(([action]) => action as QueryAction)
+      .find((action) => action.type === QueryAT.SET_RESULT)
+    expect(setResult).toMatchObject({
+      payload: result,
+      source: { bufferId: 7 },
+    })
   })
 })

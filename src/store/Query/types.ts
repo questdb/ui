@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import type { EditorBatchTransfer } from "../../utils/notebooks/notebookTransfer"
 
 import type {
   QueryRawResult,
@@ -59,6 +60,9 @@ export type QueryStateShape = Readonly<{
   tables: Table[]
   columns: Record<string, InformationSchemaColumn[]>
   result?: QueryRawResult
+  resultSource?: { bufferId?: number; fetchedAt: number }
+  batchTransfer?: EditorBatchTransfer
+  executionCounts?: Record<string, number>
   running: RunningType
   queryNotifications: Record<
     NotificationNamespaceKey,
@@ -77,6 +81,9 @@ export enum QueryAT {
   UPDATE_NOTIFICATION_KEYS = "QUERY/UPDATE_NOTIFICATION_KEYS",
   MOVE_NOTIFICATION_NAMESPACE = "QUERY/MOVE_NOTIFICATION_NAMESPACE",
   SET_RESULT = "QUERY/SET_RESULT",
+  SET_BATCH_TRANSFER = "QUERY/SET_BATCH_TRANSFER",
+  RECORD_QUERY_EXECUTION = "QUERY/RECORD_QUERY_EXECUTION",
+  CLEAR_QUERY_EXECUTIONS = "QUERY/CLEAR_QUERY_EXECUTIONS",
   STOP_RUNNING = "QUERY/STOP_RUNNING",
   TOGGLE_RUNNING = "QUERY/TOGGLE_RUNNING",
   SET_TABLES = "QUERY/SET_TABLES",
@@ -109,6 +116,7 @@ type RemoveNotificationAction = Readonly<{
 
 type SetResultAction = Readonly<{
   payload: QueryRawResult | undefined
+  source?: { bufferId?: number; fetchedAt: number }
   type: QueryAT.SET_RESULT
 }>
 
@@ -173,6 +181,12 @@ type SetQueriesToRunAction = Readonly<{
 }>
 
 export type QueryAction =
+  | { type: QueryAT.RECORD_QUERY_EXECUTION; payload: string }
+  | { type: QueryAT.CLEAR_QUERY_EXECUTIONS }
+  | {
+      type: QueryAT.SET_BATCH_TRANSFER
+      payload: EditorBatchTransfer | undefined
+    }
   | AddNotificationAction
   | CleanupNotificationsAction
   | CleanupBufferNotificationsAction

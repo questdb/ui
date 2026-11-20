@@ -408,9 +408,12 @@ building or reviewing a component.
 
 ### Hover, selection, and focus
 
-- Menu items, tree rows, search rows, chat history rows, choice cards, and
-  light-mode ghost buttons hover with `interactionHover`. Dark ghost buttons on
-  base chrome may lift to `surfaceRaised`; on a raised cell they must recede.
+- Menu items, tree rows, search rows, chat history rows, choice cards, and ghost
+  buttons hover with `interactionHover` in both modes; the ghost variant's
+  `aria-pressed` and `:active` states reuse that wash. A ghost button that needs
+  a raised latched look (the editor tab-rail history and options buttons) sets
+  `surfaceRaised` explicitly, at a specificity above the variant's pressed rule.
+  On a raised cell, ghost hovers must recede.
 - Selected rows, cards, and vertical tabs are `interactionNeutral` with
   `borderDefault`. Their hover sits one step below the selected well:
   `interactionNeutralHover` in dark, `surfaceBase` for light vertical tabs.

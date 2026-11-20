@@ -1,3 +1,4 @@
+import { trackNotebookExecution } from "../../../../modules/ConsoleEventTracker/notebookExecutionEvents"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type {
@@ -35,6 +36,19 @@ import {
   getChartZoom,
   setChartZoom,
 } from "../cellVirtualization/chartZoomStore"
+
+import { trackMonitoringChartFailure } from "../../../../utils/monitoring/telemetry"
+
+vi.mock("../../../../utils/monitoring/telemetry", () => ({
+  trackMonitoringChartFailure: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock(
+  "../../../../modules/ConsoleEventTracker/notebookExecutionEvents",
+  () => ({
+    trackNotebookExecution: vi.fn(),
+  }),
+)
 
 vi.mock("../persistCellSnapshot", () => ({
   persistCellSnapshot: vi.fn().mockResolvedValue(true),
@@ -221,6 +235,124 @@ describe("CellRefreshEngine", () => {
     vi.clearAllMocks()
   })
 
+  it("distinguishes initial loading from manual refresh and never reports poll ticks", async () => {
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(trackNotebookExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notebookId: BUFFER_ID,
+        cellId: "c1",
+        mode: "chart",
+        trigger: "initial_load",
+        outcome: "success",
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(trackNotebookExecution).toHaveBeenCalledTimes(1)
+    await engine.refresh("c1")
+    expect(trackNotebookExecution).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        notebookId: BUFFER_ID,
+        cellId: "c1",
+        trigger: "manual_refresh",
+        outcome: "success",
+      }),
+    )
+    expect(trackNotebookExecution).toHaveBeenCalledTimes(2)
+  })
+
+  it("reports refresh failure despite a previous successful frame", async () => {
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    deps.executeSingle.mockResolvedValue({
+      ...dqlResult("select 1"),
+      type: "error",
+      error: "private query",
+    })
+    await engine.refresh("c1")
+    expect(trackNotebookExecution).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        notebookId: BUFFER_ID,
+        cellId: "c1",
+        trigger: "manual_refresh",
+        outcome: "error",
+      }),
+    )
+    expect(
+      JSON.stringify(vi.mocked(trackNotebookExecution).mock.calls),
+    ).not.toContain("private query")
+  })
+
+  it("never reports an unexecuted refresh as success from cached rows", async () => {
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    deps.executeSingle.mockResolvedValue({
+      ...dqlResult("select 1"),
+      type: "error",
+      error: "private auth failure",
+      requestNotSent: true,
+    })
+    await engine.refresh("c1")
+    expect(trackNotebookExecution).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        trigger: "manual_refresh",
+        outcome: "unverified",
+      }),
+    )
+  })
+
+  // The same vocabulary as NotebookProvider.runCell: a write that is not run
+  // is "skipped", SQL that could not be classified is "validation_failed".
+  it("reports a blocked write as skipped", async () => {
+    deps.validateWithGlobals.mockResolvedValue({ queryType: "update" })
+    syncOnScreen([drawCell("c1", "update t set x = 1", false)])
+    await flushAsync()
+    expect(trackNotebookExecution).toHaveBeenLastCalledWith(
+      expect.objectContaining({ trigger: "initial_load", outcome: "skipped" }),
+    )
+  })
+
+  it("reports a classification outage as validation_failed", async () => {
+    deps.validateWithGlobals.mockRejectedValue(new Error("network down"))
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(trackNotebookExecution).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        trigger: "initial_load",
+        outcome: "validation_failed",
+      }),
+    )
+  })
+
+  it("reports an initial chart failure once without flooding telemetry on polls", async () => {
+    deps.executeSingle.mockResolvedValue({
+      ...dqlResult("select 1"),
+      type: "error",
+      error: "private server error",
+    })
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(trackMonitoringChartFailure).toHaveBeenCalledWith(
+      BUFFER_ID,
+      "c1",
+      "query_error",
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(trackMonitoringChartFailure).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not classify a later poll failure as an initial chart failure", async () => {
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    deps.executeSingle.mockResolvedValue({
+      ...dqlResult("select 1"),
+      type: "error",
+      error: "private server error",
+    })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(trackMonitoringChartFailure).not.toHaveBeenCalled()
+  })
+
   it("fetches once for a draw cell with auto-refresh off", async () => {
     // Given a draw cell with auto-refresh disabled and no prior data
     const cell = drawCell("c1", "select 1", false)
@@ -243,6 +375,91 @@ describe("CellRefreshEngine", () => {
     // And no further fetches happen over time
     await vi.advanceTimersByTimeAsync(120_000)
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
+  it("waits for explicit refresh when a transferred chart has no faithful snapshot", async () => {
+    const cell = {
+      ...drawCell("c1", "select 1", false),
+      deferInitialDraw: true,
+    }
+    harness.beginLoadOnRequest()
+    syncOnScreen([cell])
+    await flushAsync()
+    const frame = dqlCellResult("select 1")
+    frame.results[0] = {
+      ...frame.results[0],
+      truncated: true,
+    } as SingleQueryResult
+    harness.settleLoad("c1", frame)
+    await flushAsync()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    expect(engine.getState("c1")?.settledKey).toBe(
+      engine.getState("c1")?.queriesKey,
+    )
+    await engine.refresh("c1")
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
+  it("refetches a drawn transferred chart whose frame later comes back unusable", async () => {
+    // Given a transferred chart that drew its faithful in-memory frame
+    const cell = {
+      ...drawCell("c1", "select 1", false),
+      deferInitialDraw: true,
+    }
+    harness.beginLoadOnRequest()
+    syncOnScreen([cell])
+    await flushAsync()
+    harness.settleLoad("c1", dqlCellResult("select 1"))
+    await flushAsync()
+    // and the drawn frame cleared the cell's deferral
+    syncOnScreen([{ ...cell, deferInitialDraw: undefined }])
+    await flushAsync()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+
+    // When the frame is released and only a truncated copy reloads
+    const truncated = dqlCellResult("select 1")
+    truncated.results[0] = {
+      ...truncated.results[0],
+      truncated: true,
+    } as SingleQueryResult
+    cellResults.set("c1", truncated)
+    engine.setVisible("c1", false)
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then the chart fetches instead of settling with no data
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
+  it("allows explicitly selected polling for a transferred chart", async () => {
+    const cell = {
+      ...drawCell("c1", "select 1", false),
+      deferInitialDraw: true,
+    }
+    syncOnScreen([cell])
+    await flushAsync()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    syncOnScreen([{ ...cell, autoRefresh: "1s" }])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
+  it("resumes normal chart execution after editing transferred SQL", async () => {
+    const cell = {
+      ...drawCell("c1", "select 1", false),
+      deferInitialDraw: true,
+    }
+    syncOnScreen([cell])
+    await flushAsync()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    syncOnScreen([{ ...cell, value: "select 2" }])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    syncOnScreen([{ ...cell, value: "select 3" }])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
   })
 
   it("writes fetched results into the cell result", async () => {

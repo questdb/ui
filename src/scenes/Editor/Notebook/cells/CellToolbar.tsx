@@ -21,6 +21,7 @@ import {
 import { DropdownMenu, IconButton, Tooltip } from "../../../../components"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
+import { useTransferMonitorMenu } from "./useTransferMonitorMenu"
 import {
   autoRefreshLabel,
   cellToolbarMenuFlags,
@@ -43,7 +44,7 @@ import {
 } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useCellViewActions } from "./useCellViewActions"
 
@@ -117,6 +118,7 @@ export const CellToolbar: React.FC<Props> = ({
     setCellRefresh,
   } = useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cellId)
 
   // Grid positions cells via settings.layout, so swapping array order doesn't
   // move them visually — hide move up/down there.
@@ -134,6 +136,7 @@ export const CellToolbar: React.FC<Props> = ({
   // engine would ignore — same gate the inline selector applies.
   const autoRefreshBlocked = useCellFetchSelector(cellId, selectWriteBlocked)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [refreshMenuOpen, setRefreshMenuOpen] = useState(false)
   const moreActionsTooltip = useTriggerTooltip()
   const {
     viewTable: handleViewTable,
@@ -174,6 +177,16 @@ export const CellToolbar: React.FC<Props> = ({
     totalCells,
   })
 
+  useTransferMonitorMenu(
+    cellId,
+    showAutoRefreshItem && !autoRefreshBlocked && !isMaximized,
+    () => {
+      setMenuOpen(true)
+      setRefreshMenuOpen(true)
+      moreActionsTooltip.onMenuOpenChange(true)
+    },
+  )
+
   const handleMaximizeCell = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MAXIMIZE, {
       action: isMaximized ? "restore" : "maximize",
@@ -185,7 +198,10 @@ export const CellToolbar: React.FC<Props> = ({
   const handleRefreshNow = () => {
     signalUserEdit(bufferId)
     if (isChartView) {
-      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW, {
+        phase: "requested",
+        trigger: "manual",
+      })
       eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId })
       return
     }
@@ -205,6 +221,7 @@ export const CellToolbar: React.FC<Props> = ({
   }
   const handleMenuOpenChange = (open: boolean) => {
     setMenuOpen(open)
+    if (!open) setRefreshMenuOpen(false)
     moreActionsTooltip.onMenuOpenChange(open)
   }
   const handleRefreshSelect = (value: AutoRefresh | undefined) => {
@@ -229,11 +246,13 @@ export const CellToolbar: React.FC<Props> = ({
     emitUserAction({ kind: "user_moved_cell", bufferId, cellId })
   }
   const handleDuplicate = async () => {
+    const newCellId = await duplicateCell(cellId)
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DUPLICATE, {
       cellType: cell.type ?? "sql",
       view,
+      newCellId,
+      outcome: newCellId ? "success" : "not_created",
     })
-    const newCellId = await duplicateCell(cellId)
     if (newCellId) {
       setFocusedCell(newCellId)
       emitUserAction({
@@ -357,7 +376,10 @@ export const CellToolbar: React.FC<Props> = ({
                 </DropdownMenu.Item>
               )}
               {showAutoRefreshItem && (
-                <DropdownMenu.Sub>
+                <DropdownMenu.Sub
+                  open={refreshMenuOpen}
+                  onOpenChange={setRefreshMenuOpen}
+                >
                   <DropdownMenu.SubTrigger disabled={autoRefreshBlocked}>
                     {autoRefreshBlocked
                       ? "Auto-refresh (contains DDL/DML)"

@@ -4,6 +4,7 @@ import { SelectMenu, Spinner, Tooltip } from "../../../../components"
 import { useHeldFlag } from "../../../../hooks"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
+import { useTransferMonitorMenu } from "./useTransferMonitorMenu"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import {
   selectFetching,
@@ -16,7 +17,7 @@ import { OverrideDot } from "../refreshSplitButton"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
   EditorRefreshButton,
@@ -48,6 +49,7 @@ const RefreshTrigger: React.FC<RefreshTriggerProps> = ({
   isRerunning,
 }) => {
   const bufferId = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cellId)
   const fetching = useCellFetchSelector(cellId, selectFetching)
   const refreshing = isRerunning || fetching
   const busy = useHeldFlag(refreshing, REFRESH_BUSY_MIN_MS)
@@ -56,7 +58,11 @@ const RefreshTrigger: React.FC<RefreshTriggerProps> = ({
     e.stopPropagation()
     if (busy) return
     signalUserEdit(bufferId)
-    if (isChart) void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
+    if (isChart)
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW, {
+        phase: "requested",
+        trigger: "manual",
+      })
     eventBus.publish(
       isChart
         ? EventType.NOTEBOOK_CELL_REFRESH_CHART
@@ -102,6 +108,7 @@ export const CellRefreshButton: React.FC<Props> = ({
 }) => {
   const { setCellRefresh } = useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cellId)
   const writeBlockedCell = useCellFetchSelector(cellId, selectWriteBlocked)
   const isChart = view === "chart"
   const autoRefresh = resolveAutoRefresh(cellAutoRefresh, autoRefreshDefault)
@@ -109,6 +116,11 @@ export const CellRefreshButton: React.FC<Props> = ({
   const writeBlocked = view === "grid" && writeBlockedCell
   const intervalTooltip = useTriggerTooltip()
   const [menuOpen, setMenuOpen] = useState(false)
+
+  useTransferMonitorMenu(cellId, !writeBlocked, () => {
+    setMenuOpen(true)
+    intervalTooltip.onMenuOpenChange(true)
+  })
 
   const handleMenuOpenChange = (open: boolean) => {
     setMenuOpen(open)

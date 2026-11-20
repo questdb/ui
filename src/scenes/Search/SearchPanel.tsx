@@ -28,6 +28,7 @@ import {
   SearchCancelledError,
   terminateSearchWorker,
 } from "../../utils/textSearch"
+import { claimEscape, isEscape, isEscapeClaimed } from "../../utils/escapeKey"
 
 export type BufferUpdatePayload =
   | {
@@ -768,7 +769,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     void performSearch()
-                  } else if (e.key === "Escape") {
+                  } else if (isEscape(e) && !isEscapeClaimed(e)) {
+                    claimEscape(e)
                     if (searchQuery.length > 0) {
                       setSearchQuery("")
                     } else {

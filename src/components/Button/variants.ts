@@ -90,7 +90,7 @@ const themes: {
       color: "contentSecondary",
     },
     hover: {
-      background: "surfaceRaised",
+      background: "interactionHover",
       border: "transparent",
       color: "contentPrimary",
     },
@@ -215,10 +215,7 @@ export const makeButtonVariant = (variant: ButtonVariant) => {
     }
 
     &&:hover:not(:disabled):not([aria-disabled="true"]) {
-      background: ${({ theme: t }) =>
-        variant === "ghost" && t.mode === "light"
-          ? t.color.interactionHover
-          : t.color[theme.hover.background]};
+      background: ${({ theme: t }) => t.color[theme.hover.background]};
       color: ${({ theme: t }) =>
         (variant === "dangerGhost" || variant === "dangerQuiet") &&
         t.mode === "dark"

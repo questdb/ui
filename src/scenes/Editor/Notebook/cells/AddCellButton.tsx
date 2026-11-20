@@ -11,7 +11,7 @@ import {
   useNotebookState,
 } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 type AddVariant = "primary" | "secondary"
@@ -133,6 +133,7 @@ const useUserAddCell = () => {
   const { addCell } = useNotebookActions()
   const { cells } = useNotebookState()
   const bufferId = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry()
   const atLimit = cells.length >= MAX_NOTEBOOK_CELLS
   const emit = (cellId: string) => {
     if (cellId) {
@@ -144,11 +145,16 @@ const useUserAddCell = () => {
     }
   }
   const add = (afterCellId?: string, type?: CellType) => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_ADD, { cellType: type ?? "sql" })
+    const cellId = addCell(afterCellId, undefined, type)
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_ADD, {
+      cellId: cellId || undefined,
+      cellType: type ?? "sql",
+      outcome: cellId ? "success" : "not_created",
+    })
     if (cells.length + 1 >= MAX_NOTEBOOK_CELLS) {
       void trackEvent(ConsoleEvent.NOTEBOOK_CELL_LIMIT_REACHED)
     }
-    emit(addCell(afterCellId, undefined, type))
+    emit(cellId)
   }
   return { add, atLimit }
 }

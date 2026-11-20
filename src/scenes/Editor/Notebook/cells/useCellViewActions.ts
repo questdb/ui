@@ -1,7 +1,7 @@
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
@@ -27,6 +27,7 @@ export const useCellViewActions = ({
 }: Params) => {
   const { setCellPaneView, setCellMode, clearCellResult } = useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cellId)
   const resultOnly = paneLayout === "result"
 
   const viewTable = () => {
