@@ -75,33 +75,31 @@ const TileRoot = styled(ButtonBase)<{
   &&:focus-visible {
     outline-offset: -3px;
   }
-
-  &[aria-pressed="true"] {
-    background: ${({ theme }) => theme.color.interactionAccentActive};
-    box-shadow: inset 0 0 0 2px ${({ theme }) => theme.color.contentAccent};
-  }
-`
-
-const SelectionMark = styled(Check)`
-  position: absolute;
-  top: 1.2rem;
-  right: 1.6rem;
-  z-index: 1;
-  color: ${({ theme }) => theme.color.contentAccent};
 `
 
 const Label = styled.span`
   position: relative;
   z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   max-width: 100%;
   font-size: 1.2rem;
   color: ${({ theme }) => theme.color.contentSecondary};
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+
+  > span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  > svg {
+    flex-shrink: 0;
+  }
 
   [aria-pressed="true"] & {
-    max-width: calc(100% - 2rem);
+    color: ${({ theme }) => theme.color.contentPrimary};
+    font-weight: 600;
   }
 `
 
@@ -332,8 +330,10 @@ export const StatTiles = ({
             data-hook="stat-tile"
           >
             <Sparkline values={tile.spark} color={sparkColor} />
-            {selected && <SelectionMark size={16} weight="bold" aria-hidden />}
-            <Label title={tile.label}>{tile.label}</Label>
+            <Label title={tile.label}>
+              <span>{tile.label}</span>
+              {selected && <Check size={12} weight="bold" aria-hidden />}
+            </Label>
             <Value
               key={flash}
               $flash={flash}
