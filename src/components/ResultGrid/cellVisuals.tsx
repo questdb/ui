@@ -66,9 +66,19 @@ const Spark = styled.svg`
   height: calc(100% - 0.6rem);
 `
 
-const sparkPoints = (values: number[]): string => {
-  const min = Math.min(...values)
-  const max = Math.max(...values)
+export const sparklinePointsOf = (value: unknown): string | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const values: number[] = []
+  let min = Infinity
+  let max = -Infinity
+  for (const sample of value) {
+    const n = toNumber(sample)
+    if (n === null) continue
+    values.push(n)
+    min = Math.min(min, n)
+    max = Math.max(max, n)
+  }
+  if (values.length < 2) return undefined
   const span = max - min || 1
   return values
     .map(
@@ -83,23 +93,20 @@ export const CellVisualLayer = ({
   value,
   scale,
   color,
+  sparklinePoints,
 }: {
   visual: CellVisual
   value: unknown
   scale: ColumnScale | undefined
   color: string
+  sparklinePoints?: string
 }) => {
   if (visual === "sparkline") {
-    const values = Array.isArray(value)
-      ? (value as unknown[])
-          .map(toNumber)
-          .filter((n): n is number => n !== null)
-      : []
-    if (values.length < 2) return null
+    if (sparklinePoints === undefined) return null
     return (
       <Spark viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden>
         <polyline
-          points={sparkPoints(values)}
+          points={sparklinePoints}
           fill="none"
           stroke={color}
           strokeWidth="1.3"

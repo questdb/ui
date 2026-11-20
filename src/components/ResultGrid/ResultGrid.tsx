@@ -93,6 +93,7 @@ import {
 } from "../../utils/formats/columnFormat"
 import {
   CellVisualLayer,
+  sparklinePointsOf,
   columnScalesOf,
   type ColumnScale,
 } from "./cellVisuals"
@@ -157,10 +158,13 @@ const GridCell = React.memo(function GridCell({
   const theme = useTheme()
   const colType = col?.type ?? ""
   const align = isLeftAligned(colType) ? "left" : "right"
-  const sparkline = format?.visual === "sparkline" && Array.isArray(rawValue)
+  const sparklinePoints =
+    loaded && format?.visual === "sparkline"
+      ? sparklinePointsOf(rawValue)
+      : undefined
   const displayValue = !loaded
     ? ""
-    : sparkline
+    : sparklinePoints !== undefined
       ? ""
       : formatsNumbers(format) && !Array.isArray(rawValue)
         ? toSingleLineDisplay(formatValue(rawValue, format))
@@ -225,6 +229,7 @@ const GridCell = React.memo(function GridCell({
           value={rawValue}
           scale={scale}
           color={toneCss ?? theme.color.chartSeries1}
+          sparklinePoints={sparklinePoints}
         />
       )}
       <CellText

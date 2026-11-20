@@ -207,7 +207,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   )
   // Captured when the cells state changed, before this render.
   const trend = trendStore.get(cellId, statementKey)
-  const previous = trend?.result === data ? trend.previous : null
+  const previous = trend?.result === rawData ? trend.previous : null
   const capturedAt = trend?.capturedAt ?? 0
   const revision = trend?.revision ?? 0
   const columnRange = useMemo(
