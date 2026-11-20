@@ -11,10 +11,23 @@ export type ToolSchema = {
   inputSchema: Record<string, unknown>
 }
 
-export type ToolContent = {
+export type TextToolContent = {
   type: "text"
   text: string
 }
+
+export type ToolContent =
+  | TextToolContent
+  // A picture (get_cell_image): base64 data without a data: prefix.
+  | {
+      type: "image"
+      data: string
+      mimeType: "image/png"
+    }
+
+/** The text of a content item; empty for a picture. */
+export const textOf = (content: ToolContent | undefined): string =>
+  content?.type === "text" ? content.text : ""
 
 export type ToolResultPayload = {
   content: ToolContent[]

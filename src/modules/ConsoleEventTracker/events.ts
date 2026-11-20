@@ -165,6 +165,7 @@ export enum ConsoleEvent {
   MCP_DELETE_NOTEBOOK = "mcp.delete_notebook",
   MCP_LIST_CELLS = "mcp.list_cells",
   MCP_GET_CELL = "mcp.get_cell",
+  MCP_GET_CELL_IMAGE = "mcp.get_cell_image",
   MCP_GET_NOTEBOOK_STATE = "mcp.get_notebook_state",
   MCP_MOVE_CELL_UP = "mcp.move_cell_up",
   MCP_MOVE_CELL_DOWN = "mcp.move_cell_down",

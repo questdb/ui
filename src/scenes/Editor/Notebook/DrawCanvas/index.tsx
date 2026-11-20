@@ -51,6 +51,7 @@ import {
 } from "../interactions/chartInteractions"
 import { joinChartSync, setChartSync } from "../interactions/chartSync"
 import { setRenderReport } from "../renderReports"
+import { registerCellChart } from "../cellChartImages"
 import { PaneEmptyState } from "../PaneEmptyState"
 import { withNewVariables } from "../interactions/InteractionsEditor"
 import { normalizeVariables } from "../declareUtils"
@@ -293,9 +294,15 @@ export const DrawCanvas: React.FC<Props> = ({
       leaveSyncRef.current = null
       if (!instance) return
       armBrush(instance, cell.interactions)
-      leaveSyncRef.current = joinChartSync(bufferId, instance)
+      const leaveSync = joinChartSync(bufferId, instance)
+      // Agents ask for a picture of the chart (get_cell_image).
+      const unregister = registerCellChart(bufferId, cell.id, instance)
+      leaveSyncRef.current = () => {
+        leaveSync()
+        unregister()
+      }
     },
-    [bufferId, cell.interactions],
+    [bufferId, cell.id, cell.interactions],
   )
   useEffect(() => () => leaveSyncRef.current?.(), [])
 

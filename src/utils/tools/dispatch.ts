@@ -3,6 +3,21 @@ import { loadRe2 } from "../../components/ResultGrid/highlight"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { cellsUsingChartType } from "../../scenes/Editor/Notebook/customChart/chartTypeUsage"
 import {
+  backgroundOf,
+  bringCellIntoView,
+  cellChartInstance,
+  pictureOf,
+  settled,
+  waitForCellChart,
+  type CellChartPicture,
+} from "../../scenes/Editor/Notebook/cellChartImages"
+import { getRenderReport } from "../../scenes/Editor/Notebook/renderReports"
+import {
+  cellImage,
+  denyReasonForCellImage,
+  type CellImageDeps,
+} from "./cellImageTool"
+import {
   getQuestDBTableOfContents,
   getSpecificDocumentation,
   parseDocItems,
@@ -102,6 +117,7 @@ import {
   clearCellAutoRefreshTransition,
   deleteCellTransition,
   duplicateCellTransition,
+  getController,
   moveCellDownTransition,
   moveCellUpTransition,
   setCellChartConfigTransition,
@@ -334,6 +350,43 @@ const dispatchRunQuery = async (
   }
 }
 
+/** A picture a tool returns besides its text (get_cell_image). */
+export type ToolImage = { data: string; mimeType: "image/png" }
+
+export type DispatchOutput = {
+  content: string
+  is_error?: boolean
+  images?: ToolImage[]
+}
+
+/** A tool's result with a picture beside its text, unless it failed. */
+export const withPicture = (
+  out: DispatchOutput,
+  picture: CellChartPicture | null,
+): DispatchOutput =>
+  out.is_error || !picture
+    ? out
+    : { ...out, images: [{ data: picture.data, mimeType: "image/png" }] }
+
+// The page side of get_cell_image (see cellImageTool).
+const cellImageDeps: CellImageDeps = {
+  readCells,
+  liveView: async (bufferId) => {
+    // Only the open notebook has a live controller; the rest live in storage.
+    const controller = getController(bufferId)
+    if (controller?.kind !== "live") return null
+    const view = await controller.readView()
+    return { maximizedCellId: view.maximizedCellId ?? null }
+  },
+  chartOf: cellChartInstance,
+  bringIntoView: bringCellIntoView,
+  waitForChart: (bufferId, cellId, signal) =>
+    waitForCellChart(bufferId, cellId, 4000, signal),
+  settle: (instance, signal) => settled(instance, 1500, signal),
+  picture: (instance) => pictureOf(instance, backgroundOf(instance.getDom())),
+  reportOf: getRenderReport,
+}
+
 export const dispatchTool = async (
   toolName: string,
   input: unknown,
@@ -343,7 +396,7 @@ export const dispatchTool = async (
   validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal?: AbortSignal,
   toolContext?: ToolExecutionContext,
-): Promise<{ content: string; is_error?: boolean }> => {
+): Promise<DispatchOutput> => {
   const perms =
     typeof permsOrResolver === "function" ? permsOrResolver() : permsOrResolver
 
@@ -634,6 +687,27 @@ export const dispatchTool = async (
             signal,
           ),
         )
+      }
+      case "get_cell_image": {
+        const { buffer_id, cell_id } =
+          (input as { buffer_id: number; cell_id: string }) || {}
+        // A picture shows query results, which only a read grant may see.
+        if (!perms.read)
+          return { content: denyReasonForCellImage(), is_error: true }
+        setStatus(AIOperationStatus.InspectingNotebook, { cellId: cell_id })
+        // The picture travels beside the JSON text, not inside it.
+        const taken: { picture: CellChartPicture | null } = { picture: null }
+        const out = await routeNotebookTool(async () => {
+          const result = await cellImage(
+            buffer_id,
+            cell_id,
+            cellImageDeps,
+            signal,
+          )
+          taken.picture = result.picture
+          return result.body
+        })
+        return withPicture(out, taken.picture)
       }
       case "get_notebook_state": {
         const { buffer_id } = (input as { buffer_id: number }) || {}

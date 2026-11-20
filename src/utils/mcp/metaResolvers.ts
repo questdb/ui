@@ -5,7 +5,7 @@ import {
   formatSnapshot,
   formatWorkspace,
 } from "../ai/notebookSnapshot"
-import type { ToolContent } from "./types"
+import type { TextToolContent } from "./types"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 
 export type MetaToolContext = {
@@ -17,7 +17,7 @@ export type MetaToolContext = {
   consumeDigest?: () => UserActionDigest | null
 }
 
-const noNotebookOpenPayload = (ws: WorkspaceInfo | null): ToolContent[] => {
+const noNotebookOpenPayload = (ws: WorkspaceInfo | null): TextToolContent[] => {
   const hasNotebooks = !!ws && ws.notebooks.length > 0
   const status = JSON.stringify({
     status: "no_notebook_open",
@@ -38,7 +38,7 @@ const emptyDigestText =
 export const resolveGetWorkspaceState = async (
   args: { include_user_events?: boolean } | undefined,
   ctx: MetaToolContext,
-): Promise<ToolContent[]> => {
+): Promise<TextToolContent[]> => {
   const ws = ctx.getWorkspace()
   const bufferId = ctx.getActiveBufferId()
   if (bufferId === null) return noNotebookOpenPayload(ws)
@@ -60,7 +60,7 @@ export const resolveGetWorkspaceState = async (
 
 export const resolveGetRecentUserActions = (
   ctx: MetaToolContext,
-): ToolContent[] => {
+): TextToolContent[] => {
   const digest = ctx.getDigest()
   const text = digest ? formatDigest(digest) : ""
   return [{ type: "text", text: text || emptyDigestText }]

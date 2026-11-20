@@ -1,4 +1,5 @@
 import "../../../src/test/stubBrowserGlobals"
+import { textOf } from "../../../src/utils/mcp/types"
 import type { Permissions } from "../../../src/utils/tools/permissions"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -152,7 +153,7 @@ describe("dispatchMCPTool — meta tools", () => {
     const c = ctx("unfetched")
     const out = await dispatchMCPTool(makeCall("get_workspace_state"), c)
     expect(out.isError).toBe(false)
-    expect(out.content[0].text).toMatch(/<workspace>|<notebook_context>/)
+    expect(textOf(out.content[0])).toMatch(/<workspace>|<notebook_context>/)
     expect(vi.mocked(mockedDispatchTool)).not.toHaveBeenCalled()
   })
 
@@ -169,7 +170,7 @@ describe("dispatchMCPTool — meta tools", () => {
     const c = ctx("stale")
     const out = await dispatchMCPTool(makeCall("get_recent_user_actions"), c)
     expect(out.isError).toBe(false)
-    expect(out.content[0].text).toMatch(/<user_events/)
+    expect(textOf(out.content[0])).toMatch(/<user_events/)
     expect(isFresh(c.freshness, 1)).toBe(false)
   })
 })
@@ -198,7 +199,7 @@ describe("dispatchMCPTool — state-freshness gate", () => {
       const c = ctx("unfetched")
       const out = await dispatchMCPTool(makeCall(name, { buffer_id: 1 }), c)
       expect(out.isError).toBe(true)
-      expect(out.content[0].text).toMatch(/STATE_NOT_FETCHED/)
+      expect(textOf(out.content[0])).toMatch(/STATE_NOT_FETCHED/)
     }
     expect(vi.mocked(mockedDispatchTool)).not.toHaveBeenCalled()
   })
@@ -208,7 +209,7 @@ describe("dispatchMCPTool — state-freshness gate", () => {
       const c = ctx("stale")
       const out = await dispatchMCPTool(makeCall(name, { buffer_id: 1 }), c)
       expect(out.isError).toBe(true)
-      expect(out.content[0].text).toMatch(/STATE_STALE/)
+      expect(textOf(out.content[0])).toMatch(/STATE_STALE/)
     }
     expect(vi.mocked(mockedDispatchTool)).not.toHaveBeenCalled()
   })
@@ -230,7 +231,7 @@ describe("dispatchMCPTool — state-freshness gate", () => {
     const out = await dispatchMCPTool(makeCall("add_cell", { buffer_id: 1 }), c)
     // Then the recovery instruction names the read that actually unblocks it
     expect(out.isError).toBe(true)
-    expect(out.content[0].text).toMatch(/get_notebook_state/)
+    expect(textOf(out.content[0])).toMatch(/get_notebook_state/)
   })
 
   it("create_notebook records the created buffer as fresh so the agent can populate it", async () => {
@@ -301,7 +302,7 @@ describe("dispatchMCPTool — buffer-scoped freshness", () => {
       c,
     )
     expect(out.isError).toBe(true)
-    expect(out.content[0].text).toMatch(/STATE_NOT_FETCHED/)
+    expect(textOf(out.content[0])).toMatch(/STATE_NOT_FETCHED/)
     expect(vi.mocked(mockedDispatchTool)).not.toHaveBeenCalled()
   })
 
@@ -341,7 +342,7 @@ describe("dispatchMCPTool — buffer-scoped freshness", () => {
     const out = await dispatchMCPTool(makeCall("add_cell"), c)
     // Then it is refused before reaching the executor
     expect(out.isError).toBe(true)
-    expect(out.content[0].text).toMatch(/INVALID_BUFFER_ID/)
+    expect(textOf(out.content[0])).toMatch(/INVALID_BUFFER_ID/)
     expect(vi.mocked(mockedDispatchTool)).not.toHaveBeenCalled()
   })
 
@@ -358,7 +359,7 @@ describe("dispatchMCPTool — buffer-scoped freshness", () => {
     // Then the mid-read edit still blocks the write — the returned snapshot
     // may predate it
     expect(out.isError).toBe(true)
-    expect(out.content[0].text).toMatch(/STATE_STALE/)
+    expect(textOf(out.content[0])).toMatch(/STATE_STALE/)
   })
 
   // Finding 2: a failed full-state read surfaced no state → must not clear it.
@@ -387,9 +388,9 @@ describe("dispatchMCPTool — buffer-scoped freshness", () => {
 describe("dispatchMCPTool — since_last_check suffix", () => {
   it("appends current active_buffer to non-meta tool results", async () => {
     const out = await dispatchMCPTool(makeCall("list_cells"), ctx("fresh"))
-    expect(out.content[0].text).toMatch(/<since_last_check>/)
-    expect(out.content[0].text).toMatch(/active_buffer/)
-    expect(out.content[0].text).toMatch(/"n1"/)
+    expect(textOf(out.content[0])).toMatch(/<since_last_check>/)
+    expect(textOf(out.content[0])).toMatch(/active_buffer/)
+    expect(textOf(out.content[0])).toMatch(/"n1"/)
   })
 
   it("flags the active_buffer as archived when the active tab is an archived preview", async () => {
@@ -405,19 +406,19 @@ describe("dispatchMCPTool — since_last_check suffix", () => {
       makeCall("list_cells"),
       ctx("fresh", archivedMeta),
     )
-    expect(out.content[0].text).toMatch(/active_buffer:.*archived: true/)
+    expect(textOf(out.content[0])).toMatch(/active_buffer:.*archived: true/)
   })
 
   it("does NOT append the suffix to get_workspace_state (it owns the digest)", async () => {
     const c = ctx("unfetched")
     const out = await dispatchMCPTool(makeCall("get_workspace_state"), c)
-    expect(out.content[0].text).not.toMatch(/<since_last_check>/)
+    expect(textOf(out.content[0])).not.toMatch(/<since_last_check>/)
   })
 
   it("does NOT append the suffix to get_recent_user_actions", async () => {
     const c = ctx("stale")
     const out = await dispatchMCPTool(makeCall("get_recent_user_actions"), c)
-    expect(out.content[0].text).not.toMatch(/<since_last_check>/)
+    expect(textOf(out.content[0])).not.toMatch(/<since_last_check>/)
   })
 
   it("includes user events in the suffix when the digest has any", async () => {
@@ -436,8 +437,8 @@ describe("dispatchMCPTool — since_last_check suffix", () => {
       makeCall("list_cells"),
       ctx("fresh", meta),
     )
-    expect(out.content[0].text).toMatch(/added: \[c-1\]/)
-    expect(out.content[0].text).toMatch(/edited: \[c-2\]/)
+    expect(textOf(out.content[0])).toMatch(/added: \[c-1\]/)
+    expect(textOf(out.content[0])).toMatch(/edited: \[c-2\]/)
   })
 
   it("calls consumeDigest exactly once per non-meta dispatch", async () => {

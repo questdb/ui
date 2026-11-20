@@ -321,3 +321,12 @@ export const VISUAL_CATALOG: VisualSpec[] = [
 
 export const visualSpecOf = (type: VisualType): VisualSpec =>
   VISUAL_CATALOG.find((s) => s.type === type) ?? VISUAL_CATALOG[0]
+
+/** Components drawn in HTML rather than as a chart: no picture of them. */
+export const HTML_VISUAL_TYPES: ReadonlySet<string> = new Set([
+  "stat",
+  "bullet",
+  "orderBook",
+  "uptime",
+  "planTree",
+])

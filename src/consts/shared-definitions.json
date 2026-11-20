@@ -1068,6 +1068,27 @@
     }
   },
   {
+    "name": "get_cell_image",
+    "category": "free",
+    "surfaces": ["mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
+    "description": "A PNG picture of a draw cell's chart as the console shows it now (theme, size, layout, data), with the cell's render_report. Use it to check how a chart LOOKS after set_cell_chart_config / set_cell_visual / set_cell_custom_chart / define_chart_type: overlapping or cut labels, empty space, unreadable colours, a chart that draws nothing. The notebook must be open in the console (activate_notebook); a cell off screen is scrolled into view first. Components drawn in HTML (stat, bullet, orderBook, uptime, planTree) have no picture: the result says so and carries their render_report. If another cell is maximized, only that one is drawn: clear it with set_cell_maximized first. Needs the 'read' permission (the picture shows query results). Returns {picture, width, height, render_report} plus the image.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        }
+      },
+      "required": ["buffer_id", "cell_id"]
+    }
+  },
+  {
     "name": "set_cell_visual",
     "category": "free",
     "surfaces": ["ai", "mcp"],
