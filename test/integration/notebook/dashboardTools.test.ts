@@ -206,6 +206,47 @@ const parsed = (result: { content: string }) =>
   JSON.parse(result.content) as Record<string, unknown>
 
 describe("dispatchTool — dashboard tools", () => {
+  it("round-trips visual and interaction settings through a closed notebook", async () => {
+    await db.buffers.put({
+      id: 2,
+      label: "Closed dashboard",
+      value: "",
+      position: 1,
+      notebookViewState: {
+        cells: [cell("stat", "SELECT 1", { mode: "draw" })],
+        settings: { variables: [{ name: "desk", value: "'London'" }] },
+      },
+    })
+
+    const target = { buffer_id: 2, cell_id: "stat" }
+    const visual = { type: "stat", columns: { value: "volume" } }
+    expect(
+      (await call("set_cell_visual", { ...target, visual })).is_error,
+    ).not.toBe(true)
+    expect(
+      (
+        await call("set_cell_interactions", {
+          ...target,
+          click: { variable: "desk" },
+        })
+      ).is_error,
+    ).not.toBe(true)
+
+    const persisted = (await db.buffers.get(2))?.notebookViewState
+    expect(persisted?.cells[0]).toMatchObject({
+      mode: "draw",
+      chartConfig: { visual },
+      interactions: { click: { variable: "desk" } },
+    })
+    expect(persisted?.settings?.variables).toEqual([
+      { name: "desk", value: "'London'" },
+    ])
+    expect(parsed(await call("get_cell", target))).toMatchObject({
+      chart_config: { visual },
+      interactions: { click: { variable: "desk" } },
+    })
+  })
+
   it("set_cell_visual stores the visual and notes when the cell is not drawn", async () => {
     // Given a run-mode cell
     const { state } = mountLive(1, [cell("c", "SELECT 1; SELECT 2")])
