@@ -1052,6 +1052,7 @@ export const buildAppliedCells = (
     const dimensionCell: NotebookCell = {
       ...(existing ?? { id, position: index, value, type: resolvedType }),
       value,
+      chartConfig,
     }
     if (isDraw) dimensionCell.mode = "draw"
     else delete dimensionCell.mode

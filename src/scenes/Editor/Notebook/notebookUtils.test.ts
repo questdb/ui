@@ -1219,6 +1219,45 @@ describe("buildAppliedCells", () => {
       expect(apply).toThrowError(/minimum is 296px/)
     })
 
+    it.each([
+      ["component", { visual: { type: "stat" } }],
+      ["custom option", { custom: { option: {} } }],
+    ] as const)(
+      "uses the incoming chart kind for a compact %s",
+      (_name, options) => {
+        // Given a compact draw request and an existing preset with the same SQL
+        const request = {
+          id: "a",
+          value: "SELECT 1",
+          mode: "draw" as const,
+          chartConfig: { xColumn: null, queries: [], ...options },
+          resultHeight: 150,
+        }
+        const preset = drawCell()
+
+        // When a compact draw cell is created or replaces a preset
+        const created = buildAppliedCells([], {
+          cells: [{ ...request, id: undefined }],
+        })
+        const updated = buildAppliedCells([preset], { cells: [request] })
+
+        // Then both pin the height, and a preset cannot take the same height
+        expect(created.nextCells[0]).toMatchObject({
+          bottomHeight: 150,
+          bottomResized: true,
+        })
+        expect(updated.nextCells[0]).toMatchObject({
+          bottomHeight: 150,
+          bottomResized: true,
+        })
+        expect(() =>
+          buildAppliedCells(updated.nextCells, {
+            cells: [{ ...request, chartConfig: preset.chartConfig }],
+          }),
+        ).toThrowError(/minimum is 296px/)
+      },
+    )
+
     it("re-derives an unpinned height when draw becomes run", () => {
       // Given a draw cell whose height is the draw seed, not a user pin
       const prev = [drawCell()]

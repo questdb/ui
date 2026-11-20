@@ -505,7 +505,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Resize a cell using semantic pane dimensions in CSS pixels and choose its pane view. Every input field is required by strict tool calling: pass null to preserve the current setting. Pass \"auto\" for a height to restore automatic sizing, or a number to pin it. For SQL/draw cells, view accepts editor, result, or editor_result. view \"editor\" is DESTRUCTIVE: it discards the cell's result and snapshot and clears its presented mode — the same gesture as toggling off the table or chart in the UI; the response then carries mode:null and result_discarded:true. The stored result/editor_result arrangement is kept for the next result. A cell with nothing to show reports view \"editor\" and mode null. Markdown has no pane-view state: it reports `view`, `mode`, and `result_height` as null; editor_height sizes its rendered content, while result_height and view are ignored — keep them null. Use 86px for a polished markdown title. Chart result_height must be at least 296px; table results at least 100px. No pane may exceed 2400px.",
+    "description": "Resize a cell using semantic pane dimensions in CSS pixels and choose its pane view. Every input field is required by strict tool calling: pass null to preserve the current setting. Pass \"auto\" for a height to restore automatic sizing, or a number to pin it. For SQL/draw cells, view accepts editor, result, or editor_result. view \"editor\" is DESTRUCTIVE: it discards the cell's result and snapshot and clears its presented mode — the same gesture as toggling off the table or chart in the UI; the response then carries mode:null and result_discarded:true. The stored result/editor_result arrangement is kept for the next result. A cell with nothing to show reports view \"editor\" and mode null. Markdown has no pane-view state: it reports `view`, `mode`, and `result_height` as null; editor_height sizes its rendered content, while result_height and view are ignored — keep them null. Use 86px for a polished markdown title. Preset charts need at least 296px; components, custom chart options, and tables need at least 100px. No pane may exceed 2400px.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -1812,7 +1812,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "Result/chart pane height in CSS pixels. Null preserves an existing setting (default auto for a new cell); \"auto\" restores result-driven sizing. Charts require at least 296px; tables 100px; maximum 2400px. Ignored for markdown; keep it null."
+                "description": "Result/chart pane height in CSS pixels. Null preserves an existing setting (default auto for a new cell); \"auto\" restores result-driven sizing. Preset charts need at least 296px; components, custom chart options, and tables need at least 100px. Maximum 2400px. Ignored for markdown; keep it null."
               },
               "view": {
                 "anyOf": [
