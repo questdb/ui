@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useReducer } from "react"
 import { toast } from "../components"
 import { useEditor } from "../providers/EditorProvider"
 import { bufferStore, MAX_BUFFER_NAME_LENGTH } from "../store/buffers"
@@ -11,6 +11,7 @@ import {
   type TransferQuery,
 } from "../utils/notebooks/notebookTransfer"
 import {
+  markTransferSnapshotWritten,
   requestTransferMonitor,
   stageTransferSnapshot,
 } from "../utils/notebooks/notebookTransferState"
@@ -33,23 +34,33 @@ export type NotebookTransferRequest = {
   compare?: boolean
 }
 
+// One transfer at a time, shared by every instance: "Convert to notebook"
+// lives in a menu that unmounts when the item is selected, and the item shown
+// when the menu reopens must still see the transfer in progress.
+let transferBusy = false
+const transferListeners = new Set<() => void>()
+const setTransferBusy = (busy: boolean) => {
+  transferBusy = busy
+  transferListeners.forEach((listener) => listener())
+}
+
 export const useNotebookTransfer = () => {
   const { addBuffer, buffers, setActiveBuffer } = useEditor()
   const isEditorBusy = useEditorBusy()
-  const inFlight = useRef(false)
-  const mounted = useRef(true)
-  const [busy, setBusy] = useState(false)
+  const [, rerender] = useReducer((count: number) => count + 1, 0)
+  const busy = transferBusy
   useEffect(() => {
-    mounted.current = true
+    transferListeners.add(rerender)
+    // A transfer may have ended between this render and the subscription.
+    if (transferBusy !== busy) rerender()
     return () => {
-      mounted.current = false
+      transferListeners.delete(rerender)
     }
   }, [])
 
   const transfer = async (request: NotebookTransferRequest): Promise<void> => {
-    if (inFlight.current) return
-    inFlight.current = true
-    setBusy(true)
+    if (transferBusy) return
+    setTransferBusy(true)
     const session = authSessionState.capture()
     const abort = new AbortController()
     const unsubscribe = authSessionState.onEnd(() => abort.abort())
@@ -128,7 +139,9 @@ export const useNotebookTransfer = () => {
       for (const snapshot of snapshots) {
         const saved = await persistCellSnapshot(snapshot)
         requireSession()
-        if (!saved) trackFailure("result_not_saved")
+        if (saved)
+          markTransferSnapshotWritten(snapshot.bufferId, snapshot.cellId)
+        else trackFailure("result_not_saved")
       }
       if (request.monitor) requestTransferMonitor(bufferId, cells[0].id)
       stage = "activate"
@@ -167,8 +180,7 @@ export const useNotebookTransfer = () => {
         )
     } finally {
       unsubscribe()
-      inFlight.current = false
-      if (mounted.current) setBusy(false)
+      setTransferBusy(false)
     }
   }
 

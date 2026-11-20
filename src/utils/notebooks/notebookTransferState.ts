@@ -4,8 +4,9 @@ import {
 } from "../../modules/OAuth2/authSessionState"
 import type { NotebookResultSnapshot } from "../../store/notebookResults"
 
-// A bounded, one-use bridge for transferred results: a notebook opened while
-// they are still being written finds them here, and a live chart frame larger
+// A bounded bridge for transferred results: a notebook opened while they are
+// still being written finds them here (on every hydration until the write
+// lands), and a live chart frame larger
 // than the disk snapshot limit is kept whole. Eviction is safe: transferred
 // draw cells wait for explicit refresh if no faithful frame is left. SQL/query
 // data never becomes persistent history.
@@ -18,6 +19,9 @@ const snapshots = new Map<
     bytes: number
     expires: number
     session: AuthSession
+    // Its disk write has landed: from then on the disk copy is the source, so
+    // a snapshot deleted since (e.g. by a refresh) stays deleted.
+    written?: boolean
   }
 >()
 let bytesHeld = 0
@@ -49,16 +53,36 @@ export const stageTransferSnapshot = (
   bytesHeld += bytes
 }
 
+const liveEntry = (bufferId: number, cellId: string) => {
+  const value = snapshots.get(keyOf(bufferId, cellId))
+  return value && value.expires > Date.now() && value.session.isCurrent()
+    ? value
+    : undefined
+}
+
+export const peekTransferSnapshot = (
+  bufferId: number,
+  cellId: string,
+): { snapshot: NotebookResultSnapshot; written: boolean } | undefined => {
+  const value = liveEntry(bufferId, cellId)
+  return value && { snapshot: value.snapshot, written: !!value.written }
+}
+
+export const markTransferSnapshotWritten = (
+  bufferId: number,
+  cellId: string,
+): void => {
+  const value = snapshots.get(keyOf(bufferId, cellId))
+  if (value) value.written = true
+}
+
 export const takeTransferSnapshot = (
   bufferId: number,
   cellId: string,
 ): NotebookResultSnapshot | undefined => {
-  const key = keyOf(bufferId, cellId)
-  const value = snapshots.get(key)
-  drop(key)
-  return value && value.expires > Date.now() && value.session.isCurrent()
-    ? value.snapshot
-    : undefined
+  const snapshot = liveEntry(bufferId, cellId)?.snapshot
+  drop(keyOf(bufferId, cellId))
+  return snapshot
 }
 
 // A cell's staged transfer frame, unless the cell ran again since (e.g. an

@@ -13,6 +13,7 @@ import { unstable_batchedUpdates } from "react-dom"
 import {
   hasTransferSnapshot,
   newerTransferSnapshot,
+  peekTransferSnapshot,
   takeTransferSnapshot,
 } from "../../../utils/notebooks/notebookTransferState"
 import { useEditor } from "../../../providers/EditorProvider"
@@ -342,12 +343,20 @@ export const NotebookProvider: React.FC<{
     () =>
       new CellResultHydrationEngine({
         loadSnapshot: async (cellId) => {
-          const transferred = takeTransferSnapshot(bufferId, cellId)
-          if (!transferred) return loadCellSnapshot(bufferId, cellId)
+          const staged = peekTransferSnapshot(bufferId, cellId)
+          if (!staged) return loadCellSnapshot(bufferId, cellId)
           const saved = await loadCellSnapshot(bufferId, cellId).catch(
             () => undefined,
           )
-          return newerTransferSnapshot(transferred, saved)
+          // The staged frame is released once the disk has (or had) its copy:
+          // until its write lands, a later hydration of this cell (a remount,
+          // or a release and re-request) still finds it instead of marking it
+          // missing. After that, a snapshot deleted since stays deleted.
+          if (saved || staged.written) {
+            takeTransferSnapshot(bufferId, cellId)
+            if (!saved) return undefined
+          }
+          return newerTransferSnapshot(staged.snapshot, saved)
         },
         rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
         deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),

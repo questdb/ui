@@ -42,6 +42,7 @@ vi.mock("../store/buffers", () => ({
   MAX_BUFFER_NAME_LENGTH: 100,
 }))
 vi.mock("../utils/notebooks/notebookTransferState", () => ({
+  markTransferSnapshotWritten: vi.fn(),
   requestTransferMonitor: vi.fn(),
   stageTransferSnapshot: vi.fn(),
 }))
@@ -378,5 +379,32 @@ describe("notebook transfer telemetry", () => {
       ConsoleEvent.NOTEBOOK_TRANSFER,
       expect.objectContaining({ notebookId: 42 }),
     )
+  })
+})
+
+describe("notebook transfer re-entry", () => {
+  it("keeps a transfer in progress across a remount, so a reopened menu cannot start a second one", async () => {
+    const pending = deferred<unknown>()
+    mocks.addBuffer.mockReturnValue(pending.promise)
+    authSessionState.markNonSSOAuthenticated()
+    const first = mount()
+    let transfer!: Promise<void>
+    act(() => {
+      transfer = first().transfer(request)
+    })
+    // The menu closes on select, unmounting the item; reopening mounts a new one.
+    act(() => renderer?.unmount())
+    const second = mount()
+    expect(second().busy).toBe(true)
+    await act(async () => {
+      await second().transfer(request)
+    })
+    expect(mocks.addBuffer).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      pending.resolve(undefined)
+      await transfer
+    })
+    expect(second().busy).toBe(false)
+    authSessionState.endSession()
   })
 })

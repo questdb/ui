@@ -193,10 +193,20 @@ const Console = () => {
   // too, so a console mounted on a notebook tab (e.g. after signing in again)
   // corrects a panel left by the previous session.
   const appliedResultRef = React.useRef<{ result: typeof result }>()
+  const mountResultRef = React.useRef(result)
   useEffect(() => {
     const applied = appliedResultRef.current
     if (hideResult || (applied && applied.result === result)) return
     appliedResultRef.current = { result }
+    // The first apply corrects a panel left by a previous session. With no
+    // new result since mounting, an Import panel open now was opened by the
+    // user, not left over.
+    if (
+      !applied &&
+      result === mountResultRef.current &&
+      activeBottomPanel === "import"
+    )
+      return
     dispatch(
       actions.console.setActiveBottomPanel(
         resultRef.current && result ? "result" : "zeroState",

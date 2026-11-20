@@ -209,4 +209,16 @@ describe("result pane on notebook tabs", () => {
     rerender()
     expect(store.getState().console.activeBottomPanel).toBe("zeroState")
   })
+  it("keeps an Import panel opened on a notebook when the user switches to a SQL tab", () => {
+    const store = createStore(rootReducer)
+    active.summary = { id: 2, isNotebook: true }
+    const { rerender } = mountConsole(store)
+    act(() => {
+      store.dispatch(consoleActions.setActiveBottomPanel("import"))
+    })
+
+    active.summary = { id: 1, isNotebook: false }
+    rerender()
+    expect(store.getState().console.activeBottomPanel).toBe("import")
+  })
 })

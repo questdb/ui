@@ -8,6 +8,8 @@ import {
   requestTransferMonitor,
   stageTransferSnapshot,
   subscribeTransferMonitor,
+  markTransferSnapshotWritten,
+  peekTransferSnapshot,
   takeTransferSnapshot,
 } from "./notebookTransferState"
 
@@ -42,6 +44,22 @@ describe("notebook transfer handoff", () => {
     expect(takeTransferSnapshot(1, "cell")).toBe(frame)
     expect(hasTransferSnapshot(1, "cell")).toBe(false)
     expect(takeTransferSnapshot(1, "cell")).toBeUndefined()
+  })
+
+  it("keeps a frame through peeks until it is taken", () => {
+    const frame = snapshot()
+    stageTransferSnapshot(frame)
+    expect(peekTransferSnapshot(1, "cell")).toEqual({
+      snapshot: frame,
+      written: false,
+    })
+    markTransferSnapshotWritten(1, "cell")
+    expect(peekTransferSnapshot(1, "cell")).toEqual({
+      snapshot: frame,
+      written: true,
+    })
+    expect(takeTransferSnapshot(1, "cell")).toBe(frame)
+    expect(peekTransferSnapshot(1, "cell")).toBeUndefined()
   })
 
   it("does not resurrect expired frames or data from an ended session", () => {

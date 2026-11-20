@@ -9,7 +9,11 @@ import { questClient } from "../../../utils/questdb/queryClient"
 import { QueryExecutionManager } from "../../../utils/questdb/queryExecutionManager"
 import { authSessionState } from "../../../modules/OAuth2/authSessionState"
 import type { NotebookResultSnapshot } from "../../../store/notebookResults"
-import { stageTransferSnapshot } from "../../../utils/notebooks/notebookTransferState"
+import {
+  hasTransferSnapshot,
+  markTransferSnapshotWritten,
+  stageTransferSnapshot,
+} from "../../../utils/notebooks/notebookTransferState"
 
 const disk = vi.hoisted(() => ({
   indexRead: undefined as undefined | ((ids: string[]) => void),
@@ -65,42 +69,45 @@ const frame: NotebookResultSnapshot = {
 
 afterEach(() => authSessionState.endSession())
 
+let cells!: ReturnType<typeof useNotebookState>["cells"]
+const Probe = () => {
+  cells = useNotebookState().cells
+  return null
+}
+const mountNotebook = () =>
+  renderComponent(
+    <QuestContext.Provider
+      value={{
+        quest: questClient,
+        questExecution: new QueryExecutionManager(),
+        buildVersion: { type: "oss", version: "test" },
+        commitHash: "test",
+      }}
+    >
+      <NotebookProvider
+        bufferId={42}
+        initialState={{
+          focusedCellId: "c1",
+          cells: [
+            {
+              id: "c1",
+              position: 0,
+              value: "select 1",
+              lastRunStatus: "success",
+            },
+          ],
+        }}
+      >
+        <Probe />
+      </NotebookProvider>
+    </QuestContext.Provider>,
+  )
+
 describe("NotebookProvider transferred results", () => {
   it("keeps a transferred result a notebook opened mid-write is loading", async () => {
     authSessionState.markNonSSOAuthenticated()
     stageTransferSnapshot(frame)
-    let cells!: ReturnType<typeof useNotebookState>["cells"]
-    const Probe = () => {
-      cells = useNotebookState().cells
-      return null
-    }
-    renderComponent(
-      <QuestContext.Provider
-        value={{
-          quest: questClient,
-          questExecution: new QueryExecutionManager(),
-          buildVersion: { type: "oss", version: "test" },
-          commitHash: "test",
-        }}
-      >
-        <NotebookProvider
-          bufferId={42}
-          initialState={{
-            focusedCellId: "c1",
-            cells: [
-              {
-                id: "c1",
-                position: 0,
-                value: "select 1",
-                lastRunStatus: "success",
-              },
-            ],
-          }}
-        >
-          <Probe />
-        </NotebookProvider>
-      </QuestContext.Provider>,
-    )
+    mountNotebook()
     // The focused cell takes the staged frame before the index read returns.
     await waitFor(() => expect(disk.snapshotRead).toBeDefined())
     // The index read lands first: the cell's write has not.
@@ -113,5 +120,46 @@ describe("NotebookProvider transferred results", () => {
     })
     await waitFor(() => expect(cells[0].result).toBeDefined())
     expect(cells[0].result?.results[0]).toMatchObject({ dataset: [[1]] })
+  })
+
+  it("keeps a transferred result for a remount before its disk write lands", async () => {
+    authSessionState.markNonSSOAuthenticated()
+    stageTransferSnapshot(frame)
+    const first = mountNotebook()
+    await waitFor(() => expect(disk.snapshotRead).toBeDefined())
+    await act(async () => {
+      disk.indexRead?.([])
+      disk.snapshotRead?.(undefined)
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(cells[0].result).toBeDefined())
+    // The user switches tabs away and back while the write is still pending.
+    first.unmount()
+    disk.indexRead = undefined
+    disk.snapshotRead = undefined
+    mountNotebook()
+    await waitFor(() => expect(disk.snapshotRead).toBeDefined())
+    await act(async () => {
+      disk.indexRead?.([])
+      disk.snapshotRead?.(undefined)
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(cells[0].result).toBeDefined())
+    expect(cells[0].result?.results[0]).toMatchObject({ dataset: [[1]] })
+  })
+
+  it("does not bring back a written result whose snapshot was deleted since", async () => {
+    authSessionState.markNonSSOAuthenticated()
+    stageTransferSnapshot(frame)
+    markTransferSnapshotWritten(42, "c1")
+    mountNotebook()
+    await waitFor(() => expect(disk.snapshotRead).toBeDefined())
+    await act(async () => {
+      disk.indexRead?.(["c1"])
+      disk.snapshotRead?.(undefined)
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(hasTransferSnapshot(42, "c1")).toBe(false))
+    expect(cells[0].result).toBeUndefined()
   })
 })
