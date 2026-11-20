@@ -551,7 +551,8 @@ export class CellRefreshEngine {
       if (entry.kind === "grid" && entry.state.classifyBlock?.kind === "write")
         continue
       refreshed++
-      if (entry.inFlight && entry.manualRefreshInFlight) continue
+      // Matching SQL can be unchanged while its bound variables have changed.
+      // Supersede even a manual fetch, which may hold the old values.
       this.forceRefresh(entry)
     }
     return refreshed

@@ -4,7 +4,22 @@ const SOURCE = '[data-cell-id="desk-picker"]'
 const DEPENDENT = '[data-cell-id="selected-desk"]'
 
 describe("notebook dashboard", () => {
-  it("refreshes a dependent visualization when a stat tile changes the notebook variable", () => {
+  it("shows the latest stat selection when a dependent query is already fetching", () => {
+    let releaseParis
+    cy.intercept("GET", "**/exec?*", (request) => {
+      const query = new URL(request.url).searchParams.get("query") ?? ""
+      if (
+        query.includes("concat('Active desk: '") &&
+        query.includes("@desk := 'Paris'")
+      ) {
+        request.continue(
+          () =>
+            new Promise((resolve) => {
+              releaseParis = resolve
+            }),
+        )
+      }
+    })
     cy.loadConsoleWithAuth(
       false,
       {},
@@ -20,7 +35,7 @@ describe("notebook dashboard", () => {
                   id: "desk-picker",
                   position: 0,
                   value:
-                    "select 'London' as desk, 1 as volume union all select 'Paris', 2",
+                    "select 'London' as desk, 1 as volume union all select 'Paris', 2 union all select 'Tokyo', 3",
                   mode: "draw",
                   paneView: "editor_result",
                   chartConfig: {
@@ -52,9 +67,14 @@ describe("notebook dashboard", () => {
 
     cy.contains(DEPENDENT, "Active desk: London").should("be.visible")
     cy.contains(`${SOURCE} button[aria-pressed="false"]`, "Paris").click()
-    cy.contains(`${SOURCE} button[aria-pressed="true"]`, "Paris").should(
+    cy.wrap(null).should(() => expect(releaseParis).to.be.a("function"))
+    cy.contains(`${SOURCE} button[aria-pressed="false"]`, "Tokyo").click()
+    cy.contains(`${SOURCE} button[aria-pressed="true"]`, "Tokyo").should(
       "be.visible",
     )
-    cy.contains(DEPENDENT, "Active desk: Paris").should("be.visible")
+    cy.then(() => {
+      releaseParis()
+    })
+    cy.contains(DEPENDENT, "Active desk: Tokyo").should("be.visible")
   })
 })
