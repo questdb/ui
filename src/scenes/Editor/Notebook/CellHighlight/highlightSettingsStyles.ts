@@ -4,12 +4,12 @@ import {
   ButtonBase,
   Input,
   SearchableSelect,
-  SelectMenuControl,
 } from "../../../../components"
 import type { HighlightColorToken } from "../../../../components/ResultGrid/highlight"
-import { Field } from "../CellChart/chartSettingsStyles"
-
-const CONTROL_HEIGHT = BUTTON_HEIGHTS.sm
+import {
+  Field,
+  SETTINGS_CONTROL_HEIGHT,
+} from "../CellChart/chartSettingsStyles"
 const CONTROL_FONT_SIZE = "1.2rem"
 const SWATCH_SIZE = "2rem"
 
@@ -47,70 +47,6 @@ export const StatusLine = styled.div`
   }
 `
 
-export const RuleList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-`
-
-export const RuleCard = styled.div<{ $expanded: boolean }>`
-  min-width: 0;
-  border: 0;
-  border-radius: 0.6rem;
-  background: ${({ theme, $expanded }) =>
-    $expanded ? theme.color.interactionHover : "transparent"};
-  transition: background-color 120ms ease;
-
-  &:hover {
-    background: ${({ theme }) => theme.color.interactionHover};
-  }
-`
-
-export const RuleHead = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.8rem;
-  border-radius: inherit;
-`
-
-export const RuleSummaryButton = styled(ButtonBase)`
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  flex: 1;
-  min-width: 0;
-  padding: 0.4rem;
-  border: 0;
-  border-radius: 0.4rem;
-  background: transparent;
-  text-align: left;
-
-  &[data-disabled="true"] > span {
-    opacity: 0.45;
-  }
-`
-
-export const SummaryCopy = styled.span`
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  overflow-wrap: anywhere;
-`
-
-export const SummaryTitle = styled.span`
-  font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
-
-export const SummaryDetails = styled.span`
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-`
-
 export const SummarySwatches = styled.span`
   display: flex;
   flex-shrink: 0;
@@ -125,11 +61,10 @@ export const SummarySwatch = styled.span<{ $color: HighlightColorToken }>`
   background: ${({ theme, $color }) => theme.color[$color]};
 `
 
-export const RuleEditor = styled.div`
+export const RuleEditorFields = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
-  padding: 0.4rem 1.2rem 1.2rem;
 `
 
 export const RuleField = styled(Field)`
@@ -190,30 +125,20 @@ export const RuleColors = styled.div`
   align-items: center;
   flex-wrap: wrap;
   gap: 0.8rem;
-  min-height: ${CONTROL_HEIGHT};
-`
-
-export const CompactSelect = styled(SelectMenuControl).attrs({
-  labelFontSize: CONTROL_FONT_SIZE,
-})`
-  && {
-    height: ${CONTROL_HEIGHT};
-    min-height: ${CONTROL_HEIGHT};
-    padding: 0 0.8rem;
-  }
+  min-height: ${SETTINGS_CONTROL_HEIGHT};
 `
 
 export const ColumnPicker = styled(SearchableSelect)`
   && {
-    height: ${CONTROL_HEIGHT};
-    min-height: ${CONTROL_HEIGHT};
+    height: ${SETTINGS_CONTROL_HEIGHT};
+    min-height: ${SETTINGS_CONTROL_HEIGHT};
     border-radius: 0.4rem;
   }
 `
 
 export const CompactInput = styled(Input)`
   && {
-    height: ${CONTROL_HEIGHT};
+    height: ${SETTINGS_CONTROL_HEIGHT};
     min-width: 0;
     width: 100%;
     padding: 0 0.8rem;

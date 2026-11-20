@@ -1,9 +1,8 @@
 import React from "react"
 import styled from "styled-components"
 import { WarningIcon } from "@phosphor-icons/react"
-import { SelectMenuControl } from "../../../../components"
 import type { GridMode } from "../../../../store/notebook"
-import { FieldGroup } from "../CellChart/chartSettingsStyles"
+import { FieldGroup, SettingsSelect } from "../CellChart/chartSettingsStyles"
 import {
   SectionHeader,
   SectionHint,
@@ -76,7 +75,7 @@ export const LiveUpdatesSection: React.FC<Props> = ({
         <SectionTitle>Live updates</SectionTitle>
         <SectionHint>when the cell refreshes</SectionHint>
       </SectionHeader>
-      <SelectMenuControl
+      <SettingsSelect
         name="live-updates"
         ariaLabel="Live updates"
         value={mode ?? ""}

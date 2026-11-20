@@ -1,11 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
-import {
-  Checkbox,
-  Input,
-  SelectMenuControl,
-  Text,
-} from "../../../../components"
+import { Checkbox, Input, Text } from "../../../../components"
 import {
   THRESHOLD_MARKS,
   type ChartConfig,
@@ -23,6 +18,7 @@ import {
   FieldGroup,
   FieldLabel,
   IncompatibleIcon,
+  SettingsSelect,
 } from "./chartSettingsStyles"
 import { QueryControls } from "./QueryControls"
 import { SettingsDrawerShell } from "../settingsDrawer/SettingsDrawerShell"
@@ -134,7 +130,7 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
     <>
       <Field>
         <FieldLabel>X-axis</FieldLabel>
-        <SelectMenuControl
+        <SettingsSelect
           name="x-axis"
           ariaLabel="X-axis"
           value={draft.xColumn ?? ""}
@@ -166,7 +162,7 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
         <FieldGroup>
           <Field>
             <FieldLabel>Thresholds</FieldLabel>
-            <SelectMenuControl
+            <SettingsSelect
               name="thresholds"
               ariaLabel="Thresholds"
               value={draft.thresholds ?? ""}

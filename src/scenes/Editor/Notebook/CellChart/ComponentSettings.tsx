@@ -1,12 +1,6 @@
 import React, { useMemo, useState } from "react"
 import styled from "styled-components"
-import {
-  Checkbox,
-  Input,
-  MultiSelect,
-  SelectMenuControl,
-  Text,
-} from "../../../../components"
+import { Checkbox, Input, Text } from "../../../../components"
 import type {
   StateSeverity,
   VisualColumns,
@@ -20,6 +14,8 @@ import {
   Field,
   FieldGroup,
   FieldLabel,
+  SettingsSelect,
+  SettingsMultiSelect,
 } from "./chartSettingsStyles"
 import type { StatementRows } from "../visuals/statementRows"
 import {
@@ -224,7 +220,7 @@ export const ComponentSettings: React.FC<Props> = ({
       <FieldGroup>
         <Field as="div">
           <FieldLabel>Component</FieldLabel>
-          <SelectMenuControl
+          <SettingsSelect
             name="component-type"
             ariaLabel="Component"
             value={visual.type}
@@ -250,7 +246,7 @@ export const ComponentSettings: React.FC<Props> = ({
         {spec.path && (
           <Field as="div">
             <FieldLabel>Levels (in column order)</FieldLabel>
-            <MultiSelect
+            <SettingsMultiSelect
               name="Levels"
               value={visual.columns?.path ?? []}
               onChange={(path) =>
@@ -264,7 +260,7 @@ export const ComponentSettings: React.FC<Props> = ({
         {spec.roles.map((role) => (
           <Field as="div" key={role.role}>
             <FieldLabel>{role.label}</FieldLabel>
-            <SelectMenuControl
+            <SettingsSelect
               name={`role-${role.role}`}
               ariaLabel={role.label}
               value={visual.columns?.[role.role] ?? ""}
@@ -315,7 +311,7 @@ export const ComponentSettings: React.FC<Props> = ({
       {spec.options.includes("sparkline") && (
         <Field as="div">
           <FieldLabel>Sparkline</FieldLabel>
-          <SelectMenuControl
+          <SettingsSelect
             name="component-sparkline"
             ariaLabel="Sparkline"
             value={
@@ -377,7 +373,7 @@ export const ComponentSettings: React.FC<Props> = ({
           {states.map((state) => (
             <StateRow key={state}>
               <span title={state}>{state}</span>
-              <SelectMenuControl
+              <SettingsSelect
                 name={`severity-${state}`}
                 ariaLabel={`Meaning of ${state}`}
                 value={visual.severity?.[state] ?? ""}

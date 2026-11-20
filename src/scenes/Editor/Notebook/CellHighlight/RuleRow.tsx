@@ -5,8 +5,6 @@ import {
   ArrowLineDownIcon,
   ArrowLineUpIcon,
   ArrowUpIcon,
-  CaretDownIcon,
-  CaretUpIcon,
   DotsThreeIcon,
   TrashIcon,
   WarningCircleIcon,
@@ -21,7 +19,12 @@ import type {
   HighlightDisplay,
   RuleTarget,
 } from "../../../../components/ResultGrid/highlight"
-import { FieldGroup, FieldLabel } from "../CellChart/chartSettingsStyles"
+import {
+  FieldGroup,
+  FieldLabel,
+  SettingsSelect,
+} from "../CellChart/chartSettingsStyles"
+import { ExpandableSettingsItem } from "../settingsDrawer/ExpandableSettingsItem"
 import { ColorSwatch } from "./ColorSwatch"
 import { ConditionInputs } from "./ConditionInputs"
 import { StepsEditor } from "./StepsEditor"
@@ -49,25 +52,18 @@ import {
 import type { RuleErrors } from "./ruleValidation"
 import {
   ColumnPicker,
-  CompactSelect,
   DisplayField,
   FieldError,
   RuleAlert,
   RuleAppearance,
-  RuleCard,
   RuleColors,
-  RuleEditor,
+  RuleEditorFields,
   RuleField,
   RuleFields,
-  RuleHead,
   RuleParameters,
-  RuleSummaryButton,
   SectionHint,
-  SummaryCopy,
-  SummaryDetails,
   SummarySwatch,
   SummarySwatches,
-  SummaryTitle,
 } from "./highlightSettingsStyles"
 
 type Props = {
@@ -187,11 +183,15 @@ export const RuleRow: React.FC<Props> = ({
   }
 
   const summary = ruleSummary(rule)
-  const editorId = `highlight-rule-${rule.id}`
-
   return (
-    <RuleCard data-hook="highlight-rule" $expanded={expanded}>
-      <RuleHead>
+    <ExpandableSettingsItem
+      dataHook="highlight-rule"
+      title={summary}
+      expanded={expanded}
+      onToggle={onToggle}
+      toggleLabel={`${expanded ? "Collapse" : "Edit"} rule ${index + 1}: ${summary}`}
+      muted={!rule.enabled}
+      leading={
         <Checkbox
           compact
           aria-label={`Rule ${index + 1} enabled`}
@@ -202,250 +202,226 @@ export const RuleRow: React.FC<Props> = ({
             onChange({ ...rule, enabled: e.target.checked })
           }
         />
-        <RuleSummaryButton
-          type="button"
-          aria-label={`${expanded ? "Collapse" : "Edit"} rule ${index + 1}: ${summary}`}
-          aria-expanded={expanded}
-          aria-controls={editorId}
-          data-disabled={!rule.enabled}
-          onClick={onToggle}
-        >
-          <SummaryCopy>
-            <SummaryTitle>{summary}</SummaryTitle>
-            <SummaryDetails>
-              <SectionHint>{ruleDescription(rule)}</SectionHint>
-              {!isUnset && (
-                <SummarySwatches aria-hidden="true">
-                  {[...new Set(ruleColors(rule))].slice(0, 3).map((color) => (
-                    <SummarySwatch key={color} $color={color} />
-                  ))}
-                </SummarySwatches>
-              )}
-              {ruleFillLabel(rule) && (
-                <SectionHint>{ruleFillLabel(rule)}</SectionHint>
-              )}
-            </SummaryDetails>
-          </SummaryCopy>
-        </RuleSummaryButton>
-        {errors && (
-          <RuleAlert
-            role="img"
-            aria-label={`Rule ${index + 1} has errors`}
-            data-hook="highlight-rule-alert"
-          >
-            <WarningCircleIcon size={16} />
-          </RuleAlert>
-        )}
-        <IconButton
-          label={`${expanded ? "Collapse" : "Expand"} rule ${index + 1}`}
-          size="sm"
-          aria-expanded={expanded}
-          aria-controls={editorId}
-          onClick={onToggle}
-        >
-          {expanded ? <CaretUpIcon size={14} /> : <CaretDownIcon size={14} />}
-        </IconButton>
-        <DropdownMenu.Root modal={false}>
-          <DropdownMenu.Trigger asChild>
-            <IconButton label={`Rule ${index + 1} actions`} size="sm">
-              <DotsThreeIcon size={18} />
-            </IconButton>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" sideOffset={4}>
-              <DropdownMenu.Item
-                disabled={index === 0}
-                onSelect={() => onMove("top")}
-                icon={<ArrowLineUpIcon size={14} />}
-              >
-                Move to top
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                disabled={index === 0}
-                onSelect={() => onMove(-1)}
-                icon={<ArrowUpIcon size={14} />}
-              >
-                Move up
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                disabled={index === count - 1}
-                onSelect={() => onMove(1)}
-                icon={<ArrowDownIcon size={14} />}
-              >
-                Move down
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                disabled={index === count - 1}
-                onSelect={() => onMove("bottom")}
-                icon={<ArrowLineDownIcon size={14} />}
-              >
-                Move to bottom
-              </DropdownMenu.Item>
-              <DropdownMenu.Divider />
-              <DropdownMenu.Item
-                tone="danger"
-                onSelect={onRemove}
-                icon={<TrashIcon size={14} />}
-              >
-                Remove rule
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-      </RuleHead>
-      <div id={editorId} hidden={!expanded}>
-        {expanded && (
-          <RuleEditor>
-            <RuleFields>
-              {!isNewRow && (
+      }
+      details={
+        <>
+          <SectionHint>{ruleDescription(rule)}</SectionHint>
+          {!isUnset && (
+            <SummarySwatches aria-hidden="true">
+              {[...new Set(ruleColors(rule))].slice(0, 3).map((color) => (
+                <SummarySwatch key={color} $color={color} />
+              ))}
+            </SummarySwatches>
+          )}
+          {ruleFillLabel(rule) && (
+            <SectionHint>{ruleFillLabel(rule)}</SectionHint>
+          )}
+        </>
+      }
+      actions={
+        <>
+          {errors && (
+            <RuleAlert
+              role="img"
+              aria-label={`Rule ${index + 1} has errors`}
+              data-hook="highlight-rule-alert"
+            >
+              <WarningCircleIcon size={16} />
+            </RuleAlert>
+          )}
+          <DropdownMenu.Root modal={false}>
+            <DropdownMenu.Trigger asChild>
+              <IconButton label={`Rule ${index + 1} actions`} size="sm">
+                <DotsThreeIcon size={18} />
+              </IconButton>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content align="end" sideOffset={4}>
+                <DropdownMenu.Item
+                  disabled={index === 0}
+                  onSelect={() => onMove("top")}
+                  icon={<ArrowLineUpIcon size={14} />}
+                >
+                  Move to top
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled={index === 0}
+                  onSelect={() => onMove(-1)}
+                  icon={<ArrowUpIcon size={14} />}
+                >
+                  Move up
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled={index === count - 1}
+                  onSelect={() => onMove(1)}
+                  icon={<ArrowDownIcon size={14} />}
+                >
+                  Move down
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled={index === count - 1}
+                  onSelect={() => onMove("bottom")}
+                  icon={<ArrowLineDownIcon size={14} />}
+                >
+                  Move to bottom
+                </DropdownMenu.Item>
+                <DropdownMenu.Divider />
+                <DropdownMenu.Item
+                  tone="danger"
+                  onSelect={onRemove}
+                  icon={<TrashIcon size={14} />}
+                >
+                  Remove rule
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </>
+      }
+    >
+      <RuleEditorFields>
+        <RuleFields>
+          {!isNewRow && (
+            <RuleField>
+              <FieldLabel>Column</FieldLabel>
+              <ColumnPicker
+                options={targetOptions}
+                value={targetLabel}
+                placeholder="Column"
+                searchPlaceholder="Column name"
+                emptyLabel="No columns yet, type a name"
+                noMatchLabel="No columns matched"
+                ariaLabel="Column"
+                ariaInvalid={errors?.column !== undefined}
+                dataHookBase="highlight-rule-column"
+                onSelect={changeTarget}
+                onReset={() =>
+                  onChange(
+                    rule.kind === "unset"
+                      ? { ...rule, target: null }
+                      : { ...rule, target: { kind: "column", name: "" } },
+                  )
+                }
+              />
+              {errors?.column && <FieldError>{errors.column}</FieldError>}
+            </RuleField>
+          )}
+          <RuleField>
+            <FieldLabel>Condition</FieldLabel>
+            <SettingsSelect
+              name={`rule-${rule.id}-condition`}
+              ariaLabel="Condition"
+              value={currentOption ?? ""}
+              placeholder="Condition"
+              options={conditionChoices}
+              onValueChange={changeCondition}
+            />
+            {errors?.condition && <FieldError>{errors.condition}</FieldError>}
+          </RuleField>
+        </RuleFields>
+        {rule.kind !== "unset" && (
+          <>
+            <RuleParameters>
+              <ConditionInputs
+                rule={rule}
+                kind={kind}
+                range={target ? rangeOf(target) : null}
+                errors={errors ?? {}}
+                onChange={onChange}
+              />
+            </RuleParameters>
+            {rule.kind === "steps" && (
+              <StepsEditor
+                rule={rule}
+                errors={errors ?? {}}
+                onChange={onChange}
+              />
+            )}
+            <RuleAppearance>
+              {betweenFill && (kind === null || kind === "numeric") && (
                 <RuleField>
-                  <FieldLabel>Column</FieldLabel>
-                  <ColumnPicker
-                    options={targetOptions}
-                    value={targetLabel}
-                    placeholder="Column"
-                    searchPlaceholder="Column name"
-                    emptyLabel="No columns yet, type a name"
-                    noMatchLabel="No columns matched"
-                    ariaLabel="Column"
-                    ariaInvalid={errors?.column !== undefined}
-                    dataHookBase="highlight-rule-column"
-                    onSelect={changeTarget}
-                    onReset={() =>
-                      onChange(
-                        rule.kind === "unset"
-                          ? { ...rule, target: null }
-                          : { ...rule, target: { kind: "column", name: "" } },
-                      )
-                    }
+                  <FieldLabel>Fill</FieldLabel>
+                  <SettingsSelect
+                    name={`rule-${rule.id}-fill`}
+                    ariaLabel="Fill"
+                    value={betweenFill.kind}
+                    options={FILL_OPTIONS}
+                    onValueChange={changeFill}
                   />
-                  {errors?.column && <FieldError>{errors.column}</FieldError>}
+                  {errors?.fill && <FieldError>{errors.fill}</FieldError>}
                 </RuleField>
               )}
-              <RuleField>
-                <FieldLabel>Condition</FieldLabel>
-                <CompactSelect
-                  name={`rule-${rule.id}-condition`}
-                  ariaLabel="Condition"
-                  value={currentOption ?? ""}
-                  placeholder="Condition"
-                  options={conditionChoices}
-                  onValueChange={changeCondition}
-                />
-                {errors?.condition && (
-                  <FieldError>{errors.condition}</FieldError>
-                )}
-              </RuleField>
-            </RuleFields>
-            {rule.kind !== "unset" && (
-              <>
-                <RuleParameters>
-                  <ConditionInputs
-                    rule={rule}
-                    kind={kind}
-                    range={target ? rangeOf(target) : null}
-                    errors={errors ?? {}}
-                    onChange={onChange}
-                  />
-                </RuleParameters>
-                {rule.kind === "steps" && (
-                  <StepsEditor
-                    rule={rule}
-                    errors={errors ?? {}}
-                    onChange={onChange}
-                  />
-                )}
-                <RuleAppearance>
-                  {betweenFill && (kind === null || kind === "numeric") && (
-                    <RuleField>
-                      <FieldLabel>Fill</FieldLabel>
-                      <CompactSelect
-                        name={`rule-${rule.id}-fill`}
-                        ariaLabel="Fill"
-                        value={betweenFill.kind}
-                        options={FILL_OPTIONS}
-                        onValueChange={changeFill}
-                      />
-                      {errors?.fill && <FieldError>{errors.fill}</FieldError>}
-                    </RuleField>
-                  )}
-                  {rule.kind !== "steps" && (
-                    <FieldGroupCenter
-                      $multiple={betweenFill?.kind === "gradient"}
-                    >
-                      <FieldLabel>
-                        {betweenFill?.kind === "gradient" ? "Colors" : "Color"}
-                      </FieldLabel>
-                      <RuleColors>
-                        {betweenFill?.kind === "gradient" ? (
-                          <>
-                            <FieldGroupCenter>
-                              <ColorSwatch
-                                value={rule.color}
-                                label="Low color"
-                                onChange={(color) =>
-                                  onChange({ ...rule, color })
-                                }
-                              />
-                              <SectionHint>Low</SectionHint>
-                            </FieldGroupCenter>
-                            <FieldGroupCenter>
-                              <ColorSwatch
-                                value={betweenFill.highColor}
-                                label="High color"
-                                onChange={changeHighColor}
-                              />
-                              <SectionHint>High</SectionHint>
-                            </FieldGroupCenter>
-                          </>
-                        ) : (
+              {rule.kind !== "steps" && (
+                <FieldGroupCenter $multiple={betweenFill?.kind === "gradient"}>
+                  <FieldLabel>
+                    {betweenFill?.kind === "gradient" ? "Colors" : "Color"}
+                  </FieldLabel>
+                  <RuleColors>
+                    {betweenFill?.kind === "gradient" ? (
+                      <>
+                        <FieldGroupCenter>
                           <ColorSwatch
                             value={rule.color}
-                            label="Rule color"
+                            label="Low color"
                             onChange={(color) => onChange({ ...rule, color })}
                           />
-                        )}
-                      </RuleColors>
-                    </FieldGroupCenter>
-                  )}
-                  <DisplayField>
-                    <FieldLabel>Display</FieldLabel>
-                    <CompactSelect
-                      name={`rule-${rule.id}-display`}
-                      ariaLabel="Display"
-                      value={rule.display}
-                      options={DISPLAY_OPTIONS}
-                      onValueChange={(display) =>
-                        onChange({
-                          ...rule,
-                          display: display as HighlightDisplay,
-                        })
-                      }
-                    />
-                  </DisplayField>
-                  {rule.kind !== "newRow" && (
-                    <RuleField>
-                      <FieldLabel>Applies to</FieldLabel>
-                      <CompactSelect
-                        name={`rule-${rule.id}-applies-to`}
-                        ariaLabel="Applies to"
-                        value={rule.appliesTo}
-                        options={APPLIES_TO_OPTIONS}
-                        onValueChange={(appliesTo) =>
-                          onChange({
-                            ...rule,
-                            appliesTo: appliesTo as HighlightAppliesTo,
-                          })
-                        }
+                          <SectionHint>Low</SectionHint>
+                        </FieldGroupCenter>
+                        <FieldGroupCenter>
+                          <ColorSwatch
+                            value={betweenFill.highColor}
+                            label="High color"
+                            onChange={changeHighColor}
+                          />
+                          <SectionHint>High</SectionHint>
+                        </FieldGroupCenter>
+                      </>
+                    ) : (
+                      <ColorSwatch
+                        value={rule.color}
+                        label="Rule color"
+                        onChange={(color) => onChange({ ...rule, color })}
                       />
-                    </RuleField>
-                  )}
-                </RuleAppearance>
-              </>
-            )}
-          </RuleEditor>
+                    )}
+                  </RuleColors>
+                </FieldGroupCenter>
+              )}
+              <DisplayField>
+                <FieldLabel>Display</FieldLabel>
+                <SettingsSelect
+                  name={`rule-${rule.id}-display`}
+                  ariaLabel="Display"
+                  value={rule.display}
+                  options={DISPLAY_OPTIONS}
+                  onValueChange={(display) =>
+                    onChange({
+                      ...rule,
+                      display: display as HighlightDisplay,
+                    })
+                  }
+                />
+              </DisplayField>
+              {rule.kind !== "newRow" && (
+                <RuleField>
+                  <FieldLabel>Applies to</FieldLabel>
+                  <SettingsSelect
+                    name={`rule-${rule.id}-applies-to`}
+                    ariaLabel="Applies to"
+                    value={rule.appliesTo}
+                    options={APPLIES_TO_OPTIONS}
+                    onValueChange={(appliesTo) =>
+                      onChange({
+                        ...rule,
+                        appliesTo: appliesTo as HighlightAppliesTo,
+                      })
+                    }
+                  />
+                </RuleField>
+              )}
+            </RuleAppearance>
+          </>
         )}
-      </div>
-    </RuleCard>
+      </RuleEditorFields>
+    </ExpandableSettingsItem>
   )
 }

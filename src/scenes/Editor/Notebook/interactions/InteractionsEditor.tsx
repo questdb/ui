@@ -1,11 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import {
-  Checkbox,
-  Input,
-  SelectMenuControl,
-  Text,
-} from "../../../../components"
+import { Checkbox, Input, Text } from "../../../../components"
 import type {
   CellInteractions,
   NotebookVariable,
@@ -15,6 +10,7 @@ import {
   Field,
   FieldGroup,
   FieldLabel,
+  SettingsSelect,
 } from "../CellChart/chartSettingsStyles"
 import { isVariableName } from "../../../../store/notebookFormat"
 import {
@@ -230,7 +226,7 @@ const VariableField: React.FC<VariableFieldProps> = ({
     <FieldGroup>
       <Field as="div">
         <FieldLabel>{label}</FieldLabel>
-        <SelectMenuControl
+        <SettingsSelect
           name={`${slot}-variable`}
           ariaLabel={label}
           value={created ? NEW : name}
@@ -386,7 +382,7 @@ export const InteractionsEditor: React.FC<Props> = ({
             />
             <Field as="div">
               <FieldLabel>Set it to</FieldLabel>
-              <SelectMenuControl
+              <SettingsSelect
                 name="click-column"
                 ariaLabel="Set it to"
                 value={click.column ?? ""}

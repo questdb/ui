@@ -17,6 +17,7 @@ import {
   type SettingsDismissMethod,
 } from "../settingsDrawer/SettingsDrawerShell"
 import { FieldGroup } from "../CellChart/chartSettingsStyles"
+import { ExpandableSettingsList } from "../settingsDrawer/ExpandableSettingsItem"
 import { IdentitySection } from "./IdentitySection"
 import { LiveUpdatesSection } from "./LiveUpdatesSection"
 import {
@@ -45,7 +46,6 @@ import {
 } from "./ruleDraft"
 import {
   AddRow,
-  RuleList,
   SectionHeader,
   SectionHint,
   SectionTitle,
@@ -425,7 +425,10 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
               </SectionTitle>
               <SectionHint>First matching rule sets the cell color</SectionHint>
             </SectionHeader>
-            <RuleList data-hook="highlight-rule-list">
+            <ExpandableSettingsList
+              data-hook="highlight-rule-list"
+              aria-label="Highlight rules"
+            >
               {draft.rules.map((rule, index) => (
                 <RuleRow
                   key={rule.id}
@@ -453,7 +456,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
                   }
                 />
               ))}
-            </RuleList>
+            </ExpandableSettingsList>
             <AddRow>
               <Button
                 type="button"

@@ -6,7 +6,6 @@ import {
   CopyButton,
   Input,
   SearchableSelect,
-  SelectMenuControl,
   Text,
 } from "../../../../components"
 import { HighlightedSql } from "../../../../components/HighlightedSql"
@@ -35,6 +34,8 @@ import {
   FieldGroup,
   FieldLabel,
   IncompatibleIcon,
+  SettingsSelect,
+  SettingsMultiSelect,
 } from "./chartSettingsStyles"
 
 const TYPE_LABELS: Record<ChartType, string> = {
@@ -161,7 +162,7 @@ const RoleControls: React.FC<{
             <Text color="contentSecondary" size="xs">
               {label}
             </Text>
-            <SelectMenuControl
+            <SettingsSelect
               name={`${type}-${role}-${idx}`}
               ariaLabel={`${label} column`}
               value={current[role] ?? ""}
@@ -305,7 +306,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
 
       <Field>
         <FieldLabel>Type</FieldLabel>
-        <SelectMenuControl
+        <SettingsSelect
           name={`type-${idx}`}
           ariaLabel="Chart type"
           value={query.type}
@@ -354,7 +355,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
                 <Text color="contentSecondary" size="xs">
                   {label}
                 </Text>
-                <SelectMenuControl
+                <SettingsSelect
                   name={`ohlc-${k}-${idx}`}
                   ariaLabel={`${label} column`}
                   value={query.ohlc?.[k] ?? ""}
@@ -419,7 +420,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
                 <Text color="contentSecondary" size="xs">
                   {label}
                 </Text>
-                <SelectMenuControl
+                <SettingsSelect
                   name={`events-${k}-${idx}`}
                   ariaLabel={`Events ${label.toLowerCase()} column`}
                   value={query.events?.[k] ?? ""}
@@ -462,7 +463,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       {query.type === "pie" && (
         <Field>
           <FieldLabel>Value</FieldLabel>
-          <SelectMenuControl
+          <SettingsSelect
             name={`value-${idx}`}
             ariaLabel="Value column"
             value={query.yColumns[0] ?? ""}
@@ -479,7 +480,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       {query.type === "pie" && (
         <Field>
           <FieldLabel>Shape</FieldLabel>
-          <SelectMenuControl
+          <SettingsSelect
             name={`pie-shape-${idx}`}
             ariaLabel="Pie shape"
             value={query.pieShape ?? "donut"}
@@ -540,7 +541,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
                 <Text color="contentSecondary" size="xs">
                   {label}
                 </Text>
-                <SelectMenuControl
+                <SettingsSelect
                   name={`scatter-${role}-${idx}`}
                   ariaLabel={`${label} column`}
                   value={query.scatter?.[role] ?? ""}
@@ -569,7 +570,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         partitionCandidates.length > 0 && (
           <Field>
             <FieldLabel>Partition by</FieldLabel>
-            <SelectMenuControl
+            <SettingsSelect
               name={`partition-${idx}`}
               ariaLabel="Partition by"
               value={query.partitionByColumn ?? ""}
@@ -620,7 +621,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       {!isAnchorTab && query.type !== "events" && (
         <Field>
           <FieldLabel>Y-axis</FieldLabel>
-          <SelectMenuControl
+          <SettingsSelect
             name={`axis-${idx}`}
             ariaLabel="Y-axis"
             value={query.axis ?? "left"}

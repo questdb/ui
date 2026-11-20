@@ -1,5 +1,27 @@
-import styled from "styled-components"
+import styled, { css } from "styled-components"
+import {
+  MultiSelect,
+  SelectMenuControl,
+  TOOLBAR_CONTROL_HEIGHT,
+} from "../../../../components"
 import { WarningIcon } from "@phosphor-icons/react"
+
+export const SETTINGS_CONTROL_HEIGHT = TOOLBAR_CONTROL_HEIGHT
+
+const settingsSelectHeight = css`
+  && {
+    height: ${SETTINGS_CONTROL_HEIGHT};
+    min-height: ${SETTINGS_CONTROL_HEIGHT};
+  }
+`
+
+export const SettingsSelect = styled(SelectMenuControl)`
+  ${settingsSelectHeight}
+`
+
+export const SettingsMultiSelect = styled(MultiSelect)`
+  ${settingsSelectHeight}
+`
 
 export const IncompatibleIcon = styled(WarningIcon)`
   color: ${({ theme }) => theme.color.statusWarning};

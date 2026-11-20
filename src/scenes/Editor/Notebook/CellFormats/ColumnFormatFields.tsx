@@ -1,13 +1,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled, { useTheme } from "styled-components"
 import { TrashIcon } from "@phosphor-icons/react"
-import {
-  Button,
-  Checkbox,
-  Input,
-  SelectMenuControl,
-  Text,
-} from "../../../../components"
+import { Button, Checkbox, Input, Text } from "../../../../components"
 import {
   CELL_VISUALS,
   FORMAT_KINDS,
@@ -25,6 +19,7 @@ import {
   Field,
   FieldGroup,
   FieldLabel,
+  SettingsSelect,
 } from "../CellChart/chartSettingsStyles"
 import {
   CELL_VISUAL_LABELS,
@@ -135,7 +130,7 @@ export const ToneSelect: React.FC<{
 }> = ({ name, ariaLabel, value, onChange, noneLabel }) => {
   const theme = useTheme()
   return (
-    <SelectMenuControl
+    <SettingsSelect
       name={name}
       ariaLabel={ariaLabel}
       value={value ?? ""}
@@ -216,7 +211,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
         {cellVisuals ? (
           <Field as="div">
             <FieldLabel>In the grid cell</FieldLabel>
-            <SelectMenuControl
+            <SettingsSelect
               name={id("visual")}
               ariaLabel={`${column}: in the grid cell`}
               value={format.visual ?? ""}
@@ -242,7 +237,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
     <FieldGroup>
       <Field as="div">
         <FieldLabel>Show as</FieldLabel>
-        <SelectMenuControl
+        <SettingsSelect
           name={id("kind")}
           ariaLabel={`${column}: show as`}
           value={format.kind ?? "number"}
@@ -314,7 +309,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
 
       <Field as="div">
         <FieldLabel>Colour</FieldLabel>
-        <SelectMenuControl
+        <SettingsSelect
           name={id("colour")}
           ariaLabel={`${column}: colour`}
           value={mode}
@@ -398,7 +393,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
       {cellVisuals && (
         <Field as="div">
           <FieldLabel>In the grid cell</FieldLabel>
-          <SelectMenuControl
+          <SettingsSelect
             name={id("visual")}
             ariaLabel={`${column}: in the grid cell`}
             // A sparkline draws arrays only: on numbers it reads as text.
