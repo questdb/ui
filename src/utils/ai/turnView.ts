@@ -140,6 +140,7 @@ export type TimelineOperations = {
   type: "operations"
   operations: StatusEntry[]
   timestamp: number
+  // When the group's last step ended: the start of what came after it.
   endTimestamp?: number
 }
 
@@ -159,7 +160,7 @@ export function buildInterleavedTimeline(
   for (const entry of operationHistory) {
     if (entry.type === AIOperationStatus.GeneratingResponse) {
       const last = timeline[timeline.length - 1]
-      if (last?.type === "operations" && !last.endTimestamp) {
+      if (last?.type === "operations" && last.endTimestamp === undefined) {
         last.endTimestamp = entry.timestamp
       }
       if (entry.content?.trim()) {
@@ -174,7 +175,10 @@ export function buildInterleavedTimeline(
 
     const last = timeline[timeline.length - 1]
     if (last?.type === "operations") {
+      // A response without text does not end the group: its steps go on, and
+      // so does its time.
       last.operations.push(entry)
+      last.endTimestamp = undefined
     } else {
       timeline.push({
         type: "operations",

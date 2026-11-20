@@ -38,6 +38,7 @@ import {
 import { Help } from "./help"
 import { Warnings } from "./warning"
 import { AIChatButton } from "./AIChatButton"
+import { LocalAgentChatLauncher } from "./LocalAgentChatLauncher"
 import { TableDetailsButton } from "./TableDetailsButton"
 import { QueryActivityButton } from "./QueryActivityButton"
 import { TableDetailsDrawer } from "../Schema/TableDetailsDrawer"
@@ -94,8 +95,8 @@ const Layout = () => {
     <SearchProvider>
       <EditorProvider>
         <AIConversationProvider>
-          <AIStatusProvider>
-            <MCPBridgeProvider>
+          <MCPBridgeProvider>
+            <AIStatusProvider>
               <TopBar />
               <Warnings />
               <Root>
@@ -115,14 +116,15 @@ const Layout = () => {
                 <TableDetailsDrawer />
                 <QueryActivityDrawer />
                 <AIChatWindowLazy />
+                <LocalAgentChatLauncher />
               </Root>
 
               <SideMenu />
 
               <Footer />
               <NotebookOnboardingModal />
-            </MCPBridgeProvider>
-          </AIStatusProvider>
+            </AIStatusProvider>
+          </MCPBridgeProvider>
         </AIConversationProvider>
       </EditorProvider>
     </SearchProvider>

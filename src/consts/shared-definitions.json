@@ -580,7 +580,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick/heatmap); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar/heatmap only render as a chart of their own (single-query). A `heatmap` query puts x_column along the bottom, one row per value of `partition_by_column` (required), and colors each cell by the first of `y_columns` (required) — e.g. average spread by hour and symbol; `color_scale:\"row\"` scales each row on its own. `reference_lines` draws horizontal lines at fixed values, like RSI's 30 and 70.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -613,7 +613,8 @@
                   "stackedBar",
                   "scatter",
                   "pie",
-                  "candlestick"
+                  "candlestick",
+                  "heatmap"
                 ]
               },
               "y_columns": {
@@ -621,7 +622,7 @@
                 "items": {
                   "type": "string"
                 },
-                "description": "Columns to plot from THIS query; null = all numeric. Not used for candlestick — set `ohlc` instead."
+                "description": "Columns to plot from THIS query; null = all numeric. Not used for candlestick — set `ohlc` instead. For a heatmap, the first column colors the cells."
               },
               "ohlc": {
                 "type": ["object", "null"],
@@ -645,7 +646,7 @@
               },
               "partition_by_column": {
                 "type": ["string", "null"],
-                "description": "Categorical column to partition this query's series by; null = none."
+                "description": "Categorical column to partition this query's series by; for a heatmap, its rows (required). null = none."
               },
               "axis": {
                 "type": ["string", "null"],
@@ -659,6 +660,11 @@
               "name": {
                 "type": ["string", "null"],
                 "description": "Legend label for this query."
+              },
+              "color_scale": {
+                "type": ["string", "null"],
+                "enum": ["chart", "row", null],
+                "description": "Heatmap only. 'row' gives each row its own color scale, so rows of very different size (BTC next to small coins) all show their contrast. null = 'chart', one scale for every cell."
               }
             },
             "required": [
@@ -668,7 +674,8 @@
               "partition_by_column",
               "axis",
               "enabled",
-              "name"
+              "name",
+              "color_scale"
             ]
           }
         },
@@ -690,9 +697,37 @@
             }
           },
           "required": ["name", "min", "max"]
+        },
+        "reference_lines": {
+          "type": ["array", "null"],
+          "description": "Horizontal lines at fixed values, like RSI's 30 (oversold) and 70 (overbought), or a price target. A line goes on the left axis unless axis:'right'; on an axis with no series it goes on the other one. The axis grows to keep each line in view unless its min/max is pinned. Null preserves; [] removes them all; an array replaces them.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "value": { "type": "number" },
+              "axis": {
+                "type": ["string", "null"],
+                "enum": ["left", "right", null],
+                "description": "null = left."
+              },
+              "label": {
+                "type": ["string", "null"],
+                "description": "Shown on the line; null shows the value."
+              }
+            },
+            "required": ["value", "axis", "label"]
+          }
         }
       },
-      "required": ["buffer_id", "cell_id", "x_column", "queries", "right_axis"]
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "x_column",
+        "queries",
+        "right_axis",
+        "reference_lines"
+      ]
     }
   },
   {
@@ -1126,7 +1161,7 @@
               "chart_config": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
-                "description": "Chart configuration; required when mode='draw'. apply_notebook_state is a full PUT — this REPLACES the cell's chart entirely; null/omitted means NO chart (it is NOT preserved). To keep an existing chart unchanged, re-send its full config (shown as `chart_config` on the cell in <notebook_context> / get_notebook_state). The cell's `;`-separated SELECTs auto-combine into one chart sharing the first query's x-axis; `queries` holds one config per statement (each keeps its own type; axis:'right' for a second scale).",
+                "description": "Chart configuration; required when mode='draw'. apply_notebook_state is a full PUT — this REPLACES the cell's chart entirely; null/omitted means NO chart (it is NOT preserved). To keep an existing chart unchanged, re-send its full config (shown as `chart_config` on the cell in <notebook_context> / get_notebook_state). The cell's `;`-separated SELECTs auto-combine into one chart sharing the first query's x-axis; `queries` holds one config per statement (each keeps its own type; axis:'right' for a second scale; a heatmap needs partition_by_column for its rows and one y_column). `reference_lines` draws horizontal lines at fixed values, like RSI's 30 and 70.",
                 "properties": {
                   "x_column": {
                     "type": ["string", "null"]
@@ -1149,7 +1184,8 @@
                             "stackedBar",
                             "scatter",
                             "pie",
-                            "candlestick"
+                            "candlestick",
+                            "heatmap"
                           ]
                         },
                         "y_columns": {
@@ -1189,6 +1225,11 @@
                         },
                         "name": {
                           "type": ["string", "null"]
+                        },
+                        "color_scale": {
+                          "type": ["string", "null"],
+                          "enum": ["chart", "row", null],
+                          "description": "Heatmap only. 'row' gives each row its own color scale; null = one scale for every cell."
                         }
                       },
                       "required": [
@@ -1198,7 +1239,8 @@
                         "partition_by_column",
                         "axis",
                         "enabled",
-                        "name"
+                        "name",
+                        "color_scale"
                       ]
                     }
                   },
@@ -1217,9 +1259,35 @@
                       }
                     },
                     "required": ["name", "min", "max"]
+                  },
+                  "reference_lines": {
+                    "type": ["array", "null"],
+                    "description": "Horizontal lines at fixed values, like RSI's 30 (oversold) and 70 (overbought), or a price target. A line goes on the left axis unless axis:'right'; on an axis with no series it goes on the other one. The axis grows to keep each line in view unless its min/max is pinned. Null = none.",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "value": { "type": "number" },
+                        "axis": {
+                          "type": ["string", "null"],
+                          "enum": ["left", "right", null],
+                          "description": "null = left."
+                        },
+                        "label": {
+                          "type": ["string", "null"],
+                          "description": "Shown on the line; null shows the value."
+                        }
+                      },
+                      "required": ["value", "axis", "label"]
+                    }
                   }
                 },
-                "required": ["x_column", "queries", "right_axis"]
+                "required": [
+                  "x_column",
+                  "queries",
+                  "right_axis",
+                  "reference_lines"
+                ]
               },
               "highlight_config": {
                 "type": ["object", "null"],

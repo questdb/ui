@@ -1,3 +1,5 @@
+import type { AgentPromptImage } from "../localAgent/protocol"
+import { withoutInlineImages } from "./inlineImages"
 import type { Client } from "../questdb/client"
 import type { Table } from "../questdb/types"
 import type {
@@ -16,7 +18,12 @@ import type {
   OperationHistory,
   StatusArgs,
 } from "../../providers/AIStatusProvider"
-import { AIOperationStatus } from "../../providers/AIStatusProvider"
+import {
+  AIOperationStatus,
+  STEERED_ABORT_REASON,
+  dropTransientTail,
+} from "../../providers/AIStatusProvider"
+import { toolStatusOf } from "../tools/toolStatus"
 import {
   createNotebookFreshness,
   type NotebookFreshness,
@@ -38,6 +45,20 @@ import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/t
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
+import {
+  getLocalAgentChannel,
+  type NotebookRead,
+} from "../localAgent/localAgentChannel"
+import {
+  isLocalAgentModel,
+  localAgentDisplayName,
+} from "../localAgent/localAgentModel"
+import { runLocalAgentTurn } from "../localAgent/runLocalAgentTurn"
+import { localAgentPreferencesOf } from "../localAgent/localAgentSettings"
+import {
+  priorConversationFor,
+  titleFromMessage,
+} from "../localAgent/priorConversation"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 // Prepended onto every user turn. buffer_id is internal — the AI must never surface it to the user.
@@ -46,6 +67,33 @@ export type NotebookFlowContext = {
   digest?: UserActionDigest
   workspace?: WorkspaceInfo
   readSeq?: number
+}
+
+const notebookReadOf = (
+  ctx: NotebookFlowContext | undefined,
+): NotebookRead | null =>
+  ctx?.snapshot?.status === "ok" && ctx.readSeq !== undefined
+    ? { bufferId: ctx.snapshot.buffer_id, readSeq: ctx.readSeq }
+    : null
+
+const localAgentDisplayNameFor = (
+  settings: AiAssistantSettings | undefined,
+): string => {
+  const agent = getLocalAgentChannel()?.getSnapshot() ?? null
+  const preferredModel =
+    agent && settings
+      ? localAgentPreferencesOf(settings, agent.info.id).model
+      : null
+  return localAgentDisplayName(agent, preferredModel)
+}
+
+const withPriorConversation = (
+  message: string,
+  history: ConversationMessage[],
+  agentId: string | undefined,
+): string => {
+  const prior = agentId ? priorConversationFor(history, agentId) : null
+  return prior ? `${prior}\n\n${message}` : message
 }
 
 // Per-turn freshness tracker for the flow. Seeded with the bound notebook's
@@ -58,11 +106,10 @@ export type NotebookFlowContext = {
 export const buildNotebookFreshness = (
   ctx: NotebookFlowContext | undefined,
 ): NotebookFreshness => {
-  const seed =
-    ctx?.snapshot?.status === "ok" && ctx.readSeq !== undefined
-      ? [[ctx.snapshot.buffer_id, ctx.readSeq] as const]
-      : undefined
-  return createNotebookFreshness(seed)
+  const read = notebookReadOf(ctx)
+  return createNotebookFreshness(
+    read ? [[read.bufferId, read.readSeq] as const] : undefined,
+  )
 }
 
 export type WorkspaceInfo = {
@@ -99,6 +146,11 @@ type BaseFlowConfig = {
 type ChatFlowConfig = BaseFlowConfig & {
   type: "chat"
   userMessage: string
+  // Images the user attached, for an agent that reads them.
+  images?: AgentPromptImage[]
+  // One of the agent's commands, like /review: it goes to the agent as the
+  // user wrote it, since an agent reads a command only at the start.
+  agentCommand?: boolean
   currentSQL?: string
   conversationHistory: ConversationMessage[]
   isFirstMessage: boolean
@@ -244,6 +296,12 @@ function cleanupOrphanedToolCallsForTurn(params: {
 }
 
 export function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
+  if (config.type === "chat" && config.agentCommand) {
+    return {
+      content: config.userMessage,
+      displayUserMessage: config.userMessage,
+    }
+  }
   const prefix = formatNotebookContextPrefix(
     config.notebookContext?.snapshot ?? null,
     config.notebookContext?.digest,
@@ -344,6 +402,8 @@ type ProcessResultConfig = {
   streamingAssistantMessageId: string
   callbacks: AIFlowCallbacks
   compactedHistory?: ConversationMessage[]
+  // The user replaced this answer with a new message.
+  steered?: boolean
 }
 
 function processResult(config: ProcessResultConfig): AIFlowResult {
@@ -355,8 +415,12 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
     streamingAssistantMessageId,
     callbacks,
     compactedHistory,
+    steered,
   } = config
 
+  if (isAiAssistantError(response) && response.type === "aborted" && steered) {
+    return { success: false, error: formatErrorMessage(response) }
+  }
   if (isAiAssistantError(response)) {
     const errorMessage = formatErrorMessage(response)
     callbacks.updateMessage(conversationId, anchorMessageId, {
@@ -376,6 +440,7 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
     callbacks.updateMessage(conversationId, anchorMessageId, {
       ...(hasSQLInResult && { sql: response.sql as string }),
       tokenUsage: response.tokenUsage,
+      ...(response.contextUsage && { contextUsage: response.contextUsage }),
     })
     if (response.explanation) {
       callbacks.updateMessage(conversationId, streamingAssistantMessageId, {
@@ -388,6 +453,7 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
       ...(response.explanation && { content: response.explanation }),
       ...(hasSQLInResult && { sql: response.sql as string }),
       tokenUsage: response.tokenUsage,
+      ...(response.contextUsage && { contextUsage: response.contextUsage }),
     })
   }
 
@@ -444,10 +510,16 @@ async function generateChatTitleIfNeeded(
   }
 }
 
+// The status and the streaming state are global, and one answer runs at a
+// time. A flow that was stopped can still wind down after the next one has
+// started; only the latest flow may end them.
+let latestFlow = 0
+
 export async function executeAIFlow(
   config: AIFlowConfig,
   callbacks: AIFlowCallbacks,
 ): Promise<AIFlowResult> {
+  const flow = ++latestFlow
   const {
     conversationId,
     settings,
@@ -485,9 +557,13 @@ export async function executeAIFlow(
     role: "user",
     content: userMsg.content,
     timestamp: Date.now(),
+    ...(config.type === "chat" &&
+      config.images?.length && { images: config.images }),
+    ...(config.type === "chat" &&
+      config.agentCommand && { agentCommand: true }),
     ...(userMsg.displayType && { displayType: userMsg.displayType }),
     ...(userMsg.sql && { sql: userMsg.sql }),
-    ...(userMsg.displayUserMessage && {
+    ...(userMsg.displayUserMessage !== undefined && {
       displayUserMessage: userMsg.displayUserMessage,
     }),
     ...(userMsg.displaySchemaData && {
@@ -500,10 +576,16 @@ export async function executeAIFlow(
 
   // Create turn anchor — first assistant message of this turn
   const anchorMessageId = crypto.randomUUID()
-  const modelLabel =
-    getAllModelOptions(config.aiAssistantSettings).find(
-      (m) => m.value === settings.model,
-    )?.label ?? settings.model
+  const usesLocalAgent = isLocalAgentModel(settings.model)
+  const modelLabel = usesLocalAgent
+    ? localAgentDisplayNameFor(config.aiAssistantSettings)
+    : (getAllModelOptions(config.aiAssistantSettings).find(
+        (m) => m.value === settings.model,
+      )?.label ?? settings.model)
+  const localAgentId = usesLocalAgent
+    ? getLocalAgentChannel()?.info.id
+    : undefined
+  const turnStartedAt = performance.now()
   callbacks.addMessage({
     id: anchorMessageId,
     role: "assistant",
@@ -516,8 +598,10 @@ export async function executeAIFlow(
     eventBus.publish(EventType.AI_QUERY_HIGHLIGHT, conversationId)
   }
 
-  const provider = providerForModel(settings.model, config.aiAssistantSettings)
-  if (!provider) {
+  const provider = usesLocalAgent
+    ? null
+    : providerForModel(settings.model, config.aiAssistantSettings)
+  if (!usesLocalAgent && !provider) {
     callbacks.updateMessage(conversationId, anchorMessageId, {
       error: `No provider found for model: ${settings.model}`,
     })
@@ -526,12 +610,14 @@ export async function executeAIFlow(
       error: `No provider found for model: ${settings.model}`,
     }
   }
-  const providerSettings: ActiveProviderSettings = {
-    model: settings.model,
-    provider,
-    apiKey: settings.apiKey,
-    aiAssistantSettings: config.aiAssistantSettings,
-  }
+  const providerSettings: ActiveProviderSettings | null = provider
+    ? {
+        model: settings.model,
+        provider,
+        apiKey: settings.apiKey,
+        aiAssistantSettings: config.aiAssistantSettings,
+      }
+    : null
 
   // Threads conversationId + bind callback so an AI-initiated notebook auto-binds an unbound chat.
   // abortSignal lets a pending registration wait reject the moment the user presses Abort.
@@ -546,6 +632,7 @@ export async function executeAIFlow(
   )
 
   let latestOperationHistory: OperationHistory = []
+  let stepsBeforeFirstAttempt: number | null = null
 
   const handleStatusUpdate = (history: OperationHistory) => {
     latestOperationHistory = history
@@ -554,10 +641,13 @@ export async function executeAIFlow(
     })
   }
 
+  // The status belongs to the running answer. A stopped flow may still wind
+  // down after the next one started; it must not touch that one's status.
   const setStatusWithHistory = (
     nextStatus: AIOperationStatus | null,
     args?: StatusArgs,
   ) => {
+    if (abortSignal?.aborted) return
     callbacks.setStatus(nextStatus, args, handleStatusUpdate)
   }
 
@@ -637,12 +727,31 @@ export async function executeAIFlow(
     config.type === "explain" ||
     config.type === "fix"
 
-  if (shouldGenerateTitle) {
+  if (shouldGenerateTitle && usesLocalAgent) {
+    const title = titleFromMessage(userMsg.displayUserMessage ?? "")
+    if (title) {
+      void callbacks.updateConversationName?.(conversationId, title, true)
+    }
+  } else if (shouldGenerateTitle) {
     void generateChatTitleIfNeeded(config, userMsg.content, callbacks)
   }
 
   const streamingCallback: StreamingCallback = {
+    // The agent's context fills as it works; the composer shows it live.
+    onContextUsage: (contextUsage) => {
+      if (abortSignal?.aborted) return
+      callbacks.updateMessage(conversationId, anchorMessageId, { contextUsage })
+    },
     onBeforeStream: () => {
+      // A retry starts over from the steps shown before the first attempt, so
+      // the failed attempt's steps and text are not shown twice.
+      if (stepsBeforeFirstAttempt === null) {
+        stepsBeforeFirstAttempt = latestOperationHistory.length
+      } else {
+        setStatusWithHistory(AIOperationStatus.Processing, {
+          truncateTo: stepsBeforeFirstAttempt,
+        })
+      }
       // Cancel any pending RAF from a previous failed attempt
       if (rafId) {
         cancelAnimationFrame(rafId)
@@ -722,6 +831,11 @@ export async function executeAIFlow(
         scheduleUpdate()
       }
     },
+    onToolCallStart: (name) => {
+      const status = toolStatusOf(name)
+      // Replaced by the tool's own status once it runs.
+      if (status) setStatusWithHistoryAndResetFlags(status, { transient: true })
+    },
     onToolCall: (call) => {
       const toolCall: ToolCall = {
         id: call.id,
@@ -769,6 +883,10 @@ export async function executeAIFlow(
         timestamp: Date.now(),
         hideFromUI: true,
       })
+      // The tool is done; until the model's next step, "Working" shows.
+      setStatusWithHistoryAndResetFlags(AIOperationStatus.GeneratingResponse, {
+        transient: true,
+      })
     },
     onResponseStart: () => {
       // Flush pending updates for current assistant before creating new one
@@ -795,25 +913,62 @@ export async function executeAIFlow(
       accumulatedToolCalls = []
       accumulatedText = ""
       contentTimestamp = 0
+      // The new round's text and thinking are new steps.
+      thinkingStatusEmitted = false
+      generatingResponseEmitted = false
     },
   }
 
   setStatusWithHistory(AIOperationStatus.Processing)
+  const isAgentCommand = config.type === "chat" && config.agentCommand === true
 
   try {
     const conversationHistory =
       config.type === "chat" ? config.conversationHistory : []
 
-    const result = await continueConversation({
-      userMessage: userMsg.content,
-      conversationHistory: conversationHistory.filter((m) => !m.isCompacted),
-      settings: providerSettings,
-      modelToolsClient,
-      setStatus: setStatusWithHistoryAndResetFlags,
-      abortSignal,
-      streaming: streamingCallback,
-      notebookFreshness: buildNotebookFreshness(config.notebookContext),
-    })
+    const result: Awaited<ReturnType<typeof continueConversation>> =
+      providerSettings
+        ? await continueConversation({
+            userMessage: userMsg.content,
+            // An agent's images stay in the chat, not in what the model reads.
+            conversationHistory: conversationHistory
+              .filter((m) => !m.isCompacted)
+              .map((m) =>
+                typeof m.content === "string" &&
+                m.content.includes("](data:image/")
+                  ? { ...m, content: withoutInlineImages(m.content) }
+                  : m,
+              ),
+            settings: providerSettings,
+            modelToolsClient,
+            setStatus: setStatusWithHistoryAndResetFlags,
+            abortSignal,
+            streaming: streamingCallback,
+            notebookFreshness: buildNotebookFreshness(config.notebookContext),
+          })
+        : await runLocalAgentTurn({
+            conversationId,
+            userMessage: isAgentCommand
+              ? userMsg.content
+              : withPriorConversation(
+                  userMsg.content,
+                  config.type === "chat" ? config.conversationHistory : [],
+                  localAgentId,
+                ),
+            images: config.type === "chat" ? config.images : undefined,
+            notebookRead: isAgentCommand
+              ? null
+              : notebookReadOf(config.notebookContext),
+            setStatus: setStatusWithHistoryAndResetFlags,
+            streaming: streamingCallback,
+            abortSignal,
+          })
+
+    // Marks the turns the agent has seen; earlier ones are sent as a
+    // transcript on its next turn. A command carries none of them.
+    if (localAgentId && !isAgentCommand && !isAiAssistantError(result)) {
+      callbacks.updateMessage(conversationId, anchorMessageId, { localAgentId })
+    }
 
     const flowResult = processResult({
       type: config.type,
@@ -823,6 +978,7 @@ export async function executeAIFlow(
       streamingAssistantMessageId,
       callbacks,
       compactedHistory: result.compactedConversationHistory,
+      steered: abortSignal?.reason === STEERED_ABORT_REASON,
     })
 
     void trackEvent(ConsoleEvent.AI_FLOW_COMPLETE, {
@@ -837,6 +993,11 @@ export async function executeAIFlow(
       cancelAnimationFrame(rafId)
       rafId = 0
     }
+    const settledHistory = dropTransientTail(latestOperationHistory)
+    if (settledHistory !== latestOperationHistory) {
+      latestOperationHistory = settledHistory
+      hasPendingOperationHistoryUpdate = true
+    }
     flushStreamingUpdate()
     cleanupOrphanedToolCallsForTurn({
       conversationId,
@@ -845,8 +1006,16 @@ export async function executeAIFlow(
       resolvedToolCallIds,
       toolResultMessages,
     })
+    callbacks.updateMessage(conversationId, anchorMessageId, {
+      turnDurationMs: Math.round(performance.now() - turnStartedAt),
+    })
     await callbacks.persistMessages(conversationId)
-    callbacks.setIsStreaming(false)
+    if (flow === latestFlow) {
+      callbacks.setIsStreaming(false)
+      // Ends the status on every path, including errors that return before
+      // anything streamed. A stopped flow leaves it to the Stop.
+      if (!abortSignal?.aborted) callbacks.setStatus(null)
+    }
   }
 }
 

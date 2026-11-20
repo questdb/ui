@@ -154,6 +154,62 @@ describe("buildEchartsOption — volume bars overlaid on candlesticks", () => {
     expect(candle?.z).toBe(3) // candles render above the translucent bars
   })
 
+  it("draws grid lines on the right axis when every series is on it", () => {
+    // Given an RSI line put on the right axis for its 0..100 bounds
+    const rsiOnRight = resolved({
+      columns,
+      dataset,
+      xColumn: "ts",
+      type: "line",
+      yColumns: ["close"],
+      axis: "right",
+    })
+
+    // When
+    const opt = buildEchartsOption(
+      { xColumn: "ts", rightAxis: { name: "RSI", min: 0, max: 100 } },
+      [rsiOnRight],
+    )
+
+    // Then
+    const [left, right] = opt.yAxis as Array<{
+      show?: boolean
+      splitLine?: { show?: boolean }
+    }>
+    expect(left.show).toBe(false)
+    expect(right.splitLine?.show).toBe(true)
+  })
+
+  it("keeps grid lines on the left axis when it has series", () => {
+    // When
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns,
+        dataset,
+        xColumn: "ts",
+        type: "line",
+        yColumns: ["close"],
+      }),
+      resolved({
+        index: 1,
+        columns,
+        dataset,
+        xColumn: "ts",
+        type: "bar",
+        yColumns: ["volume"],
+        axis: "right",
+      }),
+    ])
+
+    // Then
+    const [left, right] = opt.yAxis as Array<{
+      show?: boolean
+      splitLine?: { show?: boolean }
+    }>
+    expect(left.show).toBe(true)
+    expect(right.splitLine?.show).toBe(false)
+  })
+
   it("leaves a pure bar chart fully opaque (no overlay)", () => {
     const opt = buildEchartsOption({ xColumn: "ts" }, [
       resolved({
@@ -416,5 +472,238 @@ describe("buildEchartsOption — right-axis bounds", () => {
     const rightAxis = (opt.yAxis as Record<string, unknown>[])[1]
     expect(rightAxis).toHaveProperty("min", undefined)
     expect(rightAxis).toHaveProperty("max", undefined)
+  })
+})
+
+describe("buildEchartsOption — reference lines", () => {
+  const columns = [
+    col("ts", "TIMESTAMP"),
+    col("price", "DOUBLE"),
+    col("rsi", "DOUBLE"),
+  ]
+  const dataset = [
+    ["2026-11-01T00:00:00.000000Z", 100, 40],
+    ["2026-11-02T00:00:00.000000Z", 104, 55],
+  ]
+  const price = resolved({
+    columns,
+    dataset,
+    xColumn: "ts",
+    yColumns: ["price"],
+  })
+  const rsi = resolved({
+    index: 1,
+    columns,
+    dataset,
+    xColumn: "ts",
+    yColumns: ["rsi"],
+    axis: "right",
+  })
+  type MarkLine = { data: { yAxis: number; label: { formatter: string } }[] }
+  const markLineOf = (opt: ReturnType<typeof buildEchartsOption>, i: number) =>
+    seriesList(opt.series)[i].markLine as MarkLine | undefined
+
+  it("draws each line on a series of its own axis, labelled", () => {
+    // When
+    const opt = buildEchartsOption(
+      {
+        xColumn: "ts",
+        referenceLines: [
+          { value: 30, axis: "right", label: "Oversold" },
+          { value: 70, axis: "right" },
+        ],
+      },
+      [price, rsi],
+    )
+
+    // Then
+    expect(markLineOf(opt, 0)).toBeUndefined()
+    expect(markLineOf(opt, 1)?.data).toEqual([
+      { yAxis: 30, label: { formatter: "Oversold" } },
+      { yAxis: 70, label: { formatter: "70" } },
+    ])
+  })
+
+  it("puts a line on the other axis when its own has no series", () => {
+    // When
+    const opt = buildEchartsOption(
+      { xColumn: "ts", referenceLines: [{ value: 70 }] },
+      [{ ...rsi, index: 0 }],
+    )
+
+    // Then
+    expect(markLineOf(opt, 0)?.data[0].yAxis).toBe(70)
+  })
+
+  it("grows a self-scaling axis to keep its lines in view, and leaves it be otherwise", () => {
+    // When
+    const opt = buildEchartsOption(
+      { xColumn: "ts", referenceLines: [{ value: 120 }, { value: 90 }] },
+      [price],
+    )
+
+    // Then
+    const axis = firstAxis(opt.yAxis) as {
+      min: (v: { min: number; max: number }) => number | null
+      max: (v: { min: number; max: number }) => number | null
+    }
+    expect(axis.max({ min: 100, max: 104 })).toBe(120)
+    expect(axis.min({ min: 100, max: 104 })).toBe(90)
+    expect(axis.max({ min: 100, max: 130 })).toBeNull()
+  })
+})
+
+describe("buildEchartsOption — heatmap", () => {
+  const columns = [
+    col("ts", "TIMESTAMP"),
+    col("symbol", "SYMBOL"),
+    col("spread", "DOUBLE"),
+  ]
+  const dataset = [
+    ["2026-11-01T00:00:00.000000Z", "EURUSD", 1.5],
+    ["2026-11-01T00:00:00.000000Z", "BTCUSD", 8],
+    ["2026-11-01T01:00:00.000000Z", "EURUSD", null],
+  ]
+
+  it("lays the x column out along the bottom, a row per partition value, colored by the value", () => {
+    // When
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns,
+        dataset,
+        xColumn: "ts",
+        type: "heatmap",
+        yColumns: ["spread"],
+        partitionByColumn: "symbol",
+      }),
+    ])
+
+    // Then
+    const xAxis = firstAxis(opt.xAxis) as {
+      data: string[]
+      axisLabel: { formatter: (v: string) => string }
+    }
+    expect(xAxis.data).toHaveLength(2)
+    // One day's hours show their time alone.
+    expect(xAxis.axisLabel.formatter(xAxis.data[1])).toBe("01:00")
+    expect(firstAxis(opt.yAxis).data).toEqual(["BTCUSD", "EURUSD"])
+    expect(seriesList(opt.series)[0]).toMatchObject({
+      type: "custom",
+      data: [
+        [0, 1, 1.5, 1.5],
+        [0, 0, 8, 8],
+        [1, 1, "-", "-"],
+      ],
+    })
+    expect(opt.visualMap).toMatchObject({ min: 1.5, max: 8, dimension: 2 })
+  })
+
+  it("escapes the values it shows in its tooltip", () => {
+    // Given
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns,
+        dataset: [["2026-11-01T00:00:00.000000Z", "<img src=x>", 1]],
+        xColumn: "ts",
+        type: "heatmap",
+        yColumns: ["spread"],
+        partitionByColumn: "symbol",
+      }),
+    ])
+
+    // When
+    const tooltip = opt.tooltip as { formatter: (p: unknown) => string }
+    const html = tooltip.formatter({ value: [0, 0, 1, 1] })
+
+    // Then
+    expect(html).toContain("&lt;img src=x&gt;")
+    expect(html).not.toContain("<img")
+  })
+})
+
+describe("buildEchartsOption — heatmap color scale per row", () => {
+  const columns = [
+    col("ts", "TIMESTAMP"),
+    col("asset", "SYMBOL"),
+    col("volume", "DOUBLE"),
+  ]
+  // BTC trades thousands of times the volume of ADA.
+  const dataset = [
+    ["2026-11-01T00:00:00.000000Z", "BTC", 5000],
+    ["2026-11-01T00:00:05.000000Z", "BTC", 9000],
+    ["2026-11-01T00:00:00.000000Z", "ADA", 2],
+    ["2026-11-01T00:00:05.000000Z", "ADA", 4],
+  ]
+  const heatmap = (colorScale?: "row") =>
+    buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns,
+        dataset,
+        xColumn: "ts",
+        type: "heatmap",
+        yColumns: ["volume"],
+        partitionByColumn: "asset",
+        colorScale,
+      }),
+    ])
+
+  it("colors each cell by where it falls in its own row, and shows its own value", () => {
+    // When
+    const opt = heatmap("row")
+
+    // Then
+    expect(seriesList(opt.series)[0].data).toEqual([
+      [0, 1, 0, 5000],
+      [1, 1, 1, 9000],
+      [0, 0, 0, 2],
+      [1, 0, 1, 4],
+    ])
+    expect(opt.visualMap).toMatchObject({ min: 0, max: 1 })
+    const tooltip = opt.tooltip as { formatter: (p: unknown) => string }
+    expect(tooltip.formatter({ value: [1, 0, 1, 4] })).toContain("<b>4</b>")
+  })
+
+  it("runs time in order along x when the query sorts by row first", () => {
+    // Given rows sorted by asset, then time
+    const sortedByAsset = [
+      ["2026-11-01T00:00:05.000000Z", "ADA", 1],
+      ["2026-11-01T00:00:00.000000Z", "BTC", 2],
+      ["2026-11-01T00:00:05.000000Z", "BTC", 3],
+    ]
+
+    // When
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns,
+        dataset: sortedByAsset,
+        xColumn: "ts",
+        type: "heatmap",
+        yColumns: ["volume"],
+        partitionByColumn: "asset",
+      }),
+    ])
+
+    // Then
+    expect(firstAxis(opt.xAxis).data).toEqual([
+      "2026-11-01T00:00:00.000000Z",
+      "2026-11-01T00:00:05.000000Z",
+    ])
+    expect(seriesList(opt.series)[0].data).toEqual([
+      [1, 0, 1, 1],
+      [0, 1, 2, 2],
+      [1, 1, 3, 3],
+    ])
+  })
+
+  it("puts its rows top-down in order", () => {
+    // When
+    const opt = heatmap()
+
+    // Then
+    expect(firstAxis(opt.yAxis)).toMatchObject({
+      data: ["ADA", "BTC"],
+      inverse: true,
+    })
+    expect(opt.visualMap).toMatchObject({ min: 2, max: 9000 })
   })
 })

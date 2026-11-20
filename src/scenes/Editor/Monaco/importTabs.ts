@@ -246,6 +246,21 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
   }
   if (typeof obj.rightAxis === "object" && obj.rightAxis !== null)
     config.rightAxis = obj.rightAxis as ChartConfig["rightAxis"]
+  if (Array.isArray(obj.referenceLines)) {
+    const lines = obj.referenceLines.flatMap((line: unknown) => {
+      if (typeof line !== "object" || line === null) return []
+      const { value, axis, label } = line as Record<string, unknown>
+      if (typeof value !== "number" || !Number.isFinite(value)) return []
+      return [
+        {
+          value,
+          ...(axis === "right" && { axis: "right" as const }),
+          ...(typeof label === "string" && label && { label }),
+        },
+      ]
+    })
+    if (lines.length > 0) config.referenceLines = lines
+  }
   return config
 }
 

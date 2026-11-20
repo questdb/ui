@@ -35,6 +35,8 @@ export type QueryGroup = {
 export type ConsoleConfig = Partial<{
   ctaBanner: boolean
   readOnly?: boolean
+  // false turns off chatting with a local coding agent through the bridge.
+  localAgents: boolean
   savedQueries: Array<Query | QueryGroup>
 }>
 

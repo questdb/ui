@@ -32,7 +32,11 @@ import {
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
 import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
 import { sqlHash } from "../../../utils/sqlHash"
-import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
+import {
+  type ChartConfig,
+  type QueryChart,
+  missingQueryFields,
+} from "./CellChart/chartTypes"
 export type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText } from "../Monaco/utils"
 import type { RunCancellation } from "./runCancellation"
@@ -828,6 +832,7 @@ const normalizeQueryChart = (q: QueryChart): QueryChart => {
   if (q.axis) next.axis = q.axis
   if (q.enabled === false) next.enabled = false
   if (q.name) next.name = q.name
+  if (q.colorScale === "row") next.colorScale = "row"
   return next
 }
 
@@ -840,6 +845,7 @@ const normalizeChartConfig = (
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
+  if (cfg.referenceLines?.length) next.referenceLines = cfg.referenceLines
   return next
 }
 
@@ -996,13 +1002,12 @@ export const buildAppliedCells = (
         )
       }
     }
-    if (
-      chartConfig?.queries.some(
-        (q) => q != null && q.type === "candlestick" && !q.ohlc,
-      )
-    ) {
+    const incomplete = chartConfig?.queries.find(
+      (q) => q != null && missingQueryFields(q) !== null,
+    )
+    if (incomplete) {
       throw new ApplyNotebookStateError(
-        `Cell at index ${index} has a candlestick query with no ohlc mapping.`,
+        `Cell at index ${index} has a ${incomplete.type} query with no ${missingQueryFields(incomplete)?.replace(/^an? /, "")}.`,
         "cells",
       )
     }

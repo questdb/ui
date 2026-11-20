@@ -4,6 +4,16 @@ import { SafeMarkdown } from "../../../components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import type { OpenInEditorContent } from "./ChatMessages"
 import { color } from "../../../utils"
+import {
+  QUESTION_RECORD_LANGUAGE,
+  parseQuestionRecord,
+} from "../../../utils/localAgent/questionTranscript"
+import { QuestionRecord } from "./QuestionRecord"
+import {
+  NOTICE_RECORD_LANGUAGE,
+  parseNoticeRecord,
+} from "../../../utils/localAgent/noticeTranscript"
+import { NoticeRecord } from "./NoticeRecord"
 
 const CodeBlockWrapper = styled.div`
   margin: 1rem 0;
@@ -42,6 +52,13 @@ const MarkdownContent = styled.div`
     color: ${color("contentPrimary")};
   }
 
+  img {
+    max-width: 100%;
+    height: auto;
+    vertical-align: middle;
+    border-radius: 0.4rem;
+  }
+
   em {
     font-style: italic;
   }
@@ -54,6 +71,12 @@ const MarkdownContent = styled.div`
 
   li {
     margin-bottom: 0.3rem;
+  }
+
+  [data-hook="markdown-local-link"] {
+    text-decoration: underline dotted;
+    text-underline-offset: 0.3rem;
+    cursor: help;
   }
 
   a {
@@ -138,6 +161,19 @@ const createComponents = (
     ({ children, className }: React.ComponentProps<"code">) => {
       const isCodeBlock =
         typeof className === "string" && className.includes("language-")
+      const blockText = Array.isArray(children)
+        ? children.join("")
+        : typeof children === "string"
+          ? children
+          : ""
+      if (className?.includes(`language-${QUESTION_RECORD_LANGUAGE}`)) {
+        const record = parseQuestionRecord(blockText)
+        if (record) return <QuestionRecord record={record} />
+      }
+      if (className?.includes(`language-${NOTICE_RECORD_LANGUAGE}`)) {
+        const notice = parseNoticeRecord(blockText)
+        if (notice) return <NoticeRecord notice={notice} />
+      }
       if (isCodeBlock) {
         const codeContent = (
           Array.isArray(children)
@@ -184,7 +220,7 @@ export const AssistantMarkdown = memo(
 
     return (
       <MarkdownContent key={messageId}>
-        <SafeMarkdown allowImages components={components}>
+        <SafeMarkdown allowImages="inline" components={components}>
           {content}
         </SafeMarkdown>
       </MarkdownContent>

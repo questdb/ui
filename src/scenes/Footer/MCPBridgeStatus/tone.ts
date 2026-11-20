@@ -33,3 +33,12 @@ export const deriveTone = (
   if (status === "connecting" || status === "reconnecting") return "connecting"
   return "error"
 }
+
+// What the pill adds after its label: unread agent changes, or an outdated
+// bridge. Only the bridge's own tone means outdated: an agent's error is
+// warning-toned too, and is not about versions.
+export const pillSuffix = (
+  unreadChanges: boolean,
+  bridgeTone: Tone,
+): string | null =>
+  unreadChanges ? "new changes" : bridgeTone === "warning" ? "outdated" : null

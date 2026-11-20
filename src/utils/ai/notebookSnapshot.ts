@@ -37,6 +37,7 @@ type ChartQueryWire = {
   axis?: "left" | "right"
   enabled?: boolean
   name?: string
+  color_scale?: "row"
 }
 import {
   toHighlightConfigWire,
@@ -49,6 +50,7 @@ export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
   right_axis?: { name?: string; min?: number; max?: number }
+  reference_lines?: { value: number; axis?: "left" | "right"; label?: string }[]
 }
 
 // Structural data only — previews ≤ 120 chars, error summaries ≤ 200 chars.
@@ -135,9 +137,13 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.axis ? { axis: q.axis } : {}),
           ...(q.enabled === false ? { enabled: false } : {}),
           ...(q.name != null ? { name: q.name } : {}),
+          ...(q.colorScale === "row" ? { color_scale: "row" as const } : {}),
         },
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
+  ...(cfg.referenceLines?.length
+    ? { reference_lines: cfg.referenceLines }
+    : {}),
 })
 
 const highlightConfigWire = (

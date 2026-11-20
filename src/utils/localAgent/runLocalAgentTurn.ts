@@ -1,0 +1,304 @@
+import type {
+  AiAssistantAPIError,
+  GeneratedSQL,
+  StatusCallback,
+  StreamingCallback,
+} from "../ai/aiAssistant"
+import type {
+  AgentPromptImage,
+  AgentToolContent,
+  AgentUpdate,
+} from "./protocol"
+import type { ContextUsage } from "../ai/aiAssistant"
+import {
+  type NoticeRecord,
+  noticeTranscript,
+  stopReasonNotice,
+} from "./noticeTranscript"
+import { AIOperationStatus } from "../../providers/AIStatusProvider"
+import { classifyAgentToolCall, questdbToolName } from "./agentToolCalls"
+import { toolStatusOf } from "../tools/toolStatus"
+import type { StatusArgs } from "../../providers/AIStatusProvider"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { getLocalAgentChannel, type NotebookRead } from "./localAgentChannel"
+
+type LocalAgentTurnParams = {
+  conversationId: string
+  userMessage: string
+  images?: AgentPromptImage[]
+  notebookRead: NotebookRead | null
+  setStatus: StatusCallback
+  streaming: StreamingCallback
+  abortSignal?: AbortSignal
+}
+
+const NOT_CONNECTED: AiAssistantAPIError = {
+  type: "network",
+  message:
+    "The local agent is not connected. Start the bridge with the `serve` command and pair this console.",
+}
+
+const ABORTED: AiAssistantAPIError = {
+  type: "aborted",
+  message: "Operation has been cancelled",
+}
+
+// After the user stops a turn the agent may still report work for a moment;
+// none of it may reopen the status the stop just closed.
+// A step with what its call reported: content replaces what it showed, and
+// null content leaves it.
+const withToolContent = (
+  step: StatusArgs,
+  content: AgentToolContent[] | null,
+): StatusArgs => {
+  if (content === null) return step
+  const { output: _output, diffs: _diffs, ...rest } = step
+  const output = content
+    .flatMap((item) => (item.type === "text" ? [item.text] : []))
+    .join("\n\n")
+  const diffs = content.flatMap((item) =>
+    item.type === "diff"
+      ? [
+          {
+            path: item.path,
+            oldText: item.oldText,
+            newText: item.newText,
+            ...(item.truncated && { truncated: true }),
+          },
+        ]
+      : [],
+  )
+  return {
+    ...rest,
+    ...(output && { output }),
+    ...(diffs.length > 0 && { diffs }),
+  }
+}
+
+const createUpdateHandler = (
+  setStatus: StatusCallback,
+  streaming: StreamingCallback,
+  abortSignal: AbortSignal | undefined,
+) => {
+  let reply = ""
+  let lastMessageId: string | null = null
+  let isThinking = false
+  const reportedToolCalls = new Set<string>()
+  // The step each of the agent's own tool calls shows, to update it.
+  const ownToolSteps = new Map<string, StatusArgs>()
+  let contextUsage: ContextUsage | null = null
+  // The agent's plan, as one step updated in place.
+  let planStep: StatusArgs | null = null
+
+  const handlePlan = (entries: { content: string; status: string }[]) => {
+    if (abortSignal?.aborted) return
+    const step: StatusArgs = { plan: entries, callId: "plan" }
+    if (planStep) {
+      setStatus(AIOperationStatus.Planning, { ...step, replaces: planStep })
+    } else {
+      handleStatus(AIOperationStatus.Planning, step)
+      setStatus(AIOperationStatus.Planning, { ...step, ended: true })
+    }
+    planStep = step
+  }
+
+  const handleStatus: StatusCallback = (status, args) => {
+    if (abortSignal?.aborted) return
+    isThinking = false
+    setStatus(status, args)
+  }
+
+  const handleMessageChunk = (messageId: string | null, text: string) => {
+    const isNewMessage = !!reply && messageId !== lastMessageId
+    const chunk = isNewMessage ? `\n\n${text}` : text
+    isThinking = false
+    lastMessageId = messageId
+    reply += chunk
+    streaming.onTextChunk(chunk)
+  }
+
+  const handleThoughtChunk = (text: string) => {
+    const chunk = isThinking ? text : text.trimStart()
+    if (!chunk) return
+    isThinking = true
+    streaming.onThinkingChunk?.(chunk)
+  }
+
+  const handleToolCall = (
+    toolCall: Extract<AgentUpdate, { kind: "tool_call" }>,
+  ) => {
+    if (reportedToolCalls.has(toolCall.toolCallId)) return
+    reportedToolCalls.add(toolCall.toolCallId)
+    switch (classifyAgentToolCall(toolCall)) {
+      case "questdb": {
+        // Shown while the agent prepares the call; the console's own status
+        // for it replaces this once the call arrives.
+        const status = toolStatusOf(questdbToolName(toolCall) ?? "")
+        if (status) handleStatus(status, { transient: true })
+        return
+      }
+      case "review":
+        handleStatus(AIOperationStatus.ReviewingToolCall, { transient: true })
+        return
+      case "lookup":
+        handleStatus(AIOperationStatus.LoadingTools, { transient: true })
+        return
+      case "own": {
+        const step: StatusArgs = withToolContent(
+          {
+            name: toolCall.title,
+            ...(toolCall.toolKind && { toolKind: toolCall.toolKind }),
+            callId: toolCall.toolCallId,
+          },
+          toolCall.content,
+        )
+        ownToolSteps.set(toolCall.toolCallId, step)
+        handleStatus(AIOperationStatus.UsingAgentTools, step)
+        return
+      }
+    }
+  }
+
+  // A finished tool ends its step: until the agent's next step, "Working"
+  // shows. QuestDB tools fail through the console's dispatch, which marks
+  // them; the agent's own tools are marked here.
+  const handleToolCallUpdate = (
+    update: Extract<AgentUpdate, { kind: "tool_call_update" }>,
+  ) => {
+    // Agents stream a call's input after announcing it: a shell call starts
+    // as "bash" and its title grows into the command. Its output and the
+    // files it changes come the same way. The step follows them.
+    const announced = ownToolSteps.get(update.toolCallId)
+    if (announced && !abortSignal?.aborted) {
+      const step = withToolContent(
+        update.title ? { ...announced, name: update.title } : announced,
+        update.content,
+      )
+      if (JSON.stringify(step) !== JSON.stringify(announced)) {
+        ownToolSteps.set(update.toolCallId, step)
+        setStatus(AIOperationStatus.UsingAgentTools, {
+          ...step,
+          replaces: announced,
+        })
+      }
+    }
+    if (update.status !== "completed" && update.status !== "failed") return
+    if (!reportedToolCalls.has(update.toolCallId)) return
+    reportedToolCalls.delete(update.toolCallId)
+    if (abortSignal?.aborted) return
+    const step = ownToolSteps.get(update.toolCallId)
+    ownToolSteps.delete(update.toolCallId)
+    if (step) {
+      setStatus(
+        AIOperationStatus.UsingAgentTools,
+        update.status === "failed"
+          ? { ...step, failed: update.error ?? "" }
+          : { ...step, ended: true },
+      )
+    }
+    handleStatus(AIOperationStatus.GeneratingResponse, { transient: true })
+  }
+
+  const handleUpdate = (update: AgentUpdate): void => {
+    if (abortSignal?.aborted) return
+    switch (update.kind) {
+      case "message_chunk":
+        handleMessageChunk(update.messageId, update.text)
+        return
+      case "thought_chunk":
+        handleThoughtChunk(update.text)
+        return
+      case "tool_call":
+        handleToolCall(update)
+        return
+      case "tool_call_update":
+        handleToolCallUpdate(update)
+        return
+      case "plan":
+        handlePlan(update.entries)
+        return
+      case "usage":
+        contextUsage = { used: update.used, size: update.size }
+        streaming.onContextUsage?.(contextUsage)
+        return
+      case "notice":
+        addNotice({
+          severity: update.severity,
+          title: update.title,
+          description: update.description,
+        })
+        return
+      default:
+        return
+    }
+  }
+
+  // A notice stays in the reply where it happened.
+  let notices = 0
+  const addNotice = (notice: NoticeRecord) => {
+    notices += 1
+    handleMessageChunk(`notice:${notices}`, noticeTranscript(notice))
+  }
+
+  return {
+    handleUpdate,
+    handleStatus,
+    addNotice,
+    reply: () => reply,
+    contextUsage: () => contextUsage,
+  }
+}
+
+export const runLocalAgentTurn = async ({
+  conversationId,
+  userMessage,
+  images,
+  notebookRead,
+  setStatus,
+  streaming,
+  abortSignal,
+}: LocalAgentTurnParams): Promise<GeneratedSQL | AiAssistantAPIError> => {
+  const channel = getLocalAgentChannel()
+  if (!channel) return NOT_CONNECTED
+
+  const startedAt = Date.now()
+  const { handleUpdate, addNotice, handleStatus, reply, contextUsage } =
+    createUpdateHandler(setStatus, streaming, abortSignal)
+  const result = await channel.prompt({
+    conversationId,
+    text: userMessage,
+    images,
+    notebookRead,
+    signal: abortSignal,
+    onUpdate: handleUpdate,
+    onToolStatus: handleStatus,
+  })
+
+  void trackEvent(ConsoleEvent.LOCAL_AGENT_TURN, {
+    agent: channel.info.id,
+    outcome: result.outcome === "failed" ? "failed" : result.stopReason,
+    durationMs: Date.now() - startedAt,
+  })
+
+  if (result.outcome === "completed" && result.stopReason === "cancelled") {
+    return ABORTED
+  }
+  // The API providers clear the status when their turn ends; a turn that
+  // ends before any text streamed has nothing else that would.
+  setStatus(null)
+  if (result.outcome === "failed") {
+    return { type: "unknown", message: result.error }
+  }
+  // A turn cut short says why, instead of ending on a partial or empty reply.
+  const stopped = stopReasonNotice(result.stopReason)
+  if (stopped) addNotice(stopped)
+  // An agent's answer shows how full its context is. Agents count tokens
+  // each their own way, so those are not shown.
+  const usage = contextUsage()
+  return {
+    sql: null,
+    explanation: reply(),
+    ...(usage && { contextUsage: usage }),
+  }
+}

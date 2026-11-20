@@ -1,5 +1,8 @@
+import type { CommandNoteEntry } from "./CommandNote"
+import type { AgentPromptImage } from "../../../utils/localAgent/protocol"
 import React, {
   useMemo,
+  useState,
   useRef,
   useContext,
   useCallback,
@@ -38,6 +41,10 @@ import { color } from "../../../utils"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
 import { ChatInput, type ChatInputHandle } from "./ChatInput"
+import {
+  latestContextUsage,
+  totalTokenUsage,
+} from "../../../utils/ai/tokenCount"
 import { ChatHistoryView } from "./ChatHistoryView"
 import { normalizeSql } from "../../../utils/formatSql"
 import {
@@ -275,14 +282,47 @@ const AIChatWindow: React.FC = () => {
   }, [conversation?.queryKey])
 
   const messages = activeConversationMessages
+  const contextUsage = useMemo(() => latestContextUsage(messages), [messages])
+  const chatTokens = useMemo(() => totalTokenUsage(messages), [messages])
 
   const hasUnactionedDiff = useMemo(() => {
     return getLastTurnWithUnactionedDiff(messages) !== null
   }, [messages])
 
+  // What the console commands the user ran did, per chat. They are for the
+  // user only, kept for the session, and never sent to a model.
+  const [commandNotes, setCommandNotes] = useState<
+    Record<string, CommandNoteEntry[]>
+  >({})
+  const activeCommandNotes = chatWindowState.activeConversationId
+    ? (commandNotes[chatWindowState.activeConversationId] ?? [])
+    : []
+  const addCommandNote = (note: {
+    command: string
+    text: string
+    error: boolean
+  }) => {
+    const conversationId = chatWindowState.activeConversationId
+    if (!conversationId) return
+    setCommandNotes((current) => ({
+      ...current,
+      [conversationId]: [
+        ...(current[conversationId] ?? []),
+        {
+          ...note,
+          id: crypto.randomUUID(),
+          afterMessageId: messages[messages.length - 1]?.id ?? null,
+        },
+      ],
+    }))
+  }
+
   const shouldShowMessages = useMemo(() => {
-    return messages.length > 0 && !isLoadingMessages
-  }, [messages, isLoadingMessages])
+    return (
+      (messages.length > 0 || activeCommandNotes.length > 0) &&
+      !isLoadingMessages
+    )
+  }, [messages, activeCommandNotes.length, isLoadingMessages])
 
   const shouldShowExplainButton = useMemo(() => {
     return (
@@ -439,6 +479,8 @@ const AIChatWindow: React.FC = () => {
   const handleSendMessage = async (
     userMessage: string,
     hasUnactionedDiffParam: boolean = false,
+    images: AgentPromptImage[] = [],
+    agentCommand = false,
   ) => {
     if (!canUse || !chatWindowState.activeConversationId || !conversation) {
       return
@@ -460,6 +502,8 @@ const AIChatWindow: React.FC = () => {
       createChatFlowConfig({
         conversationId,
         userMessage,
+        ...(images.length > 0 && { images }),
+        ...(agentCommand && { agentCommand }),
         currentSQL,
         conversationHistory: conversation.messages,
         isFirstMessage: !hasAssistantMessages,
@@ -823,7 +867,7 @@ const AIChatWindow: React.FC = () => {
         case "ask_request":
         default: {
           const userText =
-            userMessage.displayUserMessage || userMessage.content || ""
+            userMessage.displayUserMessage ?? userMessage.content ?? ""
 
           const historyUpToFailed = messages.filter(
             (message) => !failedRoundMessageIdSet.has(message.id),
@@ -833,10 +877,16 @@ const AIChatWindow: React.FC = () => {
             (msg) => msg.role === "assistant",
           )
 
+          // A retry sends what the user sent: its images, and an agent
+          // command as typed.
           void executeAIFlow(
             createChatFlowConfig({
               conversationId,
               userMessage: userText,
+              ...(userMessage.images?.length && {
+                images: userMessage.images,
+              }),
+              ...(userMessage.agentCommand && { agentCommand: true }),
               currentSQL: userMessage.sql || currentSQL,
               conversationHistory: historyUpToFailed,
               isFirstMessage: !hasAssistantMessages,
@@ -1020,6 +1070,7 @@ const AIChatWindow: React.FC = () => {
               {shouldShowMessages ? (
                 <ChatMessages
                   messages={messages}
+                  commandNotes={activeCommandNotes}
                   onAcceptChange={handleAcceptChange}
                   onRejectChange={handleRejectChange}
                   onRunQuery={handleRunQuery}
@@ -1079,10 +1130,19 @@ const AIChatWindow: React.FC = () => {
               )}
               <ChatInput
                 ref={chatInputRef}
-                onSend={(message) =>
-                  handleSendMessage(message, hasUnactionedDiff)
+                conversationId={chatWindowState.activeConversationId}
+                contextUsage={contextUsage}
+                chatTokens={chatTokens}
+                onCommandNote={addCommandNote}
+                onSend={(message, images, agentCommand) =>
+                  handleSendMessage(
+                    message,
+                    hasUnactionedDiff,
+                    images,
+                    agentCommand,
+                  )
                 }
-                disabled={!canUse || isBlockingAIStatus(aiStatus)}
+                disabled={!canUse}
                 placeholder={getPlaceholder()}
                 contextSQL={queryInfo.queryText}
                 contextTableId={conversation?.tableId}

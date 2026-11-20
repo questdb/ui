@@ -31,6 +31,7 @@ const TYPE_LABELS: Record<ChartType, string> = {
   scatter: "Scatter",
   pie: "Pie",
   candlestick: "Candlestick",
+  heatmap: "Heatmap",
 }
 
 const PARTITION_TYPES: ChartType[] = [
@@ -95,6 +96,7 @@ export type QueryControlsProps = {
   anchorLabel: string
   isAnchorTab: boolean
   ohlcError: boolean
+  heatmapError: boolean
   onUpdateQuery: (patch: Partial<QueryChart>) => void
   onSetQuery: (next: QueryChart) => void
   telemetry?: ChartSettingsTelemetry
@@ -107,6 +109,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
   anchorLabel,
   isAnchorTab,
   ohlcError,
+  heatmapError,
   onUpdateQuery,
   onSetQuery,
   telemetry,
@@ -173,6 +176,13 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
               const oh = findOhlc(groups.numeric)
               if (oh) patch.ohlc = oh
             }
+            if (type === "heatmap") {
+              if (!query.partitionByColumn && partitionCandidates[0])
+                patch.partitionByColumn = partitionCandidates[0].name
+              patch.yColumns = query.yColumns.slice(0, 1)
+              if (patch.yColumns.length === 0 && groups.numeric[0])
+                patch.yColumns = [groups.numeric[0].name]
+            }
             onUpdateQuery(patch)
           }}
           options={types.map((t) => ({ label: TYPE_LABELS[t], value: t }))}
@@ -229,7 +239,63 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </FieldGroup>
       )}
 
-      {query.type === "pie" && (
+      {query.type === "heatmap" && (
+        <FieldGroup>
+          <Field>
+            <FieldLabel>Rows</FieldLabel>
+            <SelectMenuControl
+              name={`rows-${idx}`}
+              ariaLabel="Rows column"
+              value={query.partitionByColumn ?? ""}
+              onValueChange={(value) =>
+                onUpdateQuery({ partitionByColumn: value || undefined })
+              }
+              options={[
+                { label: "Select column", value: "" },
+                ...partitionCandidates.map((c) => ({
+                  label: c.name,
+                  value: c.name,
+                })),
+              ]}
+            />
+          </Field>
+          <Field>
+            <FieldLabel>Color scale</FieldLabel>
+            <SelectMenuControl
+              name={`color-scale-${idx}`}
+              ariaLabel="Color scale"
+              value={query.colorScale ?? "chart"}
+              onValueChange={(value) =>
+                onUpdateQuery({
+                  colorScale: value === "row" ? "row" : undefined,
+                })
+              }
+              options={[
+                {
+                  label: "Whole chart",
+                  value: "chart",
+                  description: "One scale for every cell",
+                },
+                {
+                  label: "Each row",
+                  value: "row",
+                  description: "Rows of any size show their contrast",
+                },
+              ]}
+            />
+          </Field>
+          {heatmapError && (
+            <IncompatibleNote>
+              <IncompatibleIcon size={14} weight="fill" />
+              <Text color="statusWarning" size="xs" lineHeight="1.2">
+                Pick a rows column and a value column
+              </Text>
+            </IncompatibleNote>
+          )}
+        </FieldGroup>
+      )}
+
+      {(query.type === "pie" || query.type === "heatmap") && (
         <Field>
           <FieldLabel>Value</FieldLabel>
           <SelectMenuControl

@@ -215,6 +215,9 @@ async function createChatCompletionStreaming(
               name: tc.function?.name ?? "",
               arguments: tc.function?.arguments ?? "",
             })
+            if (tc.function?.name) {
+              streamCallback.onToolCallStart?.(tc.function.name)
+            }
           }
         }
       }
@@ -241,6 +244,11 @@ async function createChatCompletionStreaming(
       "network",
       error,
     )
+  }
+
+  // The SDK ends an aborted stream without an error.
+  if (abortSignal?.aborted) {
+    throw new StreamingError("Operation aborted", "interrupted")
   }
 
   const toolCalls: ChatCompletionMessageToolCall[] = Array.from(

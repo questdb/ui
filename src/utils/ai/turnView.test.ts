@@ -442,6 +442,35 @@ describe("buildInterleavedTimeline", () => {
     }
   })
 
+  it("ends the operations at the last of their steps when a response without text came between them", () => {
+    // Given steps with an empty response between them
+    const history = [
+      statusEntry(AIOperationStatus.Processing, { timestamp: 0 }),
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 4_000,
+        content: "\n",
+      }),
+      statusEntry(AIOperationStatus.RunningQuery, { timestamp: 5_000 }),
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 60_000,
+        content: "Done.",
+      }),
+    ]
+
+    // When
+    const result = buildInterleavedTimeline(history)
+
+    // Then
+    expect(result[0]).toMatchObject({
+      type: "operations",
+      timestamp: 0,
+      endTimestamp: 60_000,
+    })
+    expect(
+      result[0].type === "operations" && result[0].operations,
+    ).toHaveLength(2)
+  })
+
   it("handles interleaved operations and content", () => {
     const history = [
       statusEntry(AIOperationStatus.RetrievingTables, { timestamp: 1 }),

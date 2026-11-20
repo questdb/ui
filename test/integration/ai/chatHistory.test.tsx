@@ -51,6 +51,33 @@ describe("chat history", () => {
     expect(await db.ai_conversations.count()).toBe(2)
   })
 
+  it("shows an image-only message without displaying the agent's workspace context", async () => {
+    // Given
+    await seedChat("Image-only chat", {
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          timestamp: Date.now(),
+          content: "<workspace>Internal workspace context</workspace>",
+          displayUserMessage: "",
+          images: [{ mimeType: "image/png", data: "iVBORw0KGgo=" }],
+        },
+      ],
+    })
+    renderChat()
+
+    // When
+    await openChat()
+
+    // Then
+    await waitFor(() => {
+      const bubble = getByHook("chat-message-user")
+      expect(bubble).toContainElement(getByHook("chat-image-enlarge"))
+      expect(bubble).not.toHaveTextContent(/workspace/i)
+    })
+  })
+
   it("filters stored conversations and handles clear and Escape without closing too early", async () => {
     // Given
     for (const name of [

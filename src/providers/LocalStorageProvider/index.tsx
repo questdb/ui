@@ -118,6 +118,7 @@ const getAiAssistantSettings = (): AiAssistantSettings => {
         ...(parsed.customProviders && {
           customProviders: parsed.customProviders,
         }),
+        ...(parsed.localAgent && { localAgent: parsed.localAgent }),
       }
     }
   } catch {

@@ -52,10 +52,17 @@ export interface TokenUsage {
   outputTokens: number
 }
 
+// How full an agent's context is, in tokens, as the agent reports it.
+export type ContextUsage = {
+  used: number
+  size: number
+}
+
 export interface GeneratedSQL {
   sql: string | null
   explanation?: string
   tokenUsage?: TokenUsage
+  contextUsage?: ContextUsage
 }
 
 export interface ModelToolsClient {
@@ -105,6 +112,8 @@ export type StreamingCallback = {
   onTextChunk: (chunk: string) => void
   onThinkingChunk?: (chunk: string) => void
   onToolCall?: (call: { id: string; name: string; arguments: string }) => void
+  // The model has started a tool call; its arguments are still streaming.
+  onToolCallStart?: (name: string) => void
   onToolResult?: (result: {
     tool_call_id: string
     name: string
@@ -112,6 +121,8 @@ export type StreamingCallback = {
   }) => void
   onResponseStart?: () => void
   onBeforeStream?: () => void
+  // An agent reports how full its context is as it works.
+  onContextUsage?: (usage: ContextUsage) => void
 }
 
 export function isAiAssistantError(

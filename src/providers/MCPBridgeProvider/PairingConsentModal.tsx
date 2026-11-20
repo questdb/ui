@@ -12,6 +12,7 @@ import { Button, LoadingSpinner } from "../../components"
 import { MAX_RECONNECT_ATTEMPTS } from "../../utils/mcp/MCPBridgeClient"
 import type { BridgeVersionMismatch } from "../../utils/mcp/protocolVersion"
 import type { Permissions } from "../../utils/tools/permissions"
+import type { PendingPairAgent } from "../../utils/mcp/mcpBridgeStorage"
 import { BridgeUpgradeNotice } from "../../scenes/Footer/MCPBridgeStatus/BridgeUpgradeNotice"
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
 
@@ -204,7 +205,7 @@ const Actions = styled.div`
 `
 
 type Props = {
-  pending: { url: string; token: string } | null
+  pending: { url: string; token: string; agent?: PendingPairAgent } | null
   isConnecting: boolean
   succeeded: boolean
   retryAttempt: number
@@ -232,6 +233,7 @@ export const PairingConsentModal: React.FC<Props> = ({
   useEffect(() => {
     if (pending) setPendingPermissions(permissions)
   }, [pending])
+  const agent = pending?.agent
   const handleOpenAutoFocus = (e: Event) => {
     e.preventDefault()
     const root = e.currentTarget as HTMLElement | null
@@ -270,18 +272,34 @@ export const PairingConsentModal: React.FC<Props> = ({
               )}
             </IconBadge>
             <Title>
-              {succeeded ? "MCP server connected" : "Connect to MCP server?"}
+              {agent
+                ? succeeded
+                  ? `${agent.label} connected`
+                  : `Connect ${agent.label}?`
+                : succeeded
+                  ? "MCP server connected"
+                  : "Connect to MCP server?"}
             </Title>
             <Lede>
               {succeeded
-                ? "You can track the connection status from the bottom bar."
-                : "An external coding agent is asking to pair with this Web Console. Once connected, it can read and edit notebooks, run SQL, and inspect schemas on your behalf."}
+                ? agent
+                  ? "Chat with it in the AI Assistant. Its status is in the bottom bar."
+                  : "You can track the connection status from the bottom bar."
+                : agent
+                  ? `${agent.label} runs on your computer through the QuestDB bridge, and you chat with it here. It can read and edit notebooks, run SQL and inspect schemas. It can also edit files and run commands on your machine without asking.`
+                  : "An external coding agent is asking to pair with this Web Console. Once connected, it can read and edit notebooks, run SQL, and inspect schemas on your behalf."}
             </Lede>
           </Hero>
 
           {!succeeded && (
             <Body>
               <Fields>
+                {agent && (
+                  <>
+                    <dt>Workspace:</dt>
+                    <dd data-hook="mcp-pair-consent-workspace">{agent.cwd}</dd>
+                  </>
+                )}
                 <dt>WebSocket URL:</dt>
                 <dd data-hook="mcp-pair-consent-ws">{pending?.url ?? ""}</dd>
                 <dt>Token:</dt>

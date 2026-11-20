@@ -37,8 +37,10 @@ import {
 import type { ToolExecutionContext } from "../ai/shared"
 import {
   mapQueryChart,
+  mapReferenceLines,
   mapRightAxis,
   type ToolQueryChart,
+  type ToolReferenceLine,
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
@@ -244,6 +246,7 @@ export const dispatchApplyNotebookState = async (
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
           right_axis?: ToolRightAxis | null
+          reference_lines?: ToolReferenceLine[] | null
         } | null
         grid?: { x: number; y: number; w: number } | null
       }>
@@ -444,6 +447,8 @@ export const dispatchApplyNotebookState = async (
           ),
         }
         if (cfg.right_axis) chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
+        if (cfg.reference_lines?.length)
+          chartConfig.referenceLines = mapReferenceLines(cfg.reference_lines)
         cell.chartConfig = chartConfig
       }
       if (c.grid) cell.grid = c.grid

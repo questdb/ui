@@ -359,6 +359,7 @@ export const readLiveAiAssistantSettings = (): AiAssistantSettings | null => {
       ...(parsed.customProviders && {
         customProviders: parsed.customProviders,
       }),
+      ...(parsed.localAgent && { localAgent: parsed.localAgent }),
     }
   } catch {
     return null

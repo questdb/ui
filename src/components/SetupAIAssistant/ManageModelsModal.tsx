@@ -6,7 +6,7 @@ import React, {
   useImperativeHandle,
   forwardRef,
 } from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import { Box } from "../Box"
@@ -29,18 +29,26 @@ import { ModelSettings } from "./ModelSettings"
 import type { ModelSettingsRef } from "./ModelSettings"
 import { ModelPicker } from "./ModelPicker"
 
-const ModalContent = styled.div`
+const ModalContent = styled(Dialog.Content).attrs({
+  maxwidth: "72rem",
+})`
   display: flex;
   flex-direction: column;
-  width: 100%;
-  max-height: 80vh;
+  height: 85vh;
   overflow: hidden;
 `
 
-const ScrollableContent = styled.div`
+const ScrollableContent = styled.div<{ $loading: boolean }>`
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+
+  ${({ $loading }) =>
+    $loading &&
+    css`
+      display: grid;
+      align-content: safe center;
+    `}
 `
 
 const HeaderSection = styled(Box).attrs({
@@ -49,6 +57,7 @@ const HeaderSection = styled(Box).attrs({
   align: "flex-start",
 })`
   padding: 2rem 2.4rem;
+  flex-shrink: 0;
 `
 
 const ModalTitle = styled(Dialog.Title)`
@@ -79,6 +88,7 @@ const FooterSection = styled(Box).attrs({
 })`
   padding: 2rem 2.4rem;
   width: 100%;
+  flex-shrink: 0;
 `
 
 const FooterButton = styled(Button)`
@@ -336,77 +346,75 @@ export const ManageModelsModal = (props: ManageModelsModalProps) => {
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <Overlay primitive={RadixDialog.Overlay} />
-        <Dialog.Content maxwidth="72rem">
-          <ModalContent>
-            <HeaderSection>
-              <ModalTitle>Manage Models</ModalTitle>
-              <ModalSubtitle>
-                {props.variant === "custom"
-                  ? `Add or remove models and update the context window for ${providerName}.`
-                  : `Enable the ${providerName} models you want to use.`}
-              </ModalSubtitle>
-            </HeaderSection>
-            <Separator />
-            <ScrollableContent>
-              {open && props.variant === "custom" && (
-                <ModelSettings
-                  ref={modelSettingsRef}
-                  fetchConfig={{
-                    providerType: props.definition.type,
-                    providerId,
-                    apiKey: props.definition.apiKey || "",
-                    baseURL: props.definition.baseURL,
-                  }}
-                  initialValues={{
-                    models: props.definition.models,
-                    contextWindow: props.definition.contextWindow,
-                    permissions: {
-                      grantSchemaAccess: props.definition.grantSchemaAccess,
-                      read: props.definition.read,
-                      write: props.definition.write,
-                    },
-                  }}
-                  onLoadingChange={setModelsLoading}
-                />
-              )}
-              {open && props.variant === "builtin" && (
-                <BuiltinModelsContent
-                  ref={builtinModelsRef}
-                  providerId={providerId}
-                  apiKey={props.apiKey}
-                  enabledModels={props.enabledModels}
-                  initialListing={props.initialListing}
-                  onLoadingChange={setModelsLoading}
-                  onFetchFailedChange={setModelsFetchFailed}
-                />
-              )}
-            </ScrollableContent>
-            {error ? (
-              <ValidationNotice dataHook="manage-models-error">
-                {error}
-              </ValidationNotice>
-            ) : (
-              <Separator />
+        <ModalContent>
+          <HeaderSection>
+            <ModalTitle>Manage Models</ModalTitle>
+            <ModalSubtitle>
+              {props.variant === "custom"
+                ? `Add or remove models and update the context window for ${providerName}.`
+                : `Enable the ${providerName} models you want to use.`}
+            </ModalSubtitle>
+          </HeaderSection>
+          <Separator />
+          <ScrollableContent $loading={modelsLoading}>
+            {open && props.variant === "custom" && (
+              <ModelSettings
+                ref={modelSettingsRef}
+                fetchConfig={{
+                  providerType: props.definition.type,
+                  providerId,
+                  apiKey: props.definition.apiKey || "",
+                  baseURL: props.definition.baseURL,
+                }}
+                initialValues={{
+                  models: props.definition.models,
+                  contextWindow: props.definition.contextWindow,
+                  permissions: {
+                    grantSchemaAccess: props.definition.grantSchemaAccess,
+                    read: props.definition.read,
+                    write: props.definition.write,
+                  },
+                }}
+                onLoadingChange={setModelsLoading}
+              />
             )}
-            <FooterSection>
-              <FooterButton
-                variant="secondary"
-                data-hook="manage-models-cancel"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </FooterButton>
-              <FooterButton
-                variant="primary"
-                data-hook="manage-models-save"
-                onClick={handleSave}
-                disabled={modelsLoading || modelsFetchFailed}
-              >
-                Save
-              </FooterButton>
-            </FooterSection>
-          </ModalContent>
-        </Dialog.Content>
+            {open && props.variant === "builtin" && (
+              <BuiltinModelsContent
+                ref={builtinModelsRef}
+                providerId={providerId}
+                apiKey={props.apiKey}
+                enabledModels={props.enabledModels}
+                initialListing={props.initialListing}
+                onLoadingChange={setModelsLoading}
+                onFetchFailedChange={setModelsFetchFailed}
+              />
+            )}
+          </ScrollableContent>
+          {error ? (
+            <ValidationNotice dataHook="manage-models-error">
+              {error}
+            </ValidationNotice>
+          ) : (
+            <Separator />
+          )}
+          <FooterSection>
+            <FooterButton
+              variant="secondary"
+              data-hook="manage-models-cancel"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </FooterButton>
+            <FooterButton
+              variant="primary"
+              data-hook="manage-models-save"
+              onClick={handleSave}
+              disabled={modelsLoading || modelsFetchFailed}
+            >
+              Save
+            </FooterButton>
+          </FooterSection>
+        </ModalContent>
       </RadixDialog.Portal>
     </Dialog.Root>
   )

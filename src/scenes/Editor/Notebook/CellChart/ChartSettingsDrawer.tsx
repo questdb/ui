@@ -1,7 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Input, SelectMenuControl, TabButton } from "../../../../components"
-import type { ChartConfig, QueryChart } from "./chartTypes"
+import {
+  type ChartConfig,
+  type QueryChart,
+  missingQueryFields,
+} from "./chartTypes"
+import {
+  ReferenceLinesEditor,
+  savedReferenceLines,
+} from "./ReferenceLinesEditor"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
@@ -58,6 +66,12 @@ const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
   if (!o || !o.open || !o.high || !o.low || !o.close) return true
   return new Set([o.open, o.high, o.low, o.close]).size !== 4
 }
+
+const heatmapIncomplete = (q: QueryChart | null): boolean =>
+  !!q &&
+  q.type === "heatmap" &&
+  q.enabled !== false &&
+  missingQueryFields(q) !== null
 
 type SharedProps = {
   tabs: QueryTab[]
@@ -158,6 +172,10 @@ const ChartSettings: React.FC<SettingsProps> = ({
       : undefined
 
   const hasRight = draft.queries.some((q) => q?.axis === "right")
+  // Pie and heatmap charts have no value axis to draw a line on.
+  const anchorType =
+    anchorTab != null ? draft.queries[anchorTab.index]?.type : undefined
+  const hasValueAxis = anchorType !== "pie" && anchorType !== "heatmap"
 
   const updateQuery = (index: number, patch: Partial<QueryChart>) =>
     updateDraft({
@@ -192,6 +210,13 @@ const ChartSettings: React.FC<SettingsProps> = ({
       setActiveIndex(badIdx)
       return
     }
+    const heatmapIdx = draft.queries.findIndex(heatmapIncomplete)
+    if (heatmapIdx >= 0) {
+      telemetry?.onSaveBlocked?.("heatmap_incomplete")
+      setSaveAttempted(true)
+      setActiveIndex(heatmapIdx)
+      return
+    }
     const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
     telemetry?.onSave?.({
       chartType: primary?.type,
@@ -200,7 +225,9 @@ const ChartSettings: React.FC<SettingsProps> = ({
       hasRightAxis: hasRight,
       partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
     })
-    onSave(draft)
+    const { referenceLines: _lines, ...rest } = draft
+    const referenceLines = savedReferenceLines(draft.referenceLines)
+    onSave(referenceLines ? { ...rest, referenceLines } : rest)
     if (presentation === "drawer") onClose?.()
   }
 
@@ -280,6 +307,16 @@ const ChartSettings: React.FC<SettingsProps> = ({
         </FieldGroup>
       )}
 
+      {hasValueAxis && (
+        <ReferenceLinesEditor
+          lines={draft.referenceLines ?? []}
+          hasRightAxis={hasRight}
+          onChange={(referenceLines) =>
+            updateDraft({ ...draft, referenceLines })
+          }
+        />
+      )}
+
       {tabs.length > 1 && (
         <>
           <Divider />
@@ -314,6 +351,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
           anchorLabel={anchorTab?.label ?? "Q1"}
           isAnchorTab={isAnchorTab}
           ohlcError={saveAttempted && candlestickMissingOhlc(query)}
+          heatmapError={saveAttempted && heatmapIncomplete(query)}
           onUpdateQuery={(patch) => updateQuery(activeTab.index, patch)}
           onSetQuery={(next) => setQuery(activeTab.index, next)}
           telemetry={telemetry}

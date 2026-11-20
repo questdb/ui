@@ -1,6 +1,10 @@
 import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
 import { loadRe2 } from "../../components/ResultGrid/highlight"
-import { AIOperationStatus } from "../../providers/AIStatusProvider"
+import {
+  AIOperationStatus,
+  type StatusArgs,
+} from "../../providers/AIStatusProvider"
+import { toolErrorDetail, toolStatusOf } from "./toolStatus"
 import {
   getQuestDBTableOfContents,
   getSpecificDocumentation,
@@ -23,7 +27,10 @@ import {
   MAX_BUFFER_NAME_LENGTH,
   exceedsBufferNameLimit,
 } from "../../store/buffers"
-import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import {
+  type ChartConfig,
+  missingQueryFields,
+} from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   classifyAndCheckSqlForRunQuery,
   denyReasonUnresolvedSql,
@@ -54,8 +61,10 @@ import { formatSql } from "../formatSql"
 import { dispatchApplyNotebookState } from "./applyNotebookState"
 import {
   mapQueryChart,
+  mapReferenceLines,
   mapRightAxis,
   type ToolQueryChart,
+  type ToolReferenceLine,
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
@@ -223,6 +232,15 @@ const notebookBufferIdOf = (input: unknown): number | null => {
   return typeof id === "number" ? id : null
 }
 
+// The query a status shows; the raw SQL if the formatter cannot parse it.
+const formatSqlForStatus = (sql: string): string => {
+  try {
+    return formatSql(sql)
+  } catch {
+    return sql
+  }
+}
+
 const dispatchRunQuery = async (
   input: unknown,
   modelToolsClient: ModelToolsClient,
@@ -246,13 +264,9 @@ const dispatchRunQuery = async (
   if (!decision.granted) {
     return { content: decision.reason, is_error: true }
   }
-  let formattedSql = sql
-  try {
-    formattedSql = formatSql(sql)
-  } catch {
-    // Fall back to raw SQL if the formatter can't parse it.
-  }
-  setStatus(AIOperationStatus.RunningQuery, { content: formattedSql })
+  setStatus(AIOperationStatus.RunningQuery, {
+    content: formatSqlForStatus(sql),
+  })
   try {
     const requestedLimit =
       typeof limit === "number" && Number.isFinite(limit)
@@ -292,7 +306,52 @@ const dispatchRunQuery = async (
   }
 }
 
+// Runs a tool for the model. A tool that fails marks the step it shows as
+// failed, with the reason; a call refused before it showed one gets its step.
 export const dispatchTool = async (
+  toolName: string,
+  input: unknown,
+  modelToolsClient: ModelToolsClient,
+  setStatus: StatusCallback,
+  permsOrResolver: Permissions | (() => Permissions),
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
+  signal?: AbortSignal,
+  toolContext?: ToolExecutionContext,
+): Promise<{ content: string; is_error?: boolean }> => {
+  const shown: {
+    current: { status: AIOperationStatus; args?: StatusArgs } | null
+  } = { current: null }
+  const result = await runTool(
+    toolName,
+    input,
+    modelToolsClient,
+    (status, args) => {
+      shown.current = status === null ? null : { status, args }
+      setStatus(status, args)
+    },
+    permsOrResolver,
+    validateSql,
+    signal,
+    toolContext,
+  )
+  if (signal?.aborted) return result
+  if (result.is_error) {
+    const status = shown.current?.status ?? toolStatusOf(toolName)
+    if (status) {
+      if (!shown.current) setStatus(status)
+      setStatus(status, {
+        ...shown.current?.args,
+        failed: toolErrorDetail(result.content),
+      })
+    }
+  } else if (shown.current) {
+    // The step shows how long the tool itself took.
+    setStatus(shown.current.status, { ...shown.current.args, ended: true })
+  }
+  return result
+}
+
+const runTool = async (
   toolName: string,
   input: unknown,
   modelToolsClient: ModelToolsClient,
@@ -432,15 +491,25 @@ export const dispatchTool = async (
         }
       }
       case "validate_query": {
-        setStatus(AIOperationStatus.ValidatingQuery)
         const query = (input as { query: string })?.query
         if (!query) {
+          setStatus(AIOperationStatus.ValidatingQuery)
           return {
             content: "Error: query parameter is required",
             is_error: true,
           }
         }
+        const step = { content: formatSqlForStatus(query) }
+        setStatus(AIOperationStatus.ValidatingQuery, step)
         const result = await modelToolsClient.validateQuery(query)
+        // An invalid query is a result for the model, but a failed step for
+        // the user, who sees why.
+        if (!result.valid) {
+          setStatus(AIOperationStatus.ValidatingQuery, {
+            ...step,
+            failed: result.error,
+          })
+        }
         const content = {
           valid: result.valid,
           error: result.valid ? undefined : result.error,
@@ -953,13 +1022,21 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_chart_config": {
-        const { buffer_id, cell_id, x_column, queries, right_axis } =
+        const {
+          buffer_id,
+          cell_id,
+          x_column,
+          queries,
+          right_axis,
+          reference_lines,
+        } =
           (input as {
             buffer_id: number
             cell_id: string
             x_column?: string | null
             queries?: (ToolQueryChart | null)[] | null
             right_axis?: ToolRightAxis | null
+            reference_lines?: ToolReferenceLine[] | null
           }) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         const chartBaseline = getBufferActionSeq(buffer_id)
@@ -972,16 +1049,16 @@ export const dispatchTool = async (
           patch.queries = queries.map((q) => (q ? mapQueryChart(q) : null))
         if (right_axis !== undefined && right_axis !== null)
           patch.rightAxis = mapRightAxis(right_axis)
-        if (
-          patch.queries?.some(
-            (q) => q != null && q.type === "candlestick" && !q.ohlc,
-          )
-        ) {
+        if (reference_lines !== undefined && reference_lines !== null)
+          patch.referenceLines = mapReferenceLines(reference_lines)
+        const incomplete = patch.queries?.find(
+          (q) => q != null && missingQueryFields(q) !== null,
+        )
+        if (incomplete) {
           return {
             content: JSON.stringify({
               error_code: "validation",
-              message:
-                "VALIDATION_ERROR: a candlestick query requires an ohlc mapping (open/high/low/close). Provide ohlc, or use a non-candlestick type.",
+              message: `VALIDATION_ERROR: a ${incomplete.type} query requires ${missingQueryFields(incomplete)}.`,
             }),
             is_error: true,
           }

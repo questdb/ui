@@ -1,7 +1,13 @@
-import type { EChartsOption } from "echarts"
+import type { CustomSeriesRenderItem, EChartsOption } from "echarts"
 import type { ChartZoomDensity } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import type { ChartConfig, ChartType, SeriesAxis } from "./chartTypes"
+import type {
+  ChartConfig,
+  ChartType,
+  HeatmapColorScale,
+  ReferenceLine,
+  SeriesAxis,
+} from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
 
 type Dataset = (boolean | string | number | null)[][]
@@ -17,11 +23,13 @@ export type ResolvedQuery = {
   partitionByColumn?: string
   axis: SeriesAxis
   name?: string
+  colorScale?: HeatmapColorScale
 }
 
 export type ChartGlobals = {
   xColumn: string | null
   rightAxis?: ChartConfig["rightAxis"]
+  referenceLines?: ReferenceLine[]
 }
 
 type Series = Record<string, unknown>
@@ -309,6 +317,247 @@ const buildPieChartOption = (
   }
 }
 
+const escapeHtml = (text: string): string =>
+  text.replace(
+    /[&<>"']/g,
+    (ch) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        ch
+      ] ?? ch,
+  )
+
+// "2026-11-18T12:00:00.000000Z" → "2026-11-18 12:00", and a midnight to
+// its date alone: a heatmap's time slots are labels, not a time axis.
+const compactTimestamp = (label: string): string => {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(:\d{2})?(\.\d+)?Z?$/.exec(label)
+  if (!m) return label
+  const [, date, hhmm, seconds] = m
+  if (seconds && seconds !== ":00") return `${date} ${hhmm}${seconds}`
+  return hhmm === "00:00" ? date : `${date} ${hhmm}`
+}
+
+const formatScaleValue = (value: number): string =>
+  Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(4)))
+
+// A grid of cells: x along the bottom, one row per value of the partition
+// column, and each cell colored by its value.
+const buildHeatmapOption = (
+  q: ResolvedQuery,
+  chartText: { fontSize: number },
+  axisLabel: { fontSize: number },
+  axisName: { fontSize: number },
+  xRole: string,
+): EChartsOption => {
+  const idx = buildColumnIndexMap(q.columns)
+  const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
+  const rowIdx =
+    q.partitionByColumn != null ? idx.get(q.partitionByColumn) : undefined
+  const valueIdx = q.yColumns[0] != null ? idx.get(q.yColumns[0]) : undefined
+  if (xIdx === undefined || rowIdx === undefined || valueIdx === undefined)
+    return { tooltip: { trigger: "item", textStyle: chartText } }
+
+  // Time and numbers run in order along x, whatever the query's ORDER BY: a
+  // query sorted by row first lists each row's times in turn. Categories
+  // keep the order they came in.
+  const xValues = new Map<string, unknown>()
+  const rowSet = new Set<string>()
+  for (const row of q.dataset) {
+    const x = toCategoryLabel(row[xIdx])
+    if (!xValues.has(x)) xValues.set(x, row[xIdx])
+    rowSet.add(toCategoryLabel(row[rowIdx]))
+  }
+  const xLabels = [...xValues.keys()]
+  if (xRole === "temporal") {
+    const time = (label: string) => {
+      const ms = Date.parse(label)
+      return Number.isNaN(ms) ? Number(xValues.get(label)) : ms
+    }
+    xLabels.sort((a, b) => time(a) - time(b) || a.localeCompare(b))
+  } else if (xRole === "numeric") {
+    xLabels.sort((a, b) => Number(xValues.get(a)) - Number(xValues.get(b)))
+  }
+  const xSlot = new Map(xLabels.map((label, i) => [label, i]))
+  const rowLabels = [...rowSet].sort()
+  // Slots of a single day show their time alone.
+  const timeOf = (label: string) =>
+    /T(\d{2}:\d{2}(:\d{2}(?<!:00))?)/.exec(label)?.[1] ?? label
+  const sameDay =
+    xRole === "temporal" &&
+    new Set(xLabels.map((label) => label.slice(0, 10))).size === 1 &&
+    xLabels.every((label) => label.includes("T"))
+  const formatX =
+    xRole !== "temporal"
+      ? (label: string) => label
+      : sameDay
+        ? timeOf
+        : compactTimestamp
+  const rowSlot = new Map(rowLabels.map((label, i) => [label, i]))
+
+  // Each cell: x slot, row, the value it is colored by, and its own value.
+  // On a scale per row, a cell is colored by where it falls in its row.
+  const cells = q.dataset.map((row) => ({
+    x: xSlot.get(toCategoryLabel(row[xIdx])) ?? 0,
+    y: rowSlot.get(toCategoryLabel(row[rowIdx])) ?? 0,
+    value: toNumberOrNull(row[valueIdx]),
+  }))
+  const extentOf = (values: number[]) =>
+    values.length === 0
+      ? { min: 0, max: 1 }
+      : { min: Math.min(...values), max: Math.max(...values) }
+  const valuesOf = (list: typeof cells) =>
+    list.flatMap((cell) => (cell.value === null ? [] : [cell.value]))
+  const perRow = q.colorScale === "row"
+  const rowExtents = perRow
+    ? rowLabels.map((_, y) =>
+        extentOf(valuesOf(cells.filter((c) => c.y === y))),
+      )
+    : []
+  const shade = (value: number, y: number) => {
+    const { min, max } = rowExtents[y]
+    return max === min ? 1 : (value - min) / (max - min)
+  }
+  const data = cells.map(({ x, y, value }) => [
+    x,
+    y,
+    value === null ? "-" : perRow ? shade(value, y) : value,
+    value ?? "-",
+  ])
+  const { min, max } = perRow ? { min: 0, max: 1 } : extentOf(valuesOf(cells))
+
+  return {
+    useUTC: true,
+    tooltip: {
+      trigger: "item",
+      textStyle: chartText,
+      formatter: (params: unknown) => {
+        const [x, y, , value] = (
+          params as { value: [number, number, unknown, unknown] }
+        ).value
+        return `${escapeHtml(formatX(xLabels[x] ?? ""))}<br/>${escapeHtml(
+          rowLabels[y] ?? "",
+        )}: <b>${escapeHtml(String(value))}</b>`
+      },
+    },
+    grid: {
+      left: 24,
+      right: 24,
+      top: 24,
+      bottom: GRID_BOTTOM_NO_ZOOM,
+      containLabel: true,
+    },
+    xAxis: {
+      type: "category",
+      data: xLabels,
+      name: q.xColumn ?? "",
+      nameLocation: "middle",
+      nameGap: X_AXIS_NAME_GAP,
+      nameTextStyle: axisName,
+      axisLabel: { ...axisLabel, formatter: formatX },
+      splitArea: { show: false },
+    },
+    // Rows read top-down, in order, like a table.
+    yAxis: {
+      type: "category",
+      data: rowLabels,
+      inverse: true,
+      axisLabel,
+      nameTextStyle: axisName,
+      splitArea: { show: false },
+    },
+    visualMap: {
+      type: "continuous",
+      min,
+      max,
+      dimension: 2,
+      calculable: false,
+      orient: "horizontal",
+      left: "center",
+      bottom: LEGEND_BOTTOM,
+      itemWidth: 10,
+      itemHeight: 140,
+      text: perRow
+        ? ["Row high", "Row low"]
+        : [formatScaleValue(max), formatScaleValue(min)],
+      textGap: 8,
+      textStyle: chartText,
+    },
+    // Drawn cell by cell, like Grafana's state timeline: a row's cells run
+    // into each other, and rows keep a gap between them.
+    series: [
+      {
+        name: q.yColumns[0],
+        type: "custom",
+        renderItem: renderHeatmapCell,
+        encode: { x: 0, y: 1, tooltip: 3 },
+        data,
+      },
+    ],
+  }
+}
+
+// The share of a row its cells fill; the rest is the gap between rows.
+export const HEATMAP_ROW_FILL = 0.8
+
+// A cell spans its whole slot along x, half a pixel more on each side so
+// neighbors leave no seam, and HEATMAP_ROW_FILL of its row. A cell without a
+// value is left empty.
+const renderHeatmapCell: CustomSeriesRenderItem = (_params, api) => {
+  if (api.value(2) === "-") return null
+  const [cx, cy] = api.coord([api.value(0), api.value(1)])
+  const [width, height] = api.size?.([1, 1]) as number[]
+  const rowHeight = height * HEATMAP_ROW_FILL
+  return {
+    type: "rect",
+    shape: {
+      x: cx - width / 2 - 0.5,
+      y: cy - rowHeight / 2,
+      width: width + 1,
+      height: rowHeight,
+    },
+    style: { fill: api.visual("color") as string },
+  }
+}
+
+// Draws each reference line on the first series of its axis, or of the
+// other axis when its own has none.
+const addReferenceLines = (series: Series[], lines: ReferenceLine[]) => {
+  const onAxis = (axisIndex: number) =>
+    series.find((s) => (s.yAxisIndex ?? 0) === axisIndex)
+  for (const line of lines) {
+    const wanted = line.axis === "right" ? 1 : 0
+    const target = onAxis(wanted) ?? onAxis(1 - wanted)
+    if (!target) continue
+    const markLine = (target.markLine as { data: unknown[] } | undefined) ?? {
+      silent: true,
+      symbol: "none",
+      animation: false,
+      lineStyle: { type: "dashed", width: 1 },
+      label: { position: "insideEndTop" },
+      data: [] as unknown[],
+    }
+    markLine.data.push({
+      yAxis: line.value,
+      label: { formatter: line.label ?? String(line.value) },
+    })
+    target.markLine = markLine
+  }
+}
+
+// An axis that scales to its data keeps its reference lines in view. A bound
+// of null leaves the axis to scale itself; ECharts' types do not admit it.
+type AxisBound = (extent: { min: number; max: number }) => number
+const axisBoundsWith = (
+  values: number[],
+): { min?: AxisBound; max?: AxisBound } => {
+  if (values.length === 0) return {}
+  const lowest = Math.min(...values)
+  const highest = Math.max(...values)
+  return {
+    min: ((v) => (lowest < v.min ? lowest : null)) as AxisBound,
+    max: ((v) => (highest > v.max ? highest : null)) as AxisBound,
+  }
+}
+
 const buildScatterChartOption = (
   q: ResolvedQuery,
   chartText: { fontSize: number },
@@ -380,6 +629,14 @@ export const buildEchartsOption = (
 
   if (single && anchor.type === "pie")
     return buildPieChartOption(anchor, chartText, baseLegend)
+  if (single && anchor.type === "heatmap")
+    return buildHeatmapOption(
+      anchor,
+      chartText,
+      axisLabel,
+      axisName,
+      anchorRole,
+    )
   if (single && anchor.type === "scatter" && anchorRole === "numeric")
     return buildScatterChartOption(
       anchor,
@@ -436,8 +693,8 @@ export const buildEchartsOption = (
   const series: Series[] = []
   for (const q of queries) {
     if (q.type === "candlestick") series.push(...buildCandlestickSeries(q, ctx))
-    else if (q.type === "pie")
-      continue // pie can't share an axis
+    else if (q.type === "pie" || q.type === "heatmap")
+      continue // pie and heatmap can't share an axis
     else series.push(...buildCartesianSeries(q, ctx)) // line/area/bar/stackedBar/scatter
   }
 
@@ -458,6 +715,17 @@ export const buildEchartsOption = (
   }
 
   const hasRight = queries.some((q) => q.axis === "right")
+  const referenceLines = chart.referenceLines ?? []
+  addReferenceLines(series, referenceLines)
+  // Where each line landed: on the right axis only when a right series took it.
+  const linesOn = (axisIndex: number) =>
+    series
+      .filter((s) => (s.yAxisIndex ?? 0) === axisIndex)
+      .flatMap(
+        (s) =>
+          (s.markLine as { data: { yAxis: number }[] } | undefined)?.data ?? [],
+      )
+      .map((d) => d.yAxis)
   const rightQueries = queries.filter((q) => q.axis === "right")
   const rightTitle =
     chart.rightAxis?.name ??
@@ -480,10 +748,16 @@ export const buildEchartsOption = (
     scale: true,
     axisLabel,
     nameTextStyle: axisName,
+    ...axisBoundsWith(linesOn(0)),
   }
+  const rightBounds = axisBoundsWith(linesOn(1))
+  // Grid lines follow the left axis, so the two axes' lines do not clash.
+  // With every series on the right, the left axis is empty and the right one
+  // draws them; otherwise the chart would have none.
+  const hasLeft = queries.some((q) => q.axis !== "right")
   const yAxis: EChartsOption["yAxis"] = hasRight
     ? [
-        leftAxis,
+        { ...leftAxis, show: hasLeft },
         {
           type: "value",
           scale: true,
@@ -491,11 +765,11 @@ export const buildEchartsOption = (
           name: rightTitle,
           nameTextStyle: axisName,
           axisLabel,
-          splitLine: { show: false },
+          splitLine: { show: !hasLeft },
           // Keep both keys even when unset: chart updates merge into the prior
           // option, and an omitted key would keep a cleared bound on screen.
-          min: chart.rightAxis?.min,
-          max: chart.rightAxis?.max,
+          min: chart.rightAxis?.min ?? rightBounds.min,
+          max: chart.rightAxis?.max ?? rightBounds.max,
         },
       ]
     : leftAxis

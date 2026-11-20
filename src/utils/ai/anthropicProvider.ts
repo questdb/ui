@@ -204,6 +204,13 @@ async function createAnthropicMessageStreaming(
         throw new StreamingError(errorMessage, "failed", event)
       }
 
+      if (
+        event.type === "content_block_start" &&
+        event.content_block.type === "tool_use"
+      ) {
+        streamCallback.onToolCallStart?.(event.content_block.name)
+      }
+
       if (event.type === "content_block_delta") {
         if (event.delta.type === "thinking_delta") {
           streamCallback.onThinkingChunk?.(

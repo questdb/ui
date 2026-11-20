@@ -1810,6 +1810,83 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(parsed.error_code).toBe("validation")
   })
 
+  it("rejects a heatmap query with no rows column", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+
+    // When
+    const res = await dispatchTool(
+      "set_cell_chart_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        x_column: "ts",
+        queries: [{ type: "heatmap", y_columns: ["spread"] }],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then
+    expect(res.is_error).toBe(true)
+    const error = JSON.parse(res.content) as {
+      error_code: string
+      message: string
+    }
+    expect(error.error_code).toBe("validation")
+    expect(error.message).toMatch(
+      /heatmap query requires a partition_by_column/,
+    )
+    expect(cellById(state, "c")?.chartConfig).toBeUndefined()
+  })
+
+  it("sets reference lines, keeps them on null, and clears them on []", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    const send = (reference_lines: unknown) =>
+      dispatchTool(
+        "set_cell_chart_config",
+        {
+          buffer_id: 1,
+          cell_id: "c",
+          x_column: null,
+          queries: null,
+          right_axis: null,
+          reference_lines,
+        },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+
+    // When
+    await send([
+      { value: 30, axis: "right", label: "Oversold" },
+      { value: 70, axis: null, label: null },
+    ])
+
+    // Then
+    expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual([
+      { value: 30, axis: "right", label: "Oversold" },
+      { value: 70 },
+    ])
+
+    // When
+    await send(null)
+
+    // Then
+    expect(cellById(state, "c")?.chartConfig?.referenceLines).toHaveLength(2)
+
+    // When
+    await send([])
+
+    // Then
+    expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual([])
+  })
+
   it("treats null fields on set_cell_chart_config as 'omit' (not overwrite)", async () => {
     // Strict tool schemas (OpenAI Structured Outputs) require every property
     // in `required`; optional-ness is expressed via nullable types. The

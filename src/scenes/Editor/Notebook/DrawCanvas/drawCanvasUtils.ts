@@ -292,6 +292,7 @@ export const resolveDraw = (
       yColumns: it.qc.yColumns ?? [],
       ohlc: resolveOhlc(it.qc, it.r.columns),
       partitionByColumn: it.qc.partitionByColumn,
+      ...(it.qc.colorScale && { colorScale: it.qc.colorScale }),
       axis: it.qc.axis ?? "left",
       name: it.qc.name,
     })
@@ -314,11 +315,13 @@ export const resolveDraw = (
     chart: {
       xColumn: anchorX,
       rightAxis: config?.rightAxis,
+      referenceLines: config?.referenceLines,
     },
     renderQueries,
     effectiveConfig: {
       xColumn: anchorX,
       rightAxis: config?.rightAxis,
+      ...(config?.referenceLines && { referenceLines: config.referenceLines }),
       queries: denseQueries,
     },
     tabs,

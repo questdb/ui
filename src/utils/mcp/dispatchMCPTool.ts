@@ -1,4 +1,5 @@
-import type { ModelToolsClient } from "../ai/aiAssistant"
+import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
+import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { dispatchTool } from "../tools/dispatch"
 import {
   INVALID_BUFFER_ID_MESSAGE,
@@ -40,6 +41,8 @@ export type DispatchContext = {
   metaToolContext: MetaToolContext
   permissions: PermissionsRefs
   validateSql: (sql: string) => Promise<ValidateQueryResult>
+  // Receives the tool's progress status, as the in-app assistant shows it.
+  setStatus?: StatusCallback
   signal?: AbortSignal
 }
 
@@ -180,7 +183,9 @@ const dispatchInner = async (
   // began before a reconnect reset — otherwise a stale read could seed freshness
   // for a notebook the new connection never saw.
   const readGeneration = ctx.freshness.generation()
+  const setStatus = ctx.setStatus ?? noopSetStatus
   if (isMcpMetaToolName(call.name)) {
+    setStatus(AIOperationStatus.InspectingNotebook)
     if (call.name === "get_workspace_state") {
       const activeId = ctx.metaToolContext.getActiveBufferId()
       const seqBeforeRead = activeId !== null ? captureReadSeq(activeId) : null
@@ -222,7 +227,7 @@ const dispatchInner = async (
     call.name,
     call.arguments,
     ctx.modelToolsClient,
-    noopSetStatus,
+    setStatus,
     perms,
     ctx.validateSql,
     ctx.signal,

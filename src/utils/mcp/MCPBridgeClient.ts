@@ -8,6 +8,10 @@ import {
 import type { Permissions } from "../tools/permissions"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import type {
+  AgentInboundMessage,
+  AgentOutboundMessage,
+} from "../localAgent/protocol"
 import {
   WS_CLOSE_CODES,
   type AnyMessage,
@@ -60,6 +64,7 @@ type EventMap = {
   error: Error
   retryAttempt: number
   versionMismatch: BridgeVersionMismatch | null
+  agentMessage: AgentOutboundMessage
 }
 
 const HEARTBEAT_INTERVAL_MS = 5_000
@@ -216,6 +221,12 @@ export class MCPBridgeClient {
     this.pendingResults.push(msg)
   }
 
+  sendAgentMessage(msg: AgentInboundMessage): boolean {
+    if (this._status !== "connected") return false
+    this.send(msg)
+    return true
+  }
+
   private buildSocketUrl(): string {
     // The bridge reads both params at the WS upgrade, before any hello: the
     // token to authorize, and lastSessionId to take over the stale socket of a
@@ -310,6 +321,13 @@ export class MCPBridgeClient {
         return
       case "pong":
         this.handlePong(parsed)
+        return
+      case "agent_status":
+      case "agent_update":
+      case "agent_turn_end":
+      case "agent_question":
+      case "agent_question_closed":
+        this.emit("agentMessage", parsed)
         return
       default:
         return

@@ -180,6 +180,13 @@ async function createOpenAIResponseStreaming(
         streamCallback.onTextChunk(event.delta)
       }
 
+      if (
+        event.type === "response.output_item.added" &&
+        event.item.type === "function_call"
+      ) {
+        streamCallback.onToolCallStart?.(event.item.name)
+      }
+
       if (event.type === "response.completed") {
         finalResponse = event.response
       }
@@ -201,6 +208,10 @@ async function createOpenAIResponseStreaming(
     )
   }
 
+  // The SDK ends an aborted stream without an error.
+  if (abortSignal?.aborted) {
+    throw new StreamingError("Operation aborted", "interrupted")
+  }
   if (!finalResponse) {
     throw new StreamingError("Provider failed to return a response", "failed")
   }

@@ -4,6 +4,11 @@
 // reject with close 4004.
 
 import type { Permissions } from "../tools/permissions"
+import type {
+  AgentInboundMessage,
+  AgentInfo,
+  AgentOutboundMessage,
+} from "../localAgent/protocol"
 
 export type ToolSchema = {
   name: string
@@ -46,6 +51,7 @@ export type HelloAckMessage = {
   // Count only — bridge does NOT validate or filter; don't treat as a
   // "schemas accepted" signal.
   seenToolCount: number
+  agent?: AgentInfo
 }
 
 // bridge → browser, forwarded MCP tool call.
@@ -58,6 +64,8 @@ export type ToolCallMessage = {
   // `null` ⇒ no deadline; positive number ⇒ cancel after N ms. Never
   // treat a literal `0` as "abort immediately" — bridge will never send it.
   deadlineMs: number | null
+  // Present when a local agent conversation made the call.
+  conversationId?: string
 }
 
 // browser → bridge, response (envelope mirrors `dispatchTool` output).
@@ -122,3 +130,5 @@ export type AnyMessage =
   | PingMessage
   | PongMessage
   | CancelMessage
+  | AgentInboundMessage
+  | AgentOutboundMessage

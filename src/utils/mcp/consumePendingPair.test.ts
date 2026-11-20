@@ -111,4 +111,45 @@ describe("consumePendingPairFromUrl", () => {
     expect(replace).toHaveBeenCalledOnce()
     expect(replace).toHaveBeenCalledWith(null, "", "/console?keep=me#frag")
   })
+
+  it("keeps the agent name and workspace of an agent bridge and scrubs them from the URL", () => {
+    // Given
+    const replace = vi.fn()
+    const agent = new URLSearchParams({
+      "mcp-agent": "Claude Code",
+      "mcp-agent-cwd": "/Users/me/.questdb/mcp-bridge/workspace",
+    })
+
+    // When
+    consumePendingPairFromUrl(
+      {
+        search: `?mcp-pair=1&mcp-ws=ws://127.0.0.1:9876&mcp-token=${VALID_TOKEN}&${agent.toString()}`,
+        pathname: "/",
+        hash: "",
+      },
+      { replaceState: replace },
+    )
+
+    // Then
+    expect(readPendingPair()?.agent).toEqual({
+      label: "Claude Code",
+      cwd: "/Users/me/.questdb/mcp-bridge/workspace",
+    })
+    expect(replace).toHaveBeenCalledWith(null, "", "/")
+  })
+
+  it("drops agent details that are too long or carry control characters", () => {
+    // When
+    consumePendingPairFromUrl(
+      {
+        search: `?mcp-pair=1&mcp-ws=ws://127.0.0.1:9876&mcp-token=${VALID_TOKEN}&mcp-agent=${"x".repeat(65)}&mcp-agent-cwd=%2Ftmp%0Aevil`,
+        pathname: "/",
+        hash: "",
+      },
+      { replaceState: () => undefined },
+    )
+
+    // Then
+    expect(readPendingPair()?.agent).toBeUndefined()
+  })
 })

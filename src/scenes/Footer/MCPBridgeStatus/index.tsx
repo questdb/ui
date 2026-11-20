@@ -7,10 +7,11 @@ import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
 import { MCPBridgePairPopover } from "./PairPopover"
 import { AgentChangesPopper } from "./AgentChangesPopper"
 import { useAgentChanges } from "./useAgentChanges"
-import { Tone, accentColor, deriveTone } from "./tone"
+import { Tone, accentColor, deriveTone, pillSuffix } from "./tone"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { statusInfoFocus } from "../../../theme"
+import { useLocalAgent } from "../../../utils/localAgent/LocalAgentContext"
 
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
@@ -156,18 +157,41 @@ const Announcer = styled.span`
   border: 0;
 `
 
+const AGENT_TONES = {
+  ready: "connected",
+  starting: "connecting",
+  error: "warning",
+} as const satisfies Record<string, Tone>
+
+const AGENT_STATE_WORDS = {
+  ready: "connected",
+  starting: "starting…",
+  error: "unavailable",
+} as const
+
 export const MCPBridgeStatus: React.FC = () => {
   const { status, url, token, versionMismatch } = useMCPBridge()
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null)
   const agentChanges = useAgentChanges()
+  const localAgent = useLocalAgent()
   const paired = !!(url && token)
-  const tone = deriveTone(paired, status, versionMismatch)
+  const bridgeTone = deriveTone(paired, status, versionMismatch)
+  const tone =
+    bridgeTone === "connected" && localAgent
+      ? AGENT_TONES[localAgent.state]
+      : bridgeTone
 
   let label: string
   let title: string
 
-  if (tone === "idle") {
+  if (bridgeTone === "connected" && localAgent) {
+    label = `${localAgent.info.label} ${AGENT_STATE_WORDS[localAgent.state]}`
+    title =
+      localAgent.state === "error" && localAgent.error
+        ? localAgent.error
+        : `${localAgent.info.label} runs on your computer through the QuestDB bridge. Click to manage.`
+  } else if (tone === "idle") {
     label = "MCP not connected"
     title =
       "Click to enter MCP credentials manually, or ask Claude / Codex to pair this console."
@@ -203,12 +227,10 @@ export const MCPBridgeStatus: React.FC = () => {
     setPopoverOpen(false)
   }, [agentChanges])
 
-  if (agentChanges.unread) {
-    label = `${label} (new changes)`
+  const suffix = pillSuffix(agentChanges.unread, bridgeTone)
+  if (suffix) label = `${label} (${suffix})`
+  if (agentChanges.unread)
     title = `${title} New agent changes in ${agentChanges.label}.`
-  } else if (tone === "warning") {
-    label = `${label} (outdated)`
-  }
 
   return (
     <Container ref={setAnchorEl}>

@@ -203,4 +203,9 @@ export enum ConsoleEvent {
   MCP_AGENT_CHANGES_VIEW = "mcp.agent_changes_view",
   MCP_AGENT_CHANGES_DISMISS = "mcp.agent_changes_dismiss",
   MCP_STATUS_POPOVER_OPEN = "mcp.status_popover_open",
+
+  LOCAL_AGENT_CONNECTED = "local_agent.connected",
+  LOCAL_AGENT_TURN = "local_agent.turn",
+  LOCAL_AGENT_QUESTION = "local_agent.question",
+  LOCAL_AGENT_RESTART = "local_agent.restart",
 }

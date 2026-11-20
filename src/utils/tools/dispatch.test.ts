@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import type { Permissions } from "./permissions"
 import { __resetNotebookAIBridgeForTests } from "../notebooks/notebookAIBridge"
 import { dispatchTool } from "./dispatch"
+import { AIOperationStatus } from "../../providers/AIStatusProvider"
 
 const noop = () => undefined
 
@@ -151,5 +152,147 @@ describe("dispatch — create/duplicate/activate", () => {
     // Then it is an error naming the failure
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/activation_failed/)
+  })
+})
+
+describe("dispatch — failed steps", () => {
+  const readOnly: Permissions = {
+    grantSchemaAccess: true,
+    read: true,
+    write: false,
+  }
+
+  it("marks the step a failed tool showed as failed, with the reason", async () => {
+    // Given a table the client cannot describe
+    const setStatus = vi.fn()
+    const client = {
+      getTableDetails: vi.fn(() => Promise.resolve(null)),
+    } as unknown as Parameters<typeof dispatchTool>[2]
+
+    // When
+    const res = await dispatchTool(
+      "get_table_details",
+      { table_name: "trades" },
+      client,
+      setStatus,
+      readOnly,
+      dqlValidator,
+    )
+
+    // Then
+    expect(res.is_error).toBe(true)
+    expect(setStatus.mock.calls).toEqual([
+      [
+        AIOperationStatus.InvestigatingTable,
+        { name: "trades", tableOpType: "details" },
+      ],
+      [
+        AIOperationStatus.InvestigatingTable,
+        {
+          name: "trades",
+          tableOpType: "details",
+          failed: "Table details not found",
+        },
+      ],
+    ])
+  })
+
+  it("shows a refused call as a failed step of its own", async () => {
+    // Given a console that grants no access
+    const setStatus = vi.fn()
+    const nothingGranted: Permissions = {
+      grantSchemaAccess: false,
+      read: false,
+      write: false,
+    }
+
+    // When
+    const res = await dispatchTool(
+      "get_tables",
+      {},
+      {} as Parameters<typeof dispatchTool>[2],
+      setStatus,
+      nothingGranted,
+      dqlValidator,
+    )
+
+    // Then
+    expect(res.is_error).toBe(true)
+    expect(setStatus.mock.calls).toHaveLength(2)
+    expect(setStatus.mock.calls[0]).toEqual([
+      AIOperationStatus.RetrievingTables,
+    ])
+    const [failedStatus, failedArgs] = setStatus.mock.calls[1] as [
+      AIOperationStatus,
+      { failed?: string },
+    ]
+    expect(failedStatus).toBe(AIOperationStatus.RetrievingTables)
+    expect(failedArgs.failed).toBe(res.content)
+  })
+})
+
+describe("dispatch — validate_query", () => {
+  it("shows the query it validates, and why it is invalid", async () => {
+    // Given a query the server rejects
+    const setStatus = vi.fn()
+    const client = {
+      validateQuery: vi.fn(() =>
+        Promise.resolve({
+          valid: false,
+          error: "unknown column: prices",
+          position: 7,
+        }),
+      ),
+    } as unknown as Parameters<typeof dispatchTool>[2]
+
+    // When
+    await dispatchTool(
+      "validate_query",
+      { query: "select prices from trades" },
+      client,
+      setStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then
+    const [shown, failed] = setStatus.mock.calls as Array<
+      [AIOperationStatus, { content?: string; failed?: string }]
+    >
+    expect(shown[0]).toBe(AIOperationStatus.ValidatingQuery)
+    expect(shown[1].content).toMatch(/prices/i)
+    expect(failed).toEqual([
+      AIOperationStatus.ValidatingQuery,
+      { content: shown[1].content, failed: "unknown column: prices" },
+    ])
+  })
+})
+
+describe("dispatch — step timing", () => {
+  it("ends the step a tool showed once the tool is done", async () => {
+    // Given
+    const setStatus = vi.fn()
+    const client = {
+      validateQuery: vi.fn(() =>
+        Promise.resolve({ query: "select 1", columns: [], timestamp: 0 }),
+      ),
+    } as unknown as Parameters<typeof dispatchTool>[2]
+
+    // When
+    await dispatchTool(
+      "validate_query",
+      { query: "select 1" },
+      client,
+      setStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then
+    const calls = setStatus.mock.calls as Array<
+      [AIOperationStatus, Record<string, unknown>]
+    >
+    const [status, args] = calls[0]
+    expect(calls.at(-1)).toEqual([status, { ...args, ended: true }])
   })
 })

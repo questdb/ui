@@ -5,8 +5,9 @@ import { AISparkle } from "../AISparkle"
 import { AIAssistantPromo } from "./AIAssistantPromo"
 import { ConfigurationModal } from "./ConfigurationModal"
 import { SettingsModal } from "./SettingsModal"
-import { ModelDropdown } from "./ModelDropdown"
 import { useAIStatus } from "../../providers/AIStatusProvider"
+import { isAiAssistantConfigured } from "../../utils/ai"
+import { useLocalAgent } from "../../utils/localAgent/LocalAgentContext"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
@@ -15,7 +16,10 @@ export const SetupAIAssistant = () => {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [showPromo, setShowPromo] = useState(false)
   const configureButtonRef = useRef<HTMLElement>(null)
-  const { isConfigured } = useAIStatus()
+  const { aiAssistantSettings } = useAIStatus()
+  const localAgent = useLocalAgent()
+  const isConfigured =
+    isAiAssistantConfigured(aiAssistantSettings) || localAgent !== null
   const configureButtonVariantProps = isConfigured
     ? ({ variant: "secondary" } as const)
     : ({
@@ -41,7 +45,6 @@ export const SetupAIAssistant = () => {
   return (
     <>
       <Box gap="1.2rem" align="center">
-        <ModelDropdown />
         <div ref={configureButtonRef as React.RefObject<HTMLDivElement | null>}>
           <Button
             size="md"

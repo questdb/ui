@@ -219,6 +219,13 @@ export const availableChartTypes = (
   )
     types.push("scatter")
   if (hasNumeric && hasCategorical) types.push("pie")
+  // A heatmap's rows are a category; its x is time or another category.
+  if (
+    hasNumeric &&
+    hasCategorical &&
+    (hasTemporal || groups.categorical.length >= 2)
+  )
+    types.push("heatmap")
   if (hasTemporal && (hasOhlc || groups.numeric.length >= 4))
     types.push("candlestick")
   return types.length ? types : ["bar"]

@@ -16,6 +16,8 @@ import { ToastContainer, toast } from "../../Toast"
 import { TooltipProvider } from "../../Tooltip"
 import { SetupAIAssistant } from ".."
 import { AIChatButton } from "../../../scenes/Layout/AIChatButton"
+import { useAIStatus } from "../../../providers/AIStatusProvider"
+import { ComposerControls } from "../../../scenes/Editor/AIChatWindow/ComposerControls"
 import type { AiAssistantSettings } from "../../../providers/LocalStorageProvider/types"
 
 vi.mock("../../../providers/AIConversationProvider", () => ({
@@ -141,11 +143,30 @@ export const deferredResponse = () => {
   }
 }
 
+// The chat composer, and with it the model picker, is reachable only while
+// the assistant can be used — as behind the chat button in the app.
+export const ChatModelControls = () => {
+  const { canUse } = useAIStatus()
+  return canUse ? <ComposerControls disabled={false} /> : null
+}
+
+// Opens the model picker with every provider expanded, so that tests can see
+// all models. The picker itself opens only the selected model's provider.
+export const openModelPicker = async () => {
+  await userEvent.click(getByHook("chat-model-picker"))
+  for (const group of getAllByHook("chat-model-picker-group")) {
+    if (group.getAttribute("aria-expanded") === "false") {
+      await userEvent.click(group)
+    }
+  }
+}
+
 export const renderAISettings = (
   children: React.ReactNode = (
     <>
       <SetupAIAssistant />
       <AIChatButton />
+      <ChatModelControls />
     </>
   ),
   settings?: AiAssistantSettings,

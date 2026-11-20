@@ -2,6 +2,7 @@ import type {
   ChartConfig,
   ChartType,
   QueryChart,
+  ReferenceLine,
 } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 
 // Snake-case shapes the agent tools speak, and their mapping to the internal
@@ -14,6 +15,7 @@ export type ToolQueryChart = {
   axis?: "left" | "right" | null
   enabled?: boolean | null
   name?: string | null
+  color_scale?: "chart" | "row" | null
 }
 
 export type ToolRightAxis = {
@@ -22,6 +24,23 @@ export type ToolRightAxis = {
   max?: number | null
 }
 
+export type ToolReferenceLine = {
+  value: number
+  axis?: "left" | "right" | null
+  label?: string | null
+}
+
+export const mapReferenceLines = (
+  lines: ToolReferenceLine[],
+): ReferenceLine[] =>
+  lines
+    .filter((line) => Number.isFinite(line.value))
+    .map((line) => ({
+      value: line.value,
+      ...(line.axis === "right" && { axis: "right" as const }),
+      ...(line.label && { label: line.label }),
+    }))
+
 export const mapQueryChart = (q: ToolQueryChart): QueryChart => {
   const out: QueryChart = { type: q.type, yColumns: q.y_columns ?? [] }
   if (q.ohlc) out.ohlc = q.ohlc
@@ -29,6 +48,7 @@ export const mapQueryChart = (q: ToolQueryChart): QueryChart => {
   if (q.axis) out.axis = q.axis
   if (q.enabled === false) out.enabled = false
   if (q.name) out.name = q.name
+  if (q.type === "heatmap" && q.color_scale === "row") out.colorScale = "row"
   return out
 }
 

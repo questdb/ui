@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect } from "react"
 import styled, { css } from "styled-components"
-import { CheckboxCircle, CloseCircle } from "../icons"
+import { XIcon } from "@phosphor-icons/react"
+import { CheckboxCircle } from "../icons"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import {
   AIOperationStatus,
@@ -59,7 +60,9 @@ const CheckIcon = styled(CheckboxCircle)`
   flex-shrink: 0;
 `
 
-const CloseCircleIcon = styled(CloseCircle)`
+const FailedIcon = styled(XIcon)`
+  width: 1.6rem;
+  height: 1.6rem;
   color: ${color("statusDanger")};
   flex-shrink: 0;
 `
@@ -72,17 +75,29 @@ export type OperationSection = {
     type: AIOperationStatus
     args?: StatusArgs
     content?: string
+    endedAt?: number
   }>
   abort: boolean
+  // The section's latest step failed.
+  failed: boolean
   startTimestamp: number
+  // When the last of its steps' tools finished, once all of them have.
+  endedAt?: number
 }
 
+export const hasFailedStep = (section: OperationSection) =>
+  section.operations.some((op) => op.args?.failed !== undefined)
+
 export const getIsExpandableSection = (section: OperationSection) => {
+  if (hasFailedStep(section)) return true
   return [
     AIOperationStatus.InvestigatingTable,
     AIOperationStatus.InvestigatingDocs,
     AIOperationStatus.Thinking,
     AIOperationStatus.RunningQuery,
+    AIOperationStatus.ValidatingQuery,
+    AIOperationStatus.UsingAgentTools,
+    AIOperationStatus.Planning,
   ].includes(section.type)
 }
 
@@ -102,6 +117,7 @@ export const buildOperationSections = (
         type: sectionType,
         active: false,
         abort: sectionType === AIOperationStatus.Aborted,
+        failed: false,
         operations: [op],
         startTimestamp: op.timestamp,
       }
@@ -111,8 +127,26 @@ export const buildOperationSections = (
     }
   }
 
+  for (const section of sections) {
+    section.failed =
+      section.operations[section.operations.length - 1]?.args?.failed !==
+      undefined
+    const ends = section.operations.map((op) => op.endedAt)
+    if (ends.every((end): end is number => end !== undefined)) {
+      section.endedAt = Math.max(...ends)
+    }
+  }
+
+  // A failed or finished step has ended, even while its status is still the
+  // latest.
   const lastSection = sections[sections.length - 1]
-  if (isLive && lastSection && lastSection.type === currentStatus) {
+  if (
+    isLive &&
+    lastSection &&
+    lastSection.type === currentStatus &&
+    !lastSection.failed &&
+    lastSection.endedAt === undefined
+  ) {
     lastSection.active = true
   }
   if (lastSection && lastSection.type === AIOperationStatus.Aborted) {
@@ -134,7 +168,12 @@ export const getSectionDuration = (
   fallbackEndTimestamp?: number,
 ): string | null => {
   if (section.active || section.abort) return null
-  const endTimestamp = nextSection?.startTimestamp ?? fallbackEndTimestamp
+  // A plan is a list, not work that takes time.
+  if (section.type === AIOperationStatus.Planning) return null
+  // A step that reported its end shows its own time; the time until the next
+  // step is the model's, not the tool's.
+  const endTimestamp =
+    section.endedAt ?? nextSection?.startTimestamp ?? fallbackEndTimestamp
   if (!endTimestamp) return null
   return formatDurationMs(endTimestamp - section.startTimestamp)
 }
@@ -194,8 +233,8 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
             <ReasoningIcon>
               {section.active ? (
                 <CircleNotchSpinner size={16} />
-              ) : section.abort ? (
-                <CloseCircleIcon size={16} />
+              ) : section.abort || section.failed ? (
+                <FailedIcon />
               ) : (
                 <CheckIcon />
               )}

@@ -71,9 +71,7 @@ describe("chat tools", () => {
     await userEvent.click(getByHook("assistant-mode-processing-collapsed"))
     expect(getByHook("assistant-mode-processing-request")).toBeInTheDocument()
     expect(getByHook("assistant-mode-reviewing-docs")).toBeInTheDocument()
-    expect(document.querySelector(".token-display")).toHaveTextContent(
-      "300 input / 150 output",
-    )
+    expect(getByHook("chat-token-usage")).toHaveTextContent("300/150")
   })
 })
 
@@ -133,9 +131,7 @@ describe("documentation lookup", () => {
     expect(getByHook("message-action-accept")).toBeEnabled()
     await userEvent.click(getByHook("assistant-mode-processing-collapsed"))
     expect(getByHook("assistant-mode-investigating-docs")).toBeInTheDocument()
-    expect(document.querySelector(".token-display")).toHaveTextContent(
-      "400 input / 200 output",
-    )
+    expect(getByHook("chat-token-usage")).toHaveTextContent("400/200")
   })
 })
 

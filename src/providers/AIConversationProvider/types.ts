@@ -1,9 +1,10 @@
+import type { AgentPromptImage } from "../../utils/localAgent/protocol"
 import type { PartitionBy, TableKind } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import type { Message } from "../../utils/ai/types"
 import type { RanStatus } from "../../utils/ai/runStatus"
 import type { AutoRefresh } from "../../store/notebook"
-import type { TokenUsage } from "../../utils/ai/aiAssistant"
+import type { ContextUsage, TokenUsage } from "../../utils/ai/aiAssistant"
 import type { OperationHistory } from "../AIStatusProvider"
 
 export type ConversationId = string
@@ -35,6 +36,12 @@ export type ConversationMessage = Message & {
   error?: string
   sql?: string
   tokenUsage?: TokenUsage
+  // How full the model's context was after this answer.
+  contextUsage?: ContextUsage
+  // Images the user attached to this message, for an agent that reads them.
+  images?: AgentPromptImage[]
+  // The message is one of the agent's own commands, sent as typed.
+  agentCommand?: boolean
   previousSQL?: string // SQL before this change (for diff display)
   isRejected?: boolean
   contentTimestamp?: number // When text content started streaming
@@ -43,6 +50,10 @@ export type ConversationMessage = Message & {
   isCompacted?: boolean
   operationHistory?: OperationHistory
   model?: string
+  // Wall-clock time for the whole assistant turn, stored on its anchor.
+  turnDurationMs?: number
+  // Set on the turns a local agent answered, with the agent's id.
+  localAgentId?: string
   displayType?: UserMessageDisplayType
   displayUserMessage?: string
   displaySchemaData?: SchemaDisplayData

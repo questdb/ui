@@ -1,5 +1,10 @@
 import { writePendingPair } from "./mcpBridgeStorage"
-import { LOCALHOST_WS_RE, TOKEN_RE } from "./pairValidation"
+import {
+  isValidAgentCwd,
+  isValidAgentLabel,
+  LOCALHOST_WS_RE,
+  TOKEN_RE,
+} from "./pairValidation"
 
 // Moves deep-link pair params to sessionStorage so they survive the OIDC
 // redirect (which strips the URL), then scrubs the URL so reloads don't
@@ -35,12 +40,24 @@ export const consumePendingPairFromUrl = (
     return { kind: "rejected", reason: "invalid_token" }
   }
 
-  writePendingPair({ url, token, receivedAt: Date.now() })
+  const agentLabel = params.get("mcp-agent")
+  const agentCwd = params.get("mcp-agent-cwd")
+  const agent =
+    agentLabel &&
+    agentCwd &&
+    isValidAgentLabel(agentLabel) &&
+    isValidAgentCwd(agentCwd)
+      ? { label: agentLabel, cwd: agentCwd }
+      : undefined
+
+  writePendingPair({ url, token, receivedAt: Date.now(), agent })
 
   // Scrub so the token doesn't end up in the user's address bar.
   params.delete("mcp-pair")
   params.delete("mcp-ws")
   params.delete("mcp-token")
+  params.delete("mcp-agent")
+  params.delete("mcp-agent-cwd")
   const remaining = params.toString()
   const cleanUrl =
     loc.pathname + (remaining ? `?${remaining}` : "") + (loc.hash || "")

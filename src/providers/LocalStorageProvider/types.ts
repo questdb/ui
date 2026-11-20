@@ -26,12 +26,23 @@ export type CustomProviderDefinition = {
 
 export const AI_MODEL_VALUE_FORMAT = 2 as const
 
+export type LocalAgentPreferences = {
+  model?: string
+  effort?: string
+}
+
+export type LocalAgentSettings = {
+  // Keyed by agent id (claude, codex, pi, …).
+  preferences?: Record<string, LocalAgentPreferences>
+}
+
 export type AiAssistantSettings = {
   /** Version 2 stores globally referenced models as `providerId:modelId`. */
   modelValueFormat?: typeof AI_MODEL_VALUE_FORMAT
   selectedModel?: string
   providers: Partial<Record<string, ProviderSettings>>
   customProviders?: Record<string, CustomProviderDefinition>
+  localAgent?: LocalAgentSettings
 }
 
 export type SettingsType = string | boolean | number | AiAssistantSettings

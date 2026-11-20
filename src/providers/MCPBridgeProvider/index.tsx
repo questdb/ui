@@ -18,6 +18,7 @@ import {
 } from "../../utils/mcp/protocolVersion"
 import type { ToolCallMessage } from "../../utils/mcp/types"
 import {
+  type PendingPairAgent,
   clearLegacyLocalStorage,
   clearPendingPair,
   markPendingPairConsented,
@@ -51,6 +52,11 @@ import {
 import type { UserActionDigest } from "../AIConversationProvider/types"
 import { useBridgeToolRunner } from "./useBridgeToolRunner"
 import { PairingConsentModal } from "./PairingConsentModal"
+import { useLocalAgentConnection } from "./useLocalAgentConnection"
+import { getLocalAgentChannel } from "../../utils/localAgent/localAgentChannel"
+import { LocalAgentContext } from "../../utils/localAgent/LocalAgentContext"
+import { useSettings } from "../SettingsProvider"
+import { emitLocalAgentPairedViaLink } from "../../utils/localAgent/localAgentPairing"
 
 export type MCPBridgeContextValue = {
   status: MCPBridgeClientStatus
@@ -102,7 +108,10 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { quest } = useContext(QuestContext)
-  const { notebookOnboarding, updateNotebookOnboarding } = useLocalStorage()
+  const { notebookOnboarding, updateNotebookOnboarding, aiAssistantSettings } =
+    useLocalStorage()
+  const { consoleConfig } = useSettings()
+  const localAgentsEnabled = consoleConfig.localAgents !== false
   const [url, setUrl] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [status, setStatus] = useState<MCPBridgeClientStatus>("disconnected")
@@ -120,6 +129,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [pendingConsent, setPendingConsent] = useState<{
     url: string
     token: string
+    agent?: PendingPairAgent
   } | null>(null)
   const [consentInFlight, setConsentInFlight] = useState(false)
   const [consentSucceeded, setConsentSucceeded] = useState(false)
@@ -129,6 +139,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [connectAttempt, setConnectAttempt] = useState(0)
 
   const freshnessRef = useRef(createNotebookFreshness())
+  const {
+    channel: localAgentChannel,
+    attachClient: attachLocalAgent,
+    freshnessFor: agentFreshnessFor,
+  } = useLocalAgentConnection({
+    isEnabled: localAgentsEnabled,
+    aiAssistantSettings,
+  })
 
   const digestRef = useRef<UserActionDigest>(createEmptyDigest())
   const getDigest = useCallback(() => digestRef.current, [])
@@ -186,6 +204,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const PERMISSIONS_REVOKED_REASON = "permissions_revoked"
 
   const clientRef = useRef<MCPBridgeClient | null>(null)
+  // Armed by accepting a pairing link; the first agent hello opens its chat.
+  const opensAgentChatOnPairRef = useRef(false)
 
   useEffect(() => {
     const cleanupUserActionListener = onUserAction("user-action", (evt) => {
@@ -259,8 +279,18 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       void (async () => {
         try {
+          const { conversationId } = call
           const result = await dispatchMCPTool(call, {
             ...dispatchCtxRef.current,
+            ...(conversationId !== undefined && {
+              freshness: agentFreshnessFor(conversationId),
+              setStatus: (status, args) =>
+                getLocalAgentChannel()?.reportToolStatus(
+                  conversationId,
+                  status,
+                  args,
+                ),
+            }),
             signal: aborter.signal,
           })
           if (sendRevokedErrorIfNeeded()) {
@@ -325,9 +355,17 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       if (aborter) aborter.abort()
     })
 
+    const detachLocalAgent = attachLocalAgent(client)
+    const offAgentPaired = client.on("helloAck", (ack) => {
+      if (!opensAgentChatOnPairRef.current) return
+      opensAgentChatOnPairRef.current = false
+      if (ack.agent && localAgentsEnabled) emitLocalAgentPairedViaLink()
+    })
     client.connect()
 
     return () => {
+      detachLocalAgent()
+      offAgentPaired()
       offStatus()
       offLatency()
       offError()
@@ -343,7 +381,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       client.disconnect()
       if (clientRef.current === client) clientRef.current = null
     }
-  }, [url, token, connectAttempt])
+  }, [
+    url,
+    token,
+    connectAttempt,
+    attachLocalAgent,
+    agentFreshnessFor,
+    localAgentsEnabled,
+  ])
 
   const connect = useCallback((nextUrl: string, nextToken: string) => {
     setRetryAttempt(0)
@@ -409,7 +454,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setToken(pair.token)
     } else {
       void trackEvent(ConsoleEvent.MCP_PAIRING_PROMPTED)
-      setPendingConsent({ url: pair.url, token: pair.token })
+      setPendingConsent({ url: pair.url, token: pair.token, agent: pair.agent })
     }
   }, [])
 
@@ -475,6 +520,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       // Order matters: the about-to-be-constructed client reads
       // permissionsRef.current in its initial hello.
       setPermissions(committedPermissions)
+      opensAgentChatOnPairRef.current = true
       attemptSawActiveRef.current = false
       setConsentInFlight(true)
       setConsentSucceeded(false)
@@ -497,6 +543,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       return
     }
     void trackEvent(ConsoleEvent.MCP_PAIRING_DECLINED)
+    opensAgentChatOnPairRef.current = false
     setPendingConsent(null)
     setConsentInFlight(false)
     if (clientRef.current) {
@@ -542,7 +589,9 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   return (
     <MCPBridgeContext.Provider value={value}>
-      {children}
+      <LocalAgentContext.Provider value={localAgentChannel}>
+        {children}
+      </LocalAgentContext.Provider>
       <PairingConsentModal
         pending={pendingConsent}
         isConnecting={consentInFlight}
