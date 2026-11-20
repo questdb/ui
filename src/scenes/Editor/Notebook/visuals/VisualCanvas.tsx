@@ -86,6 +86,7 @@ type Props = {
   statements: (StatementRows | null)[]
   formats: ColumnFormats
   interactions: CellInteractions | undefined
+  clickVariableValue?: string
   setVariables: SetVariables
   live: boolean
   isFocused: boolean
@@ -101,6 +102,7 @@ export const VisualCanvas = ({
   statements,
   formats,
   interactions,
+  clickVariableValue,
   setVariables,
   live,
   isFocused,
@@ -180,6 +182,7 @@ export const VisualCanvas = ({
           visual={visual}
           statements={statements}
           formats={formats}
+          selectedValue={click ? clickVariableValue : undefined}
           onSelect={select}
         />
       )

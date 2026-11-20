@@ -418,6 +418,12 @@ export const DrawCanvas: React.FC<Props> = ({
                 statements={statements}
                 formats={formats}
                 interactions={cell.interactions}
+                clickVariableValue={
+                  settings.variables?.find(
+                    (variable) =>
+                      variable.name === cell.interactions?.click?.variable,
+                  )?.value
+                }
                 setVariables={setVariableValues}
                 live={live}
                 isFocused={isFocused}

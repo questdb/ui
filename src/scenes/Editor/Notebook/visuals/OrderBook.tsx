@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef } from "react"
-import styled, { css, keyframes } from "styled-components"
+import styled, { css } from "styled-components"
 import {
   formatValue,
   type ColumnFormat,
@@ -49,11 +49,6 @@ const readSide = (
   }
 }
 
-const flash = keyframes`
-  from { background-color: var(--row-flash); }
-  to { background-color: transparent; }
-`
-
 const Root = styled.div`
   display: flex;
   flex-direction: column;
@@ -98,23 +93,12 @@ const Ladder = styled.div`
 const Row = styled.div<{
   $cols: number
   $side: "ask" | "bid"
-  $flashing: boolean
   $clickable: boolean
 }>`
   ${Grid}
-  --row-flash: ${({ $side, theme }) =>
-    withAlpha(
-      $side === "ask" ? theme.color.chartDown : theme.color.chartUp,
-      0.22,
-    )};
   position: relative;
   height: 2.2rem;
   cursor: ${({ $clickable }) => ($clickable ? "pointer" : "default")};
-  ${({ $flashing }) =>
-    $flashing &&
-    css`
-      animation: ${flash} 650ms ease-out;
-    `}
 
   > span {
     position: relative;
@@ -132,10 +116,6 @@ const Row = styled.div<{
 
   &:hover {
     background: ${({ theme }) => theme.color.interactionHover};
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
   }
 `
 
@@ -198,23 +178,6 @@ const Empty = styled.div`
   color: ${({ theme }) => theme.color.contentMuted};
 `
 
-/** Prices whose size changed since the last result. */
-const useChanged = (side: Side) => {
-  const previous = useRef(new Map<number, number>())
-  const changed = useMemo(() => {
-    const out = new Set<number>()
-    for (const level of side.levels) {
-      const before = previous.current.get(level.price)
-      if (before !== undefined && before !== level.size) out.add(level.price)
-    }
-    return out
-  }, [side])
-  useEffect(() => {
-    previous.current = new Map(side.levels.map((l) => [l.price, l.size]))
-  }, [side])
-  return changed
-}
-
 /** Which way the mid price moved since the last result. */
 const useDirection = (mid: number | null) => {
   const previous = useRef<number | null>(null)
@@ -249,14 +212,9 @@ export const OrderBook = ({
     () => readSide(statements[1], columns),
     [statements, columns],
   )
-  const askChanged = useChanged(asks)
-  const bidChanged = useChanged(bids)
   const ladderRef = useRef<HTMLDivElement | null>(null)
   const midRef = useRef<HTMLDivElement | null>(null)
   const centred = useRef(false)
-  // Each result replays the flash on the rows whose size changed.
-  const generation = useRef(0)
-  generation.current++
 
   const name = (i: number, role: "price" | "size") => {
     const rows = statements[0] ?? statements[1]
@@ -300,14 +258,12 @@ export const OrderBook = ({
     centred.current = true
   }, [asks, bids])
 
-  const row = (level: Level, side: "ask" | "bid", changed: Set<number>) => {
-    const flashing = changed.has(level.price)
+  const row = (level: Level, side: "ask" | "bid") => {
     return (
       <Row
-        key={`${side}:${level.price}:${flashing ? generation.current : 0}`}
+        key={`${side}:${level.price}`}
         $cols={cols}
         $side={side}
-        $flashing={flashing}
         $clickable={onSelect !== undefined}
         onClick={onSelect ? () => onSelect(level.price) : undefined}
         data-hook={`order-book-${side}`}
@@ -334,7 +290,7 @@ export const OrderBook = ({
         {asks.levels.length === 0 ? (
           <Empty>No asks</Empty>
         ) : (
-          [...asks.levels].reverse().map((l) => row(l, "ask", askChanged))
+          [...asks.levels].reverse().map((l) => row(l, "ask"))
         )}
         <Mid ref={midRef}>
           <MidPrice $dir={direction}>
@@ -352,7 +308,7 @@ export const OrderBook = ({
         {bids.levels.length === 0 ? (
           <Empty>No bids</Empty>
         ) : (
-          bids.levels.map((l) => row(l, "bid", bidChanged))
+          bids.levels.map((l) => row(l, "bid"))
         )}
       </Ladder>
     </Root>

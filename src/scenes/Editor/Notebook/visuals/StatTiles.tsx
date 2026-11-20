@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef } from "react"
 import styled, { css, keyframes, useTheme } from "styled-components"
+import { Check } from "@phosphor-icons/react"
+import { ButtonBase } from "../../../../components/Button"
+import { sqlLiteral } from "../interactions/chartInteractions"
 import {
   formatValue,
   toneColor,
@@ -48,28 +51,58 @@ const Grid = styled.div<{ $count: number; $compact: boolean }>`
   overflow: auto;
 `
 
-const TileRoot = styled.div<{ $centred: boolean }>`
+const TileRoot = styled(ButtonBase)<{
+  $centred: boolean
+  $interactive: boolean
+}>`
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: ${({ $centred }) => ($centred ? "center" : "flex-start")};
+  align-items: flex-start;
   gap: 0.2rem;
   padding: 1.2rem 1.6rem;
+  min-width: 0;
+  border: 0;
+  text-align: left;
+  cursor: ${({ $interactive }) => ($interactive ? "pointer" : "default")};
   background: ${({ theme }) => theme.color.surfaceInset};
   box-shadow:
     inset -1px 0 ${({ theme }) => theme.color.borderSubtle},
     inset 0 -1px ${({ theme }) => theme.color.borderSubtle};
   overflow: hidden;
+
+  &&:focus-visible {
+    outline-offset: -3px;
+  }
+
+  &[aria-pressed="true"] {
+    background: ${({ theme }) => theme.color.interactionAccentActive};
+    box-shadow: inset 0 0 0 2px ${({ theme }) => theme.color.contentAccent};
+  }
+`
+
+const SelectionMark = styled(Check)`
+  position: absolute;
+  top: 1.2rem;
+  right: 1.6rem;
+  z-index: 1;
+  color: ${({ theme }) => theme.color.contentAccent};
 `
 
 const Label = styled.span`
   position: relative;
   z-index: 1;
+  max-width: 100%;
   font-size: 1.2rem;
   color: ${({ theme }) => theme.color.contentSecondary};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+
+  [aria-pressed="true"] & {
+    max-width: calc(100% - 2rem);
+  }
 `
 
 const Value = styled.span<{ $color?: string; $flash: number }>`
@@ -232,10 +265,17 @@ type Props = {
   visual: VisualConfig
   statements: (StatementRows | null)[]
   formats: ColumnFormats
+  selectedValue?: string
   onSelect?: (label: string) => void
 }
 
-export const StatTiles = ({ visual, statements, formats, onSelect }: Props) => {
+export const StatTiles = ({
+  visual,
+  statements,
+  formats,
+  selectedValue,
+  onSelect,
+}: Props) => {
   const theme = useTheme()
   const { tiles, valueName } = useMemo(
     () => statTiles(visual, statements),
@@ -280,15 +320,19 @@ export const StatTiles = ({ visual, statements, formats, onSelect }: Props) => {
             ? toneColor(changeTone, theme.color)
             : theme.color.chartSeries1
         const flash = flashes.current.get(tile.label) ?? 0
+        const selected = onSelect && sqlLiteral(tile.label) === selectedValue
         return (
           <TileRoot
+            as={onSelect ? "button" : "div"}
             key={tile.label}
             $centred={tile.spark.length < 2}
+            $interactive={Boolean(onSelect)}
+            aria-pressed={selected}
             onClick={onSelect ? () => onSelect(tile.label) : undefined}
-            style={onSelect ? { cursor: "pointer" } : undefined}
             data-hook="stat-tile"
           >
             <Sparkline values={tile.spark} color={sparkColor} />
+            {selected && <SelectionMark size={16} weight="bold" aria-hidden />}
             <Label title={tile.label}>{tile.label}</Label>
             <Value
               key={flash}
