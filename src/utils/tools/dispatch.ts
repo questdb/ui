@@ -1350,8 +1350,8 @@ export const dispatchTool = async (
           return validationResult(
             `render_item does not compile: ${error}. Send a function expression such as "function (params, api) { ... }" or a function body that uses params and api.`,
           )
-        // Code from an agent without write waits for the user to allow it.
-        type.allowed = perms.write
+        // SQL permissions do not grant browser-side code execution.
+        type.allowed = false
 
         return routeNotebookTool(async () => {
           const settings = await readSettings(buffer_id, signal)
@@ -1380,7 +1380,7 @@ export const dispatchTool = async (
             ...(type.allowed
               ? {}
               : {
-                  note: "Without the write permission the code does not run until the user allows it in the notebook's Chart types dialog; until then charts using it report that in render_report.",
+                  note: "The code does not run until the user allows it in the notebook's Chart types dialog; until then charts using it report that in render_report.",
                 }),
           }
         }, toolContext)

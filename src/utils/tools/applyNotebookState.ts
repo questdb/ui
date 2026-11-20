@@ -225,13 +225,9 @@ const runAppliedCells = async (
 // post-apply auto-run loop.
 /**
  * The notebook's chart types from the agent: names unique, at most 32, each
- * one parsing. Code from an agent without write waits for the user to allow
- * it (see NotebookChartType.allowed).
+ * one parsing. New or changed code waits for explicit user approval.
  */
-const parseChartTypes = (
-  wire: ChartTypeWire[],
-  canWrite: boolean,
-): NotebookChartType[] => {
+const parseChartTypes = (wire: ChartTypeWire[]): NotebookChartType[] => {
   if (wire.length > MAX_CHART_TYPES)
     throw new WireError(
       `chart_types has ${wire.length} entries; a notebook holds at most ${MAX_CHART_TYPES}.`,
@@ -249,7 +245,7 @@ const parseChartTypes = (
       throw new WireError(
         `chart_types[${i}].render_item does not compile: ${error}`,
       )
-    return { ...type, allowed: canWrite }
+    return { ...type, allowed: false }
   })
 }
 
@@ -537,7 +533,7 @@ export const dispatchApplyNotebookState = async (
         return cell
       }),
       ...(chart_types
-        ? { chartTypes: parseChartTypes(chart_types, perms.write) }
+        ? { chartTypes: parseChartTypes(chart_types) }
         : {}),
       ...(chart_sync ? { chartSync: parseChartSync(chart_sync) } : {}),
     }

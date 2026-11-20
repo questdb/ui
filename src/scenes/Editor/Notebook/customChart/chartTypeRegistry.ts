@@ -84,7 +84,7 @@ export const resolveChartTypes = (
     if (type.allowed !== true) {
       errors.set(
         type.name,
-        `Chart type "${type.name}" is not allowed to run yet: its code came from an import or from an agent without the write permission. The user allows it in the notebook's Chart types dialog.`,
+        `Chart type "${type.name}" is not allowed to run yet: review and allow its code in the notebook's Chart types dialog.`,
       )
       continue
     }

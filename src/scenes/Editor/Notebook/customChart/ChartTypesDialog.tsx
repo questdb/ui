@@ -465,7 +465,7 @@ export const ChartTypesDialog: React.FC<Props> = ({
                         <Text color="contentSecondary" size="xs">
                           {selected.allowed
                             ? "It runs in the console with your rights whenever a chart uses it."
-                            : "It came from an import or from an agent without the write permission, so it does not run. It would run with your rights: allow it only once you have read it."}
+                            : "This code needs your approval. It would run with your rights: allow it only once you have read it."}
                         </Text>
                       </Field>
                       <Box justifyContent="space-between" align="center">

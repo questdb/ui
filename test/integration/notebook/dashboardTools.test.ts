@@ -380,12 +380,11 @@ describe("dispatchTool — dashboard tools", () => {
         name: "lanes",
         renderItem: "function (params, api) { return null }",
         description: "Lanes",
-        // An agent with write may run its code
-        allowed: true,
+        allowed: false,
       },
     ])
     expect(parsed(read).render_item).toContain("function")
-    expect(parsed(read)).toMatchObject({ allowed: true, used_by: [] })
+    expect(parsed(read)).toMatchObject({ allowed: false, used_by: [] })
 
     // When it is deleted
     await call("delete_chart_type", { buffer_id: 1, name: "lanes" })
@@ -456,7 +455,7 @@ describe("dispatchTool — dashboard tools", () => {
     expect(state.parts.settings.chartTypes?.[0].allowed).toBe(true)
   })
 
-  it("apply_notebook_state runs chart type code only with write, or when the user allowed it unchanged", async () => {
+  it("apply_notebook_state keeps only unchanged approved chart type code allowed, independent of SQL write access", async () => {
     // Given a type the user allowed
     const allowed = "function (params, api) { return null }"
     const { state } = mountLive(1, [cell("c")], {
@@ -498,8 +497,8 @@ describe("dispatchTool — dashboard tools", () => {
     // When an agent with write sends them
     await apply(true)
 
-    // Then both run
-    expect(allowedOf()).toEqual({ kept: true, fresh: true })
+    // Then SQL write access does not bypass chart code approval
+    expect(allowedOf()).toEqual({ kept: true, fresh: false })
   })
 
   it("define_chart_type rejects source that does not compile", async () => {

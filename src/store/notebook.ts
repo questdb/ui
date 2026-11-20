@@ -184,9 +184,8 @@ export type NotebookChartType = {
   renderItem: string
   description?: string
   // Whether its code may run. A chart type is JavaScript that runs in the
-  // console with the user's rights, so one that came from an import, or from
-  // an agent without the write permission, waits for the user to allow it in
-  // the Chart types dialog.
+  // console with the user's rights, so a chart type from an import or an
+  // agent waits for the user to allow it in the Chart types dialog.
   allowed?: boolean
 }
 
