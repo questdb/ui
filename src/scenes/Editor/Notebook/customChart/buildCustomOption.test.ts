@@ -31,24 +31,17 @@ describe("buildCustomOption", () => {
         data,
       ),
     ]
-    expect(
-      buildCustomOption(
-        option,
-        edgeRows([
-          ["a", "b"],
-          ["b", "a"],
-        ]),
-        false,
-      ),
-    ).toMatchObject({
-      option: {},
-      problems: [
-        {
-          severity: "error",
-          message: expect.stringContaining("contain a cycle"),
-        },
-      ],
-    })
+    const cyclic = buildCustomOption(
+      option,
+      edgeRows([
+        ["a", "b"],
+        ["b", "a"],
+      ]),
+      false,
+    )
+    expect(cyclic.option).toEqual({})
+    expect(cyclic.problems[0]?.severity).toBe("error")
+    expect(cyclic.problems[0]?.message).toContain("contain a cycle")
     expect(
       buildCustomOption(
         option,
