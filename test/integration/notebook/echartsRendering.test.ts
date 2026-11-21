@@ -54,6 +54,43 @@ describe("notebook chart rendering", () => {
       chart.dispose()
     }
   })
+  it("renders and clears reference lines for numeric scatter plots", () => {
+    const query: ResolvedQuery = {
+      index: 0,
+      type: "scatter",
+      axis: "left",
+      xColumn: "slot",
+      yColumns: ["reading"],
+      columns: [
+        { name: "slot", type: "INT" },
+        { name: "reading", type: "DOUBLE" },
+      ],
+      dataset: [
+        [1, 12],
+        [2, 24],
+      ],
+    }
+    const chart = createChart()
+    try {
+      chart.setOption(
+        buildEchartsOption(
+          {
+            xColumn: "slot",
+            referenceLines: [{ value: 70, label: "Reading limit" }],
+          },
+          [query],
+        ),
+      )
+      expect(chart.renderToSVGString()).toContain("Reading limit")
+
+      chart.setOption(buildEchartsOption({ xColumn: "slot" }, [query]))
+      expect(chart.renderToSVGString()).not.toContain("Reading limit")
+      expect(chart.getOption().yAxis).toMatchObject([{ max: undefined }])
+    } finally {
+      chart.dispose()
+    }
+  })
+
   it("does not draw a cell for a null measurement on a constant scale", () => {
     // Given
     const option = buildEchartsOption({ xColumn: "slot" }, [

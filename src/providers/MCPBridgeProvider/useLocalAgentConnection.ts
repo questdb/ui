@@ -55,7 +55,10 @@ export const useLocalAgentConnection = ({
       // A reconnect to the same bridge keeps the channel and its running
       // turns: the bridge holds their updates and delivers them on reconnect.
       const offHelloAck = client.on("helloAck", (ack) => {
-        if (current && ack.agent && current.info.id === ack.agent.id) return
+        if (current && ack.agent && current.info.id === ack.agent.id) {
+          current.resume()
+          return
+        }
         release()
         if (!ack.agent || !isEnabled) return
         current = new LocalAgentChannel(client, {

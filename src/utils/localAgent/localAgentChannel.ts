@@ -79,12 +79,14 @@ type PendingTurn = {
   settle: (result: AgentTurnResult) => void
   // Set once the user stops the turn; resolves when the turn has ended.
   stopping: Promise<void> | null
+  retryCancel: (() => void) | null
 }
 
 // The console side of one paired agent bridge. It runs turns, keeps the
 // agent's status and pending questions for the UI, and forwards preferences.
 export class LocalAgentChannel {
   private turns = new Map<string, PendingTurn>()
+  private preferences: LocalAgentPreferencesWire | null = null
   private snapshot: LocalAgentSnapshot
   private listeners = new Set<() => void>()
   private readonly unsubscribe: () => void
@@ -165,25 +167,34 @@ export class LocalAgentChannel {
     return new Promise((resolve) => {
       let cancelTimer: ReturnType<typeof setTimeout> | undefined
       let stopped = () => {}
-      const cancel = () => {
-        turn.stopping = new Promise((resolve) => {
-          stopped = resolve
-        })
-        this.client.sendAgentMessage({
+      const tryCancel = () => {
+        const sent = this.client.sendAgentMessage({
           v: EXPECTED_MCP_VERSION,
           type: "agent_cancel",
           conversationId,
         })
+        if (!sent) {
+          turn.retryCancel = tryCancel
+          return
+        }
+        turn.retryCancel = null
         cancelTimer = setTimeout(
           () => this.settleTurn(conversationId, turnId, CANCELLED),
           CANCEL_GRACE_MS,
         )
+      }
+      const cancel = () => {
+        turn.stopping = new Promise((resolve) => {
+          stopped = resolve
+        })
+        tryCancel()
       }
       const turn: PendingTurn = {
         turnId,
         onUpdate,
         onToolStatus,
         stopping: null,
+        retryCancel: null,
         settle: (result) => {
           clearTimeout(cancelTimer)
           signal?.removeEventListener("abort", cancel)
@@ -206,7 +217,13 @@ export class LocalAgentChannel {
     this.turns.get(conversationId)?.onToolStatus(...status)
   }
 
+  resume(): void {
+    if (this.preferences) this.sendPreferences(this.preferences)
+    for (const turn of this.turns.values()) turn.retryCancel?.()
+  }
+
   sendPreferences(preferences: LocalAgentPreferencesWire): void {
+    this.preferences = preferences
     this.client.sendAgentMessage({
       v: EXPECTED_MCP_VERSION,
       type: "agent_settings",

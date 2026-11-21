@@ -1555,6 +1555,30 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].chartConfig?.queries).toHaveLength(2)
   })
 
+  it("keeps an incomplete disabled heatmap when applying a notebook chart config", () => {
+    const heatmap = {
+      type: "heatmap",
+      yColumns: ["reading"],
+      enabled: false,
+    } as const
+    const { nextCells } = buildAppliedCells([], {
+      cells: [
+        {
+          value: "SELECT 1; SELECT 2",
+          mode: "draw",
+          chartConfig: {
+            xColumn: "ts",
+            queries: [
+              { type: "line", yColumns: ["reading"] },
+              { ...heatmap, yColumns: [...heatmap.yColumns] },
+            ],
+          },
+        },
+      ],
+    })
+    expect(nextCells[0].chartConfig?.queries[1]).toEqual(heatmap)
+  })
+
   it("defaults a new draw cell to result and stores no autoRefresh key", () => {
     // Given a new draw cell request with no view and no autoRefresh
     // When applied to an empty notebook

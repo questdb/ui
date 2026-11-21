@@ -142,6 +142,45 @@ describe("messages written while the assistant answers", () => {
     await first.release()
   })
 
+  it("keeps a queued follow-up when the user closes and reopens the chat", async () => {
+    const { first, server } = slowFirstAnswer()
+    renderChat()
+    await openChat()
+    await sendMessage("Show the latest trades.")
+    await waitFor(() => expect(server.requests).toHaveLength(1))
+    await sendMessage("Group them by symbol.")
+    expect(getByHook("chat-queued-message-text")).toHaveTextContent(
+      "Group them by symbol.",
+    )
+
+    await userEvent.click(getByHook("chat-window-close"))
+    await openChat()
+    vi.setSystemTime(Date.now() + 3000)
+    await first.release()
+
+    await waitFor(() => expect(server.requests).toHaveLength(2))
+    expect(lastRequestText(server)).toContain("Group them by symbol.")
+  })
+
+  it("does not stop the answer when the steering shortcut refuses a console command", async () => {
+    const { first, server } = slowFirstAnswer()
+    renderChat()
+    await openChat()
+    await sendMessage("Show the latest trades.")
+    await waitFor(() => expect(server.requests).toHaveLength(1))
+
+    await userEvent.type(getByHook("chat-input-textarea"), "/model")
+    await userEvent.keyboard("{Meta>}{Enter}{/Meta}")
+
+    try {
+      expect(server.requests[0].request.signal.aborted).toBe(false)
+      expect(server.requests).toHaveLength(1)
+      expect(getByHook("chat-input-textarea")).toHaveValue("/model")
+    } finally {
+      await first.release()
+    }
+  })
+
   it("returns the queued message to the input when the user stops the answer", async () => {
     // Given
     const { first, server } = slowFirstAnswer()

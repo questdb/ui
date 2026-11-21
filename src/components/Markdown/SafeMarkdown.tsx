@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from "react"
+import React, { useMemo } from "react"
 import ReactMarkdown, {
   defaultUrlTransform,
   type Components,
@@ -35,25 +35,43 @@ const INLINE_IMAGE_KEY = "inline-image:"
 const INLINE_IMAGE_DATA =
   /(?<=\]\(\s*<?)data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+/g
 
-const InlineImagesContext = createContext<string[]>([])
+type MarkdownNode = {
+  value?: string
+  url?: string
+  alt?: string
+  children?: MarkdownNode[]
+}
 
-const withInlineImagesKeyed = (
-  markdown: string,
-): { markdown: string; images: string[] } => {
+const withInlineImagesKeyed = (markdown: string) => {
+  const prefixes = new Set(
+    Array.from(markdown.matchAll(/inline-image:(\d+):/g), (match) => match[1]),
+  )
+  let next = 0
+  while (prefixes.has(String(next))) next++
+  const prefix = `${INLINE_IMAGE_KEY}${next}:`
   const images: string[] = []
   const keyed = markdown.replace(INLINE_IMAGE_DATA, (data) => {
     images.push(data)
-    return `${INLINE_IMAGE_KEY}${images.length - 1}`
+    return `${prefix}${images.length - 1}`
   })
-  return { markdown: keyed, images }
-}
-
-const useImageSrc = (src?: string | Blob): string | undefined => {
-  const images = useContext(InlineImagesContext)
-  if (typeof src !== "string" || !src.startsWith(INLINE_IMAGE_KEY)) {
-    return typeof src === "string" ? src : undefined
+  const pattern = new RegExp(`${prefix}(\\d+)`, "g")
+  const restore = (value: string) =>
+    value.replace(pattern, (key, index) => images[Number(index)] ?? key)
+  // Restore keys after parsing, not just in destinations: text and code
+  // examples can contain literal Markdown image syntax too.
+  const restoreInlineImages = () => {
+    const visit = (node: MarkdownNode) => {
+      if (node.value !== undefined) node.value = restore(node.value)
+      if (node.url !== undefined) node.url = restore(node.url)
+      if (node.alt !== undefined) node.alt = restore(node.alt)
+      node.children?.forEach(visit)
+    }
+    return visit
   }
-  return images[Number(src.slice(INLINE_IMAGE_KEY.length))]
+  return {
+    markdown: keyed,
+    restoreInlineImages: images.length ? restoreInlineImages : null,
+  }
 }
 
 const isHttpUrl = (value?: string): value is string =>
@@ -80,7 +98,7 @@ const SafeImage = ({
   alt,
   ...props
 }: React.ComponentProps<"img">) => {
-  const src = useImageSrc(rawSrc)
+  const src = typeof rawSrc === "string" ? rawSrc : undefined
   return isSafeImageSrc(src) ? (
     <img src={src} alt={alt ?? ""} {...props} />
   ) : null
@@ -108,7 +126,7 @@ const InlineImage = ({
   alt,
   ...props
 }: React.ComponentProps<"img">) => {
-  const src = useImageSrc(rawSrc)
+  const src = rawSrc
   if (typeof src !== "string" || !src.trim()) return null
   if (/^data:image\//i.test(src))
     return <img src={src} alt={alt ?? ""} {...props} />
@@ -148,7 +166,7 @@ const fileNameOf = (src: string): string => {
 }
 
 const urlTransform: UrlTransform = (url, key) =>
-  key === "src" && /^(data:image\/|file:|inline-image:)/i.test(url)
+  key === "src" && /^(data:image\/|file:)/i.test(url)
     ? url
     : defaultUrlTransform(url)
 
@@ -185,21 +203,23 @@ export const SafeMarkdown = ({
     () =>
       allowImages === "inline"
         ? withInlineImagesKeyed(children)
-        : { markdown: children, images: [] },
+        : { markdown: children, restoreInlineImages: null },
     [allowImages, children],
   )
 
   return (
-    <InlineImagesContext.Provider value={keyed.images}>
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        components={merged}
-        urlTransform={
-          allowImages === "inline" ? inlineUrlTransform : urlTransform
-        }
-      >
-        {keyed.markdown}
-      </ReactMarkdown>
-    </InlineImagesContext.Provider>
+    <ReactMarkdown
+      remarkPlugins={
+        keyed.restoreInlineImages
+          ? [keyed.restoreInlineImages, ...(remarkPlugins ?? [])]
+          : remarkPlugins
+      }
+      components={merged}
+      urlTransform={
+        allowImages === "inline" ? inlineUrlTransform : urlTransform
+      }
+    >
+      {keyed.markdown}
+    </ReactMarkdown>
   )
 }

@@ -57,7 +57,7 @@ export type ChartConfig = {
 // What a query of this type is missing to render; null when nothing is.
 export const missingQueryFields = (q: QueryChart): string | null => {
   if (q.type === "candlestick" && !q.ohlc) return "an ohlc mapping"
-  if (q.type === "heatmap") {
+  if (q.type === "heatmap" && q.enabled !== false) {
     if (!q.partitionByColumn) return "a partition_by_column for its rows"
     if (q.yColumns.length === 0) return "a y_columns value column"
   }

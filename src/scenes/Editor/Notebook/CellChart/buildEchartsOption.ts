@@ -562,6 +562,7 @@ const axisBoundsWith = (
 
 const buildScatterChartOption = (
   q: ResolvedQuery,
+  referenceLines: ReferenceLine[],
   chartText: { fontSize: number },
   legend: object,
   axisLabel: { fontSize: number },
@@ -587,6 +588,7 @@ const buildScatterChartOption = (
       }
     })
     .filter((s): s is NonNullable<typeof s> => s !== null)
+  addReferenceLines(series, referenceLines)
   return {
     tooltip: { trigger: "item", textStyle: chartText },
     legend,
@@ -604,7 +606,15 @@ const buildScatterChartOption = (
       axisLabel,
       nameTextStyle: axisName,
     },
-    yAxis: { type: "value", scale: true, axisLabel, nameTextStyle: axisName },
+    yAxis: {
+      type: "value",
+      scale: true,
+      axisLabel,
+      nameTextStyle: axisName,
+      ...axisBoundsWith(
+        series.length ? referenceLines.map((line) => line.value) : [],
+      ),
+    },
     series,
   }
 }
@@ -642,6 +652,7 @@ export const buildEchartsOption = (
   if (single && anchor.type === "scatter" && anchorRole === "numeric")
     return buildScatterChartOption(
       anchor,
+      chart.referenceLines ?? [],
       chartText,
       baseLegend,
       axisLabel,

@@ -39,6 +39,7 @@ import {
   readImages,
 } from "./ImageAttachments"
 import type { AgentPromptImage } from "../../../utils/localAgent/protocol"
+import { LOCAL_AGENT_MODEL } from "../../../utils/localAgent/localAgentModel"
 import {
   CommandArgumentHint,
   SlashCommandMenu,
@@ -136,7 +137,10 @@ type QueuedEntry = {
   images: AgentPromptImage[]
   agentCommand: boolean
   model: string | null
+  channel: ReturnType<typeof useLocalAgentChannel>
 }
+
+export type ChatQueue = Record<string, QueuedEntry>
 
 const ContextBadgeContainer = styled.div`
   position: absolute;
@@ -182,6 +186,8 @@ export type NotebookContext = {
 
 type ChatInputProps = {
   conversationId: string | null
+  queue: ChatQueue
+  setQueue: React.Dispatch<React.SetStateAction<ChatQueue>>
   // The token usage of the chat's latest answer, shown beside the settings.
   contextUsage?: ContextUsage | null
   chatTokens?: TokenUsageCounts | null
@@ -220,6 +226,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
   (
     {
       conversationId,
+      queue,
+      setQueue,
       contextUsage = null,
       chatTokens = null,
       onCommandNote,
@@ -273,23 +281,31 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     } = useAIStatus()
 
     const isAIInProgress = isBlockingAIStatus(aiStatus)
-    // Messages written while the assistant answers, per conversation. Each
-    // is sent when the answer ends, unless the user stops it.
-    const [queue, setQueue] = useState<Record<string, QueuedEntry>>({})
     const queued = conversationId ? queue[conversationId] : undefined
     // Images attached to the message being written.
     const [attachments, setAttachments] = useState<AgentPromptImage[]>([])
     const fileInputRef = useRef<HTMLInputElement>(null)
 
+    const localAgent = useLocalAgent()
+    const localAgentChannel = useLocalAgentChannel()
+    const composerModel = useComposerModel()
+    const destinationChannel =
+      currentModel === LOCAL_AGENT_MODEL ? localAgentChannel : null
+    const acceptsImages =
+      composerModel.usesAgent && localAgent?.acceptsImages === true
+
     const unqueue = (id: string) =>
       setQueue(({ [id]: _removed, ...rest }) => rest)
 
     useEffect(() => {
-      if (isAIInProgress || disabled || !conversationId) return
-      const entry = queue[conversationId]
-      if (!entry) return
-      unqueue(conversationId)
-      if (entry.model !== currentModel) {
+      if (isAIInProgress || disabled || !conversationId || !queued) return
+      const entry = queued
+      setQueue(({ [conversationId]: _removed, ...rest }) => rest)
+      if (
+        entry.model !== currentModel ||
+        entry.channel !== destinationChannel ||
+        (entry.images.length > 0 && !acceptsImages)
+      ) {
         setInput((current) =>
           [entry.text, current].filter(Boolean).join("\n\n"),
         )
@@ -297,7 +313,17 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         return
       }
       onSend(entry.text, entry.images, entry.agentCommand)
-    }, [isAIInProgress, disabled, conversationId, currentModel, queue, onSend])
+    }, [
+      isAIInProgress,
+      disabled,
+      conversationId,
+      currentModel,
+      destinationChannel,
+      acceptsImages,
+      queued,
+      onSend,
+      setQueue,
+    ])
 
     useEffect(() => {
       // Auto-resize textarea
@@ -314,9 +340,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       }
     }
 
-    const localAgent = useLocalAgent()
-    const localAgentChannel = useLocalAgentChannel()
-    const composerModel = useComposerModel()
     const commandListId = useId()
     const [highlighted, setHighlighted] = useState(0)
     // The input at which the user closed the menu; typing reopens it.
@@ -422,7 +445,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       images: AgentPromptImage[] = [],
       agentCommand = false,
     ) => {
-      if (!conversationId) return
+      if (!conversationId || disabled) return false
+      if (images.length > 0 && !acceptsImages) {
+        setAttachError(
+          "Change to an agent that reads images, or remove the attachments.",
+        )
+        return false
+      }
       if (isAIInProgress || queued) {
         setQueue((current) => {
           const previous = current[conversationId]
@@ -435,8 +464,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   // Joined to another message, a command is no longer one.
                   agentCommand: false,
                   model: previous.model,
+                  channel: previous.channel,
                 }
-              : { text, images, agentCommand, model: currentModel },
+              : {
+                  text,
+                  images,
+                  agentCommand,
+                  model: currentModel,
+                  channel: destinationChannel,
+                },
           }
         })
       } else {
@@ -444,11 +480,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       }
       clearInput()
       setAttachments([])
+      return true
     }
 
     // An agent that reads images takes them pasted, dropped or picked.
-    const acceptsImages =
-      composerModel.usesAgent && localAgent?.acceptsImages === true
     const attach = async (files: File[]) => {
       if (files.length === 0) return
       if (!acceptsImages) {
@@ -495,10 +530,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const handleSend = () => {
       const trimmed = input.trim()
       if ((!trimmed && attachments.length === 0) || disabled || !conversationId)
-        return
+        return false
       const parsed = parseCommand(trimmed, runnableCommands)
-      if (parsed && runConsoleCommand(parsed.command, parsed.args)) return
-      sendText(trimmed, attachments, parsed?.command.source === "agent")
+      if (parsed && runConsoleCommand(parsed.command, parsed.args)) return false
+      return sendText(trimmed, attachments, parsed?.command.source === "agent")
     }
 
     // Takes the queued message back into the input for editing.
@@ -515,9 +550,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // Cmd/Ctrl+Enter replaces the running answer with what the user wrote,
     // or else with the queued message. With no answer running, it sends.
     const steer = () => {
-      const hasInput = input.trim() !== ""
-      handleSend()
-      if (isAIInProgress && (hasInput || queued)) steerOperation()
+      const hasDraft = input.trim() !== "" || attachments.length > 0
+      const submitted = handleSend()
+      if (!disabled && isAIInProgress && (submitted || (!hasDraft && queued))) {
+        steerOperation()
+      }
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

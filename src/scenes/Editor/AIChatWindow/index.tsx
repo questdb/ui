@@ -40,7 +40,7 @@ import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
-import { ChatInput, type ChatInputHandle } from "./ChatInput"
+import { ChatInput, type ChatInputHandle, type ChatQueue } from "./ChatInput"
 import {
   latestContextUsage,
   totalTokenUsage,
@@ -270,6 +270,8 @@ const AIChatWindow: React.FC = () => {
 
   // Ref for ChatInput to programmatically focus
   const chatInputRef = useRef<ChatInputHandle>(null)
+  // Keep submitted follow-ups when closing the drawer unmounts the composer.
+  const [chatQueue, setChatQueue] = useState<ChatQueue>({})
   const hasAutoFocusedRef = useRef(false)
   const notificationTimeoutRef = useRef<number | null>(null)
 
@@ -1130,6 +1132,8 @@ const AIChatWindow: React.FC = () => {
               )}
               <ChatInput
                 ref={chatInputRef}
+                queue={chatQueue}
+                setQueue={setChatQueue}
                 conversationId={chatWindowState.activeConversationId}
                 contextUsage={contextUsage}
                 chatTokens={chatTokens}
