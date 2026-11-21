@@ -600,34 +600,35 @@ const categoryLabelsOf = (q: ResolvedQuery, xIdx: number): string[] => {
     : values.map(toCategoryLabel)
 }
 
-// The distinct labels of a column: numbers and times in order (a GROUP BY
-// without ORDER BY returns them shuffled), text in result order.
-const orderedLabels = (
-  q: ResolvedQuery,
-  index: number,
-  labels: string[],
-): string[] => {
-  const column = q.columns[index]
-  const kind = column ? classifyColumn(column) : "other"
-  const firstRaw = new Map<string, unknown>()
-  labels.forEach((label, i) => {
-    if (!firstRaw.has(label)) firstRaw.set(label, q.dataset[i]?.[index])
-  })
-  const distinct = [...firstRaw.keys()]
+// Keep raw categories distinct. A GROUP BY without ORDER BY can return
+// numbers or times out of order; text stays in result order.
+const heatmapAxis = (q: ResolvedQuery, index: number) => {
+  const kind = classifyColumn(q.columns[index])
+  const categories = [...new Set(q.dataset.map((row) => row[index]))]
   if (kind === "numeric")
-    return distinct.sort((a, b) => {
-      const x = toNumberOrNull(firstRaw.get(a))
-      const y = toNumberOrNull(firstRaw.get(b))
-      // Nulls last.
+    categories.sort((a, b) => {
+      const x = toNumberOrNull(a)
+      const y = toNumberOrNull(b)
       if (x === null || y === null)
         return (x === null ? 1 : 0) - (y === null ? 1 : 0)
       return x - y
     })
   if (kind === "temporal")
-    return distinct.sort((a, b) =>
-      String(firstRaw.get(a)).localeCompare(String(firstRaw.get(b))),
-    )
-  return distinct
+    categories.sort((a, b) => String(a).localeCompare(String(b)))
+  const labels = categories.map((value) =>
+    value === null
+      ? "(null)"
+      : value === ""
+        ? "(empty)"
+        : toCategoryLabel(value),
+  )
+  const ticks = kind === "temporal" ? timeCategoryLabels(labels) : labels
+  return {
+    data: categories.map((_, i) => String(i)),
+    positions: new Map(categories.map((value, i) => [value, i])),
+    labels,
+    tick: (key: string) => ticks[Number(key)] ?? "",
+  }
 }
 
 const EMPTY_CANDLE: (number | string)[] = ["-", "-", "-", "-"]
@@ -798,24 +799,18 @@ const buildHeatmapOption = (
   const roles = roleIndexes(q, ["y", "value"])
   if (xIdx === undefined || !roles) return { tooltip: { textStyle: chartText } }
   const [yIdx, valueIdx] = roles
-  const xKeys = q.dataset.map((row) => toCategoryLabel(row[xIdx]))
-  const yKeys = q.dataset.map((row) => toCategoryLabel(row[yIdx]))
-  const xs = orderedLabels(q, xIdx, xKeys)
-  const ys = orderedLabels(q, yIdx, yKeys)
-  const xLabels = isTimeColumn(q, q.xColumn ?? undefined)
-    ? timeCategoryLabels(xs)
-    : xs
-  const yLabels = isTimeColumn(q, q.roles?.y) ? timeCategoryLabels(ys) : ys
-  const formatX = new Map(xs.map((key, index) => [key, xLabels[index]]))
-  const formatY = new Map(ys.map((key, index) => [key, yLabels[index]]))
-  const xAt = new Map(xs.map((x, i) => [x, i]))
-  const yAt = new Map(ys.map((y, i) => [y, i]))
-  const data = q.dataset.map((row, i) =>
+  const x = heatmapAxis(q, xIdx)
+  const y = heatmapAxis(q, yIdx)
+  const data = q.dataset.map((row) =>
     rowItem(
       q,
       row,
-      [xAt.get(xKeys[i]), yAt.get(yKeys[i]), toNumberOrNull(row[valueIdx])],
-      xKeys[i],
+      [
+        x.positions.get(row[xIdx]),
+        y.positions.get(row[yIdx]),
+        toNumberOrNull(row[valueIdx]),
+      ],
+      toCategoryLabel(row[xIdx]),
     ),
   )
   const values = data
@@ -830,31 +825,25 @@ const buildHeatmapOption = (
       textStyle: chartText,
       formatter: (p: unknown) => {
         const v = (p as { value: [number, number, number | null] }).value
-        return `${escapeHtml(`${xs[v[0]] ?? ""} · ${ys[v[1]] ?? ""}`)}<br/><b>${escapeHtml(format(v[2]))}</b>`
+        return `${escapeHtml(`${x.labels[v[0]] ?? ""} · ${y.labels[v[1]] ?? ""}`)}<br/><b>${escapeHtml(format(v[2]))}</b>`
       },
     },
     grid: { ...STANDALONE_GRID, top: 36 },
     xAxis: {
       type: "category",
-      data: xs,
+      data: x.data,
       name: q.xColumn ?? "",
       nameLocation: "middle",
       nameGap: X_AXIS_NAME_GAP,
-      axisLabel: {
-        ...axisLabel,
-        formatter: (key: string) => formatX.get(key) ?? key,
-      },
+      axisLabel: { ...axisLabel, formatter: x.tick },
       nameTextStyle: axisName,
       splitArea: { show: false },
     },
     yAxis: {
       type: "category",
-      data: ys,
+      data: y.data,
       name: q.roles?.y ?? "",
-      axisLabel: {
-        ...axisLabel,
-        formatter: (key: string) => formatY.get(key) ?? key,
-      },
+      axisLabel: { ...axisLabel, formatter: y.tick },
       nameTextStyle: axisName,
       splitArea: { show: false },
     },

@@ -339,6 +339,47 @@ describe("role chart types", () => {
     ])
   })
 
+  it("draws SQL null and empty text in separate heatmap cells", () => {
+    // Given a missing category and an actual empty VARCHAR
+    const option = buildEchartsOption({ xColumn: "label" }, [
+      query({
+        type: "heatmap",
+        xColumn: "label",
+        roles: { y: "bucket", value: "usage" },
+        columns: [
+          col("label", "VARCHAR"),
+          col("bucket", "INT"),
+          col("usage", "INT"),
+        ],
+        dataset: [
+          [null, 1, 5],
+          ["", 1, 9],
+        ],
+      }),
+    ])
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 800,
+      height: 400,
+    })
+    try {
+      // When the chart renders, both coordinates and labels are distinct
+      chart.setOption(option)
+      expect(seriesOf(option)[0].data).toMatchObject([
+        { value: [0, 0, 5] },
+        { value: [1, 0, 9] },
+      ])
+      expect(chart.convertToPixel({ xAxisIndex: 0 }, 0)).not.toBe(
+        chart.convertToPixel({ xAxisIndex: 0 }, 1),
+      )
+      expect(chart.renderToSVGString()).toContain("(null)")
+      expect(chart.renderToSVGString()).toContain("(empty)")
+    } finally {
+      chart.dispose()
+    }
+  })
+
   it("orders a numeric heatmap y by value, not as text", () => {
     // Given price levels as y
     const option = buildEchartsOption({ xColumn: "ts" }, [
@@ -352,9 +393,17 @@ describe("role chart types", () => {
     ])
 
     // Then
-    expect(option.yAxis).toMatchObject({
-      data: ["-2", "-1", "1.0835", "1.084", ""],
-    })
+    const axis = option.yAxis as {
+      data: string[]
+      axisLabel: { formatter: (key: string) => string }
+    }
+    expect(axis.data.map(axis.axisLabel.formatter)).toEqual([
+      "-2",
+      "-1",
+      "1.0835",
+      "1.084",
+      "(null)",
+    ])
   })
 
   it("draws a heatmap of x by y in the result's order for text", () => {
@@ -378,7 +427,11 @@ describe("role chart types", () => {
     ])
 
     // Then
-    expect(option.yAxis).toMatchObject({ data: ["b10", "b2"] })
+    const axis = option.yAxis as {
+      data: string[]
+      axisLabel: { formatter: (key: string) => string }
+    }
+    expect(axis.data.map(axis.axisLabel.formatter)).toEqual(["b10", "b2"])
     const heatmap = seriesOf(option)[0]
     expect(heatmap.type).toBe("heatmap")
     expect(
@@ -513,7 +566,11 @@ describe("role chart types", () => {
     ])
 
     // Then
-    expect(option.xAxis).toMatchObject({ data: ["2", "10"] })
+    const axis = option.xAxis as {
+      data: string[]
+      axisLabel: { formatter: (key: string) => string }
+    }
+    expect(axis.data.map(axis.axisLabel.formatter)).toEqual(["2", "10"])
   })
 
   it("puts events on a timeline", () => {
