@@ -98,6 +98,28 @@ describe("stateTimelineOption", () => {
 })
 
 describe("sankeyOption", () => {
+  it("reports cycles instead of handing an unsupported flow to ECharts", () => {
+    const option = sankeyOption({
+      visual: { type: "sankey" },
+      statements: [
+        rows(
+          [
+            ["source", "SYMBOL"],
+            ["target", "SYMBOL"],
+          ],
+          [
+            ["orders", "workers"],
+            ["workers", "orders"],
+          ],
+        ),
+      ],
+      colors: lightColors,
+      formats: {},
+    })
+    expect(option.option).toBeNull()
+    expect(option.problems[0]?.message).toContain("contain a cycle")
+  })
+
   it("does not invent unit weights when an explicit weight column is missing", () => {
     const statements = [
       rows(

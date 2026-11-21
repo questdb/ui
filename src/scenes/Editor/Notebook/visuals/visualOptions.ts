@@ -663,13 +663,32 @@ export const sankeyOption = (ctx: VisualContext): VisualBuild => {
   // Labels sit right of their node, except on the last column, where they
   // would run off the chart.
   const depth = new Map<string, number>()
-  for (let pass = 0; pass < e.nodes.length; pass++) {
-    for (const l of e.links) {
-      const d = (depth.get(l.source) ?? 0) + 1
-      if (d > (depth.get(l.target) ?? 0)) depth.set(l.target, d)
+  const outgoing = new Map<string, string[]>()
+  const incoming = new Map(e.nodes.map(({ name }) => [name, 0]))
+  for (const { source, target } of e.links) {
+    const targets = outgoing.get(source) ?? []
+    targets.push(target)
+    outgoing.set(source, targets)
+    incoming.set(target, (incoming.get(target) ?? 0) + 1)
+  }
+  const ready = e.nodes
+    .filter(({ name }) => incoming.get(name) === 0)
+    .map(({ name }) => name)
+  let lastDepth = 0
+  for (const source of ready) {
+    const nextDepth = (depth.get(source) ?? 0) + 1
+    for (const target of outgoing.get(source) ?? []) {
+      const remaining = (incoming.get(target) ?? 0) - 1
+      incoming.set(target, remaining)
+      depth.set(target, Math.max(depth.get(target) ?? 0, nextDepth))
+      lastDepth = Math.max(lastDepth, nextDepth)
+      if (remaining === 0) ready.push(target)
     }
   }
-  const lastDepth = Math.max(0, ...depth.values())
+  if (ready.length !== e.nodes.length)
+    return missing(
+      "Sankey links contain a cycle. Remove cycles or choose a graph visual.",
+    )
   const { colors, formats } = ctx
   const format = e.valueName ? formats[e.valueName] : undefined
   return {
