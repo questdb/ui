@@ -445,23 +445,32 @@ const alignedRows = (
   xIdx: number,
   valueIdxs: number[],
   ctx: SeriesContext,
-): unknown[][] => {
-  const values = (row: Dataset[number]) =>
-    valueIdxs.map((i) => toNumberOrNull(row[i]))
-  if (ctx.xMode === "time")
-    return q.dataset.map((row) => [row[xIdx], ...values(row)])
-  if (ctx.xMode === "value")
-    return q.dataset.map((row) => [toNumberOrNull(row[xIdx]), ...values(row)])
-  if (ctx.categoryUnion) {
-    const byLabel = new Map<string, (number | null)[]>()
-    for (const row of q.dataset)
-      byLabel.set(toCategoryLabel(row[xIdx]), values(row))
-    return ctx.categoryUnion.flatMap((label) => {
-      const v = byLabel.get(label)
-      return v ? [[label, ...v]] : []
-    })
+): unknown[] => {
+  const clickColumn = ctx.clickColumn
+  const clickIdx =
+    clickColumn === undefined
+      ? -1
+      : q.columns.findIndex(({ name }) => name === clickColumn)
+  const toPoint = (row: Dataset[number]) => {
+    const x =
+      ctx.xMode === "time"
+        ? row[xIdx]
+        : ctx.xMode === "value"
+          ? toNumberOrNull(row[xIdx])
+          : toCategoryLabel(row[xIdx])
+    const value = [x, ...valueIdxs.map((i) => toNumberOrNull(row[i]))]
+    return clickColumn !== undefined && clickIdx >= 0
+      ? { value, columns: { [clickColumn]: row[clickIdx] } }
+      : value
   }
-  return q.dataset.map((row) => [toCategoryLabel(row[xIdx]), ...values(row)])
+  if (ctx.xMode === "category" && ctx.categoryUnion)
+    return alignPointsToCategoryUnion(
+      q.dataset,
+      xIdx,
+      ctx.categoryUnion,
+      toPoint,
+    ).filter((value) => value !== null)
+  return q.dataset.map(toPoint)
 }
 
 // A data item that carries its row by column name, so a click can set a

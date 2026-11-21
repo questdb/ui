@@ -45,6 +45,29 @@ const seriesOf = (option: unknown) =>
   (option as { series: Record<string, unknown>[] }).series
 
 describe("preset chart interactions", () => {
+  it("keeps the unplotted bound field on each numeric range bar", () => {
+    const option = buildEchartsOption(
+      { xColumn: "market" },
+      [
+        query({
+          type: "rangeBar",
+          xColumn: "market",
+          roles: { start: "low", end: "high" },
+          columns: [
+            col("market", "SYMBOL"),
+            col("low", "INT"),
+            col("high", "INT"),
+            col("code", "SYMBOL"),
+          ],
+          dataset: [["London", 5, 10, "LON"]],
+        }),
+      ],
+      { clickColumn: "code" },
+    )
+    const data = (seriesOf(option)[0].data as unknown[])[0]
+    expect(data).toEqual({ value: ["London", 5, 10], columns: { code: "LON" } })
+    expect(clickedValue({ data }, "code")).toBe("LON")
+  })
   it("retains the raw bound field without changing a candle's OHLC tuple", () => {
     const ts = "2026-01-01T12:00:00.000000Z"
     const option = buildEchartsOption(
