@@ -45,53 +45,56 @@ const seriesOf = (option: unknown) =>
   (option as { series: Record<string, unknown>[] }).series
 
 describe("preset chart interactions", () => {
-  it("writes the bound source column, not the bar's category label", () => {
-    const bars = query({
-      type: "bar",
-      xColumn: "desk",
-      yColumns: ["volume"],
-      columns: [
-        col("desk", "SYMBOL"),
-        col("volume", "INT"),
-        col("code", "SYMBOL"),
-      ],
-      dataset: [
-        ["London", 4, "LON"],
-        ["Tokyo", 9, "TYO"],
-      ],
-    })
-    const chart = echarts.init(null, undefined, {
-      renderer: "svg",
-      ssr: true,
-      width: 600,
-      height: 400,
-    })
-    try {
-      chart.setOption(
-        buildEchartsOption({ xColumn: "desk" }, [bars], {
-          clickColumn: "code",
-        }),
-      )
-      const model = (
-        chart as unknown as {
-          getModel(): {
-            getSeriesByIndex(index: number): {
-              getDataParams(index: number): unknown
+  it.each(["bar", "pie"] as const)(
+    "writes the bound source column for a %s",
+    (type) => {
+      const bars = query({
+        type,
+        xColumn: "desk",
+        yColumns: ["volume"],
+        columns: [
+          col("desk", "SYMBOL"),
+          col("volume", "INT"),
+          col("code", "SYMBOL"),
+        ],
+        dataset: [
+          ["London", 4, "LON"],
+          ["Tokyo", 9, "TYO"],
+        ],
+      })
+      const chart = echarts.init(null, undefined, {
+        renderer: "svg",
+        ssr: true,
+        width: 600,
+        height: 400,
+      })
+      try {
+        chart.setOption(
+          buildEchartsOption({ xColumn: "desk" }, [bars], {
+            clickColumn: "code",
+          }),
+        )
+        const model = (
+          chart as unknown as {
+            getModel(): {
+              getSeriesByIndex(index: number): {
+                getDataParams(index: number): unknown
+              }
             }
           }
-        }
-      ).getModel()
-      const params = model.getSeriesByIndex(0).getDataParams(1)
-      const setVariables = vi.fn()
-      interactionEvents(
-        { click: { variable: "selection", column: "code" } },
-        setVariables,
-      ).click(params, chart)
-      expect(setVariables).toHaveBeenCalledWith({ selection: "'TYO'" })
-    } finally {
-      chart.dispose()
-    }
-  })
+        ).getModel()
+        const params = model.getSeriesByIndex(0).getDataParams(1)
+        const setVariables = vi.fn()
+        interactionEvents(
+          { click: { variable: "selection", column: "code" } },
+          setVariables,
+        ).click(params, chart)
+        expect(setVariables).toHaveBeenCalledWith({ selection: "'TYO'" })
+      } finally {
+        chart.dispose()
+      }
+    },
+  )
 })
 
 describe("role chart types", () => {
@@ -258,6 +261,31 @@ describe("role chart types", () => {
       renderItem: "barRange",
       encode: { y: 0, x: [1, 2] },
     })
+  })
+
+  it("keeps distinct subsecond heatmap coordinates on both axes", () => {
+    const a = "2026-01-01T00:00:01.100000Z"
+    const b = "2026-01-01T00:00:01.900000Z"
+    const option = buildEchartsOption({ xColumn: "x" }, [
+      query({
+        type: "heatmap",
+        xColumn: "x",
+        roles: { y: "y", value: "usage" },
+        columns: [
+          col("x", "TIMESTAMP"),
+          col("y", "TIMESTAMP"),
+          col("usage", "INT"),
+        ],
+        dataset: [
+          [a, a, 4],
+          [b, b, 9],
+        ],
+      }),
+    ])
+    expect(seriesOf(option)[0].data).toMatchObject([
+      { value: [0, 0, 4] },
+      { value: [1, 1, 9] },
+    ])
   })
 
   it("orders a numeric heatmap y by value, not as text", () => {

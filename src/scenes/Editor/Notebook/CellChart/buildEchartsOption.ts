@@ -695,9 +695,14 @@ const buildPieChartOption = (
   const yIdx = q.yColumns[0] != null ? idx.get(q.yColumns[0]) : undefined
   if (xIdx === undefined || yIdx === undefined)
     return { tooltip: { trigger: "item", textStyle: chartText } }
+  const clickColumn = context.clickColumn
+  const clickIdx = clickColumn === undefined ? undefined : idx.get(clickColumn)
   const data = q.dataset.map((row) => ({
     name: toCategoryLabel(row[xIdx]),
     value: toNumberOrNull(row[yIdx]) ?? 0,
+    ...(clickColumn !== undefined && clickIdx !== undefined
+      ? { columns: { [clickColumn]: row[clickIdx] } }
+      : {}),
   }))
   return {
     tooltip: {
@@ -770,21 +775,24 @@ const buildHeatmapOption = (
   const roles = roleIndexes(q, ["y", "value"])
   if (xIdx === undefined || !roles) return { tooltip: { textStyle: chartText } }
   const [yIdx, valueIdx] = roles
-  const xLabels = categoryLabelsOf(q, xIdx)
-  const xs = orderedLabels(q, xIdx, xLabels)
-  const yRaw = q.dataset.map((row) => row[yIdx])
-  const yLabels = isTimeColumn(q, q.roles?.y)
-    ? timeCategoryLabels(yRaw)
-    : yRaw.map(toCategoryLabel)
-  const ys = orderedLabels(q, yIdx, yLabels)
+  const xKeys = q.dataset.map((row) => toCategoryLabel(row[xIdx]))
+  const yKeys = q.dataset.map((row) => toCategoryLabel(row[yIdx]))
+  const xs = orderedLabels(q, xIdx, xKeys)
+  const ys = orderedLabels(q, yIdx, yKeys)
+  const xLabels = isTimeColumn(q, q.xColumn ?? undefined)
+    ? timeCategoryLabels(xs)
+    : xs
+  const yLabels = isTimeColumn(q, q.roles?.y) ? timeCategoryLabels(ys) : ys
+  const formatX = new Map(xs.map((key, index) => [key, xLabels[index]]))
+  const formatY = new Map(ys.map((key, index) => [key, yLabels[index]]))
   const xAt = new Map(xs.map((x, i) => [x, i]))
   const yAt = new Map(ys.map((y, i) => [y, i]))
   const data = q.dataset.map((row, i) =>
     rowItem(
       q,
       row,
-      [xAt.get(xLabels[i]), yAt.get(yLabels[i]), toNumberOrNull(row[valueIdx])],
-      xLabels[i],
+      [xAt.get(xKeys[i]), yAt.get(yKeys[i]), toNumberOrNull(row[valueIdx])],
+      xKeys[i],
     ),
   )
   const values = data
@@ -809,7 +817,10 @@ const buildHeatmapOption = (
       name: q.xColumn ?? "",
       nameLocation: "middle",
       nameGap: X_AXIS_NAME_GAP,
-      axisLabel,
+      axisLabel: {
+        ...axisLabel,
+        formatter: (key: string) => formatX.get(key) ?? key,
+      },
       nameTextStyle: axisName,
       splitArea: { show: false },
     },
@@ -817,7 +828,10 @@ const buildHeatmapOption = (
       type: "category",
       data: ys,
       name: q.roles?.y ?? "",
-      axisLabel,
+      axisLabel: {
+        ...axisLabel,
+        formatter: (key: string) => formatY.get(key) ?? key,
+      },
       nameTextStyle: axisName,
       splitArea: { show: false },
     },
