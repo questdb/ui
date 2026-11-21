@@ -42,6 +42,41 @@ describe("buildCustomOption", () => {
     })
   })
 
+  it("removes external navigation from treemap nodes without disabling drill-down", () => {
+    const { option } = buildCustomOption(
+      {
+        series: [
+          {
+            type: "treemap",
+            nodeClick: "zoomToNode",
+            data: [
+              {
+                name: "Region",
+                children: [
+                  {
+                    name: "Desk",
+                    value: 3,
+                    link: "https://example.com/report",
+                    target: "blank",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      [],
+      false,
+    )
+    expect(option.series).toEqual([
+      {
+        type: "treemap",
+        nodeClick: "zoomToNode",
+        data: [{ name: "Region", children: [{ name: "Desk", value: 3 }] }],
+      },
+    ])
+  })
+
   it("removes navigation metadata from titles at the renderer boundary", () => {
     const title = {
       text: "Daily volume",

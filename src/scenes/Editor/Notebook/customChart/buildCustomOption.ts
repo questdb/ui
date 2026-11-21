@@ -248,15 +248,27 @@ const checkEncodes = (
 // nested scopes such as timeline and media options that ECharts merges later.
 const TITLE_NAVIGATION = new Set(["link", "sublink", "target", "subtarget"])
 
-const enforceRendererPolicy = (node: unknown, inTitle = false): unknown => {
+const enforceRendererPolicy = (
+  node: unknown,
+  inTitle = false,
+  inTreemapData = false,
+): unknown => {
   if (Array.isArray(node))
-    return node.map((child) => enforceRendererPolicy(child, inTitle))
+    return node.map((child) =>
+      enforceRendererPolicy(child, inTitle, inTreemapData),
+    )
   if (!isRecord(node)) return node
   return Object.fromEntries(
     Object.entries(node)
-      .filter(([key]) => !inTitle || !TITLE_NAVIGATION.has(key))
+      .filter(
+        ([key]) => !(inTitle || inTreemapData) || !TITLE_NAVIGATION.has(key),
+      )
       .map(([key, value]) => {
-        const child = enforceRendererPolicy(value, key === "title" || inTitle)
+        const child = enforceRendererPolicy(
+          value,
+          key === "title" || inTitle,
+          (node.type === "treemap" && key === "data") || inTreemapData,
+        )
         if (key !== "tooltip") return [key, child]
         const normalize = (tooltip: unknown) => {
           if (tooltip === false) return false
