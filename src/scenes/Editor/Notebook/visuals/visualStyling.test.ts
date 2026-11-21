@@ -6,6 +6,7 @@ import {
   sankeyOption,
   stateTimelineOption,
   treemapOption,
+  volumeProfileOption,
 } from "./visualOptions"
 import { statTiles } from "./StatTiles"
 import { bulletRows } from "./Bullets"
@@ -94,6 +95,79 @@ describe("stateTimelineOption", () => {
     expect(colorOf("moving")).toBe(lightColors.chartUp)
     expect(colorOf("charging")).toBe(lightColors.statusWarning)
     expect(colorOf("error")).toBe(lightColors.chartDown)
+  })
+})
+
+describe("volumeProfileOption", () => {
+  const common = { colors: lightColors, formats: {}, clickColumn: "price" }
+  it("reports a missing configured sell column instead of changing the point of control", () => {
+    const result = volumeProfileOption({
+      ...common,
+      visual: { type: "volumeProfile", columns: { sell: "sell" } },
+      statements: [
+        rows(
+          [
+            ["price", "INT"],
+            ["buy", "INT"],
+            ["sales", "INT"],
+          ],
+          [
+            [10, 4, 20],
+            [11, 5, 0],
+          ],
+        ),
+      ],
+    })
+    expect(result.option).toBeNull()
+    expect(result.problems[0]?.message).toContain('column "sell" not found')
+  })
+  it("keeps raw price metadata in split and single volume bars", () => {
+    const statements = [
+      rows(
+        [
+          ["price", "INT"],
+          ["buy", "INT"],
+          ["sell", "INT"],
+        ],
+        [
+          [10, 4, 20],
+          [11, 5, 0],
+        ],
+      ),
+    ]
+    const split = volumeProfileOption({
+      ...common,
+      visual: { type: "volumeProfile" },
+      statements,
+    })
+    expect(split.drawn.pointOfControl).toBe("10")
+    expect(split.option?.series).toMatchObject([
+      {
+        data: [
+          { value: 5, columns: { price: 11 } },
+          { value: 4, columns: { price: 10 } },
+        ],
+      },
+      {
+        data: [
+          { value: 0, columns: { price: 11 } },
+          { value: 20, columns: { price: 10 } },
+        ],
+      },
+    ])
+    const single = volumeProfileOption({
+      ...common,
+      visual: { type: "volumeProfile", columns: { value: "buy" } },
+      statements,
+    })
+    expect(single.option?.series).toMatchObject([
+      {
+        data: [
+          { value: 5, columns: { price: 11 } },
+          { value: 4, columns: { price: 10 } },
+        ],
+      },
+    ])
   })
 })
 

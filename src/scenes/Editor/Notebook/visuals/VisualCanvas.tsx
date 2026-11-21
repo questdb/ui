@@ -117,15 +117,29 @@ export const VisualCanvas = ({
   const theme = useTheme()
   const builder = ECHARTS_VISUALS[visual.type]
   const mapStatus = useWorldMap(visual.type === "map")
+  const click = interactions?.click
   // A map fits its view to the regions once the world map has loaded.
   const built = useMemo(
     () =>
       builder && mapStatus === "ready"
-        ? builder({ visual, statements, colors: theme.color, formats })
+        ? builder({
+            visual,
+            statements,
+            colors: theme.color,
+            formats,
+            clickColumn: click?.column,
+          })
         : null,
-    [builder, visual, statements, theme.color, formats, mapStatus],
+    [
+      builder,
+      visual,
+      statements,
+      theme.color,
+      formats,
+      mapStatus,
+      click?.column,
+    ],
   )
-  const click = interactions?.click
   const select = click
     ? (value: unknown) => setVariables({ [click.variable]: sqlLiteral(value) })
     : undefined

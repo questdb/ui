@@ -44,6 +44,7 @@ export type VisualContext = {
   statements: (StatementRows | null)[]
   colors: ColorShape
   formats: ColumnFormats
+  clickColumn?: string
 }
 
 const missing = (message: string): VisualBuild => ({
@@ -1119,6 +1120,7 @@ export const volumeProfileOption = ({
   statements,
   colors,
   formats,
+  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
@@ -1140,9 +1142,10 @@ export const volumeProfileOption = ({
   const valueIdx = c.value !== undefined ? columnIndex(rows, c.value) : -1
   const err =
     need(rows, priceIdx, "price", c.price) ??
-    (valueIdx < 0 && buyIdx < 0
-      ? `buy: column not found. Columns: ${columnNames(rows)}.`
-      : null)
+    (c.value !== undefined
+      ? need(rows, valueIdx, "value", c.value)
+      : (need(rows, buyIdx, "buy", c.buy) ??
+        (c.sell === undefined ? null : need(rows, sellIdx, "sell", c.sell))))
   if (err) return missing(err)
   const sorted = [...rows.rows].sort(
     (a, b) => (toNumber(b[priceIdx]) ?? 0) - (toNumber(a[priceIdx]) ?? 0),
@@ -1157,14 +1160,22 @@ export const volumeProfileOption = ({
       : (toNumber(r[buyIdx]) ?? 0) +
         (sellIdx >= 0 ? (toNumber(r[sellIdx]) ?? 0) : 0),
   )
-  const poc = total.indexOf(Math.max(...total))
+  const poc = total.reduce(
+    (best, value, index) => (value > total[best] ? index : best),
+    0,
+  )
+  const clickIdx = columnIndex(rows, clickColumn)
+  const item = (value: number | null, row: StatementRows["rows"][number]) =>
+    clickColumn !== undefined && clickIdx >= 0
+      ? { value, columns: { [clickColumn]: row[clickIdx] } }
+      : value
   const series =
     valueIdx >= 0
       ? [
           {
             type: "bar",
             name: rows.columns[valueIdx].name,
-            data: total,
+            data: total.map((value, index) => item(value, sorted[index])),
             itemStyle: { color: colors.chartSeries1 },
             barCategoryGap: "12%",
           },
@@ -1174,7 +1185,7 @@ export const volumeProfileOption = ({
             type: "bar",
             name: rows.columns[buyIdx].name,
             stack: "v",
-            data: sorted.map((r) => toNumber(r[buyIdx])),
+            data: sorted.map((r) => item(toNumber(r[buyIdx]), r)),
             itemStyle: { color: colors.dataPositive, opacity: 0.85 },
             barCategoryGap: "12%",
           },
@@ -1184,7 +1195,7 @@ export const volumeProfileOption = ({
                   type: "bar",
                   name: rows.columns[sellIdx].name,
                   stack: "v",
-                  data: sorted.map((r) => toNumber(r[sellIdx])),
+                  data: sorted.map((r) => item(toNumber(r[sellIdx]), r)),
                   itemStyle: { color: colors.dataNegative, opacity: 0.85 },
                 },
               ]
