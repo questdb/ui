@@ -127,7 +127,7 @@ describe("draw settings drawer", () => {
   it.each(["bullet", "planTree"] as const)(
     "does not offer or save interactions for %s",
     async (type) => {
-      const onSave = vi.fn()
+      const onSave = vi.fn<[DrawSettings], void>()
       renderComponent(
         <Fixture
           onSave={onSave}
