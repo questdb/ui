@@ -163,5 +163,6 @@ describe("dashboard grid", () => {
     expect(single).toHaveTextContent("7")
     expect(single.querySelector("polyline")).toBeNull()
     expect(multiple.querySelector("polyline")).not.toBeNull()
+    expect(multiple).toHaveAccessibleName(/8.*9/)
   })
 })

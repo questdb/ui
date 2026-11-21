@@ -34,6 +34,7 @@ import {
   sampleColumnWidths,
   isLeftAligned,
   formatCellValue,
+  formatCellValueForCopy,
   formatColumnType,
   toSingleLineDisplay,
 } from "./inlineGridUtils"
@@ -220,6 +221,11 @@ const GridCell = React.memo(function GridCell({
       $flashParity={flashParity}
       onClick={() => onCellClick(rowIndex, colIndex)}
       role="gridcell"
+      aria-label={
+        sparklinePoints === undefined
+          ? undefined
+          : formatCellValueForCopy(rawValue, col)
+      }
       aria-colindex={colIndex + 1}
       aria-selected={isActive}
     >
