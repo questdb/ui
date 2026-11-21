@@ -67,6 +67,7 @@ const showTime = (bufferId: number, source: EChartsType, value: number) => {
 const hideTime = (bufferId: number, source: EChartsType) => {
   drive(() => {
     for (const { instance } of others(bufferId, source)) {
+      if (!isTimeChart(instance)) continue
       instance.dispatchAction({ type: "hideTip" })
       instance.dispatchAction({
         type: "updateAxisPointer",
@@ -107,15 +108,19 @@ export const joinChartSync = (
   instance: EChartsType,
 ): (() => void) => {
   const onPointer = (event: unknown) => {
-    if (driving) return
+    if (driving || !isTimeChart(instance)) return
     const info = (
-      event as { axesInfo?: { axisDim?: string; value?: unknown }[] }
+      event as {
+        axesInfo?: { axisDim?: string; axisIndex?: number; value?: unknown }[]
+      }
     ).axesInfo
-    const x = info?.find((a) => a.axisDim === "x")
+    const x = info?.find((a) => a.axisDim === "x" && a.axisIndex === 0)
     if (typeof x?.value === "number") showTime(bufferId, instance, x.value)
   }
   const onOut = () => {
-    if (!driving) hideTime(bufferId, instance)
+    const sync = settings.get(bufferId)
+    if (!driving && sync && sync.crosshair !== "off" && isTimeChart(instance))
+      hideTime(bufferId, instance)
   }
   const onZoom = () => {
     if (!driving) zoomTo(bufferId, instance)

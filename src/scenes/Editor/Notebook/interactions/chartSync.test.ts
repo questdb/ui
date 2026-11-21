@@ -42,8 +42,8 @@ afterEach(() => {
 
 const move = {
   axesInfo: [
-    { axisDim: "y", value: 11 },
-    { axisDim: "x", value: 87 },
+    { axisDim: "y", axisIndex: 0, value: 11 },
+    { axisDim: "x", axisIndex: 0, value: 87 },
   ],
 }
 
@@ -86,6 +86,27 @@ describe("notebook chart sync", () => {
       [{ type: "hideTip" }],
       [{ type: "updateAxisPointer", currTrigger: "leave" }],
     ])
+  })
+
+  it("ignores category indices, secondary axes and exits while sync is off", () => {
+    // Given two time charts and a categorical chart
+    const category = makeChart("category")
+    const source = makeChart()
+    const peer = makeChart()
+    for (const chart of [category, source, peer]) join(1, chart)
+
+    // When a non-time axis generates a pointer update or the pointer exits
+    setChartSync(1, { crosshair: "line", zoom: false })
+    category.emit("updateAxisPointer", move)
+    category.emit("globalout")
+    source.emit("updateAxisPointer", {
+      axesInfo: [{ axisDim: "x", axisIndex: 1, value: 87 }],
+    })
+    setChartSync(1, { crosshair: "off", zoom: false })
+    source.emit("globalout")
+
+    // Then the time peer does not receive a pointer or cleanup action
+    expect(peer.dispatchAction).not.toHaveBeenCalled()
   })
 
   it("copies an absolute zoom range without echoing it and detaches on leave", () => {
