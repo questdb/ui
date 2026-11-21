@@ -11,6 +11,31 @@ const rows = (
 })
 
 describe("buildCustomOption", () => {
+  it("keeps tooltips on the chart renderer after binding and in nested options", () => {
+    const { option } = buildCustomOption(
+      {
+        tooltip: { trigger: "axis" },
+        series: [{ type: "bar", tooltip: { formatter: "Series {b}" } }],
+        media: [{ option: { tooltip: "Media {b}" } }],
+      },
+      [],
+      false,
+    )
+    expect(option).toMatchObject({
+      tooltip: { trigger: "axis", renderMode: "richText", confine: true },
+      series: [
+        { tooltip: { formatter: "Series {b}", renderMode: "richText" } },
+      ],
+      media: [
+        {
+          option: {
+            tooltip: { formatter: "Media {b}", renderMode: "richText" },
+          },
+        },
+      ],
+    })
+  })
+
   it("puts each statement first as a dataset q<i>", () => {
     // Given
     const trades = rows(

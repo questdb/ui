@@ -244,6 +244,33 @@ const checkEncodes = (
   })
 }
 
+// Enforce the non-DOM renderer after row binding as well as at the root.
+// ECharts merges tooltip options across components, series, and items.
+const canvasTooltips = (node: unknown): unknown => {
+  if (Array.isArray(node)) return node.map(canvasTooltips)
+  if (!isRecord(node)) return node
+  return Object.fromEntries(
+    Object.entries(node).map(([key, value]) => {
+      const child = canvasTooltips(value)
+      if (key !== "tooltip") return [key, child]
+      const normalize = (tooltip: unknown) => {
+        if (tooltip === false) return false
+        if (typeof tooltip === "string")
+          return { formatter: tooltip, renderMode: "richText" }
+        return isRecord(tooltip)
+          ? { ...tooltip, renderMode: "richText" }
+          : undefined
+      }
+      return [
+        key,
+        Array.isArray(child)
+          ? child.map(normalize).filter(Boolean)
+          : normalize(child),
+      ]
+    }),
+  )
+}
+
 export type BuiltCustomOption = {
   option: Record<string, unknown>
   problems: OptionProblem[]
@@ -259,10 +286,9 @@ export const buildCustomOption = (
     if (problems.length < 50)
       problems.push({ path, message, severity: "warning" })
   }
-  const filled = fillRows(sanitized, statements, "", report) as Record<
-    string,
-    unknown
-  >
+  const filled = canvasTooltips(
+    fillRows(sanitized, statements, "", report),
+  ) as Record<string, unknown>
   const ours = datasetsOf(statements)
   const theirs: unknown = filled.dataset
   const theirList: unknown[] = Array.isArray(theirs)
@@ -289,12 +315,16 @@ export const buildCustomOption = (
   )
   checkEncodes(filled, statements, datasetIds, report)
 
-  const tooltip = isRecord(filled.tooltip) ? filled.tooltip : {}
+  const tooltip = isRecord(filled.tooltip)
+    ? filled.tooltip
+    : filled.tooltip === false
+      ? { show: false }
+      : {}
   const option: Record<string, unknown> = {
     useUTC: true,
     ...filled,
     dataset: datasets,
-    tooltip: { ...tooltip, confine: true },
+    tooltip: { ...tooltip, confine: true, renderMode: "richText" },
     ...(live ? { animation: false } : {}),
   }
   return { option, problems }
