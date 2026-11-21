@@ -8,11 +8,28 @@ import {
   prependGlobalsDeclare,
   renderDeclareBlock,
   stripLeadingAt,
+  usesVariables,
   validateVariableShape,
 } from "./declareUtils"
 
 const vars = (values: Record<string, string>) =>
   Object.entries(values).map(([name, value]) => ({ name, value }))
+
+describe("usesVariables", () => {
+  const changed = new Set(["σx", "desk"])
+
+  it("recognizes complete variable names regardless of case or script", () => {
+    expect(usesVariables("select @Σx", changed)).toBe(true)
+    expect(usesVariables("select @DESK", changed)).toBe(true)
+    expect(usesVariables("select @desk2, @deské", changed)).toBe(false)
+  })
+
+  it("ignores quoted text and comments containing variable names", () => {
+    expect(
+      usesVariables(`select '@desk', "@Σx" -- @desk\n/* @Σx */`, changed),
+    ).toBe(false)
+  })
+})
 
 describe("isValidVariableName", () => {
   it.each(["x", "X", "_x", "symbol", "from_time", "v1", "_"])(

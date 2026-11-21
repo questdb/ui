@@ -10,7 +10,7 @@ describe("notebook dashboard", () => {
       const query = new URL(request.url).searchParams.get("query") ?? ""
       if (
         query.includes("concat('Active desk: '") &&
-        query.includes("@desk := 'Paris'")
+        query.includes("@Σx := 'Paris'")
       ) {
         request.continue(
           () =>
@@ -29,7 +29,7 @@ describe("notebook dashboard", () => {
             label: "Desk dashboard",
             notebookViewState: {
               focusedCellId: "desk-picker",
-              settings: { variables: [{ name: "desk", value: "'London'" }] },
+              settings: { variables: [{ name: "Σx", value: "'London'" }] },
               cells: [
                 {
                   id: "desk-picker",
@@ -43,13 +43,13 @@ describe("notebook dashboard", () => {
                     queries: [null],
                     visual: { type: "stat" },
                   },
-                  interactions: { click: { variable: "desk" } },
+                  interactions: { click: { variable: "Σx" } },
                 },
                 {
                   id: "selected-desk",
                   position: 1,
                   value:
-                    "select concat('Active desk: ', @desk) as desk, 1 as volume",
+                    "select concat('Active desk: ', @σx) as desk, 1 as volume",
                   mode: "draw",
                   paneView: "result",
                   chartConfig: {

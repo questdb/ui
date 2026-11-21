@@ -40,6 +40,17 @@ export const expandGlobals = (sql: string, globals: unknown): string => {
 export const stripLeadingAt = (raw: string): string =>
   raw.startsWith("@") ? raw.slice(1) : raw
 
+/** Matches complete SQL variable tokens, not prefixes, comments or literals. */
+export const usesVariables = (
+  sql: string,
+  names: ReadonlySet<string>,
+): boolean =>
+  tokenize(maskParserBlockComments(sql)).tokens.some(
+    (token) =>
+      token.tokenType.name === "VariableReference" &&
+      names.has(stripLeadingAt(token.image).toLowerCase()),
+  )
+
 export const renderDeclareBlock = (variables: NotebookVariable[]): string => {
   const valid = variables.filter(({ name }) => isValidVariableName(name))
   if (valid.length === 0) return ""
