@@ -248,6 +248,7 @@ export const DrawCanvas: React.FC<Props> = ({
         buildEchartsOption(resolution.chart, resolution.renderQueries, {
           colors: theme.color,
           formats,
+          clickColumn: cell.interactions?.click?.column,
         }),
         cell.interactions,
       ),

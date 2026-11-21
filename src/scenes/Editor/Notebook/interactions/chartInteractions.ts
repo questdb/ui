@@ -42,10 +42,19 @@ export const clickedValue = (
     const data = params.data
     // Items built from rows carry them by column name (heatmap, boxplot).
     const columns = (data as { columns?: unknown } | null)?.columns
-    if (typeof columns === "object" && columns !== null && column in columns)
+    if (
+      typeof columns === "object" &&
+      columns !== null &&
+      Object.hasOwn(columns, column)
+    )
       return (columns as Record<string, unknown>)[column]
-    if (typeof data === "object" && data !== null && column in data)
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      Object.hasOwn(data, column)
+    )
       return (data as Record<string, unknown>)[column]
+    return undefined
   }
   if (params.name !== undefined && params.name !== "") return params.name
   return Array.isArray(params.value) ? params.value[0] : params.value
@@ -66,9 +75,9 @@ export const interactionEvents = (
       // Mark lines and areas (events) are not data.
       if (p.componentType === "markLine" || p.componentType === "markArea")
         return
-      setVariables({
-        [click.variable]: sqlLiteral(clickedValue(p, click.column)),
-      })
+      const value = clickedValue(p, click.column)
+      if (click.column !== undefined && value === undefined) return
+      setVariables({ [click.variable]: sqlLiteral(value) })
     }
   }
   const brush = interactions?.brush

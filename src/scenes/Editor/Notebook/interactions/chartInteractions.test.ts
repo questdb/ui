@@ -31,6 +31,20 @@ describe("clickedValue", () => {
 })
 
 describe("interactionEvents", () => {
+  it("leaves the variable unchanged when the bound column is unavailable", () => {
+    const setVariables = vi.fn()
+    const instance = {} as EChartsType
+    const events = interactionEvents(
+      { click: { variable: "desk", column: "code" } },
+      setVariables,
+    )
+    events.click({ name: "Tokyo", value: 9 }, instance)
+    expect(setVariables).not.toHaveBeenCalled()
+
+    events.click({ name: "Tokyo", data: { columns: { code: null } } }, instance)
+    expect(setVariables).toHaveBeenCalledWith({ desk: "null" })
+  })
+
   it("sets the time window variables from a drag and clears the brush", () => {
     // Given
     const setVariables = vi.fn()

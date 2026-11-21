@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   buildEchartsOption,
@@ -7,7 +7,11 @@ import {
   withZoomDensity,
   type ResolvedQuery,
 } from "./buildEchartsOption"
-import { areaRangeRenderItem, barRangeRenderItem } from "./echartsSetup"
+import {
+  areaRangeRenderItem,
+  barRangeRenderItem,
+  echarts,
+} from "./echartsSetup"
 import { chartZoomDensity } from "./chartDensity"
 import {
   availableChartTypes,
@@ -19,7 +23,10 @@ import {
   resolveDraw,
   resolveRoles,
 } from "../DrawCanvas/drawCanvasUtils"
-import { clickedValue } from "../interactions/chartInteractions"
+import {
+  clickedValue,
+  interactionEvents,
+} from "../interactions/chartInteractions"
 
 const col = (name: string, type: string): ColumnDefinition => ({ name, type })
 
@@ -36,6 +43,56 @@ const query = (over: Partial<ResolvedQuery>): ResolvedQuery => ({
 
 const seriesOf = (option: unknown) =>
   (option as { series: Record<string, unknown>[] }).series
+
+describe("preset chart interactions", () => {
+  it("writes the bound source column, not the bar's category label", () => {
+    const bars = query({
+      type: "bar",
+      xColumn: "desk",
+      yColumns: ["volume"],
+      columns: [
+        col("desk", "SYMBOL"),
+        col("volume", "INT"),
+        col("code", "SYMBOL"),
+      ],
+      dataset: [
+        ["London", 4, "LON"],
+        ["Tokyo", 9, "TYO"],
+      ],
+    })
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 600,
+      height: 400,
+    })
+    try {
+      chart.setOption(
+        buildEchartsOption({ xColumn: "desk" }, [bars], {
+          clickColumn: "code",
+        }),
+      )
+      const model = (
+        chart as unknown as {
+          getModel(): {
+            getSeriesByIndex(index: number): {
+              getDataParams(index: number): unknown
+            }
+          }
+        }
+      ).getModel()
+      const params = model.getSeriesByIndex(0).getDataParams(1)
+      const setVariables = vi.fn()
+      interactionEvents(
+        { click: { variable: "selection", column: "code" } },
+        setVariables,
+      ).click(params, chart)
+      expect(setVariables).toHaveBeenCalledWith({ selection: "'TYO'" })
+    } finally {
+      chart.dispose()
+    }
+  })
+})
 
 describe("role chart types", () => {
   it("guesses the columns from names, then from kinds", () => {

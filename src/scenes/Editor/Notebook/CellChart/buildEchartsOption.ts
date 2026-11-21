@@ -63,6 +63,7 @@ export type ChartGlobals = {
 export type ChartContext = {
   colors?: ColorShape
   formats?: ColumnFormats
+  clickColumn?: string
 }
 
 type Series = Record<string, unknown>
@@ -74,6 +75,7 @@ type XMode = "time" | "value" | "category"
 
 type SeriesContext = {
   xMode: XMode
+  clickColumn?: string
   categoryUnion: string[] | null // set only when overlaying series onto a shared category axis; null for a single positional query
 }
 
@@ -146,28 +148,27 @@ const resolveSeriesRenderSpec = (type: ChartType) => {
   return { seriesType, lineExtras, perfExtras, isStacked }
 }
 
-const alignValuesToCategoryUnion = (
-  q: ResolvedQuery,
-  xIdx: number,
-  yIdx: number,
-  union: string[],
-): (number | null)[] => {
-  const m = new Map<string, number | null>()
-  for (const row of q.dataset)
-    m.set(toCategoryLabel(row[xIdx]), toNumberOrNull(row[yIdx]))
-  return union.map((lbl) => (m.has(lbl) ? (m.get(lbl) ?? null) : null))
-}
+type ClickPoint = { value: unknown; columns: Record<string, unknown> }
 
-const alignRowsToCategoryUnion = (
+const isClickPoint = (point: unknown): point is ClickPoint =>
+  point !== null &&
+  typeof point === "object" &&
+  "columns" in point &&
+  "value" in point
+
+const pointValue = (point: unknown): unknown =>
+  isClickPoint(point) ? point.value : point
+
+const alignPointsToCategoryUnion = (
   rows: Dataset,
   xIdx: number,
-  yIdx: number,
   union: string[],
-): (number | null)[] => {
-  const m = new Map<string, number | null>()
+  toPoint: (row: Dataset[number]) => unknown,
+): unknown[] => {
+  const byCategory = new Map<string, unknown>()
   for (const row of rows)
-    m.set(toCategoryLabel(row[xIdx]), toNumberOrNull(row[yIdx]))
-  return union.map((lbl) => (m.has(lbl) ? (m.get(lbl) ?? null) : null))
+    byCategory.set(toCategoryLabel(row[xIdx]), toPoint(row))
+  return union.map((label) => byCategory.get(label) ?? null)
 }
 
 // Marks a series whose values were turned into shares of 100.
@@ -289,10 +290,14 @@ const scatterEncoding = (q: ResolvedQuery) => {
 
 // Turns each x's stacked values into shares of their total, in place.
 const toPercentShares = (series: Series[]) => {
-  const keyOf = (point: unknown, i: number) =>
-    Array.isArray(point) ? String(point[0]) : String(i)
-  const valueOf = (point: unknown) =>
-    toNumberOrNull(Array.isArray(point) ? point[1] : point)
+  const keyOf = (point: unknown, i: number) => {
+    const value = pointValue(point)
+    return Array.isArray(value) ? String(value[0]) : String(i)
+  }
+  const valueOf = (point: unknown) => {
+    const value = pointValue(point)
+    return toNumberOrNull(Array.isArray(value) ? value[1] : value)
+  }
   const totals = new Map<string, number>()
   for (const s of series)
     (s.data as unknown[]).forEach((point, i) => {
@@ -309,7 +314,9 @@ const toPercentShares = (series: Series[]) => {
       const total = totals.get(keyOf(point, i)) ?? 0
       const share =
         v === null || total === 0 ? null : (Math.abs(v) / total) * 100
-      return Array.isArray(point) ? [point[0], share] : share
+      const value = pointValue(point)
+      const shareValue = Array.isArray(value) ? [value[0], share] : share
+      return isClickPoint(point) ? { ...point, value: shareValue } : shareValue
     })
     s[PERCENT] = true
   }
@@ -343,6 +350,24 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
   const idx = buildColumnIndexMap(q.columns)
   const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
   if (xIdx === undefined) return []
+  const clickColumn = ctx.clickColumn
+  const clickIdx = clickColumn === undefined ? undefined : idx.get(clickColumn)
+  const pointsFor = (rows: Dataset, yIdx: number): unknown[] => {
+    const toPoint = (row: Dataset[number]) => {
+      const y = toNumberOrNull(row[yIdx])
+      const value = scatter
+        ? scatter.tuple(xValue(row, xIdx), row, yIdx)
+        : ctx.xMode === "category"
+          ? y
+          : [xValue(row, xIdx), y]
+      return clickColumn !== undefined && clickIdx !== undefined
+        ? { value, columns: { [clickColumn]: row[clickIdx] } }
+        : value
+    }
+    return !scatter && ctx.xMode === "category" && ctx.categoryUnion
+      ? alignPointsToCategoryUnion(rows, xIdx, ctx.categoryUnion, toPoint)
+      : rows.map(toPoint)
+  }
   const stack = isStacked ? `stack-${q.index}` : undefined
   const out: Series[] = []
 
@@ -377,18 +402,7 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
       for (const [yName, rows] of metricMap) {
         const yIdx = idx.get(yName)
         if (yIdx === undefined) continue
-        const data = scatter
-          ? rows.map((row) => scatter.tuple(xValue(row, xIdx), row, yIdx))
-          : ctx.xMode === "time"
-            ? rows.map((row) => [row[xIdx], toNumberOrNull(row[yIdx])])
-            : ctx.xMode === "value"
-              ? rows.map((row) => [
-                  toNumberOrNull(row[xIdx]),
-                  toNumberOrNull(row[yIdx]),
-                ])
-              : ctx.categoryUnion
-                ? alignRowsToCategoryUnion(rows, xIdx, yIdx, ctx.categoryUnion)
-                : rows.map((row) => toNumberOrNull(row[yIdx]))
+        const data = pointsFor(rows, yIdx)
         out.push({
           name: q.yColumns.length > 1 ? `${partVal} · ${yName}` : partVal,
           [Y_COLUMN]: yName,
@@ -408,18 +422,7 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
   for (const name of q.yColumns) {
     const yIdx = idx.get(name)
     if (yIdx === undefined) continue
-    const data = scatter
-      ? q.dataset.map((row) => scatter.tuple(xValue(row, xIdx), row, yIdx))
-      : ctx.xMode === "time"
-        ? q.dataset.map((row) => [row[xIdx], toNumberOrNull(row[yIdx])])
-        : ctx.xMode === "value"
-          ? q.dataset.map((row) => [
-              toNumberOrNull(row[xIdx]),
-              toNumberOrNull(row[yIdx]),
-            ])
-          : ctx.categoryUnion
-            ? alignValuesToCategoryUnion(q, xIdx, yIdx, ctx.categoryUnion)
-            : q.dataset.map((row) => toNumberOrNull(row[yIdx]))
+    const data = pointsFor(q.dataset, yIdx)
     out.push({
       name,
       [Y_COLUMN]: name,
@@ -1191,7 +1194,11 @@ export const buildEchartsOption = (
     categoryAxisData = union
   }
 
-  const ctx: SeriesContext = { xMode, categoryUnion }
+  const ctx: SeriesContext = {
+    xMode,
+    categoryUnion,
+    clickColumn: context.clickColumn,
+  }
   const hasCandle = queries.some((q) => q.type === "candlestick")
   const hasBar = queries.some(
     (q) => q.type === "bar" || q.type === "stackedBar" || q.type === "rangeBar",
@@ -1541,6 +1548,7 @@ const thresholdMarks = (
   // Bands reach past the data so they fill the plot; the grid clips them.
   const values = series
     .flatMap((s) => (Array.isArray(s.data) ? (s.data as unknown[]) : []))
+    .map(pointValue)
     .map((p) => toNumberOrNull(Array.isArray(p) ? p[1] : p))
     .filter((v): v is number => v !== null)
   const lo = Math.min(...values, ...thresholds.map((t) => t.value))
@@ -1586,7 +1594,11 @@ const layDown = (option: EChartsOption): EChartsOption => {
     const { yAxisIndex, ...rest } = s as Series & { yAxisIndex?: number }
     const next: Series = { ...rest, xAxisIndex: yAxisIndex ?? 0 }
     if (s.type === "custom") next.encode = { y: 0, x: [1, 2], tooltip: [1, 2] }
-    else if ((s.data as unknown[] | undefined)?.some(Array.isArray))
+    else if (
+      (s.data as unknown[] | undefined)?.some((point) =>
+        Array.isArray(pointValue(point)),
+      )
+    )
       next.encode = { x: 1, y: 0 }
     return next
   })
