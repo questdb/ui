@@ -239,6 +239,7 @@ const GridCell = React.memo(function GridCell({
         />
       )}
       <CellText
+        data-hook="grid-cell-text"
         style={{
           textAlign: align,
           ...(toneCss ? { color: toneCss } : {}),

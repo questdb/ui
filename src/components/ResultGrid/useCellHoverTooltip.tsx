@@ -81,7 +81,7 @@ const resolveTruncatedText = (
     if (target.scrollWidth <= target.clientWidth) return null
     return target.textContent ?? ""
   }
-  const cellText = target.firstElementChild
+  const cellText = target.querySelector('[data-hook="grid-cell-text"]')
   const match = CELL_ID_PATTERN.exec(target.id)
   if (!match || !(cellText instanceof HTMLElement)) return null
   const [, row, col] = match
