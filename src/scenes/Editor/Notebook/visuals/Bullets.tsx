@@ -210,14 +210,18 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
   const { rows, valueIdx, targetIdx, labelIdx } = read
   const valueName = rows.columns[valueIdx].name
   const format = formats[valueName]
-  const values = rows.rows.map((r) => toNumber(r[valueIdx]) ?? 0)
+  const values = rows.rows.map((r) => toNumber(r[valueIdx]))
   const targets = rows.rows.map((r) =>
     targetIdx >= 0 ? toNumber(r[targetIdx]) : null,
   )
   const min = visual.min ?? 0
   const max =
     visual.max ??
-    Math.max(...values, ...targets.map((t) => (t ?? 0) * 1.1), 1e-12)
+    Math.max(
+      ...values.map((value) => value ?? 0),
+      ...targets.map((t) => (t ?? 0) * 1.1),
+      1e-12,
+    )
   const span = max - min || 1
   const pct = (v: number) =>
     `${Math.max(0, Math.min(100, ((v - min) / span) * 100))}%`
@@ -235,7 +239,7 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
           ? toneColor(tone, theme.color)
           : theme.color.chartSeries1
         const status = statusOf(tone)
-        const use = target ? value / target : null
+        const use = target && value !== null ? value / target : null
         const name = labelIdx >= 0 ? toLabel(row[labelIdx]) : valueName
         return (
           <Item key={name}>
@@ -243,8 +247,8 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
               <Name>{name}</Name>
               {status && <Status $color={color}>{status}</Status>}
               <Figures>
-                {formatValue(value, format)}
-                {target !== null && (
+                {value === null ? "No measurement" : formatValue(value, format)}
+                {value !== null && target !== null && (
                   <small> of {formatValue(target, format)}</small>
                 )}
                 {use !== null && (
@@ -259,7 +263,9 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
               {notches.map((n) => (
                 <Notch key={n.value} style={{ left: pct(n.value) }} />
               ))}
-              <Fill style={{ width: pct(value), background: color }} />
+              {value !== null && (
+                <Fill style={{ width: pct(value), background: color }} />
+              )}
               {target !== null && <Target style={{ left: pct(target) }} />}
             </Track>
             <Card data-card>
@@ -275,7 +281,12 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
                       {formatValue(use, { kind: "percent", decimals: 1 })}
                     </dd>
                     <dt>Headroom</dt>
-                    <dd>{formatValue(target - value, format)}</dd>
+                    <dd>
+                      {formatValue(
+                        value === null ? null : target - value,
+                        format,
+                      )}
+                    </dd>
                   </>
                 )}
                 {notches.map((n) => (

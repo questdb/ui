@@ -59,24 +59,25 @@ const Fill = styled.div`
 `
 
 const useWorldMap = (needed: boolean) => {
-  const [ready, setReady] = React.useState(
-    () => !needed || isMapLoaded(MAP_NAMES[0]),
+  const [status, setStatus] = React.useState<"ready" | "loading" | "error">(
+    () => (!needed || isMapLoaded(MAP_NAMES[0]) ? "ready" : "loading"),
   )
   useEffect(() => {
     if (!needed || isMapLoaded(MAP_NAMES[0])) {
-      setReady(true)
+      setStatus("ready")
       return
     }
+    setStatus("loading")
     let cancelled = false
     void ensureMaps([MAP_NAMES[0]]).then(
-      () => !cancelled && setReady(true),
-      () => undefined,
+      () => !cancelled && setStatus("ready"),
+      () => !cancelled && setStatus("error"),
     )
     return () => {
       cancelled = true
     }
   }, [needed])
-  return ready
+  return status
 }
 
 type Props = {
@@ -84,6 +85,7 @@ type Props = {
   cellId: string
   visual: VisualConfig
   statements: (StatementRows | null)[]
+  statementErrors?: (string | null)[]
   formats: ColumnFormats
   interactions: CellInteractions | undefined
   clickVariableValue?: string
@@ -101,6 +103,7 @@ export const VisualCanvas = ({
   cellId,
   visual,
   statements,
+  statementErrors,
   formats,
   interactions,
   clickVariableValue,
@@ -113,14 +116,14 @@ export const VisualCanvas = ({
 }: Props) => {
   const theme = useTheme()
   const builder = ECHARTS_VISUALS[visual.type]
-  const mapReady = useWorldMap(visual.type === "map")
+  const mapStatus = useWorldMap(visual.type === "map")
   // A map fits its view to the regions once the world map has loaded.
   const built = useMemo(
     () =>
-      builder && mapReady
+      builder && mapStatus === "ready"
         ? builder({ visual, statements, colors: theme.color, formats })
         : null,
-    [builder, visual, statements, theme.color, formats, mapReady],
+    [builder, visual, statements, theme.color, formats, mapStatus],
   )
   const click = interactions?.click
   const select = click
@@ -135,7 +138,11 @@ export const VisualCanvas = ({
       drawn = built.drawn
       problems = built.problems
     } else if (visual.type === "orderBook") {
-      ;({ drawn, problems } = orderBookDrawn(statements, visual.columns))
+      ;({ drawn, problems } = orderBookDrawn(
+        statements,
+        visual.columns,
+        statementErrors,
+      ))
     } else if (visual.type === "stat") {
       const read = statTiles(visual, statements, click?.column)
       drawn = { tiles: read.tiles.length }
@@ -175,7 +182,15 @@ export const VisualCanvas = ({
       drawn: { type: visual.type, ...drawn },
       problems,
     })
-  }, [bufferId, cellId, built, visual, statements, click?.column])
+  }, [
+    bufferId,
+    cellId,
+    built,
+    visual,
+    statements,
+    statementErrors,
+    click?.column,
+  ])
 
   switch (visual.type) {
     case "stat":
@@ -194,6 +209,7 @@ export const VisualCanvas = ({
       return (
         <OrderBook
           statements={statements}
+          statementErrors={statementErrors}
           columns={visual.columns}
           formats={formats}
           animateDigits={visual.animateDigits}
@@ -214,7 +230,14 @@ export const VisualCanvas = ({
     default:
       break
   }
-  if (!mapReady) return <PaneEmptyState>Loading map…</PaneEmptyState>
+  if (mapStatus === "error")
+    return (
+      <PaneEmptyState role="alert">
+        Could not load the world map. Reload the console to try again.
+      </PaneEmptyState>
+    )
+  if (mapStatus === "loading")
+    return <PaneEmptyState>Loading map…</PaneEmptyState>
   if (!built?.option)
     return (
       <PaneEmptyState>

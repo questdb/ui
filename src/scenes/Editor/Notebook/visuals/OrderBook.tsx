@@ -184,6 +184,7 @@ const Empty = styled.div`
 
 type Props = {
   statements: (StatementRows | null)[]
+  statementErrors?: (string | null)[]
   columns?: VisualColumns
   formats: ColumnFormats
   animateDigits?: boolean
@@ -194,6 +195,7 @@ type Props = {
 
 export const OrderBook = ({
   statements,
+  statementErrors,
   columns,
   formats,
   animateDigits = false,
@@ -282,7 +284,9 @@ export const OrderBook = ({
         {cols === 3 && <span>Total</span>}
       </Head>
       <Ladder ref={ladderRef}>
-        {asks.levels.length === 0 ? (
+        {statementErrors?.[0] ? (
+          <Empty role="alert">Ask query failed: {statementErrors[0]}</Empty>
+        ) : asks.levels.length === 0 ? (
           <Empty>No asks</Empty>
         ) : (
           [...asks.levels].reverse().map((l) => row(l, "ask"))
@@ -305,7 +309,9 @@ export const OrderBook = ({
               : ""}
           </SpreadText>
         </Mid>
-        {bids.levels.length === 0 ? (
+        {statementErrors?.[1] ? (
+          <Empty role="alert">Bid query failed: {statementErrors[1]}</Empty>
+        ) : bids.levels.length === 0 ? (
           <Empty>No bids</Empty>
         ) : (
           bids.levels.map((l) => row(l, "bid"))
@@ -318,12 +324,24 @@ export const OrderBook = ({
 export const orderBookDrawn = (
   statements: (StatementRows | null)[],
   columns?: VisualColumns,
+  statementErrors?: (string | null)[],
 ) => {
   const asks = readSide(statements[0], columns)
   const bids = readSide(statements[1], columns)
   return {
     drawn: { asks: asks.levels.length, bids: bids.levels.length },
     problems: [
+      ...(["Ask", "Bid"] as const).flatMap((side, index) => {
+        const error = statementErrors?.[index]
+        return error
+          ? [
+              {
+                message: `${side} query failed: ${error}`,
+                severity: "error" as const,
+              },
+            ]
+          : []
+      }),
       ...(statements.length < 2
         ? [
             {

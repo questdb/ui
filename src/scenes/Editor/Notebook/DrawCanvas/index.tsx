@@ -283,6 +283,15 @@ export const DrawCanvas: React.FC<Props> = ({
   )
   const statements =
     statementResults.kind === "settled" ? statementResults.statements : []
+  const statementErrors = useMemo(
+    () =>
+      statementResults.kind === "settled"
+        ? cell.result?.results.map((result) =>
+            result.type === "error" ? result.error || "Query failed" : null,
+          )
+        : undefined,
+    [cell.result, statementResults],
+  )
   const live = !animatesAt(refreshIntervalMs)
 
   useEffect(() => {
@@ -417,6 +426,7 @@ export const DrawCanvas: React.FC<Props> = ({
                 cellId={cell.id}
                 visual={visual}
                 statements={statements}
+                statementErrors={statementErrors}
                 formats={formats}
                 interactions={cell.interactions}
                 clickVariableValue={

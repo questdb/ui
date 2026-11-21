@@ -77,19 +77,19 @@ export const CustomChart = ({
   )
 
   const neededMaps = useMemo(() => mapsUsedBy(built.option), [built])
-  const [mapsReady, setMapsReady] = useState(() =>
-    neededMaps.every(isMapLoaded),
+  const [mapStatus, setMapStatus] = useState<"loading" | "error" | "ready">(
+    () => (neededMaps.every(isMapLoaded) ? "ready" : "loading"),
   )
   useEffect(() => {
     if (neededMaps.every(isMapLoaded)) {
-      setMapsReady(true)
+      setMapStatus("ready")
       return
     }
-    setMapsReady(false)
+    setMapStatus("loading")
     let cancelled = false
     void ensureMaps(neededMaps).then(
-      () => !cancelled && setMapsReady(true),
-      () => undefined,
+      () => !cancelled && setMapStatus("ready"),
+      () => !cancelled && setMapStatus("error"),
     )
     return () => {
       cancelled = true
@@ -127,7 +127,14 @@ export const CustomChart = ({
 
   if (sanitized.problems.some((p) => p.severity === "error" && p.path === ""))
     return <PaneEmptyState>{sanitized.problems[0].message}</PaneEmptyState>
-  if (!mapsReady) return <PaneEmptyState>Loading map…</PaneEmptyState>
+  if (mapStatus === "error")
+    return (
+      <PaneEmptyState role="alert">
+        Could not load the world map. Reload the console to try again.
+      </PaneEmptyState>
+    )
+  if (mapStatus === "loading")
+    return <PaneEmptyState>Loading map…</PaneEmptyState>
   // A chart type whose code is not allowed draws nothing: say why.
   const waiting = chartTypesUsedBy(rawOption).filter(
     (name) =>
