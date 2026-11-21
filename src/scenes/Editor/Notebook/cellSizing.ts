@@ -479,7 +479,15 @@ export const mergeCellChartConfig = (
 ): ChartConfig => {
   const base: ChartConfig = cell.chartConfig ?? { xColumn: null, queries: [] }
   const merged = { ...base, ...patch }
-  if (!merged.visual && !merged.custom && merged.queries.length === 0) {
+  const clearedVisual =
+    (base.visual !== undefined && Object.hasOwn(patch, "visual")) ||
+    (base.custom !== undefined && Object.hasOwn(patch, "custom"))
+  if (
+    clearedVisual &&
+    !merged.visual &&
+    !merged.custom &&
+    merged.queries.length === 0
+  ) {
     merged.queries = getQueriesFromText(cell.value).map(() => null)
   }
   return merged
