@@ -36,6 +36,24 @@ describe("buildCustomOption", () => {
     })
   })
 
+  it("removes navigation metadata from titles at the renderer boundary", () => {
+    const title = {
+      text: "Daily volume",
+      link: "https://example.com/report",
+      target: "blank",
+    }
+    const { option } = buildCustomOption(
+      { title, baseOption: { title: [title] }, media: [{ option: { title } }] },
+      [],
+      false,
+    )
+    expect(option.title).toEqual({ text: "Daily volume" })
+    expect(option.baseOption).toEqual({ title: [{ text: "Daily volume" }] })
+    expect(option.media).toEqual([
+      { option: { title: { text: "Daily volume" } } },
+    ])
+  })
+
   it("puts each statement first as a dataset q<i>", () => {
     // Given
     const trades = rows(

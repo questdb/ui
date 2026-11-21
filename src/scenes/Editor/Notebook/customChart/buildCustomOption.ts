@@ -244,30 +244,35 @@ const checkEncodes = (
   })
 }
 
-// Enforce the non-DOM renderer after row binding as well as at the root.
-// ECharts merges tooltip options across components, series, and items.
-const canvasTooltips = (node: unknown): unknown => {
-  if (Array.isArray(node)) return node.map(canvasTooltips)
+// Enforce console-owned rendering policies after row binding, including
+// nested scopes such as timeline and media options that ECharts merges later.
+const TITLE_NAVIGATION = new Set(["link", "sublink", "target", "subtarget"])
+
+const enforceRendererPolicy = (node: unknown, inTitle = false): unknown => {
+  if (Array.isArray(node))
+    return node.map((child) => enforceRendererPolicy(child, inTitle))
   if (!isRecord(node)) return node
   return Object.fromEntries(
-    Object.entries(node).map(([key, value]) => {
-      const child = canvasTooltips(value)
-      if (key !== "tooltip") return [key, child]
-      const normalize = (tooltip: unknown) => {
-        if (tooltip === false) return false
-        if (typeof tooltip === "string")
-          return { formatter: tooltip, renderMode: "richText" }
-        return isRecord(tooltip)
-          ? { ...tooltip, renderMode: "richText" }
-          : undefined
-      }
-      return [
-        key,
-        Array.isArray(child)
-          ? child.map(normalize).filter(Boolean)
-          : normalize(child),
-      ]
-    }),
+    Object.entries(node)
+      .filter(([key]) => !inTitle || !TITLE_NAVIGATION.has(key))
+      .map(([key, value]) => {
+        const child = enforceRendererPolicy(value, key === "title" || inTitle)
+        if (key !== "tooltip") return [key, child]
+        const normalize = (tooltip: unknown) => {
+          if (tooltip === false) return false
+          if (typeof tooltip === "string")
+            return { formatter: tooltip, renderMode: "richText" }
+          return isRecord(tooltip)
+            ? { ...tooltip, renderMode: "richText" }
+            : undefined
+        }
+        return [
+          key,
+          Array.isArray(child)
+            ? child.map(normalize).filter(Boolean)
+            : normalize(child),
+        ]
+      }),
   )
 }
 
@@ -286,7 +291,7 @@ export const buildCustomOption = (
     if (problems.length < 50)
       problems.push({ path, message, severity: "warning" })
   }
-  const filled = canvasTooltips(
+  const filled = enforceRendererPolicy(
     fillRows(sanitized, statements, "", report),
   ) as Record<string, unknown>
   const ours = datasetsOf(statements)
