@@ -700,11 +700,43 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           resetLayout()
           return
         }
+        if (
+          e.key === "ArrowDown" &&
+          e.target === e.currentTarget &&
+          !focusedCell &&
+          onCellActivateRef.current &&
+          rowCount > 0 &&
+          columns.length > 0
+        ) {
+          e.preventDefault()
+          e.stopPropagation()
+          setFocusedCell({ row: 0, col: 0 })
+          return
+        }
+        if (
+          (e.key === "Enter" || e.key === " ") &&
+          e.target === e.currentTarget &&
+          !e.altKey &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !e.shiftKey &&
+          !e.nativeEvent.isComposing &&
+          focusedCell &&
+          onCellActivateRef.current
+        ) {
+          e.preventDefault()
+          e.stopPropagation()
+          if (!e.repeat) onCellClick(focusedCell.row, focusedCell.col)
+          return
+        }
         onKeyDown(e)
       },
       [
         onKeyDown,
         focusedCell,
+        onCellClick,
+        rowCount,
+        columns.length,
         shuffleFocusedColumnToFront,
         onYieldFocus,
         setFocusedCell,

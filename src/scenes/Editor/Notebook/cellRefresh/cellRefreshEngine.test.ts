@@ -3879,6 +3879,30 @@ describe("CellRefreshEngine", () => {
       })
     })
 
+    it("remembers a changed variable before the first Run creates a grid entry", async () => {
+      // Given a first Run whose validation hasn't produced a placeholder
+      const sql = "select @desk"
+      const completed = gridCell("g1", sql, [sql], false)
+      const first = {
+        ...completed,
+        result: undefined,
+        lastRunStatus: undefined,
+      }
+      syncOnScreen([first])
+      await flushAsync()
+      engine.noteRunStarted("g1")
+
+      // When a matching selection changes before the first result
+      engine.refreshWhere((_cellId, query) => query === sql, [first])
+      await flushAsync()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+      engine.noteRunFinished("g1", completed)
+      await flushAsync()
+
+      // Then the refresh is redeemed once a completed grid is available
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
     it("keeps the gate closed until the last overlapping run finishes", async () => {
       // Given a run superseded by a second run on the same cell
       const cell = gridCell("g1", "select 1", ["select 1"], false)

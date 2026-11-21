@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useRef, useState } from "react"
 import { ShapesIcon, WarningIcon } from "@phosphor-icons/react"
 import { useTheme } from "styled-components"
 import { Button, Tooltip } from "../../../components"
@@ -16,6 +16,7 @@ export const NotebookChartTypesControl: React.FC = () => {
   const { saveChartTypes } = useNotebookActions()
   const bufferId = useNotebookBufferId()
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const theme = useTheme()
   const count = settings.chartTypes?.length ?? 0
   const waiting =
@@ -34,7 +35,11 @@ export const NotebookChartTypesControl: React.FC = () => {
           variant="secondary"
           aria-label={label}
           data-hook="notebook-chart-types"
-          onClick={() => setOpen(true)}
+          onClick={(event) => {
+            if (event.currentTarget instanceof HTMLButtonElement)
+              triggerRef.current = event.currentTarget
+            setOpen(true)
+          }}
         >
           <ShapesIcon size={18} />
           {count > 0 && count}
@@ -51,6 +56,7 @@ export const NotebookChartTypesControl: React.FC = () => {
       <ChartTypesDialog
         open={open}
         onOpenChange={setOpen}
+        triggerRef={triggerRef}
         types={settings.chartTypes}
         cells={cells}
         onSave={(types, renames) => {

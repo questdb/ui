@@ -58,6 +58,7 @@ const showTime = (bufferId: number, source: EChartsType, value: number) => {
           currTrigger: "mousemove",
           x,
           y,
+          tooltipOption: { showContent: false },
         })
       }
     }

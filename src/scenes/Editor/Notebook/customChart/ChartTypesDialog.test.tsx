@@ -9,6 +9,7 @@ import type {
   NotebookChartType,
 } from "../../../../store/notebook"
 import { ChartTypesDialog } from "./ChartTypesDialog"
+import { Button } from "../../../../components/Button"
 
 vi.mock("@monaco-editor/react", () => ({
   loader: { init: () => new Promise(() => undefined), config: () => undefined },
@@ -70,6 +71,42 @@ const renderDialog = () => {
 }
 
 describe("ChartTypesDialog", () => {
+  it("restores focus to its toolbar trigger on Cancel", async () => {
+    const Fixture = () => {
+      const [open, setOpen] = React.useState(false)
+      const triggerRef = React.useRef<HTMLButtonElement>(null)
+      return (
+        <>
+          <Button
+            onClick={(event) => {
+              if (event.currentTarget instanceof HTMLButtonElement)
+                triggerRef.current = event.currentTarget
+              setOpen(true)
+            }}
+          >
+            Chart types
+          </Button>
+          <ChartTypesDialog
+            open={open}
+            onOpenChange={setOpen}
+            triggerRef={triggerRef}
+            types={[]}
+            cells={[]}
+            onSave={() => {}}
+          />
+        </>
+      )
+    }
+    renderComponent(<Fixture />)
+    const trigger = screen.getByRole("button", { name: "Chart types" })
+    trigger.focus()
+    await userEvent.keyboard("{Enter}")
+    const dialog = await screen.findByRole("dialog")
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    )
+    await waitFor(() => expect(trigger).toHaveFocus())
+  })
   it("lists the types with the cells that use them", () => {
     // Given / When
     const { dialog } = renderDialog()

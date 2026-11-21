@@ -18,6 +18,7 @@ export type Segment = {
   state: string
   start: number
   end: number
+  selection?: unknown
 }
 
 export type StateSegments = {
@@ -101,10 +102,10 @@ export const readStateSegments = (
     const start = toTime(row[timeIdx])
     if (start === null) continue
     const lane = toLabel(row[laneIdx])
+    const selection: unknown = row[clickIdx]
     if (clickIdx >= 0) {
-      const value: unknown = row[clickIdx]
-      if (!selectionByLane.has(lane)) selectionByLane.set(lane, value)
-      else if (!Object.is(selectionByLane.get(lane), value))
+      if (!selectionByLane.has(lane)) selectionByLane.set(lane, selection)
+      else if (!Object.is(selectionByLane.get(lane), selection))
         selectionByLane.set(lane, undefined)
     }
     open.push({
@@ -112,6 +113,7 @@ export const readStateSegments = (
       state: toLabel(row[stateIdx]),
       start,
       end: endIdx >= 0 ? toTime(row[endIdx]) : null,
+      ...(clickIdx >= 0 ? { selection } : {}),
     })
   }
   if (open.length === 0) return "No row has a valid time."
@@ -138,6 +140,16 @@ export const readStateSegments = (
     from,
     to,
   }
+}
+
+export const latestStateByLane = (segments: Segment[]): Map<string, string> => {
+  const latest = new Map<string, Segment>()
+  for (const segment of segments) {
+    const previous = latest.get(segment.lane)
+    if (!previous || segment.start >= previous.start)
+      latest.set(segment.lane, segment)
+  }
+  return new Map([...latest].map(([lane, segment]) => [lane, segment.state]))
 }
 
 export type Bucket = {

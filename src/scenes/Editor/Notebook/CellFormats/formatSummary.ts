@@ -96,7 +96,7 @@ export const summarise = (format: ColumnFormat): string => {
 /** Drops empty fields, so an untouched editor saves nothing extra. */
 export const tidyFormat = (format: ColumnFormat): ColumnFormat => {
   const next: ColumnFormat = {}
-  if (format.kind && format.kind !== "number") next.kind = format.kind
+  if (format.kind) next.kind = format.kind
   if (format.decimals !== undefined) next.decimals = format.decimals
   if (format.compact) next.compact = true
   if (format.prefix) next.prefix = format.prefix

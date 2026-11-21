@@ -9,7 +9,7 @@ import {
 import type { StatementRows } from "../visuals/statementRows"
 import { setRenderReport, type RenderProblem } from "../renderReports"
 import { sanitizeOption } from "./sanitizeOption"
-import { buildCustomOption } from "./buildCustomOption"
+import { buildCustomOption, customSeriesCount } from "./buildCustomOption"
 import { drawErrorsOf, resolveChartTypes } from "./chartTypeRegistry"
 import { MAP_NAMES, ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
 import { problemsOf } from "./prepareCustomOption"
@@ -109,13 +109,10 @@ export const CustomChart = ({
           severity: "error" as const,
         })),
       ]
-      const series = Array.isArray(built.option.series)
-        ? built.option.series.length
-        : 0
       setRenderReport(bufferId, cellId, {
         kind: "custom",
         drawn: {
-          series,
+          series: customSeriesCount(built.option),
           datasets: statements.length,
           rows: statements.reduce((n, s) => n + (s?.rows.length ?? 0), 0),
         },

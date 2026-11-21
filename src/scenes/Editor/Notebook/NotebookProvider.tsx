@@ -85,6 +85,7 @@ import { persistCellSnapshot } from "./persistCellSnapshot"
 import type { QueryKey } from "../../../store/Query/types"
 import {
   affectedVariables,
+  hasChangedBindings,
   createValidateWithGlobals,
   usesVariables,
 } from "./declareUtils"
@@ -675,6 +676,17 @@ export const NotebookProvider: React.FC<{
       executeSingle,
       validateWithGlobals,
       setCellResult,
+      isRestoredGridResultStale: (result) =>
+        result.results.some(
+          (statement) =>
+            statement.type === "dql" &&
+            statement.effectiveQuery !== undefined &&
+            hasChangedBindings(
+              statement.query,
+              statement.effectiveQuery,
+              settingsRef.current.variables,
+            ),
+        ),
       getCellResult: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
       isDrawCell: (cellId) =>
@@ -698,10 +710,11 @@ export const NotebookProvider: React.FC<{
     if (names.length === 0) return
     pendingVariableRefreshRef.current = []
     const changedNames = affectedVariables(names, settings.variables)
-    cellRefreshEngine.refreshWhere((_cellId, sql) =>
-      usesVariables(sql, changedNames),
+    cellRefreshEngine.refreshWhere(
+      (_cellId, sql) => usesVariables(sql, changedNames),
+      store.cellsRef.current,
     )
-  }, [settings.variables, cellRefreshEngine])
+  }, [settings.variables, cellRefreshEngine, store.cellsRef])
   cellRefreshEngineRef.current = cellRefreshEngine
 
   const cellVirtualizationEngine = createVirtualizationEngine({
@@ -771,7 +784,10 @@ export const NotebookProvider: React.FC<{
       } finally {
         // Balance noteRunStarted on every outcome — denied, skipped,
         // superseded, thrown included — or refresh stays gated forever.
-        cellRefreshEngineRef.current?.noteRunFinished(cellId)
+        cellRefreshEngineRef.current?.noteRunFinished(
+          cellId,
+          store.cellsRef.current.find((cell) => cell.id === cellId),
+        )
         if (activeCellQueryKeysRef.current.get(cellId) === queryKey) {
           activeCellQueryKeysRef.current.delete(cellId)
           questExecution.releaseExecution(queryKey, scopeKey)
@@ -989,6 +1005,13 @@ export const NotebookProvider: React.FC<{
       pendingVariableRefreshRef.current = [
         ...new Set([...pendingVariableRefreshRef.current, ...names]),
       ]
+      if (
+        names.some(
+          (name) =>
+            current.find((v) => v.name === name)?.value !== values[name],
+        )
+      )
+        signalUserEdit(bufferId)
       updateSettings({ variables: next })
     },
     setCellPaneView,

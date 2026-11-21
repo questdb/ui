@@ -57,6 +57,37 @@ it("reads the bound gauge click value from its first row, not its reading or lab
 })
 
 describe("stateTimelineOption", () => {
+  it("carries each segment's bound source value through time sorting", () => {
+    // Given two readings for the same lane with different selection values
+    const { option } = stateTimelineOption({
+      visual: { type: "stateTimeline" },
+      formats: {},
+      colors: lightColors,
+      clickColumn: "cluster_code",
+      statements: [
+        rows(
+          [
+            ["ts", "TIMESTAMP"],
+            ["lane", "SYMBOL"],
+            ["state", "SYMBOL"],
+            ["cluster_code", "SYMBOL"],
+          ],
+          [
+            ["2026-01-01T00:01:00Z", "host", "up", "west"],
+            ["2026-01-01T00:00:00Z", "host", "up", "east"],
+          ],
+        ),
+      ],
+    })
+
+    // When each segment is clicked, then it uses the value from its own row
+    const [state] = series(option)
+    expect(
+      (state.data as unknown[]).map((data) =>
+        clickedValue({ data }, "cluster_code"),
+      ),
+    ).toEqual(["east", "west"])
+  })
   const states = rows(
     [
       ["ts", "TIMESTAMP"],

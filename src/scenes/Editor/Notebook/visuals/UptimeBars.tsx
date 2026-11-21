@@ -9,6 +9,7 @@ import {
   SEVERITY_RANK,
   bucketLanes,
   bucketSeverity,
+  latestStateByLane,
   readStateSegments,
   severityOf,
   uptimeByLane,
@@ -288,16 +289,12 @@ export const UptimeBars = ({
       typeof read === "string" ? null : uptimeByLane(read.segments, severity),
     [read, severity],
   )
-  if (typeof read === "string") return <PaneEmptyState>{read}</PaneEmptyState>
-  if (!lanes || !uptimes) return null
-  const current = new Map(
-    read.lanes.map((lane) => {
-      const last = read.segments
-        .filter((s) => s.lane === lane)
-        .reduce((a, b) => (b.start >= a.start ? b : a))
-      return [lane, last.state]
-    }),
+  const current = useMemo(
+    () => (typeof read === "string" ? null : latestStateByLane(read.segments)),
+    [read],
   )
+  if (typeof read === "string") return <PaneEmptyState>{read}</PaneEmptyState>
+  if (!lanes || !uptimes || !current) return null
   const counts = { bad: 0, warning: 0 }
   for (const state of current.values()) {
     const s = severityOf(state, severity)

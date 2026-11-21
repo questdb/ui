@@ -1,6 +1,8 @@
 import type { EChartsType } from "echarts"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { joinChartSync, setChartSync } from "./chartSync"
+import { echarts } from "../CellChart/echartsSetup"
+import { zoomWindowForEvent, type DataZoomEvent } from "../CellChart/zoomWindow"
 
 type Handler = (payload?: unknown) => void
 
@@ -48,6 +50,43 @@ const move = {
 }
 
 describe("notebook chart sync", () => {
+  it("reads the peer's calculated zoom window from a value-only event", () => {
+    // Given a time chart using a different scale from its sender
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 500,
+      height: 300,
+    })
+    try {
+      chart.setOption({
+        xAxis: { type: "time", min: 0, max: 1000 },
+        yAxis: { type: "value" },
+        dataZoom: [{ type: "inside" }],
+        series: [
+          {
+            type: "line",
+            data: [
+              [0, 1],
+              [1000, 2],
+            ],
+          },
+        ],
+      })
+      const seen = vi.fn()
+      chart.on("datazoom", (event) => {
+        seen(zoomWindowForEvent(event as DataZoomEvent, chart))
+      })
+
+      // When linking changes the peer's time window
+      chart.dispatchAction({ type: "dataZoom", startValue: 200, endValue: 800 })
+
+      // Then the renderer can update the peer's Reset zoom state
+      expect(seen).toHaveBeenCalledWith({ start: 20, end: 80 })
+    } finally {
+      chart.dispose()
+    }
+  })
   it("projects the time into each peer's pixels and changes modes without rejoining", () => {
     const source = makeChart()
     const peer = makeChart()
@@ -69,6 +108,7 @@ describe("notebook chart sync", () => {
       currTrigger: "mousemove",
       x: 42,
       y: 100,
+      tooltipOption: { showContent: false },
     })
     for (const chart of [source, category, disposed, otherNotebook]) {
       expect(chart.dispatchAction).not.toHaveBeenCalled()

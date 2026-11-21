@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import queries from "./__fixtures__/declare-cases.json"
 import {
   affectedVariables,
+  expandGlobals,
+  hasChangedBindings,
   isValidVariableName,
   mapWireErrorPosition,
   normalizeVariables,
@@ -29,6 +31,26 @@ describe("affectedVariables", () => {
     )
     expect(affected).toEqual(new Set(["base", "second", "third"]))
   })
+})
+
+it("recognizes stale snapshots for derived variables but not unrelated changes", () => {
+  const old = vars({ current: "'east'", selected: "@current", unrelated: "1" })
+  const sql = "select @selected"
+  const previous = expandGlobals(sql, old)
+  expect(
+    hasChangedBindings(
+      sql,
+      previous,
+      vars({ current: "'west'", selected: "@current", unrelated: "1" }),
+    ),
+  ).toBe(true)
+  expect(
+    hasChangedBindings(
+      sql,
+      previous,
+      vars({ current: "'east'", selected: "@current", unrelated: "2" }),
+    ),
+  ).toBe(false)
 })
 
 describe("usesVariables", () => {

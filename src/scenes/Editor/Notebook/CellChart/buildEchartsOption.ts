@@ -696,10 +696,12 @@ const buildCandlestickSeries = (
   ]
 }
 
-// A full pie, a ring, or a half ring standing on its flat side.
+// Write the full-circle geometry too: ECharts merges options into the
+// existing series when a user switches out of the half ring.
+const fullPie = { center: ["50%", "50%"], startAngle: 90, endAngle: "auto" }
 const PIE_GEOMETRY: Record<PieShape, Record<string, unknown>> = {
-  pie: { radius: "70%" },
-  donut: { radius: ["35%", "70%"] },
+  pie: { ...fullPie, radius: "70%" },
+  donut: { ...fullPie, radius: ["35%", "70%"] },
   halfDonut: {
     radius: ["45%", "90%"],
     center: ["50%", "78%"],
@@ -1568,6 +1570,7 @@ const thresholdMarks = (
       type: "line",
       data: [],
       silent: true,
+      markArea: { data: [] },
       markLine: {
         symbol: "none",
         animation: false,
@@ -1606,6 +1609,7 @@ const thresholdMarks = (
     type: "line",
     data: [],
     silent: true,
+    markLine: { data: [] },
     markArea: {
       silent: true,
       animation: false,

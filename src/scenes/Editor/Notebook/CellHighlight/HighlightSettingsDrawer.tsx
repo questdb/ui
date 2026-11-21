@@ -251,13 +251,22 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       variables,
       (q) => quest.validateQuery(q),
     ).finally(() => setSaving(false))
+    const latest = interactionsRef.current
+    if (
+      !acceptsSaveRef.current ||
+      latest.interactions !== interactionDraft.interactions ||
+      latest.created !== interactionDraft.created
+    )
+      return false
     setServerProblems(server)
     if (server) setSection("interactions")
     return server === null
   }
 
-  const commit = (current: DraftConfig) => {
-    const interactionDraft = interactionsRef.current
+  const commit = (
+    current: DraftConfig,
+    interactionDraft: InteractionsDraft,
+  ) => {
     const next = validateRules(current.rules, columns)
     const identity = validateIdentity(current)
     setErrors(next)
@@ -282,7 +291,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   // Clears the rules, keeps the identity, and saves the rest of the draft.
   const clearRules = async () => {
     if (saving) return
-    const interactionDraft = { interactions, created }
+    const interactionDraft = interactionsRef.current
     if (!interactionsComplete(interactionDraft)) return
     if (
       newVariablesInUse(interactionDraft).length > 0 &&
@@ -293,7 +302,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       highlight: highlightToSave(draft.identityColumns, [], defaultIdentity),
       formats: tidyFormats(formats),
       gridMode,
-      interactions,
+      interactions: interactionDraft.interactions,
       newVariables: newVariablesInUse(interactionDraft),
     })
   }
@@ -313,7 +322,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       !((await serverAccepts(interactionDraft)) && acceptsSaveRef.current)
     )
       return
-    commit(draftRef.current)
+    commit(draftRef.current, interactionDraft)
   }
 
   useEffect(() => {
@@ -372,6 +381,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
         <InteractionsEditor
           draft={{ interactions, created }}
           onChange={(next) => {
+            interactionsRef.current = next
             setServerProblems(null)
             updateDraft({
               interactions: next.interactions,

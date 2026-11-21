@@ -32,7 +32,7 @@ type Level = {
   selection: unknown
 }
 
-type Side = { levels: Level[]; totalName?: string }
+type Side = { levels: Level[]; totalName?: string; problem?: string }
 
 const readSide = (
   rows: StatementRows | null,
@@ -45,29 +45,37 @@ const readSide = (
   const totalIdx = rows.columns.findIndex(
     (_, i) => i !== priceIdx && i !== sizeIdx,
   )
-  if (priceIdx < 0 || sizeIdx < 0) return { levels: [] }
+  if (priceIdx < 0 || sizeIdx < 0) {
+    const roles = [priceIdx < 0 && "price", sizeIdx < 0 && "size"]
+      .filter(Boolean)
+      .join(" and ")
+    return { levels: [], problem: `missing ${roles} column binding.` }
+  }
   const clickIdx = columnIndex(rows, clickColumn)
   let running = 0
+  const levels = rows.rows.flatMap((row) => {
+    const rawPrice = row[priceIdx]
+    if (typeof rawPrice !== "string" && typeof rawPrice !== "number") return []
+    const price = asNumeric(rawPrice)
+    const size = toNumber(row[sizeIdx])
+    if (price === null || size === null) return []
+    running += size
+    return [
+      {
+        price,
+        rawPrice,
+        size,
+        selection: clickColumn === undefined ? rawPrice : row[clickIdx],
+        total: totalIdx >= 0 ? (toNumber(row[totalIdx]) ?? running) : null,
+      },
+    ]
+  })
   return {
-    levels: rows.rows.flatMap((row) => {
-      const rawPrice = row[priceIdx]
-      if (typeof rawPrice !== "string" && typeof rawPrice !== "number")
-        return []
-      const price = asNumeric(rawPrice)
-      const size = toNumber(row[sizeIdx])
-      if (price === null || size === null) return []
-      running += size
-      return [
-        {
-          price,
-          rawPrice,
-          size,
-          selection: clickColumn === undefined ? rawPrice : row[clickIdx],
-          total: totalIdx >= 0 ? (toNumber(row[totalIdx]) ?? running) : null,
-        },
-      ]
-    }),
+    levels,
     totalName: totalIdx >= 0 ? rows.columns[totalIdx].name : undefined,
+    ...(levels.length === 0 && rows.rows.length > 0
+      ? { problem: "no rows with valid price and size." }
+      : {}),
   }
 }
 
@@ -330,6 +338,8 @@ export const OrderBook = ({
       <Ladder ref={ladderRef}>
         {statementErrors?.[0] ? (
           <Empty role="alert">Ask query failed: {statementErrors[0]}</Empty>
+        ) : asks.problem ? (
+          <Empty role="alert">Asks: {asks.problem}</Empty>
         ) : asks.levels.length === 0 ? (
           <Empty>No asks</Empty>
         ) : (
@@ -355,6 +365,8 @@ export const OrderBook = ({
         </Mid>
         {statementErrors?.[1] ? (
           <Empty role="alert">Bid query failed: {statementErrors[1]}</Empty>
+        ) : bids.problem ? (
+          <Empty role="alert">Bids: {bids.problem}</Empty>
         ) : bids.levels.length === 0 ? (
           <Empty>No bids</Empty>
         ) : (
@@ -395,16 +407,16 @@ export const orderBookDrawn = (
             },
           ]
         : []),
-      ...(statements[0] &&
-      asks.levels.length === 0 &&
-      statements[0].rows.length > 0
-        ? [
-            {
-              message: `Asks: no price and size columns found (columns: ${statements[0].columns.map((c) => c.name).join(", ")}).`,
-              severity: "error" as const,
-            },
-          ]
-        : []),
+      ...([asks, bids] as const).flatMap(({ problem }, index) =>
+        problem && !statementErrors?.[index]
+          ? [
+              {
+                message: `${index === 0 ? "Asks" : "Bids"}: ${problem}`,
+                severity: "error" as const,
+              },
+            ]
+          : [],
+      ),
       ...(asks.levels.length > 1 &&
       compareValues(asks.levels[0].price, asks.levels[1].price) > 0
         ? [

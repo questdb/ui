@@ -257,8 +257,9 @@ export const stateTimelineOption = ({
   visual,
   statements,
   colors,
+  clickColumn,
 }: VisualContext): VisualBuild => {
-  const read = readStateSegments(visual, statements[0])
+  const read = readStateSegments(visual, statements[0], clickColumn)
   if (typeof read === "string") return missing(read)
   const { lanes, segments: segs } = read
   const severity = (state: string) =>
@@ -322,12 +323,17 @@ export const stateTimelineOption = ({
         itemStyle: { color: stateColors.get(state) },
         data: segs
           .filter((s) => s.state === state)
-          .map((s) => [
-            s.start,
-            s.end,
-            lanes.indexOf(s.lane),
-            states.indexOf(state),
-          ]),
+          .map((s) => {
+            const value = [
+              s.start,
+              s.end,
+              lanes.indexOf(s.lane),
+              states.indexOf(state),
+            ]
+            return clickColumn !== undefined && s.selection !== undefined
+              ? { value, columns: { [clickColumn]: s.selection } }
+              : value
+          }),
       })) as EChartsOption["series"],
     },
     drawn: {

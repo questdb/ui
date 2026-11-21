@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react"
-import { screen } from "@testing-library/react"
+import { fireEvent, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import type { CellValue } from "../../../../components/ResultGrid/types"
@@ -126,6 +126,38 @@ describe("dashboard grid", () => {
       screen.getAllByRole("gridcell").map((cell) => cell.textContent),
     ).toEqual(["ETH", "2.0", "BTC", "10.0▲"])
   })
+
+  it.each(["Enter", " "])(
+    "activates the focused row with %s when clicks are bound",
+    (key) => {
+      // Given a grid with a row activation handler
+      const activate = vi.fn()
+      renderComponent(
+        <ResultGrid
+          dataSource={inMemoryDataSource(
+            columns,
+            [
+              ["BTC", 1],
+              ["ETH", 2],
+            ],
+            -1,
+          )}
+          maxColumnWidth="auto"
+          onCellActivate={activate}
+        />,
+      )
+      const grid = screen.getByRole("grid")
+      grid.focus()
+
+      // When keyboard navigation enters the first cell and activates it
+      fireEvent.keyDown(grid, { key: "ArrowDown" })
+      fireEvent.keyDown(grid, { key })
+
+      // Then it uses the same row and column as a click
+      expect(activate).toHaveBeenCalledOnce()
+      expect(activate).toHaveBeenCalledWith(["BTC", 1], 0)
+    },
+  )
 
   it("preserves the digits of a formatted LONG value from the database", () => {
     renderComponent(

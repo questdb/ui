@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   bucketLanes,
   bucketSeverity,
+  latestStateByLane,
   readStateSegments,
   severityOf,
   uptimeByLane,
@@ -26,6 +27,24 @@ it("does not infer end times when an explicitly bound end column is missing", ()
   expect(readStateSegments({ type: "stateTimeline" }, frame)).toMatchObject({
     lanes: ["db"],
   })
+})
+
+it("keeps the latest state per lane, preferring the last row on a tie", () => {
+  // Given interleaved segments and two reports at the newest timestamp
+  const segments = [
+    { lane: "west", state: "down", start: 5, end: 7 },
+    { lane: "east", state: "up", start: 2, end: 4 },
+    { lane: "west", state: "up", start: 1, end: 5 },
+    { lane: "west", state: "degraded", start: 5, end: 8 },
+  ]
+
+  // When computing current state, then older samples cannot replace newer ones
+  expect(latestStateByLane(segments)).toEqual(
+    new Map([
+      ["west", "degraded"],
+      ["east", "up"],
+    ]),
+  )
 })
 
 const HOUR = 3_600_000

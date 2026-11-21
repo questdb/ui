@@ -185,6 +185,7 @@ const usersText = (users: NotebookCell[], cells: NotebookCell[]) =>
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  triggerRef?: React.RefObject<HTMLButtonElement | null>
   types: NotebookChartType[] | undefined
   cells: NotebookCell[]
   onSave: (types: NotebookChartType[], renames: Record<string, string>) => void
@@ -197,6 +198,7 @@ type Props = {
 export const ChartTypesDialog: React.FC<Props> = ({
   open,
   onOpenChange,
+  triggerRef,
   types,
   cells,
   onSave,
@@ -296,6 +298,11 @@ export const ChartTypesDialog: React.FC<Props> = ({
             maxwidth="100rem"
             data-hook="chart-types-dialog"
             aria-describedby={undefined}
+            onCloseAutoFocus={(event) => {
+              if (!triggerRef?.current) return
+              event.preventDefault()
+              triggerRef.current.focus()
+            }}
             onEscapeKeyDown={(e) => {
               // Escape inside the code editor is the editor's.
               if (escapeInCodeEditor(document.activeElement)) e.preventDefault()

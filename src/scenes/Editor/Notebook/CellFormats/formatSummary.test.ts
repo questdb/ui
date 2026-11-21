@@ -36,7 +36,8 @@ describe("format summary", () => {
   it("saves only what was set, thresholds ascending, and no empty formats", () => {
     // Given
     const formats = {
-      empty: { kind: "number" as const, prefix: "" },
+      empty: { prefix: "" },
+      volume: { kind: "number" as const },
       lag: {
         thresholds: [
           { value: 10, tone: "negative" as const },
@@ -49,6 +50,7 @@ describe("format summary", () => {
 
     // When / Then
     expect(tidyFormats(formats)).toEqual({
+      volume: { kind: "number" },
       lag: {
         thresholds: [
           { value: 5, tone: "warning" },

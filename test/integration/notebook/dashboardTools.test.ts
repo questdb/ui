@@ -411,6 +411,38 @@ describe("dispatchTool — dashboard tools", () => {
     expect(types?.map(({ name }) => name).sort()).toEqual(["one", "two"])
   })
 
+  it("does not restore a chart type when two deletions overlap", async () => {
+    // Given a closed notebook with two saved definitions
+    await db.buffers.put({
+      id: 2,
+      label: "Closed dashboard",
+      value: "",
+      position: 1,
+      notebookViewState: {
+        cells: [],
+        settings: {
+          chartTypes: ["one", "two"].map((name) => ({
+            name,
+            renderItem: "return null",
+          })),
+        },
+      },
+    })
+
+    // When the assistant deletes both in parallel
+    const results = await Promise.all(
+      ["one", "two"].map((name) =>
+        call("delete_chart_type", { buffer_id: 2, name }),
+      ),
+    )
+
+    // Then both succeeded and neither type remains
+    expect(results.map((result) => parsed(result).ok)).toEqual([true, true])
+    expect(
+      (await db.buffers.get(2))?.notebookViewState?.settings?.chartTypes,
+    ).toBeUndefined()
+  })
+
   it("define_chart_type compiles, stores and lists the type; delete removes it", async () => {
     // Given
     const { state } = mountLive(1, [cell("c")])

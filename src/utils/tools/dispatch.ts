@@ -1392,24 +1392,22 @@ export const dispatchTool = async (
         setStatus(AIOperationStatus.ConfiguringChart)
         const baseline = getBufferActionSeq(buffer_id)
         return routeNotebookTool(async () => {
-          const settings = await readSettings(buffer_id, signal)
-          const types = settings.chartTypes ?? []
-          if (!types.some((t) => t.name === name))
-            throw new NotebookToolError(
-              "validation",
-              `No chart type "${name}". Defined: ${types.map((t) => t.name).join(", ") || "none"}.`,
-            )
-          const rest = types.filter((t) => t.name !== name)
-          const users = cellsUsingChartType(
-            await readCells(buffer_id, signal),
-            name,
-          ).map((c) => c.id)
+          let users: string[] = []
           await runTransition(
             buffer_id,
-            (parts) =>
-              setNotebookSettingsTransition(parts, {
+            (parts) => {
+              const types = parts.settings.chartTypes ?? []
+              const rest = types.filter((t) => t.name !== name)
+              if (rest.length === types.length)
+                throw new NotebookToolError(
+                  "validation",
+                  `No chart type "${name}". Defined: ${types.map((t) => t.name).join(", ") || "none"}.`,
+                )
+              users = cellsUsingChartType(parts.cells, name).map((c) => c.id)
+              return setNotebookSettingsTransition(parts, {
                 chartTypes: rest.length > 0 ? rest : undefined,
-              }),
+              })
+            },
             signal,
             baseline,
           )

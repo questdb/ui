@@ -78,6 +78,35 @@ describe("chart type usage", () => {
     expect(renameChartTypesIn(option, { c: "d" })).toBe(option)
   })
 
+  it("tracks and renames chart types in base, timeline and media options", () => {
+    // Given the same chart type used in several ECharts option scopes
+    const keep = { series: { type: "line" } }
+    const marker = { type: "custom", renderItem: "before" }
+    const option = {
+      baseOption: { series: [marker] },
+      options: [{ series: marker }, keep],
+      media: [{ query: { maxWidth: 400 }, option: { series: [marker] } }],
+    }
+
+    // When the type is renamed
+    const next = renameChartTypesIn(option, { before: "after" })
+
+    // Then all uses point at the new name, without replacing unrelated options
+    expect(chartTypesUsedBy(option)).toEqual(["before"])
+    expect(next).toEqual({
+      baseOption: { series: [{ ...marker, renderItem: "after" }] },
+      options: [{ series: { ...marker, renderItem: "after" } }, keep],
+      media: [
+        {
+          query: { maxWidth: 400 },
+          option: { series: [{ ...marker, renderItem: "after" }] },
+        },
+      ],
+    })
+    expect((next.options as unknown[])[1]).toBe(keep)
+    expect(chartTypesUsedBy(next)).toEqual(["after"])
+  })
+
   it("saves the types and renames their uses in one step", () => {
     // Given a notebook whose cell draws with "glyph"
     const parts = {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { buildCustomOption, chartNumber } from "./buildCustomOption"
+import {
+  buildCustomOption,
+  chartNumber,
+  customSeriesCount,
+} from "./buildCustomOption"
 import type { StatementRows } from "../visuals/statementRows"
 import { echarts } from "../CellChart/echartsSetup"
 
@@ -57,6 +61,7 @@ describe("buildCustomOption", () => {
         dataset: [{ id: "q0" }],
       })
       expect(chart.renderToSVGString()).toContain("west")
+      expect(customSeriesCount(option)).toBe(1)
     } finally {
       chart.dispose()
     }

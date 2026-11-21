@@ -345,6 +345,14 @@ const containsCyclicSankey = (node: unknown): boolean => {
   ].some(containsCyclicSankey)
 }
 
+const baseOptionOf = (option: Record<string, unknown>) =>
+  isRecord(option.baseOption) ? option.baseOption : option
+
+export const customSeriesCount = (option: Record<string, unknown>): number => {
+  const series = baseOptionOf(option).series
+  return Array.isArray(series) ? series.length : isRecord(series) ? 1 : 0
+}
+
 export type BuiltCustomOption = {
   option: Record<string, unknown>
   problems: OptionProblem[]
@@ -378,7 +386,7 @@ export const buildCustomOption = (
       ],
     }
   }
-  const base = isRecord(filled.baseOption) ? filled.baseOption : filled
+  const base = baseOptionOf(filled)
   const ours = datasetsOf(statements)
   const theirs: unknown = base.dataset
   const theirList: unknown[] = Array.isArray(theirs)

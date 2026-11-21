@@ -164,6 +164,38 @@ describe("VisualCanvas", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument()
   })
 
+  it("reports an incompatible bid schema without hiding valid asks", () => {
+    // Given both queries succeeded, but only asks returned the bound size alias
+    const price = { name: "price", type: "DOUBLE" }
+    renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "orderBook", columns: { size: "size" } }}
+        statements={[
+          {
+            columns: [price, { name: "size", type: "DOUBLE" }],
+            rows: [[101, 20]],
+          },
+          {
+            columns: [price, { name: "volume", type: "DOUBLE" }],
+            rows: [[99, 10]],
+          },
+        ]}
+      />,
+    )
+
+    // Then the dashboard does not confuse that side with an empty market
+    expect(screen.getByText("101")).toBeVisible()
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Bids: missing size column binding.",
+    )
+    expect(screen.queryByText("No bids")).not.toBeInTheDocument()
+    expect(getRenderReport(bufferId, cellId)?.problems).toContainEqual({
+      message: "Bids: missing size column binding.",
+      severity: "error",
+    })
+  })
+
   it("writes the bound order-book column from the clicked side", async () => {
     const setVariables = vi.fn()
     const price = { name: "price", type: "DOUBLE" }

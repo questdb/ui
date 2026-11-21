@@ -15,6 +15,11 @@ import { withZoomDensity } from "./buildEchartsOption"
 import { fitLayout } from "./fitLayout"
 import { chartZoomDensity, type ChartZoomDensity } from "./chartDensity"
 import { createQuestdbTheme } from "./questdbTheme"
+import {
+  zoomWindowForEvent,
+  type DataZoomEvent,
+  type ZoomWindow,
+} from "./zoomWindow"
 import { useNotebookBufferId } from "../NotebookProvider"
 import {
   settleChartEntryAnimation,
@@ -88,14 +93,6 @@ const structuralKey = (option: EChartsOption): string => {
     option.brush ? "brush" : "no-brush",
   ].join("::")
 }
-
-type DataZoomEvent = {
-  start?: number
-  end?: number
-  batch?: Array<{ start?: number; end?: number }>
-}
-
-type ZoomWindow = { start: number; end: number }
 
 const isZoomed = ({ start, end }: ZoomWindow): boolean => start > 0 || end < 100
 
@@ -177,18 +174,12 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       },
       [fit],
     )
+    // ECharts 6.1 setTheme replays the first setOption rather than the
+    // latest merged frame. Mount from the current option and restore zoom.
     const key = useMemo(
-      () => `${specKey ?? ""}::${structuralKey(optionToDraw)}`,
-      [optionToDraw, specKey],
+      () => `${theme.mode}::${specKey ?? ""}::${structuralKey(optionToDraw)}`,
+      [optionToDraw, specKey, theme.mode],
     )
-    // The theme an instance starts with: the current one when the structural
-    // key mounts a new instance. Later theme changes (light and dark mode) go
-    // through `setTheme`, which restyles the live instance instead of
-    // re-creating it, so zoom and legend state survive.
-    const mountThemeRef = useRef({ key, theme: chartTheme })
-    if (mountThemeRef.current.key !== key) {
-      mountThemeRef.current = { key, theme: chartTheme }
-    }
     const suppressEntryAnimation =
       !animateEntryRef.current && !firstInstanceDoneRef.current
     const renderOption = useMemo(
@@ -222,14 +213,11 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         ...bound,
         datazoom: (evt: unknown) => {
           zoomHandler?.(evt)
-          const e = evt as DataZoomEvent
-          const first = e.batch?.[0] ?? e
-          if (
-            typeof first.start === "number" &&
-            typeof first.end === "number"
-          ) {
-            onZoomChange(first.start, first.end)
-          }
+          const zoom = zoomWindowForEvent(
+            evt as DataZoomEvent,
+            instanceRef.current,
+          )
+          if (zoom) onZoomChange(zoom.start, zoom.end)
         },
       }
     }, [onZoomChange, extraEvents])
@@ -364,12 +352,6 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       onZoomChangeRef.current?.(0, 100)
     }, [zoomDensity, resetZoom, zoomable])
 
-    useEffect(() => {
-      const instance = reactEchartsRef.current?.getEchartsInstance()
-      if (!instance || instance.isDisposed()) return
-      instance.setTheme(chartTheme)
-    }, [chartTheme])
-
     useImperativeHandle(ref, () => ({ resetZoom }), [resetZoom])
 
     return (
@@ -386,7 +368,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
             ref={reactEchartsRef}
             echarts={echarts}
             option={renderOption}
-            theme={mountThemeRef.current.theme}
+            theme={chartTheme}
             notMerge={false}
             lazyUpdate
             autoResize={false}

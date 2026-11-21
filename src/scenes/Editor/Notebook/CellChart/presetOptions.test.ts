@@ -191,6 +191,36 @@ describe("preset options", () => {
     expect(pie("halfDonut")).toMatchObject({ startAngle: 180, endAngle: 360 })
   })
 
+  it("restores full geometry when a half donut becomes a donut", () => {
+    // Given an existing half donut
+    const build = (pieShape: "donut" | "halfDonut") =>
+      buildEchartsOption({ xColumn: "venue" }, [
+        { ...venues, type: "pie", pieShape },
+      ])
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 640,
+      height: 360,
+    })
+    try {
+      chart.setOption(build("halfDonut"))
+      expect(seriesOf(chart.getOption())[0].startAngle).toBe(180)
+
+      // When merged options switch the same series to a full donut
+      chart.setOption(build("donut"))
+
+      // Then the previous arc and offset no longer apply
+      expect(seriesOf(chart.getOption())[0]).toMatchObject({
+        center: ["50%", "50%"],
+        startAngle: 90,
+        endAngle: "auto",
+      })
+    } finally {
+      chart.dispose()
+    }
+  })
+
   it("uses independent legends for different scatter color measures", () => {
     const measure = (name: string, values: number[]) =>
       query({
@@ -343,6 +373,40 @@ describe("preset options", () => {
       { color: lightColors.statusWarning, opacity: 0.1 },
       { color: lightColors.chartDown, opacity: 0.1 },
     ])
+  })
+
+  it("replaces threshold markers when changing modes on the same chart", () => {
+    // Given a mounted chart with one threshold line
+    const context = {
+      formats: {
+        volume: { thresholds: [{ value: 20, tone: "warning" as const }] },
+      },
+    }
+    const build = (thresholds: "lines" | "bands") =>
+      buildEchartsOption({ xColumn: "venue", thresholds }, [venues], context)
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 640,
+      height: 360,
+    })
+    const marks = () =>
+      seriesOf(chart.getOption()).find((s) => s.name === "Thresholds")
+    try {
+      chart.setOption(build("lines"))
+      expect(marks()?.markLine).toMatchObject({ data: [{ yAxis: 20 }] })
+
+      // When the options are merged as in ChartRenderer
+      chart.setOption(build("bands"))
+
+      // Then the bands replace the lines, and vice versa
+      expect(marks()?.markLine).toMatchObject({ data: [] })
+      expect((marks()?.markArea as { data: unknown[] }).data).toHaveLength(2)
+      chart.setOption(build("lines"))
+      expect(marks()?.markArea).toMatchObject({ data: [] })
+    } finally {
+      chart.dispose()
+    }
   })
 
   it("builds threshold bands for 160,000 points without spreading them as arguments", () => {

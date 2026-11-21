@@ -193,6 +193,29 @@ export const parseDeclareBlock = (text: string): NotebookVariable[] => {
   return out
 }
 
+/** Whether a restored query result was bound to different notebook values. */
+export const hasChangedBindings = (
+  sql: string,
+  previousEffectiveSql: string,
+  globals: readonly NotebookVariable[] | undefined,
+): boolean => {
+  const currentEffectiveSql = expandGlobals(sql, globals)
+  if (currentEffectiveSql === previousEffectiveSql) return false
+  const previous = parseDeclareBlock(previousEffectiveSql)
+  const next = parseDeclareBlock(currentEffectiveSql)
+  const values = (declared: NotebookVariable[]) =>
+    new Map(declared.map(({ name, value }) => [name.toLowerCase(), value]))
+  const before = values(previous)
+  const after = values(next)
+  const changed = [...new Set([...before.keys(), ...after.keys()])].filter(
+    (name) => before.get(name) !== after.get(name),
+  )
+  if (changed.length === 0) return false
+  // Use the effective declarations so statement-local overrides and derived
+  // variables are accounted for; unrelated settings don't invalidate a frame.
+  return usesVariables(sql, affectedVariables(changed, next))
+}
+
 export type VariableShapeError =
   | { kind: "parse" }
   | { kind: "count"; actual: number }

@@ -114,6 +114,7 @@ export type CellRefreshDeps = {
   ) => Promise<ValidateQueryResult>
   setCellResult: (cellId: string, result: CellResult | undefined) => void
   getCellResult: (cellId: string) => CellResult | null | undefined
+  isRestoredGridResultStale?: (result: CellResult) => boolean
   isDrawCell: (cellId: string) => boolean
   isCellRunning: (cellId: string) => boolean
   resultLoadStatus: (cellId: string) => CellResultStatus
@@ -308,13 +309,13 @@ type Entry = {
   autoRefresh: AutoRefresh
   visible: boolean
   pendingManualRefresh: boolean
-  variableRefreshAfterRun: boolean
   manualRefreshInFlight: boolean
   // A zero-survivor collapse dropped the display but kept the disk snapshot;
   // the next settle with no result asks hydration for a non-destructive
   // revive, so undo gets its rows back.
   snapshotRetained: boolean
   ensureAttempted: boolean
+  checkedRestoredBindings: boolean
   lastFetchedAt: number
   // The interval the running loop last settled on, back to the floor on an
   // auto-refresh change. A restarted loop waits out the rest of it before its
@@ -352,6 +353,7 @@ export class CellRefreshEngine {
   // replacement still runs. Keyed outside the entries so a run on a cell whose
   // entry appears mid-run (first run of an editor-only cell) is still covered.
   private pendingRunCounts = new Map<string, number>()
+  private refreshAfterRun = new Set<string>()
   private stopOnSessionEnd: (() => void) | null = null
 
   private refreshHandler = (payload?: { cellId?: string }) => {
@@ -416,6 +418,7 @@ export class CellRefreshEngine {
     this.visibilityByCell.clear()
     this.pendingRefreshSeeds.clear()
     this.pendingRunCounts.clear()
+    this.refreshAfterRun.clear()
     this.lastSyncedEntryCells = null
   }
 
@@ -545,7 +548,10 @@ export class CellRefreshEngine {
    * Refreshes the read cells whose SQL matches, e.g. those that use a
    * variable a click just changed. Write cells are never re-run.
    */
-  refreshWhere(match: (cellId: string, sql: string) => boolean): number {
+  refreshWhere(
+    match: (cellId: string, sql: string) => boolean,
+    cells: readonly NotebookCell[] = [],
+  ): number {
     let refreshed = 0
     for (const entry of this.entries.values()) {
       if (!match(entry.cellId, entry.pendingSql ?? entry.sql)) continue
@@ -553,12 +559,26 @@ export class CellRefreshEngine {
         continue
       refreshed++
       if (entry.kind === "grid" && this.isRunPending(entry.cellId)) {
-        entry.variableRefreshAfterRun = true
+        this.refreshAfterRun.add(entry.cellId)
         continue
       }
       // Matching SQL can be unchanged while its bound variables have changed.
       // Supersede even a manual fetch, which may hold the old values.
       this.forceRefresh(entry)
+    }
+    // During the first Run's validation there may not be a result, or even
+    // a placeholder, to make the cell an entry yet.
+    for (const cell of cells) {
+      if (
+        this.isRunPending(cell.id) &&
+        !this.entries.has(cell.id) &&
+        cell.type !== "markdown" &&
+        cell.mode !== "draw" &&
+        match(cell.id, cell.value)
+      ) {
+        this.refreshAfterRun.add(cell.id)
+        refreshed++
+      }
     }
     return refreshed
   }
@@ -740,18 +760,25 @@ export class CellRefreshEngine {
   // Balances noteRunStarted on EVERY outcome — denied, skipped, superseded,
   // thrown included. A leaked count would not corrupt data; it would silently
   // disable refresh for the cell, so the caller wires this in a finally.
-  noteRunFinished(cellId: string) {
+  noteRunFinished(cellId: string, currentCell?: NotebookCell) {
     const count = this.pendingRunCounts.get(cellId) ?? 0
     if (count > 1) {
       this.pendingRunCounts.set(cellId, count - 1)
       return
     }
     this.pendingRunCounts.delete(cellId)
+    if (!this.refreshAfterRun.delete(cellId)) return
+
+    // A quick first Run can settle before React syncs the new grid entry.
+    if (
+      !this.entries.has(cellId) &&
+      currentCell &&
+      entryKindFor(currentCell) === "grid"
+    )
+      this.createEntry(currentCell, "grid")
     const entry = this.entries.get(cellId)
-    if (entry?.variableRefreshAfterRun) {
-      entry.variableRefreshAfterRun = false
+    if (entry?.kind === "grid" && entry.state.classifyBlock?.kind !== "write")
       this.forceRefresh(entry)
-    }
   }
 
   private isRunPending(cellId: string): boolean {
@@ -783,10 +810,10 @@ export class CellRefreshEngine {
       state: initialFetchState(queries),
       visible: this.visibilityByCell.get(cell.id) ?? false,
       pendingManualRefresh: false,
-      variableRefreshAfterRun: false,
       manualRefreshInFlight: false,
       snapshotRetained: false,
       ensureAttempted: false,
+      checkedRestoredBindings: false,
       lastFetchedAt: 0,
       pollIntervalMs: REFRESH_MIN_MS,
       sqlDebounce: null,
@@ -1029,8 +1056,24 @@ export class CellRefreshEngine {
   }
 
   private ensureGridData(entry: Entry) {
-    const result = this.getDeps().getCellResult(entry.cellId)
+    const deps = this.getDeps()
+    const result = deps.getCellResult(entry.cellId)
     if (result != null) {
+      if (
+        !entry.checkedRestoredBindings &&
+        deps.resultLoadStatus(entry.cellId) === "loaded"
+      ) {
+        entry.checkedRestoredBindings = true
+        if (
+          entry.state.classifyBlock?.kind !== "write" &&
+          deps.isRestoredGridResultStale?.(result)
+        ) {
+          if (this.isRunPending(entry.cellId))
+            this.refreshAfterRun.add(entry.cellId)
+          else this.forceRefresh(entry)
+          return
+        }
+      }
       this.setState(entry, { settledKey: entry.state.queriesKey })
       // A reveal must not regress the freshness finishRound stamped.
       entry.lastFetchedAt = Math.max(

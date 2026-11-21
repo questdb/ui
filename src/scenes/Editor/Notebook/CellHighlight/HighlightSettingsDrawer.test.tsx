@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { renderComponent } from "../../../../test/component"
 import React, { useState } from "react"
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor } from "@testing-library/react"
+import { questClient } from "../../../../utils/questdb/queryClient"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { Button } from "../../../../components/Button"
@@ -247,6 +248,59 @@ describe("highlight settings validation", () => {
     const saved = (onSave.mock.calls[0] as [GridSettingsSave])[0]
     expect("gridMode" in saved).toBe(true)
     expect(saved.gridMode).toBeUndefined()
+  })
+
+  it("requires another Save when a new variable is edited during validation", async () => {
+    // Given a drawer with a new variable and a database that answers late
+    const onSave = vi.fn()
+    type Answer = Awaited<ReturnType<typeof questClient.validateQuery>>
+    let answer: (value: Answer) => void = () => undefined
+    const validate = vi
+      .spyOn(questClient, "validateQuery")
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+      )
+      .mockResolvedValueOnce({} as Answer)
+    try {
+      renderComponent(<Fixture onSave={onSave} />)
+      fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+      await userEvent.click(
+        await screen.findByRole("tab", { name: "Interactions" }),
+      )
+      fireEvent.click(screen.getByRole("checkbox", { name: /A click sets/ }))
+      await userEvent.click(screen.getByRole("button", { name: /^Variable/ }))
+      await userEvent.click(
+        screen.getByRole("menuitemradio", { name: "New variable…" }),
+      )
+      fireEvent.change(screen.getByPlaceholderText("e.g. symbol"), {
+        target: { value: "station" },
+      })
+      const value = screen.getByPlaceholderText("e.g. 'BTC'")
+      fireEvent.change(value, { target: { value: "'east'" } })
+      const save = screen.getByRole("button", { name: "Save" })
+
+      // When the user edits the starting value before the check answers
+      fireEvent.click(save)
+      fireEvent.change(value, { target: { value: "'west'" } })
+      await act(() => {
+        answer({} as Answer)
+        return Promise.resolve()
+      })
+
+      // Then the old validation result cannot save that edit
+      expect(onSave).not.toHaveBeenCalled()
+      fireEvent.click(save)
+      await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+      expect(validate).toHaveBeenLastCalledWith(
+        expect.stringContaining("'west'"),
+      )
+      const saved = (onSave.mock.calls[0] as [GridSettingsSave])[0]
+      expect(saved.newVariables).toEqual([{ name: "station", value: "'west'" }])
+    } finally {
+      validate.mockRestore()
+    }
   })
 
   it("saves a click on the grid, and Clear rules waits for an unfinished one", async () => {
