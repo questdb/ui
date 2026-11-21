@@ -1377,8 +1377,10 @@ export const buildEchartsOption = (
     delete s[Y_COLUMN]
     delete s[PERCENT]
     delete s[POINT_COLUMNS]
-    if (points) s.tooltip = { formatter: pointTooltip(points, formats) }
-    else if (format) s.tooltip = { valueFormatter: valueFormatterFor(format) }
+    s.tooltip = {
+      formatter: points ? pointTooltip(points, formats) : undefined,
+      valueFormatter: !points && format ? valueFormatterFor(format) : undefined,
+    }
   }
   const sharedFormat = (list: (ColumnFormat | undefined)[]) =>
     list.length > 0 &&
@@ -1405,16 +1407,17 @@ export const buildEchartsOption = (
           formatter: (v: number) => `${v}%`,
         },
       }
-    return format
-      ? {
-          ...axis,
-          axisLabel: {
-            ...(axis.axisLabel as object),
-            formatter: (v: number) =>
-              formatValue(v, { ...format, prefix: "", suffix: "" }),
-          },
-        }
-      : axis
+    return {
+      min: undefined,
+      max: undefined,
+      ...axis,
+      axisLabel: {
+        ...(axis.axisLabel as object),
+        formatter: format
+          ? (v: number) => formatValue(v, { ...format, prefix: "", suffix: "" })
+          : undefined,
+      },
+    }
   }
   const formattedYAxis = Array.isArray(yAxis)
     ? yAxis.map((a, i) =>

@@ -15,6 +15,7 @@ import { toChartConfigWire } from "../../../../utils/ai/notebookSnapshot"
 import { drawProblems, resolveDraw } from "../DrawCanvas/drawCanvasUtils"
 import { chartOptionsOffered, withoutUnofferedOptions } from "./chartOptions"
 import { chartZoomDensity } from "./chartDensity"
+import { echarts } from "./echartsSetup"
 
 const col = (name: string, type: string): ColumnDefinition => ({ name, type })
 
@@ -132,6 +133,47 @@ describe("preset options", () => {
     expect(first(option.yAxis)).toMatchObject({ min: 0, max: 100 })
     const tooltip = gas.tooltip as { valueFormatter: (v: unknown) => string }
     expect(tooltip.valueFormatter(75)).toBe("75.0%")
+  })
+
+  it("clears old units and percent bounds when updating the same chart", () => {
+    // Given a mounted chart with percentage stacking and a percent format
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 800,
+      height: 400,
+    })
+    const render = (percentStack: boolean, formatted = false) => {
+      chart.setOption(
+        buildEchartsOption(
+          { xColumn: "venue" },
+          [{ ...venues, type: "stackedBar", percentStack }],
+          formatted ? { formats: { volume: { kind: "percent" } } } : {},
+        ),
+      )
+      return chart.getOption() as { yAxis: Loose[]; series: Loose[] }
+    }
+    try {
+      expect(render(true).yAxis[0]).toMatchObject({ min: 0, max: 100 })
+      const formatted = render(false, true)
+      expect((formatted.yAxis[0].axisLabel as Loose).formatter).toBeTypeOf(
+        "function",
+      )
+      expect((formatted.series[0].tooltip as Loose).valueFormatter).toBeTypeOf(
+        "function",
+      )
+
+      // When these settings are cleared, then the live chart uses its defaults
+      const cleared = render(false)
+      expect(cleared.yAxis[0].min).not.toBe(0)
+      expect(cleared.yAxis[0].max).not.toBe(100)
+      expect((cleared.yAxis[0].axisLabel as Loose).formatter).toBeUndefined()
+      expect(
+        (cleared.series[0].tooltip as Loose).valueFormatter,
+      ).toBeUndefined()
+    } finally {
+      chart.dispose()
+    }
   })
 
   it("draws a pie as a full pie, a ring or a half ring", () => {
