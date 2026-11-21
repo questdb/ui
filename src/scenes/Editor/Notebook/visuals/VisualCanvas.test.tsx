@@ -83,6 +83,31 @@ describe("VisualCanvas", () => {
     },
   )
 
+  it("does not draw a Sankey from an incomplete result", () => {
+    // Given an otherwise valid flow in a capped statement result
+    renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "sankey" }}
+        statements={[
+          {
+            columns: [
+              { name: "source", type: "SYMBOL" },
+              { name: "target", type: "SYMBOL" },
+              { name: "amount", type: "INT" },
+            ],
+            rows: [["east", "west", 10]],
+            partial: true,
+          },
+        ]}
+      />,
+    )
+    expect(screen.getByText(/Aggregate flows in SQL/)).toBeVisible()
+    expect(getRenderReport(bufferId, cellId)?.problems[0]?.severity).toBe(
+      "error",
+    )
+  })
+
   it("explains an empty successful Stat result", () => {
     renderComponent(
       <VisualCanvas

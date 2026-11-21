@@ -678,6 +678,10 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
 }
 
 export const sankeyOption = (ctx: VisualContext): VisualBuild => {
+  if (ctx.statements[0]?.partial)
+    return missing(
+      "The query returned only part of its rows. Aggregate flows in SQL or reduce the result before drawing this Sankey chart.",
+    )
   const e = edges(ctx)
   if (typeof e === "string") return missing(e)
   // Labels sit right of their node, except on the last column, where they
