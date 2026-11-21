@@ -52,7 +52,7 @@ export type ConversationMessage = Message & {
   model?: string
   // Wall-clock time for the whole assistant turn, stored on its anchor.
   turnDurationMs?: number
-  // Set on the turns a local agent answered, with the agent's id.
+  // Set on regular chat turns that handed their earlier history to this agent.
   localAgentId?: string
   displayType?: UserMessageDisplayType
   displayUserMessage?: string

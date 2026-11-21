@@ -14,7 +14,9 @@ import { LOCAL_AGENT_MODEL } from "../localAgent/localAgentModel"
 import type { ConversationMessage } from "../../providers/AIConversationProvider/types"
 import {
   type AIFlowCallbacks,
+  type AIFlowConfig,
   createChatFlowConfig,
+  createSchemaExplainFlowConfig,
   executeAIFlow,
 } from "./executeAIFlow"
 
@@ -36,12 +38,14 @@ const earlierTurns: ConversationMessage[] = [
   { id: "a1", role: "assistant", content: "trades, quotes", timestamp: 2 },
 ]
 
-const runTurn = async (
-  message: string,
-  agentCommand: boolean,
-  images?: AgentPromptImage[],
-  onAgentReply?: () => void,
-) => {
+const localConfig = {
+  conversationId: CONVERSATION_ID,
+  settings: { model: LOCAL_AGENT_MODEL, apiKey: "" },
+  questClient: {} as never,
+  hasSchemaAccess: false,
+}
+
+const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
   const sent: AgentInboundMessage[] = []
   let deliver: (msg: AgentOutboundMessage) => void = () => undefined
   const client = {
@@ -75,20 +79,43 @@ const runTurn = async (
     onNotebookRead: vi.fn(),
   })
   registerLocalAgentChannel(channel)
-  const updateMessage = vi.fn()
+  const updateMessage = vi.fn<
+    Parameters<AIFlowCallbacks["updateMessage"]>,
+    void
+  >()
   const addMessage = vi.fn<Parameters<AIFlowCallbacks["addMessage"]>, void>()
   const persistMessages = vi.fn(() => Promise.resolve())
-  await executeAIFlow(
+  const result = await executeAIFlow(config, {
+    addMessage,
+    updateMessage,
+    setStatus: vi.fn(),
+    setIsStreaming: vi.fn(),
+    persistMessages,
+  })
+  const prompt = sent.find((msg) => msg.type === "agent_prompt")
+  return {
+    prompt: prompt?.type === "agent_prompt" ? prompt.prompt : [],
+    updateMessage,
+    addMessage,
+    persistMessages,
+    result,
+  }
+}
+
+const runTurn = (
+  message: string,
+  agentCommand: boolean,
+  images?: AgentPromptImage[],
+  onAgentReply?: () => void,
+) =>
+  runFlow(
     createChatFlowConfig({
-      conversationId: CONVERSATION_ID,
+      ...localConfig,
       userMessage: message,
       agentCommand,
       images,
       conversationHistory: earlierTurns,
       isFirstMessage: false,
-      settings: { model: LOCAL_AGENT_MODEL, apiKey: "" },
-      questClient: {} as never,
-      hasSchemaAccess: false,
       notebookContext: {
         snapshot: null,
         digest: undefined,
@@ -96,22 +123,56 @@ const runTurn = async (
         readSeq: 0,
       } as never,
     }),
-    {
-      addMessage,
-      updateMessage,
-      setStatus: vi.fn(),
-      setIsStreaming: vi.fn(),
-      persistMessages,
-    },
+    onAgentReply,
   )
-  const prompt = sent.find((msg) => msg.type === "agent_prompt")
-  return {
-    prompt: prompt?.type === "agent_prompt" ? prompt.prompt : [],
-    updateMessage,
-    addMessage,
-    persistMessages,
-  }
-}
+
+it("does not mark earlier chat turns as seen after a local schema explanation", async () => {
+  const schema = "CREATE TABLE trades (price DOUBLE);"
+  const quickAction = await runFlow(
+    createSchemaExplainFlowConfig({
+      ...localConfig,
+      hasSchemaAccess: true,
+      tableName: "trades",
+      schema,
+      kindLabel: "table",
+      schemaDisplayData: { tableName: "trades", kind: "table" },
+    }),
+  )
+  expect(quickAction.result.success).toBe(true)
+  const schemaPrompt = quickAction.prompt[0]
+  expect(schemaPrompt?.type === "text" && schemaPrompt.text).toContain(schema)
+  expect(schemaPrompt?.type === "text" && schemaPrompt.text).not.toContain(
+    "<earlier_conversation>",
+  )
+
+  const schemaMessages = quickAction.addMessage.mock.calls.map(([message]) => {
+    const id = message.id ?? "schema-request"
+    const updates = quickAction.updateMessage.mock.calls
+      .filter(([, updatedId]) => updatedId === id)
+      .map(([, , patch]) => patch)
+    return updates.reduce<ConversationMessage>(
+      (current, patch) => ({ ...current, ...patch }),
+      { ...message, id },
+    )
+  })
+  const followUp = await runFlow(
+    createChatFlowConfig({
+      ...localConfig,
+      userMessage: "What tables did we list?",
+      conversationHistory: [...earlierTurns, ...schemaMessages],
+      isFirstMessage: false,
+    }),
+  )
+  const prompt = followUp.prompt[0]
+  expect(prompt?.type === "text" && prompt.text).toContain(
+    "User: List the tables\nAssistant: trades, quotes",
+  )
+  expect(followUp.updateMessage).toHaveBeenCalledWith(
+    CONVERSATION_ID,
+    expect.any(String),
+    { localAgentId: "claude" },
+  )
+})
 
 it("stores the elapsed turn time on the anchor before persisting the reply", async () => {
   // Given

@@ -49,36 +49,152 @@ const question = (requestId: string): AgentQuestionMessage => ({
   fields: [],
 })
 
-it("replays Stop after reconnect even if the old socket accepted the write", async () => {
+const startTurn = (channel: LocalAgentChannel, signal?: AbortSignal) => {
+  const onUpdate = vi.fn()
+  const turn = channel.prompt({
+    conversationId: "c1",
+    text: "Show trades",
+    notebookRead: null,
+    signal,
+    onUpdate,
+    onToolStatus: vi.fn(),
+  })
+  return { turn, onUpdate }
+}
+
+const turnEnd = (turnId: string): AgentOutboundMessage => ({
+  v: "0.6.0",
+  type: "agent_turn_end",
+  conversationId: "c1",
+  turnId,
+  result: { outcome: "completed", stopReason: "end_turn", usage: null },
+})
+
+it.each([1000, 6000])(
+  "replays Stop on reconnect at %i ms and clears it on matching end",
+  async (reconnectAt) => {
+    vi.useFakeTimers()
+    const { channel, sent, deliver, setConnected } = connect()
+    try {
+      const controller = new AbortController()
+      const { turn } = startTurn(channel, controller.signal)
+      const settled = vi.fn()
+      void turn.then(settled)
+      const [prompt] = sent
+      if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+      controller.abort()
+      setConnected(false)
+      await vi.advanceTimersByTimeAsync(reconnectAt)
+      expect(settled).toHaveBeenCalledTimes(reconnectAt < 5000 ? 0 : 1)
+      deliver(turnEnd("older-turn"))
+      setConnected(true)
+      channel.resume()
+      expect(sent.map((message) => message.type)).toEqual([
+        "agent_prompt",
+        "agent_cancel",
+        "agent_cancel",
+      ])
+      await vi.advanceTimersByTimeAsync(Math.max(0, 5000 - reconnectAt))
+      await expect(turn).resolves.toMatchObject({ stopReason: "cancelled" })
+      deliver(turnEnd(prompt.turnId))
+      channel.resume()
+      expect(sent).toHaveLength(3)
+    } finally {
+      channel.dispose()
+      vi.useRealTimers()
+    }
+  },
+)
+
+it.each([false, true])(
+  "retires Stop when the next prompt is sent (reconnect first: %s)",
+  async (reconnectFirst) => {
+    vi.useFakeTimers()
+    const { channel, sent, deliver, setConnected } = connect()
+    try {
+      const controller = new AbortController()
+      const stopped = startTurn(channel, controller.signal)
+      const [first] = sent
+      if (first?.type !== "agent_prompt") throw new Error("Expected a prompt")
+      controller.abort()
+      await vi.advanceTimersByTimeAsync(5000)
+      await expect(stopped.turn).resolves.toMatchObject({
+        stopReason: "cancelled",
+      })
+      if (reconnectFirst) {
+        setConnected(false)
+        await expect(startTurn(channel).turn).resolves.toMatchObject({
+          outcome: "failed",
+        })
+        setConnected(true)
+        channel.resume()
+      }
+
+      const next = startTurn(channel)
+      const second = sent.at(-1)
+      if (second?.type !== "agent_prompt")
+        throw new Error("Expected a follow-up prompt")
+      channel.resume()
+      expect(sent.map((message) => message.type)).toEqual([
+        "agent_prompt",
+        "agent_cancel",
+        ...(reconnectFirst ? ["agent_cancel"] : []),
+        "agent_prompt",
+      ])
+
+      deliver(question("next-question"))
+      deliver(turnEnd(first.turnId))
+      expect(
+        channel.answerQuestion("next-question", { database: "questdb" }),
+      ).toBe(true)
+      expect(next.onUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: "question:next-question" }),
+      )
+      deliver(turnEnd(second.turnId))
+      await expect(next.turn).resolves.toMatchObject({ stopReason: "end_turn" })
+    } finally {
+      channel.dispose()
+      vi.useRealTimers()
+    }
+  },
+)
+
+it("does not replay a Stop after the channel is disposed", async () => {
   vi.useFakeTimers()
+  const { channel, sent } = connect()
   try {
-    const { channel, sent, setConnected } = connect()
     const controller = new AbortController()
-    const turn = channel.prompt({
-      conversationId: "c1",
-      text: "Show trades",
-      notebookRead: null,
-      signal: controller.signal,
-      onUpdate: vi.fn(),
-      onToolStatus: vi.fn(),
-    })
+    const { turn } = startTurn(channel, controller.signal)
     controller.abort()
-    setConnected(false)
-    await vi.advanceTimersByTimeAsync(1000)
-    setConnected(true)
+    await vi.advanceTimersByTimeAsync(5000)
+    await expect(turn).resolves.toMatchObject({ stopReason: "cancelled" })
+
+    channel.dispose()
     channel.resume()
     expect(sent.map((message) => message.type)).toEqual([
       "agent_prompt",
       "agent_cancel",
-      "agent_cancel",
     ])
-    await vi.advanceTimersByTimeAsync(4000)
-    expect(await turn).toMatchObject({ stopReason: "cancelled" })
-    channel.resume()
-    expect(sent).toHaveLength(3)
   } finally {
     vi.useRealTimers()
   }
+})
+
+it("does not send a deferred follow-up through a disposed channel", async () => {
+  const { channel, sent } = connect()
+  const controller = new AbortController()
+  const stopped = startTurn(channel, controller.signal)
+  controller.abort()
+  const next = startTurn(channel)
+
+  channel.dispose()
+
+  await expect(stopped.turn).resolves.toMatchObject({ outcome: "failed" })
+  expect(sent.map((message) => message.type)).toEqual([
+    "agent_prompt",
+    "agent_cancel",
+  ])
+  await expect(next.turn).resolves.toMatchObject({ outcome: "failed" })
 })
 
 describe("LocalAgentChannel questions", () => {

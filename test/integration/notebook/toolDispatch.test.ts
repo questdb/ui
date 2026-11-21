@@ -1950,6 +1950,109 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   const twoStatementCell = () =>
     mountLive(1, [cell("c", "SELECT a FROM t; SELECT b FROM t")])
 
+  it("rejects an explicit enabled heatmap mix without changing the saved chart", async () => {
+    const { state } = twoStatementCell()
+    const heatmap = {
+      type: "heatmap",
+      y_columns: ["a"],
+      partition_by_column: "site",
+    }
+    const line = { type: "line", y_columns: ["b"] }
+    const send = (queries: unknown[]) =>
+      dispatchTool(
+        "set_cell_chart_config",
+        { buffer_id: 1, cell_id: "c", queries },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+
+    expect(
+      (await send([heatmap, { ...line, enabled: false }])).is_error,
+    ).toBeFalsy()
+    const saved = cellById(state, "c")?.chartConfig
+    expect(saved?.queries[1]?.enabled).toBe(false)
+
+    const res = await send([heatmap, line])
+    expect(res.is_error).toBe(true)
+    const error = JSON.parse(res.content) as {
+      error_code: string
+      message: string
+    }
+    expect(error.error_code).toBe("validation")
+    expect(error.message).toContain("Heatmaps need a chart of their own")
+    expect(cellById(state, "c")?.chartConfig).toEqual(saved)
+
+    expect(
+      (await send([{ ...heatmap, enabled: false }, line])).is_error,
+    ).toBeFalsy()
+    expect(cellById(state, "c")?.chartConfig?.queries[0]?.enabled).toBe(false)
+    expect((await send([heatmap, null])).is_error).toBeFalsy()
+    expect(cellById(state, "c")?.chartConfig?.queries[1]).toBeNull()
+  })
+
+  it.each([
+    { xType: "SYMBOL", resultQuery: "SELECT b FROM t", rejected: false },
+    { xType: "TIMESTAMP", resultQuery: "SELECT b FROM t", rejected: true },
+    { xType: "SYMBOL", resultQuery: "SELECT b FROM old_table", rejected: true },
+  ])(
+    "only trusts matching result metadata when validating a heatmap mix ($xType, $resultQuery)",
+    async ({ xType, resultQuery, rejected }) => {
+      const statements = ["SELECT a FROM t", "SELECT b FROM t"]
+      const { state } = mountLive(1, [
+        cell("c", statements.join("; "), {
+          result: {
+            timestamp: 0,
+            activeResultIndex: 0,
+            results: [
+              {
+                type: "dql",
+                query: statements[0],
+                count: 1,
+                columns: [
+                  { name: "ts", type: "TIMESTAMP" },
+                  { name: "site", type: "SYMBOL" },
+                  { name: "a", type: "DOUBLE" },
+                ],
+                dataset: [[1000, "west", 1]],
+              },
+              {
+                type: "dql",
+                query: resultQuery,
+                count: 1,
+                columns: [
+                  { name: "bucket", type: xType },
+                  { name: "b", type: "DOUBLE" },
+                ],
+                dataset: [[xType === "SYMBOL" ? "A" : 1000, 2]],
+              },
+            ],
+          },
+        }),
+      ])
+      const result = await dispatchTool(
+        "set_cell_chart_config",
+        {
+          buffer_id: 1,
+          cell_id: "c",
+          queries: [
+            { type: "heatmap", y_columns: ["a"], partition_by_column: "site" },
+            { type: "line", y_columns: ["b"] },
+          ],
+        },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+      expect(result.is_error ?? false).toBe(rejected)
+      expect(
+        cellById(state, "c")?.chartConfig?.queries.map((q) => q?.type),
+      ).toEqual(rejected ? undefined : ["heatmap", "line"])
+    },
+  )
+
   it("rejects a non-empty queries array whose length != the cell's statement count", async () => {
     // Given a two-statement cell
     twoStatementCell()

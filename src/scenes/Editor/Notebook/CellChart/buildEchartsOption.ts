@@ -339,6 +339,82 @@ const compactTimestamp = (label: string): string => {
 const formatScaleValue = (value: number): string =>
   Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(4)))
 
+const scaleLabels = (min: number, max: number): string[] => {
+  const low = formatScaleValue(min)
+  const high = formatScaleValue(max)
+  return min !== max && low === high ? [String(max), String(min)] : [high, low]
+}
+
+type HeatmapReading = { y: number; reading: Dataset[number][number] }
+
+const longReading = (value: HeatmapReading["reading"]): bigint | null => {
+  if (typeof value === "bigint") return value
+  if (typeof value === "string" && /^[+-]?\d+$/.test(value))
+    return BigInt(value)
+  if (typeof value === "number" && Number.isInteger(value)) return BigInt(value)
+  return null
+}
+
+const longHeatmapScale = (cells: HeatmapReading[], perRow: boolean) => {
+  const values = cells.map(({ reading }) => longReading(reading))
+  const extents = new Map<number, { min: bigint; max: bigint }>()
+  cells.forEach(({ y }, i) => {
+    const value = values[i]
+    if (value === null) return
+    const key = perRow ? y : 0
+    const extent = extents.get(key)
+    if (!extent) extents.set(key, { min: value, max: value })
+    else {
+      if (value < extent.min) extent.min = value
+      if (value > extent.max) extent.max = value
+    }
+  })
+  const shades = cells.map(({ y }, i) => {
+    const value = values[i]
+    const extent = extents.get(perRow ? y : 0)
+    if (value === null || !extent) return "-"
+    const { min, max } = extent
+    if (min === max) return perRow ? 1 : 0.5
+    // Subtract before converting: adjacent LONGs can have the same double.
+    return Number(value - min) / Number(max - min)
+  })
+  const extent = extents.get(0)
+  return {
+    shades,
+    min: 0,
+    max: 1,
+    labels: extent ? [String(extent.max), String(extent.min)] : ["1", "0"],
+  }
+}
+
+const numericHeatmapScale = (
+  cells: HeatmapReading[],
+  perRow: boolean,
+  rowCount: number,
+) => {
+  const values = cells.map(({ reading }) => toNumberOrNull(reading))
+  const emptyExtent = () => ({ min: Infinity, max: -Infinity })
+  const globalExtent = emptyExtent()
+  const rowExtents = perRow ? Array.from({ length: rowCount }, emptyExtent) : []
+  cells.forEach(({ y }, i) => {
+    const value = values[i]
+    if (value === null) return
+    const extent = perRow ? rowExtents[y] : globalExtent
+    extent.min = Math.min(extent.min, value)
+    extent.max = Math.max(extent.max, value)
+  })
+  const shades = cells.map(({ y }, i) => {
+    const value = values[i]
+    if (value === null) return "-"
+    if (!perRow) return value
+    const { min, max } = rowExtents[y]
+    return max === min ? 1 : (value - min) / (max - min)
+  })
+  const { min, max } =
+    perRow || globalExtent.min === Infinity ? { min: 0, max: 1 } : globalExtent
+  return { shades, min, max, labels: scaleLabels(min, max) }
+}
+
 // A grid of cells: x along the bottom, one row per value of the partition
 // column, and each cell colored by its value.
 const buildHeatmapOption = (
@@ -398,31 +474,19 @@ const buildHeatmapOption = (
   const cells = q.dataset.map((row) => ({
     x: xSlot.get(toCategoryLabel(row[xIdx])) ?? 0,
     y: rowSlot.get(toCategoryLabel(row[rowIdx])) ?? 0,
-    value: toNumberOrNull(row[valueIdx]),
-    reading: row[valueIdx] ?? "-",
+    reading: row[valueIdx],
   }))
   const perRow = q.colorScale === "row"
-  const emptyExtent = () => ({ min: Infinity, max: -Infinity })
-  const globalExtent = emptyExtent()
-  const rowExtents = perRow ? rowLabels.map(emptyExtent) : []
-  for (const { value, y } of cells) {
-    if (value === null) continue
-    const extent = perRow ? rowExtents[y] : globalExtent
-    extent.min = Math.min(extent.min, value)
-    extent.max = Math.max(extent.max, value)
-  }
-  const shade = (value: number, y: number) => {
-    const { min, max } = rowExtents[y]
-    return max === min ? 1 : (value - min) / (max - min)
-  }
-  const data = cells.map(({ x, y, value, reading }) => [
+  const { shades, min, max, labels } =
+    q.columns[valueIdx].type?.toUpperCase() === "LONG"
+      ? longHeatmapScale(cells, perRow)
+      : numericHeatmapScale(cells, perRow, rowLabels.length)
+  const data = cells.map(({ x, y, reading }, i) => [
     x,
     y,
-    value === null ? "-" : perRow ? shade(value, y) : value,
-    typeof reading === "bigint" ? String(reading) : reading,
+    shades[i],
+    typeof reading === "bigint" ? String(reading) : (reading ?? "-"),
   ])
-  const { min, max } =
-    perRow || globalExtent.min === Infinity ? { min: 0, max: 1 } : globalExtent
 
   return {
     useUTC: true,
@@ -475,9 +539,7 @@ const buildHeatmapOption = (
       bottom: LEGEND_BOTTOM,
       itemWidth: 10,
       itemHeight: 140,
-      text: perRow
-        ? ["Row high", "Row low"]
-        : [formatScaleValue(max), formatScaleValue(min)],
+      text: perRow ? ["Row high", "Row low"] : labels,
       textGap: 8,
       textStyle: chartText,
     },

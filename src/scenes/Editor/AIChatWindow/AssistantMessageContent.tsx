@@ -181,7 +181,9 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
             const isFirstContent = index === firstContentIndex
             return (
               <ExplanationContent
-                key={`content-${item.timestamp}`}
+                // Ordered stream segments can share a timestamp within one websocket tick.
+                // eslint-disable-next-line react/no-array-index-key
+                key={`content-${item.timestamp}-${index}`}
                 $withCopyGutter={isFirstContent}
                 data-hook="chat-response-content"
               >

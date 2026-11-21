@@ -90,6 +90,8 @@ export type StatusArgs = {
   label?: string
   cellId?: string
   content?: string
+  // Distinguishes standalone Markdown blocks at different reply offsets.
+  markdownBlockOffset?: number
   // The agent's tool kind (execute, read, edit, …) for its own tool calls.
   toolKind?: string
   // The agent's id for one of its tool calls, which tells two runs of the

@@ -79,13 +79,16 @@ type PendingTurn = {
   settle: (result: AgentTurnResult) => void
   // Set once the user stops the turn; resolves when the turn has ended.
   stopping: Promise<void> | null
-  retryCancel: (() => void) | null
+  startCancelGrace: () => void
 }
 
 // The console side of one paired agent bridge. It runs turns, keeps the
 // agent's status and pending questions for the UI, and forwards preferences.
 export class LocalAgentChannel {
   private turns = new Map<string, PendingTurn>()
+  // The local Stop grace can expire before the bridge sees the cancel.
+  private pendingCancels = new Map<string, string>()
+  private disposed = false
   private preferences: LocalAgentPreferencesWire | null = null
   private snapshot: LocalAgentSnapshot
   private listeners = new Set<() => void>()
@@ -132,6 +135,7 @@ export class LocalAgentChannel {
     onToolStatus,
   }: LocalAgentPrompt): Promise<AgentTurnResult> {
     if (signal?.aborted) return Promise.resolve(CANCELLED)
+    if (this.disposed) return Promise.resolve(BRIDGE_DISCONNECTED)
     const previous = this.turns.get(conversationId)
     if (previous) {
       // A message sent right after Stop waits for the agent to end the
@@ -163,37 +167,32 @@ export class LocalAgentChannel {
       ],
     })
     if (!sent) return Promise.resolve(BRIDGE_DISCONNECTED)
+    // Cancels on the wire target the conversation. Once the new prompt is
+    // written, no subsequent reconnect may send its predecessor's cancel.
+    this.pendingCancels.delete(conversationId)
 
     return new Promise((resolve) => {
       let cancelTimer: ReturnType<typeof setTimeout> | undefined
       let stopped = () => {}
-      const tryCancel = () => {
-        const sent = this.client.sendAgentMessage({
-          v: EXPECTED_MCP_VERSION,
-          type: "agent_cancel",
-          conversationId,
-        })
-        // A successful socket write is not an acknowledgement. Replay Stop
-        // if we reconnect before this turn ends, without extending its grace.
-        if (!sent || cancelTimer !== undefined) return
-        cancelTimer = setTimeout(
-          () => this.settleTurn(conversationId, turnId, CANCELLED),
-          CANCEL_GRACE_MS,
-        )
-      }
       const cancel = () => {
         turn.stopping = new Promise((resolve) => {
           stopped = resolve
         })
-        turn.retryCancel = tryCancel
-        tryCancel()
+        this.pendingCancels.set(conversationId, turnId)
+        this.sendCancel(conversationId, turnId)
       }
       const turn: PendingTurn = {
         turnId,
         onUpdate,
         onToolStatus,
         stopping: null,
-        retryCancel: null,
+        startCancelGrace: () => {
+          // Replay never extends the grace that started on the first write.
+          cancelTimer ??= setTimeout(
+            () => this.settleTurn(conversationId, turnId, CANCELLED),
+            CANCEL_GRACE_MS,
+          )
+        },
         settle: (result) => {
           clearTimeout(cancelTimer)
           signal?.removeEventListener("abort", cancel)
@@ -217,8 +216,11 @@ export class LocalAgentChannel {
   }
 
   resume(): void {
+    if (this.disposed) return
     if (this.preferences) this.sendPreferences(this.preferences)
-    for (const turn of this.turns.values()) turn.retryCancel?.()
+    for (const [conversationId, turnId] of this.pendingCancels) {
+      this.sendCancel(conversationId, turnId)
+    }
   }
 
   sendPreferences(preferences: LocalAgentPreferencesWire): void {
@@ -271,11 +273,23 @@ export class LocalAgentChannel {
   }
 
   dispose(): void {
+    this.disposed = true
     this.unsubscribe()
+    this.pendingCancels.clear()
     for (const [conversationId, turn] of Array.from(this.turns)) {
       this.settleTurn(conversationId, turn.turnId, BRIDGE_DISCONNECTED)
     }
     this.listeners.clear()
+  }
+
+  private sendCancel(conversationId: string, turnId: string): void {
+    const sent = this.client.sendAgentMessage({
+      v: EXPECTED_MCP_VERSION,
+      type: "agent_cancel",
+      conversationId,
+    })
+    // An accepted write starts local grace but is not an acknowledgement.
+    if (sent) this.turnOf(conversationId, turnId)?.startCancelGrace()
   }
 
   private update(patch: Partial<LocalAgentSnapshot>): void {
@@ -306,6 +320,9 @@ export class LocalAgentChannel {
         this.turnOf(msg.conversationId, msg.turnId)?.onUpdate(msg.update)
         return
       case "agent_turn_end":
+        if (this.pendingCancels.get(msg.conversationId) === msg.turnId) {
+          this.pendingCancels.delete(msg.conversationId)
+        }
         this.settleTurn(msg.conversationId, msg.turnId, msg.result)
         return
       case "agent_question":

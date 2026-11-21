@@ -94,6 +94,8 @@ export type QueryControlsProps = {
   query: QueryChart
   xColumn: string | null
   anchorLabel: string
+  compatible: boolean
+  canToggleIncluded: boolean
   isAnchorTab: boolean
   ohlcError: boolean
   heatmapError: boolean
@@ -107,6 +109,8 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
   query,
   xColumn,
   anchorLabel,
+  compatible,
+  canToggleIncluded,
   isAnchorTab,
   ohlcError,
   heatmapError,
@@ -139,7 +143,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         <SqlPre code={activeTab.query} />
       </FieldGroup>
 
-      {!activeTab.compatible && (
+      {!compatible && (
         <IncompatibleNote>
           <IncompatibleIcon size={14} weight="fill" />
           <Text color="statusWarning" size="xs" lineHeight="1.2">
@@ -148,9 +152,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </IncompatibleNote>
       )}
 
-      {(!isAnchorTab ||
-        query.enabled === false ||
-        query.type === "heatmap") && (
+      {canToggleIncluded && (
         <CheckboxRow>
           <Checkbox
             checked={query.enabled !== false}

@@ -1,5 +1,5 @@
 import type { CommandNoteEntry } from "./CommandNote"
-import type { AgentPromptImage } from "../../../utils/localAgent/protocol"
+import { getLocalAgentChannel } from "../../../utils/localAgent/localAgentChannel"
 import { LOCAL_AGENT_MODEL } from "../../../utils/localAgent/localAgentModel"
 import {
   useLocalAgent,
@@ -12,6 +12,7 @@ import React, {
   useContext,
   useCallback,
   useEffect,
+  useLayoutEffect,
 } from "react"
 import type { MutableRefObject } from "react"
 import styled from "styled-components"
@@ -48,6 +49,8 @@ import { ChatMessages } from "./ChatMessages"
 import {
   ChatInput,
   canDeliverQueued,
+  queuedAgentModel,
+  type QueuedEntry,
   type ChatInputHandle,
   type ChatQueue,
 } from "./ChatInput"
@@ -492,76 +495,118 @@ const AIChatWindow: React.FC = () => {
     [getConversationMeta, readUserActionDigest, buffers, activeBuffer],
   )
 
-  const handleSendMessage = async (
-    userMessage: string,
-    hasUnactionedDiffParam: boolean = false,
-    images: AgentPromptImage[] = [],
-    agentCommand = false,
-  ) => {
-    if (!canUse || !chatWindowState.activeConversationId || !conversation) {
-      return
-    }
-
-    void trackEvent(ConsoleEvent.AI_CHAT_SEND)
-
-    const conversationId = chatWindowState.activeConversationId
-
-    if (hasUnactionedDiffParam) {
-      void closePreviewBuffer()
-    }
-
-    const hasAssistantMessages = conversation.messages.some(
-      (msg) => msg.role === "assistant",
-    )
-
-    void executeAIFlow(
-      createChatFlowConfig({
-        conversationId,
-        userMessage,
-        ...(images.length > 0 && { images }),
-        ...(agentCommand && { agentCommand }),
-        currentSQL,
-        conversationHistory: conversation.messages,
-        isFirstMessage: !hasAssistantMessages,
-        settings: { model: currentModel, apiKey },
-        aiAssistantSettings,
-        questClient: quest,
-        tables,
-        hasSchemaAccess,
-        abortSignal: abortController?.signal,
-        notebookContext: await buildNotebookFlowContext(conversationId),
-      }),
-      {
-        addMessage,
-        removeMessages,
-        updateMessage,
-        setStatus,
-        setIsStreaming,
-        persistMessages,
-        updateConversationName,
-        bindConversationToNotebook,
-        rotateUserActionDigest,
-        updateMessagesWithCompaction,
-      },
+  const conversationId = chatWindowState.activeConversationId
+  const queued = conversationId ? chatQueue[conversationId] : undefined
+  const canDispatchQueued = (entry: QueuedEntry) => {
+    const agent = localAgentChannel?.getSnapshot() ?? null
+    return (
+      canUse &&
+      !isLoadingMessages &&
+      !isBlockingAIStatus(aiStatus) &&
+      !abortController?.signal.aborted &&
+      (currentModel !== LOCAL_AGENT_MODEL ||
+        localAgentChannel === getLocalAgentChannel()) &&
+      canDeliverQueued(
+        entry,
+        currentModel,
+        localAgentChannel,
+        currentModel === LOCAL_AGENT_MODEL && agent?.acceptsImages === true,
+        queuedAgentModel(agent, aiAssistantSettings),
+      )
     )
   }
+  const preparingQueued = useRef(false)
+  const [, setQueuePreparation] = useState(0)
+  const dispatchQueuedRef = useRef<
+    | ((
+        id: string,
+        entry: QueuedEntry,
+        notebookContext: NotebookFlowContext | undefined,
+      ) => void)
+    | null
+  >(null)
+
+  // Only the committed conversation and target may use the active transcript.
+  useLayoutEffect(() => {
+    dispatchQueuedRef.current = (id, entry, notebookContext) => {
+      if (
+        conversationId !== id ||
+        !conversation ||
+        currentModel === null ||
+        apiKey === null ||
+        queued !== entry ||
+        !canDispatchQueued(entry)
+      )
+        return
+
+      setChatQueue((current) => {
+        if (current[id] !== entry) return current
+        const { [id]: _sent, ...rest } = current
+        return rest
+      })
+      void trackEvent(ConsoleEvent.AI_CHAT_SEND)
+      if (hasUnactionedDiff) void closePreviewBuffer()
+
+      void executeAIFlow(
+        createChatFlowConfig({
+          conversationId: id,
+          userMessage: entry.text,
+          ...(entry.images.length > 0 && { images: entry.images }),
+          ...(entry.agentCommand && { agentCommand: true }),
+          currentSQL,
+          conversationHistory: conversation.messages,
+          isFirstMessage: !conversation.messages.some(
+            (msg) => msg.role === "assistant",
+          ),
+          settings: { model: currentModel, apiKey },
+          aiAssistantSettings,
+          questClient: quest,
+          tables,
+          hasSchemaAccess,
+          abortSignal: abortController?.signal,
+          notebookContext,
+        }),
+        {
+          addMessage,
+          removeMessages,
+          updateMessage,
+          setStatus,
+          setIsStreaming,
+          persistMessages,
+          updateConversationName,
+          bindConversationToNotebook,
+          rotateUserActionDigest,
+          updateMessagesWithCompaction,
+        },
+      )
+    }
+    return () => {
+      dispatchQueuedRef.current = null
+    }
+  })
 
   useEffect(() => {
-    const id = chatWindowState.activeConversationId
-    if (!id || !conversation || !canUse || isBlockingAIStatus(aiStatus)) return
-    const queued = chatQueue[id]
     if (
+      preparingQueued.current ||
+      !conversationId ||
+      !conversation ||
       !queued ||
-      !canDeliverQueued(queued, currentModel, localAgentChannel, acceptsImages)
+      !canDispatchQueued(queued)
     )
       return
-    setChatQueue(({ [id]: _sent, ...rest }) => rest)
-    void handleSendMessage(
-      queued.text,
-      hasUnactionedDiff,
-      queued.images,
-      queued.agentCommand,
-    )
+    preparingQueued.current = true
+    void buildNotebookFlowContext(conversationId)
+      .then((context) => {
+        dispatchQueuedRef.current?.(conversationId, queued, context)
+        preparingQueued.current = false
+        // If the entry or owner changed while waiting, reconsider the active queue.
+        if (dispatchQueuedRef.current) setQueuePreparation((count) => count + 1)
+      })
+      .catch((error) => {
+        preparingQueued.current = false
+        console.error("Could not prepare chat context", error)
+        toast.error("Could not prepare the message. It is still queued.")
+      })
   })
 
   const handleAcceptChange = useCallback(
@@ -1030,7 +1075,7 @@ const AIChatWindow: React.FC = () => {
     if (!chatInputRef.current) return
     chatInputRef.current.focus()
     hasAutoFocusedRef.current = true
-  }, [activeSidebar?.type, isHistoryOpen, isLoadingMessages])
+  }, [activeSidebar?.type, isHistoryOpen, isLoadingMessages, conversationId])
 
   const handleNewChat = useCallback(async () => {
     hasAutoFocusedRef.current = false
@@ -1197,14 +1242,6 @@ const AIChatWindow: React.FC = () => {
                 contextUsage={contextUsage}
                 chatTokens={chatTokens}
                 onCommandNote={addCommandNote}
-                onSend={(message, images, agentCommand) =>
-                  handleSendMessage(
-                    message,
-                    hasUnactionedDiff,
-                    images,
-                    agentCommand,
-                  )
-                }
                 disabled={!canUse}
                 placeholder={getPlaceholder()}
                 contextSQL={queryInfo.queryText}

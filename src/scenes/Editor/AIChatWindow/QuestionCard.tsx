@@ -252,9 +252,6 @@ export const QuestionCard = ({
   const [tab, setTab] = useState(0)
   const [answers, setAnswers] = useState<Answers>({})
   const [editing, setEditing] = useState(false)
-  // Set while the own-answer box is open, so its blur after Enter does not
-  // commit the answer a second time.
-  const editingRef = useRef(false)
   const [draft, setDraft] = useState("")
   const [answered, setAnswered] = useState(false)
   const [sendFailed, setSendFailed] = useState(false)
@@ -276,7 +273,6 @@ export const QuestionCard = ({
   }
 
   const goTo = (next: number) => {
-    editingRef.current = false
     setEditing(false)
     setTab(Math.max(0, Math.min(single ? 0 : reviewTab, next)))
   }
@@ -314,7 +310,6 @@ export const QuestionCard = ({
     const next = { ...answers, [target.id]: value }
     if (target.otherFieldId) delete next[target.otherFieldId]
     setAnswers(next)
-    editingRef.current = false
     setEditing(false)
     moveOn(next)
   }
@@ -322,14 +317,11 @@ export const QuestionCard = ({
   const openOwnAnswer = (target: AgentQuestionField) => {
     if (target.kind !== "choice" || !target.otherFieldId) return
     setDraft(valuesOf(answers[target.otherFieldId])[0] ?? "")
-    editingRef.current = true
     setEditing(true)
   }
 
-  const commitOwnAnswer = (target: AgentQuestionField) => {
-    if (target.kind !== "choice" || !target.otherFieldId) return
-    if (!editingRef.current) return
-    editingRef.current = false
+  const commitOwnAnswer = (target: AgentQuestionField): Answers => {
+    if (target.kind !== "choice" || !target.otherFieldId) return answers
     const text = draft.trim()
     const next = { ...answers }
     if (text) next[target.otherFieldId] = text
@@ -338,15 +330,11 @@ export const QuestionCard = ({
     if (text && !target.multiple) delete next[target.id]
     setAnswers(next)
     setEditing(false)
-    if (text && !target.multiple) moveOn(next)
+    return next
   }
 
   const next = () => {
-    if (single) {
-      if (canSend) finish(answers)
-      return
-    }
-    goTo(tab + 1)
+    moveOn(editing && field ? commitOwnAnswer(field) : answers)
   }
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -422,23 +410,15 @@ export const QuestionCard = ({
                   if (event.nativeEvent.isComposing) return
                   if (event.key === "Enter") {
                     event.preventDefault()
-                    commitOwnAnswer(target)
+                    const next = commitOwnAnswer(target)
+                    if (draft.trim() && !target.multiple) moveOn(next)
                   } else if (event.key === "Escape") {
                     event.preventDefault()
                     event.stopPropagation()
-                    editingRef.current = false
                     setEditing(false)
                   }
                 }}
-                onBlur={(event) => {
-                  if (
-                    event.relatedTarget?.matches(
-                      '[data-hook="chat-question-skip"], [data-hook="chat-question-stop"]',
-                    )
-                  )
-                    return
-                  commitOwnAnswer(target)
-                }}
+                disabled={answered}
                 placeholder="Type your own answer"
                 aria-label="Your own answer"
                 data-hook="chat-question-own-answer"
@@ -479,9 +459,10 @@ export const QuestionCard = ({
     : tab + 1 >= reviewTab
       ? "Review"
       : "Next"
+  const hasCustomDraft = editing && draft.trim() !== ""
   const showPrimary =
-    // A single choice moves on, or is sent, by itself.
-    !onReview && !!field && (field.kind === "text" || field.multiple)
+    // A listed single choice moves on by itself; a custom draft needs confirmation.
+    !onReview && !!field && (editing || field.kind === "text" || field.multiple)
 
   return (
     <Card
@@ -606,7 +587,14 @@ export const QuestionCard = ({
           <Button
             size="sm"
             variant="primary"
-            disabled={answered || (single && !canSend)}
+            disabled={
+              answered ||
+              (editing &&
+                field?.kind === "choice" &&
+                !field.multiple &&
+                !hasCustomDraft) ||
+              (single && !canSend && !hasCustomDraft)
+            }
             onClick={next}
             data-hook="chat-question-next"
           >

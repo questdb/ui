@@ -790,12 +790,19 @@ export async function executeAIFlow(
         tool_calls: undefined,
       })
     },
-    onTextChunk: (chunk: string) => {
+    onTextChunk: (chunk, { standalone = false } = {}) => {
       if (contentTimestamp === 0) contentTimestamp = Date.now()
-      if (!generatingResponseEmitted) {
-        generatingResponseEmitted = true
+      if (standalone || !generatingResponseEmitted) {
+        generatingResponseEmitted = !standalone
         thinkingStatusEmitted = false
-        setStatusWithHistory(AIOperationStatus.GeneratingResponse)
+        // A notice gets its own history entry and Markdown parse, without
+        // changing the saved reply or trying to repair the agent's Markdown.
+        setStatusWithHistory(
+          AIOperationStatus.GeneratingResponse,
+          standalone
+            ? { markdownBlockOffset: accumulatedText.length }
+            : undefined,
+        )
       }
       accumulatedText += chunk
       callbacks.setIsStreaming(true)
@@ -952,7 +959,7 @@ export async function executeAIFlow(
               ? userMsg.content
               : withPriorConversation(
                   userMsg.content,
-                  config.type === "chat" ? config.conversationHistory : [],
+                  conversationHistory,
                   localAgentId,
                 ),
             images: config.type === "chat" ? config.images : undefined,
@@ -964,9 +971,14 @@ export async function executeAIFlow(
             abortSignal,
           })
 
-    // Marks the turns the agent has seen; earlier ones are sent as a
-    // transcript on its next turn. A command carries none of them.
-    if (localAgentId && !isAgentCommand && !isAiAssistantError(result)) {
+    // Only a regular chat turn carries the earlier transcript. Quick
+    // actions and commands must not mark those earlier turns as seen.
+    if (
+      localAgentId &&
+      config.type === "chat" &&
+      !isAgentCommand &&
+      !isAiAssistantError(result)
+    ) {
       callbacks.updateMessage(conversationId, anchorMessageId, { localAgentId })
     }
 

@@ -3,6 +3,7 @@ import React, {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   forwardRef,
   useImperativeHandle,
   useMemo,
@@ -40,7 +41,12 @@ import {
   readImages,
 } from "./ImageAttachments"
 import type { AgentPromptImage } from "../../../utils/localAgent/protocol"
-import { LOCAL_AGENT_MODEL } from "../../../utils/localAgent/localAgentModel"
+import {
+  effectiveAgentModel,
+  LOCAL_AGENT_MODEL,
+} from "../../../utils/localAgent/localAgentModel"
+import { localAgentPreferencesOf } from "../../../utils/localAgent/localAgentSettings"
+import type { AiAssistantSettings } from "../../../providers/LocalStorageProvider/types"
 import {
   CommandArgumentHint,
   SlashCommandMenu,
@@ -126,34 +132,53 @@ const SendButton = styled(IconButton)`
   bottom: 0.8rem;
 `
 
-const AttachButton = styled(IconButton)`
+const StopButton = styled(SendButton)<{ $alongsideSend: boolean }>`
+  right: ${({ $alongsideSend }) => ($alongsideSend ? "4.8rem" : "0.8rem")};
+`
+
+const AttachButton = styled(IconButton)<{ $alongsideStop: boolean }>`
   position: absolute;
-  right: 4.8rem;
+  right: ${({ $alongsideStop }) => ($alongsideStop ? "8.8rem" : "4.8rem")};
   bottom: 0.8rem;
 `
 
-// A message waiting for the answer to end, with the images attached to it.
-type QueuedEntry = {
+// A submitted message waiting for the answer to end or for context preparation.
+export type QueuedEntry = {
   text: string
   images: AgentPromptImage[]
   agentCommand: boolean
   model: string | null
   channel: ReturnType<typeof useLocalAgentChannel>
+  agentModel: string | null
   waitingFor?: AbortSignal
 }
 
 export type ChatQueue = Record<string, QueuedEntry>
+
+export const queuedAgentModel = (
+  agent: ReturnType<typeof useLocalAgent>,
+  settings: AiAssistantSettings,
+) =>
+  agent &&
+  effectiveAgentModel(
+    agent,
+    localAgentPreferencesOf(settings, agent.info.id).model,
+  )
 
 export const canDeliverQueued = (
   entry: QueuedEntry,
   model: string | null,
   channel: QueuedEntry["channel"],
   acceptsImages: boolean,
+  agentModel: string | null,
 ) =>
   (!entry.waitingFor?.aborted ||
     entry.waitingFor.reason === STEERED_ABORT_REASON) &&
   entry.model === model &&
-  entry.channel === (model === LOCAL_AGENT_MODEL ? channel : null) &&
+  (model !== LOCAL_AGENT_MODEL ||
+    (channel !== null &&
+      entry.channel === channel &&
+      entry.agentModel === agentModel)) &&
   (entry.images.length === 0 || acceptsImages)
 
 const ContextBadgeContainer = styled.div`
@@ -211,12 +236,6 @@ type ChatInputProps = {
     text: string
     error: boolean
   }) => void
-  // agentCommand: the message is one of the agent's commands, like /review.
-  onSend: (
-    message: string,
-    images: AgentPromptImage[],
-    agentCommand: boolean,
-  ) => void
   disabled?: boolean
   placeholder?: string
   contextSQL?: string
@@ -236,7 +255,14 @@ export type ChatInputHandle = {
   focus: () => void
 }
 
+// A conversation change replaces the full unsent draft, including pending reads.
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
+  (props, ref) => (
+    <ConversationInput key={props.conversationId} {...props} ref={ref} />
+  ),
+)
+
+const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
   (
     {
       conversationId,
@@ -245,7 +271,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       contextUsage = null,
       chatTokens = null,
       onCommandNote,
-      onSend,
       disabled = false,
       placeholder = "Ask a question or request a refinement...",
       contextSQL,
@@ -293,6 +318,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       abortOperation,
       steerOperation,
       currentModel,
+      aiAssistantSettings,
     } = useAIStatus()
 
     const isAIInProgress = isBlockingAIStatus(aiStatus)
@@ -300,12 +326,24 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // Images attached to the message being written.
     const [attachments, setAttachments] = useState<AgentPromptImage[]>([])
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const readingAttachment = useRef(false)
+    const [isReadingAttachment, setIsReadingAttachment] = useState(false)
+    const mounted = useRef(false)
+    useLayoutEffect(() => {
+      mounted.current = true
+      return () => {
+        mounted.current = false
+      }
+    }, [])
 
     const localAgent = useLocalAgent()
     const localAgentChannel = useLocalAgentChannel()
     const composerModel = useComposerModel()
     const destinationChannel =
       currentModel === LOCAL_AGENT_MODEL ? localAgentChannel : null
+    const agentModel = destinationChannel
+      ? queuedAgentModel(localAgent, aiAssistantSettings)
+      : null
     const acceptsImages =
       composerModel.usesAgent && localAgent?.acceptsImages === true
 
@@ -320,6 +358,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           currentModel,
           destinationChannel,
           acceptsImages,
+          agentModel,
         )
       )
         return
@@ -333,6 +372,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       currentModel,
       destinationChannel,
       acceptsImages,
+      agentModel,
       queued,
       setQueue,
     ])
@@ -457,7 +497,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       images: AgentPromptImage[] = [],
       agentCommand = false,
     ) => {
-      if (!conversationId || disabled) return false
+      if (!conversationId || disabled || readingAttachment.current) return false
       if (images.length > 0 && !acceptsImages) {
         setAttachError(
           "Change to an agent that reads images, or remove the attachments.",
@@ -470,34 +510,31 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         )
         return false
       }
-      if (isAIInProgress || queued) {
-        setQueue((current) => {
-          const previous = current[conversationId]
-          return {
-            ...current,
-            [conversationId]: previous
-              ? {
-                  text: [previous.text, text].filter(Boolean).join("\n\n"),
-                  images: [...previous.images, ...images],
-                  // Joined to another message, a command is no longer one.
-                  agentCommand: false,
-                  model: previous.model,
-                  channel: previous.channel,
-                  waitingFor: previous.waitingFor,
-                }
-              : {
-                  text,
-                  images,
-                  agentCommand,
-                  model: currentModel,
-                  channel: destinationChannel,
-                  waitingFor: abortController?.signal,
-                },
-          }
-        })
-      } else {
-        onSend(text, images, agentCommand)
-      }
+      setQueue((current) => {
+        const previous = current[conversationId]
+        return {
+          ...current,
+          [conversationId]: previous
+            ? {
+                ...previous,
+                text: [previous.text, text].filter(Boolean).join("\n\n"),
+                images: [...previous.images, ...images],
+                // Joined to another message, a command is no longer one.
+                agentCommand: false,
+              }
+            : {
+                text,
+                images,
+                agentCommand,
+                model: currentModel,
+                channel: destinationChannel,
+                agentModel,
+                waitingFor: isAIInProgress
+                  ? abortController?.signal
+                  : undefined,
+              },
+        }
+      })
       clearInput()
       setAttachments([])
       return true
@@ -514,13 +551,30 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         )
         return
       }
-      const { images, error } = await readImages(
-        files,
-        MAX_IMAGES - attachments.length,
-      )
-      setAttachments((current) => [...current, ...images])
-      setAttachError(error)
-      textareaRef.current?.focus()
+      if (readingAttachment.current) {
+        setAttachError(
+          "Wait for the current image attachments to finish reading.",
+        )
+        return
+      }
+      readingAttachment.current = true
+      setIsReadingAttachment(true)
+      try {
+        const { images, error } = await readImages(
+          files,
+          MAX_IMAGES - attachments.length,
+        )
+        if (!mounted.current) return
+        setAttachments((current) => [...current, ...images])
+        setAttachError(error)
+        textareaRef.current?.focus()
+      } catch {
+        if (mounted.current)
+          setAttachError("Could not read the image attachments.")
+      } finally {
+        readingAttachment.current = false
+        if (mounted.current) setIsReadingAttachment(false)
+      }
     }
     const imageFilesOf = (items: DataTransferItemList | null) =>
       Array.from(items ?? [])
@@ -537,6 +591,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // One that takes an argument waits for it: Enter adds the command, and
     // the next Enter sends it.
     const chooseCommand = (command: SlashCommand) => {
+      if (readingAttachment.current) return
       if (runConsoleCommand(command, "")) return
       if (command.hint) return completeCommand(command)
       sendText(`/${command.name}`, attachments, true)
@@ -548,6 +603,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }
 
     const handleSend = () => {
+      if (readingAttachment.current) return false
       const trimmed = input.trim()
       if ((!trimmed && attachments.length === 0) || disabled || !conversationId)
         return false
@@ -570,6 +626,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // Cmd/Ctrl+Enter replaces the running answer with what the user wrote,
     // or else with the queued message. With no answer running, it sends.
     const steer = () => {
+      if (readingAttachment.current) return
       const hasDraft = input.trim() !== "" || attachments.length > 0
       const submitted = handleSend()
       if (!disabled && isAIInProgress && (submitted || (!hasDraft && queued))) {
@@ -625,10 +682,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }
 
     // Stops the answer; the queued message goes out once it has stopped.
-    const sendQueuedNow = () => steerOperation()
+    const sendQueuedNow = () => {
+      if (!disabled && !readingAttachment.current) steerOperation()
+    }
 
-    const showStop =
-      isAIInProgress && input.trim() === "" && attachments.length === 0
+    const hasDraft = input.trim() !== "" || attachments.length > 0
+    const showSend = !isAIInProgress || hasDraft
+    const showBoth = isAIInProgress && showSend
     const question = localAgent?.questions.find(
       (pending) => pending.conversationId === conversationId,
     )
@@ -663,7 +723,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <QueuedMessage
                 text={queued.text}
                 imageCount={queued.images.length}
-                onSendNow={sendQueuedNow}
+                onSendNow={isAIInProgress ? sendQueuedNow : undefined}
+                sendNowDisabled={disabled || isReadingAttachment}
                 onRemove={() => conversationId && unqueue(conversationId)}
               />
             )}
@@ -770,7 +831,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   disabled={disabled}
                   rows={1}
                   $paddingTop={`${(hasContext ? 4.4 : 1.2) + (attachments.length > 0 ? ATTACHMENT_SIZE + 0.8 : 0)}rem`}
-                  $paddingRight={acceptsImages ? "8.5rem" : "4.5rem"}
+                  $paddingRight={`${4.5 + (acceptsImages ? 4 : 0) + (showBoth ? 4 : 0)}rem`}
                   data-hook="chat-input-textarea"
                 />
                 {acceptsImages && (
@@ -780,7 +841,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                       tooltip="Attach images, or paste or drop them"
                       variant="ghost"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={disabled || attachments.length >= MAX_IMAGES}
+                      $alongsideStop={showBoth}
+                      disabled={
+                        disabled ||
+                        isReadingAttachment ||
+                        attachments.length >= MAX_IMAGES
+                      }
                       data-hook="chat-attach-image"
                     >
                       <ImageIcon size={18} />
@@ -799,8 +865,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                     />
                   </>
                 )}
-                {showStop ? (
-                  <SendButton
+                {isAIInProgress && (
+                  <StopButton
+                    $alongsideSend={showBoth}
                     label="Stop AI generation"
                     variant="secondary"
                     onClick={handleStop}
@@ -808,15 +875,14 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                     data-hook="chat-stop-button"
                   >
                     <StopIcon size={14} weight="fill" />
-                  </SendButton>
-                ) : (
+                  </StopButton>
+                )}
+                {showSend && (
                   <SendButton
                     label={isAIInProgress ? "Queue message" : "Send message"}
                     variant="primary"
                     onClick={handleSend}
-                    disabled={
-                      (!input.trim() && attachments.length === 0) || disabled
-                    }
+                    disabled={!hasDraft || disabled || isReadingAttachment}
                     title={
                       isAIInProgress
                         ? `Queue (Enter) • Send now, stopping the answer (${ctrlCmd}+Enter)`

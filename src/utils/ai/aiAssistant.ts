@@ -109,7 +109,8 @@ export type StatusCallback = (
 ) => void
 
 export type StreamingCallback = {
-  onTextChunk: (chunk: string) => void
+  // A standalone chunk is parsed separately from the Markdown around it.
+  onTextChunk: (chunk: string, options?: { standalone?: boolean }) => void
   onThinkingChunk?: (chunk: string) => void
   onToolCall?: (call: { id: string; name: string; arguments: string }) => void
   // The model has started a tool call; its arguments are still streaming.

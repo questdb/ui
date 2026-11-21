@@ -580,7 +580,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick/heatmap); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar/heatmap only render as a chart of their own (single-query). A `heatmap` query puts x_column along the bottom, one row per value of `partition_by_column` (required), and colors each cell by the first of `y_columns` (required) — e.g. average spread by hour and symbol; `color_scale:\"row\"` scales each row on its own. `reference_lines` draws horizontal lines at fixed values, like RSI's 30 and 70.",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first included query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick/heatmap); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first result is always included unless a heatmap type is explicitly configured). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar/heatmap only render as a chart of their own (single-query). A `heatmap` query puts x_column along the bottom, one row per value of `partition_by_column` (required), and colors each cell by the first of `y_columns` (required) — e.g. average spread by hour and symbol; `color_scale:\"row\"` scales each row on its own. `reference_lines` draws horizontal lines at fixed values, like RSI's 30 and 70.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -593,7 +593,7 @@
         },
         "x_column": {
           "type": ["string", "null"],
-          "description": "Shared x-axis column (the first query's). Null preserves."
+          "description": "X-axis column of the first included result. Null preserves."
         },
         "queries": {
           "type": ["array", "null"],
@@ -655,7 +655,7 @@
               },
               "enabled": {
                 "type": ["boolean", "null"],
-                "description": "false opts this query out of the chart. null = included. The first query is always included."
+                "description": "false opts this query out of the chart. null = included. The first result is always included unless a heatmap type is explicitly configured."
               },
               "name": {
                 "type": ["string", "null"],

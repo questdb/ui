@@ -109,13 +109,18 @@ const createUpdateHandler = (
     setStatus(status, args)
   }
 
-  const handleMessageChunk = (messageId: string | null, text: string) => {
+  const handleMessageChunk = (
+    messageId: string | null,
+    text: string,
+    standalone = false,
+  ) => {
     const isNewMessage = !!reply && messageId !== lastMessageId
     const chunk = isNewMessage ? `\n\n${text}` : text
     isThinking = false
     lastMessageId = messageId
     reply += chunk
-    streaming.onTextChunk(chunk)
+    if (standalone) streaming.onTextChunk(chunk, { standalone: true })
+    else streaming.onTextChunk(chunk)
   }
 
   const handleThoughtChunk = (text: string) => {
@@ -238,7 +243,7 @@ const createUpdateHandler = (
   let notices = 0
   const addNotice = (notice: NoticeRecord) => {
     notices += 1
-    handleMessageChunk(`notice:${notices}`, noticeTranscript(notice))
+    handleMessageChunk(`notice:${notices}`, noticeTranscript(notice), true)
   }
 
   return {
@@ -284,15 +289,15 @@ export const runLocalAgentTurn = async ({
   if (result.outcome === "completed" && result.stopReason === "cancelled") {
     return ABORTED
   }
-  // The API providers clear the status when their turn ends; a turn that
-  // ends before any text streamed has nothing else that would.
-  setStatus(null)
   if (result.outcome === "failed") {
+    setStatus(null)
     return { type: "unknown", message: result.error }
   }
-  // A turn cut short says why, instead of ending on a partial or empty reply.
+  // Append the notice before clearing status so it stays in this turn's
+  // operation history, even if no answer text has streamed yet.
   const stopped = stopReasonNotice(result.stopReason)
   if (stopped) addNotice(stopped)
+  setStatus(null)
   // An agent's answer shows how full its context is. Agents count tokens
   // each their own way, so those are not shown.
   const usage = contextUsage()

@@ -328,6 +328,72 @@ describe("resolveDraw — unresolved statements use a null slot, not an inert co
     expect(renderQueries).toEqual([])
   })
 
+  it("still plots the first legacy result when its saved line is disabled", () => {
+    const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
+    const saved: ChartConfig = {
+      xColumn: "ts",
+      queries: [
+        { type: "line", yColumns: ["price"], enabled: false },
+        { type: "line", yColumns: ["price"] },
+      ],
+    }
+    const first = tsPrice(statements[0])
+    const second = tsPrice(statements[1])
+    for (const results of [[first], [first, second]]) {
+      const { renderQueries, effectiveConfig } = resolveDraw(
+        statements,
+        results,
+        saved,
+      )
+      expect(renderQueries.map((q) => q.index)).toEqual(
+        results.map((_, i) => i),
+      )
+      expect(effectiveConfig.queries[0]?.enabled).toBe(false)
+    }
+  })
+
+  it.each(["line", "heatmap"] as const)(
+    "does not re-anchor a heatmap when a disabled %s query gains rows",
+    (type) => {
+      const statements = [
+        "SELECT bucket, price FROM a",
+        "SELECT ts, price FROM b",
+      ]
+      const first = dql(
+        [
+          { name: "bucket", type: "SYMBOL" },
+          { name: "price", type: "DOUBLE" },
+        ],
+        [["A", 1]],
+        statements[0],
+      )
+      const second = dql(
+        [
+          { name: "ts", type: "TIMESTAMP" },
+          { name: "sample_time", type: "TIMESTAMP" },
+          { name: "site", type: "SYMBOL" },
+          { name: "price", type: "DOUBLE" },
+        ],
+        [[1000, 1100, "west", 5]],
+        statements[1],
+      )
+      const saved: ChartConfig = {
+        xColumn: "sample_time",
+        queries: [
+          { type, yColumns: ["price"], enabled: false },
+          { type: "heatmap", yColumns: ["price"], partitionByColumn: "site" },
+        ],
+      }
+      for (const results of [[second], [first, second]]) {
+        const { chart, renderQueries } = resolveDraw(statements, results, saved)
+        expect(chart.xColumn).toBe("sample_time")
+        expect(renderQueries.map((q) => [q.index, q.xColumn])).toEqual([
+          [1, "sample_time"],
+        ])
+      }
+    },
+  )
+
   it("a saved null does not suppress inference once the statement resolves", () => {
     const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
     // Config saved earlier while statement 0 was unresolved → its slot is null.

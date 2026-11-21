@@ -17,7 +17,11 @@ import {
 } from "./ReferenceLinesEditor"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
-import { canCombineXAxis, type QueryTab } from "../DrawCanvas/drawCanvasUtils"
+import {
+  chartXAxisOf,
+  resolveQueryAxes,
+  type QueryTab,
+} from "../DrawCanvas/drawCanvasUtils"
 import {
   Field,
   FieldGroup,
@@ -159,44 +163,39 @@ const ChartSettings: React.FC<SettingsProps> = ({
     [telemetry, onClose],
   )
 
-  const anchorTab = tabs[0]
-  const anchorGroups = anchorTab
-    ? groupColumns(anchorTab.columns)
-    : { temporal: [], numeric: [], categorical: [], other: [] }
-  const xCandidates = [
-    ...anchorGroups.temporal,
-    ...anchorGroups.categorical,
-    ...anchorGroups.numeric,
-  ]
+  const { anchor, xColumn, placements, allowAnchorExclusion } =
+    resolveQueryAxes(tabs, draft)
+  const active =
+    placements.find(({ item }) => item.index === activeIndex) ?? placements[0]
+  const activeTab = active?.item
+  // With everything excluded, keep X editable for the selected query so it
+  // can be configured before it is included again.
+  const xTab = anchor ?? activeTab
+  const selectedX =
+    anchor || !xTab ? xColumn : chartXAxisOf(xTab, draft.xColumn)
+  const xGroups = xTab ? groupColumns(xTab.columns) : null
+  const xCandidates = xGroups
+    ? [...xGroups.temporal, ...xGroups.categorical, ...xGroups.numeric]
+    : []
+  const isAnchorTab = activeTab != null && activeTab === anchor
+  const query = activeTab != null ? draft.queries[activeTab.index] : null
 
-  const activeTab = tabs.find((t) => t.index === activeIndex) ?? anchorTab
-  const isAnchorTab = activeTab != null && activeTab.index === anchorTab?.index
-  const query: QueryChart | undefined =
-    activeTab != null
-      ? (draft.queries[activeTab.index] ?? undefined)
-      : undefined
-
-  const includedTabs = tabs.filter((tab) => {
-    const q = draft.queries[tab.index]
-    const compatible =
-      anchorTab != null &&
-      (tab === anchorTab ||
-        canCombineXAxis(
-          anchorTab.columns,
-          draft.xColumn,
-          tab.columns,
-          tab.xColumn,
-        ))
-    return compatible && q != null && q.enabled !== false
-  })
+  const includedTabs = placements.filter(({ included }) => included)
   const heatmapConflict =
     includedTabs.length > 1 &&
-    includedTabs.some((tab) => draft.queries[tab.index]?.type === "heatmap")
+    includedTabs.some(
+      ({ item }) => draft.queries[item.index]?.type === "heatmap",
+    )
   const hasRight = draft.queries.some((q) => q?.axis === "right")
+  const primary = anchor
+    ? (draft.queries[anchor.index] ?? anchor.inferredChart)
+    : null
   // Pie and heatmap charts have no value axis to draw a line on.
-  const anchorType =
-    anchorTab != null ? draft.queries[anchorTab.index]?.type : undefined
-  const hasValueAxis = anchorType !== "pie" && anchorType !== "heatmap"
+  const hasValueAxis =
+    primary != null &&
+    primary.type !== "pie" &&
+    primary.type !== "heatmap" &&
+    !heatmapConflict
 
   const updateQuery = (index: number, patch: Partial<QueryChart>) =>
     updateDraft({
@@ -211,7 +210,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ...draft,
       xColumn,
       queries: draft.queries.map((q, i) =>
-        i === anchorTab?.index && q?.partitionByColumn === xColumn
+        i === xTab?.index && q?.partitionByColumn === xColumn
           ? { ...q, partitionByColumn: undefined }
           : q,
       ),
@@ -239,7 +238,6 @@ const ChartSettings: React.FC<SettingsProps> = ({
       setActiveIndex(heatmapIdx)
       return
     }
-    const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
     telemetry?.onSave?.({
       chartType: primary?.type,
       seriesCount: primary?.yColumns.length ?? 0,
@@ -247,7 +245,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
       hasRightAxis: hasRight,
       partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
     })
-    const { referenceLines: _lines, ...rest } = draft
+    const { referenceLines: _lines, ...rest } = { ...draft, xColumn }
     const referenceLines = savedReferenceLines(draft.referenceLines)
     onSave(referenceLines ? { ...rest, referenceLines } : rest)
     if (presentation === "drawer") onClose?.()
@@ -278,7 +276,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
         <SelectMenuControl
           name="x-axis"
           ariaLabel="X-axis"
-          value={draft.xColumn ?? ""}
+          value={selectedX ?? ""}
           placeholder="Select column"
           onValueChange={(value) => changeXColumn(value || null)}
           options={xCandidates.map((c) => ({
@@ -352,7 +350,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
           <Divider />
           <FieldLabel>Queries</FieldLabel>
           <TabStrip role="tablist" aria-label="Chart queries">
-            {tabs.map((t) => (
+            {placements.map(({ item: t, compatible }) => (
               <Tab
                 key={t.index}
                 type="button"
@@ -360,30 +358,32 @@ const ChartSettings: React.FC<SettingsProps> = ({
                 role="tab"
                 onClick={() => setActiveIndex(t.index)}
                 title={
-                  t.compatible
+                  compatible
                     ? t.query
                     : `${t.query}\n\n(x-axis incompatible — excluded)`
                 }
               >
                 {t.label}
-                {!t.compatible && <IncompatibleIcon size={14} weight="fill" />}
+                {!compatible && <IncompatibleIcon size={14} weight="fill" />}
               </Tab>
             ))}
           </TabStrip>
         </>
       )}
 
-      {activeTab && query && (
+      {active && query && (
         <QueryControls
-          activeTab={activeTab}
+          activeTab={active.item}
           query={query}
-          xColumn={isAnchorTab ? draft.xColumn : activeTab.xColumn}
-          anchorLabel={anchorTab?.label ?? "Q1"}
+          xColumn={active.item === xTab ? selectedX : active.ownX}
+          compatible={active.compatible}
+          canToggleIncluded={!isAnchorTab || allowAnchorExclusion}
+          anchorLabel={anchor?.label ?? "Q1"}
           isAnchorTab={isAnchorTab}
           ohlcError={saveAttempted && candlestickMissingOhlc(query)}
           heatmapError={saveAttempted && heatmapIncomplete(query)}
-          onUpdateQuery={(patch) => updateQuery(activeTab.index, patch)}
-          onSetQuery={(next) => setQuery(activeTab.index, next)}
+          onUpdateQuery={(patch) => updateQuery(active.item.index, patch)}
+          onSetQuery={(next) => setQuery(active.item.index, next)}
           telemetry={telemetry}
         />
       )}

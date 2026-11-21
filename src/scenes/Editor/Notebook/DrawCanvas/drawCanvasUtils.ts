@@ -152,13 +152,15 @@ export const resultsEquivalent = (
   return true
 }
 
-export type QueryTab = {
+type QueryAxisCandidate = {
   index: number
+  columns: ColumnDefinition[]
+  inferredXColumn: string | null
+}
+
+export type QueryTab = QueryAxisCandidate & {
   label: string
   query: string
-  columns: ColumnDefinition[]
-  xColumn: string | null
-  compatible: boolean
   inferredChart: QueryChart
 }
 
@@ -174,7 +176,7 @@ const xRoleOf = (columns: ColumnDefinition[], name: string | null) => {
   return col ? classifyColumn(col) : "other"
 }
 
-export const canCombineXAxis = (
+const canCombineXAxis = (
   anchorColumns: ColumnDefinition[],
   anchorX: string | null,
   otherColumns: ColumnDefinition[],
@@ -185,6 +187,44 @@ export const canCombineXAxis = (
     (anchorRole === "temporal" || anchorRole === "categorical") &&
     xRoleOf(otherColumns, otherX) === anchorRole
   )
+}
+
+export const chartXAxisOf = (
+  query: QueryAxisCandidate,
+  savedX: string | null | undefined,
+): string | null =>
+  savedX != null && query.columns.some((c) => c.name === savedX)
+    ? savedX
+    : query.inferredXColumn
+
+// Legacy charts always keep the first result. An explicit heatmap config
+// (even if excluded or temporarily without rows) opts into full exclusion.
+export const resolveQueryAxes = <T extends QueryAxisCandidate>(
+  items: T[],
+  config: ChartConfig | undefined,
+) => {
+  const allowAnchorExclusion =
+    config?.queries.some((q) => q?.type === "heatmap") ?? false
+  const enabled = (item: T) => config?.queries[item.index]?.enabled !== false
+  const anchor = allowAnchorExclusion ? items.find(enabled) : items[0]
+  const xColumn = anchor
+    ? chartXAxisOf(anchor, config?.xColumn)
+    : (config?.xColumn ?? null)
+  const placements = items.map((item) => {
+    const isAnchor = item === anchor
+    const ownX = isAnchor ? xColumn : item.inferredXColumn
+    const compatible =
+      !anchor ||
+      isAnchor ||
+      canCombineXAxis(anchor.columns, xColumn, item.columns, ownX)
+    return {
+      item,
+      ownX,
+      compatible,
+      included: anchor != null && compatible && (isAnchor || enabled(item)),
+    }
+  })
+  return { anchor, xColumn, placements, allowAnchorExclusion }
 }
 
 const resolveOhlc = (
@@ -252,56 +292,47 @@ export const resolveDraw = (
     const inferred = inferChartConfig(r.columns, r.dataset, r.query)
     const saved = idx >= 0 ? config?.queries[idx] : undefined
     return {
-      idx,
-      r,
-      inferred,
+      index: idx,
+      columns: r.columns,
+      dataset: r.dataset,
+      query: r.query,
+      inferredXColumn: inferred.xColumn,
+      inferredChart: inferred.chart,
       qc: pruneQuery(saved ?? inferred.chart, r.columns),
     }
   })
 
-  const anchor = items[0]
-  // Drop a stale x-axis (a removed column) by falling back to inference.
-  const savedX = config?.xColumn
-  const anchorX: string | null =
-    savedX != null &&
-    anchor != null &&
-    anchor.r.columns.some((c) => c.name === savedX)
-      ? savedX
-      : (anchor?.inferred.xColumn ?? null)
-
-  const placedItems = items.map((it, i) => {
-    const ownX = i === 0 ? anchorX : it.inferred.xColumn
-    return { ...it, ownX, qc: dropPartitionOnX(it.qc, ownX) }
-  })
+  const { xColumn, placements } = resolveQueryAxes(items, config)
+  const placedItems = placements.map(({ item, ownX, included }) => ({
+    ...item,
+    ownX,
+    included,
+    qc: dropPartitionOnX(item.qc, ownX),
+  }))
 
   const tabs: QueryTab[] = []
   const renderQueries: ResolvedQuery[] = []
-  placedItems.forEach((it, i) => {
-    const isAnchor = i === 0
-    const { ownX } = it
-    const compatible =
-      isAnchor || canCombineXAxis(anchor.r.columns, anchorX, it.r.columns, ownX)
-    const enabled = it.qc.enabled !== false
-    if (it.idx >= 0) {
+  placedItems.forEach((it) => {
+    const { index, columns, ownX } = it
+    if (index >= 0) {
       tabs.push({
-        index: it.idx,
-        label: `Q${it.idx + 1}`,
-        query: it.r.query,
-        columns: it.r.columns,
-        xColumn: ownX,
-        compatible,
-        inferredChart: it.inferred.chart,
+        index,
+        label: `Q${index + 1}`,
+        query: it.query,
+        columns,
+        inferredXColumn: it.inferredXColumn,
+        inferredChart: it.inferredChart,
       })
     }
-    if (!compatible || !enabled) return
+    if (!it.included) return
     renderQueries.push({
-      index: it.idx,
-      columns: it.r.columns,
-      dataset: it.r.dataset,
+      index,
+      columns,
+      dataset: it.dataset,
       xColumn: ownX,
       type: it.qc.type,
       yColumns: it.qc.yColumns ?? [],
-      ohlc: resolveOhlc(it.qc, it.r.columns),
+      ohlc: resolveOhlc(it.qc, columns),
       partitionByColumn: it.qc.partitionByColumn,
       ...(it.qc.colorScale && { colorScale: it.qc.colorScale }),
       axis: it.qc.axis ?? "left",
@@ -312,10 +343,10 @@ export const resolveDraw = (
   // Dense, statement-aligned config for the drawer: a concrete QueryChart per
   // statement that ran, else the saved override, else `null` for unresolved statements.
   const denseQueries: (QueryChart | null)[] = statements.map((_stmt, i) => {
-    const it = placedItems.find((x) => x.idx === i)
+    const it = placedItems.find((x) => x.index === i)
     if (it) {
       const qc: QueryChart = { ...it.qc }
-      const oh = resolveOhlc(qc, it.r.columns)
+      const oh = resolveOhlc(qc, it.columns)
       if (oh) qc.ohlc = oh
       return qc
     }
@@ -324,13 +355,13 @@ export const resolveDraw = (
 
   return {
     chart: {
-      xColumn: anchorX,
+      xColumn,
       rightAxis: config?.rightAxis,
       referenceLines: config?.referenceLines,
     },
     renderQueries,
     effectiveConfig: {
-      xColumn: anchorX,
+      xColumn,
       rightAxis: config?.rightAxis,
       ...(config?.referenceLines && { referenceLines: config.referenceLines }),
       queries: denseQueries,

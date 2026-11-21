@@ -54,7 +54,8 @@ const Text = styled.span`
 type QueuedMessageProps = {
   text: string
   imageCount?: number
-  onSendNow: () => void
+  onSendNow?: () => void
+  sendNowDisabled: boolean
   onRemove: () => void
 }
 
@@ -64,6 +65,7 @@ export const QueuedMessage = ({
   text,
   imageCount = 0,
   onSendNow,
+  sendNowDisabled,
   onRemove,
 }: QueuedMessageProps) => (
   <Root role="status" data-hook="chat-queued-message">
@@ -79,14 +81,17 @@ export const QueuedMessage = ({
           .join(" · ")}
       </Text>
     </Copy>
-    <TextButton
-      onClick={onSendNow}
-      title={`Stop the answer and send this now (${ctrlCmd}+Enter)`}
-      data-hook="chat-queued-send-now"
-    >
-      Send now
-      <Shortcut aria-hidden="true">{ctrlCmd} ↵</Shortcut>
-    </TextButton>
+    {onSendNow && (
+      <TextButton
+        onClick={onSendNow}
+        disabled={sendNowDisabled}
+        title={`Stop the answer and send this now (${ctrlCmd}+Enter)`}
+        data-hook="chat-queued-send-now"
+      >
+        Send now
+        <Shortcut aria-hidden="true">{ctrlCmd} ↵</Shortcut>
+      </TextButton>
+    )}
     <IconButton
       label="Remove queued message"
       size="sm"

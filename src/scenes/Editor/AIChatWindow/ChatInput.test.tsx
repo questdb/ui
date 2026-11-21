@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import React, { useState } from "react"
 import userEvent from "@testing-library/user-event"
-import { expect, it, vi } from "vitest"
-import { screen } from "@testing-library/react"
+import { afterEach, expect, it, vi } from "vitest"
+import { act, fireEvent, screen } from "@testing-library/react"
 import { getHook, queryHook, renderComponent } from "../../../test/component"
 import {
   AIOperationStatus,
@@ -28,15 +28,26 @@ vi.mock("./ComposerControls/useComposerModel", () => ({
   }),
 }))
 
-const configure = (status: AIOperationStatus | null, currentModel: string) =>
-  vi
-    .mocked(useAIStatus)
-    .mockReturnValue({ status, currentModel } as ReturnType<typeof useAIStatus>)
+const configure = (
+  status: AIOperationStatus | null,
+  currentModel: string,
+  overrides: Partial<ReturnType<typeof useAIStatus>> = {},
+) =>
+  vi.mocked(useAIStatus).mockReturnValue({
+    status,
+    currentModel,
+    aiAssistantSettings: {},
+    ...overrides,
+  } as ReturnType<typeof useAIStatus>)
 
-const fakeChannel = (id: string) => {
+const fakeChannel = (
+  id: string,
+  model?: { current: string; choices: { value: string; name: string }[] },
+) => {
   const snapshot = {
     info: { id, label: id },
     acceptsImages: true,
+    config: { model },
     questions: [],
     commands: [],
   }
@@ -47,25 +58,32 @@ const fakeChannel = (id: string) => {
 }
 
 const renderInput = (initial: LocalAgentChannel | null = null) => {
-  const onSend = vi.fn()
-  const Input = ({ channel }: { channel: LocalAgentChannel | null }) => {
+  let submitted: ChatQueue = {}
+  const Input = ({
+    channel,
+    id,
+  }: {
+    channel: LocalAgentChannel | null
+    id: string
+  }) => {
     const [queue, setQueue] = useState<ChatQueue>({})
+    submitted = queue
     return (
       <LocalAgentContext.Provider value={channel}>
         <ChatInput
-          conversationId="c1"
+          conversationId={id}
           queue={queue}
           setQueue={setQueue}
-          onSend={onSend}
           onContextClick={vi.fn()}
         />
       </LocalAgentContext.Provider>
     )
   }
-  const view = renderComponent(<Input channel={initial} />)
+  const view = renderComponent(<Input channel={initial} id="c1" />)
   return {
-    onSend,
-    rerender: (channel = initial) => view.rerender(<Input channel={channel} />),
+    submitted: (id = "c1") => submitted[id],
+    rerender: (channel = initial, id = "c1") =>
+      view.rerender(<Input channel={channel} id={id} />),
   }
 }
 
@@ -86,7 +104,7 @@ it("restores a queued draft if the selected model changes before delivery", asyn
   view.rerender()
 
   // Then the draft requires an explicit send with the new model
-  expect(view.onSend).not.toHaveBeenCalled()
+  expect(view.submitted()).toBeUndefined()
   expect(queryHook("chat-queued-message")).not.toBeInTheDocument()
   expect(getHook("chat-input-textarea")).toHaveValue("Queued follow-up")
 })
@@ -100,7 +118,27 @@ it("requires a fresh send when the local connection is replaced", async () => {
   configure(null, LOCAL_AGENT_MODEL)
   view.rerender(fakeChannel("new"))
 
-  expect(view.onSend).not.toHaveBeenCalled()
+  expect(view.submitted()).toBeUndefined()
+  expect(getHook("chat-input-textarea")).toHaveValue("Follow-up")
+})
+
+it("requires a fresh send when the model on the same agent channel changes", async () => {
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+  const model = {
+    current: "fast",
+    choices: [
+      { value: "fast", name: "Fast" },
+      { value: "deep", name: "Deep" },
+    ],
+  }
+  const view = renderInput(fakeChannel("agent", model))
+  await userEvent.type(getHook("chat-input-textarea"), "Follow-up{Enter}")
+  expect(view.submitted()?.agentModel).toBe("fast")
+
+  model.current = "deep"
+  configure(null, LOCAL_AGENT_MODEL)
+  view.rerender()
+  expect(view.submitted()).toBeUndefined()
   expect(getHook("chat-input-textarea")).toHaveValue("Follow-up")
 })
 
@@ -114,7 +152,7 @@ it("offers Queue for an image-only draft during a reply", async () => {
   await screen.findByRole("button", { name: "Remove image 1" })
   await userEvent.click(screen.getByRole("button", { name: "Queue message" }))
   expect(getHook("chat-queued-message")).toHaveTextContent("1 image")
-  expect(view.onSend).not.toHaveBeenCalled()
+  expect(view.submitted()?.images).toHaveLength(1)
 })
 
 it("preserves an image draft when adding it would exceed the queued limit", async () => {
@@ -156,8 +194,88 @@ it("keeps attached images in a draft rather than sending without them", async ()
 
   await userEvent.type(getHook("chat-input-textarea"), "What is shown?{Enter}")
 
-  expect(view.onSend).not.toHaveBeenCalled()
+  expect(view.submitted()).toBeUndefined()
   expect(getHook("chat-image-attachments")).toBeInTheDocument()
   expect(getHook("chat-input-textarea")).toHaveValue("What is shown?")
   expect(screen.getByText(/remove the attachments/)).toBeVisible()
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+const holdAttachment = () => {
+  const readers: FileReader[] = []
+  vi.spyOn(FileReader.prototype, "readAsDataURL").mockImplementation(function (
+    this: FileReader,
+  ) {
+    readers.push(this)
+  })
+  fireEvent.change(getHook("chat-attach-image-input"), {
+    target: {
+      files: [new File(["sample"], "reading.png", { type: "image/png" })],
+    },
+  })
+  return () =>
+    act(async () => {
+      await Promise.resolve()
+      const [reader] = readers
+      Object.defineProperty(reader, "result", {
+        value: "data:image/png;base64,c2FtcGxl",
+      })
+      reader.dispatchEvent(new Event("load"))
+    })
+}
+
+it("blocks Send and both Enter shortcuts until the attachment is ready", async () => {
+  configure(null, LOCAL_AGENT_MODEL)
+  const { submitted } = renderInput(fakeChannel("agent"))
+  await userEvent.type(getHook("chat-input-textarea"), "Read this chart")
+  const finish = holdAttachment()
+  const send = screen.getByRole("button", { name: "Send message" })
+  expect(send).toBeDisabled()
+  await userEvent.keyboard("{Enter}{Control>}{Enter}{/Control}")
+  expect(submitted()).toBeUndefined()
+  await finish()
+  await userEvent.click(send)
+  expect(submitted()).toMatchObject({
+    text: "Read this chart",
+    images: [{ mimeType: "image/png", data: "c2FtcGxl" }],
+  })
+})
+
+it("does not steer a queued message while reading the current draft image", async () => {
+  const steerOperation = vi.fn()
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL, { steerOperation })
+  const { submitted } = renderInput(fakeChannel("agent"))
+  await userEvent.type(getHook("chat-input-textarea"), "Follow-up{Enter}")
+  const finish = holdAttachment()
+  const sendNow = getHook("chat-queued-send-now")
+  expect(sendNow).toBeDisabled()
+  await userEvent.click(sendNow)
+  await userEvent.keyboard("{Control>}{Enter}{/Control}")
+  expect(steerOperation).not.toHaveBeenCalled()
+  expect(submitted()?.text).toBe("Follow-up")
+  await finish()
+  expect(sendNow).toBeEnabled()
+})
+
+it("clears the composer on conversation change and discards a late attachment read", async () => {
+  configure(null, LOCAL_AGENT_MODEL)
+  const view = renderInput(fakeChannel("agent"))
+  await userEvent.upload(
+    getHook("chat-attach-image-input"),
+    new File(["sample"], "reading.png", { type: "image/png" }),
+  )
+  await screen.findByRole("button", { name: "Remove image 1" })
+  await userEvent.type(getHook("chat-input-textarea"), "Previous draft")
+  const finish = holdAttachment()
+  view.rerender(undefined, "c2")
+  expect(getHook("chat-input-textarea")).toHaveValue("")
+  expect(queryHook("chat-image-attachments")).not.toBeInTheDocument()
+  await userEvent.type(getHook("chat-input-textarea"), "New draft")
+  await finish()
+  expect(queryHook("chat-image-attachments")).not.toBeInTheDocument()
+  await userEvent.keyboard("{Enter}")
+  expect(view.submitted("c2")).toMatchObject({ text: "New draft", images: [] })
 })

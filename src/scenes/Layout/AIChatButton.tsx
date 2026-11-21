@@ -10,6 +10,7 @@ import { SIDEBAR_ICON_SIZE } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useLocalAgent } from "../../utils/localAgent/LocalAgentContext"
 import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
+import { getApiKey, providerForModel } from "../../utils/ai/settings"
 import { StoreKey } from "../../utils/localStorage/types"
 
 const ChatButton = styled(PrimaryToggleButton)`
@@ -24,13 +25,22 @@ const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
 export const AIChatButton = () => {
   const { openOrCreateBlankChatWindow, closeChatWindow } =
     useAIConversationActions()
-  const { canUse } = useAIStatus()
+  const { canUse, models } = useAIStatus()
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const localAgent = useLocalAgent()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const isActive = activeSidebar?.type === "aiChat"
 
-  if (!canUse && !isActive && !localAgent) {
+  const canPickApiModel =
+    aiAssistantSettings.selectedModel === LOCAL_AGENT_MODEL &&
+    models.some((model) => {
+      const provider = providerForModel(model, aiAssistantSettings)
+      return (
+        provider !== null && getApiKey(provider, aiAssistantSettings) !== null
+      )
+    })
+
+  if (!canUse && !isActive && !localAgent && !canPickApiModel) {
     return null
   }
 

@@ -143,6 +143,44 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith({ question_0_custom: "SQLite" })
   })
 
+  it("chooses the listed answer instead of submitting a focused custom draft", async () => {
+    const { onAnswer } = renderCard(question([database]))
+    await userEvent.click(
+      screen.getByRole("radio", { name: /Type your own answer/ }),
+    )
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Your own answer" }),
+      "SQLite",
+    )
+    await userEvent.click(screen.getByText("Which database should we use?"))
+    expect(onAnswer).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole("radio", { name: /Postgres/ }))
+    expect(onAnswer.mock.calls).toEqual([[{ question_0: "Postgres" }]])
+  })
+
+  it("confirms a custom answer on a multiple-choice step before review", async () => {
+    const { onAnswer } = renderCard(
+      question([database, { ...features, otherFieldId: "custom_feature" }]),
+    )
+    await userEvent.click(screen.getByRole("radio", { name: /Postgres/ }))
+    await userEvent.click(screen.getByRole("checkbox", { name: /SQL/ }))
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /Type your own answer/ }),
+    )
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Your own answer" }),
+      "Charts",
+    )
+    await userEvent.click(screen.getByRole("button", { name: "Review" }))
+    expect(onAnswer).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole("button", { name: "Send" }))
+    expect(onAnswer).toHaveBeenCalledWith({
+      question_0: "Postgres",
+      question_1: ["SQL"],
+      custom_feature: "Charts",
+    })
+  })
+
   it("skips without submitting a focused custom draft", async () => {
     const { onAnswer } = renderCard(question([database]))
     await userEvent.click(
