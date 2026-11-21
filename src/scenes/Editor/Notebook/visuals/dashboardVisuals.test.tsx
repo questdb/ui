@@ -49,6 +49,39 @@ describe("dashboard visuals", () => {
     expect(eth).toHaveFocus()
   })
 
+  it("keeps exact LONG prices distinct when calculating spread and midpoint", async () => {
+    // Given adjacent LONGs that collapse to the same double
+    const columns = [
+      { name: "price", type: "LONG" },
+      { name: "size", type: "INT" },
+    ]
+    const onSelect = vi.fn()
+    const { container } = renderComponent(
+      <OrderBook
+        formats={{}}
+        onSelect={onSelect}
+        statements={[
+          { columns, rows: [["9007199254740993", 2]] },
+          { columns, rows: [["9007199254740992", 10]] },
+        ]}
+      />,
+    )
+    const ask = screen.getByRole("button", { name: /9,007,199,254,740,993/ })
+    expect(
+      screen.getByRole("button", { name: /9,007,199,254,740,992/ }),
+    ).toBeVisible()
+    expect(
+      container.querySelector('[data-hook="order-book-mid-price"]'),
+    ).toHaveTextContent("9,007,199,254,740,992.5")
+    expect(screen.getByText(/^Spread/).querySelector("b")).toHaveTextContent(
+      /^1$/,
+    )
+
+    // When selecting the ask, then the variable receives its exact price
+    await userEvent.click(ask)
+    expect(onSelect).toHaveBeenCalledWith("9007199254740993")
+  })
+
   it("rolls only changed mid-price digits and resets for a different query", () => {
     // Given a book with a mid price of 100.10 at two decimal places
     const columns = [

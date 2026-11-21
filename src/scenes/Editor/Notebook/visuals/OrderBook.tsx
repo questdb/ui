@@ -5,6 +5,14 @@ import {
   type ColumnFormat,
   type ColumnFormats,
 } from "../../../../utils/formats/columnFormat"
+import {
+  asNumeric,
+  comparableText,
+  compareValues,
+  differenceOf,
+  midpointOf,
+  type Numeric,
+} from "../../../../components/ResultGrid/highlight/comparable"
 import { withAlpha } from "../../../../theme"
 import { columnIndex, toNumber, type StatementRows } from "./statementRows"
 import type { VisualColumns } from "../CellChart/chartTypes"
@@ -17,7 +25,8 @@ import { RollingNumber } from "./RollingNumber"
 // running total and also sizes the depth bars.
 
 type Level = {
-  price: number
+  price: Numeric
+  rawPrice: string | number
   size: number
   total: number | null
   selection: unknown
@@ -41,15 +50,19 @@ const readSide = (
   let running = 0
   return {
     levels: rows.rows.flatMap((row) => {
-      const price = toNumber(row[priceIdx])
+      const rawPrice = row[priceIdx]
+      if (typeof rawPrice !== "string" && typeof rawPrice !== "number")
+        return []
+      const price = asNumeric(rawPrice)
       const size = toNumber(row[sizeIdx])
       if (price === null || size === null) return []
       running += size
       return [
         {
           price,
+          rawPrice,
           size,
-          selection: clickColumn === undefined ? price : row[clickIdx],
+          selection: clickColumn === undefined ? rawPrice : row[clickIdx],
           total: totalIdx >= 0 ? (toNumber(row[totalIdx]) ?? running) : null,
         },
       ]
@@ -259,11 +272,15 @@ export const OrderBook = ({
   const bestAsk = asks.levels[0]?.price
   const bestBid = bids.levels[0]?.price
   const spread =
-    bestAsk !== undefined && bestBid !== undefined ? bestAsk - bestBid : null
+    bestAsk !== undefined && bestBid !== undefined
+      ? comparableText(differenceOf(bestAsk, bestBid))
+      : null
   const mid =
     bestAsk !== undefined && bestBid !== undefined
-      ? (bestAsk + bestBid) / 2
+      ? midpointOf(bestAsk, bestBid)
       : null
+  const midText = mid === null ? "—" : comparableText(mid)
+  const midNumber = Number(midText)
 
   // Start with the mid price in the middle of the ladder.
   useLayoutEffect(() => {
@@ -285,7 +302,7 @@ export const OrderBook = ({
       <Row
         as={activate ? "button" : "div"}
         type={activate ? "button" : undefined}
-        key={`${side}:${level.price}`}
+        key={`${side}:${level.rawPrice}`}
         $cols={cols}
         $side={side}
         $clickable={activate !== undefined}
@@ -296,7 +313,7 @@ export const OrderBook = ({
           $side={side}
           style={{ width: `${(depthOf(level) / maxDepth) * 100}%` }}
         />
-        <span>{formatValue(level.price, priceFormat)}</span>
+        <span>{formatValue(level.rawPrice, priceFormat)}</span>
         <span>{formatValue(level.size, sizeFormat)}</span>
         {cols === 3 && <span>{formatValue(level.total, totalFormat)}</span>}
       </Row>
@@ -323,7 +340,7 @@ export const OrderBook = ({
             <RollingNumber
               key={`${queriesKey ?? ""}:${animateDigits}`}
               value={mid}
-              text={mid === null ? "—" : formatValue(mid, priceFormat)}
+              text={mid === null ? midText : formatValue(midText, priceFormat)}
               enabled={animateDigits}
               showDirection
             />
@@ -331,8 +348,8 @@ export const OrderBook = ({
           <SpreadText>
             Spread{" "}
             <b>{spread === null ? "—" : formatValue(spread, priceFormat)}</b>
-            {spread !== null && mid
-              ? ` · ${((spread / mid) * 10_000).toFixed(1)} bps`
+            {spread !== null && midNumber
+              ? ` · ${((Number(spread) / midNumber) * 10_000).toFixed(1)} bps`
               : ""}
           </SpreadText>
         </Mid>
@@ -388,7 +405,8 @@ export const orderBookDrawn = (
             },
           ]
         : []),
-      ...(asks.levels.length > 1 && asks.levels[0].price > asks.levels[1].price
+      ...(asks.levels.length > 1 &&
+      compareValues(asks.levels[0].price, asks.levels[1].price) > 0
         ? [
             {
               message:
@@ -397,7 +415,8 @@ export const orderBookDrawn = (
             },
           ]
         : []),
-      ...(bids.levels.length > 1 && bids.levels[0].price < bids.levels[1].price
+      ...(bids.levels.length > 1 &&
+      compareValues(bids.levels[0].price, bids.levels[1].price) < 0
         ? [
             {
               message:

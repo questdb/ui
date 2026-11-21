@@ -1,5 +1,10 @@
 import React, { useState } from "react"
 import styled, { keyframes } from "styled-components"
+import {
+  compareValues,
+  type Numeric,
+} from "../../../../components/ResultGrid/highlight/comparable"
+
 type Direction = "up" | "down"
 
 const AccessiblePrice = styled.span`
@@ -51,7 +56,7 @@ const Digit = styled.span<{ $direction: Direction }>`
 `
 
 type PriceFrame = {
-  value: number | null
+  value: Numeric | null
   text: string
   previousText?: string
   direction?: Direction
@@ -66,7 +71,7 @@ export const RollingNumber = ({
   enabled,
   showDirection,
 }: {
-  value: number | null
+  value: Numeric | null
   text: string
   enabled: boolean
   showDirection?: boolean
@@ -74,12 +79,12 @@ export const RollingNumber = ({
   const [frame, setFrame] = useState<PriceFrame>({ value, text, revision: 0 })
   // Compare visible prices so rounding doesn't trigger motion or flip the arrow.
   if (frame.text !== text) {
+    const comparison =
+      value === null || frame.value === null
+        ? 0
+        : compareValues(value, frame.value)
     const direction =
-      value === null || frame.value === null || value === frame.value
-        ? undefined
-        : value > frame.value
-          ? "up"
-          : "down"
+      comparison > 0 ? "up" : comparison < 0 ? "down" : undefined
     setFrame({
       value,
       text,
