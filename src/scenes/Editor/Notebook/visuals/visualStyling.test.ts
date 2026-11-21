@@ -100,6 +100,30 @@ describe("stateTimelineOption", () => {
 
 describe("volumeProfileOption", () => {
   const common = { colors: lightColors, formats: {}, clickColumn: "price" }
+  it("does not mark a point of control for two absent volumes", () => {
+    const rendered = volumeProfileOption({
+      ...common,
+      visual: { type: "volumeProfile", columns: { value: "volume" } },
+      statements: [
+        {
+          columns: [
+            { name: "price", type: "INT" },
+            { name: "volume", type: "DOUBLE" },
+          ],
+          rows: [
+            [10, null],
+            [11, null],
+          ],
+        },
+      ],
+    })
+    expect(rendered.drawn.pointOfControl).toBe("")
+    expect(rendered.option?.series).toMatchObject([
+      { data: [{ value: null }, { value: null }] },
+    ])
+    const series = rendered.option?.series as unknown[] | undefined
+    expect(series?.[0]).not.toHaveProperty("markLine")
+  })
   it("reports a missing configured sell column instead of changing the point of control", () => {
     const result = volumeProfileOption({
       ...common,
@@ -223,6 +247,24 @@ describe("sankeyOption", () => {
 })
 
 describe("gaugeOption", () => {
+  it("rejects inverted effective bounds and formats the original LONG on a valid scale", () => {
+    const build = (value: string, max?: number) =>
+      gaugeOption({
+        visual: { type: "gauge", max },
+        statements: [rows([["reading", "LONG"]], [[value]])],
+        colors: lightColors,
+        formats: { reading: { kind: "number" } },
+      })
+    expect(build("-20", -10).problems[0]?.message).toContain(
+      "maximum must be greater",
+    )
+    const rendered = build("9007199254740993")
+    expect(rendered.drawn.value).toBe("9007199254740993")
+    const series = rendered.option?.series as
+      | { detail: { formatter?: () => string } }[]
+      | undefined
+    expect(series?.[1].detail.formatter?.()).toBe("9,007,199,254,740,993")
+  })
   it("does not substitute another metric when the configured column disappears", () => {
     const result = gaugeOption({
       visual: { type: "gauge", columns: { value: "cpu_percent" } },

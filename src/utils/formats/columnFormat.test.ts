@@ -105,6 +105,24 @@ describe("toneOf", () => {
 })
 
 describe("thresholdBands", () => {
+  it("starts with the tone at the lower visible bound", () => {
+    expect(
+      thresholdBands(
+        {
+          baseTone: "positive",
+          thresholds: [
+            { value: 10, tone: "warning" },
+            { value: 90, tone: "negative" },
+          ],
+        },
+        10,
+        100,
+      ),
+    ).toEqual([
+      { from: 10, to: 90, tone: "warning" },
+      { from: 90, to: 100, tone: "negative" },
+    ])
+  })
   it("splits the range at each threshold", () => {
     // Given
     const format = {

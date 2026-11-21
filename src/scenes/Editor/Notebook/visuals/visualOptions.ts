@@ -97,7 +97,8 @@ export const gaugeOption = ({
   if (err) return missing(err)
   const valueName = rows.columns[valueIdx].name
   const format = formats[valueName]
-  const value = toNumber(rows.rows[0][valueIdx])
+  const rawValue = rows.rows[0][valueIdx]
+  const value = toNumber(rawValue)
   if (value === null)
     return missing(
       `No numeric value for ${JSON.stringify(valueName)} in the first row.`,
@@ -106,9 +107,11 @@ export const gaugeOption = ({
   const min = visual.min ?? 0
   const max =
     visual.max ?? (format?.kind === "percent" ? 1 : Math.max(100, value))
-  const span = max - min || 1
+  if (min >= max)
+    return missing("Gauge maximum must be greater than its minimum.")
+  const span = max - min
   const clamped = Math.min(Math.max(value, min), max)
-  const tone = toneOf(value, format)
+  const tone = toneOf(rawValue, format)
   const valueColor = tone ? toneColor(tone, colors) : colors.chartSeries1
   // Threshold zones: a thin outer ring, quiet below the value's own colour.
   const bands = thresholdBands(format, min, max)
@@ -183,13 +186,18 @@ export const gaugeOption = ({
             fontSize: 30,
             fontWeight: 600,
             color: colors.contentPrimary,
-            formatter: () => formatValue(value, format),
+            formatter: () => formatValue(rawValue, format),
           },
           data: [{ value: clamped, name: label }],
         },
       ],
     },
-    drawn: { value, min, max, bands: bands.length },
+    drawn: {
+      value: typeof rawValue === "string" ? rawValue : value,
+      min,
+      max,
+      bands: bands.length,
+    },
     problems:
       value < min || value > max
         ? [
@@ -1154,16 +1162,19 @@ export const volumeProfileOption = ({
     kind: "number" as const,
   }
   const prices = sorted.map((r) => formatValue(r[priceIdx], priceFormat))
-  const total = sorted.map((r) =>
-    valueIdx >= 0
-      ? (toNumber(r[valueIdx]) ?? 0)
-      : (toNumber(r[buyIdx]) ?? 0) +
-        (sellIdx >= 0 ? (toNumber(r[sellIdx]) ?? 0) : 0),
-  )
-  const poc = total.reduce(
-    (best, value, index) => (value > total[best] ? index : best),
-    0,
-  )
+  const total = sorted.map((r) => {
+    if (valueIdx >= 0) return toNumber(r[valueIdx])
+    const buy = toNumber(r[buyIdx])
+    const sell = sellIdx >= 0 ? toNumber(r[sellIdx]) : null
+    return buy === null && sell === null ? null : (buy ?? 0) + (sell ?? 0)
+  })
+  let poc = -1
+  let highest = -Infinity
+  total.forEach((value, index) => {
+    if (value === null || value <= highest) return
+    highest = value
+    poc = index
+  })
   const clickIdx = columnIndex(rows, clickColumn)
   const item = (value: number | null, row: StatementRows["rows"][number]) =>
     clickColumn !== undefined && clickIdx >= 0
@@ -1225,7 +1236,7 @@ export const volumeProfileOption = ({
         },
       },
       series: series.map((s, i) =>
-        i === series.length - 1
+        poc >= 0 && i === series.length - 1
           ? {
               ...s,
               markLine: {

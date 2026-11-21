@@ -298,13 +298,17 @@ export const thresholdBands = (
   max: number,
 ): { from: number; to: number; tone: Tone }[] => {
   const thresholds = (format?.thresholds ?? [])
-    .filter((t) => t.value > min && t.value < max)
+    .filter((t) => t.value < max)
     .sort((a, b) => a.value - b.value)
   if (thresholds.length === 0) return []
   const bands: { from: number; to: number; tone: Tone }[] = []
   let from = min
   let tone: Tone = format?.baseTone ?? "muted"
   for (const threshold of thresholds) {
+    if (threshold.value <= min) {
+      tone = threshold.tone
+      continue
+    }
     bands.push({ from, to: threshold.value, tone })
     from = threshold.value
     tone = threshold.tone
