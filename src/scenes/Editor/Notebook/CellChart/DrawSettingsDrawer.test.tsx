@@ -124,6 +124,33 @@ const openDrawer = async () => {
 }
 
 describe("draw settings drawer", () => {
+  it.each(["bullet", "planTree"] as const)(
+    "does not offer or save interactions for %s",
+    async (type) => {
+      const onSave = vi.fn()
+      renderComponent(
+        <Fixture
+          onSave={onSave}
+          saved={{
+            chartConfig: { ...effective, visual: { type } },
+            interactions: { click: { variable: "target" } },
+          }}
+        />,
+      )
+      const drawer = await openDrawer()
+      await userEvent.click(
+        within(drawer).getByRole("tab", { name: "Interactions" }),
+      )
+      expect(
+        within(drawer).getByText(/does not support click or drag/),
+      ).toBeVisible()
+      await userEvent.click(
+        within(drawer).getByRole("button", { name: "Save" }),
+      )
+      expect(onSave.mock.calls[0]?.[0].interactions).toBeUndefined()
+    },
+  )
+
   beforeEach(() => {
     // The kind switch is a segmented control, which reads the motion
     // preference and draws its lens on a canvas.

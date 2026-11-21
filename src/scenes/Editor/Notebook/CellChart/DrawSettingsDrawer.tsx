@@ -262,9 +262,16 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     }
   }, [open])
 
+  const supportsInteractions = (value: typeof draft) =>
+    value.kind !== "component" ||
+    (value.visual?.type !== "bullet" && value.visual?.type !== "planTree")
+
   const commit = async (): Promise<void> => {
     if (committing) return
-    const draft = draftRef.current
+    const original = draftRef.current
+    const draft = supportsInteractions(original)
+      ? original
+      : { ...original, interactions: undefined }
     if (draft.kind === "chart") {
       const badIdx = draft.chart.queries.findIndex(candlestickMissingOhlc)
       if (badIdx >= 0) {
@@ -288,7 +295,7 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
       ).finally(() => setCommitting(false))
       if (!acceptsSaveRef.current) return
       // Edited while the database checked: check the edits instead.
-      if (draftRef.current !== draft) return commit()
+      if (draftRef.current !== original) return commit()
       setServerProblems(server)
       if (server) {
         setSection("interactions")
@@ -343,7 +350,13 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         ariaLabel="Chart settings sections"
       />
 
-      {section === "interactions" && (
+      {section === "interactions" && !supportsInteractions(draft) && (
+        <Text color="contentSecondary" size="sm">
+          This component does not support click or drag interactions.
+        </Text>
+      )}
+
+      {section === "interactions" && supportsInteractions(draft) && (
         <InteractionsEditor
           draft={draft}
           onChange={({ interactions, created }) => {
