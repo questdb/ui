@@ -45,6 +45,34 @@ const seriesOf = (option: unknown) =>
   (option as { series: Record<string, unknown>[] }).series
 
 describe("preset chart interactions", () => {
+  it("retains the raw bound field without changing a candle's OHLC tuple", () => {
+    const ts = "2026-01-01T12:00:00.000000Z"
+    const option = buildEchartsOption(
+      { xColumn: "ts" },
+      [
+        query({
+          type: "candlestick",
+          xColumn: "ts",
+          yColumns: [],
+          columns: [
+            col("ts", "TIMESTAMP"),
+            col("o", "DOUBLE"),
+            col("c", "DOUBLE"),
+            col("l", "DOUBLE"),
+            col("h", "DOUBLE"),
+            col("venue", "SYMBOL"),
+          ],
+          dataset: [[ts, 10, 12, 9, 13, "London"]],
+          ohlc: { open: "o", close: "c", low: "l", high: "h" },
+        }),
+      ],
+      { clickColumn: "venue" },
+    )
+    expect(seriesOf(option)[0].data).toEqual([
+      { value: [ts, 10, 12, 9, 13], columns: { venue: "London" } },
+    ])
+  })
+
   it.each(["bar", "pie"] as const)(
     "writes the bound source column for a %s",
     (type) => {

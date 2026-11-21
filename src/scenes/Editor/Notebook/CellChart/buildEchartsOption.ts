@@ -650,18 +650,30 @@ const buildCandlestickSeries = (
       return EMPTY_CANDLE
     return [o, c, l, h]
   }
-  let data: unknown[]
-  if (ctx.xMode === "time") {
-    data = q.dataset.map((row) => [row[xIdx], ...candle(row)])
-  } else if (ctx.xMode === "value") {
-    data = q.dataset.map((row) => [toNumberOrNull(row[xIdx]), ...candle(row)])
-  } else if (ctx.categoryUnion) {
-    const m = new Map<string, (number | string)[]>()
-    for (const row of q.dataset) m.set(toCategoryLabel(row[xIdx]), candle(row))
-    data = ctx.categoryUnion.map((lbl) => m.get(lbl) ?? EMPTY_CANDLE)
-  } else {
-    data = q.dataset.map((row) => candle(row))
+  const clickColumn = ctx.clickColumn
+  const clickIdx = clickColumn === undefined ? undefined : idx.get(clickColumn)
+  const point = (row: Dataset[number]) => {
+    const values = candle(row)
+    const value =
+      ctx.xMode === "category"
+        ? values
+        : [
+            ctx.xMode === "time" ? row[xIdx] : toNumberOrNull(row[xIdx]),
+            ...values,
+          ]
+    return clickColumn !== undefined && clickIdx !== undefined
+      ? { value, columns: { [clickColumn]: row[clickIdx] } }
+      : value
   }
+  const data =
+    ctx.xMode === "category" && ctx.categoryUnion
+      ? alignPointsToCategoryUnion(
+          q.dataset,
+          xIdx,
+          ctx.categoryUnion,
+          point,
+        ).map((value) => value ?? EMPTY_CANDLE)
+      : q.dataset.map(point)
   return [
     {
       name: q.name ?? "OHLC",

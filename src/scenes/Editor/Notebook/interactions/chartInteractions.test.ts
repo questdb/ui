@@ -16,6 +16,19 @@ describe("sqlLiteral", () => {
 })
 
 describe("clickedValue", () => {
+  it("prefers the exact source value to a rounded plotted dimension", () => {
+    expect(
+      clickedValue(
+        {
+          value: [9007199254740992],
+          dimensionNames: ["id"],
+          data: { columns: { id: "9007199254740993" } },
+        },
+        "id",
+      ),
+    ).toBe("9007199254740993")
+  })
+
   it("reads the named column from a dataset row, else the item name", () => {
     // Given
     const params = {

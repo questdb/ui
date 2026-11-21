@@ -34,11 +34,6 @@ export const clickedValue = (
   column: string | undefined,
 ): unknown => {
   if (column !== undefined) {
-    const dims = params.dimensionNames
-    if (Array.isArray(params.value) && Array.isArray(dims)) {
-      const i = dims.indexOf(column)
-      if (i >= 0) return (params.value as unknown[])[i]
-    }
     const data = params.data
     // Items built from rows carry them by column name (heatmap, boxplot).
     const columns = (data as { columns?: unknown } | null)?.columns
@@ -54,6 +49,11 @@ export const clickedValue = (
       Object.hasOwn(data, column)
     )
       return (data as Record<string, unknown>)[column]
+    const dims = params.dimensionNames
+    if (Array.isArray(params.value) && Array.isArray(dims)) {
+      const i = dims.indexOf(column)
+      if (i >= 0) return (params.value as unknown[])[i]
+    }
     return undefined
   }
   if (params.name !== undefined && params.name !== "") return params.name
