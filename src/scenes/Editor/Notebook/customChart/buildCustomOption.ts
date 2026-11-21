@@ -32,7 +32,7 @@ export const datasetId = (index: number) => `q${index}`
 // 4.1000000000000005), which templates such as "{@[2]}" would print.
 export const chartNumber = (value: unknown): number | null => {
   const n = toNumber(value)
-  return n === null ? null : Number(n.toPrecision(15))
+  return n === null || Number.isSafeInteger(n) ? n : Number(n.toPrecision(15))
 }
 
 const datasetsOf = (statements: (StatementRows | null)[]) =>

@@ -307,7 +307,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
 const MAX_AFFIX = 16
-const MAX_THRESHOLDS = 20
 
 /** A format read from untrusted input (imports), or undefined when unusable. */
 export const sanitizeColumnFormat = (
@@ -338,7 +337,6 @@ export const sanitizeColumnFormat = (
           Number.isFinite(t.value) &&
           isTone(t.tone),
       )
-      .slice(0, MAX_THRESHOLDS)
       .map((t) => ({ value: t.value, tone: t.tone }))
       .sort((a, b) => a.value - b.value)
     if (thresholds.length > 0) format.thresholds = thresholds

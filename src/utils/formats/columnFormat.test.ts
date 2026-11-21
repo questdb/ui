@@ -47,6 +47,17 @@ describe("formatValue", () => {
 })
 
 describe("toneOf", () => {
+  it("keeps thresholds beyond the first twenty when importing a saved format", () => {
+    const thresholds = Array.from({ length: 21 }, (_, value) => ({
+      value,
+      tone: value === 20 ? "negative" : "positive",
+    }))
+    const format = sanitizeColumnFormats({
+      temperature: { thresholds },
+    })?.temperature
+    expect(format?.thresholds).toHaveLength(21)
+    expect(toneOf(20, format)).toBe("negative")
+  })
   it("takes the highest threshold a value reaches", () => {
     // Given
     const format = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildCustomOption } from "./buildCustomOption"
+import { buildCustomOption, chartNumber } from "./buildCustomOption"
 import type { StatementRows } from "../visuals/statementRows"
 
 const rows = (
@@ -11,6 +11,12 @@ const rows = (
 })
 
 describe("buildCustomOption", () => {
+  it("does not merge distinct, exactly representable LONGs", () => {
+    expect([
+      chartNumber("9007199254740990"),
+      chartNumber("9007199254740991"),
+    ]).toEqual([9_007_199_254_740_990, 9_007_199_254_740_991])
+  })
   it("keeps tooltips on the chart renderer after binding and in nested options", () => {
     const { option } = buildCustomOption(
       {
