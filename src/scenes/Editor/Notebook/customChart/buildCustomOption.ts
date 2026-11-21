@@ -362,8 +362,9 @@ export const buildCustomOption = (
       ],
     }
   }
+  const base = isRecord(filled.baseOption) ? filled.baseOption : filled
   const ours = datasetsOf(statements)
-  const theirs: unknown = filled.dataset
+  const theirs: unknown = base.dataset
   const theirList: unknown[] = Array.isArray(theirs)
     ? (theirs as unknown[])
     : theirs
@@ -386,19 +387,23 @@ export const buildCustomOption = (
   const datasetIds = datasets.map((d, i) =>
     isRecord(d) && typeof d.id === "string" ? d.id : String(i),
   )
-  checkEncodes(filled, statements, datasetIds, report)
+  const reportInBase = (path: string, message: string) =>
+    report(base === filled ? path : `baseOption.${path}`, message)
+  checkEncodes(base, statements, datasetIds, reportInBase)
 
-  const tooltip = isRecord(filled.tooltip)
-    ? filled.tooltip
-    : filled.tooltip === false
+  const tooltip = isRecord(base.tooltip)
+    ? base.tooltip
+    : base.tooltip === false
       ? { show: false }
       : {}
-  const option: Record<string, unknown> = {
+  const effectiveBase = {
     useUTC: true,
-    ...filled,
+    ...base,
     dataset: datasets,
     tooltip: { ...tooltip, confine: true, renderMode: "richText" },
     ...(live ? { animation: false } : {}),
   }
+  const option =
+    base === filled ? effectiveBase : { ...filled, baseOption: effectiveBase }
   return { option, problems }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { buildCustomOption, chartNumber } from "./buildCustomOption"
 import type { StatementRows } from "../visuals/statementRows"
+import { echarts } from "../CellChart/echartsSetup"
 
 const rows = (
   columns: [string, string][],
@@ -11,6 +12,56 @@ const rows = (
 })
 
 describe("buildCustomOption", () => {
+  it("plots statement rows from the effective ECharts base option", () => {
+    // Given a nested line series bound to the first statement
+    const { option, problems } = buildCustomOption(
+      {
+        baseOption: {
+          xAxis: { type: "category" },
+          yAxis: { type: "value" },
+          series: [
+            {
+              type: "line",
+              datasetId: "q0",
+              encode: { x: "station", y: "volume" },
+            },
+          ],
+        },
+      },
+      [
+        rows(
+          [
+            ["station", "SYMBOL"],
+            ["volume", "INT"],
+          ],
+          [
+            ["east", 1],
+            ["west", 2],
+          ],
+        ),
+      ],
+      true,
+    )
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 800,
+      height: 400,
+    })
+    try {
+      // When ECharts resolves the chart, then its series gets both query rows
+      chart.setOption(option)
+      expect(problems).toEqual([])
+      expect(chart.getOption()).toMatchObject({
+        animation: false,
+        dataset: [{ id: "q0" }],
+      })
+      expect(chart.renderToSVGString()).toContain("west")
+    } finally {
+      chart.dispose()
+    }
+  })
+
   it("diagnoses a cycle after binding Sankey query rows", () => {
     const option = {
       series: [
@@ -131,7 +182,8 @@ describe("buildCustomOption", () => {
       false,
     )
     expect(option.title).toEqual({ text: "Daily volume" })
-    expect(option.baseOption).toEqual({ title: [{ text: "Daily volume" }] })
+    const base = option.baseOption as { title: unknown[] }
+    expect(base.title).toEqual([{ text: "Daily volume" }])
     expect(option.media).toEqual([
       { option: { title: { text: "Daily volume" } } },
     ])
