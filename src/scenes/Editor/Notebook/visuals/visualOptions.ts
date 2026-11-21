@@ -1250,7 +1250,7 @@ export const volumeProfileOption = ({
                   color: colors.statusWarning,
                   position: "insideEndTop",
                 },
-                data: poc < 0 ? [] : [{ yAxis: prices[poc] }],
+                data: poc < 0 ? [] : [{ yAxis: poc }],
               },
             }
           : s,

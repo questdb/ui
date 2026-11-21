@@ -121,6 +121,29 @@ it("reports a liquidity heatmap with no drawable cells", () => {
 
 describe("volumeProfileOption", () => {
   const common = { colors: lightColors, formats: {}, clickColumn: "price" }
+  it("anchors POC to the winning bar, not a rounded display label", () => {
+    const result = volumeProfileOption({
+      ...common,
+      visual: { type: "volumeProfile", columns: { value: "volume" } },
+      formats: { price: { decimals: 0 } },
+      statements: [
+        rows(
+          [
+            ["price", "DOUBLE"],
+            ["volume", "INT"],
+          ],
+          [
+            [100.02, 12],
+            [100.01, 5],
+          ],
+        ),
+      ],
+    })
+    expect(result.option?.yAxis).toMatchObject({ data: ["100", "100"] })
+    expect(result.option?.series).toMatchObject([
+      { markLine: { data: [{ yAxis: 0 }] } },
+    ])
+  })
   it("does not mark a point of control for two absent volumes", () => {
     const rendered = volumeProfileOption({
       ...common,
