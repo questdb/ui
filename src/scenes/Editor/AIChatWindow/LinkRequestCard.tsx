@@ -4,7 +4,14 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react"
 import { Button, CopyButton } from "../../../components"
 import { AIStopButton } from "../../../components/AIStopButton"
 import type { AgentQuestionMessage } from "../../../utils/localAgent/protocol"
-import { Card, Footer, Header, Heading, QuestionText } from "./QuestionCard"
+import {
+  AnswerSendError,
+  Card,
+  Footer,
+  Header,
+  Heading,
+  QuestionText,
+} from "./QuestionCard"
 
 const Address = styled.div`
   display: flex;
@@ -50,7 +57,7 @@ export const hostOf = (url: string): string => {
 type LinkRequestCardProps = {
   agentLabel: string
   question: AgentQuestionMessage & { url: string }
-  onAnswer: (answers: Record<string, never> | null) => void
+  onAnswer: (answers: Record<string, never> | null) => boolean
   onStop: () => void
 }
 
@@ -64,6 +71,7 @@ export const LinkRequestCard = ({
   onStop,
 }: LinkRequestCardProps) => {
   const [answered, setAnswered] = useState(false)
+  const [sendFailed, setSendFailed] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
@@ -72,9 +80,11 @@ export const LinkRequestCard = ({
 
   const finish = (opened: boolean) => {
     if (answered) return
-    setAnswered(true)
-    if (opened) window.open(question.url, "_blank", "noopener,noreferrer")
-    onAnswer(opened ? {} : null)
+    const sent = onAnswer(opened ? {} : null)
+    setAnswered(sent)
+    setSendFailed(!sent)
+    if (sent && opened)
+      window.open(question.url, "_blank", "noopener,noreferrer")
   }
 
   return (
@@ -109,6 +119,7 @@ export const LinkRequestCard = ({
         <Url title={question.url}>{question.url}</Url>
       </Address>
       <Note>Opens in a new tab. Finish there, then come back here.</Note>
+      {sendFailed && <AnswerSendError />}
       <Footer>
         <Button
           size="sm"

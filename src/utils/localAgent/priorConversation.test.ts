@@ -39,6 +39,25 @@ describe("priorConversationFor", () => {
     )
   })
 
+  it("includes the SQL shown as a suggestion even when it is not in the assistant's text", () => {
+    // Given
+    const history = [
+      message({ role: "user", content: "Show trades" }),
+      message({
+        role: "assistant",
+        content: "This query filters by symbol.",
+        sql: "select * from trades where symbol = 'BTC'",
+      }),
+    ]
+
+    // When
+    const prior = priorConversationFor(history, "claude")
+
+    // Then
+    expect(prior).toContain("Assistant: This query filters by symbol.")
+    expect(prior).toContain("select * from trades where symbol = 'BTC'")
+  })
+
   it("sends nothing once the same agent has answered in this chat", () => {
     // Given
     const history = [

@@ -9,8 +9,11 @@ import { AssistantModesCompact } from "./AssistantModesCompact"
 import { diffStats } from "./AgentToolDetails"
 
 // Monaco does not run in jsdom; the diff shows its two texts.
+vi.mock("../../utils/monacoInit", () => ({
+  getMonacoThemeName: (mode: string) => `questdb-${mode}`,
+}))
+
 vi.mock("@monaco-editor/react", () => ({
-  loader: { config: () => undefined, init: () => Promise.resolve() },
   DiffEditor: ({
     original,
     modified,

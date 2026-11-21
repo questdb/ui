@@ -13,8 +13,11 @@ const visibleText = (message: ConversationMessage): string | null => {
       (typeof message.content === "string" ? message.content : null)
     )
   }
-  if (message.role === "assistant" && typeof message.content === "string") {
-    return message.content
+  if (message.role === "assistant") {
+    const text = typeof message.content === "string" ? message.content : ""
+    return [text, message.sql && `Suggested SQL:\n${message.sql}`]
+      .filter(Boolean)
+      .join("\n")
   }
   return null
 }

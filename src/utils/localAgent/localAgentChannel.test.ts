@@ -13,6 +13,7 @@ vi.mock("../../modules/ConsoleEventTracker", () => ({
 
 const connect = () => {
   const sent: AgentInboundMessage[] = []
+  let connected = true
   let deliver: (msg: AgentOutboundMessage) => void = () => undefined
   const client = {
     on: (_event: "agentMessage", handler: typeof deliver) => {
@@ -20,6 +21,7 @@ const connect = () => {
       return () => undefined
     },
     sendAgentMessage: (msg: AgentInboundMessage) => {
+      if (!connected) return false
       sent.push(msg)
       return true
     },
@@ -28,7 +30,14 @@ const connect = () => {
     info: { id: "claude", label: "Claude Code", cwd: "/tmp/workspace" },
     onNotebookRead: vi.fn(),
   })
-  return { channel, sent, deliver: (msg: AgentOutboundMessage) => deliver(msg) }
+  return {
+    channel,
+    sent,
+    deliver: (msg: AgentOutboundMessage) => deliver(msg),
+    setConnected: (value: boolean) => {
+      connected = value
+    },
+  }
 }
 
 const question = (requestId: string): AgentQuestionMessage => ({
@@ -59,6 +68,27 @@ describe("LocalAgentChannel questions", () => {
       answers: { database: "questdb" },
     })
     expect(channel.getSnapshot().questions).toEqual([])
+  })
+
+  it("keeps an undelivered answer pending so the user can retry after reconnecting", () => {
+    // Given
+    const { channel, deliver, sent, setConnected } = connect()
+    const pending = question("q1")
+    deliver(pending)
+    setConnected(false)
+
+    // When
+    const firstAttempt = channel.answerQuestion("q1", { database: "questdb" })
+
+    // Then
+    expect(channel.getSnapshot().questions).toEqual([pending])
+    expect(firstAttempt).toBe(false)
+    expect(sent).toHaveLength(0)
+
+    setConnected(true)
+    expect(channel.answerQuestion("q1", { database: "questdb" })).toBe(true)
+    expect(sent).toHaveLength(1)
+    expect(channel.getSnapshot().questions).toHaveLength(0)
   })
 
   it("adds the question and the answer to the reply of the turn that asked", () => {

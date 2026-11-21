@@ -222,9 +222,7 @@ export class MCPBridgeClient {
   }
 
   sendAgentMessage(msg: AgentInboundMessage): boolean {
-    if (this._status !== "connected") return false
-    this.send(msg)
-    return true
+    return this._status === "connected" && this.send(msg)
   }
 
   private buildSocketUrl(): string {
@@ -523,7 +521,7 @@ export class MCPBridgeClient {
     this.onVisibilityChange = null
   }
 
-  private send(msg: AnyMessage): void {
+  private send(msg: AnyMessage): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn(
         "[MCPBridgeClient] send dropped — ws not OPEN, type =",
@@ -531,16 +529,18 @@ export class MCPBridgeClient {
         "readyState =",
         this.ws?.readyState,
       )
-      return
+      return false
     }
     try {
       this.ws.send(JSON.stringify(msg))
+      return true
     } catch (err) {
       console.error("[MCPBridgeClient] send threw:", err)
       this.emit(
         "error",
         err instanceof Error ? err : new Error("WebSocket send failed"),
       )
+      return false
     }
   }
 }

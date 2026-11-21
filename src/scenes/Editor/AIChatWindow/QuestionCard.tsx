@@ -76,6 +76,12 @@ const Tab = styled(ButtonBase)`
   }
 `
 
+export const AnswerSendError = () => (
+  <p role="alert">
+    Could not send the answer. Check the bridge connection and try again.
+  </p>
+)
+
 export const QuestionText = styled.p`
   margin: 0;
   font-size: 1.4rem;
@@ -224,7 +230,7 @@ const isAnswered = (field: AgentQuestionField, answers: Answers): boolean =>
 type QuestionCardProps = {
   agentLabel: string
   question: AgentQuestionMessage
-  onAnswer: (answers: Answers | null) => void
+  onAnswer: (answers: Answers | null) => boolean
   onStop: () => void
 }
 
@@ -251,6 +257,7 @@ export const QuestionCard = ({
   const editingRef = useRef(false)
   const [draft, setDraft] = useState("")
   const [answered, setAnswered] = useState(false)
+  const [sendFailed, setSendFailed] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const field = fields[tab] as AgentQuestionField | undefined
   const canSend = fields.every(
@@ -263,8 +270,9 @@ export const QuestionCard = ({
 
   const finish = (result: Answers | null) => {
     if (answered) return
-    setAnswered(true)
-    onAnswer(result)
+    const sent = onAnswer(result)
+    setAnswered(sent)
+    setSendFailed(!sent)
   }
 
   const goTo = (next: number) => {
@@ -573,6 +581,7 @@ export const QuestionCard = ({
         )
       )}
 
+      {sendFailed && <AnswerSendError />}
       <Footer>
         {onReview && (
           <Button

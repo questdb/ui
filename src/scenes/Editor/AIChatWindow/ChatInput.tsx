@@ -569,7 +569,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             agentLabel={localAgent.info.label}
             question={{ ...question, url: question.url }}
             onAnswer={(answers) =>
-              localAgentChannel?.answerQuestion(question.requestId, answers)
+              localAgentChannel?.answerQuestion(question.requestId, answers) ??
+              false
             }
             onStop={handleStop}
           />
@@ -579,7 +580,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             agentLabel={localAgent.info.label}
             question={question}
             onAnswer={(answers) =>
-              localAgentChannel?.answerQuestion(question.requestId, answers)
+              localAgentChannel?.answerQuestion(question.requestId, answers) ??
+              false
             }
             onStop={handleStop}
           />

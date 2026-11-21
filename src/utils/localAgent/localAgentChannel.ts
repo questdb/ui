@@ -228,29 +228,30 @@ export class LocalAgentChannel {
   answerQuestion(
     requestId: string,
     answers: Record<string, string | string[]> | null,
-  ): void {
-    void trackEvent(ConsoleEvent.LOCAL_AGENT_QUESTION, {
-      agent: this.options.info.id,
-      outcome: answers ? "answered" : "skipped",
-    })
-    this.client.sendAgentMessage({
+  ): boolean {
+    const question = this.snapshot.questions.find(
+      (pending) => pending.requestId === requestId,
+    )
+    if (!question) return false
+    const sent = this.client.sendAgentMessage({
       v: EXPECTED_MCP_VERSION,
       type: "agent_question_answer",
       requestId,
       answers,
     })
-    const question = this.snapshot.questions.find(
-      (pending) => pending.requestId === requestId,
-    )
+    if (!sent) return false
+    void trackEvent(ConsoleEvent.LOCAL_AGENT_QUESTION, {
+      agent: this.options.info.id,
+      outcome: answers ? "answered" : "skipped",
+    })
     // The chat keeps the question and the answer in the agent's reply.
-    if (question) {
-      this.turns.get(question.conversationId)?.onUpdate({
-        kind: "message_chunk",
-        messageId: `question:${requestId}`,
-        text: questionTranscript(question, answers),
-      })
-    }
+    this.turns.get(question.conversationId)?.onUpdate({
+      kind: "message_chunk",
+      messageId: `question:${requestId}`,
+      text: questionTranscript(question, answers),
+    })
     this.removeQuestion(requestId)
+    return true
   }
 
   dispose(): void {

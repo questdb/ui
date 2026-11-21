@@ -24,7 +24,7 @@ describe("LinkRequestCard", () => {
   it("shows where the page leads, opens it in a new tab and tells the agent", async () => {
     // Given
     const open = vi.spyOn(window, "open").mockReturnValue(null)
-    const onAnswer = vi.fn()
+    const onAnswer = vi.fn(() => true)
     renderComponent(
       <LinkRequestCard
         agentLabel="Codex"
@@ -50,7 +50,7 @@ describe("LinkRequestCard", () => {
   it("declines without opening anything", async () => {
     // Given
     const open = vi.spyOn(window, "open").mockReturnValue(null)
-    const onAnswer = vi.fn()
+    const onAnswer = vi.fn(() => true)
     renderComponent(
       <LinkRequestCard
         agentLabel="Codex"

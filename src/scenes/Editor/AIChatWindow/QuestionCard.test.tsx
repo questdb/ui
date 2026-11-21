@@ -48,7 +48,7 @@ const question = (fields: AgentQuestionField[]): AgentQuestionMessage => ({
 })
 
 const renderCard = (message: AgentQuestionMessage) => {
-  const onAnswer = vi.fn()
+  const onAnswer = vi.fn(() => true)
   const onStop = vi.fn()
   renderComponent(
     <QuestionCard
@@ -72,6 +72,23 @@ describe("QuestionCard", () => {
 
     // Then
     expect(onAnswer).toHaveBeenCalledWith({ question_0: "QuestDB" })
+  })
+
+  it("lets the user send a choice again after a failed delivery", async () => {
+    // Given
+    const { onAnswer } = renderCard(question([database]))
+    onAnswer.mockReturnValueOnce(false)
+    const choice = screen.getByRole("radio", { name: /QuestDB/ })
+
+    // When
+    await userEvent.click(choice)
+
+    // Then
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not send")
+    expect(choice).toBeEnabled()
+    await userEvent.click(choice)
+    expect(onAnswer).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
   })
 
   it("moves to the next question after a pick, lets the user go back, and sends from the review", async () => {

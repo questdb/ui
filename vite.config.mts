@@ -29,46 +29,38 @@ export default defineConfig(({ mode }) => {
   const contextPath = env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ''
   const monacoPath = path.resolve(__dirname, 'node_modules', 'monaco-editor')
   const proxySettings = {
-    '/read/v1': {
-      target: 'https://demo.questdb.io',
-      changeOrigin: true,
-      ws: true,
-      configure: (proxy: any) => {
-        proxy.on('proxyReqWs', (request: any) => request.removeHeader('origin'))
-      },
-    },
     '/imp': {
-      target: 'https://demo.questdb.io',
+      target: 'http://127.0.0.1:9000',
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
     '/exp': {
-      target: 'https://demo.questdb.io',
+      target: 'http://127.0.0.1:9000',
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
     '/exec': {
-      target: 'https://demo.questdb.io',
+      target: 'http://127.0.0.1:9000',
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
     '/chk': {
-      target: 'https://demo.questdb.io',
+      target: 'http://127.0.0.1:9000',
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
     '/settings': {
-      target: 'https://demo.questdb.io',
+      target: 'http://127.0.0.1:9000',
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
     '/warnings': {
-      target: 'https://demo.questdb.io',
+      target: 'http://127.0.0.1:9000',
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
     '/preferences': {
-      target: 'https://demo.questdb.io',
+      target: 'http://127.0.0.1:9000',
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
@@ -82,7 +74,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     "/api": {
-      target: 'https://demo.questdb.io',
+      target: 'http://127.0.0.1:9000',
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
