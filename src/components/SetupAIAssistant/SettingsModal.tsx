@@ -1163,12 +1163,14 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           ],
         ),
       )
-      updatedSettings.selectedModel =
-        getNextModel(
-          updatedSettings.selectedModel,
-          persistedEnabledModels,
-          updatedSettings,
-        ) || undefined
+      if (updatedSettings.selectedModel !== LOCAL_AGENT_MODEL) {
+        updatedSettings.selectedModel =
+          getNextModel(
+            updatedSettings.selectedModel,
+            persistedEnabledModels,
+            updatedSettings,
+          ) || undefined
+      }
 
       updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, updatedSettings)
       toast.success("Model preferences updated")

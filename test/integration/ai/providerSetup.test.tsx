@@ -18,6 +18,7 @@ import {
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, it } from "vitest"
+import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
 
 const checkbox = (id: string, prefix = "manage-models") => {
   const row = getAllByHook(`${prefix}-model-row`).find(
@@ -125,6 +126,28 @@ it("preserves delisted and manual models, removes only the chosen chip, and relo
   expect(labels).toContain("GPT 5.4")
   expect(labels).toContain("my-proxy-model")
   expect(labels).not.toContain("My-proxy-model")
+})
+
+it("keeps the saved local agent selected when cloud model preferences change", async () => {
+  // Given
+  modelServer()
+  renderAISettings(undefined, {
+    ...configuredOpenAI,
+    selectedModel: LOCAL_AGENT_MODEL,
+  })
+
+  // When
+  await openSettings()
+  await userEvent.click(getByHook("ai-settings-manage-models"))
+  await waitForModels()
+  await userEvent.click(checkbox("gpt-5-mini"))
+  await userEvent.click(getByHook("manage-models-save"))
+
+  // Then
+  expect(storedSettings().selectedModel).toBe(LOCAL_AGENT_MODEL)
+  expect(storedSettings().providers?.openai?.enabledModels).toContain(
+    "openai:gpt-5-mini",
+  )
 })
 
 it("locks the model picker when the provider rate-limits listing without changing saved models", async () => {
