@@ -3,6 +3,7 @@ import { lightColors } from "../../../../theme"
 import {
   gaugeOption,
   graphOption,
+  sankeyOption,
   stateTimelineOption,
   treemapOption,
 } from "./visualOptions"
@@ -93,6 +94,35 @@ describe("stateTimelineOption", () => {
     expect(colorOf("moving")).toBe(lightColors.chartUp)
     expect(colorOf("charging")).toBe(lightColors.statusWarning)
     expect(colorOf("error")).toBe(lightColors.chartDown)
+  })
+})
+
+describe("sankeyOption", () => {
+  it("does not invent unit weights when an explicit weight column is missing", () => {
+    const statements = [
+      rows(
+        [
+          ["source", "SYMBOL"],
+          ["target", "SYMBOL"],
+        ],
+        [["a", "b"]],
+      ),
+    ]
+    const bound = sankeyOption({
+      visual: { type: "sankey", columns: { value: "bytes" } },
+      statements,
+      colors: lightColors,
+      formats: {},
+    })
+    expect(bound.option).toBeNull()
+    expect(bound.problems[0]?.message).toContain('column "bytes" not found')
+    const unbound = sankeyOption({
+      visual: { type: "sankey" },
+      statements,
+      colors: lightColors,
+      formats: {},
+    })
+    expect(unbound.option?.series).toMatchObject([{ links: [{ value: 1 }] }])
   })
 })
 

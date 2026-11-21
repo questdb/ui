@@ -214,6 +214,7 @@ export const VisualCanvas = ({
           formats={formats}
           animateDigits={visual.animateDigits}
           queriesKey={queriesKey}
+          clickColumn={click?.column}
           onSelect={select}
         />
       )

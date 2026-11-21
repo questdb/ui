@@ -69,6 +69,31 @@ describe("VisualCanvas", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument()
   })
 
+  it("writes the bound order-book column from the clicked side", async () => {
+    const setVariables = vi.fn()
+    const price = { name: "price", type: "DOUBLE" }
+    const size = { name: "size", type: "DOUBLE" }
+    const { container } = renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{
+          type: "orderBook",
+          columns: { price: "price", size: "size" },
+        }}
+        statements={[
+          { columns: [price, size], rows: [[101, 20]] },
+          { columns: [size, price], rows: [[30, 99]] },
+        ]}
+        interactions={{ click: { variable: "amount", column: "size" } }}
+        setVariables={setVariables}
+      />,
+    )
+    const bid = container.querySelector('[data-hook="order-book-bid"]')
+    expect(bid).not.toBeNull()
+    await userEvent.click(bid!)
+    expect(setVariables).toHaveBeenCalledWith({ amount: "30" })
+  })
+
   it("does not display a missing bullet measurement as zero", () => {
     renderComponent(
       <VisualCanvas

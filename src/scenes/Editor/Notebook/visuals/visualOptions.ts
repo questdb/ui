@@ -575,7 +575,9 @@ const edges = (ctx: VisualContext) => {
       ? columnIndex(rows, c.value)
       : columnIndex(rows, undefined, 2)
   const err =
-    need(rows, fromIdx, "from", c.from) ?? need(rows, toIdx, "to", c.to)
+    need(rows, fromIdx, "from", c.from) ??
+    need(rows, toIdx, "to", c.to) ??
+    (c.value === undefined ? null : need(rows, valueIdx, "value", c.value))
   if (err) return err
   const links = linksFrom(rows, fromIdx, toIdx, valueIdx)
   return {

@@ -16,13 +16,19 @@ import { RollingNumber } from "./RollingNumber"
 // (or the columns named in the visual). A third column, when present, is the
 // running total and also sizes the depth bars.
 
-type Level = { price: number; size: number; total: number | null }
+type Level = {
+  price: number
+  size: number
+  total: number | null
+  selection: unknown
+}
 
 type Side = { levels: Level[]; totalName?: string }
 
 const readSide = (
   rows: StatementRows | null,
   columns: VisualColumns | undefined,
+  clickColumn?: string,
 ): Side => {
   if (!rows) return { levels: [] }
   const priceIdx = columnIndex(rows, columns?.price, 0)
@@ -31,6 +37,7 @@ const readSide = (
     (_, i) => i !== priceIdx && i !== sizeIdx,
   )
   if (priceIdx < 0 || sizeIdx < 0) return { levels: [] }
+  const clickIdx = columnIndex(rows, clickColumn)
   let running = 0
   return {
     levels: rows.rows.flatMap((row) => {
@@ -42,6 +49,7 @@ const readSide = (
         {
           price,
           size,
+          selection: clickColumn === undefined ? price : row[clickIdx],
           total: totalIdx >= 0 ? (toNumber(row[totalIdx]) ?? running) : null,
         },
       ]
@@ -189,8 +197,9 @@ type Props = {
   formats: ColumnFormats
   animateDigits?: boolean
   queriesKey?: string
-  // A click on a level reports its price.
-  onSelect?: (price: number) => void
+  // Unbound clicks report price; a bound click reads from its own side.
+  clickColumn?: string
+  onSelect?: (value: unknown) => void
 }
 
 export const OrderBook = ({
@@ -200,15 +209,16 @@ export const OrderBook = ({
   formats,
   animateDigits = false,
   queriesKey,
+  clickColumn,
   onSelect,
 }: Props) => {
   const asks = useMemo(
-    () => readSide(statements[0], columns),
-    [statements, columns],
+    () => readSide(statements[0], columns, clickColumn),
+    [statements, columns, clickColumn],
   )
   const bids = useMemo(
-    () => readSide(statements[1], columns),
-    [statements, columns],
+    () => readSide(statements[1], columns, clickColumn),
+    [statements, columns, clickColumn],
   )
   const ladderRef = useRef<HTMLDivElement | null>(null)
   const midRef = useRef<HTMLDivElement | null>(null)
@@ -256,13 +266,17 @@ export const OrderBook = ({
   }, [asks, bids])
 
   const row = (level: Level, side: "ask" | "bid") => {
+    const activate =
+      onSelect && level.selection !== undefined
+        ? () => onSelect(level.selection)
+        : undefined
     return (
       <Row
         key={`${side}:${level.price}`}
         $cols={cols}
         $side={side}
-        $clickable={onSelect !== undefined}
-        onClick={onSelect ? () => onSelect(level.price) : undefined}
+        $clickable={activate !== undefined}
+        onClick={activate}
         data-hook={`order-book-${side}`}
       >
         <Depth
