@@ -1,4 +1,8 @@
 import type { ColorShape } from "../../types/styled"
+import {
+  asNumeric,
+  compareValues,
+} from "../../components/ResultGrid/highlight/comparable"
 
 // One way to format and colour a column's values, shared by the result grid,
 // charts, stat tiles, gauges, the order book and every other visual. A format
@@ -240,18 +244,24 @@ export const toneOf = (
   format: ColumnFormat | undefined,
 ): Tone | undefined => {
   if (!format) return undefined
-  const n = toNumber(value)
+  const n =
+    typeof value === "bigint"
+      ? value
+      : typeof value === "string" || typeof value === "number"
+        ? asNumeric(value)
+        : null
   if (n === null) return undefined
   if (format.thresholds && format.thresholds.length > 0) {
     let tone: Tone | undefined = format.baseTone
     for (const threshold of format.thresholds) {
-      if (n >= threshold.value) tone = threshold.tone
+      if (compareValues(n, threshold.value) >= 0) tone = threshold.tone
     }
     return tone
   }
   if (format.signTone) {
-    if (n > 0) return "positive"
-    if (n < 0) return "negative"
+    const sign = compareValues(n, 0)
+    if (sign > 0) return "positive"
+    if (sign < 0) return "negative"
   }
   return format.baseTone
 }

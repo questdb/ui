@@ -47,6 +47,16 @@ describe("formatValue", () => {
 })
 
 describe("toneOf", () => {
+  it("does not round an exact LONG up to a threshold", () => {
+    const value = "9007199254740995"
+    expect(formatValue(value, { kind: "number" })).toBe("9,007,199,254,740,995")
+    expect(
+      toneOf(value, {
+        baseTone: "positive",
+        thresholds: [{ value: 9_007_199_254_740_996, tone: "warning" }],
+      }),
+    ).toBe("positive")
+  })
   it("keeps thresholds beyond the first twenty when importing a saved format", () => {
     const thresholds = Array.from({ length: 21 }, (_, value) => ({
       value,
