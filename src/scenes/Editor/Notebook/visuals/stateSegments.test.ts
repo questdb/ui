@@ -31,6 +31,21 @@ it("does not infer end times when an explicitly bound end column is missing", ()
 const HOUR = 3_600_000
 const at = (h: number) => new Date(Date.UTC(2026, 0, 1, h)).toISOString()
 
+it("does not calculate uptime for a server-capped result", () => {
+  const result: StatementRows = {
+    columns: [
+      { name: "ts", type: "TIMESTAMP" },
+      { name: "lane", type: "SYMBOL" },
+      { name: "state", type: "SYMBOL" },
+    ],
+    rows: [["2026-01-01T00:00:00Z", "primary", "up"]],
+    partial: true,
+  }
+  expect(readStateSegments({ type: "uptime" }, result)).toContain(
+    "requires a complete result",
+  )
+})
+
 const states = (data: [number, string, string][]): StatementRows => ({
   columns: [
     { name: "ts", type: "TIMESTAMP" },

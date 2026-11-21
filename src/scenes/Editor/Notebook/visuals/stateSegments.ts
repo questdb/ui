@@ -65,6 +65,8 @@ export const readStateSegments = (
   clickColumn?: string,
 ): StateSegments | string => {
   if (!rows || rows.rows.length === 0) return "The query returned no rows."
+  if (visual.type === "uptime" && rows.partial)
+    return "Uptime requires a complete result. Narrow the time window or aggregate the query."
   const c = visual.columns ?? {}
   const names = () => rows.columns.map((x) => x.name).join(", ")
   const timeIdx =
@@ -116,7 +118,11 @@ export const readStateSegments = (
   const to = Math.max(...open.map((s) => s.end ?? s.start))
   const from = Math.min(...open.map((s) => s.start))
   const byLane = new Map<string, typeof open>()
-  for (const s of open) byLane.set(s.lane, [...(byLane.get(s.lane) ?? []), s])
+  for (const s of open) {
+    const lane = byLane.get(s.lane)
+    if (lane) lane.push(s)
+    else byLane.set(s.lane, [s])
+  }
   const segments: Segment[] = []
   for (const list of byLane.values()) {
     list.sort((a, b) => a.start - b.start)

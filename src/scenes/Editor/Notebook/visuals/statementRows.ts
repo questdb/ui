@@ -15,6 +15,7 @@ import { classifyColumn } from "../CellChart/inferChartConfig"
 export type StatementRows = {
   columns: QueryExecResult["columns"]
   rows: QueryExecResult["dataset"]
+  partial?: true
 }
 
 export type StatementResults =
@@ -33,7 +34,13 @@ export const statementResultsOf = (
     const exec = toExecResult(r)
     if (exec.type === "error" && exec.error) error ??= exec.error
     return exec.type === "dql"
-      ? { columns: exec.columns, rows: exec.dataset }
+      ? {
+          columns: exec.columns,
+          rows: exec.dataset,
+          ...(exec.count > exec.dataset.length
+            ? { partial: true as const }
+            : {}),
+        }
       : null
   })
   return { kind: "settled", statements, error }
