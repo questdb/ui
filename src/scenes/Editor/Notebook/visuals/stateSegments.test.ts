@@ -4,7 +4,7 @@ import {
   bucketSeverity,
   readStateSegments,
   severityOf,
-  uptimeOf,
+  uptimeByLane,
 } from "./stateSegments"
 import type { StatementRows } from "./statementRows"
 
@@ -76,7 +76,20 @@ describe("uptime buckets", () => {
       "good",
       "good",
     ])
-    expect(uptimeOf(buckets)).toBeCloseTo(0.75)
+    expect(uptimeByLane(read.segments).get("db")).toBeCloseTo(0.75)
+  })
+
+  it("counts overlapping coverage once and treats any simultaneous bad state as down", () => {
+    const uptime = uptimeByLane([
+      { lane: "db", state: "offline", start: 40, end: 60 },
+      { lane: "db", state: "up", start: 0, end: 60 },
+      { lane: "db", state: "down", start: 30, end: 50 },
+      { lane: "replica", state: "up", start: 30, end: 60 },
+      { lane: "invalid", state: "up", start: 60, end: 30 },
+    ])
+    expect(uptime.get("db")).toBe(0.5)
+    expect(uptime.get("replica")).toBe(1)
+    expect(uptime.has("invalid")).toBe(false)
   })
 
   it("lets a severity override name what a state means", () => {

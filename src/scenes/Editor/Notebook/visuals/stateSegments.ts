@@ -174,17 +174,34 @@ export const bucketSeverity = (
   return worst
 }
 
-/** Share of covered time not spent in a bad state. */
-export const uptimeOf = (
-  buckets: Bucket[],
+/** Share of distinct covered time with no bad state, by lane. */
+export const uptimeByLane = (
+  segments: Segment[],
   overrides?: Record<string, Severity>,
-): number | null => {
-  let covered = 0
-  let down = 0
-  for (const b of buckets)
-    for (const [state, ms] of b.time) {
-      covered += ms
-      if (severityOf(state, overrides) === "bad") down += ms
+): Map<string, number> => {
+  const totals = new Map<
+    string,
+    { covered: number; coveredTo: number; down: number; downTo: number }
+  >()
+  for (const { lane, state, start, end } of [...segments].sort(
+    (a, b) => a.start - b.start,
+  )) {
+    if (end <= start) continue
+    const total = totals.get(lane) ?? {
+      covered: 0,
+      coveredTo: -Infinity,
+      down: 0,
+      downTo: -Infinity,
     }
-  return covered > 0 ? (covered - down) / covered : null
+    total.covered += Math.max(0, end - Math.max(start, total.coveredTo))
+    total.coveredTo = Math.max(end, total.coveredTo)
+    if (severityOf(state, overrides) === "bad") {
+      total.down += Math.max(0, end - Math.max(start, total.downTo))
+      total.downTo = Math.max(end, total.downTo)
+    }
+    totals.set(lane, total)
+  }
+  return new Map(
+    [...totals].map(([lane, { covered, down }]) => [lane, 1 - down / covered]),
+  )
 }

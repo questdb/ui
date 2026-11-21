@@ -10,7 +10,7 @@ import {
   bucketSeverity,
   readStateSegments,
   severityOf,
-  uptimeOf,
+  uptimeByLane,
   type Bucket,
   type Severity,
 } from "./stateSegments"
@@ -275,9 +275,13 @@ export const UptimeBars = ({ visual, statements, onSelect }: Props) => {
     () => (typeof read === "string" ? null : bucketLanes(read, count)),
     [read, count],
   )
-  if (typeof read === "string" || !lanes) return <Root ref={ref} />
-
   const severity = visual.severity
+  const uptimes = useMemo(
+    () =>
+      typeof read === "string" ? null : uptimeByLane(read.segments, severity),
+    [read, severity],
+  )
+  if (typeof read === "string" || !lanes || !uptimes) return <Root ref={ref} />
   const current = new Map(
     read.lanes.map((lane) => {
       const last = read.segments
@@ -318,7 +322,7 @@ export const UptimeBars = ({ visual, statements, onSelect }: Props) => {
       <Lanes>
         {read.lanes.map((lane) => {
           const buckets = lanes.get(lane) ?? []
-          const uptime = uptimeOf(buckets, severity)
+          const uptime = uptimes.get(lane) ?? null
           const state = current.get(lane) ?? ""
           const active = hover?.lane === lane ? buckets[hover.index] : null
           const left =
