@@ -135,6 +135,7 @@ type QueuedEntry = {
   text: string
   images: AgentPromptImage[]
   agentCommand: boolean
+  model: string | null
 }
 
 const ContextBadgeContainer = styled.div`
@@ -264,7 +265,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         textareaRef.current?.focus()
       },
     }))
-    const { status: aiStatus, abortOperation, steerOperation } = useAIStatus()
+    const {
+      status: aiStatus,
+      abortOperation,
+      steerOperation,
+      currentModel,
+    } = useAIStatus()
 
     const isAIInProgress = isBlockingAIStatus(aiStatus)
     // Messages written while the assistant answers, per conversation. Each
@@ -283,8 +289,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       const entry = queue[conversationId]
       if (!entry) return
       unqueue(conversationId)
+      if (entry.model !== currentModel) {
+        setInput((current) =>
+          [entry.text, current].filter(Boolean).join("\n\n"),
+        )
+        setAttachments((current) => [...entry.images, ...current])
+        return
+      }
       onSend(entry.text, entry.images, entry.agentCommand)
-    }, [isAIInProgress, disabled, conversationId, queue, onSend])
+    }, [isAIInProgress, disabled, conversationId, currentModel, queue, onSend])
 
     useEffect(() => {
       // Auto-resize textarea
@@ -421,8 +434,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   images: [...previous.images, ...images],
                   // Joined to another message, a command is no longer one.
                   agentCommand: false,
+                  model: previous.model,
                 }
-              : { text, images, agentCommand },
+              : { text, images, agentCommand, model: currentModel },
           }
         })
       } else {
