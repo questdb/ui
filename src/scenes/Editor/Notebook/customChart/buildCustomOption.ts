@@ -267,7 +267,9 @@ const enforceRendererPolicy = (
         const child = enforceRendererPolicy(
           value,
           key === "title" || inTitle,
-          (node.type === "treemap" && key === "data") || inTreemapData,
+          ((node.type === "treemap" || node.type === "sunburst") &&
+            key === "data") ||
+            inTreemapData,
         )
         if (key !== "tooltip") return [key, child]
         const normalize = (tooltip: unknown) => {
