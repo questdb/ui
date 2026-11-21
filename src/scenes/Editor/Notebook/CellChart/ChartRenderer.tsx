@@ -85,6 +85,7 @@ const structuralKey = (option: EChartsOption): string => {
     (yAxis as { type?: string } | undefined)?.type ?? "",
     axisCount,
     hasZoom ? "z" : "nz",
+    option.brush ? "brush" : "no-brush",
   ].join("::")
 }
 
