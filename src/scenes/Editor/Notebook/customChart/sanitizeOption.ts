@@ -279,12 +279,6 @@ export const sanitizeOption = (
     unknown
   >
 
-  delete option.backgroundColor
-  if ("toolbox" in option) {
-    delete option.toolbox
-    report("toolbox", "The console provides its own chart toolbar.")
-  }
-
   validateOptionScopes(option, context, report)
   return { option, problems }
 }
@@ -302,6 +296,11 @@ const validateOptionScopes = (
   const qualify = (part: string) => (path ? `${path}.${part}` : part)
   const reportHere: typeof report = (part, message, severity) =>
     report(qualify(part), message, severity)
+  delete option.backgroundColor
+  if ("toolbox" in option) {
+    delete option.toolbox
+    reportHere("toolbox", "The console provides its own chart toolbar.")
+  }
   validateSeries(option, context, reportHere)
   validateMaps(option, context, reportHere)
   if (isRecord(option.baseOption))

@@ -12,6 +12,33 @@ const context = {
 }
 
 describe("sanitizeOption", () => {
+  it("reserves chart toolbars in all option scopes", () => {
+    // Given a user toolbar preference in every chart scope
+    const scope = { toolbox: { show: true } }
+    const { option, problems } = sanitizeOption(
+      {
+        ...scope,
+        baseOption: scope,
+        options: [scope],
+        media: [{ option: scope }],
+      },
+      context,
+    )
+
+    // Then only console-owned toolbar configuration can reach the renderer
+    expect(option).toEqual({
+      baseOption: {},
+      options: [{}],
+      media: [{ option: {} }],
+    })
+    expect(problems.map(({ path }) => path)).toEqual([
+      "toolbox",
+      "baseOption.toolbox",
+      "options[0].toolbox",
+      "media[0].option.toolbox",
+    ])
+  })
+
   it("checks custom renderer authorization in nested option scopes", () => {
     const series = [{ type: "custom", renderItem: "unregistered" }]
     const { option, problems } = sanitizeOption(
