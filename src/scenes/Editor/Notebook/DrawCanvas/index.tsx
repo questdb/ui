@@ -458,11 +458,13 @@ export const DrawCanvas: React.FC<Props> = ({
               <LazyChartRenderer
                 ref={chartRendererRef}
                 option={option}
-                specKey={resolution.renderQueries
-                  .map((query) =>
-                    query.percentStack === true ? "percent" : "raw",
-                  )
-                  .join(":")}
+                specKey={JSON.stringify(
+                  resolution.renderQueries.map(({ percentStack, scatter }) => [
+                    percentStack === true,
+                    scatter?.size ?? null,
+                    scatter?.color ?? null,
+                  ]),
+                )}
                 onZoomChange={handleZoomChange}
                 isFocused={isFocused}
                 animate={animatesAt(refreshIntervalMs)}

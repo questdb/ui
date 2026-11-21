@@ -280,7 +280,9 @@ const scatterEncoding = (q: ResolvedQuery) => {
         ...(sizeIdx !== undefined ? { size: q.scatter?.size } : {}),
         ...(colorIdx !== undefined ? { color: q.scatter?.color } : {}),
       } satisfies PointColumns,
-      ...(colorIdx !== undefined && colors ? { [COLOR_SCALE]: colors } : {}),
+      ...(colorIdx !== undefined && colors
+        ? { [COLOR_SCALE]: { extent: colors, column: q.scatter?.color } }
+        : {}),
       // Sized points overlap; let the ones behind show through.
       itemStyle: { opacity: 0.8 },
       large: false,
@@ -1473,13 +1475,7 @@ export const buildEchartsOption = (
   )
   const yAxisOut = Array.isArray(formattedYAxis) ? valueAxes : valueAxes[0]
 
-  const colorColumn = queries.find((q) => q.scatter?.color)?.scatter?.color
-  const colorScale = colorScaleOf(
-    series,
-    context,
-    colorColumn ?? "",
-    colorColumn ? formats[colorColumn] : undefined,
-  )
+  const colorScales = colorScalesOf(series, context)
 
   const option: EChartsOption = {
     // The server sends UTC and every result grid prints it verbatim, so the
@@ -1487,10 +1483,13 @@ export const buildEchartsOption = (
     useUTC: true,
     tooltip,
     legend,
-    grid,
+    grid:
+      colorScales.length > 1
+        ? { ...grid, top: 40 + (colorScales.length - 1) * 24 }
+        : grid,
     xAxis,
     yAxis: yAxisOut as EChartsOption["yAxis"],
-    ...(colorScale ? { visualMap: colorScale } : {}),
+    visualMap: colorScales.length === 1 ? colorScales[0] : colorScales,
     series: series as EChartsOption["series"],
   }
   return horizontal ? layDown(option) : option
@@ -1500,49 +1499,61 @@ const HORIZONTAL_TYPES = new Set<ChartType>(["bar", "stackedBar", "rangeBar"])
 
 const PERCENT_FORMAT: ColumnFormat = { decimals: 1, suffix: "%" }
 
-// One colour scale for the points coloured by a column, light to strong.
-const colorScaleOf = (
-  series: Series[],
-  context: ChartContext,
-  colorColumn: string,
-  colorFormat: ColumnFormat | undefined,
-): EChartsOption["visualMap"] | null => {
-  const scaled = series
-    .map((s, i) => ({
-      i,
-      extent: s[COLOR_SCALE] as [number, number] | undefined,
-    }))
-    .filter((s): s is { i: number; extent: [number, number] } => !!s.extent)
-  for (const s of series) delete s[COLOR_SCALE]
-  if (scaled.length === 0) return null
+// Different colour measurements need independent scales and formatting.
+const colorScalesOf = (series: Series[], context: ChartContext) => {
+  const groups = new Map<
+    string,
+    { indices: number[]; min: number; max: number }
+  >()
+  series.forEach((item, index) => {
+    const scale = item[COLOR_SCALE] as
+      | { extent: [number, number]; column: string }
+      | undefined
+    delete item[COLOR_SCALE]
+    if (!scale) return
+    const {
+      extent: [min, max],
+      column,
+    } = scale
+    const group = groups.get(column)
+    if (group) {
+      group.indices.push(index)
+      group.min = Math.min(group.min, min)
+      group.max = Math.max(group.max, max)
+    } else groups.set(column, { indices: [index], min, max })
+  })
   const colors = context.colors
-  return {
-    type: "continuous",
-    seriesIndex: scaled.map((s) => s.i),
-    dimension: 3,
-    min: Math.min(...scaled.map((s) => s.extent[0])),
-    max: Math.max(...scaled.map((s) => s.extent[1])),
-    calculable: false,
-    orient: "horizontal",
-    right: 8,
-    top: 0,
-    itemWidth: 10,
-    itemHeight: 100,
-    textStyle: { fontSize: CHART_FONT_SIZE },
-    // A scale without handles shows no numbers, so label its ends.
-    // The low end names what the colour shows: "score 10 ▬▬ 90".
-    text: [
-      readableValue(Math.max(...scaled.map((s) => s.extent[1])), colorFormat),
-      `${colorColumn}  ${readableValue(Math.min(...scaled.map((s) => s.extent[0])), colorFormat)}`,
-    ],
-    ...(colors
-      ? {
-          inRange: {
-            color: [withAlpha(colors.chartSeries1, 0.25), colors.chartSeries1],
-          },
-        }
-      : {}),
-  }
+  return [...groups].map(([column, { indices, min, max }], index) => {
+    const format = context.formats?.[column]
+    return {
+      type: "continuous" as const,
+      seriesIndex: indices,
+      dimension: 3,
+      min,
+      max,
+      calculable: false,
+      orient: "horizontal" as const,
+      right: 8,
+      top: 24 * index,
+      itemWidth: 10,
+      itemHeight: 100,
+      textStyle: { fontSize: CHART_FONT_SIZE },
+      text: [
+        readableValue(max, format),
+        `${column}  ${readableValue(min, format)}`,
+      ],
+      ...(colors
+        ? {
+            inRange: {
+              color: [
+                withAlpha(colors.chartSeries1, 0.25),
+                colors.chartSeries1,
+              ],
+            },
+          }
+        : {}),
+    }
+  })
 }
 
 // Lines at, or shaded bands between, a format's thresholds, on the value axis.

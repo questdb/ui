@@ -149,6 +149,27 @@ describe("preset options", () => {
     expect(pie("halfDonut")).toMatchObject({ startAngle: 180, endAngle: 360 })
   })
 
+  it("uses independent legends for different scatter color measures", () => {
+    const measure = (name: string, values: number[]) =>
+      query({
+        type: "scatter",
+        columns: [col("x", "DOUBLE"), col("y", "DOUBLE"), col(name, "DOUBLE")],
+        dataset: values.map((value, index) => [index, index, value]),
+        xColumn: "x",
+        yColumns: ["y"],
+        scatter: { color: name },
+      })
+    const option = buildEchartsOption(
+      { xColumn: "x" },
+      [measure("score", [2, 9]), measure("pressure", [100, 900])],
+      { colors: lightColors },
+    )
+    expect(option.visualMap).toMatchObject([
+      { min: 2, max: 9, seriesIndex: [0], text: ["9", "score  2"] },
+      { min: 100, max: 900, seriesIndex: [1], text: ["900", "pressure  100"] },
+    ])
+  })
+
   it("sizes and colours points by columns", () => {
     // Given
     const points = query({
