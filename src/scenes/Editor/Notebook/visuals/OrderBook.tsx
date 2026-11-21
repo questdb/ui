@@ -108,6 +108,17 @@ const Row = styled.div<{
   position: relative;
   height: 2.2rem;
   cursor: ${({ $clickable }) => ($clickable ? "pointer" : "default")};
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+
+  &:focus-visible {
+    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline-offset: -1px;
+  }
 
   > span {
     position: relative;
@@ -272,6 +283,8 @@ export const OrderBook = ({
         : undefined
     return (
       <Row
+        as={activate ? "button" : "div"}
+        type={activate ? "button" : undefined}
         key={`${side}:${level.price}`}
         $cols={cols}
         $side={side}

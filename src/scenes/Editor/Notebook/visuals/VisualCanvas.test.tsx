@@ -29,6 +29,22 @@ describe("VisualCanvas", () => {
     isFocused: true,
   }
 
+  it("explains an empty successful Stat result", () => {
+    renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "stat" }}
+        statements={[
+          { columns: [{ name: "reading", type: "DOUBLE" }], rows: [] },
+        ]}
+      />,
+    )
+    expect(screen.getByText("The query returned no rows.")).toBeVisible()
+    expect(getRenderReport(bufferId, cellId)?.problems[0]?.message).toBe(
+      "The query returned no rows.",
+    )
+  })
+
   it("reports a rejected map download instead of continuing to load", async () => {
     renderComponent(
       <VisualCanvas {...defaults} visual={{ type: "map" }} statements={[]} />,
@@ -88,10 +104,22 @@ describe("VisualCanvas", () => {
         setVariables={setVariables}
       />,
     )
-    const bid = container.querySelector('[data-hook="order-book-bid"]')
-    expect(bid).not.toBeNull()
-    await userEvent.click(bid!)
-    expect(setVariables).toHaveBeenCalledWith({ amount: "30" })
+    const bid = container.querySelector<HTMLElement>(
+      '[data-hook="order-book-bid"]',
+    )
+    const ask = container.querySelector<HTMLElement>(
+      '[data-hook="order-book-ask"]',
+    )
+    expect(bid?.tagName).toBe("BUTTON")
+    expect(ask?.tagName).toBe("BUTTON")
+    bid?.focus()
+    await userEvent.keyboard("{Enter}")
+    ask?.focus()
+    await userEvent.keyboard(" ")
+    expect(setVariables.mock.calls).toEqual([
+      [{ amount: "30" }],
+      [{ amount: "20" }],
+    ])
   })
 
   it("writes one consistent uptime lane binding from the keyboard and ignores ambiguous lanes", async () => {

@@ -268,6 +268,23 @@ describe("sankeyOption", () => {
 })
 
 describe("gaugeOption", () => {
+  it("infers a parameterized QuestDB DECIMAL before a later integer", () => {
+    const rendered = gaugeOption({
+      visual: { type: "gauge" },
+      colors: lightColors,
+      formats: {},
+      statements: [
+        rows(
+          [
+            ["reading", "DECIMAL(10,2)"],
+            ["count", "INT"],
+          ],
+          [["12.34", 2]],
+        ),
+      ],
+    })
+    expect(rendered.drawn.value).toBe("12.34")
+  })
   it("rejects inverted effective bounds and formats the original LONG on a valid scale", () => {
     const build = (value: string, max?: number) =>
       gaugeOption({

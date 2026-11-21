@@ -1,6 +1,7 @@
 import React, { useMemo } from "react"
 import styled, { useTheme } from "styled-components"
 import { RollingNumber } from "./RollingNumber"
+import { PaneEmptyState } from "../PaneEmptyState"
 import { Check } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../components/Button"
 import { sqlLiteral } from "../interactions/chartInteractions"
@@ -177,7 +178,7 @@ export const statTiles = (
   clickColumn?: string,
 ): { tiles: Tile[]; valueName: string | null; problems: string[] } => {
   const rows = statements[0]
-  if (!rows)
+  if (!rows || rows.rows.length === 0)
     return {
       tiles: [],
       valueName: null,
@@ -275,10 +276,12 @@ export const StatTiles = ({
   onSelect,
 }: Props) => {
   const theme = useTheme()
-  const { tiles, valueName } = useMemo(
+  const { tiles, valueName, problems } = useMemo(
     () => statTiles(visual, statements, clickColumn),
     [visual, statements, clickColumn],
   )
+  if (tiles.length === 0)
+    return <PaneEmptyState>{problems[0] ?? "No data to plot."}</PaneEmptyState>
   const format = valueName ? formats[valueName] : undefined
   const changeFormat = visual.columns?.change
     ? formats[visual.columns.change]
