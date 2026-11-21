@@ -172,6 +172,22 @@ const Sparkline = ({ values, color }: { values: number[]; color: string }) => {
   )
 }
 
+const MAX_STAT_TILES = 24
+
+export const statTileLimitNotice = (
+  statements: (StatementRows | null)[],
+): string | undefined => {
+  const count = statements[0]?.rows.length ?? 0
+  return count > MAX_STAT_TILES
+    ? `Showing ${MAX_STAT_TILES} of ${count} tiles.`
+    : undefined
+}
+
+const LimitNotice = styled.span`
+  grid-column: 1 / -1;
+  color: ${({ theme }) => theme.color.contentSecondary};
+`
+
 export const statTiles = (
   visual: VisualConfig,
   statements: (StatementRows | null)[],
@@ -241,7 +257,7 @@ export const statTiles = (
   const clickIdx = columnIndex(rows, clickColumn)
   if (clickColumn !== undefined && clickIdx < 0)
     problems.push(`Click column ${JSON.stringify(clickColumn)} not found.`)
-  const tiles = rows.rows.slice(0, 24).map((row) => {
+  const tiles = rows.rows.slice(0, MAX_STAT_TILES).map((row) => {
     const label =
       labelIdx >= 0 ? toLabel(row[labelIdx]) : rows.columns[valueIdx].name
     return {
@@ -282,6 +298,7 @@ export const StatTiles = ({
   )
   if (tiles.length === 0)
     return <PaneEmptyState>{problems[0] ?? "No data to plot."}</PaneEmptyState>
+  const limitNotice = statTileLimitNotice(statements)
   const format = valueName ? formats[valueName] : undefined
   const changeFormat = visual.columns?.change
     ? formats[visual.columns.change]
@@ -292,6 +309,7 @@ export const StatTiles = ({
       $compact={tiles.every((t) => t.spark.length < 2)}
       data-hook="stat-tiles"
     >
+      {limitNotice && <LimitNotice role="status">{limitNotice}</LimitNotice>}
       {tiles.map((tile) => {
         const tone = toneOf(tile.value, format)
         const changeTone =

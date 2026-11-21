@@ -29,6 +29,31 @@ describe("VisualCanvas", () => {
     isFocused: true,
   }
 
+  it("shows and reports how many stat tiles were omitted", () => {
+    renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "stat" }}
+        statements={[
+          {
+            columns: [
+              { name: "service", type: "SYMBOL" },
+              { name: "reading", type: "INT" },
+            ],
+            rows: Array.from({ length: 25 }, (_, i) => [`service ${i}`, i]),
+          },
+        ]}
+      />,
+    )
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Showing 24 of 25 tiles.",
+    )
+    expect(getRenderReport(bufferId, cellId)?.problems).toContainEqual({
+      message: "Showing 24 of 25 tiles.",
+      severity: "warning",
+    })
+  })
+
   it("explains an empty successful Stat result", () => {
     renderComponent(
       <VisualCanvas

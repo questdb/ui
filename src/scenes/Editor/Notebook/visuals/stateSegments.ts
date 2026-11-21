@@ -165,14 +165,20 @@ export const bucketLanes = (
       })),
     )
   }
-  for (const s of read.segments) {
+  const coveredUntil = new Map<string, Map<string, number>>()
+  for (const s of [...read.segments].sort((a, b) => a.start - b.start)) {
     const buckets = out.get(s.lane)
     if (!buckets || s.end <= s.start) continue
-    const first = Math.max(0, Math.floor((s.start - read.from) / width))
+    const lane = coveredUntil.get(s.lane) ?? new Map<string, number>()
+    coveredUntil.set(s.lane, lane)
+    const start = Math.max(s.start, lane.get(s.state) ?? -Infinity)
+    if (s.end <= start) continue
+    lane.set(s.state, s.end)
+    const first = Math.max(0, Math.floor((start - read.from) / width))
     const last = Math.min(n - 1, Math.floor((s.end - read.from) / width))
     for (let i = first; i <= last; i++) {
       const b = buckets[i]
-      const overlap = Math.min(s.end, b.to) - Math.max(s.start, b.from)
+      const overlap = Math.min(s.end, b.to) - Math.max(start, b.from)
       if (overlap > 0) b.time.set(s.state, (b.time.get(s.state) ?? 0) + overlap)
     }
   }

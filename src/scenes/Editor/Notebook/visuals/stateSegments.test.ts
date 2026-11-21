@@ -31,6 +31,23 @@ it("does not infer end times when an explicitly bound end column is missing", ()
 const HOUR = 3_600_000
 const at = (h: number) => new Date(Date.UTC(2026, 0, 1, h)).toISOString()
 
+it("counts overlapping intervals of the same state once in hover buckets", () => {
+  const bucket = bucketLanes(
+    {
+      from: 0,
+      to: 6,
+      lanes: ["db"],
+      states: ["down"],
+      segments: [
+        { lane: "db", state: "down", start: 0, end: 6 },
+        { lane: "db", state: "down", start: 0, end: 6 },
+      ],
+    },
+    1,
+  ).get("db")?.[0]
+  expect(bucket?.time.get("down")).toBe(6)
+})
+
 it("does not calculate uptime for a server-capped result", () => {
   const result: StatementRows = {
     columns: [

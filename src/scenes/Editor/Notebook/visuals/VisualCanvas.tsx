@@ -29,7 +29,7 @@ import {
   type VisualContext,
 } from "./visualOptions"
 import { OrderBook, orderBookDrawn } from "./OrderBook"
-import { StatTiles, statTiles } from "./StatTiles"
+import { StatTiles, statTiles, statTileLimitNotice } from "./StatTiles"
 import { Bullets, bulletRows } from "./Bullets"
 import { PlanTree, parsePlan, planLines } from "./PlanTree"
 import { UptimeBars } from "./UptimeBars"
@@ -164,6 +164,9 @@ export const VisualCanvas = ({
         message,
         severity: "error",
       }))
+      const limitNotice = statTileLimitNotice(statements)
+      if (limitNotice)
+        problems.push({ message: limitNotice, severity: "warning" })
     } else if (visual.type === "bullet") {
       const read = bulletRows(visual, statements[0])
       if ("error" in read)
