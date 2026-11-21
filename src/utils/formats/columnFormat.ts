@@ -358,17 +358,12 @@ export const sanitizeColumnFormat = (
   return format
 }
 
-const MAX_FORMATTED_COLUMNS = 200
-
 export const sanitizeColumnFormats = (
   value: unknown,
 ): ColumnFormats | undefined => {
   if (!isRecord(value)) return undefined
   const out: ColumnFormats = {}
-  for (const [column, raw] of Object.entries(value).slice(
-    0,
-    MAX_FORMATTED_COLUMNS,
-  )) {
+  for (const [column, raw] of Object.entries(value)) {
     if (column === "__proto__" || column === "constructor") continue
     const format = sanitizeColumnFormat(raw)
     if (format) out[column] = format

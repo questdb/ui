@@ -46,6 +46,18 @@ describe("formatValue", () => {
   })
 })
 
+describe("sanitizeColumnFormats", () => {
+  it("preserves all valid formats in a wide saved result", () => {
+    const formats = Object.fromEntries(
+      Array.from({ length: 201 }, (_, i) => [
+        `field_${i}`,
+        { kind: "number", decimals: 2 },
+      ]),
+    )
+    expect(sanitizeColumnFormats(formats)).toEqual(formats)
+  })
+})
+
 describe("toneOf", () => {
   it("does not round an exact LONG up to a threshold", () => {
     const value = "9007199254740995"
