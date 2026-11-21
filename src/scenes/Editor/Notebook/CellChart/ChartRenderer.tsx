@@ -88,12 +88,18 @@ const structuralKey = (option: EChartsOption): string => {
   const yAxis = Array.isArray(option.yAxis) ? option.yAxis[0] : option.yAxis
   const hasZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
   const axisCount = Array.isArray(option.yAxis) ? "2y" : "1y"
+  const scales = Array.isArray(option.visualMap)
+    ? option.visualMap.length
+    : option.visualMap
+      ? 1
+      : 0
   return [
     seriesTypes.join("|"),
     (xAxis as { type?: string } | undefined)?.type ?? "",
     (yAxis as { type?: string } | undefined)?.type ?? "",
     axisCount,
     hasZoom ? "z" : "nz",
+    scales,
     option.brush ? "brush" : "no-brush",
   ].join("::")
 }

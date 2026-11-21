@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react"
 import type { EChartsOption } from "echarts"
 import styled, { useTheme } from "styled-components"
-import type { NotebookChartType } from "../../../../store/notebook"
+import type {
+  CellInteractions,
+  NotebookChartType,
+} from "../../../../store/notebook"
+import { withBrush } from "../interactions/chartInteractions"
 import {
   ChartRenderer,
   type ChartEventHandler,
@@ -34,6 +38,7 @@ type Props = {
   chartTypes: NotebookChartType[] | undefined
   live: boolean
   isFocused: boolean
+  interactions?: CellInteractions
   events?: Record<string, ChartEventHandler>
   onInstance?: React.ComponentProps<typeof ChartRenderer>["onInstance"]
 }
@@ -47,6 +52,7 @@ export const CustomChart = ({
   chartTypes,
   live,
   isFocused,
+  interactions,
   events,
   onInstance,
 }: Props) => {
@@ -70,6 +76,21 @@ export const CustomChart = ({
   )
   const specKey = useMemo(() => JSON.stringify(sanitized.option), [sanitized])
 
+  const option = useMemo(() => {
+    const raw = built.option
+    if (
+      raw.baseOption &&
+      typeof raw.baseOption === "object" &&
+      !Array.isArray(raw.baseOption)
+    ) {
+      const baseOption = withBrush(
+        raw.baseOption as EChartsOption,
+        interactions,
+      )
+      return { ...raw, baseOption } as EChartsOption
+    }
+    return withBrush(raw as EChartsOption, interactions)
+  }, [built, interactions])
   const neededMaps = useMemo(() => mapsUsedBy(built.option), [built])
   const [mapStatus, setMapStatus] = useState<"loading" | "error" | "ready">(
     () => (neededMaps.every(isMapLoaded) ? "ready" : "loading"),
@@ -144,13 +165,13 @@ export const CustomChart = ({
 
   return (
     <ChartRenderer
-      option={built.option as EChartsOption}
+      option={option}
       isFocused={isFocused}
       animate={!live}
       zoomWindow={NO_ZOOM_WINDOW}
       zoomable={false}
       fit
-      specKey={specKey}
+      specKey={`${specKey}:${Boolean(interactions?.brush)}`}
       events={events}
       onInstance={onInstance}
     />

@@ -605,7 +605,12 @@ const edges = (ctx: VisualContext) => {
     need(rows, toIdx, "to", c.to) ??
     (c.value === undefined ? null : need(rows, valueIdx, "value", c.value))
   if (err) return err
-  const links = linksFrom(rows, fromIdx, toIdx, valueIdx)
+  const clickIdx = columnIndex(rows, ctx.clickColumn)
+  const links = linksFrom(rows, fromIdx, toIdx, valueIdx).map((link, index) =>
+    ctx.clickColumn !== undefined && clickIdx >= 0
+      ? { ...link, columns: { [ctx.clickColumn]: rows.rows[index][clickIdx] } }
+      : link,
+  )
   return {
     links,
     nodes: nodesOf(links),

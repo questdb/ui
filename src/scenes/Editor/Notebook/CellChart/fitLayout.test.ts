@@ -7,6 +7,14 @@ const first = (value: unknown): Box =>
   (Array.isArray(value) ? value[0] : value) as Box
 
 describe("fitLayout", () => {
+  it("preserves ECharts' default track length on a Y-only slider", () => {
+    const slider = { type: "slider", yAxisIndex: 0 }
+    const option = fitLayout(
+      { dataZoom: [slider], grid: {} },
+      { width: 720, height: 480 },
+    )
+    expect(option.dataZoom).toEqual([slider])
+  })
   it("reserves distinct bands inside the effective base option", () => {
     const option = fitLayout(
       {

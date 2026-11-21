@@ -192,6 +192,14 @@ const resolveRows = (
     }
     case "links":
     case "nodes": {
+      if (rows.partial) {
+        report(
+          "",
+          `Statement ${query} returned only part of its rows. Aggregate links in SQL or reduce the result before drawing this graph.`,
+          "error",
+        )
+        return []
+      }
       const fromIdx = col(spec.source, "source", 0)
       const toIdx = col(spec.target, "target", 1)
       const valueIdx =

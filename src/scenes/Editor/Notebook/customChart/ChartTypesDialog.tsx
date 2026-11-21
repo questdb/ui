@@ -272,6 +272,7 @@ export const ChartTypesDialog: React.FC<Props> = ({
   const requestClose = () => (dirty ? setConfirm("discard") : close())
 
   const save = () => {
+    if (changedElsewhere) return
     if (invalid.length > 0) {
       setSelectedKey(invalid[0].key)
       return
@@ -321,7 +322,8 @@ export const ChartTypesDialog: React.FC<Props> = ({
             </Notice>
             {changedElsewhere && dirty && (
               <Notice role="status">
-                The chart types changed while you were editing.
+                The chart types changed while you were editing. Load the new
+                version before saving.
                 <Button
                   variant="secondary"
                   size="sm"
@@ -511,7 +513,7 @@ export const ChartTypesDialog: React.FC<Props> = ({
                 <Button
                   variant="primary"
                   onClick={save}
-                  disabled={!dirty || invalid.length > 0}
+                  disabled={!dirty || invalid.length > 0 || changedElsewhere}
                 >
                   Save
                 </Button>

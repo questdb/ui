@@ -57,6 +57,30 @@ it("reads the bound gauge click value from its first row, not its reading or lab
   expect(clickedValue({ data: datum }, "station")).toBe("east")
 })
 
+it("retains a graph edge's query column for selection", () => {
+  const { option } = graphOption({
+    visual: { type: "graph" },
+    colors: lightColors,
+    formats: {},
+    clickColumn: "route",
+    statements: [
+      rows(
+        [
+          ["from", "SYMBOL"],
+          ["to", "SYMBOL"],
+          ["weight", "INT"],
+          ["route", "SYMBOL"],
+        ],
+        [["east", "west", 1, "r1"]],
+      ),
+    ],
+  })
+  const [graph] = series(option)
+  expect(clickedValue({ data: (graph.links as unknown[])[0] }, "route")).toBe(
+    "r1",
+  )
+})
+
 describe("stateTimelineOption", () => {
   it("carries each segment's bound source value through time sorting", () => {
     // Given two readings for the same lane with different selection values

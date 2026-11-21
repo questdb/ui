@@ -163,7 +163,15 @@ const placeBottomBands = (option: Box, size: Size): Bands => {
 
   const sliders = list(option.dataZoom).filter(
     (zoom) =>
-      zoom.type === "slider" && shown(zoom) && zoom.orient !== "vertical",
+      zoom.type === "slider" &&
+      shown(zoom) &&
+      (zoom.orient === "horizontal" ||
+        (zoom.orient !== "vertical" &&
+          !(
+            zoom.yAxisIndex != null &&
+            zoom.yAxisIndex !== false &&
+            (zoom.xAxisIndex == null || zoom.xAxisIndex === false)
+          ))),
   )
   if (sliders.length > 0) {
     option.dataZoom = list(option.dataZoom).map((zoom) => {

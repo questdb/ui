@@ -475,6 +475,7 @@ export const NotebookProvider: React.FC<{
 
   const cancelCell = useCallback(
     (cellId: string, reason?: RunCancelReason) => {
+      cellRefreshEngineRef.current?.discardVariableRefresh(cellId)
       execution.cancelCell(cellId, reason)
       releaseCellExecution(cellId)
     },

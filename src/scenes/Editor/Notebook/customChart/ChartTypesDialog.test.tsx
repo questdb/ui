@@ -212,8 +212,9 @@ describe("ChartTypesDialog", () => {
     await userEvent.type(within(dialog).getByDisplayValue("glyph"), "2")
     changeTypes([{ ...glyph, description: "Squares" }])
 
-    // Then the edit stays, and the new version is offered
+    // Then the edit stays, but cannot overwrite the new version
     expect(within(dialog).getByDisplayValue("glyph2")).toBeVisible()
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled()
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Load the new version" }),
     )

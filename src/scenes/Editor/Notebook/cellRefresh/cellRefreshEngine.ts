@@ -816,6 +816,12 @@ export class CellRefreshEngine {
       this.forceRefresh(entry)
   }
 
+  discardVariableRefresh(cellId: string) {
+    this.refreshAfterRun.delete(cellId)
+    const entry = this.entries.get(cellId)
+    if (entry) entry.pendingGridVariableRefresh = false
+  }
+
   private isRunPending(cellId: string): boolean {
     return (this.pendingRunCounts.get(cellId) ?? 0) > 0
   }

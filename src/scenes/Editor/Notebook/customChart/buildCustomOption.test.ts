@@ -77,6 +77,28 @@ describe("buildCustomOption", () => {
     }
   })
 
+  it("does not build query-bound flow links from partial rows", () => {
+    const built = buildCustomOption(
+      { series: [{ type: "sankey", links: { $rows: { shape: "links" } } }] },
+      [
+        {
+          ...rows(
+            [
+              ["from", "SYMBOL"],
+              ["to", "SYMBOL"],
+              ["size", "INT"],
+            ],
+            [["A", "B", 1]],
+          ),
+          partial: true,
+        },
+      ],
+      false,
+    )
+    expect(built.option).toEqual({})
+    expect(built.problems[0]?.message).toContain("part of its rows")
+  })
+
   it("makes incomplete tree bindings a chart-level error", () => {
     // Given a custom tree based on an incomplete statement result
     const built = buildCustomOption(

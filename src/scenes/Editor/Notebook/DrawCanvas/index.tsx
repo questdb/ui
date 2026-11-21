@@ -454,6 +454,7 @@ export const DrawCanvas: React.FC<Props> = ({
                 rawOption={custom.option}
                 statements={statements}
                 chartTypes={settings.chartTypes}
+                interactions={cell.interactions}
                 live={live}
                 isFocused={isFocused}
                 events={events}

@@ -41,14 +41,16 @@ export const orderStably = (
 
 export type LiveRowsState = {
   previousKeys: Map<string, number> | null
-  last: { data: DqlQueryResult; mode: GridMode; identity: string } | null
-  live: LiveRows | null
+  last: { mode: GridMode; identity: string } | null
+  revision: number
+  frames: WeakMap<DqlQueryResult, LiveRows>
 }
 
 export const createLiveRowsState = (): LiveRowsState => ({
   previousKeys: null,
   last: null,
-  live: null,
+  revision: 0,
+  frames: new WeakMap(),
 })
 
 export const useLiveRows = (
@@ -67,14 +69,15 @@ export const useLiveRows = (
     if (!mode || indexes === null) {
       state.last = null
       state.previousKeys = null
-      state.live = null
+      state.revision = 0
+      state.frames = new WeakMap()
       return { data, isNew: null, at: 0, revision: 0 }
     }
     const identity = JSON.stringify(identityColumns)
-    const sameFrame = state.last?.data === data
+    const cached = state.frames.get(data)
+    const sameFrame = cached !== undefined
     const sameIdentity = state.last?.identity === identity
-    if (sameFrame && sameIdentity && state.last?.mode === mode && state.live)
-      return state.live
+    if (cached && sameIdentity && state.last?.mode === mode) return cached
     const keyOf = (row: DqlQueryResult["dataset"][number]) =>
       identityKeyOf(row, indexes)
     const before = sameIdentity ? state.previousKeys : null
@@ -88,13 +91,16 @@ export const useLiveRows = (
         ? new Set<number>()
         : new Set(keys.flatMap((key, i) => (before.has(key) ? [] : [i])))
     state.previousKeys = new Map(keys.map((key, i) => [key, i]))
-    state.last = { data, mode, identity }
-    state.live = {
+    state.last = { mode, identity }
+    const live: LiveRows = {
       data: dataset === data.dataset ? data : { ...data, dataset },
       isNew: fresh.size > 0 ? (row) => fresh.has(row) : null,
       at: Date.now(),
-      revision: (state.live?.revision ?? 0) + 1,
+      revision: ++state.revision,
     }
-    return state.live
+    // Stable ranks outlive a result tab. Its dataset must not outlive offscreen
+    // result release: neither key nor value is kept alive by this cache.
+    state.frames = new WeakMap([[data, live]])
+    return live
   }, [data, identityColumns, mode, state])
 }

@@ -3902,6 +3902,19 @@ describe("CellRefreshEngine", () => {
       expect(deps.executeSingle).toHaveBeenCalledTimes(1)
     })
 
+    it("drops a pending variable refresh when the foreground Run is stopped", async () => {
+      const sql = "select @desk"
+      const grid = gridCell("g1", sql, [sql], false)
+      syncOnScreen([grid])
+      await flushAsync()
+      engine.noteRunStarted("g1")
+      engine.refreshWhere(() => true, [grid])
+      engine.discardVariableRefresh("g1")
+      engine.noteRunFinished("g1", grid)
+      await flushAsync()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+    })
+
     it("does not replace a partial Run result when redeeming a variable refresh", async () => {
       const fullSql = "select 1; select @desk"
       const partial = gridCell("g1", fullSql, ["select 1"], false)

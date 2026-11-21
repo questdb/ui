@@ -742,8 +742,23 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           e.preventDefault()
           e.stopPropagation()
           const active = e.currentTarget.getAttribute("aria-activedescendant")
+          const viewport = scrollRef.current
+          const rowVisible =
+            !viewport ||
+            ((focusedCell.row + 1) * ROW_HEIGHT > viewport.scrollTop &&
+              focusedCell.row * ROW_HEIGHT + HEADER_HEIGHT <
+                viewport.scrollTop + (viewport.clientHeight || Infinity))
+          const colVisible =
+            !viewport ||
+            focusedCell.col < frozenCount ||
+            (columnOffsets[focusedCell.col + 1] >
+              viewport.scrollLeft + frozenWidth &&
+              columnOffsets[focusedCell.col] <
+                viewport.scrollLeft + (viewport.clientWidth || Infinity))
           if (
             !e.repeat &&
+            rowVisible &&
+            colVisible &&
             active === `cell-${focusedCell.row}-${focusedCell.col}`
           )
             onCellClick(focusedCell.row, focusedCell.col)
@@ -759,6 +774,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         columns.length,
         columnOffsets,
         frozenCount,
+        frozenWidth,
         shuffleFocusedColumnToFront,
         onYieldFocus,
         setFocusedCell,
