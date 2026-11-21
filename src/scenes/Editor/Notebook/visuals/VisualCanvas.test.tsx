@@ -13,6 +13,38 @@ const cellId = "dashboard-stat"
 afterEach(() => clearRenderReport(bufferId, cellId))
 
 describe("VisualCanvas", () => {
+  it("selects and writes the configured stat source field rather than its label", async () => {
+    const setVariables = vi.fn()
+    renderComponent(
+      <VisualCanvas
+        bufferId={bufferId}
+        cellId={cellId}
+        visual={{ type: "stat", columns: { value: "volume" } }}
+        statements={[
+          {
+            columns: [
+              { name: "desk", type: "SYMBOL" },
+              { name: "desk_id", type: "INT" },
+              { name: "volume", type: "DOUBLE" },
+            ],
+            rows: [["London", 42, 5]],
+          },
+        ]}
+        formats={{}}
+        interactions={{ click: { variable: "desk", column: "desk_id" } }}
+        clickVariableValue="42"
+        setVariables={setVariables}
+        live={false}
+        isFocused
+      />,
+    )
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /London/, pressed: true }),
+    )
+    expect(setVariables.mock.calls).toEqual([[{ desk: "42" }]])
+  })
+
   it("writes the selected stat label as one SQL literal and reports the tiles drawn", async () => {
     const setVariables = vi.fn()
     renderComponent(

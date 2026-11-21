@@ -28,6 +28,7 @@ import type { VisualConfig } from "../CellChart/chartTypes"
 
 type Tile = {
   label: string
+  selection: unknown
   caption: string | null
   value: unknown
   change: number | null
@@ -173,6 +174,7 @@ const Sparkline = ({ values, color }: { values: number[]; color: string }) => {
 export const statTiles = (
   visual: VisualConfig,
   statements: (StatementRows | null)[],
+  clickColumn?: string,
 ): { tiles: Tile[]; valueName: string | null; problems: string[] } => {
   const rows = statements[0]
   if (!rows)
@@ -232,11 +234,15 @@ export const statTiles = (
     }
   }
 
+  const clickIdx = columnIndex(rows, clickColumn)
+  if (clickColumn !== undefined && clickIdx < 0)
+    problems.push(`Click column ${JSON.stringify(clickColumn)} not found.`)
   const tiles = rows.rows.slice(0, 24).map((row) => {
     const label =
       labelIdx >= 0 ? toLabel(row[labelIdx]) : rows.columns[valueIdx].name
     return {
       label,
+      selection: clickColumn === undefined ? label : row[clickIdx],
       caption: captionIdx >= 0 ? toLabel(row[captionIdx]) : null,
       value: row[valueIdx],
       change: changeIdx >= 0 ? toNumber(row[changeIdx]) : null,
@@ -252,7 +258,8 @@ type Props = {
   formats: ColumnFormats
   queriesKey?: string
   selectedValue?: string
-  onSelect?: (label: string) => void
+  clickColumn?: string
+  onSelect?: (value: unknown) => void
 }
 
 export const StatTiles = ({
@@ -261,12 +268,13 @@ export const StatTiles = ({
   formats,
   queriesKey,
   selectedValue,
+  clickColumn,
   onSelect,
 }: Props) => {
   const theme = useTheme()
   const { tiles, valueName } = useMemo(
-    () => statTiles(visual, statements),
-    [visual, statements],
+    () => statTiles(visual, statements, clickColumn),
+    [visual, statements, clickColumn],
   )
   const format = valueName ? formats[valueName] : undefined
   const changeFormat = visual.columns?.change
@@ -293,15 +301,20 @@ export const StatTiles = ({
             ? toneColor(changeTone, theme.color)
             : theme.color.chartSeries1
         const text = formatValue(tile.value, format ?? { kind: "number" })
-        const selected = onSelect && sqlLiteral(tile.label) === selectedValue
+        const activate =
+          onSelect && tile.selection !== undefined
+            ? () => onSelect(tile.selection)
+            : undefined
+        const selected =
+          activate && sqlLiteral(tile.selection) === selectedValue
         return (
           <TileRoot
-            as={onSelect ? "button" : "div"}
+            as={activate ? "button" : "div"}
             key={tile.label}
             $centred={tile.spark.length < 2}
-            $interactive={Boolean(onSelect)}
+            $interactive={Boolean(activate)}
             aria-pressed={selected}
-            onClick={onSelect ? () => onSelect(tile.label) : undefined}
+            onClick={activate}
             data-hook="stat-tile"
           >
             <Sparkline values={tile.spark} color={sparkColor} />

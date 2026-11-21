@@ -137,7 +137,7 @@ export const VisualCanvas = ({
     } else if (visual.type === "orderBook") {
       ;({ drawn, problems } = orderBookDrawn(statements, visual.columns))
     } else if (visual.type === "stat") {
-      const read = statTiles(visual, statements)
+      const read = statTiles(visual, statements, click?.column)
       drawn = { tiles: read.tiles.length }
       problems = read.problems.map((message) => ({
         message,
@@ -175,7 +175,7 @@ export const VisualCanvas = ({
       drawn: { type: visual.type, ...drawn },
       problems,
     })
-  }, [bufferId, cellId, built, visual, statements])
+  }, [bufferId, cellId, built, visual, statements, click?.column])
 
   switch (visual.type) {
     case "stat":
@@ -186,6 +186,7 @@ export const VisualCanvas = ({
           formats={formats}
           queriesKey={queriesKey}
           selectedValue={click ? clickVariableValue : undefined}
+          clickColumn={click?.column}
           onSelect={select}
         />
       )
