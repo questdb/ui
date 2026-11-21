@@ -68,11 +68,17 @@ type RowsSpec = {
   color?: string
 }
 
+type Report = (
+  path: string,
+  message: string,
+  severity?: OptionProblem["severity"],
+) => void
+
 const resolveRows = (
   spec: RowsSpec,
   statements: (StatementRows | null)[],
   path: string,
-  report: (path: string, message: string) => void,
+  report: Report,
 ): unknown => {
   const query = spec.query ?? 0
   const rows = statements[query]
@@ -127,6 +133,14 @@ const resolveRows = (
       }))
     }
     case "tree": {
+      if (rows.partial) {
+        report(
+          "",
+          `Statement ${query} returned only part of its rows. Aggregate by path in SQL or reduce the result before drawing this hierarchy.`,
+          "error",
+        )
+        return []
+      }
       const pathIdx = (spec.path ?? [rows.columns[0]?.name]).map((n) =>
         col(n, "path"),
       )
@@ -192,7 +206,7 @@ const fillRows = (
   node: unknown,
   statements: (StatementRows | null)[],
   path: string,
-  report: (path: string, message: string) => void,
+  report: Report,
 ): unknown => {
   if (Array.isArray(node))
     return node.map((n, i) => fillRows(n, statements, `${path}[${i}]`, report))
@@ -342,13 +356,15 @@ export const buildCustomOption = (
   live: boolean,
 ): BuiltCustomOption => {
   const problems: OptionProblem[] = []
-  const report = (path: string, message: string) => {
-    if (problems.length < 50)
-      problems.push({ path, message, severity: "warning" })
+  let fatal: OptionProblem | undefined
+  const report: Report = (path, message, severity = "warning") => {
+    if (severity === "error" && path === "")
+      fatal ??= { path, message, severity }
+    else if (problems.length < 50) problems.push({ path, message, severity })
   }
-  const filled = enforceRendererPolicy(
-    fillRows(sanitized, statements, "", report),
-  ) as Record<string, unknown>
+  const bound = fillRows(sanitized, statements, "", report)
+  if (fatal) return { option: {}, problems: [fatal] }
+  const filled = enforceRendererPolicy(bound) as Record<string, unknown>
   if (containsCyclicSankey(filled)) {
     return {
       option: {},

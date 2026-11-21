@@ -62,6 +62,39 @@ describe("buildCustomOption", () => {
     }
   })
 
+  it("makes incomplete tree bindings a chart-level error", () => {
+    // Given a custom tree based on an incomplete statement result
+    const built = buildCustomOption(
+      {
+        series: [
+          {
+            type: "treemap",
+            data: { $rows: { shape: "tree", path: ["desk"], value: "volume" } },
+          },
+        ],
+      },
+      [
+        {
+          ...rows(
+            [
+              ["desk", "SYMBOL"],
+              ["volume", "INT"],
+            ],
+            [["east", 5]],
+          ),
+          partial: true,
+        },
+      ],
+      false,
+    )
+
+    // Then the pane can show a fatal diagnostic instead of a partial total
+    expect(built.option).toEqual({})
+    expect(built.problems[0]?.path).toBe("")
+    expect(built.problems[0]?.severity).toBe("error")
+    expect(built.problems[0]?.message).toContain("Aggregate by path in SQL")
+  })
+
   it("diagnoses a cycle after binding Sankey query rows", () => {
     const option = {
       series: [
