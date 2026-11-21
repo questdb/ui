@@ -1354,30 +1354,31 @@ export const dispatchTool = async (
         type.allowed = false
 
         return routeNotebookTool(async () => {
-          const settings = await readSettings(buffer_id, signal)
-          const others = (settings.chartTypes ?? []).filter(
-            (t) => t.name !== type.name,
-          )
-          // The same code the user already allowed stays allowed.
-          Object.assign(type, keepAllowed([type], settings.chartTypes)[0])
-          if (others.length >= 32)
-            throw new NotebookToolError(
-              "validation",
-              "A notebook holds at most 32 chart types; delete one first.",
-            )
+          let savedType = type
           await runTransition(
             buffer_id,
-            (parts) =>
-              setNotebookSettingsTransition(parts, {
-                chartTypes: [...others, type],
-              }),
+            (parts) => {
+              const { chartTypes } = parts.settings
+              const others = (chartTypes ?? []).filter(
+                (t) => t.name !== type.name,
+              )
+              if (others.length >= 32)
+                throw new NotebookToolError(
+                  "validation",
+                  "A notebook holds at most 32 chart types; delete one first.",
+                )
+              savedType = keepAllowed([type], chartTypes)[0]
+              return setNotebookSettingsTransition(parts, {
+                chartTypes: [...others, savedType],
+              })
+            },
             signal,
             baseline,
           )
           return {
             ok: true,
             usage: `Use it in a custom chart option: {"series":[{"type":"custom","renderItem":"${type.name}","datasetId":"q0","encode":{...}}]}.`,
-            ...(type.allowed
+            ...(savedType.allowed
               ? {}
               : {
                   note: "The code does not run until the user allows it in the notebook's Chart types dialog; until then charts using it report that in render_report.",

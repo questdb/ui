@@ -360,6 +360,29 @@ describe("dispatchTool — dashboard tools", () => {
     expect(parsed(result).note).toContain("@symbol")
   })
 
+  it("keeps both chart types when concurrent definitions target a closed notebook", async () => {
+    await db.buffers.put({
+      id: 2,
+      label: "Closed dashboard",
+      value: "",
+      position: 1,
+      notebookViewState: { cells: [] },
+    })
+    const results = await Promise.all(
+      ["one", "two"].map((name) =>
+        call("define_chart_type", {
+          buffer_id: 2,
+          name,
+          render_item: "return null",
+        }),
+      ),
+    )
+    expect(results.every((result) => parsed(result).ok === true)).toBe(true)
+    const types = (await db.buffers.get(2))?.notebookViewState?.settings
+      ?.chartTypes
+    expect(types?.map(({ name }) => name).sort()).toEqual(["one", "two"])
+  })
+
   it("define_chart_type compiles, stores and lists the type; delete removes it", async () => {
     // Given
     const { state } = mountLive(1, [cell("c")])
