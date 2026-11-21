@@ -206,6 +206,34 @@ const parsed = (result: { content: string }) =>
   JSON.parse(result.content) as Record<string, unknown>
 
 describe("dispatchTool — dashboard tools", () => {
+  it("round-trips the inferred chart configuration after clearing a visual", async () => {
+    await db.buffers.put({
+      id: 2,
+      label: "Dashboard",
+      value: "",
+      position: 1,
+      notebookViewState: {
+        cells: [cell("chart", "SELECT 1", { mode: "draw" })],
+      },
+    })
+    const target = { buffer_id: 2, cell_id: "chart" }
+    const set = await call("set_cell_visual", {
+      ...target,
+      visual: { type: "stat" },
+    })
+    expect(set.is_error).not.toBe(true)
+    const clear = await call("set_cell_visual", { ...target, visual: null })
+    expect(clear.is_error).not.toBe(true)
+    const chart_config = parsed(await call("get_cell", target)).chart_config
+    expect(chart_config).toMatchObject({ queries: [null] })
+    const applied = await call("apply_notebook_state", {
+      buffer_id: 2,
+      cells: [
+        { id: "chart", preserve_value: true, mode: "draw", chart_config },
+      ],
+    })
+    expect(applied.is_error, applied.content).not.toBe(true)
+  })
   it("round-trips visual and interaction settings through a closed notebook", async () => {
     await db.buffers.put({
       id: 2,

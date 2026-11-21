@@ -478,7 +478,11 @@ export const mergeCellChartConfig = (
   patch: Partial<ChartConfig>,
 ): ChartConfig => {
   const base: ChartConfig = cell.chartConfig ?? { xColumn: null, queries: [] }
-  return { ...base, ...patch }
+  const merged = { ...base, ...patch }
+  if (!merged.visual && !merged.custom && merged.queries.length === 0) {
+    merged.queries = getQueriesFromText(cell.value).map(() => null)
+  }
+  return merged
 }
 
 export const patchCellRunResult = (
