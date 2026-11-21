@@ -1053,6 +1053,7 @@ export const useCellExecution = ({
 
   return {
     runningCellIds,
+    isCellRunning: (cellId: string) => abortControllersRef.current.has(cellId),
     runCell,
     validateForDraw,
     reRunResultAt,

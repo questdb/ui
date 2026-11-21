@@ -308,6 +308,7 @@ type Entry = {
   autoRefresh: AutoRefresh
   visible: boolean
   pendingManualRefresh: boolean
+  variableRefreshAfterRun: boolean
   manualRefreshInFlight: boolean
   // A zero-survivor collapse dropped the display but kept the disk snapshot;
   // the next settle with no result asks hydration for a non-destructive
@@ -551,6 +552,10 @@ export class CellRefreshEngine {
       if (entry.kind === "grid" && entry.state.classifyBlock?.kind === "write")
         continue
       refreshed++
+      if (entry.kind === "grid" && this.isRunPending(entry.cellId)) {
+        entry.variableRefreshAfterRun = true
+        continue
+      }
       // Matching SQL can be unchanged while its bound variables have changed.
       // Supersede even a manual fetch, which may hold the old values.
       this.forceRefresh(entry)
@@ -737,8 +742,16 @@ export class CellRefreshEngine {
   // disable refresh for the cell, so the caller wires this in a finally.
   noteRunFinished(cellId: string) {
     const count = this.pendingRunCounts.get(cellId) ?? 0
-    if (count <= 1) this.pendingRunCounts.delete(cellId)
-    else this.pendingRunCounts.set(cellId, count - 1)
+    if (count > 1) {
+      this.pendingRunCounts.set(cellId, count - 1)
+      return
+    }
+    this.pendingRunCounts.delete(cellId)
+    const entry = this.entries.get(cellId)
+    if (entry?.variableRefreshAfterRun) {
+      entry.variableRefreshAfterRun = false
+      this.forceRefresh(entry)
+    }
   }
 
   private isRunPending(cellId: string): boolean {
@@ -770,6 +783,7 @@ export class CellRefreshEngine {
       state: initialFetchState(queries),
       visible: this.visibilityByCell.get(cell.id) ?? false,
       pendingManualRefresh: false,
+      variableRefreshAfterRun: false,
       manualRefreshInFlight: false,
       snapshotRetained: false,
       ensureAttempted: false,

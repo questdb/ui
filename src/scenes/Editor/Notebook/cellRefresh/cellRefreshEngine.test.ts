@@ -3853,6 +3853,32 @@ describe("CellRefreshEngine", () => {
       expect(deps.executeSingle).toHaveBeenCalledTimes(1)
     })
 
+    it("refreshes once with the latest variable after the last manual run finishes", async () => {
+      const sql = "select @desk"
+      syncOnScreen([gridCell("g1", sql, [sql], false)])
+      await flushAsync()
+      engine.noteRunStarted("g1")
+      engine.noteRunStarted("g1")
+      let selected = "Paris"
+      deps.executeSingle.mockImplementation((query) =>
+        Promise.resolve({ ...dqlResult(query), dataset: [[selected, 2]] }),
+      )
+
+      engine.refreshWhere((_cellId, query) => query === sql)
+      engine.noteRunFinished("g1")
+      await flushAsync()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      selected = "Tokyo"
+      engine.refreshWhere((_cellId, query) => query === sql)
+      engine.noteRunFinished("g1")
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      expect(cellResults.get("g1")?.results[0]).toMatchObject({
+        dataset: [["Tokyo", 2]],
+      })
+    })
+
     it("keeps the gate closed until the last overlapping run finishes", async () => {
       // Given a run superseded by a second run on the same cell
       const cell = gridCell("g1", "select 1", ["select 1"], false)

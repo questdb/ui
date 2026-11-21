@@ -675,7 +675,7 @@ export const NotebookProvider: React.FC<{
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
       isDrawCell: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.mode === "draw",
-      isCellRunning: (cellId) => execution.runningCellIds.has(cellId),
+      isCellRunning: execution.isCellRunning,
       resultLoadStatus: (cellId) => resultHydration.statusOf(cellId),
       subscribeResultLoad: (cellId, listener) =>
         resultHydration.subscribe(cellId, listener),
