@@ -80,6 +80,7 @@ export const sparklinePointsOf = (value: unknown): string | undefined => {
   }
   if (values.length < 2) return undefined
   const span = max - min || 1
+  if (!Number.isFinite(span)) return undefined
   return values
     .map(
       (v, i) =>

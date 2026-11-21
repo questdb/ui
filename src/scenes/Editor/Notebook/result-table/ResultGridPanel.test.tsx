@@ -151,7 +151,11 @@ describe("dashboard grid", () => {
         dataSource={inMemoryDataSource(
           [{ name: "history", type: "ARRAY", dim: 1, elemType: "DOUBLE" }],
           // The wire supports QuestDB ARRAYs beyond the scalar CellValue type.
-          [[[7] as unknown as CellValue], [[8, 9] as unknown as CellValue]],
+          [
+            [[7] as unknown as CellValue],
+            [[8, 9] as unknown as CellValue],
+            [[-1e308, 1e308] as unknown as CellValue],
+          ],
           -1,
         )}
         maxColumnWidth="auto"
@@ -159,10 +163,12 @@ describe("dashboard grid", () => {
       />,
     )
 
-    const [single, multiple] = screen.getAllByRole("gridcell")
+    const [single, multiple, extreme] = screen.getAllByRole("gridcell")
     expect(single).toHaveTextContent("7")
     expect(single.querySelector("polyline")).toBeNull()
     expect(multiple.querySelector("polyline")).not.toBeNull()
     expect(multiple).toHaveAccessibleName(/8.*9/)
+    expect(extreme.querySelector("polyline")).toBeNull()
+    expect(extreme).toHaveTextContent(/1e\+308/)
   })
 })

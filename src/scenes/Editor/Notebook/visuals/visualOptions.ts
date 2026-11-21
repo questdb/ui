@@ -1043,6 +1043,8 @@ export const liquidityHeatmapOption = ({
       toNumber(r[valueIdx]),
     ])
     .filter((v): v is [number, number, number] => v.every((x) => x !== null))
+  if (cells.length === 0)
+    return missing("No drawable liquidity measurements were returned.")
   const dt = smallestStep(cells.map((v) => v[0]))
   const dp = smallestStep(cells.map((v) => v[1]))
   const values = cells.map((v) => v[2])
@@ -1236,7 +1238,7 @@ export const volumeProfileOption = ({
         },
       },
       series: series.map((s, i) =>
-        poc >= 0 && i === series.length - 1
+        i === series.length - 1
           ? {
               ...s,
               markLine: {
@@ -1248,7 +1250,7 @@ export const volumeProfileOption = ({
                   color: colors.statusWarning,
                   position: "insideEndTop",
                 },
-                data: [{ yAxis: prices[poc] }],
+                data: poc < 0 ? [] : [{ yAxis: prices[poc] }],
               },
             }
           : s,

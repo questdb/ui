@@ -3,6 +3,7 @@ import { lightColors } from "../../../../theme"
 import {
   gaugeOption,
   graphOption,
+  liquidityHeatmapOption,
   sankeyOption,
   stateTimelineOption,
   treemapOption,
@@ -98,6 +99,26 @@ describe("stateTimelineOption", () => {
   })
 })
 
+it("reports a liquidity heatmap with no drawable cells", () => {
+  const result = liquidityHeatmapOption({
+    visual: { type: "liquidityHeatmap" },
+    colors: lightColors,
+    formats: {},
+    statements: [
+      {
+        columns: [
+          { name: "ts", type: "TIMESTAMP" },
+          { name: "price", type: "INT" },
+          { name: "amount", type: "DOUBLE" },
+        ],
+        rows: [["2026-01-01T00:00:00Z", 10, null]],
+      },
+    ],
+  })
+  expect(result.option).toBeNull()
+  expect(result.problems[0]?.message).toContain("No drawable liquidity")
+})
+
 describe("volumeProfileOption", () => {
   const common = { colors: lightColors, formats: {}, clickColumn: "price" }
   it("does not mark a point of control for two absent volumes", () => {
@@ -122,7 +143,7 @@ describe("volumeProfileOption", () => {
       { data: [{ value: null }, { value: null }] },
     ])
     const series = rendered.option?.series as unknown[] | undefined
-    expect(series?.[0]).not.toHaveProperty("markLine")
+    expect(series?.[0]).toMatchObject({ markLine: { data: [] } })
   })
   it("reports a missing configured sell column instead of changing the point of control", () => {
     const result = volumeProfileOption({
