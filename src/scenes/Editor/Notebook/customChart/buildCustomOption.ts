@@ -285,6 +285,52 @@ const enforceRendererPolicy = (
   )
 }
 
+const containsCyclicSankey = (node: unknown): boolean => {
+  if (Array.isArray(node)) return node.some(containsCyclicSankey)
+  if (!isRecord(node)) return false
+  if (node.type === "sankey") {
+    const links = node.links ?? node.edges
+    if (Array.isArray(links)) {
+      const outgoing = new Map<string, string[]>()
+      const incoming = new Map<string, number>()
+      for (const link of links) {
+        if (!isRecord(link)) continue
+        const { source, target } = link
+        if (
+          (typeof source !== "string" && typeof source !== "number") ||
+          (typeof target !== "string" && typeof target !== "number")
+        )
+          continue
+        const from = String(source)
+        const to = String(target)
+        const children = outgoing.get(from) ?? []
+        children.push(to)
+        outgoing.set(from, children)
+        if (!incoming.has(from)) incoming.set(from, 0)
+        incoming.set(to, (incoming.get(to) ?? 0) + 1)
+      }
+      const sources = [...incoming]
+        .filter(([, count]) => count === 0)
+        .map(([name]) => name)
+      for (const from of sources) {
+        for (const to of outgoing.get(from) ?? []) {
+          const remaining = (incoming.get(to) ?? 0) - 1
+          incoming.set(to, remaining)
+          if (remaining === 0) sources.push(to)
+        }
+      }
+      if (sources.length !== incoming.size) return true
+    }
+  }
+  return [
+    node.series,
+    node.baseOption,
+    node.options,
+    node.media,
+    node.option,
+  ].some(containsCyclicSankey)
+}
+
 export type BuiltCustomOption = {
   option: Record<string, unknown>
   problems: OptionProblem[]
@@ -303,6 +349,19 @@ export const buildCustomOption = (
   const filled = enforceRendererPolicy(
     fillRows(sanitized, statements, "", report),
   ) as Record<string, unknown>
+  if (containsCyclicSankey(filled)) {
+    return {
+      option: {},
+      problems: [
+        {
+          path: "",
+          message:
+            "Sankey links contain a cycle. Remove cycles or choose a graph visual.",
+          severity: "error",
+        },
+      ],
+    }
+  }
   const ours = datasetsOf(statements)
   const theirs: unknown = filled.dataset
   const theirList: unknown[] = Array.isArray(theirs)

@@ -125,8 +125,11 @@ export const CustomChart = ({
     return () => window.clearTimeout(timer)
   }, [bufferId, cellId, rawOption, sanitized, built, resolution, statements])
 
-  if (sanitized.problems.some((p) => p.severity === "error" && p.path === ""))
-    return <PaneEmptyState>{sanitized.problems[0].message}</PaneEmptyState>
+  const fatal = [...sanitized.problems, ...built.problems].find(
+    (problem) => problem.severity === "error" && problem.path === "",
+  )
+  if (fatal)
+    return <PaneEmptyState role="alert">{fatal.message}</PaneEmptyState>
   if (mapStatus === "error")
     return (
       <PaneEmptyState role="alert">

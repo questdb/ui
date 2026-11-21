@@ -11,6 +11,55 @@ const rows = (
 })
 
 describe("buildCustomOption", () => {
+  it("diagnoses a cycle after binding Sankey query rows", () => {
+    const option = {
+      series: [
+        {
+          type: "sankey",
+          links: {
+            $rows: { query: 0, shape: "links", source: "from", target: "to" },
+          },
+        },
+      ],
+    }
+    const edgeRows = (data: string[][]) => [
+      rows(
+        [
+          ["from", "SYMBOL"],
+          ["to", "SYMBOL"],
+        ],
+        data,
+      ),
+    ]
+    expect(
+      buildCustomOption(
+        option,
+        edgeRows([
+          ["a", "b"],
+          ["b", "a"],
+        ]),
+        false,
+      ),
+    ).toMatchObject({
+      option: {},
+      problems: [
+        {
+          severity: "error",
+          message: expect.stringContaining("contain a cycle"),
+        },
+      ],
+    })
+    expect(
+      buildCustomOption(
+        option,
+        edgeRows([
+          ["a", "b"],
+          ["b", "c"],
+        ]),
+        false,
+      ).problems,
+    ).toEqual([])
+  })
   it("does not merge distinct, exactly representable LONGs", () => {
     expect([
       chartNumber("9007199254740990"),
