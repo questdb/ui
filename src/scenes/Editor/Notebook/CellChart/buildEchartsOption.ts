@@ -1560,13 +1560,22 @@ const thresholdMarks = (
       },
     }
   // Bands reach past the data so they fill the plot; the grid clips them.
-  const values = series
-    .flatMap((s) => (Array.isArray(s.data) ? (s.data as unknown[]) : []))
-    .map(pointValue)
-    .map((p) => toNumberOrNull(Array.isArray(p) ? p[1] : p))
-    .filter((v): v is number => v !== null)
-  const lo = Math.min(...values, ...thresholds.map((t) => t.value))
-  const hi = Math.max(...values, ...thresholds.map((t) => t.value))
+  let lo = Infinity
+  let hi = -Infinity
+  const include = (value: number) => {
+    if (!Number.isFinite(value)) return
+    lo = Math.min(lo, value)
+    hi = Math.max(hi, value)
+  }
+  for (const { value } of thresholds) include(value)
+  for (const { data } of series) {
+    if (!Array.isArray(data)) continue
+    for (const point of data as unknown[]) {
+      const raw = pointValue(point)
+      const value = toNumberOrNull(Array.isArray(raw) ? raw[1] : raw)
+      if (value !== null) include(value)
+    }
+  }
   const reach = Math.max(hi - lo, Math.abs(hi), 1) * 10
   return {
     name: "Thresholds",

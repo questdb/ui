@@ -282,6 +282,35 @@ describe("preset options", () => {
     ])
   })
 
+  it("builds threshold bands for 160,000 points without spreading them as arguments", () => {
+    const names = Array.from({ length: 16 }, (_, i) => `metric${i}`)
+    const dataset = Array.from({ length: 10_000 }, (_, i) => [
+      i,
+      ...names.map((_, j) => i + j),
+    ])
+    const option = buildEchartsOption(
+      { xColumn: "axis", thresholds: "bands" },
+      [
+        query({
+          columns: [
+            col("axis", "INT"),
+            ...names.map((name) => col(name, "INT")),
+          ],
+          dataset,
+          xColumn: "axis",
+          yColumns: names,
+        }),
+      ],
+      {
+        colors: lightColors,
+        formats: { metric0: { thresholds: [{ value: 100, tone: "warning" }] } },
+      },
+    )
+    expect(
+      seriesOf(option).find((series) => series.name === "Thresholds"),
+    ).toHaveProperty("markArea")
+  })
+
   it("takes thresholds only from values on the left axis", () => {
     // Given a 100% stacked area and a right-axis line whose formats have thresholds
     const formats = {
