@@ -1,5 +1,10 @@
 import type { CommandNoteEntry } from "./CommandNote"
 import type { AgentPromptImage } from "../../../utils/localAgent/protocol"
+import { LOCAL_AGENT_MODEL } from "../../../utils/localAgent/localAgentModel"
+import {
+  useLocalAgent,
+  useLocalAgentChannel,
+} from "../../../utils/localAgent/LocalAgentContext"
 import React, {
   useMemo,
   useState,
@@ -40,7 +45,12 @@ import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
-import { ChatInput, type ChatInputHandle, type ChatQueue } from "./ChatInput"
+import {
+  ChatInput,
+  canDeliverQueued,
+  type ChatInputHandle,
+  type ChatQueue,
+} from "./ChatInput"
 import {
   latestContextUsage,
   totalTokenUsage,
@@ -56,7 +66,7 @@ import {
 } from "../../../utils/ai/executeAIFlow"
 import { getTableKind, getTableKindLabel } from "../../../utils/questdb/types"
 import * as QuestDB from "../../../utils/questdb"
-import { QuestContext } from "../../../providers"
+import { QuestContext } from "../../../providers/QuestProvider"
 import { useDispatch, useSelector } from "react-redux"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
@@ -243,6 +253,10 @@ const AIChatWindow: React.FC = () => {
     apiKey,
     aiAssistantSettings,
   } = useAIStatus()
+  const localAgent = useLocalAgent()
+  const localAgentChannel = useLocalAgentChannel()
+  const acceptsImages =
+    currentModel === LOCAL_AGENT_MODEL && localAgent?.acceptsImages === true
   const tables = useSelector(selectors.query.getTables)
   const { active: activeExecution } = useQueryExecutionState()
   const runningQueryKey = activeExecution?.queryKey ?? null
@@ -532,6 +546,24 @@ const AIChatWindow: React.FC = () => {
     )
   }
 
+  useEffect(() => {
+    const id = chatWindowState.activeConversationId
+    if (!id || !conversation || !canUse || isBlockingAIStatus(aiStatus)) return
+    const queued = chatQueue[id]
+    if (
+      !queued ||
+      !canDeliverQueued(queued, currentModel, localAgentChannel, acceptsImages)
+    )
+      return
+    setChatQueue(({ [id]: _sent, ...rest }) => rest)
+    void handleSendMessage(
+      queued.text,
+      hasUnactionedDiff,
+      queued.images,
+      queued.agentCommand,
+    )
+  })
+
   const handleAcceptChange = useCallback(
     async (messageId: string) => {
       if (!chatWindowState.activeConversationId) return
@@ -761,6 +793,26 @@ const AIChatWindow: React.FC = () => {
       const conversationId = chatWindowState.activeConversationId
       const userMessage = messages.find((m) => m.id === userMessageId)
       if (!userMessage) return
+      if (
+        aiAssistantSettings.selectedModel === LOCAL_AGENT_MODEL &&
+        currentModel !== LOCAL_AGENT_MODEL
+      ) {
+        toast.error(
+          "Reconnect the local agent or select another model before retrying.",
+        )
+        return
+      }
+      if (userMessage.images?.length && !acceptsImages) {
+        toast.error("Select a local agent that reads images before retrying.")
+        return
+      }
+      if (
+        userMessage.displayType === "schema_explain_request" &&
+        !hasSchemaAccess
+      ) {
+        toast.error("Enable schema access before retrying.")
+        return
+      }
       const userMessageIndex = messages.findIndex((m) => m.id === userMessageId)
       if (userMessageIndex < 0) return
 
@@ -903,6 +955,7 @@ const AIChatWindow: React.FC = () => {
     [
       chatWindowState.activeConversationId,
       canUse,
+      acceptsImages,
       aiStatus,
       messages,
       removeMessages,
@@ -969,12 +1022,15 @@ const AIChatWindow: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    if (hasAutoFocusedRef.current) return
-    if (isHistoryOpen || isLoadingMessages) return
+    if (activeSidebar?.type !== "aiChat") {
+      hasAutoFocusedRef.current = false
+      return
+    }
+    if (hasAutoFocusedRef.current || isHistoryOpen || isLoadingMessages) return
     if (!chatInputRef.current) return
     chatInputRef.current.focus()
     hasAutoFocusedRef.current = true
-  }, [isHistoryOpen, isLoadingMessages])
+  }, [activeSidebar?.type, isHistoryOpen, isLoadingMessages])
 
   const handleNewChat = useCallback(async () => {
     hasAutoFocusedRef.current = false

@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from "react"
+import React, { lazy, Suspense, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import styled from "styled-components"
 import { useSelector } from "react-redux"
@@ -32,13 +32,17 @@ const LoaderFallback = () => {
 export const AIChatWindowLazy = () => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
-  if (activeSidebar?.type !== "aiChat") {
-    return null
-  }
+  const isOpen = activeSidebar?.type === "aiChat"
+  const [hasOpened, setHasOpened] = useState(isOpen)
+  useEffect(() => {
+    if (isOpen) setHasOpened(true)
+  }, [isOpen])
+
+  if (!isOpen && !hasOpened) return null
 
   return (
     <AIChatErrorBoundary>
-      <Suspense fallback={<LoaderFallback />}>
+      <Suspense fallback={isOpen ? <LoaderFallback /> : null}>
         <AIChatWindow />
       </Suspense>
     </AIChatErrorBoundary>

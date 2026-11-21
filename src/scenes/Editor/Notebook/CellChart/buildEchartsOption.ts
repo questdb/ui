@@ -400,18 +400,16 @@ const buildHeatmapOption = (
     y: rowSlot.get(toCategoryLabel(row[rowIdx])) ?? 0,
     value: toNumberOrNull(row[valueIdx]),
   }))
-  const extentOf = (values: number[]) =>
-    values.length === 0
-      ? { min: 0, max: 1 }
-      : { min: Math.min(...values), max: Math.max(...values) }
-  const valuesOf = (list: typeof cells) =>
-    list.flatMap((cell) => (cell.value === null ? [] : [cell.value]))
   const perRow = q.colorScale === "row"
-  const rowExtents = perRow
-    ? rowLabels.map((_, y) =>
-        extentOf(valuesOf(cells.filter((c) => c.y === y))),
-      )
-    : []
+  const emptyExtent = () => ({ min: Infinity, max: -Infinity })
+  const globalExtent = emptyExtent()
+  const rowExtents = perRow ? rowLabels.map(emptyExtent) : []
+  for (const { value, y } of cells) {
+    if (value === null) continue
+    const extent = perRow ? rowExtents[y] : globalExtent
+    extent.min = Math.min(extent.min, value)
+    extent.max = Math.max(extent.max, value)
+  }
   const shade = (value: number, y: number) => {
     const { min, max } = rowExtents[y]
     return max === min ? 1 : (value - min) / (max - min)
@@ -422,7 +420,8 @@ const buildHeatmapOption = (
     value === null ? "-" : perRow ? shade(value, y) : value,
     value ?? "-",
   ])
-  const { min, max } = perRow ? { min: 0, max: 1 } : extentOf(valuesOf(cells))
+  const { min, max } =
+    perRow || globalExtent.min === Infinity ? { min: 0, max: 1 } : globalExtent
 
   return {
     useUTC: true,
@@ -433,7 +432,7 @@ const buildHeatmapOption = (
         const [x, y, , value] = (
           params as { value: [number, number, unknown, unknown] }
         ).value
-        return `${escapeHtml(formatX(xLabels[x] ?? ""))}<br/>${escapeHtml(
+        return `${escapeHtml(xLabels[x] ?? "")}<br/>${escapeHtml(
           rowLabels[y] ?? "",
         )}: <b>${escapeHtml(String(value))}</b>`
       },
@@ -488,6 +487,7 @@ const buildHeatmapOption = (
         name: q.yColumns[0],
         type: "custom",
         renderItem: renderHeatmapCell,
+        clip: true,
         encode: { x: 0, y: 1, tooltip: 3 },
         data,
       },
@@ -518,15 +518,23 @@ const renderHeatmapCell: CustomSeriesRenderItem = (_params, api) => {
   }
 }
 
-// Draws each reference line on the first series of its axis, or of the
-// other axis when its own has none.
-const addReferenceLines = (series: Series[], lines: ReferenceLine[]) => {
-  const onAxis = (axisIndex: number) =>
-    series.find((s) => (s.yAxisIndex ?? 0) === axisIndex)
+// Reference lines belong to the axes, not a selectable legend entry.
+const referenceLineSeries = (series: Series[], lines: ReferenceLine[]) => {
+  const plottedAxes = new Set(series.map((s) => s.yAxisIndex ?? 0))
+  const markers = new Map<number, Series>()
   for (const line of lines) {
     const wanted = line.axis === "right" ? 1 : 0
-    const target = onAxis(wanted) ?? onAxis(1 - wanted)
-    if (!target) continue
+    const axis = plottedAxes.has(wanted) ? wanted : 1 - wanted
+    if (!plottedAxes.has(axis)) continue
+    const target = markers.get(axis) ?? {
+      id: `reference-lines-${axis}`,
+      type: "line",
+      yAxisIndex: axis,
+      data: [],
+      silent: true,
+      animation: false,
+      tooltip: { show: false },
+    }
     const markLine = (target.markLine as { data: unknown[] } | undefined) ?? {
       silent: true,
       symbol: "none",
@@ -540,9 +548,9 @@ const addReferenceLines = (series: Series[], lines: ReferenceLine[]) => {
       label: { formatter: line.label ?? String(line.value) },
     })
     target.markLine = markLine
+    markers.set(axis, target)
   }
-  // ECharts merges series options. An empty list clears previously drawn lines.
-  for (const s of series) s.markLine ??= { data: [] }
+  return [...markers.values()]
 }
 
 // An axis that scales to its data keeps its reference lines in view. A bound
@@ -588,10 +596,10 @@ const buildScatterChartOption = (
       }
     })
     .filter((s): s is NonNullable<typeof s> => s !== null)
-  addReferenceLines(series, referenceLines)
+  const markers = referenceLineSeries(series, referenceLines)
   return {
     tooltip: { trigger: "item", textStyle: chartText },
-    legend,
+    legend: { ...legend, data: [...new Set(series.map((s) => s.name))] },
     grid: {
       left: 24,
       right: 24,
@@ -615,7 +623,7 @@ const buildScatterChartOption = (
         series.length ? referenceLines.map((line) => line.value) : [],
       ),
     },
-    series,
+    series: [...series, ...markers] as EChartsOption["series"],
   }
 }
 
@@ -729,10 +737,10 @@ export const buildEchartsOption = (
 
   const hasRight = queries.some((q) => q.axis === "right")
   const referenceLines = chart.referenceLines ?? []
-  addReferenceLines(series, referenceLines)
+  const markers = referenceLineSeries(series, referenceLines)
   // Where each line landed: on the right axis only when a right series took it.
   const linesOn = (axisIndex: number) =>
-    series
+    markers
       .filter((s) => (s.yAxisIndex ?? 0) === axisIndex)
       .flatMap(
         (s) =>
@@ -830,11 +838,14 @@ export const buildEchartsOption = (
     // axis and tooltip must not re-render those instants in the browser's zone.
     useUTC: true,
     tooltip,
-    legend: baseLegend,
+    legend: {
+      ...baseLegend,
+      data: [...new Set(series.map((s) => String(s.name)))],
+    },
     grid,
     xAxis,
     yAxis,
-    series: series as EChartsOption["series"],
+    series: [...series, ...markers] as EChartsOption["series"],
   }
 }
 

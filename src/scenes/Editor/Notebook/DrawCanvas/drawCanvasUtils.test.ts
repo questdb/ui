@@ -314,6 +314,20 @@ describe("resolveDraw — unresolved statements use a null slot, not an inert co
     expect(effectiveConfig.queries[1]).not.toBeNull()
   })
 
+  it("does not plot a disabled heatmap when it is the only query with rows", () => {
+    const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
+    const saved: ChartConfig = {
+      xColumn: "ts",
+      queries: [null, { type: "heatmap", yColumns: [], enabled: false }],
+    }
+    const { renderQueries } = resolveDraw(
+      statements,
+      [tsPrice(statements[1])],
+      saved,
+    )
+    expect(renderQueries).toEqual([])
+  })
+
   it("a saved null does not suppress inference once the statement resolves", () => {
     const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
     // Config saved earlier while statement 0 was unresolved → its slot is null.

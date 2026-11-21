@@ -148,7 +148,9 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </IncompatibleNote>
       )}
 
-      {!isAnchorTab && (
+      {(!isAnchorTab ||
+        query.enabled === false ||
+        query.type === "heatmap") && (
         <CheckboxRow>
           <Checkbox
             checked={query.enabled !== false}

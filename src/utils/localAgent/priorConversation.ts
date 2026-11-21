@@ -4,6 +4,9 @@ import type { ConversationMessage } from "../../providers/AIConversationProvider
 const MAX_MESSAGES = 20
 const MAX_MESSAGE_CHARS = 2_000
 const MAX_TOTAL_CHARS = 12_000
+const SUMMARY_PREFIX = "## PREVIOUS CONVERSATION SUMMARY:\n\n"
+const SUMMARY_SUFFIX =
+  "\n\n\n**Continue helping the user from where we left off.**"
 
 const visibleText = (message: ConversationMessage): string | null => {
   if (message.hideFromUI || message.isCompacted) return null
@@ -45,7 +48,22 @@ export const priorConversationFor = (
 ): string | null => {
   const unseen = unseenByAgent(history, agentId)
   const lines: string[] = []
-  let total = 0
+  // Compaction already keeps the old turns out of the live context. Carry
+  // their summary separately so a busy recent tail cannot crowd it out.
+  const summary = unseen.findLast(
+    (message) =>
+      message.role === "user" &&
+      message.hideFromUI &&
+      !message.isCompacted &&
+      typeof message.content === "string" &&
+      message.content.startsWith(SUMMARY_PREFIX) &&
+      message.content.endsWith(SUMMARY_SUFFIX),
+  )?.content
+  const carriedSummary =
+    typeof summary === "string"
+      ? `Summary of older turns: ${truncate(withoutInlineImages(summary.slice(SUMMARY_PREFIX.length, -SUMMARY_SUFFIX.length)).trim(), MAX_TOTAL_CHARS / 2)}`
+      : null
+  let total = carriedSummary?.length ?? 0
   for (const message of unseen.slice(-MAX_MESSAGES).reverse()) {
     const text = withoutInlineImages(visibleText(message) ?? "").trim()
     if (!text) continue
@@ -54,6 +72,7 @@ export const priorConversationFor = (
     lines.unshift(line)
     total += line.length
   }
+  if (carriedSummary) lines.unshift(carriedSummary)
   if (lines.length === 0) return null
   return [
     "<earlier_conversation>",

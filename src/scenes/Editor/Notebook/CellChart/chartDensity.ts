@@ -89,5 +89,9 @@ export const chartZoomDensity = (
     include(bandSlots(candles), CANDLE_FILL_RATIO, MIN_MARK_PX)
   }
   include(maxDataLength(points), 1, MIN_POINT_PX)
+  // Heatmap cells share x slots across rows; count columns, not cells.
+  if (series.some((s) => s.type === "custom")) {
+    include(categorySlots, 1, MIN_MARK_PX)
+  }
   return density
 }

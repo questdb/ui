@@ -19,7 +19,9 @@ import { LocalStorageProvider } from "../../../../src/providers/LocalStorageProv
 import { AIStatusProvider } from "../../../../src/providers/AIStatusProvider"
 import { AIConversationProvider } from "../../../../src/providers/AIConversationProvider"
 import { AIChatButton } from "../../../../src/scenes/Layout/AIChatButton"
-import AIChatWindow from "../../../../src/scenes/Editor/AIChatWindow"
+// Preload the drawer with the harness's mocked dependencies before React.lazy.
+import "../../../../src/scenes/Editor/AIChatWindow"
+import { AIChatWindowLazy } from "../../../../src/scenes/Editor/AIChatWindow/AIChatWindowLazy"
 import type { AiAssistantSettings } from "../../../../src/providers/LocalStorageProvider/types"
 import type { AIConversation } from "../../../../src/providers/AIConversationProvider/types"
 import type { EditorContext } from "../../../../src/providers/EditorProvider"
@@ -129,7 +131,8 @@ export const renderChat = (
             <AIConversationProvider>
               <AIStatusProvider>
                 <AIChatButton />
-                <AIChatWindow />
+                <div id="side-panel-right" />
+                <AIChatWindowLazy />
                 <ToastContainer />
                 {children}
               </AIStatusProvider>

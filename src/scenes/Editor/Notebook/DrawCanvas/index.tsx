@@ -209,8 +209,14 @@ export const DrawCanvas: React.FC<Props> = ({
     [resolution],
   )
 
+  const plotted = resolution.renderQueries
+  const heatmapConflict =
+    plotted.length > 1 && plotted.some((query) => query.type === "heatmap")
   const empty =
-    classifyBlock !== null || queries.length === 0 || results.length === 0
+    classifyBlock !== null ||
+    queries.length === 0 ||
+    plotted.length === 0 ||
+    heatmapConflict
   const settledForCurrentQueries = settledKey === queriesKey
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
@@ -222,6 +228,9 @@ export const DrawCanvas: React.FC<Props> = ({
     emptyMessage = "Type a query to draw."
   } else if (!settledForCurrentQueries) {
     emptyMessage = "Drawing…"
+  } else if (heatmapConflict) {
+    emptyMessage =
+      "Heatmaps need a chart of their own. Include only one query in Chart settings."
   } else if (hadError) {
     emptyMessage = "Query failed: check the SQL editor for the error."
   } else {

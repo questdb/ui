@@ -1285,7 +1285,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                       <ProviderTab
                         $active={showAgentPanel}
                         role="tab"
-                        onClick={() => setIsAgentTabActive(true)}
+                        onClick={() => {
+                          abortValidation(selectedProvider)
+                          setIsAgentTabActive(true)
+                        }}
                         data-hook="ai-settings-provider-local-agent"
                       >
                         <ProviderTabTitle>

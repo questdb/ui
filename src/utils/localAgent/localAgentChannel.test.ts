@@ -49,6 +49,38 @@ const question = (requestId: string): AgentQuestionMessage => ({
   fields: [],
 })
 
+it("replays Stop after reconnect even if the old socket accepted the write", async () => {
+  vi.useFakeTimers()
+  try {
+    const { channel, sent, setConnected } = connect()
+    const controller = new AbortController()
+    const turn = channel.prompt({
+      conversationId: "c1",
+      text: "Show trades",
+      notebookRead: null,
+      signal: controller.signal,
+      onUpdate: vi.fn(),
+      onToolStatus: vi.fn(),
+    })
+    controller.abort()
+    setConnected(false)
+    await vi.advanceTimersByTimeAsync(1000)
+    setConnected(true)
+    channel.resume()
+    expect(sent.map((message) => message.type)).toEqual([
+      "agent_prompt",
+      "agent_cancel",
+      "agent_cancel",
+    ])
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(await turn).toMatchObject({ stopReason: "cancelled" })
+    channel.resume()
+    expect(sent).toHaveLength(3)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
 describe("LocalAgentChannel questions", () => {
   it("keeps the agent's questions until they are answered or the agent stops waiting", () => {
     // Given

@@ -270,7 +270,7 @@ export const resolveDraw = (
     const { ownX } = it
     const role = xRoleOf(it.r.columns, ownX)
     const compatible = isAnchor || (canCombine && role === anchorRole)
-    const enabled = isAnchor ? true : (it.qc.enabled ?? true)
+    const enabled = it.qc.enabled !== false
     if (it.idx >= 0) {
       tabs.push({
         index: it.idx,

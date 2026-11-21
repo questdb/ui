@@ -173,11 +173,9 @@ export class LocalAgentChannel {
           type: "agent_cancel",
           conversationId,
         })
-        if (!sent) {
-          turn.retryCancel = tryCancel
-          return
-        }
-        turn.retryCancel = null
+        // A successful socket write is not an acknowledgement. Replay Stop
+        // if we reconnect before this turn ends, without extending its grace.
+        if (!sent || cancelTimer !== undefined) return
         cancelTimer = setTimeout(
           () => this.settleTurn(conversationId, turnId, CANCELLED),
           CANCEL_GRACE_MS,
@@ -187,6 +185,7 @@ export class LocalAgentChannel {
         turn.stopping = new Promise((resolve) => {
           stopped = resolve
         })
+        turn.retryCancel = tryCancel
         tryCancel()
       }
       const turn: PendingTurn = {

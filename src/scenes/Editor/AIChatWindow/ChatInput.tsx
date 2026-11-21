@@ -142,6 +142,16 @@ type QueuedEntry = {
 
 export type ChatQueue = Record<string, QueuedEntry>
 
+export const canDeliverQueued = (
+  entry: QueuedEntry,
+  model: string | null,
+  channel: QueuedEntry["channel"],
+  acceptsImages: boolean,
+) =>
+  entry.model === model &&
+  entry.channel === (model === LOCAL_AGENT_MODEL ? channel : null) &&
+  (entry.images.length === 0 || acceptsImages)
+
 const ContextBadgeContainer = styled.div`
   position: absolute;
   padding: 0.8rem;
@@ -299,20 +309,18 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     useEffect(() => {
       if (isAIInProgress || disabled || !conversationId || !queued) return
-      const entry = queued
-      setQueue(({ [conversationId]: _removed, ...rest }) => rest)
       if (
-        entry.model !== currentModel ||
-        entry.channel !== destinationChannel ||
-        (entry.images.length > 0 && !acceptsImages)
-      ) {
-        setInput((current) =>
-          [entry.text, current].filter(Boolean).join("\n\n"),
+        canDeliverQueued(
+          queued,
+          currentModel,
+          destinationChannel,
+          acceptsImages,
         )
-        setAttachments((current) => [...entry.images, ...current])
+      )
         return
-      }
-      onSend(entry.text, entry.images, entry.agentCommand)
+      setQueue(({ [conversationId]: _removed, ...rest }) => rest)
+      setInput((current) => [queued.text, current].filter(Boolean).join("\n\n"))
+      setAttachments((current) => [...queued.images, ...current])
     }, [
       isAIInProgress,
       disabled,
@@ -321,7 +329,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       destinationChannel,
       acceptsImages,
       queued,
-      onSend,
       setQueue,
     ])
 
@@ -449,6 +456,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       if (images.length > 0 && !acceptsImages) {
         setAttachError(
           "Change to an agent that reads images, or remove the attachments.",
+        )
+        return false
+      }
+      if ((queued?.images.length ?? 0) + images.length > MAX_IMAGES) {
+        setAttachError(
+          `A message takes up to ${MAX_IMAGES} images. Remove an image or wait for the queued message to send.`,
         )
         return false
       }
@@ -607,7 +620,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // Stops the answer; the queued message goes out once it has stopped.
     const sendQueuedNow = () => steerOperation()
 
-    const showStop = isAIInProgress && input.trim() === ""
+    const showStop =
+      isAIInProgress && input.trim() === "" && attachments.length === 0
     const question = localAgent?.questions.find(
       (pending) => pending.conversationId === conversationId,
     )

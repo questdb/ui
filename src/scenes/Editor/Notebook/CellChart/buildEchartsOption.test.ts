@@ -517,8 +517,10 @@ describe("buildEchartsOption — reference lines", () => {
     )
 
     // Then
-    expect(markLineOf(opt, 0)?.data).toEqual([])
-    expect(markLineOf(opt, 1)?.data).toEqual([
+    expect(markLineOf(opt, 0)).toBeUndefined()
+    expect(markLineOf(opt, 1)).toBeUndefined()
+    expect(seriesList(opt.series)[2]).toMatchObject({ yAxisIndex: 1 })
+    expect(markLineOf(opt, 2)?.data).toEqual([
       { yAxis: 30, label: { formatter: "Oversold" } },
       { yAxis: 70, label: { formatter: "70" } },
     ])
@@ -532,7 +534,8 @@ describe("buildEchartsOption — reference lines", () => {
     )
 
     // Then
-    expect(markLineOf(opt, 0)?.data[0].yAxis).toBe(70)
+    expect(seriesList(opt.series)[1]).toMatchObject({ yAxisIndex: 1 })
+    expect(markLineOf(opt, 1)?.data[0].yAxis).toBe(70)
   })
 
   it("grows a self-scaling axis to keep its lines in view, and leaves it be otherwise", () => {
@@ -596,6 +599,27 @@ describe("buildEchartsOption — heatmap", () => {
       ],
     })
     expect(opt.visualMap).toMatchObject({ min: 1.5, max: 8, dimension: 2 })
+  })
+
+  it("identifies distinct sub-second slots in the hover tooltip", () => {
+    const timestamps = [
+      "2026-11-01T00:00:00.001000Z",
+      "2026-11-01T00:00:00.002000Z",
+    ]
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns,
+        dataset: timestamps.map((ts) => [ts, "EURUSD", 1]),
+        xColumn: "ts",
+        type: "heatmap",
+        yColumns: ["spread"],
+        partitionByColumn: "symbol",
+      }),
+    ])
+    const tooltip = opt.tooltip as { formatter: (p: unknown) => string }
+    for (const [slot, timestamp] of timestamps.entries()) {
+      expect(tooltip.formatter({ value: [slot, 0, 1, 1] })).toContain(timestamp)
+    }
   })
 
   it("escapes the values it shows in its tooltip", () => {

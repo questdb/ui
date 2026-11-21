@@ -2,22 +2,38 @@
 import React from "react"
 import { act } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
-import { renderAISettings } from "../../components/SetupAIAssistant/test/setupHarness"
+import {
+  configuredOpenAI,
+  renderAISettings,
+} from "../../components/SetupAIAssistant/test/setupHarness"
+import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
 import { AIOperationStatus, useAIStatus } from "."
 
 type Status = ReturnType<typeof useAIStatus>
 
-const renderStatus = () => {
+const renderStatus = (settings?: Parameters<typeof renderAISettings>[1]) => {
   const probe: { current: Status | null } = { current: null }
   const Probe = () => {
     probe.current = useAIStatus()
     return null
   }
-  renderAISettings(<Probe />)
+  renderAISettings(<Probe />, settings)
   return () => probe.current!
 }
 
 describe("AIStatusProvider", () => {
+  it("disables sending when the selected local agent is gone and no cloud model is enabled", () => {
+    const status = renderStatus({
+      ...configuredOpenAI,
+      selectedModel: LOCAL_AGENT_MODEL,
+      providers: {
+        openai: { ...configuredOpenAI.providers.openai, enabledModels: [] },
+      },
+    })
+    expect(status().currentModel).toBeNull()
+    expect(status().canUse).toBe(false)
+  })
+
   it("starts a retried answer over from the steps it showed before its first attempt", () => {
     // Given an attempt that showed a tool step and text before it failed
     const status = renderStatus()

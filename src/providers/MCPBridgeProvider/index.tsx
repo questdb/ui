@@ -54,7 +54,10 @@ import { useBridgeToolRunner } from "./useBridgeToolRunner"
 import { PairingConsentModal } from "./PairingConsentModal"
 import { useLocalAgentConnection } from "./useLocalAgentConnection"
 import { getLocalAgentChannel } from "../../utils/localAgent/localAgentChannel"
-import { LocalAgentContext } from "../../utils/localAgent/LocalAgentContext"
+import {
+  LocalAgentContext,
+  LocalAgentSchemaAccessContext,
+} from "../../utils/localAgent/LocalAgentContext"
 import { useSettings } from "../SettingsProvider"
 import { emitLocalAgentPairedViaLink } from "../../utils/localAgent/localAgentPairing"
 
@@ -590,7 +593,11 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <MCPBridgeContext.Provider value={value}>
       <LocalAgentContext.Provider value={localAgentChannel}>
-        {children}
+        <LocalAgentSchemaAccessContext.Provider
+          value={permissions.grantSchemaAccess}
+        >
+          {children}
+        </LocalAgentSchemaAccessContext.Provider>
       </LocalAgentContext.Provider>
       <PairingConsentModal
         pending={pendingConsent}

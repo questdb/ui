@@ -19,9 +19,11 @@ import {
 } from "../../utils/ai"
 import type { AiAssistantSettings } from "../LocalStorageProvider/types"
 import { useAIConversation } from "../AIConversationProvider"
-import { useLocalAgent } from "../../utils/localAgent/LocalAgentContext"
+import {
+  useLocalAgent,
+  useLocalAgentSchemaAccess,
+} from "../../utils/localAgent/LocalAgentContext"
 import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
-import { readPermissions } from "../../utils/mcp/mcpBridgeStorage"
 
 export const useAIStatus = () => {
   const context = useContext(AIStatusContext)
@@ -211,6 +213,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   const { isStreaming } = useAIConversation()
   const { aiAssistantSettings } = useLocalStorage()
   const localAgent = useLocalAgent()
+  const localAgentSchemaAccess = useLocalAgentSchemaAccess()
   const [status, setStatusState] = useState<AIOperationStatus | null>(null)
   const [currentOperation, setCurrentOperation] = useState<OperationHistory>([])
   const [abortController, setAbortController] = useState<AbortController>(
@@ -230,11 +233,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     localAgent !== null &&
     aiAssistantSettings.selectedModel === LOCAL_AGENT_MODEL
 
-  const canUse = useMemo(
-    () => isLocalAgentSelected || canUseAiAssistant(aiAssistantSettings),
-    [isLocalAgentSelected, aiAssistantSettings],
-  )
-
   const currentModel = useMemo(
     () =>
       isLocalAgentSelected
@@ -246,7 +244,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   // A local agent reaches the schema through the bridge, so the bridge's
   // permission decides, not the API provider's.
   const hasSchemaAccessValue = isLocalAgentSelected
-    ? readPermissions().grantSchemaAccess
+    ? localAgentSchemaAccess
     : hasSchemaAccess(aiAssistantSettings)
 
   const apiKey = useMemo(() => {
@@ -256,6 +254,12 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     if (!provider) return null
     return getApiKey(provider, aiAssistantSettings)
   }, [isLocalAgentSelected, currentModel, aiAssistantSettings])
+
+  const canUse =
+    isLocalAgentSelected ||
+    (currentModel !== null &&
+      apiKey !== null &&
+      canUseAiAssistant(aiAssistantSettings))
 
   const models = useMemo(
     () => getAllEnabledModels(aiAssistantSettings),

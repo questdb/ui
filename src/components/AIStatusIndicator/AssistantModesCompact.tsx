@@ -846,7 +846,7 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
           </Box>
         </ModeHeaderTop>
         {isExpandable && isContentSection && (
-          <ExpandableWrapper $expanded={isExpanded}>
+          <ExpandableWrapper $expanded={isExpanded} inert={!isExpanded}>
             <ExpandableContent>
               {isQuerySection ? (
                 <QueryList>
@@ -887,7 +887,7 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
           </ExpandableWrapper>
         )}
         {isExpandable && !isContentSection && (
-          <ExpandableWrapper $expanded={isExpanded}>
+          <ExpandableWrapper $expanded={isExpanded} inert={!isExpanded}>
             <ExpandableContent>
               <ReasoningThread>
                 {section.operations.map((op, idx) => {
@@ -936,7 +936,10 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
               <ChevronRight size={14} />
             </ModeChevron>
           </ModeHeaderTop>
-          <ExpandableWrapper $expanded={collapsedProcessingExpanded}>
+          <ExpandableWrapper
+            $expanded={collapsedProcessingExpanded}
+            inert={!collapsedProcessingExpanded}
+          >
             <ExpandableContent>
               <CollapsedSectionsWrapper>
                 {sectionsContent}

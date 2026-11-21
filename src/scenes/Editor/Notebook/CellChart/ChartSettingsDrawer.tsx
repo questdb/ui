@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Input, SelectMenuControl, TabButton } from "../../../../components"
+import {
+  Input,
+  SelectMenuControl,
+  TabButton,
+  Text,
+} from "../../../../components"
 import {
   type ChartConfig,
   type QueryChart,
@@ -171,6 +176,13 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ? (draft.queries[activeTab.index] ?? undefined)
       : undefined
 
+  const includedTabs = tabs.filter((tab) => {
+    const q = draft.queries[tab.index]
+    return tab.compatible && q != null && q.enabled !== false
+  })
+  const heatmapConflict =
+    includedTabs.length > 1 &&
+    includedTabs.some((tab) => draft.queries[tab.index]?.type === "heatmap")
   const hasRight = draft.queries.some((q) => q?.axis === "right")
   // Pie and heatmap charts have no value axis to draw a line on.
   const anchorType =
@@ -203,6 +215,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
     })
 
   const commit = () => {
+    if (heatmapConflict) return
     const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
     if (badIdx >= 0) {
       telemetry?.onSaveBlocked?.("ohlc_incomplete")
@@ -243,6 +256,14 @@ const ChartSettings: React.FC<SettingsProps> = ({
       onDismiss={dismiss}
       onCommit={commit}
     >
+      {heatmapConflict && (
+        <div role="alert">
+          <Text color="statusWarning">
+            Heatmaps need a chart of their own. Include only one query or choose
+            a different chart type.
+          </Text>
+        </div>
+      )}
       <Field>
         <FieldLabel>X-axis</FieldLabel>
         <SelectMenuControl

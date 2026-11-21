@@ -104,6 +104,45 @@ it("requires a fresh send when the local connection is replaced", async () => {
   expect(getHook("chat-input-textarea")).toHaveValue("Follow-up")
 })
 
+it("offers Queue for an image-only draft during a reply", async () => {
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+  const view = renderInput(fakeChannel("agent"))
+  await userEvent.upload(
+    getHook("chat-attach-image-input"),
+    new File(["sample"], "reading.png", { type: "image/png" }),
+  )
+  await screen.findByRole("button", { name: "Remove image 1" })
+  await userEvent.click(screen.getByRole("button", { name: "Queue message" }))
+  expect(getHook("chat-queued-message")).toHaveTextContent("1 image")
+  expect(view.onSend).not.toHaveBeenCalled()
+})
+
+it("preserves an image draft when adding it would exceed the queued limit", async () => {
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+  renderInput(fakeChannel("agent"))
+  const picker = getHook("chat-attach-image-input")
+  const upload = (count: number) =>
+    userEvent.upload(
+      picker,
+      Array.from(
+        { length: count },
+        (_, i) =>
+          new File(["sample"], `reading-${i}.png`, { type: "image/png" }),
+      ),
+    )
+  await upload(3)
+  await screen.findByRole("button", { name: "Remove image 3" })
+  await userEvent.click(screen.getByRole("button", { name: "Queue message" }))
+  await upload(2)
+  await screen.findByRole("button", { name: "Remove image 2" })
+  await userEvent.click(screen.getByRole("button", { name: "Queue message" }))
+  expect(getHook("chat-queued-message")).toHaveTextContent("3 images")
+  expect(
+    screen.getByRole("button", { name: "Remove image 2" }),
+  ).toBeInTheDocument()
+  expect(screen.getByText(/a message takes up to 4 images/i)).toBeVisible()
+})
+
 it("keeps attached images in a draft rather than sending without them", async () => {
   configure(null, LOCAL_AGENT_MODEL)
   const view = renderInput(fakeChannel("agent"))

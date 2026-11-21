@@ -12,6 +12,29 @@ const message = (
 })
 
 describe("priorConversationFor", () => {
+  it("carries the active compaction summary alongside the recent transcript", () => {
+    const history = [
+      message({
+        role: "user",
+        content: "old verbatim turn",
+        isCompacted: true,
+      }),
+      message({
+        role: "user",
+        content:
+          "## PREVIOUS CONVERSATION SUMMARY:\n\nUse UTC for daily totals.\n\n\n**Continue helping the user from where we left off.**",
+        hideFromUI: true,
+      }),
+      ...Array.from({ length: 20 }, () =>
+        message({ role: "user", content: "Recent question" }),
+      ),
+    ]
+    const prior = priorConversationFor(history, "claude")
+    expect(prior).toContain("Summary of older turns: Use UTC for daily totals.")
+    expect(prior).toContain("User: Recent question")
+    expect(prior).not.toContain("old verbatim turn")
+  })
+
   it("hands the agent what the user saw of an earlier model's turns", () => {
     // Given
     const history = [

@@ -2,6 +2,9 @@ import { createContext, useContext, useSyncExternalStore } from "react"
 import type { LocalAgentChannel, LocalAgentSnapshot } from "./localAgentChannel"
 
 export const LocalAgentContext = createContext<LocalAgentChannel | null>(null)
+export const LocalAgentSchemaAccessContext = createContext(false)
+export const useLocalAgentSchemaAccess = () =>
+  useContext(LocalAgentSchemaAccessContext)
 
 const subscribeToNothing = () => () => undefined
 const noSnapshot = () => null

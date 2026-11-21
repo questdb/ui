@@ -154,12 +154,14 @@ describe("messages written while the assistant answers", () => {
     )
 
     await userEvent.click(getByHook("chat-window-close"))
-    await openChat()
+    expect(queryByHook("ai-chat-window")).not.toBeInTheDocument()
     vi.setSystemTime(Date.now() + 3000)
     await first.release()
 
     await waitFor(() => expect(server.requests).toHaveLength(2))
     expect(lastRequestText(server)).toContain("Group them by symbol.")
+    await openChat()
+    expect(queryByHook("chat-queued-message")).not.toBeInTheDocument()
   })
 
   it("does not stop the answer when the steering shortcut refuses a console command", async () => {
