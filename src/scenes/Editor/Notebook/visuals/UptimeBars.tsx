@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
+import { PaneEmptyState } from "../PaneEmptyState"
 import styled, { useTheme } from "styled-components"
 import type { ColorShape } from "../../../../types/styled"
 import type { VisualConfig } from "../CellChart/chartTypes"
@@ -281,7 +282,8 @@ export const UptimeBars = ({ visual, statements, onSelect }: Props) => {
       typeof read === "string" ? null : uptimeByLane(read.segments, severity),
     [read, severity],
   )
-  if (typeof read === "string" || !lanes || !uptimes) return <Root ref={ref} />
+  if (typeof read === "string") return <PaneEmptyState>{read}</PaneEmptyState>
+  if (!lanes || !uptimes) return null
   const current = new Map(
     read.lanes.map((lane) => {
       const last = read.segments

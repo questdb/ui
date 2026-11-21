@@ -44,6 +44,15 @@ describe("migrateNotebookFormat", () => {
 })
 
 describe("sanitizers", () => {
+  it("preserves an uptime override for a long query-derived state label", () => {
+    const state = "device state ".repeat(18)
+    const visual = sanitizeVisualConfig({
+      type: "uptime",
+      severity: { [state]: "bad" },
+    })
+    expect(visual?.severity?.[state]).toBe("bad")
+  })
+
   it("keeps a visual's known roles and drops unknown types", () => {
     // Given / When
     const visual = sanitizeVisualConfig({
