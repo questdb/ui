@@ -87,10 +87,11 @@ export const gaugeOption = ({
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
     return missing("The query returned no rows.")
+  const valueColumn = visual.columns?.value
   const valueIdx =
-    columnIndex(rows, visual.columns?.value) >= 0
-      ? columnIndex(rows, visual.columns?.value)
-      : firstColumnOf(rows, "numeric")
+    valueColumn === undefined
+      ? firstColumnOf(rows, "numeric")
+      : columnIndex(rows, valueColumn)
   const err = need(rows, valueIdx, "value", visual.columns?.value)
   if (err) return missing(err)
   const valueName = rows.columns[valueIdx].name

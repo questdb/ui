@@ -97,6 +97,21 @@ describe("stateTimelineOption", () => {
 })
 
 describe("gaugeOption", () => {
+  it("does not substitute another metric when the configured column disappears", () => {
+    const result = gaugeOption({
+      visual: { type: "gauge", columns: { value: "cpu_percent" } },
+      statements: [
+        { columns: [{ name: "memory_percent", type: "DOUBLE" }], rows: [[72]] },
+      ],
+      colors: lightColors,
+      formats: {},
+    })
+    expect(result.option).toBeNull()
+    expect(result.problems[0]?.message).toContain(
+      'column "cpu_percent" not found',
+    )
+  })
+
   it("reports NULL as missing while keeping a genuine zero", () => {
     const build = (value: number | null) =>
       gaugeOption({
