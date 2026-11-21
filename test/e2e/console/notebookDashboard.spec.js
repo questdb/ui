@@ -29,7 +29,12 @@ describe("notebook dashboard", () => {
             label: "Desk dashboard",
             notebookViewState: {
               focusedCellId: "desk-picker",
-              settings: { variables: [{ name: "Σx", value: "'London'" }] },
+              settings: {
+                variables: [
+                  { name: "Σx", value: "'London'" },
+                  { name: "active_desk", value: "@σx" },
+                ],
+              },
               cells: [
                 {
                   id: "desk-picker",
@@ -49,7 +54,7 @@ describe("notebook dashboard", () => {
                   id: "selected-desk",
                   position: 1,
                   value:
-                    "select concat('Active desk: ', @σx) as desk, 1 as volume",
+                    "select concat('Active desk: ', @active_desk) as desk, 1 as volume",
                   mode: "draw",
                   paneView: "result",
                   chartConfig: {

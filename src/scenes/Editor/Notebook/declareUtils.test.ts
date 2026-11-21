@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import queries from "./__fixtures__/declare-cases.json"
 import {
+  affectedVariables,
   isValidVariableName,
   mapWireErrorPosition,
   normalizeVariables,
@@ -14,6 +15,21 @@ import {
 
 const vars = (values: Record<string, string>) =>
   Object.entries(values).map(([name, value]) => ({ name, value }))
+
+describe("affectedVariables", () => {
+  it("follows chains and cycles without treating quoted references as edges", () => {
+    const affected = affectedVariables(
+      ["BASE"],
+      [
+        { name: "base", value: "@third" },
+        { name: "second", value: "@BASE * 2" },
+        { name: "third", value: "@second + 1" },
+        { name: "quoted", value: "'@second'" },
+      ],
+    )
+    expect(affected).toEqual(new Set(["base", "second", "third"]))
+  })
+})
 
 describe("usesVariables", () => {
   const changed = new Set(["σx", "desk"])

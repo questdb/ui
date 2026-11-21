@@ -40,16 +40,38 @@ export const expandGlobals = (sql: string, globals: unknown): string => {
 export const stripLeadingAt = (raw: string): string =>
   raw.startsWith("@") ? raw.slice(1) : raw
 
+const sqlVariableNames = (sql: string): string[] =>
+  tokenize(maskParserBlockComments(sql)).tokens.flatMap((token) =>
+    token.tokenType.name === "VariableReference"
+      ? [stripLeadingAt(token.image).toLowerCase()]
+      : [],
+  )
+
 /** Matches complete SQL variable tokens, not prefixes, comments or literals. */
 export const usesVariables = (
   sql: string,
   names: ReadonlySet<string>,
-): boolean =>
-  tokenize(maskParserBlockComments(sql)).tokens.some(
-    (token) =>
-      token.tokenType.name === "VariableReference" &&
-      names.has(stripLeadingAt(token.image).toLowerCase()),
-  )
+): boolean => sqlVariableNames(sql).some((name) => names.has(name))
+
+/** Includes values derived (transitively) from the changed variables. */
+export const affectedVariables = (
+  changed: readonly string[],
+  variables: readonly NotebookVariable[] | undefined,
+): ReadonlySet<string> => {
+  const dependents = new Map<string, string[]>()
+  for (const variable of variables ?? []) {
+    for (const dependency of sqlVariableNames(variable.value)) {
+      const names = dependents.get(dependency) ?? []
+      names.push(variable.name.toLowerCase())
+      dependents.set(dependency, names)
+    }
+  }
+  const affected = new Set(changed.map((name) => name.toLowerCase()))
+  // Set iteration visits names added along the way and terminates on cycles.
+  for (const name of affected)
+    for (const dependent of dependents.get(name) ?? []) affected.add(dependent)
+  return affected
+}
 
 export const renderDeclareBlock = (variables: NotebookVariable[]): string => {
   const valid = variables.filter(({ name }) => isValidVariableName(name))

@@ -83,7 +83,11 @@ import {
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import type { QueryKey } from "../../../store/Query/types"
-import { createValidateWithGlobals, usesVariables } from "./declareUtils"
+import {
+  affectedVariables,
+  createValidateWithGlobals,
+  usesVariables,
+} from "./declareUtils"
 import {
   CellRefreshProvider,
   useCellRefreshEngine,
@@ -693,7 +697,7 @@ export const NotebookProvider: React.FC<{
     const names = pendingVariableRefreshRef.current
     if (names.length === 0) return
     pendingVariableRefreshRef.current = []
-    const changedNames = new Set(names.map((name) => name.toLowerCase()))
+    const changedNames = affectedVariables(names, settings.variables)
     cellRefreshEngine.refreshWhere((_cellId, sql) =>
       usesVariables(sql, changedNames),
     )
