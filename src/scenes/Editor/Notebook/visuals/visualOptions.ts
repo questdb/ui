@@ -95,7 +95,11 @@ export const gaugeOption = ({
   if (err) return missing(err)
   const valueName = rows.columns[valueIdx].name
   const format = formats[valueName]
-  const value = toNumber(rows.rows[0][valueIdx]) ?? 0
+  const value = toNumber(rows.rows[0][valueIdx])
+  if (value === null)
+    return missing(
+      `No numeric value for ${JSON.stringify(valueName)} in the first row.`,
+    )
   const labelIdx = columnIndex(rows, visual.columns?.label)
   const min = visual.min ?? 0
   const max =

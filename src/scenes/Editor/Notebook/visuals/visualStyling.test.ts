@@ -97,6 +97,21 @@ describe("stateTimelineOption", () => {
 })
 
 describe("gaugeOption", () => {
+  it("reports NULL as missing while keeping a genuine zero", () => {
+    const build = (value: number | null) =>
+      gaugeOption({
+        visual: { type: "gauge" },
+        statements: [
+          { columns: [{ name: "value", type: "DOUBLE" }], rows: [[value]] },
+        ],
+        colors: lightColors,
+        formats: {},
+      })
+    expect(build(null).option).toBeNull()
+    expect(build(null).problems[0]?.message).toContain("No numeric value")
+    expect(build(0).drawn.value).toBe(0)
+  })
+
   it("shows the value large and only the scale ends as labels", () => {
     // Given
     const memory = rows([["bytes", "LONG"]], [[300]])
