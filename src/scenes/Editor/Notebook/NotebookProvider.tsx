@@ -980,7 +980,10 @@ export const NotebookProvider: React.FC<{
         })
     },
     cancelCell,
-    cancelQuery: execution.cancelQuery,
+    cancelQuery: (cellId, index) => {
+      cellRefreshEngineRef.current?.discardVariableRefresh(cellId)
+      execution.cancelQuery(cellId, index)
+    },
     setActiveStatement: execution.setActiveStatement,
     setCellMode,
     clearCellResult,

@@ -245,6 +245,8 @@ export const DrawCanvas: React.FC<Props> = ({
   }
 
   const theme = useTheme()
+  const { settings } = useNotebookState()
+  const preciseTimePointer = settings.chartSync?.crosshair === "line"
   const formats = useMemo(() => cell.formats ?? {}, [cell.formats])
   const option = useMemo(
     () =>
@@ -253,13 +255,12 @@ export const DrawCanvas: React.FC<Props> = ({
           colors: theme.color,
           formats,
           clickColumn: cell.interactions?.click?.column,
+          preciseTimePointer,
         }),
         cell.interactions,
       ),
-    [resolution, theme.color, formats, cell.interactions],
+    [resolution, theme.color, formats, cell.interactions, preciseTimePointer],
   )
-
-  const { settings } = useNotebookState()
   const { setVariableValues, updateSettings, getVariables } =
     useNotebookActions()
   // A save adds the variables the Interactions section created, then the
@@ -464,13 +465,14 @@ export const DrawCanvas: React.FC<Props> = ({
               <LazyChartRenderer
                 ref={chartRendererRef}
                 option={option}
-                specKey={JSON.stringify(
+                specKey={JSON.stringify([
+                  preciseTimePointer,
                   resolution.renderQueries.map(({ percentStack, scatter }) => [
                     percentStack === true,
                     scatter?.size ?? null,
                     scatter?.color ?? null,
                   ]),
-                )}
+                ])}
                 onZoomChange={handleZoomChange}
                 isFocused={isFocused}
                 animate={animatesAt(refreshIntervalMs)}

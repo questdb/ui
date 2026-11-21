@@ -106,7 +106,11 @@ export const withBrush = (
   if (!interactions?.brush) return option
   const x = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis
   if ((x as { type?: string } | undefined)?.type !== "time") return option
-  const zooms = Array.isArray(option.dataZoom) ? option.dataZoom : []
+  const zooms = Array.isArray(option.dataZoom)
+    ? option.dataZoom
+    : option.dataZoom
+      ? [option.dataZoom]
+      : []
   return {
     ...option,
     // The brush's own toolbar buttons are not needed: dragging selects.

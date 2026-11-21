@@ -7,6 +7,18 @@ const first = (value: unknown): Box =>
   (Array.isArray(value) ? value[0] : value) as Box
 
 describe("fitLayout", () => {
+  it("gives two visible color scales separate bands", () => {
+    const result = fitLayout(
+      { visualMap: [{ seriesIndex: 0 }, { seriesIndex: 1 }] },
+      SIZE,
+    )
+    const [first, second] = result.visualMap as {
+      seriesIndex: number
+      bottom: number
+    }[]
+    expect(first.bottom).toBeGreaterThan(0)
+    expect(second.bottom).toBeGreaterThan(first.bottom)
+  })
   it("preserves ECharts' default track length on a Y-only slider", () => {
     const slider = { type: "slider", yAxisIndex: 0 }
     const option = fitLayout(

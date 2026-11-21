@@ -144,6 +144,18 @@ describe("ChartTypesDialog", () => {
     )
   })
 
+  it("restores the field's focus when discarding is cancelled", async () => {
+    const { dialog } = renderDialog()
+    const description = within(dialog).getByDisplayValue("Dots")
+    await userEvent.type(description, " again")
+    await userEvent.keyboard("{Escape}")
+    const confirm = await screen.findByRole("alertdialog")
+    await userEvent.click(
+      within(confirm).getByRole("button", { name: "Keep editing" }),
+    )
+    await waitFor(() => expect(description).toHaveFocus())
+  })
+
   it("blocks saving a type that does not compile", async () => {
     // Given
     const { dialog, onSave } = renderDialog()

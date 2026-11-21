@@ -44,6 +44,11 @@ describe("migrateNotebookFormat", () => {
 })
 
 describe("sanitizers", () => {
+  it("preserves an explicitly bound long query alias", () => {
+    const column = "a".repeat(201)
+    const interactions = { click: { variable: "selected", column } }
+    expect(sanitizeInteractions(interactions)).toEqual(interactions)
+  })
   it("preserves an uptime override for a long query-derived state label", () => {
     const state = "device state ".repeat(18)
     const visual = sanitizeVisualConfig({

@@ -212,6 +212,7 @@ export const ChartTypesDialog: React.FC<Props> = ({
   // agent) while the dialog is open is offered, not forced.
   const [base, setBase] = useState(types)
   const nameRef = useRef<HTMLInputElement>(null)
+  const beforeConfirm = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -269,7 +270,17 @@ export const ChartTypesDialog: React.FC<Props> = ({
     setConfirm(null)
     onOpenChange(false)
   }
-  const requestClose = () => (dirty ? setConfirm("discard") : close())
+  const requestClose = () => {
+    if (!dirty) {
+      close()
+      return
+    }
+    beforeConfirm.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    setConfirm("discard")
+  }
 
   const save = () => {
     if (changedElsewhere) return
@@ -531,7 +542,16 @@ export const ChartTypesDialog: React.FC<Props> = ({
           <ForwardRef>
             <Overlay primitive={AlertDialog.Overlay} />
           </ForwardRef>
-          <AlertDialog.Content maxwidth="44rem">
+          <AlertDialog.Content
+            maxwidth="44rem"
+            onCloseAutoFocus={(event) => {
+              const previous = beforeConfirm.current
+              beforeConfirm.current = null
+              if (!open || !previous?.isConnected) return
+              event.preventDefault()
+              previous.focus()
+            }}
+          >
             <AlertDialog.Title>
               {confirm === "delete"
                 ? `Delete ${selected?.name ?? "chart type"}?`

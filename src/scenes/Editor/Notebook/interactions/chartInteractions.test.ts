@@ -4,7 +4,18 @@ import {
   clickedValue,
   interactionEvents,
   sqlLiteral,
+  withBrush,
 } from "./chartInteractions"
+
+it("keeps a Custom chart's single zoom slider while adding a brush", () => {
+  const slider = { type: "slider" as const, start: 15, end: 75 }
+  const option = withBrush(
+    { xAxis: { type: "time" }, dataZoom: slider },
+    { brush: { from: "start", to: "end" } },
+  )
+  expect(option.dataZoom).toEqual([slider])
+  expect(option.brush).toMatchObject({ brushType: "lineX" })
+})
 
 describe("sqlLiteral", () => {
   it("quotes text and keeps numbers", () => {

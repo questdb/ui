@@ -28,7 +28,7 @@ it("syncs a peer’s pointer without showing its tooltip in crosshair-only mode"
   }> = []
   const leaves: Array<() => void> = []
   const time = "2026-01-01T00:01:00.000Z"
-  function chart(metric: string, value: number) {
+  function chart(metric: string, value: number, middle = time) {
     const query = `select ts, ${metric} from metrics`
     const options = toChartResult(
       {
@@ -44,7 +44,7 @@ it("syncs a peer’s pointer without showing its tooltip in crosshair-only mode"
             ],
             dataset: [
               ["2026-01-01T00:00:00.000Z", value - 1],
-              [time, value],
+              [middle, value],
               ["2026-01-01T00:02:00.000Z", value + 1],
             ],
             count: 3,
@@ -59,7 +59,9 @@ it("syncs a peer’s pointer without showing its tooltip in crosshair-only mode"
     const resolution = resolveDraw([query], options.results, undefined)
     expect(resolution.renderQueries[0]?.type).toBe("line")
     const option = withZoomDensity(
-      buildEchartsOption(resolution.chart, resolution.renderQueries),
+      buildEchartsOption(resolution.chart, resolution.renderQueries, {
+        preciseTimePointer: true,
+      }),
       { wheel: true, slider: true },
     )
     expect(option.xAxis).toMatchObject({ type: "time" })
@@ -78,7 +80,7 @@ it("syncs a peer’s pointer without showing its tooltip in crosshair-only mode"
   }
   try {
     const source = chart("source_metric", 17)
-    const peer = chart("peer_metric", 2718)
+    const peer = chart("peer_metric", 2718, "2026-01-01T00:01:25.000Z")
     const observedAxes: unknown[] = []
     const peerMoves: unknown[] = []
     source.instance.on("updateAxisPointer", (event) => {

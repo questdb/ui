@@ -90,6 +90,7 @@ const hideTime = (bufferId: number, source: EChartsType) => {
 }
 
 type Zoom = {
+  id?: string
   startValue?: number
   endValue?: number
   xAxisIndex?: number | number[] | false
@@ -117,10 +118,33 @@ const controlsPrimaryX = (zoom: Zoom): boolean => {
   )
 }
 
-const zoomTo = (bufferId: number, source: EChartsType) => {
+type ZoomTarget = { dataZoomId?: string; dataZoomIndex?: number | number[] }
+const zoomTo = (
+  bufferId: number,
+  source: EChartsType,
+  event?: ZoomTarget & { batch?: ZoomTarget[] },
+) => {
   const sync = settings.get(bufferId)
   if (!sync?.zoom || !isTimeChart(source)) return
-  const zoom = zoomsOf(source).find(controlsPrimaryX)
+  const controls = zoomsOf(source)
+  const targets = event?.batch ?? [event]
+  const relevant = targets.some((target) => {
+    if (target?.dataZoomId !== undefined)
+      return controls.some(
+        (zoom) => zoom.id === target.dataZoomId && controlsPrimaryX(zoom),
+      )
+    if (target?.dataZoomIndex !== undefined) {
+      const indexes = Array.isArray(target.dataZoomIndex)
+        ? target.dataZoomIndex
+        : [target.dataZoomIndex]
+      return indexes.some(
+        (index) => controls[index] && controlsPrimaryX(controls[index]),
+      )
+    }
+    return true
+  })
+  if (!relevant) return
+  const zoom = controls.find(controlsPrimaryX)
   if (zoom?.startValue === undefined || zoom.endValue === undefined) return
   drive(() => {
     for (const { instance } of others(bufferId, source)) {
@@ -164,8 +188,9 @@ export const joinChartSync = (
     if (!driving && sync && sync.crosshair !== "off" && isTimeChart(instance))
       hideTime(bufferId, instance)
   }
-  const onZoom = () => {
-    if (!driving) zoomTo(bufferId, instance)
+  const onZoom = (event: unknown) => {
+    if (!driving)
+      zoomTo(bufferId, instance, event as ZoomTarget & { batch?: ZoomTarget[] })
   }
   instance.on("updateAxisPointer", onPointer)
   instance.on("globalout", onOut)

@@ -15,6 +15,7 @@ import {
   severityOf,
   uptimeByLane,
   type Bucket,
+  type Segment,
   type Severity,
 } from "./stateSegments"
 
@@ -301,10 +302,30 @@ export const UptimeBars = ({
       Math.floor(barsWidth / MIN_SLOT_PX) || DEFAULT_BUCKETS,
     ),
   )
-  const lanes = useMemo(
-    () => (typeof read === "string" ? null : bucketLanes(read, count)),
-    [read, count],
-  )
+  const firstVisibleLane = visible[0]?.index ?? 0
+  const lastVisibleLane = visible.at(-1)?.index ?? -1
+  const segmentsByLane = useMemo(() => {
+    const grouped = new Map<string, Segment[]>()
+    if (typeof read !== "string")
+      for (const segment of read.segments) {
+        const lane = grouped.get(segment.lane)
+        if (lane) lane.push(segment)
+        else grouped.set(segment.lane, [segment])
+      }
+    return grouped
+  }, [read])
+  const lanes = useMemo(() => {
+    if (typeof read === "string") return null
+    const names = read.lanes.slice(firstVisibleLane, lastVisibleLane + 1)
+    return bucketLanes(
+      {
+        ...read,
+        lanes: names,
+        segments: names.flatMap((name) => segmentsByLane.get(name) ?? []),
+      },
+      count,
+    )
+  }, [read, count, firstVisibleLane, lastVisibleLane, segmentsByLane])
   const severity = visual.severity
   const uptimes = useMemo(
     () =>

@@ -192,7 +192,12 @@ export const statTiles = (
   visual: VisualConfig,
   statements: (StatementRows | null)[],
   clickColumn?: string,
-): { tiles: Tile[]; valueName: string | null; problems: string[] } => {
+): {
+  tiles: Tile[]
+  valueName: string | null
+  changeName?: string
+  problems: string[]
+} => {
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
     return {
@@ -269,7 +274,12 @@ export const statTiles = (
       spark: sparks.get(labelIdx >= 0 ? label : "") ?? sparks.get("") ?? [],
     }
   })
-  return { tiles, valueName: rows.columns[valueIdx].name, problems }
+  return {
+    tiles,
+    valueName: rows.columns[valueIdx].name,
+    changeName: rows.columns[changeIdx]?.name,
+    problems,
+  }
 }
 
 type Props = {
@@ -292,7 +302,7 @@ export const StatTiles = ({
   onSelect,
 }: Props) => {
   const theme = useTheme()
-  const { tiles, valueName, problems } = useMemo(
+  const { tiles, valueName, changeName, problems } = useMemo(
     () => statTiles(visual, statements, clickColumn),
     [visual, statements, clickColumn],
   )
@@ -300,9 +310,7 @@ export const StatTiles = ({
     return <PaneEmptyState>{problems[0] ?? "No data to plot."}</PaneEmptyState>
   const limitNotice = statTileLimitNotice(statements)
   const format = valueName ? formats[valueName] : undefined
-  const changeFormat = visual.columns?.change
-    ? formats[visual.columns.change]
-    : undefined
+  const changeFormat = changeName ? formats[changeName] : undefined
   return (
     <Grid
       $count={tiles.length}

@@ -216,7 +216,8 @@ export const sanitizeInteractions = (
   const out: CellInteractions = {}
   if (isRecord(value.click) && isVariableName(value.click.variable)) {
     out.click = { variable: value.click.variable }
-    if (isName(value.click.column)) out.click.column = value.click.column
+    if (typeof value.click.column === "string" && value.click.column.length > 0)
+      out.click.column = value.click.column
   }
   if (
     isRecord(value.brush) &&

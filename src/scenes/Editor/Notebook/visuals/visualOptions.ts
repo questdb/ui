@@ -592,6 +592,8 @@ export const sunburstOption = (ctx: VisualContext): VisualBuild => {
 
 const edges = (ctx: VisualContext) => {
   const rows = ctx.statements[0]
+  if (rows?.partial)
+    return "The query returned only part of its rows. Aggregate links in SQL or reduce the result before drawing."
   if (!rows || rows.rows.length === 0) return "The query returned no rows."
   const c = ctx.visual.columns ?? {}
   const fromIdx = columnIndex(rows, c.from, 0)

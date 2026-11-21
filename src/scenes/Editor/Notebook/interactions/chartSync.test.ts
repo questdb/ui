@@ -170,7 +170,9 @@ describe("notebook chart sync", () => {
     expect(peer.dispatchAction).not.toHaveBeenCalled()
 
     setChartSync(1, { crosshair: "off", zoom: true })
-    source.emit("datazoom")
+    source.emit("datazoom", { dataZoomIndex: 0 })
+    expect(peer.dispatchAction).not.toHaveBeenCalled()
+    source.emit("datazoom", { batch: [{ dataZoomIndex: 1 }] })
     expect(peer.dispatchAction).toHaveBeenCalledTimes(1)
     expect(peer.dispatchAction).toHaveBeenCalledWith({
       type: "dataZoom",

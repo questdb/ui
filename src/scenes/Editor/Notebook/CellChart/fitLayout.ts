@@ -139,9 +139,10 @@ const placeBottomBands = (option: Box, size: Size): Bands => {
   }
 
   if (list(option.visualMap).some(shown)) {
-    const bottom = bands.bottom + 6
     option.visualMap = list(option.visualMap).map((map) => {
       if (!shown(map)) return map
+      const bottom = bands.bottom + 6
+      bands.bottom += VISUAL_MAP_BAND
       const placed: Box = {
         ...map,
         orient: "horizontal",
@@ -158,7 +159,6 @@ const placeBottomBands = (option: Box, size: Size): Bands => {
       delete placed.right
       return placed
     })
-    bands.bottom += VISUAL_MAP_BAND
   }
 
   const sliders = list(option.dataZoom).filter(

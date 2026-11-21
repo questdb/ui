@@ -64,6 +64,7 @@ export type ChartContext = {
   colors?: ColorShape
   formats?: ColumnFormats
   clickColumn?: string
+  preciseTimePointer?: boolean
 }
 
 type Series = Record<string, unknown>
@@ -1321,6 +1322,9 @@ export const buildEchartsOption = (
       ? {
           type: "time",
           ...xAxisName,
+          ...(context.preciseTimePointer
+            ? { axisPointer: { snap: false } }
+            : {}),
           // Extend the time axis 5% on each side so range bars sit inside the
           // plot. Candles and bars need no room: ECharts 6.1 keeps their
           // shapes inside the axis (containShape).
