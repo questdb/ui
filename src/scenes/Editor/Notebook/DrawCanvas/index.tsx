@@ -256,7 +256,8 @@ export const DrawCanvas: React.FC<Props> = ({
   )
 
   const { settings } = useNotebookState()
-  const { setVariableValues, updateSettings } = useNotebookActions()
+  const { setVariableValues, updateSettings, getVariables } =
+    useNotebookActions()
   // A save adds the variables the Interactions section created, then the
   // cell's settings.
   const saveSettings = useCallback(
@@ -264,13 +265,13 @@ export const DrawCanvas: React.FC<Props> = ({
       if (newVariables.length > 0)
         updateSettings({
           variables: withNewVariables(
-            normalizeVariables(settings.variables),
+            normalizeVariables(getVariables()),
             newVariables,
           ),
         })
       onSettingsChange(next)
     },
-    [updateSettings, settings.variables, onSettingsChange],
+    [updateSettings, getVariables, onSettingsChange],
   )
   const visual = cell.chartConfig?.visual
   const custom = cell.chartConfig?.custom

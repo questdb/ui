@@ -162,6 +162,7 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   )
   // Mounting already open means a remount mid-session: keep the draft.
   const wasOpenRef = useRef(open)
+  const saveEpoch = useRef(0)
 
   const updateDraft = useCallback(
     (next: DrawDraft) => {
@@ -186,6 +187,7 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
 
   const dismiss = useCallback(
     (method: SettingsDismissMethod) => {
+      saveEpoch.current++
       telemetry?.onCancel?.(method)
       onClose()
     },
@@ -257,8 +259,10 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   draftRef.current = draft
   useEffect(() => {
     acceptsSaveRef.current = open
+    setCommitting(false)
     return () => {
       acceptsSaveRef.current = false
+      saveEpoch.current++
     }
   }, [open])
 
@@ -289,11 +293,14 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     }
     // New variables join every query of the notebook: the server checks them.
     if (newVariablesInUse(draft).length > 0) {
+      const epoch = saveEpoch.current
       setCommitting(true)
       const server = await serverInteractionErrors(draft, variables, (q) =>
         quest.validateQuery(q),
-      ).finally(() => setCommitting(false))
-      if (!acceptsSaveRef.current) return
+      ).finally(() => {
+        if (saveEpoch.current === epoch) setCommitting(false)
+      })
+      if (!acceptsSaveRef.current || saveEpoch.current !== epoch) return
       // Edited while the database checked: check the edits instead.
       if (draftRef.current !== original) return commit()
       setServerProblems(server)

@@ -4,6 +4,7 @@ import {
   gaugeOption,
   graphOption,
   liquidityHeatmapOption,
+  mapOption,
   sankeyOption,
   stateTimelineOption,
   treemapOption,
@@ -182,7 +183,52 @@ it("reports a liquidity heatmap with no drawable cells", () => {
   expect(result.problems[0]?.message).toContain("No drawable liquidity")
 })
 
+it("keeps the mapped point’s exact selection field separate from its coordinates", () => {
+  const { option } = mapOption({
+    visual: { type: "map" },
+    formats: {},
+    colors: lightColors,
+    clickColumn: "site",
+    statements: [
+      rows(
+        [
+          ["lat", "DOUBLE"],
+          ["lon", "DOUBLE"],
+          ["value", "INT"],
+          ["site", "SYMBOL"],
+        ],
+        [[12, 34, 5, "west"]],
+      ),
+    ],
+  })
+  const [points] = series(option)
+  expect(clickedValue({ data: (points.data as unknown[])[0] }, "site")).toBe(
+    "west",
+  )
+})
+
 describe("volumeProfileOption", () => {
+  it("does not report point of control for a capped prefix", () => {
+    const result = volumeProfileOption({
+      visual: { type: "volumeProfile" },
+      statements: [
+        {
+          ...rows(
+            [
+              ["price", "DOUBLE"],
+              ["volume", "DOUBLE"],
+            ],
+            [[10, 2]],
+          ),
+          partial: true,
+        },
+      ],
+      colors: lightColors,
+      formats: {},
+    })
+    expect(result.option).toBeNull()
+    expect(result.problems[0]?.message).toContain("requires a complete result")
+  })
   const common = { colors: lightColors, formats: {}, clickColumn: "price" }
   it("anchors POC to the winning bar, not a rounded display label", () => {
     const result = volumeProfileOption({

@@ -68,13 +68,7 @@ export const CustomChart = ({
     () => buildCustomOption(sanitized.option, statements, live),
     [sanitized, statements, live],
   )
-  const specKey = useMemo(
-    () =>
-      JSON.stringify(rawOption).length.toString(36) +
-      ":" +
-      JSON.stringify(sanitized.option).slice(0, 200),
-    [rawOption, sanitized],
-  )
+  const specKey = useMemo(() => JSON.stringify(sanitized.option), [sanitized])
 
   const neededMaps = useMemo(() => mapsUsedBy(built.option), [built])
   const [mapStatus, setMapStatus] = useState<"loading" | "error" | "ready">(
@@ -138,7 +132,8 @@ export const CustomChart = ({
   // A chart type whose code is not allowed draws nothing: say why.
   const waiting = chartTypesUsedBy(rawOption).filter(
     (name) =>
-      chartTypes?.some((t) => t.name === name && t.allowed !== true) ?? false,
+      !resolution.renderItems.has(name) &&
+      (chartTypes?.some((t) => t.name === name && t.allowed !== true) ?? false),
   )
   if (waiting.length > 0)
     return (

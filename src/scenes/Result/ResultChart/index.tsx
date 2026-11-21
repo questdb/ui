@@ -315,6 +315,9 @@ export const ResultChart: React.FC<Props> = ({
           )}
           <ChartSuspense>
             <LazyChartRenderer
+              specKey={JSON.stringify(
+                resolution?.renderQueries.map(({ scatter }) => scatter ?? null),
+              )}
               ref={chartRendererRef}
               option={option}
               onZoomChange={handleZoomChange}

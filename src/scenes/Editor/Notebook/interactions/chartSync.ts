@@ -78,19 +78,47 @@ const hideTime = (bufferId: number, source: EChartsType) => {
   })
 }
 
+type Zoom = {
+  startValue?: number
+  endValue?: number
+  xAxisIndex?: number | number[] | false
+  yAxisIndex?: number | number[] | false
+  radiusAxisIndex?: number | number[] | false
+  angleAxisIndex?: number | number[] | false
+  singleAxisIndex?: number | number[] | false
+  orient?: string
+}
+
+const zoomsOf = (instance: EChartsType): Zoom[] =>
+  (instance.getOption() as { dataZoom?: Zoom[] }).dataZoom ?? []
+
+const controlsPrimaryX = (zoom: Zoom): boolean => {
+  if (zoom.xAxisIndex !== undefined)
+    return Array.isArray(zoom.xAxisIndex)
+      ? zoom.xAxisIndex.includes(0)
+      : zoom.xAxisIndex === 0
+  return (
+    zoom.yAxisIndex === undefined &&
+    zoom.radiusAxisIndex === undefined &&
+    zoom.angleAxisIndex === undefined &&
+    zoom.singleAxisIndex === undefined &&
+    zoom.orient !== "vertical"
+  )
+}
+
 const zoomTo = (bufferId: number, source: EChartsType) => {
   const sync = settings.get(bufferId)
   if (!sync?.zoom || !isTimeChart(source)) return
-  const option = source.getOption() as {
-    dataZoom?: { startValue?: number; endValue?: number }[]
-  }
-  const zoom = option.dataZoom?.[0]
+  const zoom = zoomsOf(source).find(controlsPrimaryX)
   if (zoom?.startValue === undefined || zoom.endValue === undefined) return
   drive(() => {
     for (const { instance } of others(bufferId, source)) {
       if (!isTimeChart(instance)) continue
+      const dataZoomIndex = zoomsOf(instance).findIndex(controlsPrimaryX)
+      if (dataZoomIndex < 0) continue
       instance.dispatchAction({
         type: "dataZoom",
+        dataZoomIndex,
         startValue: zoom.startValue,
         endValue: zoom.endValue,
       })
@@ -109,7 +137,9 @@ export const joinChartSync = (
   instance: EChartsType,
 ): (() => void) => {
   const onPointer = (event: unknown) => {
-    if (driving || !isTimeChart(instance)) return
+    const sync = settings.get(bufferId)
+    if (driving || !sync || sync.crosshair === "off" || !isTimeChart(instance))
+      return
     const info = (
       event as {
         axesInfo?: { axisDim?: string; axisIndex?: number; value?: unknown }[]

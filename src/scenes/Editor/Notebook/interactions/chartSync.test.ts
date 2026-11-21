@@ -13,7 +13,10 @@ const makeChart = (type = "time") => {
   const chart = {
     getOption: vi.fn(() => ({
       xAxis: [{ type }],
-      dataZoom: [{ startValue: 0, endValue: 1_000 }],
+      dataZoom: [
+        { startValue: 50, endValue: 100, yAxisIndex: 0 },
+        { startValue: 0, endValue: 1_000, xAxisIndex: 0 },
+      ],
     })),
     getHeight: vi.fn(() => 200),
     convertToPixel: vi.fn(() => 42),
@@ -98,6 +101,7 @@ describe("notebook chart sync", () => {
     join(2, otherNotebook)
 
     source.emit("updateAxisPointer", move)
+    expect(source.getOption).not.toHaveBeenCalled()
     expect(peer.dispatchAction).not.toHaveBeenCalled()
 
     setChartSync(1, { crosshair: "line", zoom: false })
@@ -165,6 +169,7 @@ describe("notebook chart sync", () => {
     expect(peer.dispatchAction).toHaveBeenCalledTimes(1)
     expect(peer.dispatchAction).toHaveBeenCalledWith({
       type: "dataZoom",
+      dataZoomIndex: 1,
       startValue: 0,
       endValue: 1_000,
     })

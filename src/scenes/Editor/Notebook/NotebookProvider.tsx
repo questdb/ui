@@ -676,7 +676,7 @@ export const NotebookProvider: React.FC<{
       executeSingle,
       validateWithGlobals,
       setCellResult,
-      isRestoredGridResultStale: (result) =>
+      isRestoredResultStale: (result) =>
         result.results.some(
           (statement) =>
             statement.type === "dql" &&

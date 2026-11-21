@@ -118,15 +118,21 @@ export const treeFromPath = (
   colorIdx = -1,
 ): TreeNode[] => {
   const root: TreeNode = { name: "", children: [] }
+  const childrenByName = new WeakMap<TreeNode, Map<string, TreeNode>>()
   for (const row of rows.rows) {
     let node = root
     pathIdx.forEach((p, level) => {
       const name = toLabel(row[p])
-      node.children ??= []
-      let child = node.children.find((c) => c.name === name)
+      let children = childrenByName.get(node)
+      if (!children) {
+        children = new Map()
+        childrenByName.set(node, children)
+      }
+      let child = children.get(name)
       if (!child) {
         child = { name }
-        node.children.push(child)
+        children.set(name, child)
+        ;(node.children ??= []).push(child)
       }
       if (level === pathIdx.length - 1) {
         child.value = (child.value ?? 0) + (toNumber(row[valueIdx]) ?? 0)

@@ -299,9 +299,13 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     )
       return
     onSave({
-      highlight: highlightToSave(draft.identityColumns, [], defaultIdentity),
-      formats: tidyFormats(formats),
-      gridMode,
+      highlight: highlightToSave(
+        draftRef.current.identityColumns,
+        [],
+        defaultIdentity,
+      ),
+      formats: tidyFormats(formatsRef.current),
+      gridMode: gridModeRef.current,
       interactions: interactionDraft.interactions,
       newVariables: newVariablesInUse(interactionDraft),
     })

@@ -108,6 +108,44 @@ describe("VisualCanvas", () => {
     )
   })
 
+  it("windows large Uptime panels instead of mounting every lane", () => {
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(330)
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(800)
+    const { container } = renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "uptime" }}
+        statements={[
+          {
+            columns: [
+              { name: "ts", type: "TIMESTAMP" },
+              { name: "service", type: "SYMBOL" },
+              { name: "state", type: "SYMBOL" },
+            ],
+            rows: Array.from({ length: 400 }, (_, i) => [
+              ["2026-01-01T00:00:00Z", `host ${i}`, "up"],
+              ["2026-01-01T00:01:00Z", `host ${i}`, "down"],
+            ]).flat(),
+          },
+        ]}
+      />,
+    )
+    const lanes = container.querySelectorAll("[data-lane-index]")
+    expect(lanes.length).toBeGreaterThan(0)
+    expect(lanes.length).toBeLessThan(50)
+  })
+
+  it("explains a successful empty Bullet result", () => {
+    renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "bullet" }}
+        statements={[{ columns: [{ name: "reading", type: "INT" }], rows: [] }]}
+      />,
+    )
+    expect(screen.getByText("The query returned no rows.")).toBeVisible()
+  })
+
   it("explains an empty successful Stat result", () => {
     renderComponent(
       <VisualCanvas

@@ -36,6 +36,7 @@ import {
 } from "../statementIdentity"
 import {
   type ChartResult,
+  resultMatchesQueries,
   resultsEquivalent,
   successResults,
   toChartResult,
@@ -114,7 +115,7 @@ export type CellRefreshDeps = {
   ) => Promise<ValidateQueryResult>
   setCellResult: (cellId: string, result: CellResult | undefined) => void
   getCellResult: (cellId: string) => CellResult | null | undefined
-  isRestoredGridResultStale?: (result: CellResult) => boolean
+  isRestoredResultStale?: (result: CellResult) => boolean
   isDrawCell: (cellId: string) => boolean
   isCellRunning: (cellId: string) => boolean
   resultLoadStatus: (cellId: string) => CellResultStatus
@@ -562,6 +563,17 @@ export class CellRefreshEngine {
         this.refreshAfterRun.add(entry.cellId)
         continue
       }
+      if (entry.kind === "grid") {
+        const frame = this.getDeps().getCellResult(entry.cellId)
+        const queries =
+          entry.pendingSql === null
+            ? entry.state.queries
+            : getQueriesFromText(entry.pendingSql)
+        if (frame && !resultMatchesQueries(frame, queries)) {
+          refreshed--
+          continue
+        }
+      }
       // Matching SQL can be unchanged while its bound variables have changed.
       // Supersede even a manual fetch, which may hold the old values.
       this.forceRefresh(entry)
@@ -777,7 +789,14 @@ export class CellRefreshEngine {
     )
       this.createEntry(currentCell, "grid")
     const entry = this.entries.get(cellId)
-    if (entry?.kind === "grid" && entry.state.classifyBlock?.kind !== "write")
+    if (
+      entry?.kind === "grid" &&
+      entry.state.classifyBlock?.kind !== "write" &&
+      resultMatchesQueries(
+        currentCell?.result ?? this.getDeps().getCellResult(cellId),
+        entry.state.queries,
+      )
+    )
       this.forceRefresh(entry)
   }
 
@@ -1018,11 +1037,30 @@ export class CellRefreshEngine {
       this.updatePoll(entry)
       return
     }
+    const deps = this.getDeps()
+    const current = deps.getCellResult(entry.cellId)
+    if (
+      current &&
+      !entry.checkedRestoredBindings &&
+      deps.resultLoadStatus(entry.cellId) === "loaded"
+    ) {
+      entry.checkedRestoredBindings = true
+      // In particular, a Run snapshot may represent just one of several
+      // statements or an arbitrary selection. Do not execute untouched SQL.
+      if (
+        resultMatchesQueries(current, queries) &&
+        deps.isRestoredResultStale?.(current)
+      ) {
+        if (entry.kind === "grid" && this.isRunPending(entry.cellId))
+          this.refreshAfterRun.add(entry.cellId)
+        else this.forceRefresh(entry)
+        return
+      }
+    }
     if (entry.kind === "grid") {
       this.ensureGridData(entry)
       return
     }
-    const current = this.getDeps().getCellResult(entry.cellId)
     const chartResult = toChartResult(current, queries)
     if (
       chartResult.kind === "settled" &&
@@ -1059,21 +1097,6 @@ export class CellRefreshEngine {
     const deps = this.getDeps()
     const result = deps.getCellResult(entry.cellId)
     if (result != null) {
-      if (
-        !entry.checkedRestoredBindings &&
-        deps.resultLoadStatus(entry.cellId) === "loaded"
-      ) {
-        entry.checkedRestoredBindings = true
-        if (
-          entry.state.classifyBlock?.kind !== "write" &&
-          deps.isRestoredGridResultStale?.(result)
-        ) {
-          if (this.isRunPending(entry.cellId))
-            this.refreshAfterRun.add(entry.cellId)
-          else this.forceRefresh(entry)
-          return
-        }
-      }
       this.setState(entry, { settledKey: entry.state.queriesKey })
       // A reveal must not regress the freshness finishRound stamped.
       entry.lastFetchedAt = Math.max(

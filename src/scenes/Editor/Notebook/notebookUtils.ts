@@ -1018,7 +1018,11 @@ export const buildAppliedCells = (
         "cells",
       )
     }
-    if (req.chartConfig && req.chartConfig.queries.length > 0) {
+    if (
+      req.chartConfig &&
+      !drawsOwnChart &&
+      req.chartConfig.queries.length > 0
+    ) {
       const statementCount = getQueriesFromText(value).length
       if (
         statementCount > 0 &&
@@ -1031,6 +1035,7 @@ export const buildAppliedCells = (
       }
     }
     if (
+      !drawsOwnChart &&
       chartConfig?.queries.some(
         (q) => q != null && q.type === "candlestick" && !q.ohlc,
       )

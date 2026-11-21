@@ -861,6 +861,7 @@ export const mapOption = ({
   statements,
   colors,
   formats,
+  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
@@ -884,6 +885,11 @@ export const mapOption = ({
       : firstColumnOf(rows, "categorical")
   const format =
     valueIdx >= 0 ? formats[rows.columns[valueIdx].name] : undefined
+  const clickIdx = columnIndex(rows, clickColumn)
+  const clickData = (row: StatementRows["rows"][number]) =>
+    clickColumn !== undefined && clickIdx >= 0
+      ? { columns: { [clickColumn]: row[clickIdx] } }
+      : {}
   const geo = {
     map: "world",
     roam: true,
@@ -934,6 +940,7 @@ export const mapOption = ({
             data: rows.rows.map((r, i) => ({
               name: labelIdx >= 0 ? toLabel(r[labelIdx]) : "",
               value: [toNumber(r[lonIdx]), toNumber(r[latIdx]), values[i]],
+              ...clickData(r),
             })),
           },
         ],
@@ -956,6 +963,7 @@ export const mapOption = ({
   const data = rows.rows.map((r) => ({
     name: toLabel(r[regionIdx]),
     value: toNumber(r[valueIdx]),
+    ...clickData(r),
   }))
   const bounds = regionBounds(new Set(data.map((d) => d.name)))
   const values = data.map((d) => d.value ?? 0)
@@ -1154,6 +1162,10 @@ export const volumeProfileOption = ({
   clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
+  if (rows?.partial)
+    return missing(
+      "Volume profile requires a complete result to calculate the point of control. Aggregate by price in SQL or narrow the query.",
+    )
   if (!rows || rows.rows.length === 0)
     return missing("The query returned no rows.")
   const c = visual.columns ?? {}

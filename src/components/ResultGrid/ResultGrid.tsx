@@ -710,7 +710,12 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         ) {
           e.preventDefault()
           e.stopPropagation()
-          setFocusedCell({ row: 0, col: 0 })
+          const viewport = scrollRef.current
+          const firstVisibleRow = Math.min(
+            rowCount - 1,
+            Math.max(0, Math.floor((viewport?.scrollTop ?? 0) / ROW_HEIGHT)),
+          )
+          setFocusedCell({ row: firstVisibleRow, col: 0 })
           return
         }
         if (

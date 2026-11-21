@@ -42,12 +42,21 @@ const datasetsOf = (statements: (StatementRows | null)[]) =>
         name: c.name,
         type: dimensionType(c.type),
       })),
+      // QuestDB provides schema separately; the first array is always data.
+      sourceHeader: false,
       source:
         numeric.length === 0
           ? (s?.rows ?? [])
           : (s?.rows ?? []).map((row) => {
               const copy = row.slice()
-              for (const k of numeric) copy[k] = chartNumber(row[k])
+              for (const k of numeric) {
+                const raw = row[k]
+                const number = chartNumber(raw)
+                // ECharts parses float dimensions for plotting. Retain the
+                // exact text in raw event data for clicks and tooltips.
+                copy[k] =
+                  typeof raw === "string" && number !== null ? raw : number
+              }
               return copy
             }),
     }

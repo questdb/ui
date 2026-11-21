@@ -251,11 +251,10 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         if (isZoomed(zoom)) {
           const mounted = instance.getOption() as { dataZoom?: unknown }
           if (hasActiveZoomControl(mounted)) {
-            instance.dispatchAction({
-              type: "dataZoom",
-              start: zoom.start,
-              end: zoom.end,
-            })
+            instance.dispatchAction(
+              { type: "dataZoom", start: zoom.start, end: zoom.end },
+              { silent: true },
+            )
           } else {
             // The remounted chart has no control that could move the window
             // back: report the zoom as gone, or the owner's Reset button keeps

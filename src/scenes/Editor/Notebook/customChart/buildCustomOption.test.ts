@@ -6,6 +6,7 @@ import {
 } from "./buildCustomOption"
 import type { StatementRows } from "../visuals/statementRows"
 import { echarts } from "../CellChart/echartsSetup"
+import { mapsUsedBy } from "./maps"
 
 const rows = (
   columns: [string, string][],
@@ -16,6 +17,15 @@ const rows = (
 })
 
 describe("buildCustomOption", () => {
+  it("loads maps used only by nested chart options", () => {
+    expect(
+      mapsUsedBy({
+        baseOption: { geo: { map: "world" } },
+        media: [{ option: { series: [{ type: "map", map: "world" }] } }],
+      }),
+    ).toEqual(["world"])
+  })
+
   it("plots statement rows from the effective ECharts base option", () => {
     // Given a nested line series bound to the first statement
     const { option, problems } = buildCustomOption(
@@ -433,6 +443,45 @@ describe("buildCustomOption", () => {
     // Then
     const series = option.series as { data: unknown[] }[]
     expect(series[0].data).toEqual([[7, "Mon"]])
+  })
+
+  it("keeps headerless SQL rows and exact IDs in chart event data", () => {
+    const data = rows(
+      [
+        ["ts", "TIMESTAMP"],
+        ["id", "LONG"],
+      ],
+      [
+        ["2026-01-01T00:00:00Z", "9007199254740993"],
+        ["2026-01-02T00:00:00Z", "9007199254740992"],
+      ],
+    )
+    const { option } = buildCustomOption(
+      {
+        xAxis: { type: "time" },
+        yAxis: { type: "value" },
+        series: [
+          { type: "scatter", datasetId: "q0", encode: { x: "ts", y: "id" } },
+        ],
+      },
+      [data],
+      false,
+    )
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 640,
+      height: 360,
+    })
+    try {
+      chart.setOption(option)
+      expect(option.dataset).toMatchObject([
+        { id: "q0", sourceHeader: false, source: data.rows },
+      ])
+      expect(chart.getOption().dataset).toMatchObject([{ source: data.rows }])
+    } finally {
+      chart.dispose()
+    }
   })
 
   it("preserves distinct doubles in the plotted dataset", () => {

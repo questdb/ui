@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { PaneEmptyState } from "../PaneEmptyState"
 import styled, { useTheme } from "styled-components"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import type { ColorShape } from "../../../../types/styled"
 import type { VisualConfig } from "../CellChart/chartTypes"
 import { withAlpha } from "../../../../theme"
@@ -25,6 +26,7 @@ const DEFAULT_BUCKETS = 90
 const MIN_SLOT_PX = 5
 
 const Root = styled.div`
+  position: relative;
   height: 100%;
   overflow: auto;
   padding: 0.4rem 1.6rem 1.2rem;
@@ -59,14 +61,16 @@ const Overall = styled.span<{ $color: string }>`
   }
 `
 
-const Lanes = styled.div``
+const Lanes = styled.div`
+  position: relative;
+`
 
 const Lane = styled.div<{ $clickable: boolean }>`
   position: relative;
   padding: 1.2rem 0 1rem;
   cursor: ${({ $clickable }) => ($clickable ? "pointer" : "default")};
 
-  & + & {
+  &[data-lane-index]:not([data-lane-index="0"]) {
     border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
   }
 `
@@ -271,6 +275,24 @@ export const UptimeBars = ({
     () => readStateSegments(visual, statements[0], clickColumn),
     [visual, statements, clickColumn],
   )
+  const lanesRef = useRef<HTMLDivElement>(null)
+  const laneNames = typeof read === "string" ? [] : read.lanes
+  const windowLanes = laneNames.length > 50
+  const virtual = useVirtualizer({
+    count: laneNames.length,
+    enabled: windowLanes,
+    getScrollElement: () => ref.current,
+    getItemKey: (index) => laneNames[index],
+    estimateSize: () => 95,
+    scrollMargin: lanesRef.current?.offsetTop ?? 36,
+    overscan: 3,
+  })
+  const visible = windowLanes
+    ? virtual.getVirtualItems().map(({ index, start }) => ({
+        index,
+        offset: start - virtual.options.scrollMargin,
+      }))
+    : laneNames.map((_, index) => ({ index, offset: undefined }))
   const barsWidth = Math.max(width - 32, 0)
   const count = Math.max(
     10,
@@ -324,8 +346,12 @@ export const UptimeBars = ({
         <Overall $color={overall.color}>{overall.text}</Overall>
         <span>Uptime over the last {span}</span>
       </Summary>
-      <Lanes>
-        {read.lanes.map((lane) => {
+      <Lanes
+        ref={lanesRef}
+        style={windowLanes ? { height: virtual.getTotalSize() } : undefined}
+      >
+        {visible.map(({ index: laneIndex, offset }) => {
+          const lane = laneNames[laneIndex]
           const buckets = lanes.get(lane) ?? []
           const uptime = uptimes.get(lane) ?? null
           const state = current.get(lane) ?? ""
@@ -346,6 +372,14 @@ export const UptimeBars = ({
           return (
             <Lane
               key={lane}
+              data-lane-index={laneIndex}
+              data-index={laneIndex}
+              ref={windowLanes ? virtual.measureElement : undefined}
+              style={
+                offset === undefined
+                  ? undefined
+                  : { position: "absolute", top: offset, width: "100%" }
+              }
               $clickable={Boolean(activate)}
               role={activate ? "button" : undefined}
               tabIndex={activate ? 0 : undefined}

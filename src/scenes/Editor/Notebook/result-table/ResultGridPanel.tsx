@@ -144,7 +144,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
     viewportStore,
   })
   const { maxColumnWidth } = useLocalStorage()
-  const { setCellSettings, setVariableValues, updateSettings } =
+  const { setCellSettings, setVariableValues, updateSettings, getVariables } =
     useNotebookActions()
   const trendStore = useResultTrendStore()
   // What the grid drawer edits; compared field by field, so a remount
@@ -293,7 +293,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
     if (newVariables.length > 0)
       updateSettings({
         variables: withNewVariables(
-          normalizeVariables(settings.variables),
+          normalizeVariables(getVariables()),
           newVariables,
         ),
       })
@@ -363,7 +363,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         onCellActivate={onCellActivate}
         runToken={runToken}
         cellHighlights={highlights.lookup}
-        flashParity={(revision + liveRevision) % 2 === 0 ? 0 : 1}
+        flashParity={(liveRevision || revision) % 2 === 0 ? 0 : 1}
         flashStartedAt={Math.max(capturedAt, liveAt)}
         flashDurationMs={flashDurationFor(refreshIntervalMs)}
         isFocused={isFocused}

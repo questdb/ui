@@ -148,7 +148,13 @@ const Row = styled.div<{
 
   > span:first-of-type {
     color: ${({ $side, theme }) =>
-      $side === "ask" ? theme.color.chartDown : theme.color.chartUp};
+      theme.mode === "light"
+        ? $side === "ask"
+          ? theme.color.dataNegative
+          : theme.color.dataPositive
+        : $side === "ask"
+          ? theme.color.chartDown
+          : theme.color.chartUp};
   }
 
   > span:nth-of-type(3) {

@@ -16,6 +16,7 @@ import {
   type StatementRows,
 } from "./statementRows"
 import type { VisualConfig } from "../CellChart/chartTypes"
+import { PaneEmptyState } from "../PaneEmptyState"
 
 // Each row's value against its target (a limit, a budget) on a shared scale:
 // a bar coloured by the value format's thresholds, a marker for the target,
@@ -206,7 +207,7 @@ type Props = {
 export const Bullets = ({ visual, statements, formats }: Props) => {
   const theme = useTheme()
   const read = bulletRows(visual, statements[0])
-  if ("error" in read) return null
+  if ("error" in read) return <PaneEmptyState>{read.error}</PaneEmptyState>
   const { rows, valueIdx, targetIdx, labelIdx } = read
   const valueName = rows.columns[valueIdx].name
   const format = formats[valueName]

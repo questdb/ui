@@ -3879,6 +3879,20 @@ describe("CellRefreshEngine", () => {
       })
     })
 
+    it("does not replace a partial Run result when redeeming a variable refresh", async () => {
+      const fullSql = "select 1; select @desk"
+      const partial = gridCell("g1", fullSql, ["select 1"], false)
+      syncOnScreen([partial])
+      await flushAsync()
+      engine.noteRunStarted("g1")
+      engine.refreshWhere(() => true, [partial])
+
+      // The foreground Run only executed the first statement.
+      engine.noteRunFinished("g1", partial)
+      await flushAsync()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+    })
+
     it("remembers a changed variable before the first Run creates a grid entry", async () => {
       // Given a first Run whose validation hasn't produced a placeholder
       const sql = "select @desk"

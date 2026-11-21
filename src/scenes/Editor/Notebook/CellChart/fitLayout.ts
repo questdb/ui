@@ -121,12 +121,14 @@ const placeBottomBands = (option: Box, size: Size): Bands => {
   if (legends.length > 0) {
     option.legend = list(option.legend).map((legend) => {
       if (!shown(legend)) return legend
+      const bottom = LEGEND_BOTTOM + bands.bottom
+      bands.bottom += LEGEND_BAND
       const placed: Box = {
         ...legend,
         type: "scroll",
         orient: "horizontal",
         left: "center",
-        bottom: LEGEND_BOTTOM,
+        bottom,
         width: Math.max(size.width - 2 * CHART_PADDING.left, 40),
       }
       delete placed.top
@@ -134,7 +136,6 @@ const placeBottomBands = (option: Box, size: Size): Bands => {
       delete placed.height
       return placed
     })
-    bands.bottom += LEGEND_BAND
   }
 
   if (list(option.visualMap).some(shown)) {
