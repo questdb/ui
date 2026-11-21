@@ -107,7 +107,7 @@ export const sanitizeVisualConfig = (
       if (isName(column)) (columns as Record<string, string>)[key] = column
     }
     if (Array.isArray(value.columns.path)) {
-      const path = value.columns.path.filter(isName).slice(0, 8)
+      const path = value.columns.path.filter(isName)
       if (path.length > 0) columns.path = path
     }
     if (Object.keys(columns).length > 0) visual.columns = columns

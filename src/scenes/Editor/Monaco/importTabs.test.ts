@@ -775,6 +775,33 @@ describe("sanitizeBuffer", () => {
   })
 
   describe("notebookViewState sanitization", () => {
+    it("preserves every treemap path column saved in an exported notebook", () => {
+      const path = Array.from({ length: 9 }, (_, index) => `level_${index}`)
+      const imported = sanitizeBuffer({
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "chart",
+              value: "SELECT * FROM levels",
+              mode: "draw",
+              chartConfig: {
+                xColumn: null,
+                queries: [null],
+                visual: { type: "treemap", columns: { path } },
+              },
+            },
+          ],
+        },
+      })
+      expect(
+        imported.notebookViewState?.cells[0]?.chartConfig?.visual?.columns
+          ?.path,
+      ).toEqual(path)
+    })
+
     it("imports one preferred view and maps main's legacy boolean", () => {
       // Given cells with a preferred view, main's legacy boolean, and a markdown cell
       const input = {
