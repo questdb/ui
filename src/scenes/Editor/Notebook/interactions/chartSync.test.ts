@@ -11,6 +11,7 @@ const makeChart = (type = "time") => {
   const emit = (event: string, payload?: unknown) =>
     handlers.get(event)?.(payload)
   const chart = {
+    getModel: () => ({ getComponent: () => ({ get: () => type }) }),
     getOption: vi.fn(() => ({
       xAxis: [{ type }],
       dataZoom: [
@@ -85,7 +86,11 @@ describe("notebook chart sync", () => {
       chart.dispatchAction({ type: "dataZoom", startValue: 200, endValue: 800 })
 
       // Then the renderer can update the peer's Reset zoom state
-      expect(seen).toHaveBeenCalledWith({ start: 20, end: 80 })
+      expect(seen).toHaveBeenCalledWith({
+        start: 20,
+        end: 80,
+        bounds: { startValue: 200, endValue: 800 },
+      })
     } finally {
       chart.dispose()
     }

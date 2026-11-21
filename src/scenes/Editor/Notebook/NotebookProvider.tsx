@@ -994,7 +994,7 @@ export const NotebookProvider: React.FC<{
       if (names.length === 0) return
       const current = settingsRef.current.variables ?? []
       const next = current.map((v) =>
-        v.name in values ? { ...v, value: values[v.name] } : v,
+        Object.hasOwn(values, v.name) ? { ...v, value: values[v.name] } : v,
       )
       for (const name of names) {
         if (!current.some((v) => v.name === name))

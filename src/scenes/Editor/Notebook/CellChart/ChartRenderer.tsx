@@ -35,7 +35,11 @@ export type ChartEventHandler = (params: unknown, instance: EChartsType) => void
 type Props = {
   option: EChartsOption
   height?: number | string
-  onZoomChange?: (start: number, end: number) => void
+  onZoomChange?: (
+    start: number,
+    end: number,
+    bounds?: ZoomWindow["bounds"],
+  ) => void
   isFocused?: boolean
   animateEntry?: boolean
   animate?: boolean
@@ -217,7 +221,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
             evt as DataZoomEvent,
             instanceRef.current,
           )
-          if (zoom) onZoomChange(zoom.start, zoom.end)
+          if (zoom) onZoomChange(zoom.start, zoom.end, zoom.bounds)
         },
       }
     }, [onZoomChange, extraEvents])
@@ -252,7 +256,10 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           const mounted = instance.getOption() as { dataZoom?: unknown }
           if (hasActiveZoomControl(mounted)) {
             instance.dispatchAction(
-              { type: "dataZoom", start: zoom.start, end: zoom.end },
+              {
+                type: "dataZoom",
+                ...(zoom.bounds ?? { start: zoom.start, end: zoom.end }),
+              },
               { silent: true },
             )
           } else {

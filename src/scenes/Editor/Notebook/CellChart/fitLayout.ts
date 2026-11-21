@@ -166,9 +166,10 @@ const placeBottomBands = (option: Box, size: Size): Bands => {
       zoom.type === "slider" && shown(zoom) && zoom.orient !== "vertical",
   )
   if (sliders.length > 0) {
-    const bottom = bands.bottom + 8
     option.dataZoom = list(option.dataZoom).map((zoom) => {
       if (!sliders.includes(zoom)) return zoom
+      const bottom = bands.bottom + 8
+      bands.bottom += SLIDER_BAND
       const placed: Box = {
         ...zoom,
         bottom,
@@ -180,7 +181,6 @@ const placeBottomBands = (option: Box, size: Size): Bands => {
       delete placed.width
       return placed
     })
-    bands.bottom += SLIDER_BAND
   }
 
   // A title at an edge is a heading: give it its band. One placed inside
@@ -563,6 +563,10 @@ type Transform = (x: number, y: number) => [number, number]
 export const fitLayout = <T extends object>(input: T, size: Size): T => {
   if (size.width < 40 || size.height < 40) return input
   const option = { ...(input as Box) }
+  if (isRecord(option.baseOption)) {
+    option.baseOption = fitLayout(option.baseOption, size)
+    return option as T
+  }
   for (const key of [
     "series",
     "grid",

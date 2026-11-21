@@ -14,8 +14,19 @@ const settings = new Map<number, ChartSync>()
 let driving = false
 
 const isTimeChart = (instance: EChartsType): boolean => {
-  const option = instance.getOption() as { xAxis?: { type?: string }[] }
-  return option.xAxis?.[0]?.type === "time"
+  // getOption clones every series. Axis-only inspection must not do that
+  // on the pointer path, and must reflect current timeline/media options.
+  const chart = instance as unknown as {
+    getModel():
+      | {
+          getComponent(
+            type: "xAxis",
+            index: number,
+          ): { get(key: "type"): unknown } | undefined
+        }
+      | undefined
+  }
+  return chart.getModel()?.getComponent("xAxis", 0)?.get("type") === "time"
 }
 
 const xToPixel = (instance: EChartsType, value: number): number | null => {

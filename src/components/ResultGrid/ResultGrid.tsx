@@ -715,7 +715,17 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
             rowCount - 1,
             Math.max(0, Math.floor((viewport?.scrollTop ?? 0) / ROW_HEIGHT)),
           )
-          setFocusedCell({ row: firstVisibleRow, col: 0 })
+          const firstVisibleColumn =
+            frozenCount > 0
+              ? 0
+              : columnOffsets.findIndex(
+                  (_, index) =>
+                    columnOffsets[index + 1] > (viewport?.scrollLeft ?? 0),
+                )
+          setFocusedCell({
+            row: firstVisibleRow,
+            col: Math.max(firstVisibleColumn, 0),
+          })
           return
         }
         if (
@@ -731,7 +741,12 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         ) {
           e.preventDefault()
           e.stopPropagation()
-          if (!e.repeat) onCellClick(focusedCell.row, focusedCell.col)
+          const active = e.currentTarget.getAttribute("aria-activedescendant")
+          if (
+            !e.repeat &&
+            active === `cell-${focusedCell.row}-${focusedCell.col}`
+          )
+            onCellClick(focusedCell.row, focusedCell.col)
           return
         }
         onKeyDown(e)
@@ -742,6 +757,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         onCellClick,
         rowCount,
         columns.length,
+        columnOffsets,
+        frozenCount,
         shuffleFocusedColumnToFront,
         onYieldFocus,
         setFocusedCell,

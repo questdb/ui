@@ -184,7 +184,14 @@ const ResultGridPanelInner: React.FC<Props> = ({
     isNew,
     at: liveAt,
     revision: liveRevision,
-  } = useLiveRows(rawData, highlightConfig.identityColumns, gridMode)
+  } = useLiveRows(
+    rawData,
+    highlightConfig.identityColumns,
+    gridMode,
+    gridMode === "stable"
+      ? viewportStore.liveRows(statementKey, runToken)
+      : undefined,
+  )
   const dataSource = useMemo(
     () => inMemoryDataSource(data.columns, data.dataset, data.timestamp ?? -1),
     [data.columns, data.dataset, data.timestamp],

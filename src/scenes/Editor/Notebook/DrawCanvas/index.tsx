@@ -211,10 +211,14 @@ export const DrawCanvas: React.FC<Props> = ({
   const hadError = chartResult.kind === "settled" && chartResult.hadError
 
   const handleZoomChange = useCallback(
-    (start: number, end: number) => {
+    (
+      start: number,
+      end: number,
+      bounds?: NonNullable<ReturnType<typeof getChartZoom>>["bounds"],
+    ) => {
       setZoomStart(start)
       setZoomEnd(end)
-      setChartZoom(cell.id, start, end)
+      setChartZoom(cell.id, start, end, bounds)
     },
     [cell.id],
   )
@@ -469,7 +473,9 @@ export const DrawCanvas: React.FC<Props> = ({
                 onZoomChange={handleZoomChange}
                 isFocused={isFocused}
                 animate={animatesAt(refreshIntervalMs)}
-                zoomWindow={{ start: zoomStart, end: zoomEnd }}
+                zoomWindow={
+                  getChartZoom(cell.id) ?? { start: zoomStart, end: zoomEnd }
+                }
                 events={events}
                 onInstance={handleInstance}
               />

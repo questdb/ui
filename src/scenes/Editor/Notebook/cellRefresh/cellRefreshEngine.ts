@@ -36,7 +36,6 @@ import {
 } from "../statementIdentity"
 import {
   type ChartResult,
-  resultMatchesQueries,
   resultsEquivalent,
   successResults,
   toChartResult,
@@ -239,6 +238,17 @@ export type CellRefreshEngineOptions = {
 // Editor-only cells are never entries: charts are entries by mode, grids only
 // while they show (or expect) a result frame. The grid engine never
 // bootstraps — the first frame always comes from the run path.
+const coversEditorStatements = (
+  result: CellResult | null | undefined,
+  queries: string[],
+): result is CellResult =>
+  result != null &&
+  result.results.length === queries.length &&
+  result.results.every(
+    (entry, i) =>
+      normalizeQueryText(entry.query) === normalizeQueryText(queries[i]),
+  )
+
 const entryKindFor = (cell: NotebookCell): CellEntryKind | null => {
   if (cell.type === "markdown") return null
   if (cell.mode === "draw") return "chart"
@@ -310,6 +320,7 @@ type Entry = {
   autoRefresh: AutoRefresh
   visible: boolean
   pendingManualRefresh: boolean
+  pendingGridVariableRefresh: boolean
   manualRefreshInFlight: boolean
   // A zero-survivor collapse dropped the display but kept the disk snapshot;
   // the next settle with no result asks hydration for a non-destructive
@@ -569,8 +580,13 @@ export class CellRefreshEngine {
           entry.pendingSql === null
             ? entry.state.queries
             : getQueriesFromText(entry.pendingSql)
-        if (frame && !resultMatchesQueries(frame, queries)) {
+        if (frame && !coversEditorStatements(frame, queries)) {
           refreshed--
+          continue
+        }
+        if (!frame || !entry.visible || this.documentHidden) {
+          entry.pendingGridVariableRefresh = true
+          if (entry.visible && !this.documentHidden) this.ensureData(entry)
           continue
         }
       }
@@ -792,7 +808,7 @@ export class CellRefreshEngine {
     if (
       entry?.kind === "grid" &&
       entry.state.classifyBlock?.kind !== "write" &&
-      resultMatchesQueries(
+      coversEditorStatements(
         currentCell?.result ?? this.getDeps().getCellResult(cellId),
         entry.state.queries,
       )
@@ -829,6 +845,7 @@ export class CellRefreshEngine {
       state: initialFetchState(queries),
       visible: this.visibilityByCell.get(cell.id) ?? false,
       pendingManualRefresh: false,
+      pendingGridVariableRefresh: false,
       manualRefreshInFlight: false,
       snapshotRetained: false,
       ensureAttempted: false,
@@ -1048,7 +1065,7 @@ export class CellRefreshEngine {
       // In particular, a Run snapshot may represent just one of several
       // statements or an arbitrary selection. Do not execute untouched SQL.
       if (
-        resultMatchesQueries(current, queries) &&
+        coversEditorStatements(current, queries) &&
         deps.isRestoredResultStale?.(current)
       ) {
         if (entry.kind === "grid" && this.isRunPending(entry.cellId))
@@ -1097,6 +1114,26 @@ export class CellRefreshEngine {
     const deps = this.getDeps()
     const result = deps.getCellResult(entry.cellId)
     if (result != null) {
+      if (
+        entry.pendingGridVariableRefresh &&
+        entry.visible &&
+        !this.documentHidden
+      ) {
+        entry.pendingGridVariableRefresh = false
+        const queries =
+          entry.pendingSql === null
+            ? entry.state.queries
+            : getQueriesFromText(entry.pendingSql)
+        if (
+          coversEditorStatements(result, queries) &&
+          entry.state.classifyBlock?.kind !== "write"
+        ) {
+          if (this.isRunPending(entry.cellId))
+            this.refreshAfterRun.add(entry.cellId)
+          else this.forceRefresh(entry)
+          return
+        }
+      }
       this.setState(entry, { settledKey: entry.state.queriesKey })
       // A reveal must not regress the freshness finishRound stamped.
       entry.lastFetchedAt = Math.max(
@@ -1108,6 +1145,7 @@ export class CellRefreshEngine {
     }
     if (this.waitForResultLoad(entry)) return
     // Nothing to refresh (snapshot missing or gone) — stay idle, never fetch.
+    entry.pendingGridVariableRefresh = false
     this.updatePoll(entry)
   }
 

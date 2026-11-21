@@ -7,6 +7,26 @@ const first = (value: unknown): Box =>
   (Array.isArray(value) ? value[0] : value) as Box
 
 describe("fitLayout", () => {
+  it("reserves distinct bands inside the effective base option", () => {
+    const option = fitLayout(
+      {
+        baseOption: {
+          legend: [{ data: ["north"] }, { data: ["south"] }],
+          dataZoom: [
+            { type: "slider", xAxisIndex: 0 },
+            { type: "slider", xAxisIndex: 1 },
+          ],
+          grid: {},
+        },
+      },
+      { width: 720, height: 480 },
+    )
+    const legends = option.baseOption.legend as { bottom?: number }[]
+    const sliders = option.baseOption.dataZoom as { bottom?: number }[]
+    expect(legends.map(({ bottom }) => bottom)).toEqual([3, 31])
+    expect(typeof sliders[0].bottom).toBe("number")
+    expect(sliders[1].bottom).toBeGreaterThan(sliders[0].bottom ?? 0)
+  })
   it("fits a grid to the panel and keeps its labels inside, whatever paddings it had", () => {
     // Given an option with paddings that would clip or waste space
     const option = {

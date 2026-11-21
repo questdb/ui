@@ -3879,6 +3879,29 @@ describe("CellRefreshEngine", () => {
       })
     })
 
+    it("refreshes a byte-capped result when its statement identities still match", async () => {
+      const sql = "select @desk"
+      const full = gridCell("g1", sql, [sql], false)
+      const result = full.result
+      if (!result) throw new Error("Expected a complete frame")
+      syncOnScreen([
+        {
+          ...full,
+          result: {
+            ...result,
+            results: result.results.map((r) =>
+              r.type === "dql" ? { ...r, truncated: true } : r,
+            ),
+          },
+        },
+      ])
+      await flushAsync()
+
+      engine.refreshWhere((_cellId, text) => text === sql)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
     it("does not replace a partial Run result when redeeming a variable refresh", async () => {
       const fullSql = "select 1; select @desk"
       const partial = gridCell("g1", fullSql, ["select 1"], false)

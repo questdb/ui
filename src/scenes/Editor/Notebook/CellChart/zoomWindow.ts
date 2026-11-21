@@ -25,7 +25,18 @@ export const zoomWindowForEvent = (
     | undefined
   const zoom = option?.dataZoom?.[0]
   if (typeof zoom?.start === "number" && typeof zoom.end === "number")
-    return { start: zoom.start, end: zoom.end }
+    return {
+      start: zoom.start,
+      end: zoom.end,
+      ...(typeof first.startValue === "number" &&
+      typeof first.endValue === "number"
+        ? { bounds: { startValue: first.startValue, endValue: first.endValue } }
+        : {}),
+    }
 }
 
-export type ZoomWindow = { start: number; end: number }
+export type ZoomWindow = {
+  start: number
+  end: number
+  bounds?: { startValue: number; endValue: number }
+}

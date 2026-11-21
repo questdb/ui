@@ -39,36 +39,45 @@ export const orderStably = (
   return order.map((o) => o.row)
 }
 
+export type LiveRowsState = {
+  previousKeys: Map<string, number> | null
+  last: { data: DqlQueryResult; mode: GridMode; identity: string } | null
+  live: LiveRows | null
+}
+
+export const createLiveRowsState = (): LiveRowsState => ({
+  previousKeys: null,
+  last: null,
+  live: null,
+})
+
 export const useLiveRows = (
   data: DqlQueryResult,
   identityColumns: string[],
   mode: GridMode | undefined,
+  saved?: LiveRowsState,
 ): LiveRows => {
-  const previousKeys = useRef<Map<string, number> | null>(null)
-  const last = useRef<{
-    data: DqlQueryResult
-    mode: GridMode
-    identity: string
-  } | null>(null)
-  const live = useRef<LiveRows>({ data, isNew: null, at: 0, revision: 0 })
+  const local = useRef(createLiveRowsState())
+  const state = saved ?? local.current
 
   return useMemo(() => {
     const indexes = mode
       ? identityColumnIndexes(data.columns, identityColumns)
       : null
     if (!mode || indexes === null) {
-      last.current = null
-      previousKeys.current = null
+      state.last = null
+      state.previousKeys = null
+      state.live = null
       return { data, isNew: null, at: 0, revision: 0 }
     }
     const identity = JSON.stringify(identityColumns)
-    const sameFrame = last.current?.data === data
-    const sameIdentity = last.current?.identity === identity
-    if (sameFrame && sameIdentity && last.current?.mode === mode)
-      return live.current
+    const sameFrame = state.last?.data === data
+    const sameIdentity = state.last?.identity === identity
+    if (sameFrame && sameIdentity && state.last?.mode === mode && state.live)
+      return state.live
     const keyOf = (row: DqlQueryResult["dataset"][number]) =>
       identityKeyOf(row, indexes)
-    const before = sameIdentity ? previousKeys.current : null
+    const before = sameIdentity ? state.previousKeys : null
     const dataset =
       mode === "stable" && before
         ? orderStably(data.dataset, data.dataset.map(keyOf), before)
@@ -78,14 +87,14 @@ export const useLiveRows = (
       before === null || sameFrame
         ? new Set<number>()
         : new Set(keys.flatMap((key, i) => (before.has(key) ? [] : [i])))
-    previousKeys.current = new Map(keys.map((key, i) => [key, i]))
-    last.current = { data, mode, identity }
-    live.current = {
+    state.previousKeys = new Map(keys.map((key, i) => [key, i]))
+    state.last = { data, mode, identity }
+    state.live = {
       data: dataset === data.dataset ? data : { ...data, dataset },
       isNew: fresh.size > 0 ? (row) => fresh.has(row) : null,
       at: Date.now(),
-      revision: live.current.revision + 1,
+      revision: (state.live?.revision ?? 0) + 1,
     }
-    return live.current
-  }, [data, identityColumns, mode])
+    return state.live
+  }, [data, identityColumns, mode, state])
 }
