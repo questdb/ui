@@ -24,6 +24,7 @@ export type StateSegments = {
   lanes: string[]
   states: string[]
   segments: Segment[]
+  selectionByLane?: ReadonlyMap<string, unknown>
   from: number
   to: number
 }
@@ -61,6 +62,7 @@ export const naturalOrder = (a: string, b: string) =>
 export const readStateSegments = (
   visual: VisualConfig,
   rows: StatementRows | null,
+  clickColumn?: string,
 ): StateSegments | string => {
   if (!rows || rows.rows.length === 0) return "The query returned no rows."
   const c = visual.columns ?? {}
@@ -89,12 +91,21 @@ export const readStateSegments = (
       return `${role}: column ${JSON.stringify(set ?? `(default ${role})`)} not found. Columns: ${names()}.`
   }
 
+  const clickIdx = columnIndex(rows, clickColumn)
+  const selectionByLane = new Map<string, unknown>()
   const open: (Omit<Segment, "end"> & { end: number | null })[] = []
   for (const row of rows.rows) {
     const start = toTime(row[timeIdx])
     if (start === null) continue
+    const lane = toLabel(row[laneIdx])
+    if (clickIdx >= 0) {
+      const value: unknown = row[clickIdx]
+      if (!selectionByLane.has(lane)) selectionByLane.set(lane, value)
+      else if (!Object.is(selectionByLane.get(lane), value))
+        selectionByLane.set(lane, undefined)
+    }
     open.push({
-      lane: toLabel(row[laneIdx]),
+      lane,
       state: toLabel(row[stateIdx]),
       start,
       end: endIdx >= 0 ? toTime(row[endIdx]) : null,
@@ -116,6 +127,7 @@ export const readStateSegments = (
     lanes: [...byLane.keys()].sort(naturalOrder),
     states: [...new Set(segments.map((s) => s.state))],
     segments,
+    ...(clickColumn === undefined ? {} : { selectionByLane }),
     from,
     to,
   }

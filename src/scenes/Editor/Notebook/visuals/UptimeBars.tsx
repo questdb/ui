@@ -251,18 +251,24 @@ const useWidth = () => {
 type Props = {
   visual: VisualConfig
   statements: (StatementRows | null)[]
-  onSelect?: (lane: string) => void
+  clickColumn?: string
+  onSelect?: (value: unknown) => void
 }
 
-export const UptimeBars = ({ visual, statements, onSelect }: Props) => {
+export const UptimeBars = ({
+  visual,
+  statements,
+  clickColumn,
+  onSelect,
+}: Props) => {
   const { color: colors } = useTheme()
   const [ref, width] = useWidth()
   const [hover, setHover] = useState<{ lane: string; index: number } | null>(
     null,
   )
   const read = useMemo(
-    () => readStateSegments(visual, statements[0]),
-    [visual, statements],
+    () => readStateSegments(visual, statements[0], clickColumn),
+    [visual, statements, clickColumn],
   )
   const barsWidth = Math.max(width - 32, 0)
   const count = Math.max(
@@ -334,11 +340,27 @@ export const UptimeBars = ({ visual, statements, onSelect }: Props) => {
                   Math.max(barsWidth - 260, 0),
                 )
               : 0
+          const selection =
+            clickColumn === undefined ? lane : read.selectionByLane?.get(lane)
+          const activate =
+            onSelect && selection !== undefined
+              ? () => onSelect(selection)
+              : undefined
           return (
             <Lane
               key={lane}
-              $clickable={Boolean(onSelect)}
-              onClick={onSelect ? () => onSelect(lane) : undefined}
+              $clickable={Boolean(activate)}
+              role={activate ? "button" : undefined}
+              tabIndex={activate ? 0 : undefined}
+              onClick={activate}
+              onKeyDown={
+                activate &&
+                ((event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return
+                  event.preventDefault()
+                  activate()
+                })
+              }
               onMouseLeave={() => setHover(null)}
             >
               <Head>

@@ -226,7 +226,12 @@ export const VisualCanvas = ({
       return <PlanTree visual={visual} statements={statements} />
     case "uptime":
       return (
-        <UptimeBars visual={visual} statements={statements} onSelect={select} />
+        <UptimeBars
+          visual={visual}
+          statements={statements}
+          clickColumn={click?.column}
+          onSelect={select}
+        />
       )
     default:
       break

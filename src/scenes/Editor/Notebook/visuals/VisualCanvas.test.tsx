@@ -94,6 +94,39 @@ describe("VisualCanvas", () => {
     expect(setVariables).toHaveBeenCalledWith({ amount: "30" })
   })
 
+  it("writes one consistent uptime lane binding from the keyboard and ignores ambiguous lanes", async () => {
+    const setVariables = vi.fn()
+    renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "uptime" }}
+        interactions={{ click: { variable: "asset", column: "asset_id" } }}
+        setVariables={setVariables}
+        statements={[
+          {
+            columns: [
+              { name: "ts", type: "TIMESTAMP" },
+              { name: "lane", type: "SYMBOL" },
+              { name: "state", type: "SYMBOL" },
+              { name: "asset_id", type: "INT" },
+            ],
+            rows: [
+              ["2026-01-01T00:00:00Z", "west", "up", 42],
+              ["2026-01-01T00:00:00Z", "east", "up", 7],
+              ["2026-01-01T00:01:00Z", "east", "up", 8],
+            ],
+          },
+        ]}
+      />,
+    )
+    expect(
+      screen.queryByRole("button", { name: /east/ }),
+    ).not.toBeInTheDocument()
+    screen.getByRole("button", { name: /west/ }).focus()
+    await userEvent.keyboard("{Enter}")
+    expect(setVariables).toHaveBeenCalledWith({ asset: "42" })
+  })
+
   it("does not display a missing bullet measurement as zero", () => {
     renderComponent(
       <VisualCanvas
