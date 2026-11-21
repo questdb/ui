@@ -127,6 +127,24 @@ describe("dashboard grid", () => {
     ).toEqual(["ETH", "2.0", "BTC", "10.0▲"])
   })
 
+  it("preserves the digits of a formatted LONG value from the database", () => {
+    renderComponent(
+      <ResultGrid
+        dataSource={inMemoryDataSource(
+          [{ name: "volume", type: "LONG" }],
+          [["9007199254740993"]],
+          -1,
+        )}
+        maxColumnWidth="auto"
+        columnFormats={{ volume: { kind: "number" } }}
+      />,
+    )
+
+    expect(screen.getByRole("gridcell")).toHaveTextContent(
+      "9,007,199,254,740,993",
+    )
+  })
+
   it("keeps a single sample visible and draws a line when there are two samples", () => {
     renderComponent(
       <ResultGrid

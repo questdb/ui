@@ -109,13 +109,15 @@ const grouped = (
   min: number,
   max: number,
   compact = false,
+  style: "decimal" | "percent" = "decimal",
 ): Intl.NumberFormat => {
-  const key = `${min}:${max}:${compact}`
+  const key = `${min}:${max}:${compact}:${style}`
   let formatter = groupedCache.get(key)
   if (!formatter) {
     formatter = new Intl.NumberFormat("en-US", {
       minimumFractionDigits: min,
       maximumFractionDigits: max,
+      style,
       ...(compact ? { notation: "compact" as const } : {}),
     })
     groupedCache.set(key, formatter)
@@ -154,16 +156,23 @@ const formatDuration = (ms: number, decimals: number | undefined): string => {
   return `${sign}${h} h ${m} m`
 }
 
-const formatNumberBody = (n: number, format: ColumnFormat): string => {
+const formatNumberBody = (
+  n: number,
+  format: ColumnFormat,
+  exact: bigint | `${number}` | undefined,
+): string => {
+  const value = exact ?? n
   const kind = format.kind ?? "number"
   switch (kind) {
     case "percent": {
       const digits = format.decimals ?? 2
-      return `${grouped(digits, digits, format.compact).format(n * 100)}%`
+      return exact === undefined
+        ? `${grouped(digits, digits, format.compact).format(n * 100)}%`
+        : grouped(digits, digits, format.compact, "percent").format(exact)
     }
     case "price": {
       const digits = format.decimals ?? 2
-      return grouped(digits, digits, format.compact).format(n)
+      return grouped(digits, digits, format.compact).format(value)
     }
     case "bytes":
       return formatBytes(n, format.decimals)
@@ -172,12 +181,12 @@ const formatNumberBody = (n: number, format: ColumnFormat): string => {
     default: {
       if (format.decimals !== undefined)
         return grouped(format.decimals, format.decimals, format.compact).format(
-          n,
+          value,
         )
-      if (format.compact) return grouped(0, 1, true).format(n)
-      return Number.isInteger(n)
-        ? grouped(0, 0).format(n)
-        : grouped(0, Math.abs(n) >= 100 ? 2 : 4).format(n)
+      if (format.compact) return grouped(0, 1, true).format(value)
+      return Number.isInteger(n) && typeof exact !== "string"
+        ? grouped(0, 0).format(value)
+        : grouped(0, Math.abs(n) >= 100 ? 2 : 4).format(value)
     }
   }
 }
@@ -193,6 +202,9 @@ const asText = (value: unknown): string => {
   return JSON.stringify(value) ?? ""
 }
 
+const supportsExactDecimal =
+  grouped(0, 1).format("9007199254740993.5") === "9,007,199,254,740,993.5"
+
 /** The value as text, formatted when it is a number and the format asks to. */
 export const formatValue = (
   value: unknown,
@@ -202,7 +214,20 @@ export const formatValue = (
   const n = format && format.kind !== "text" ? toNumber(value) : null
   if (n === null) return asText(value)
   const f = format as ColumnFormat
-  return `${f.prefix ?? ""}${formatNumberBody(n, f)}${f.suffix ?? ""}`
+  let exact: bigint | `${number}` | undefined
+  // QuestDB sends LONG and DECIMAL values as strings. Do not round them to
+  // doubles before Intl applies the user's decimal/compact formatting.
+  if (typeof value === "bigint") exact = value
+  else if (typeof value === "string") {
+    if (/^[+-]?\d+$/.test(value) && !Number.isSafeInteger(n))
+      exact = BigInt(value)
+    else if (/^[+-]?\d+\.\d+$/.test(value)) {
+      if (supportsExactDecimal) exact = value as `${number}`
+      else if (String(n) !== value)
+        return `${f.prefix ?? ""}${value}${f.suffix ?? ""}`
+    }
+  }
+  return `${f.prefix ?? ""}${formatNumberBody(n, f, exact)}${f.suffix ?? ""}`
 }
 
 /** True when the format changes how a number reads. */

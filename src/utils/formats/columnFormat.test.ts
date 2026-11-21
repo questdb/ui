@@ -21,6 +21,15 @@ describe("formatValue", () => {
     expect(formatValue(16_700_000_000, { compact: true })).toBe("16.7B")
   })
 
+  it("groups exact LONG and DECIMAL text without rounding it through a double", () => {
+    expect(formatValue("9007199254740993", { kind: "number" })).toBe(
+      "9,007,199,254,740,993",
+    )
+    expect(
+      formatValue("-9007199254740993.125", { kind: "price", decimals: 3 }),
+    ).toBe("-9,007,199,254,740,993.125")
+  })
+
   it("adds the prefix and suffix around numbers only", () => {
     // Given
     const format = { prefix: "$", suffix: " USD", decimals: 2 }
