@@ -37,6 +37,16 @@ describe("SafeMarkdown", () => {
     expect(remote).toContain('title="Not loaded automatically"')
   })
 
+  it("preserves the reply when a remote image URL is malformed", () => {
+    // When
+    const html = render("Before ![chart](https://) after **text**.", "inline")
+
+    // Then
+    expect(html).toContain("<span>chart</span>")
+    expect(html).toContain("<strong>text</strong>")
+    expect(html).not.toContain("href=")
+  })
+
   it("names a local image a model writes, which the browser cannot load", () => {
     // When
     const path = render("![heat map](/tmp/out/heat%20map.png)", "inline")

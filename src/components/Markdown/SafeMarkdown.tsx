@@ -113,7 +113,12 @@ const InlineImage = ({
   if (/^data:image\//i.test(src))
     return <img src={src} alt={alt ?? ""} {...props} />
   if (/^https?:\/\//i.test(src)) {
-    const host = new URL(src).host
+    let host: string
+    try {
+      host = new URL(src).host
+    } catch {
+      return <span>{alt || "Image unavailable"}</span>
+    }
     return (
       <SafeLink
         href={src}

@@ -502,7 +502,7 @@ export const HEATMAP_ROW_FILL = 0.8
 // neighbors leave no seam, and HEATMAP_ROW_FILL of its row. A cell without a
 // value is left empty.
 const renderHeatmapCell: CustomSeriesRenderItem = (_params, api) => {
-  if (api.value(2) === "-") return null
+  if (!Number.isFinite(api.value(2))) return null
   const [cx, cy] = api.coord([api.value(0), api.value(1)])
   const [width, height] = api.size?.([1, 1]) as number[]
   const rowHeight = height * HEATMAP_ROW_FILL
