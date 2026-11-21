@@ -54,6 +54,35 @@ describe("VisualCanvas", () => {
     })
   })
 
+  it.each(["treemap", "sunburst"] as const)(
+    "rejects partial results rather than showing incomplete %s totals",
+    (type) => {
+      // Given a settled query whose result was capped by the server
+      renderComponent(
+        <VisualCanvas
+          {...defaults}
+          visual={{ type }}
+          statements={[
+            {
+              columns: [
+                { name: "station", type: "SYMBOL" },
+                { name: "volume", type: "INT" },
+              ],
+              rows: [["east", 10]],
+              partial: true,
+            },
+          ]}
+        />,
+      )
+
+      // Then the pane and report explain why no aggregate was drawn
+      expect(screen.getByText(/returned only part of its rows/)).toBeVisible()
+      expect(getRenderReport(bufferId, cellId)?.problems[0]?.severity).toBe(
+        "error",
+      )
+    },
+  )
+
   it("explains an empty successful Stat result", () => {
     renderComponent(
       <VisualCanvas

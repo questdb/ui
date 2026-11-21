@@ -84,6 +84,7 @@ export const gaugeOption = ({
   statements,
   colors,
   formats,
+  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
@@ -123,6 +124,14 @@ export const gaugeOption = ({
         ])
       : [[1, colors.dataGrid]]
   const label = labelIdx >= 0 ? toLabel(rows.rows[0][labelIdx]) : valueName
+  const clickIdx = columnIndex(rows, clickColumn)
+  const datum = {
+    value: clamped,
+    name: label,
+    ...(clickColumn !== undefined && clickIdx >= 0
+      ? { columns: { [clickColumn]: rows.rows[0][clickIdx] } }
+      : {}),
+  }
   const plain = format ? { ...format, prefix: "", suffix: "" } : undefined
   const common = {
     type: "gauge" as const,
@@ -188,7 +197,7 @@ export const gaugeOption = ({
             color: colors.contentPrimary,
             formatter: () => formatValue(rawValue, format),
           },
-          data: [{ value: clamped, name: label }],
+          data: [datum],
         },
       ],
     },
@@ -336,6 +345,8 @@ const hierarchy = (
   ctx: VisualContext,
 ): { tree: TreeNode[]; valueName: string; colorName?: string } | string => {
   const rows = ctx.statements[0]
+  if (rows?.partial)
+    return "The query returned only part of its rows. Aggregate by path in SQL or reduce the result before drawing this hierarchy."
   if (!rows || rows.rows.length === 0) return "The query returned no rows."
   const c = ctx.visual.columns ?? {}
   const pathIdx = c.path

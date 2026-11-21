@@ -11,6 +11,7 @@ import {
 } from "./visualOptions"
 import { statTiles } from "./StatTiles"
 import { bulletRows } from "./Bullets"
+import { clickedValue } from "../interactions/chartInteractions"
 import type { StatementRows } from "./statementRows"
 
 const rows = (
@@ -23,6 +24,37 @@ const rows = (
 
 const series = (option: unknown) =>
   (option as { series: Record<string, unknown>[] }).series
+
+it("reads the bound gauge click value from its first row, not its reading or label", () => {
+  // Given a gauge with a clamped reading and a separate selection column
+  const { option } = gaugeOption({
+    visual: { type: "gauge", max: 50 },
+    colors: lightColors,
+    formats: {},
+    clickColumn: "station",
+    statements: [
+      rows(
+        [
+          ["load", "DOUBLE"],
+          ["station", "SYMBOL"],
+        ],
+        [
+          [65, "east"],
+          [2, "west"],
+        ],
+      ),
+    ],
+  })
+
+  // When the non-silent progress series is clicked
+  const [{ silent }, { data }] = series(option)
+  const datum = (data as { value: number }[])[0]
+
+  // Then the interaction uses the raw bound column
+  expect(silent).toBe(true)
+  expect(datum.value).toBe(50)
+  expect(clickedValue({ data: datum }, "station")).toBe("east")
+})
 
 describe("stateTimelineOption", () => {
   const states = rows(
