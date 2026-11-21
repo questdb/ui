@@ -532,9 +532,7 @@ export const dispatchApplyNotebookState = async (
         if (c.grid) cell.grid = c.grid
         return cell
       }),
-      ...(chart_types
-        ? { chartTypes: parseChartTypes(chart_types) }
-        : {}),
+      ...(chart_types ? { chartTypes: parseChartTypes(chart_types) } : {}),
       ...(chart_sync ? { chartSync: parseChartSync(chart_sync) } : {}),
     }
   } catch (e) {

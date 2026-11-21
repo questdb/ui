@@ -68,7 +68,10 @@ describe("dashboard grid", () => {
   it("highlights a price change on the correct stable row after server rows reorder", () => {
     const store = createResultTrendStore()
     const viewportStore = createResultGridViewportStore()
-    const panel = (data: DqlQueryResult) => (
+    const panel = (
+      data: DqlQueryResult,
+      gridMode: "stable" | "stream" = "stable",
+    ) => (
       <ResultTrendProvider value={store}>
         <ResultGridPanel
           data={data}
@@ -84,7 +87,7 @@ describe("dashboard grid", () => {
           viewportStore={viewportStore}
           highlightConfig={highlightConfig}
           refreshIntervalMs={undefined}
-          gridMode="stable"
+          gridMode={gridMode}
         />
       </ResultTrendProvider>
     )
@@ -117,6 +120,11 @@ describe("dashboard grid", () => {
     expect(
       screen.getByText("2.0").closest('[role="gridcell"]'),
     ).not.toHaveAttribute("data-highlight-color")
+
+    rerender(panel(next, "stream"))
+    expect(
+      screen.getAllByRole("gridcell").map((cell) => cell.textContent),
+    ).toEqual(["ETH", "2.0", "BTC", "10.0▲"])
   })
 
   it("keeps a single sample visible and draws a line when there are two samples", () => {
@@ -128,7 +136,7 @@ describe("dashboard grid", () => {
           [[[7] as unknown as CellValue], [[8, 9] as unknown as CellValue]],
           -1,
         )}
-        maxColumnWidth={"auto"}
+        maxColumnWidth="auto"
         columnFormats={{ history: { visual: "sparkline" } }}
       />,
     )

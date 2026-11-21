@@ -45,28 +45,41 @@ export const useLiveRows = (
   mode: GridMode | undefined,
 ): LiveRows => {
   const previousKeys = useRef<Map<string, number> | null>(null)
-  const lastResult = useRef<DqlQueryResult | null>(null)
+  const last = useRef<{
+    data: DqlQueryResult
+    mode: GridMode
+    identity: string
+  } | null>(null)
   const live = useRef<LiveRows>({ data, isNew: null, at: 0, revision: 0 })
 
   return useMemo(() => {
-    if (!mode) return { data, isNew: null, at: 0, revision: 0 }
-    if (lastResult.current === data) return live.current
-    const indexes = identityColumnIndexes(data.columns, identityColumns)
-    if (indexes === null) return { data, isNew: null, at: 0, revision: 0 }
+    const indexes = mode
+      ? identityColumnIndexes(data.columns, identityColumns)
+      : null
+    if (!mode || indexes === null) {
+      last.current = null
+      previousKeys.current = null
+      return { data, isNew: null, at: 0, revision: 0 }
+    }
+    const identity = JSON.stringify(identityColumns)
+    const sameFrame = last.current?.data === data
+    const sameIdentity = last.current?.identity === identity
+    if (sameFrame && sameIdentity && last.current?.mode === mode)
+      return live.current
     const keyOf = (row: DqlQueryResult["dataset"][number]) =>
       identityKeyOf(row, indexes)
-    const before = previousKeys.current
+    const before = sameIdentity ? previousKeys.current : null
     const dataset =
       mode === "stable" && before
         ? orderStably(data.dataset, data.dataset.map(keyOf), before)
         : data.dataset
     const keys = dataset.map(keyOf)
     const fresh =
-      before === null
+      before === null || sameFrame
         ? new Set<number>()
         : new Set(keys.flatMap((key, i) => (before.has(key) ? [] : [i])))
     previousKeys.current = new Map(keys.map((key, i) => [key, i]))
-    lastResult.current = data
+    last.current = { data, mode, identity }
     live.current = {
       data: dataset === data.dataset ? data : { ...data, dataset },
       isNew: fresh.size > 0 ? (row) => fresh.has(row) : null,
