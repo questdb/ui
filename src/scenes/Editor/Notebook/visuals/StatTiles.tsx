@@ -229,7 +229,10 @@ export const statTiles = (
       for (const row of sorted) {
         const key = k >= 0 ? toLabel(row[k]) : ""
         const n = toNumber(row[v])
-        if (n !== null) sparks.set(key, [...(sparks.get(key) ?? []), n])
+        if (n === null) continue
+        const history = sparks.get(key)
+        if (history) history.push(n)
+        else sparks.set(key, [n])
       }
     }
   }
