@@ -8,6 +8,26 @@ import {
 } from "./stateSegments"
 import type { StatementRows } from "./statementRows"
 
+it("does not infer end times when an explicitly bound end column is missing", () => {
+  const frame = {
+    columns: [
+      { name: "time", type: "TIMESTAMP" },
+      { name: "lane", type: "SYMBOL" },
+      { name: "state", type: "SYMBOL" },
+    ],
+    rows: [
+      ["2026-01-01T00:00:00Z", "db", "up"],
+      ["2026-01-01T00:01:00Z", "db", "down"],
+    ],
+  }
+  expect(
+    readStateSegments({ type: "uptime", columns: { end: "end_time" } }, frame),
+  ).toContain('end: column "end_time" not found')
+  expect(readStateSegments({ type: "stateTimeline" }, frame)).toMatchObject({
+    lanes: ["db"],
+  })
+})
+
 const HOUR = 3_600_000
 const at = (h: number) => new Date(Date.UTC(2026, 0, 1, h)).toISOString()
 

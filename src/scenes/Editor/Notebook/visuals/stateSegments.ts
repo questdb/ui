@@ -86,8 +86,9 @@ export const readStateSegments = (
     [timeIdx, "time", c.time],
     [laneIdx, "lane", c.lane],
     [stateIdx, "state", c.state],
+    [endIdx, "end", c.end],
   ] as const) {
-    if (idx < 0)
+    if (idx < 0 && (role !== "end" || set !== undefined))
       return `${role}: column ${JSON.stringify(set ?? `(default ${role})`)} not found. Columns: ${names()}.`
   }
 
