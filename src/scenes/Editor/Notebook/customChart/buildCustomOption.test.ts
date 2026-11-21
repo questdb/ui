@@ -303,15 +303,15 @@ describe("buildCustomOption", () => {
     expect(series[0].data).toEqual([[7, "Mon"]])
   })
 
-  it("drops float noise from numbers in datasets", () => {
-    // Given a rounded double as QuestDB returns it
-    const latency = rows([["ms", "DOUBLE"]], [[4.1000000000000005]])
+  it("preserves distinct doubles in the plotted dataset", () => {
+    const measured = [[4.1], [4.1000000000000005]]
+    const latency = rows([["ms", "DOUBLE"]], measured)
 
     // When
     const { option } = buildCustomOption({}, [latency], false)
 
     // Then
     const [q0] = option.dataset as { source: unknown[][] }[]
-    expect(q0.source).toEqual([[4.1]])
+    expect(q0.source).toEqual(measured)
   })
 })

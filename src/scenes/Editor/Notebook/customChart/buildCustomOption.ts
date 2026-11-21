@@ -27,13 +27,8 @@ const dimensionType = (type: string): "time" | "float" | "ordinal" => {
 
 export const datasetId = (index: number) => `q${index}`
 
-// A number as a chart shows it: LONG values arrive as strings (to keep their
-// precision) and doubles carry float noise (round(x, 1) can return
-// 4.1000000000000005), which templates such as "{@[2]}" would print.
-export const chartNumber = (value: unknown): number | null => {
-  const n = toNumber(value)
-  return n === null || Number.isSafeInteger(n) ? n : Number(n.toPrecision(15))
-}
+// Plot coordinates must not be rounded for display before reaching ECharts.
+export const chartNumber = (value: unknown): number | null => toNumber(value)
 
 const datasetsOf = (statements: (StatementRows | null)[]) =>
   statements.map((s, i) => {
