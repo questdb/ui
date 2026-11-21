@@ -519,7 +519,6 @@ export async function executeAIFlow(
   config: AIFlowConfig,
   callbacks: AIFlowCallbacks,
 ): Promise<AIFlowResult> {
-  const flow = ++latestFlow
   const {
     conversationId,
     settings,
@@ -553,6 +552,7 @@ export async function executeAIFlow(
     }
   }
 
+  const flow = ++latestFlow
   callbacks.addMessage({
     role: "user",
     content: userMsg.content,
@@ -970,6 +970,15 @@ export async function executeAIFlow(
       callbacks.updateMessage(conversationId, anchorMessageId, { localAgentId })
     }
 
+    const originalContent = new Map(
+      conversationHistory.map((message) => [message.id, message.content]),
+    )
+    const compactedHistory = result.compactedConversationHistory?.map(
+      (message) =>
+        originalContent.has(message.id)
+          ? { ...message, content: originalContent.get(message.id)! }
+          : message,
+    )
     const flowResult = processResult({
       type: config.type,
       response: result,
@@ -977,7 +986,7 @@ export async function executeAIFlow(
       anchorMessageId,
       streamingAssistantMessageId,
       callbacks,
-      compactedHistory: result.compactedConversationHistory,
+      compactedHistory,
       steered: abortSignal?.reason === STEERED_ABORT_REASON,
     })
 

@@ -143,6 +143,19 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith({ question_0_custom: "SQLite" })
   })
 
+  it("skips without submitting a focused custom draft", async () => {
+    const { onAnswer } = renderCard(question([database]))
+    await userEvent.click(
+      screen.getByRole("radio", { name: /Type your own answer/ }),
+    )
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Your own answer" }),
+      "SQLite",
+    )
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }))
+    expect(onAnswer.mock.calls).toEqual([[null]])
+  })
+
   it("picks an option with its number key", async () => {
     // Given
     const { onAnswer } = renderCard(question([database]))

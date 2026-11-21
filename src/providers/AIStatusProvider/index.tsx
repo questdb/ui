@@ -230,15 +230,17 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   )
 
   const isLocalAgentSelected =
-    localAgent !== null &&
     aiAssistantSettings.selectedModel === LOCAL_AGENT_MODEL
+  const hasSelectedLocalAgent = isLocalAgentSelected && localAgent !== null
 
   const currentModel = useMemo(
     () =>
       isLocalAgentSelected
-        ? LOCAL_AGENT_MODEL
+        ? hasSelectedLocalAgent
+          ? LOCAL_AGENT_MODEL
+          : null
         : getSelectedModel(aiAssistantSettings),
-    [isLocalAgentSelected, aiAssistantSettings],
+    [isLocalAgentSelected, hasSelectedLocalAgent, aiAssistantSettings],
   )
 
   // A local agent reaches the schema through the bridge, so the bridge's
@@ -248,15 +250,15 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     : hasSchemaAccess(aiAssistantSettings)
 
   const apiKey = useMemo(() => {
-    if (isLocalAgentSelected) return ""
+    if (hasSelectedLocalAgent) return ""
     if (!currentModel) return null
     const provider = providerForModel(currentModel, aiAssistantSettings)
     if (!provider) return null
     return getApiKey(provider, aiAssistantSettings)
-  }, [isLocalAgentSelected, currentModel, aiAssistantSettings])
+  }, [hasSelectedLocalAgent, currentModel, aiAssistantSettings])
 
   const canUse =
-    isLocalAgentSelected ||
+    hasSelectedLocalAgent ||
     (currentModel !== null &&
       apiKey !== null &&
       canUseAiAssistant(aiAssistantSettings))
@@ -435,7 +437,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   }, [])
 
   const contextValue: AIStatusContextType =
-    isConfigured || isLocalAgentSelected
+    isConfigured || hasSelectedLocalAgent
       ? {
           status,
           setStatus,

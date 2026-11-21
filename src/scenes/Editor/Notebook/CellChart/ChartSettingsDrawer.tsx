@@ -17,7 +17,7 @@ import {
 } from "./ReferenceLinesEditor"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
-import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
+import { canCombineXAxis, type QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
   Field,
   FieldGroup,
@@ -178,7 +178,16 @@ const ChartSettings: React.FC<SettingsProps> = ({
 
   const includedTabs = tabs.filter((tab) => {
     const q = draft.queries[tab.index]
-    return tab.compatible && q != null && q.enabled !== false
+    const compatible =
+      anchorTab != null &&
+      (tab === anchorTab ||
+        canCombineXAxis(
+          anchorTab.columns,
+          draft.xColumn,
+          tab.columns,
+          tab.xColumn,
+        ))
+    return compatible && q != null && q.enabled !== false
   })
   const heatmapConflict =
     includedTabs.length > 1 &&

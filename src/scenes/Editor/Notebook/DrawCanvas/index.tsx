@@ -212,7 +212,15 @@ export const DrawCanvas: React.FC<Props> = ({
   const plotted = resolution.renderQueries
   const heatmapConflict =
     plotted.length > 1 && plotted.some((query) => query.type === "heatmap")
+  const incompleteHeatmap = plotted.some(
+    (query) =>
+      query.type === "heatmap" &&
+      (!query.xColumn ||
+        !query.partitionByColumn ||
+        query.yColumns.length === 0),
+  )
   const empty =
+    incompleteHeatmap ||
     classifyBlock !== null ||
     queries.length === 0 ||
     plotted.length === 0 ||
@@ -231,6 +239,9 @@ export const DrawCanvas: React.FC<Props> = ({
   } else if (heatmapConflict) {
     emptyMessage =
       "Heatmaps need a chart of their own. Include only one query in Chart settings."
+  } else if (incompleteHeatmap) {
+    emptyMessage =
+      "This heatmap needs an X-axis, a row column, and a value column. Update Chart settings."
   } else if (hadError) {
     emptyMessage = "Query failed: check the SQL editor for the error."
   } else {

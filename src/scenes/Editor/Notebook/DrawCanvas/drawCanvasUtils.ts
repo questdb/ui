@@ -174,6 +174,19 @@ const xRoleOf = (columns: ColumnDefinition[], name: string | null) => {
   return col ? classifyColumn(col) : "other"
 }
 
+export const canCombineXAxis = (
+  anchorColumns: ColumnDefinition[],
+  anchorX: string | null,
+  otherColumns: ColumnDefinition[],
+  otherX: string | null,
+) => {
+  const anchorRole = xRoleOf(anchorColumns, anchorX)
+  return (
+    (anchorRole === "temporal" || anchorRole === "categorical") &&
+    xRoleOf(otherColumns, otherX) === anchorRole
+  )
+}
+
 const resolveOhlc = (
   qc: QueryChart,
   columns: ColumnDefinition[],
@@ -255,8 +268,6 @@ export const resolveDraw = (
     anchor.r.columns.some((c) => c.name === savedX)
       ? savedX
       : (anchor?.inferred.xColumn ?? null)
-  const anchorRole = anchor ? xRoleOf(anchor.r.columns, anchorX) : "other"
-  const canCombine = anchorRole === "temporal" || anchorRole === "categorical"
 
   const placedItems = items.map((it, i) => {
     const ownX = i === 0 ? anchorX : it.inferred.xColumn
@@ -268,8 +279,8 @@ export const resolveDraw = (
   placedItems.forEach((it, i) => {
     const isAnchor = i === 0
     const { ownX } = it
-    const role = xRoleOf(it.r.columns, ownX)
-    const compatible = isAnchor || (canCombine && role === anchorRole)
+    const compatible =
+      isAnchor || canCombineXAxis(anchor.r.columns, anchorX, it.r.columns, ownX)
     const enabled = it.qc.enabled !== false
     if (it.idx >= 0) {
       tabs.push({

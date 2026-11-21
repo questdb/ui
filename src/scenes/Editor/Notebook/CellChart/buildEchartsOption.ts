@@ -399,6 +399,7 @@ const buildHeatmapOption = (
     x: xSlot.get(toCategoryLabel(row[xIdx])) ?? 0,
     y: rowSlot.get(toCategoryLabel(row[rowIdx])) ?? 0,
     value: toNumberOrNull(row[valueIdx]),
+    reading: row[valueIdx] ?? "-",
   }))
   const perRow = q.colorScale === "row"
   const emptyExtent = () => ({ min: Infinity, max: -Infinity })
@@ -414,11 +415,11 @@ const buildHeatmapOption = (
     const { min, max } = rowExtents[y]
     return max === min ? 1 : (value - min) / (max - min)
   }
-  const data = cells.map(({ x, y, value }) => [
+  const data = cells.map(({ x, y, value, reading }) => [
     x,
     y,
     value === null ? "-" : perRow ? shade(value, y) : value,
-    value ?? "-",
+    typeof reading === "bigint" ? String(reading) : reading,
   ])
   const { min, max } =
     perRow || globalExtent.min === Infinity ? { min: 0, max: 1 } : globalExtent
@@ -536,6 +537,7 @@ const referenceLineSeries = (series: Series[], lines: ReferenceLine[]) => {
       tooltip: { show: false },
     }
     const markLine = (target.markLine as { data: unknown[] } | undefined) ?? {
+      precision: -1,
       silent: true,
       symbol: "none",
       animation: false,

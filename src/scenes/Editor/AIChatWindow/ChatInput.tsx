@@ -22,6 +22,7 @@ import {
 import {
   useAIStatus,
   isBlockingAIStatus,
+  STEERED_ABORT_REASON,
 } from "../../../providers/AIStatusProvider"
 import { TableIcon } from "../../Schema/table-icon"
 import { getTableKind } from "../../../utils/questdb/types"
@@ -138,6 +139,7 @@ type QueuedEntry = {
   agentCommand: boolean
   model: string | null
   channel: ReturnType<typeof useLocalAgentChannel>
+  waitingFor?: AbortSignal
 }
 
 export type ChatQueue = Record<string, QueuedEntry>
@@ -148,6 +150,8 @@ export const canDeliverQueued = (
   channel: QueuedEntry["channel"],
   acceptsImages: boolean,
 ) =>
+  (!entry.waitingFor?.aborted ||
+    entry.waitingFor.reason === STEERED_ABORT_REASON) &&
   entry.model === model &&
   entry.channel === (model === LOCAL_AGENT_MODEL ? channel : null) &&
   (entry.images.length === 0 || acceptsImages)
@@ -285,6 +289,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }))
     const {
       status: aiStatus,
+      abortController,
       abortOperation,
       steerOperation,
       currentModel,
@@ -478,6 +483,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   agentCommand: false,
                   model: previous.model,
                   channel: previous.channel,
+                  waitingFor: previous.waitingFor,
                 }
               : {
                   text,
@@ -485,6 +491,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   agentCommand,
                   model: currentModel,
                   channel: destinationChannel,
+                  waitingFor: abortController?.signal,
                 },
           }
         })

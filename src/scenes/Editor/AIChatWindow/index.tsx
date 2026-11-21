@@ -1061,6 +1061,18 @@ const AIChatWindow: React.FC = () => {
     return { label, warn, onClick }
   })()
 
+  const queryActions = (shouldShowExplainButton || shouldShowFixButton) && (
+    <ButtonContainer ref={explainButtonRef}>
+      {shouldShowExplainButton && (
+        <ExplainQueryButton
+          conversationId={conversation!.id}
+          queryText={currentSQL.trim()}
+        />
+      )}
+      {shouldShowFixButton && <FixQueryButton />}
+    </ButtonContainer>
+  )
+
   return (
     <>
       <Drawer
@@ -1125,6 +1137,7 @@ const AIChatWindow: React.FC = () => {
             />
           ) : (
             <ChatPanel>
+              {shouldShowMessages && queryActions}
               {shouldShowMessages ? (
                 <ChatMessages
                   messages={messages}
@@ -1161,17 +1174,7 @@ const AIChatWindow: React.FC = () => {
                       />
                     </InitialQueryEditor>
                   </InitialQueryBox>
-                  {(shouldShowExplainButton || shouldShowFixButton) && (
-                    <ButtonContainer ref={explainButtonRef}>
-                      {shouldShowExplainButton && (
-                        <ExplainQueryButton
-                          conversationId={conversation!.id}
-                          queryText={currentSQL.trim()}
-                        />
-                      )}
-                      {shouldShowFixButton && <FixQueryButton />}
-                    </ButtonContainer>
-                  )}
+                  {queryActions}
                 </InitialQueryContainer>
               ) : (
                 <BlankChatContainer data-hook="chat-blank-state">

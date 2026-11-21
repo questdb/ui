@@ -430,7 +430,15 @@ export const QuestionCard = ({
                     setEditing(false)
                   }
                 }}
-                onBlur={() => commitOwnAnswer(target)}
+                onBlur={(event) => {
+                  if (
+                    event.relatedTarget?.matches(
+                      '[data-hook="chat-question-skip"], [data-hook="chat-question-stop"]',
+                    )
+                  )
+                    return
+                  commitOwnAnswer(target)
+                }}
                 placeholder="Type your own answer"
                 aria-label="Your own answer"
                 data-hook="chat-question-own-answer"

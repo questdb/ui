@@ -622,6 +622,23 @@ describe("buildEchartsOption — heatmap", () => {
     }
   })
 
+  it("keeps the exact LONG reading in a heatmap tooltip", () => {
+    const reading = "9007199254740993"
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns: [columns[0], columns[1], col("spread", "LONG")],
+        dataset: [["2026-11-01T00:00:00.000000Z", "EURUSD", reading]],
+        xColumn: "ts",
+        type: "heatmap",
+        yColumns: ["spread"],
+        partitionByColumn: "symbol",
+      }),
+    ])
+    const tooltip = opt.tooltip as { formatter: (p: unknown) => string }
+    const [data] = seriesList(opt.series)[0].data as unknown[][]
+    expect(tooltip.formatter({ value: data })).toContain(`<b>${reading}</b>`)
+  })
+
   it("escapes the values it shows in its tooltip", () => {
     // Given
     const opt = buildEchartsOption({ xColumn: "ts" }, [

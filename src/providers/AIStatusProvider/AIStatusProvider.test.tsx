@@ -34,6 +34,15 @@ describe("AIStatusProvider", () => {
     expect(status().canUse).toBe(false)
   })
 
+  it("does not fall back to a cloud model while a disconnected local agent is selected", () => {
+    const status = renderStatus({
+      ...configuredOpenAI,
+      selectedModel: LOCAL_AGENT_MODEL,
+    })
+    expect(status().currentModel).toBeNull()
+    expect(status().canUse).toBe(false)
+  })
+
   it("starts a retried answer over from the steps it showed before its first attempt", () => {
     // Given an attempt that showed a tool step and text before it failed
     const status = renderStatus()
