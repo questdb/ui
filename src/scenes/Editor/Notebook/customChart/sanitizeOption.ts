@@ -285,9 +285,52 @@ export const sanitizeOption = (
     report("toolbox", "The console provides its own chart toolbar.")
   }
 
-  validateSeries(option, context, report)
-  validateMaps(option, context, report)
+  validateOptionScopes(option, context, report)
   return { option, problems }
+}
+
+const validateOptionScopes = (
+  option: Record<string, unknown>,
+  context: SanitizeContext,
+  report: (
+    path: string,
+    message: string,
+    severity?: OptionProblem["severity"],
+  ) => void,
+  path = "",
+): void => {
+  const qualify = (part: string) => (path ? `${path}.${part}` : part)
+  const reportHere: typeof report = (part, message, severity) =>
+    report(qualify(part), message, severity)
+  validateSeries(option, context, reportHere)
+  validateMaps(option, context, reportHere)
+  if (isRecord(option.baseOption))
+    validateOptionScopes(
+      option.baseOption,
+      context,
+      report,
+      qualify("baseOption"),
+    )
+  if (Array.isArray(option.options))
+    option.options.forEach((entry, index) => {
+      if (isRecord(entry))
+        validateOptionScopes(
+          entry,
+          context,
+          report,
+          qualify(`options[${index}]`),
+        )
+    })
+  if (Array.isArray(option.media))
+    option.media.forEach((entry, index) => {
+      if (isRecord(entry) && isRecord(entry.option))
+        validateOptionScopes(
+          entry.option,
+          context,
+          report,
+          qualify(`media[${index}].option`),
+        )
+    })
 }
 
 const validateSeries = (

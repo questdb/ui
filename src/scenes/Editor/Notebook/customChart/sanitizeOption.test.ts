@@ -12,6 +12,27 @@ const context = {
 }
 
 describe("sanitizeOption", () => {
+  it("checks custom renderer authorization in nested option scopes", () => {
+    const series = [{ type: "custom", renderItem: "unregistered" }]
+    const { option, problems } = sanitizeOption(
+      {
+        baseOption: { series },
+        options: [{ series }],
+        media: [{ option: { series } }],
+      },
+      context,
+    )
+    expect(option).toEqual({
+      baseOption: { series: [] },
+      options: [{ series: [] }],
+      media: [{ option: { series: [] } }],
+    })
+    expect(problems.map(({ path }) => path)).toEqual([
+      "baseOption.series[0].renderItem",
+      "options[0].series[0].renderItem",
+      "media[0].option.series[0].renderItem",
+    ])
+  })
   it("escapes HTML in tooltip templates and drops title links", () => {
     // Given
     const raw = {
