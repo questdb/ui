@@ -541,6 +541,8 @@ const addReferenceLines = (series: Series[], lines: ReferenceLine[]) => {
     })
     target.markLine = markLine
   }
+  // ECharts merges series options. An empty list clears previously drawn lines.
+  for (const s of series) s.markLine ??= { data: [] }
 }
 
 // An axis that scales to its data keeps its reference lines in view. A bound
@@ -549,7 +551,7 @@ type AxisBound = (extent: { min: number; max: number }) => number
 const axisBoundsWith = (
   values: number[],
 ): { min?: AxisBound; max?: AxisBound } => {
-  if (values.length === 0) return {}
+  if (values.length === 0) return { min: undefined, max: undefined }
   const lowest = Math.min(...values)
   const highest = Math.max(...values)
   return {

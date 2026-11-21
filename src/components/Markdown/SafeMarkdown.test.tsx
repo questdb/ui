@@ -14,6 +14,15 @@ describe("SafeMarkdown", () => {
     expect(html).not.toContain("track.png")
   })
 
+  it("preserves inline image syntax in notebook code examples", () => {
+    // When
+    const html = render("```md\n![sample](data:image/png;base64,AAAA)\n```")
+
+    // Then
+    expect(html).toContain("![sample](data:image/png;base64,AAAA)")
+    expect(html).not.toContain("inline-image:")
+  })
+
   it("renders images when allowImages and src is http(s)/data:image", () => {
     expect(render("![ok](https://example.com/a.png)", true)).toContain("<img")
     expect(render("![ok](data:image/png;base64,iVBORw0KGgo=)", true)).toContain(

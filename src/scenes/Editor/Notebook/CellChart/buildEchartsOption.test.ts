@@ -517,7 +517,7 @@ describe("buildEchartsOption — reference lines", () => {
     )
 
     // Then
-    expect(markLineOf(opt, 0)).toBeUndefined()
+    expect(markLineOf(opt, 0)?.data).toEqual([])
     expect(markLineOf(opt, 1)?.data).toEqual([
       { yAxis: 30, label: { formatter: "Oversold" } },
       { yAxis: 70, label: { formatter: "70" } },

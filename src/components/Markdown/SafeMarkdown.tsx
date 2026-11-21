@@ -181,7 +181,13 @@ export const SafeMarkdown = ({
     ...(allowImages ? {} : { img: DropImage }),
   }
 
-  const keyed = useMemo(() => withInlineImagesKeyed(children), [children])
+  const keyed = useMemo(
+    () =>
+      allowImages === "inline"
+        ? withInlineImagesKeyed(children)
+        : { markdown: children, images: [] },
+    [allowImages, children],
+  )
 
   return (
     <InlineImagesContext.Provider value={keyed.images}>
