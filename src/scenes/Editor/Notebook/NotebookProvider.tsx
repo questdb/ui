@@ -263,10 +263,16 @@ const createNotebookScopeKey = (bufferId: number, cellId: string): string =>
   `notebook:${bufferId}:${cellId}`
 
 const NotebookStateContext = createContext<NotebookState>(EMPTY_STATE)
+// The settings alone, for components inside a cell: they must not re-render
+// whenever any cell's text or result changes.
+const NotebookSettingsContext = createContext<NotebookSettings>(
+  EMPTY_STATE.settings,
+)
 const NotebookActionsContext = createContext<NotebookActions>(NOOP_ACTIONS)
 const NotebookBufferIdContext = createContext<number>(0)
 
 export const useNotebookState = () => useContext(NotebookStateContext)
+export const useNotebookSettings = () => useContext(NotebookSettingsContext)
 export const useNotebookActions = () => useContext(NotebookActionsContext)
 export const useNotebookBufferId = () => useContext(NotebookBufferIdContext)
 
@@ -1088,17 +1094,19 @@ export const NotebookProvider: React.FC<{
     <NotebookBufferIdContext.Provider value={bufferId}>
       <NotebookActionsContext.Provider value={actionsValue}>
         <NotebookStateContext.Provider value={stateValue}>
-          <CellRefreshProvider value={cellRefreshEngine}>
-            <CellVirtualizationProvider value={cellVirtualizationEngine}>
-              <CellResultHydrationProvider value={resultHydration}>
-                <ResultTrendProvider value={resultTrendStore}>
-                  <RowHistoriesProvider value={rowHistories}>
-                    {children}
-                  </RowHistoriesProvider>
-                </ResultTrendProvider>
-              </CellResultHydrationProvider>
-            </CellVirtualizationProvider>
-          </CellRefreshProvider>
+          <NotebookSettingsContext.Provider value={settings}>
+            <CellRefreshProvider value={cellRefreshEngine}>
+              <CellVirtualizationProvider value={cellVirtualizationEngine}>
+                <CellResultHydrationProvider value={resultHydration}>
+                  <ResultTrendProvider value={resultTrendStore}>
+                    <RowHistoriesProvider value={rowHistories}>
+                      {children}
+                    </RowHistoriesProvider>
+                  </ResultTrendProvider>
+                </CellResultHydrationProvider>
+              </CellVirtualizationProvider>
+            </CellRefreshProvider>
+          </NotebookSettingsContext.Provider>
         </NotebookStateContext.Provider>
       </NotebookActionsContext.Provider>
     </NotebookBufferIdContext.Provider>

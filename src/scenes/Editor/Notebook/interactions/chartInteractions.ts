@@ -88,8 +88,23 @@ export const clickedValue = (
     }
     return undefined
   }
+  // An item whose name is a display label carries the value it selects.
+  const data = params.data
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    Object.hasOwn(data, "selection")
+  )
+    return (data as { selection: unknown }).selection
   if (params.name !== undefined && params.name !== "") return params.name
   return Array.isArray(params.value) ? params.value[0] : params.value
+}
+
+/** The column an item's own `selection` comes from, for its SQL type. */
+const selectionColumnOf = (params: ClickParams): string | undefined => {
+  const column = (params.data as { selectionColumn?: unknown } | null)
+    ?.selectionColumn
+  return typeof column === "string" ? column : undefined
 }
 
 export type SetVariables = (values: Record<string, string>) => void
@@ -111,8 +126,8 @@ export const interactionEvents = (
         return
       const value = clickedValue(p, click.column, requireSourceColumn)
       if (click.column !== undefined && value === undefined) return
-      const type =
-        click.column === undefined ? undefined : columnType?.(click.column)
+      const column = click.column ?? selectionColumnOf(p)
+      const type = column === undefined ? undefined : columnType?.(column)
       setVariables({ [click.variable]: sqlLiteral(value, type) })
     }
   }

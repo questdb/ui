@@ -42,7 +42,7 @@ import {
   type VariableSlot,
 } from "../interactions/InteractionsEditor"
 import { QuestContext } from "../../../../providers/QuestProvider"
-import { useNotebookState } from "../NotebookProvider"
+import { useNotebookSettings } from "../NotebookProvider"
 import { normalizeVariables } from "../declareUtils"
 import { classifyColumn } from "./inferChartConfig"
 import type { NotebookVariable } from "../../../../store/notebook"
@@ -151,7 +151,7 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   > | null>(null)
   const [committing, setCommitting] = useState(false)
   const { quest } = useContext(QuestContext)
-  const { settings } = useNotebookState()
+  const settings = useNotebookSettings()
   const variables = useMemo(
     () => normalizeVariables(settings.variables),
     [settings.variables],

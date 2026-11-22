@@ -215,7 +215,7 @@ export const gaugeOption = ({
       value < min || value > max
         ? [
             {
-              message: `The value ${value} is outside min ${min} … max ${max}; set min and max on the visual.`,
+              message: `The value is outside min ${min} … max ${max}; set min and max on the visual.`,
               severity: "warning",
             },
           ]
@@ -959,12 +959,16 @@ export const mapOption = ({
       }),
       0.15,
     )
+    // A NULL value stays missing: it is not a reading of 0.
     const values = rows.rows.map((r) =>
-      valueIdx >= 0 ? (toNumber(r[valueIdx]) ?? 0) : 1,
+      valueIdx >= 0 ? toNumber(r[valueIdx]) : 1,
     )
     // Sizes scale with magnitude, so the scale is the largest magnitude: a
     // negative value must not be measured against a positive (or no) maximum.
-    const max = values.reduce((m, v) => Math.max(m, Math.abs(v)), 1e-9)
+    const max = values.reduce<number>(
+      (m, v) => (v === null ? m : Math.max(m, Math.abs(v))),
+      1e-9,
+    )
     return {
       option: {
         tooltip: {
@@ -983,11 +987,21 @@ export const mapOption = ({
             showEffectOn: "emphasis",
             rippleEffect: { scale: 2.5, brushType: "stroke" },
             itemStyle: { color: colors.contentAccent },
-            symbolSize: (v: number[]) =>
-              6 + 18 * Math.sqrt(Math.abs(v[2]) / max),
+            symbolSize: (v: (number | null)[]) =>
+              v[2] === null ? 6 : 6 + 18 * Math.sqrt(Math.abs(v[2]) / max),
             data: rows.rows.map((r, i) => ({
               name: labelIdx >= 0 ? toLabel(r[labelIdx]) : "",
               value: [toNumber(r[lonIdx]), toNumber(r[latIdx]), values[i]],
+              // A point with no value is drawn hollow, unlike a real 0.
+              ...(values[i] === null
+                ? {
+                    itemStyle: {
+                      color: "transparent",
+                      borderColor: colors.contentAccent,
+                      borderWidth: 1.5,
+                    },
+                  }
+                : {}),
               ...clickData(r),
             })),
           },
@@ -1252,7 +1266,8 @@ export const volumeProfileOption = ({
   const sorted = [...rows.rows].sort(
     (a, b) => (toNumber(b[priceIdx]) ?? 0) - (toNumber(a[priceIdx]) ?? 0),
   )
-  const priceFormat = formats[rows.columns[priceIdx].name] ?? {
+  const priceName = rows.columns[priceIdx].name
+  const priceFormat = formats[priceName] ?? {
     kind: "number" as const,
   }
   const prices = sorted.map((r) => formatValue(r[priceIdx], priceFormat))
@@ -1293,10 +1308,14 @@ export const volumeProfileOption = ({
     poc = index
   })
   const clickIdx = columnIndex(rows, clickColumn)
+  // The price labels are formatted, so an unbound click selects the price
+  // itself, typed by its column, not the label.
   const item = (value: number | null, row: StatementRows["rows"][number]) =>
-    clickColumn !== undefined && clickIdx >= 0
-      ? { value, columns: { [clickColumn]: row[clickIdx] } }
-      : value
+    clickColumn !== undefined
+      ? clickIdx >= 0
+        ? { value, columns: { [clickColumn]: row[clickIdx] } }
+        : value
+      : { value, selection: row[priceIdx], selectionColumn: priceName }
   const series =
     valueIdx >= 0
       ? [

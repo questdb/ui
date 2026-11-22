@@ -272,7 +272,16 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
     if (visible) return
     const opener = openerRef.current
     openerRef.current = null
-    if (opener?.isConnected) opener.focus()
+    if (!opener?.isConnected) return
+    // A control shown only while its header has focus or the pointer (a
+    // column's Format button) is hidden by now, and a hidden control cannot
+    // take focus. Show it for the hand-back; once focused, its header keeps
+    // it shown.
+    const inline = opener.style.visibility
+    const hidden = getComputedStyle(opener).visibility === "hidden"
+    if (hidden) opener.style.visibility = "visible"
+    opener.focus()
+    if (hidden) opener.style.visibility = inline
   }, [visible])
 
   useEffect(() => {

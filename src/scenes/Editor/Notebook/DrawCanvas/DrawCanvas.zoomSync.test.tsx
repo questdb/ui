@@ -16,9 +16,8 @@ import { DrawCanvas } from "./index"
 
 vi.mock("../NotebookProvider", () => ({
   useNotebookBufferId: () => 909,
-  useNotebookState: () => ({
-    cells: [],
-    settings: { chartSync: { crosshair: "off", zoom: true } },
+  useNotebookSettings: () => ({
+    chartSync: { crosshair: "off", zoom: true },
   }),
   useNotebookActions: () => ({
     setVariableValues: () => undefined,

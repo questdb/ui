@@ -142,9 +142,15 @@ export const VisualCanvas = ({
     ],
   )
   const clickType = columnTypeOf(statements, click?.column)
+  // A visual passes the SQL type of a value an unbound click selects.
   const select = click
-    ? (value: unknown) =>
-        setVariables({ [click.variable]: sqlLiteral(value, clickType) })
+    ? (value: unknown, type?: string) =>
+        setVariables({
+          [click.variable]: sqlLiteral(
+            value,
+            click.column === undefined ? type : clickType,
+          ),
+        })
     : undefined
 
   // Every visual but the order book (which reports each side) draws from the

@@ -20,6 +20,13 @@ const Hint = styled(Text)`
   line-height: 1.4;
 `
 
+// Groups the editor's controls for focus lookups without adding a box.
+const Group = styled.div`
+  display: contents;
+`
+
+const ADD_FORMAT_HOOK = "add-column-format"
+
 type Props = {
   formats: ColumnFormats | undefined
   onChange: (formats: ColumnFormats | undefined) => void
@@ -51,18 +58,51 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
     focusColumn ?? (entries.length === 1 ? entries[0][0] : null),
   )
 
-  const lastAddedToggle = useRef<HTMLButtonElement>(null)
+  const groupRef = useRef<HTMLDivElement>(null)
+  const toggles = useRef(new Map<string, HTMLButtonElement>())
+  const toggleRefOf =
+    (column: string) => (toggle: HTMLButtonElement | null) => {
+      if (toggle) toggles.current.set(column, toggle)
+      else toggles.current.delete(column)
+    }
   const [focusLastAdded, setFocusLastAdded] = useState<string | null>(null)
   useEffect(() => {
     if (focusLastAdded === null) return
     // The last choice removes the menu trigger, so the usual Radix handback
     // has nowhere to go. Wait until its focus scope has closed.
     const frame = requestAnimationFrame(() => {
-      lastAddedToggle.current?.focus()
+      toggles.current.get(focusLastAdded)?.focus()
       setFocusLastAdded(null)
     })
     return () => cancelAnimationFrame(frame)
   }, [focusLastAdded])
+
+  // Removing a format removes its focused button: focus moves on to the next
+  // formatted column (or the one before), else to "Format a column".
+  const [focusAfterRemove, setFocusAfterRemove] = useState<{
+    column: string | null
+  } | null>(null)
+  useEffect(() => {
+    if (!focusAfterRemove) return
+    const target =
+      (focusAfterRemove.column !== null &&
+        toggles.current.get(focusAfterRemove.column)) ||
+      groupRef.current?.querySelector<HTMLElement>(
+        `[data-hook="${ADD_FORMAT_HOOK}"]`,
+      )
+    target?.focus()
+    setFocusAfterRemove(null)
+  }, [focusAfterRemove])
+
+  const removeFormat = (column: string) => {
+    const columnsWithFormats = entries.map(([name]) => name)
+    const index = columnsWithFormats.indexOf(column)
+    setFocusAfterRemove({
+      column:
+        columnsWithFormats[index + 1] ?? columnsWithFormats[index - 1] ?? null,
+    })
+    setFormat(column, null)
+  }
 
   const setFormat = (column: string, format: ColumnFormat | null) => {
     const next = { ...formats }
@@ -93,7 +133,7 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
   })
 
   return (
-    <>
+    <Group ref={groupRef}>
       <Hint color="contentSecondary" size="xs">
         How a column&apos;s values read wherever this cell shows them: grid
         cells, chart tooltips and axes, and components.
@@ -117,15 +157,13 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
                 title={column}
                 details={summarise(format)}
                 expanded={open}
-                toggleRef={
-                  focusLastAdded === column ? lastAddedToggle : undefined
-                }
+                toggleRef={toggleRefOf(column)}
                 onToggle={() => setExpanded(open ? null : column)}
                 actions={
                   <IconButton
                     size="sm"
                     label={`Remove the format of ${column}`}
-                    onClick={() => setFormat(column, null)}
+                    onClick={() => removeFormat(column)}
                   >
                     <TrashIcon size={14} />
                   </IconButton>
@@ -149,6 +187,7 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
         <SettingsSelect
           name="add-format"
           ariaLabel="Format a column"
+          dataHook={ADD_FORMAT_HOOK}
           value=""
           placeholder="+ Format a column"
           onValueChange={(column) => {
@@ -160,6 +199,6 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
           options={unformatted.map((c) => ({ label: c.name, value: c.name }))}
         />
       )}
-    </>
+    </Group>
   )
 }

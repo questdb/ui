@@ -31,6 +31,8 @@ type Level = {
   rawSize: string | number
   total: number | string | null
   selection: unknown
+  /** The SQL type of an unbound click's selection, the price. */
+  selectionType?: string
 }
 
 type Side = { levels: Level[]; totalName?: string; problem?: string }
@@ -64,6 +66,7 @@ const readSide = (
     return { levels: [], problem: `missing ${roles} column binding.` }
   }
   const clickIdx = columnIndex(rows, clickColumn)
+  const priceType = rows.columns[priceIdx].type
   const levels = rows.rows.flatMap((row) => {
     const rawPrice = row[priceIdx]
     if (typeof rawPrice !== "string" && typeof rawPrice !== "number") return []
@@ -80,6 +83,7 @@ const readSide = (
         size,
         rawSize,
         selection: clickColumn === undefined ? rawPrice : row[clickIdx],
+        selectionType: clickColumn === undefined ? priceType : undefined,
         total:
           typeof total === "number" || typeof total === "string" ? total : null,
       },
@@ -252,7 +256,7 @@ type Props = {
   queriesKey?: string
   // Unbound clicks report price; a bound click reads from its own side.
   clickColumn?: string
-  onSelect?: (value: unknown) => void
+  onSelect?: (value: unknown, type?: string) => void
 }
 
 export const OrderBook = ({
@@ -332,7 +336,9 @@ export const OrderBook = ({
     const ladder = ladderRef.current
     const midRow = midRef.current
     const level = event.target
-    if (!ladder || !midRow || midRow.contains(level)) return
+    // Only a level row moves: the ladder itself takes focus as a scroll
+    // container, and the mid bar is not a level.
+    if (!ladder || !midRow || level === ladder || midRow.contains(level)) return
     const shown = level.getBoundingClientRect()
     const bar = midRow.getBoundingClientRect()
     if (shown.bottom <= bar.top || shown.top >= bar.bottom) return
@@ -346,7 +352,7 @@ export const OrderBook = ({
   const row = (level: Level, side: "ask" | "bid") => {
     const activate =
       onSelect && level.selection !== undefined
-        ? () => onSelect(level.selection)
+        ? () => onSelect(level.selection, level.selectionType)
         : undefined
     return (
       <Row

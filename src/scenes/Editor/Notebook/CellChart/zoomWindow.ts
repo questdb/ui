@@ -15,8 +15,25 @@ export const zoomWindowForEvent = (
   instance: EChartsType | null,
 ): ZoomWindow | undefined => {
   const first = event.batch?.[0] ?? event
-  if (typeof first.start === "number" && typeof first.end === "number")
-    return { start: first.start, end: first.end }
+  if (typeof first.start === "number" && typeof first.end === "number") {
+    // Chart sync can pin this chart to its peers' absolute window while the
+    // user's zoom event is still being handled: keep those bounds, or the
+    // percentage window slides away from the peers once the data changes.
+    const control = instance
+      ? zoomForTarget(zoomControls(instance), first)
+      : undefined
+    const pinned =
+      control?.getRangePropMode?.().every((mode) => mode === "value") === true
+        ? control.getValueRange()
+        : undefined
+    return {
+      start: first.start,
+      end: first.end,
+      ...(pinned?.every(Number.isFinite)
+        ? { bounds: { startValue: pinned[0], endValue: pinned[1] } }
+        : {}),
+    }
+  }
 
   // Linked charts can receive absolute bounds only. The updated chart model
   // has already converted these to percentages on the peer's own time axis.

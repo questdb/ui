@@ -25,7 +25,13 @@ vi.mock("../cellRefresh/CellRefreshContext", async (orig) => {
           settled?: boolean
         }
       }
-      const s = engine.pendingCellFetchState(g.__sql)
+      // One state per SQL, so its queries keep their identity across renders
+      // as the engine's do.
+      const g2 = globalThis as unknown as { __states?: Map<string, unknown> }
+      const cache = (g2.__states ??= new Map())
+      const fresh = engine.pendingCellFetchState(g.__sql)
+      const s = (cache.get(g.__sql) as typeof fresh | undefined) ?? fresh
+      cache.set(g.__sql, s)
       const o = g.__fetch ?? {}
       return select({
         ...s,
@@ -40,7 +46,7 @@ vi.mock("../cells/useChartLoading", () => ({
   useChartLoading: () => ({ loading: false, stopVisible: false }),
 }))
 const actions = {
-  setVariableValues: () => undefined,
+  setVariableValues: (_values: Record<string, string>) => undefined,
   updateSettings: () => undefined,
   getVariables: () => [],
 }
@@ -48,7 +54,7 @@ const state = { settings: {} }
 vi.mock("../NotebookProvider", () => ({
   useNotebookActions: () => actions,
   useNotebookBufferId: () => 46,
-  useNotebookState: () => state,
+  useNotebookSettings: () => state.settings,
 }))
 vi.mock("../CellChart/lazyCharts", () => ({
   ChartSuspense: ({ children }: { children: React.ReactNode }) => (
@@ -56,7 +62,11 @@ vi.mock("../CellChart/lazyCharts", () => ({
   ),
   LazyChartRenderer: React.forwardRef(() => <div data-hook="stub-chart" />),
   LazyCustomChart: () => <div />,
-  LazyVisualCanvas: () => <div />,
+  LazyVisualCanvas: (props: { events?: Record<string, unknown> }) => {
+    ;(globalThis as unknown as { __visualEvents?: unknown }).__visualEvents =
+      props.events
+    return <div />
+  },
   preloadChartCode: () => undefined,
 }))
 vi.mock("../CellChart/DrawSettingsDrawer", () => ({
@@ -202,4 +212,79 @@ describe("DrawCanvas render report", () => {
       expect(report?.problems).toEqual([{ message, severity }])
     },
   )
+
+  it("writes the drawn report again once a blocked chart draws the same rows", () => {
+    // Given a chart that drew, then could not be classified on the next round
+    const g = globalThis as unknown as { __sql: string; __fetch?: unknown }
+    g.__sql = SQL
+    const cell = cellWith(dql(5))
+    const { rerender } = renderComponent(ui(cell))
+    g.__fetch = {
+      classifyBlock: { kind: "failed", message: "Service Unavailable" },
+    }
+    act(() => {
+      rerender(ui(cell))
+    })
+    expect(getCell(cell).render_report?.problems[0]?.severity).toBe("error")
+
+    // When a later round classifies it and returns the rows it already holds
+    g.__fetch = undefined
+    act(() => {
+      rerender(ui(cell))
+    })
+
+    // Then the agent reads the chart the pane shows again
+    const report = getCell(cell).render_report
+    expect(report?.drawn).toEqual({ series: 1, points: 5, events: 0 })
+    expect(report?.problems).toEqual([])
+  })
+})
+
+describe("DrawCanvas click interactions", () => {
+  it("writes a visual's click on a LONG column as a number", () => {
+    // Given a gauge whose click sets a LONG id, which QuestDB sends as text
+    ;(globalThis as unknown as { __sql: string }).__sql = SQL
+    const setVariableValues = vi.spyOn(actions, "setVariableValues")
+    const cell: NotebookCell = {
+      ...cellWith({
+        results: [
+          {
+            type: "dql",
+            query: SQL,
+            columns: [
+              { name: "id", type: "LONG" },
+              { name: "v", type: "DOUBLE" },
+            ],
+            dataset: [["42", 75]],
+            count: 1,
+            fetchedAt: 1,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 2,
+      }),
+      chartConfig: {
+        xColumn: null,
+        queries: [],
+        visual: { type: "gauge", columns: { value: "v" } },
+      },
+      interactions: { click: { variable: "sel", column: "id" } },
+    } as NotebookCell
+    renderComponent(ui(cell))
+
+    // When the user clicks the drawn item, which carries its row's id
+    const events = (
+      globalThis as unknown as {
+        __visualEvents?: Record<string, (p: unknown, i: unknown) => void>
+      }
+    ).__visualEvents
+    events?.click(
+      { componentType: "series", data: { value: 75, columns: { id: "42" } } },
+      {},
+    )
+
+    // Then the variable holds the number, typed by the result's column
+    expect(setVariableValues).toHaveBeenCalledWith({ sel: "42" })
+    setVariableValues.mockRestore()
+  })
 })

@@ -8,6 +8,8 @@ export type ZoomControl = {
   getAxisModel(dim: string, index: number): unknown
   getPercentRange(): [number, number] | undefined
   getValueRange(dim?: string, index?: number): [number, number] | undefined
+  /** Whether start and end are held as percentages or as axis values. */
+  getRangePropMode?(): ["percent" | "value", "percent" | "value"]
 }
 
 type LiveModel = {

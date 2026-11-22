@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { darkColors, lightColors } from "../../../../theme"
 import {
   gaugeOption,
@@ -13,7 +13,11 @@ import {
 } from "./visualOptions"
 import { sparklineGeometry, statTiles } from "./StatTiles"
 import { bulletRows } from "./Bullets"
-import { clickedValue } from "../interactions/chartInteractions"
+import {
+  clickedValue,
+  columnTypeOf,
+  interactionEvents,
+} from "../interactions/chartInteractions"
 import type { StatementRows } from "./statementRows"
 
 const rows = (
@@ -448,6 +452,45 @@ it("sizes World map points by magnitude when every value is negative", () => {
   }
 })
 
+it("keeps a World map point with a NULL value missing, not 0", () => {
+  const { option } = mapOption({
+    visual: { type: "map" },
+    formats: {},
+    colors: lightColors,
+    statements: [
+      rows(
+        [
+          ["city", "SYMBOL"],
+          ["lat", "DOUBLE"],
+          ["lon", "DOUBLE"],
+          ["temp", "DOUBLE"],
+        ],
+        [
+          ["London", 51.5, -0.12, null],
+          ["Paris", 48.8, 2.35, 0],
+          ["Berlin", 52.5, 13.4, 10],
+        ],
+      ),
+    ],
+  })
+  const [points] = series(option)
+  const data = points.data as {
+    value: (number | null)[]
+    itemStyle?: { color?: string }
+  }[]
+  // Then the missing reading keeps no value and is drawn hollow
+  expect(data[0].value[2]).toBeNull()
+  expect(data[0].itemStyle?.color).toBe("transparent")
+  // And a real 0 is drawn as a filled point
+  expect(data[1].value[2]).toBe(0)
+  expect(data[1].itemStyle).toBeUndefined()
+  // And the tooltip shows a missing value, not 0
+  const tooltip = (option?.tooltip as { formatter: (p: unknown) => string })
+    .formatter
+  expect(tooltip({ name: "London", value: data[0].value })).toBe("London<br/>—")
+  expect(tooltip({ name: "Paris", value: data[1].value })).toBe("Paris<br/>0")
+})
+
 it("does not start World map ripples on a settled coordinate frame", () => {
   const { option } = mapOption({
     visual: { type: "map" },
@@ -657,6 +700,47 @@ describe("volumeProfileOption", () => {
       },
     ])
   })
+  it.each([
+    ["DECIMAL(10,2)", "63000.50", { prefix: "$" }, "63000.50m"],
+    ["DOUBLE", 63000.5, undefined, "63000.5"],
+  ] as const)(
+    "sets an unbound click on a %s price to the price, not its label",
+    (type, price, format, literal) => {
+      // Given a volume profile whose click keeps the default (no column)
+      const statements = [
+        rows(
+          [
+            ["price", type],
+            ["volume", "DOUBLE"],
+          ],
+          [[price, 4]],
+        ),
+      ]
+      const built = volumeProfileOption({
+        colors: lightColors,
+        formats: format ? { price: format } : {},
+        visual: { type: "volumeProfile", columns: { value: "volume" } },
+        statements,
+      })
+      const [bars] = built.option?.series as { data: unknown[] }[]
+      const set = vi.fn()
+      const events = interactionEvents(
+        { click: { variable: "p" } },
+        set,
+        false,
+        (name) => columnTypeOf(statements, name),
+      )
+
+      // When the user clicks the bar, named by its formatted price label
+      events.click(
+        { componentType: "series", name: "$63,000.50", data: bars.data[0] },
+        {} as never,
+      )
+
+      // Then the variable holds the price as a number of its type
+      expect(set).toHaveBeenCalledWith({ p: literal })
+    },
+  )
 })
 
 describe("sankeyOption", () => {

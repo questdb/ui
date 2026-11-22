@@ -34,6 +34,37 @@ const MAPS = new Set<string>(MAP_NAMES)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
 
+const WINDOW_KEYS = ["start", "end", "startValue", "endValue"]
+
+const withoutWindow = (zoom: unknown): unknown =>
+  typeof zoom === "object" && zoom !== null && !Array.isArray(zoom)
+    ? Object.fromEntries(
+        Object.entries(zoom).filter(([key]) => !WINDOW_KEYS.includes(key)),
+      )
+    : zoom
+
+/**
+ * The option without its authored zoom windows: once the chart is zoomed, a
+ * refresh's merge must not move it back to the authored window.
+ */
+const withoutZoomWindows = (
+  option: Record<string, unknown>,
+): Record<string, unknown> => {
+  const strip = (part: Record<string, unknown>) =>
+    part.dataZoom === undefined
+      ? part
+      : {
+          ...part,
+          dataZoom: Array.isArray(part.dataZoom)
+            ? part.dataZoom.map(withoutWindow)
+            : withoutWindow(part.dataZoom),
+        }
+  const base = option.baseOption
+  return base && typeof base === "object" && !Array.isArray(base)
+    ? { ...strip(option), baseOption: strip(base as Record<string, unknown>) }
+    : strip(option)
+}
+
 const PartialNotice = styled.div`
   height: 2.8rem;
   padding: 0.5rem 1rem;
@@ -78,11 +109,17 @@ export const CustomChart = ({
     option: typeof rawOption
     range: [number, number]
   } | null>(null)
+  // The option whose drawn chart was zoomed (by the user or a linked chart):
+  // its authored window applies when it is drawn, not on later refreshes.
+  const [zoomedOption, setZoomedOption] = useState<typeof rawOption | null>(
+    null,
+  )
   const chartEvents = useMemo(
     () => ({
       ...events,
       datazoom: (payload: unknown, instance: EChartsType) => {
         events?.datazoom?.(payload, instance)
+        setZoomedOption(rawOption)
         if (!isTimeChart(instance)) return
         const event = payload as DataZoomEvent
         const controls = primaryXControls(instance)
@@ -143,8 +180,9 @@ export const CustomChart = ({
   )
   const specKey = useMemo(() => JSON.stringify(sanitized.option), [sanitized])
 
+  const zoomed = zoomedOption === rawOption
   const option = useMemo(() => {
-    const raw = built.option
+    const raw = zoomed ? withoutZoomWindows(built.option) : built.option
     if (
       raw.baseOption &&
       typeof raw.baseOption === "object" &&
@@ -157,7 +195,7 @@ export const CustomChart = ({
       return { ...raw, baseOption } as EChartsOption
     }
     return withBrush(raw as EChartsOption, interactions)
-  }, [built, interactions])
+  }, [built, interactions, zoomed])
   const neededMaps = useMemo(() => mapsUsedBy(built.option), [built])
   const [mapStatus, setMapStatus] = useState<"loading" | "error" | "ready">(
     () => (neededMaps.every(isMapLoaded) ? "ready" : "loading"),

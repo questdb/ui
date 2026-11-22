@@ -670,6 +670,75 @@ describe("VisualCanvas", () => {
     ])
   })
 
+  it.each([
+    ["LONG", "9007199254740993", "9007199254740993"],
+    ["DECIMAL(10,2)", "100.50", "100.50m"],
+  ])(
+    "writes an unbound order-book click on a %s price as a number",
+    async (type, price, literal) => {
+      // Given an order book whose click sets the level's price (the default),
+      // with the price as QuestDB sends LONG and DECIMAL values: text
+      const setVariables = vi.fn()
+      const columns = [
+        { name: "price", type },
+        { name: "size", type: "DOUBLE" },
+      ]
+      const { container } = renderComponent(
+        <VisualCanvas
+          {...defaults}
+          visual={{ type: "orderBook" }}
+          statements={[
+            { columns, rows: [[price, 2]] },
+            { columns, rows: [["1", 3]] },
+          ]}
+          interactions={{ click: { variable: "px" } }}
+          setVariables={setVariables}
+        />,
+      )
+
+      // When the user clicks the ask level
+      await userEvent.click(
+        container.querySelector<HTMLElement>('[data-hook="order-book-ask"]')!,
+      )
+
+      // Then the variable holds the price as a number of its type, not text
+      expect(setVariables.mock.calls).toEqual([[{ px: literal }]])
+    },
+  )
+
+  it("writes a bound LONG click as a number and shows that tile selected", async () => {
+    // Given stat tiles whose click sets a LONG id, sent as text
+    const setVariables = vi.fn()
+    const statements = [
+      {
+        columns: [
+          { name: "desk", type: "SYMBOL" },
+          { name: "desk_id", type: "LONG" },
+          { name: "volume", type: "DOUBLE" },
+        ],
+        rows: [["London", "42", 5]],
+      },
+    ]
+    const props = {
+      ...defaults,
+      visual: { type: "stat" as const, columns: { value: "volume" } },
+      statements,
+      interactions: { click: { variable: "desk", column: "desk_id" } },
+      setVariables,
+    }
+    const { rerender } = renderComponent(<VisualCanvas {...props} />)
+
+    // When the user clicks the tile
+    await userEvent.click(screen.getByRole("button", { name: /London/ }))
+
+    // Then the variable holds the number, and that value marks the tile
+    expect(setVariables.mock.calls).toEqual([[{ desk: "42" }]])
+    rerender(<VisualCanvas {...props} clickVariableValue="42" />)
+    expect(
+      screen.getByRole("button", { name: /London/, pressed: true }),
+    ).toBeInTheDocument()
+  })
+
   it("writes one consistent uptime lane binding from the keyboard and ignores ambiguous lanes", async () => {
     const setVariables = vi.fn()
     renderComponent(

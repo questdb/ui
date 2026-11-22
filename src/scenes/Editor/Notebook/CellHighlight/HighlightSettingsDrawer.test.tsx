@@ -349,4 +349,58 @@ describe("highlight settings validation", () => {
       }),
     )
   })
+
+  it("moves focus to Format a column after the last format is removed by keyboard", async () => {
+    // Given the Formats section with one formatted column
+    renderComponent(<Fixture onSave={vi.fn()} focus={{ section: "formats" }} />)
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+    const drawer = await screen.findByRole("dialog", { name: "Grid settings" })
+    const remove = await screen.findByRole("button", {
+      name: "Remove the format of v",
+    })
+
+    // When the keyboard user removes it
+    remove.focus()
+    await userEvent.keyboard("{Enter}")
+
+    // Then focus stays in the drawer, on the control that adds a format
+    await waitFor(() =>
+      expect(document.activeElement).toHaveAccessibleName(
+        expect.stringContaining("Format a column"),
+      ),
+    )
+    expect(drawer).toContainElement(document.activeElement as HTMLElement)
+  })
+
+  it("hands focus back to an opener that shows only while focused", async () => {
+    // Given an opener that is hidden once focus leaves it, like a column
+    // header's Format button
+    vi.stubGlobal("matchMedia", () => ({ matches: false }))
+    renderComponent(<Fixture onSave={vi.fn()} />)
+    const opener = screen.getByRole("button", { name: "Grid settings" })
+    await userEvent.click(opener)
+    await screen.findByRole("dialog", { name: "Grid settings" })
+    opener.style.visibility = "hidden"
+    const shownWhenFocused: string[] = []
+    const focus = opener.focus.bind(opener)
+    vi.spyOn(opener, "focus").mockImplementation((options) => {
+      shownWhenFocused.push(getComputedStyle(opener).visibility)
+      focus(options)
+    })
+
+    // When the drawer is cancelled and has slid out
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    const panel = screen.queryByRole("dialog", { name: "Grid settings" })
+    if (panel) fireEvent.animationEnd(panel)
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Grid settings" }),
+      ).not.toBeInTheDocument(),
+    )
+
+    // Then the opener was shown while it took focus back
+    expect(shownWhenFocused).toEqual(["visible"])
+    expect(opener).toHaveFocus()
+    vi.unstubAllGlobals()
+  })
 })

@@ -24,7 +24,7 @@ import { eventBus } from "../../../../modules/EventBus"
 import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
-import { useNotebookActions, useNotebookState } from "../NotebookProvider"
+import { useNotebookActions, useNotebookSettings } from "../NotebookProvider"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
@@ -241,7 +241,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
     [data, highlightConfig, previous, re2Ready],
   )
   // The row a click selected: its column holds the variable's value.
-  const { settings } = useNotebookState()
+  const settings = useNotebookSettings()
   const selectedValue = interactions?.click
     ? settings.variables?.find((v) => v.name === interactions.click?.variable)
         ?.value

@@ -23,7 +23,7 @@ const notebook = vi.hoisted(() => ({
 }))
 vi.mock("../NotebookProvider", () => ({
   useNotebookActions: () => notebook.actions,
-  useNotebookState: () => notebook.state,
+  useNotebookSettings: () => notebook.state.settings,
 }))
 
 vi.hoisted(() => {

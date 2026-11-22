@@ -112,9 +112,9 @@ describe("dashboard visuals", () => {
       /^1$/,
     )
 
-    // When selecting the ask, then the variable receives its exact price
+    // When selecting the ask, it selects its exact price, typed by its column
     await userEvent.click(ask)
-    expect(onSelect).toHaveBeenCalledWith("9007199254740993")
+    expect(onSelect).toHaveBeenCalledWith("9007199254740993", "LONG")
   })
 
   it("renders the exact size of a LONG without compact formatting", () => {
@@ -284,6 +284,46 @@ describe("dashboard visuals", () => {
       expect(scrollTop).toBe(500 + scrolled)
     },
   )
+
+  it("keeps the ladder where it is when the ladder itself takes focus", () => {
+    // Given an order book whose mid bar overlaps the ladder's own box
+    const columns = [
+      { name: "price", type: "DOUBLE" },
+      { name: "size", type: "DOUBLE" },
+    ]
+    renderComponent(
+      <OrderBook
+        formats={{}}
+        statements={[
+          { columns, rows: [[101, 1]] },
+          { columns, rows: [[99, 1]] },
+        ]}
+      />,
+    )
+    const bar = screen.getByText("Spread", { exact: false }).parentElement
+    const ladder = bar?.parentElement
+    if (!bar || !ladder) throw new Error("order book not rendered")
+    let scrollTop = 500
+    Object.defineProperty(ladder, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (next: number) => {
+        scrollTop = next
+      },
+    })
+    const rect = (top: number, bottom: number) =>
+      new DOMRect(0, top, 300, bottom - top)
+    vi.spyOn(ladder, "getBoundingClientRect").mockReturnValue(rect(0, 300))
+    vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(rect(132, 168))
+    ladder.tabIndex = 0
+
+    // When Tab lands on the scrollable ladder (Firefox, or rows without a click)
+    ladder.focus()
+
+    // Then the ladder does not scroll away from the centred mid price
+    expect(ladder).toHaveFocus()
+    expect(scrollTop).toBe(500)
+  })
 
   it("lists the levels nearest the spread of a deep book and says how many", () => {
     const columns = [

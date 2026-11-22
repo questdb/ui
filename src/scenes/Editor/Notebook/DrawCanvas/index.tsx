@@ -39,7 +39,7 @@ import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import {
   useNotebookActions,
   useNotebookBufferId,
-  useNotebookState,
+  useNotebookSettings,
 } from "../NotebookProvider"
 import { statementResultsOf } from "../visuals/statementRows"
 import {
@@ -252,7 +252,7 @@ export const DrawCanvas: React.FC<Props> = ({
   }
 
   const theme = useTheme()
-  const { settings } = useNotebookState()
+  const settings = useNotebookSettings()
   const preciseTimePointer = settings.chartSync?.crosshair === "line"
   const sharedTimePointer =
     preciseTimePointer || settings.chartSync?.crosshair === "tooltip"
@@ -358,9 +358,12 @@ export const DrawCanvas: React.FC<Props> = ({
   useEffect(() => () => leaveSyncRef.current?.(), [])
 
   // What the preset chart drew, for the agent (visuals and custom charts
-  // report their own).
+  // report their own). It is written again when a blocked chart is drawn
+  // again with the same rows, so the block's report does not outlive it.
+  const presetDrawn =
+    !visual && !custom && classifyBlock === null && results.length > 0
   useEffect(() => {
-    if (visual || custom || results.length === 0) return
+    if (!presetDrawn) return
     const series = (Array.isArray(option.series) ? option.series : []) as {
       name?: string
       data?: unknown[]
@@ -386,10 +389,9 @@ export const DrawCanvas: React.FC<Props> = ({
     cell.chartConfig,
     formats,
     option,
+    presetDrawn,
     resolution,
     results,
-    visual,
-    custom,
   ])
 
   const stackProblem = useMemo(

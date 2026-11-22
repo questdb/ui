@@ -78,7 +78,12 @@ const stubCanvas = () =>
       ) as unknown as CanvasRenderingContext2D
     } as unknown as typeof HTMLCanvasElement.prototype.getContext)
 
-const mount = (metric: string, from: number, to: number) => {
+const mount = (
+  metric: string,
+  from: number,
+  to: number,
+  handlerAfterSync = false,
+) => {
   const host = document.createElement("div")
   document.body.append(host)
   const instance = echarts.init(host, undefined, {
@@ -90,11 +95,16 @@ const mount = (metric: string, from: number, to: number) => {
   // echarts-for-react first render: setOption(option, notMerge=false, lazyUpdate=true)
   instance.setOption(optionFor(metric, from, to), false, false)
   const persisted: unknown[] = []
-  // ChartRenderer's datazoom handler -> onZoomChange (what the store keeps)
-  instance.on("datazoom", (evt) => {
-    persisted.push(zoomWindowForEvent(evt as DataZoomEvent, instance))
-  })
+  // ChartRenderer's datazoom handler -> onZoomChange (what the store keeps).
+  // echarts-for-react binds it before chart sync joins, and binds it again
+  // after sync when the cell's interactions change.
+  const persist = () =>
+    instance.on("datazoom", (evt) => {
+      persisted.push(zoomWindowForEvent(evt as DataZoomEvent, instance))
+    })
+  if (!handlerAfterSync) persist()
   leaves.push(joinChartSync(9, instance))
+  if (handlerAfterSync) persist()
   return { instance, host, persisted }
 }
 
@@ -194,3 +204,32 @@ it.each([
     expect(source.persisted.at(-1)).toHaveProperty("bounds")
   },
 )
+
+it("keeps the zoomed chart's absolute window when its zoom handler runs after chart sync", () => {
+  vi.useFakeTimers()
+  stubCanvas()
+  setChartSync(9, { crosshair: "off", zoom: true })
+  // Given a linked chart whose zoom handler was bound again after it joined
+  // chart sync (a saved click interaction rebinds the chart's events)
+  const source = mount("cpu", 0, 60, true)
+  const peer = mount("mem", 0, 60)
+
+  // When the user zooms it to the middle half
+  const inside = primaryXControls(source.instance).find(
+    (c) => (c as unknown as { type: string }).type === "dataZoom.inside",
+  )!
+  source.instance.dispatchAction({
+    type: "dataZoom",
+    batch: [{ dataZoomId: inside.id, start: 25, end: 75 }],
+  })
+  vi.advanceTimersByTime(500)
+
+  // Then it remembers the same absolute window as its peer, so a remount
+  // after a refresh restores the times the peer shows
+  const [startValue, endValue] = primaryXControls(
+    peer.instance,
+  )[0].getValueRange("x", 0)!
+  expect(source.persisted.at(-1)).toMatchObject({
+    bounds: { startValue, endValue },
+  })
+})

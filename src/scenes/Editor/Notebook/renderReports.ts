@@ -41,10 +41,50 @@ export const clearRenderReport = (bufferId: number, cellId: string): void => {
   reports.delete(keyOf(bufferId, cellId))
 }
 
-/** A report in the agent wire's snake case. */
-export const renderReportWire = (report: RenderReport) => ({
+// Keys of `drawn` that say what was drawn (counts and kinds). The others,
+// such as a gauge's value or a volume profile's point of control, are result
+// values.
+const SHAPE_KEYS = new Set([
+  "type",
+  "series",
+  "points",
+  "events",
+  "datasets",
+  "rows",
+  "tiles",
+  "bars",
+  "targets",
+  "lanes",
+  "states",
+  "segments",
+  "buckets",
+  "operators",
+  "groups",
+  "nodes",
+  "links",
+  "regions",
+  "cells",
+  "levels",
+  "asks",
+  "bands",
+  "bids",
+])
+
+/**
+ * A report in the agent wire's snake case. Without `withResultValues` (as in
+ * get_cell, which never carries query result data) `drawn` keeps only what
+ * was drawn, not the values drawn.
+ */
+export const renderReportWire = (
+  report: RenderReport,
+  withResultValues = false,
+) => ({
   kind: report.kind,
-  drawn: report.drawn,
+  drawn: withResultValues
+    ? report.drawn
+    : Object.fromEntries(
+        Object.entries(report.drawn).filter(([key]) => SHAPE_KEYS.has(key)),
+      ),
   problems: report.problems,
   seconds_ago: Math.round((Date.now() - report.at) / 1000),
 })
