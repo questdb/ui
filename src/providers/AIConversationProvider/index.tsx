@@ -17,9 +17,11 @@ import type {
   ChatWindowState,
   ConversationId,
   AIConversation,
-  UserActionDigest,
 } from "./types"
-import { applyUserActionToDigest, createEmptyDigest } from "./userActionDigest"
+import {
+  createUserActionDigestState,
+  type UserActionDigestCapture,
+} from "./userActionDigest"
 import {
   on as onUserAction,
   type UserActionEvent,
@@ -86,12 +88,9 @@ type AIConversationContextType = {
     conversationId: ConversationId,
     notebookBufferId: number,
   ) => Promise<void>
-  readUserActionDigest: (
+  captureUserActionDigest: (
     conversationId: ConversationId,
-  ) => UserActionDigest | undefined
-  rotateUserActionDigest: (
-    conversationId: ConversationId,
-  ) => UserActionDigest | undefined
+  ) => UserActionDigestCapture | undefined
   handleGlyphClick: (options: {
     bufferId: number
     queryKey: QueryKey
@@ -211,8 +210,8 @@ export const AIConversationProvider: React.FC<{
     [conversationMetasArray],
   )
 
-  const userActionDigestsRef = useRef<Map<ConversationId, UserActionDigest>>(
-    new Map(),
+  const userActionDigestsRef = useRef(
+    new Map<ConversationId, ReturnType<typeof createUserActionDigestState>>(),
   )
   const conversationMetasRef = useRef(conversationMetas)
   useEffect(() => {
@@ -227,10 +226,10 @@ export const AIConversationProvider: React.FC<{
           if (meta.notebookBufferId !== evt.bufferId) continue
           let digest = userActionDigestsRef.current.get(meta.id)
           if (!digest) {
-            digest = createEmptyDigest()
+            digest = createUserActionDigestState()
             userActionDigestsRef.current.set(meta.id, digest)
           }
-          applyUserActionToDigest(digest, evt)
+          digest.apply(evt)
         }
       },
     )
@@ -477,19 +476,9 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
-  const readUserActionDigest = useCallback(
-    (conversationId: ConversationId): UserActionDigest | undefined =>
-      userActionDigestsRef.current.get(conversationId),
-    [],
-  )
-
-  const rotateUserActionDigest = useCallback(
-    (conversationId: ConversationId): UserActionDigest | undefined => {
-      const current = userActionDigestsRef.current.get(conversationId)
-      if (!current) return undefined
-      userActionDigestsRef.current.set(conversationId, createEmptyDigest())
-      return current
-    },
+  const captureUserActionDigest = useCallback(
+    (conversationId: ConversationId) =>
+      userActionDigestsRef.current.get(conversationId)?.capture(),
     [],
   )
 
@@ -1208,8 +1197,7 @@ export const AIConversationProvider: React.FC<{
       findOrCreateNotebookChat,
       openNotebookChat,
       bindConversationToNotebook,
-      readUserActionDigest,
-      rotateUserActionDigest,
+      captureUserActionDigest,
       handleGlyphClick,
       shiftQueryKeysForBuffer,
       openChatWindow,
@@ -1244,8 +1232,7 @@ export const AIConversationProvider: React.FC<{
       findOrCreateNotebookChat,
       openNotebookChat,
       bindConversationToNotebook,
-      readUserActionDigest,
-      rotateUserActionDigest,
+      captureUserActionDigest,
       handleGlyphClick,
       shiftQueryKeysForBuffer,
       openChatWindow,
@@ -1293,8 +1280,7 @@ export const AIConversationProvider: React.FC<{
       findNotebookChat,
       findOrCreateNotebookChat,
       bindConversationToNotebook,
-      readUserActionDigest,
-      rotateUserActionDigest,
+      captureUserActionDigest,
       closeChatWindow,
       openHistoryView,
       closeHistoryView,
@@ -1334,8 +1320,7 @@ export const AIConversationProvider: React.FC<{
       findNotebookChat,
       findOrCreateNotebookChat,
       bindConversationToNotebook,
-      readUserActionDigest,
-      rotateUserActionDigest,
+      captureUserActionDigest,
       closeChatWindow,
       openHistoryView,
       closeHistoryView,

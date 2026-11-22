@@ -19,8 +19,10 @@ import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
 import {
   chartXAxisOf,
-  isNumericHeatmapValue,
+  heatmapMappingIncomplete,
+  HEATMAP_INCOMPLETE_MESSAGE,
   resolveQueryAxes,
+  type PositionedResult,
   type QueryTab,
 } from "../DrawCanvas/drawCanvasUtils"
 import {
@@ -77,23 +79,9 @@ const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
   return new Set([o.open, o.high, o.low, o.close]).size !== 4
 }
 
-const heatmapIncomplete = (
-  q: QueryChart | null,
-  placement: { item: QueryTab; ownX: string | null } | undefined,
-  value: string | undefined,
-): boolean =>
-  !!q &&
-  q.type === "heatmap" &&
-  q.enabled !== false &&
-  (!q.partitionByColumn ||
-    !value ||
-    (placement != null &&
-      (!placement.ownX ||
-        q.partitionByColumn === placement.ownX ||
-        !isNumericHeatmapValue(placement.item.columns, value))))
-
 type SharedProps = {
   tabs: QueryTab[]
+  emptyDqlResults?: PositionedResult[]
   config: ChartConfig
   onSave: (next: ChartConfig) => void
   telemetry?: ChartSettingsTelemetry
@@ -115,6 +103,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
   open,
   onClose,
   tabs,
+  emptyDqlResults,
   config,
   onSave,
   telemetry,
@@ -220,7 +209,9 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ...draft,
       xColumn,
       queries: draft.queries.map((q, i) =>
-        i === xTab?.index && q?.partitionByColumn === xColumn
+        i === xTab?.index &&
+        q?.partitionByColumn === xColumn &&
+        !(q.type === "heatmap" && q.enabled === false)
           ? { ...q, partitionByColumn: undefined }
           : q,
       ),
@@ -233,6 +224,19 @@ const ChartSettings: React.FC<SettingsProps> = ({
     })
   const heatmapValueAt = (index: number) =>
     draft.heatmapValues?.[index] ?? draft.queries[index]?.yColumns[0]
+  const heatmapIncomplete = (q: QueryChart | null, index: number) =>
+    q?.type === "heatmap" &&
+    q.enabled !== false &&
+    heatmapMappingIncomplete(
+      q,
+      draft.xColumn,
+      tabs.find((tab) => tab.index === index) ??
+        emptyDqlResults?.find((entry) => entry.statementIndex === index),
+      heatmapValueAt(index),
+    )
+  const heatmapIdx = saveAttempted
+    ? draft.queries.findIndex(heatmapIncomplete)
+    : -1
 
   const setQuery = (index: number, next: QueryChart) =>
     updateDraft({
@@ -250,13 +254,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
       setActiveIndex(badIdx)
       return
     }
-    const heatmapIdx = draft.queries.findIndex((q, index) =>
-      heatmapIncomplete(
-        q,
-        placements.find(({ item }) => item.index === index),
-        heatmapValueAt(index),
-      ),
-    )
+    const heatmapIdx = draft.queries.findIndex(heatmapIncomplete)
     if (heatmapIdx >= 0) {
       telemetry?.onSaveBlocked?.("heatmap_incomplete")
       setSaveAttempted(true)
@@ -280,7 +278,6 @@ const ChartSettings: React.FC<SettingsProps> = ({
     const referenceLines = savedReferenceLines(draft.referenceLines)
     onSave({
       ...rest,
-      xColumn,
       queries,
       ...(referenceLines && { referenceLines }),
     })
@@ -305,6 +302,11 @@ const ChartSettings: React.FC<SettingsProps> = ({
             Heatmaps need a chart of their own. Include only one query or choose
             a different chart type.
           </Text>
+        </div>
+      )}
+      {heatmapIdx >= 0 && !tabs.some((tab) => tab.index === heatmapIdx) && (
+        <div role="alert">
+          <Text color="statusWarning">{HEATMAP_INCOMPLETE_MESSAGE}</Text>
         </div>
       )}
       <Field>
@@ -418,8 +420,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
           isAnchorTab={isAnchorTab}
           ohlcError={saveAttempted && candlestickMissingOhlc(query)}
           heatmapError={
-            saveAttempted &&
-            heatmapIncomplete(query, active, heatmapValueAt(active.item.index))
+            saveAttempted && heatmapIncomplete(query, active.item.index)
           }
           heatmapValue={heatmapValueAt(active.item.index)}
           onHeatmapValueChange={(value) =>

@@ -218,6 +218,45 @@ it("does not append ordinary text to a native slash command in the queue", async
   expect(input).toHaveValue("Explain the sample")
 })
 
+it.each(["text", "image"])(
+  "keeps queued command Edit separate from a draft with %s",
+  async (draft) => {
+    configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+    const view = renderInput(fakeChannel("agent"))
+    const user = userEvent.setup()
+    const input = getHook("chat-input-textarea")
+    await user.type(input, "/summary{Enter}")
+    const queued = view.submitted()
+    if (draft === "text") await user.type(input, "Separate draft")
+    else {
+      await user.upload(
+        getHook("chat-attach-image-input"),
+        new File(["sample"], "draft.png", { type: "image/png" }),
+      )
+      await screen.findByRole("img", { name: "Attachment 1" })
+    }
+
+    await user.click(screen.getByRole("button", { name: "Edit" }))
+    expect(view.submitted()).toBe(queued)
+    expect(getHook("chat-queued-message")).toHaveTextContent(
+      "then choose Edit again to restore the queued command",
+    )
+    if (draft === "text") {
+      expect(input).toHaveValue("Separate draft")
+      await user.clear(input)
+    } else {
+      expect(input).toHaveValue("")
+      expect(screen.getByRole("img", { name: "Attachment 1" })).toBeVisible()
+      await user.click(screen.getByRole("button", { name: "Remove image 1" }))
+    }
+    await user.click(screen.getByRole("button", { name: "Edit" }))
+    expect(view.submitted()).toBeUndefined()
+    expect(input).toHaveValue("/summary")
+    expect(input).toHaveFocus()
+    expect(queryHook("chat-image-attachments")).not.toBeInTheDocument()
+  },
+)
+
 const mixedClipboard = () =>
   ({
     items: [
@@ -262,6 +301,35 @@ it("attaches the image rather than inserting mixed-paste text for an image-capab
   await user.paste(mixedClipboard())
   expect(await screen.findByRole("img", { name: "Attachment 1" })).toBeVisible()
   expect(input).toHaveValue("Existing draft")
+})
+
+it("inserts mixed-paste text at the selection when the image slots are full", async () => {
+  configure(null, LOCAL_AGENT_MODEL)
+  renderInput(fakeChannel("agent"))
+  const user = userEvent.setup()
+  await user.upload(
+    getHook("chat-attach-image-input"),
+    Array.from(
+      { length: 4 },
+      (_, index) =>
+        new File([`sample ${index}`], `chart-${index}.png`, {
+          type: "image/png",
+        }),
+    ),
+  )
+  await screen.findByRole("img", { name: "Attachment 4" })
+  const sources = () =>
+    screen
+      .getAllByRole("img", { name: /Attachment \d/ })
+      .map((img) => img.getAttribute("src"))
+  const original = sources()
+  const input = getHook("chat-input-textarea") as HTMLTextAreaElement
+  await user.type(input, "Show chart here")
+  input.setSelectionRange(5, 10)
+  await user.paste(mixedClipboard())
+  expect(input).toHaveValue("Show row counts here")
+  expect(sources()).toEqual(original)
+  expect(queryHook("chat-attach-error")).not.toBeInTheDocument()
 })
 
 const renderQuestions = (...ids: string[]) => {

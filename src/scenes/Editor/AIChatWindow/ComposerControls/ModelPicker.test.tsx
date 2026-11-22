@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react"
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
@@ -29,21 +29,35 @@ const groups = [
   providerGroup("anthropic", "Anthropic", ["Claude Haiku", "Claude Sonnet"]),
 ]
 
-const renderPicker = (selectedKey = "anthropic:Claude Sonnet") => {
+const renderPicker = (openSignal: number | null = null) => {
   const onSelect = vi.fn()
-  renderComponent(
-    <ModelPicker
-      groups={groups}
-      selectedKey={selectedKey}
-      triggerLabel="Claude Sonnet"
-      triggerProvider="anthropic"
-      agent={null}
-      disabled={false}
-      onSelect={onSelect}
-      onRestartAgent={vi.fn()}
-    />,
+  const onDone = vi.fn(() =>
+    screen.getByRole("textbox", { name: "Composer" }).focus(),
   )
-  return { onSelect }
+  const picker = (disabled: boolean) => (
+    <>
+      <input aria-label="Composer" />
+      <input aria-label="Outside control" />
+      <ModelPicker
+        groups={groups}
+        selectedKey="anthropic:Claude Sonnet"
+        triggerLabel="Claude Sonnet"
+        triggerProvider="anthropic"
+        agent={null}
+        disabled={disabled}
+        onSelect={onSelect}
+        onRestartAgent={vi.fn()}
+        openSignal={openSignal}
+        onDone={onDone}
+      />
+    </>
+  )
+  const view = renderComponent(picker(false))
+  return {
+    onSelect,
+    onDone,
+    setDisabled: (disabled: boolean) => view.rerender(picker(disabled)),
+  }
 }
 
 const group = (name: string) => screen.getByRole("button", { name })
@@ -93,6 +107,44 @@ describe("ModelPicker", () => {
     // Then
     expect(optionNames()).toEqual(["GPT 5", "GPT 5 Mini"])
     expect(group("OpenAI")).toHaveAttribute("aria-expanded", "true")
+  })
+
+  it("closes an open picker when disabled and does not reopen or accept Enter", async () => {
+    const { onSelect, setDisabled } = renderPicker()
+    const user = userEvent.setup()
+    const trigger = screen.getByRole("button", { name: /Model:/ })
+    await user.click(trigger)
+    expect(screen.getByRole("combobox")).toHaveFocus()
+    expect(screen.getByRole("option", { name: "Claude Haiku" })).toBeVisible()
+
+    setDisabled(true)
+    expect(trigger).toBeDisabled()
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
+    expect(optionNames()).toEqual([])
+    await user.click(trigger)
+    await user.keyboard("{Enter}")
+    expect(onSelect).not.toHaveBeenCalled()
+
+    setDisabled(false)
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
+    await user.click(trigger)
+    expect(screen.getByRole("combobox")).toHaveFocus()
+  })
+
+  it("leaves focus on the clicked field when a slash-opened picker closes outside", async () => {
+    const { onDone, onSelect } = renderPicker(1)
+    const user = userEvent.setup()
+    expect(await screen.findByRole("combobox")).toHaveFocus()
+    const other = screen.getByRole("textbox", { name: "Outside control" })
+    await user.click(other)
+    await waitFor(() =>
+      expect(screen.queryByRole("combobox")).not.toBeInTheDocument(),
+    )
+    await user.keyboard("sample")
+    expect(other).toHaveFocus()
+    expect(other).toHaveValue("sample")
+    expect(onDone).not.toHaveBeenCalled()
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it("opens a collapsed provider and picks its model from the keyboard", async () => {

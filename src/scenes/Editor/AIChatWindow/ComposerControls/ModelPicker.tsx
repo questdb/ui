@@ -1,4 +1,11 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from "react"
+import React, {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled from "styled-components"
 import * as RadixPopover from "@radix-ui/react-popover"
 import {
@@ -317,12 +324,20 @@ export const ModelPicker = ({
   }, [open])
 
   const changeOpen = (next: boolean) => {
+    if (next && disabled) return
     if (next) handsOff.current = false
     setOpen(next)
     setQuery("")
     setHighlighted(next ? selectedKey : null)
     if (next) setExpanded(initiallyExpanded(groups, selectedKey))
   }
+
+  useLayoutEffect(() => {
+    if (!disabled) return
+    // Radix runs close autofocus after unmount; don't redirect that focus.
+    handsOff.current = false
+    setOpen(false)
+  }, [disabled])
 
   useEffect(() => {
     if (openSignal === null || disabled) return
@@ -352,6 +367,7 @@ export const ModelPicker = ({
   }
 
   const choose = (option: ModelOption) => {
+    if (disabled) return
     handsOff.current = true
     onSelect(option.selection)
     changeOpen(false)
@@ -388,7 +404,7 @@ export const ModelPicker = ({
   }
 
   return (
-    <RadixPopover.Root open={open} onOpenChange={changeOpen}>
+    <RadixPopover.Root open={open && !disabled} onOpenChange={changeOpen}>
       <RadixPopover.Trigger asChild>
         <ComposerTrigger
           icon={<ModelIcon provider={triggerProvider} />}
@@ -405,6 +421,10 @@ export const ModelPicker = ({
           sideOffset={6}
           collisionPadding={8}
           data-hook="chat-model-picker-menu"
+          onInteractOutside={() => {
+            // Leave focus on the outside control, even for a slash-opened menu.
+            handsOff.current = false
+          }}
           onCloseAutoFocus={(event) => {
             if (!handsOff.current || !onDone) return
             event.preventDefault()

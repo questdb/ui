@@ -48,6 +48,7 @@ import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
 import {
   ChatInput,
+  agentDestination,
   matchesQueuedDestination,
   wasQueueCancelled,
   queuedAgentModel,
@@ -251,8 +252,7 @@ const AIChatWindow: React.FC = () => {
     rejectSuggestion,
     persistMessages,
     bindConversationToNotebook,
-    readUserActionDigest,
-    rotateUserActionDigest,
+    captureUserActionDigest,
   } = useAIConversation()
   const {
     status: aiStatus,
@@ -491,7 +491,6 @@ const AIChatWindow: React.FC = () => {
             return null
           })
         : null
-      const digest = readUserActionDigest(conversationId)
       const notebookBuffers = buffers.filter(
         (b) => !!b.notebookViewState && typeof b.id === "number",
       )
@@ -520,10 +519,10 @@ const AIChatWindow: React.FC = () => {
                   : undefined,
             }
           : undefined
-      if (!snapshot && !digest && !workspace) return undefined
-      return { snapshot, digest, workspace, readSeq }
+      if (!snapshot && !workspace) return undefined
+      return { snapshot, workspace, readSeq }
     },
-    [getConversationMeta, readUserActionDigest, buffers, activeBuffer],
+    [getConversationMeta, buffers, activeBuffer],
   )
 
   const conversationId = chatWindowState.activeConversationId
@@ -578,6 +577,7 @@ const AIChatWindow: React.FC = () => {
       deletingConversationRef.current !== id &&
       !isOperationBlocking() &&
       !getOperationSignal().aborted &&
+      !entry.heldByStop &&
       !wasQueueCancelled(entry) &&
       (currentModel !== LOCAL_AGENT_MODEL ||
         hasReadyLocalAgent(localAgentChannel)) &&
@@ -586,7 +586,7 @@ const AIChatWindow: React.FC = () => {
         currentModel,
         localAgentChannel,
         currentModel === LOCAL_AGENT_MODEL && agent?.acceptsImages === true,
-        queuedAgentModel(agent, aiAssistantSettings),
+        agentDestination(agent, aiAssistantSettings),
       )
     )
   }
@@ -647,7 +647,7 @@ const AIChatWindow: React.FC = () => {
           persistMessages,
           updateConversationName,
           bindConversationToNotebook,
-          rotateUserActionDigest,
+          captureUserActionDigest,
           updateMessagesWithCompaction,
         },
       )
@@ -1074,7 +1074,7 @@ const AIChatWindow: React.FC = () => {
         updateConversationName,
         updateMessagesWithCompaction,
         bindConversationToNotebook,
-        rotateUserActionDigest,
+        captureUserActionDigest,
       })
     } catch (error) {
       if (!stillOwnsRetry()) return

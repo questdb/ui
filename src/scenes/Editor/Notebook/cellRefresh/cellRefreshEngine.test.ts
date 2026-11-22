@@ -1820,7 +1820,7 @@ describe("CellRefreshEngine", () => {
     const overMissing = deriveChartLoading(state, { kind: "missing" }, false)
     const overEmpty = deriveChartLoading(
       state,
-      { kind: "settled", results: [], hadError: false },
+      { kind: "settled", results: [], emptyDqlResults: [], hadError: false },
       false,
     )
 

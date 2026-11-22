@@ -1887,6 +1887,53 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual([])
   })
 
+  it("round-trips an inferred reference-line chart from patch through full apply", async () => {
+    const { state } = mountLive(1, [cell("c", "SELECT 1", { mode: "draw" })])
+    const tool = (name: string, input: object = {}) =>
+      dispatchTool(
+        name,
+        { buffer_id: 1, ...input },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+    const referenceLines = [{ value: 30, axis: "right", label: "Threshold" }]
+    expect(
+      (
+        await tool("set_cell_chart_config", {
+          cell_id: "c",
+          reference_lines: referenceLines,
+        })
+      ).is_error,
+    ).toBeFalsy()
+    const saved = cellById(state, "c")?.chartConfig
+    const snapshot = await tool("get_notebook_state")
+    expect(snapshot.is_error).toBeFalsy()
+    const { cells } = JSON.parse(snapshot.content) as {
+      cells: { chart_config: object }[]
+    }
+    expect(cells[0].chart_config).toMatchObject({
+      queries: [],
+      reference_lines: referenceLines,
+    })
+    const response = await tool("apply_notebook_state", {
+      cells: [
+        {
+          id: "c",
+          preserve_value: true,
+          name: "Renamed",
+          chart_config: { right_axis: null, ...cells[0].chart_config },
+        },
+      ],
+    })
+    expect(response.is_error, response.content).toBeFalsy()
+    expect(cellById(state, "c")).toMatchObject({
+      name: "Renamed",
+      chartConfig: saved,
+    })
+  })
+
   it("treats null fields on set_cell_chart_config as 'omit' (not overwrite)", async () => {
     // Strict tool schemas (OpenAI Structured Outputs) require every property
     // in `required`; optional-ness is expressed via nullable types. The
@@ -2054,6 +2101,154 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       expect((await send("reading")).is_error).toBeFalsy()
     },
   )
+
+  it.each([{ rows: [] }, { rows: [[1000, "west", 2]] }])(
+    "validates X and Rows against current DQL on chart patch and apply (frame %#)",
+    async ({ rows }) => {
+      const query = "SELECT ts, site, reading FROM samples"
+      const { state } = mountLive(1, [
+        cell("c", query, {
+          mode: "draw",
+          result: {
+            timestamp: 0,
+            activeResultIndex: 0,
+            results: [
+              {
+                type: "dql",
+                query,
+                dataset: rows,
+                count: rows.length,
+                columns: [
+                  { name: "ts", type: "TIMESTAMP" },
+                  { name: "site", type: "SYMBOL" },
+                  { name: "reading", type: "DOUBLE" },
+                ],
+              },
+            ],
+          },
+        }),
+      ])
+      const tool = (name: string, input: object) =>
+        dispatchTool(
+          name,
+          { buffer_id: 1, ...input },
+          makeClient(),
+          noopStatus,
+          ALL_GRANTED,
+          dqlValidator,
+        )
+      const heatmap = {
+        type: "heatmap",
+        y_columns: ["reading"],
+        partition_by_column: "site",
+      }
+      const patch = (fields: object) =>
+        tool("set_cell_chart_config", { cell_id: "c", ...fields })
+      const apply = (chart_config: object) =>
+        tool("apply_notebook_state", {
+          cells: [{ id: "c", preserve_value: true, chart_config }],
+        })
+      expect(
+        (await patch({ x_column: "ts", queries: [heatmap] })).is_error,
+      ).toBeFalsy()
+      const before = state.parts
+      for (const response of [
+        await patch({ x_column: "site" }),
+        await patch({ x_column: "missing_x" }),
+        await patch({
+          queries: [{ ...heatmap, partition_by_column: "missing_rows" }],
+        }),
+        await apply({ x_column: "site", queries: [heatmap] }),
+      ]) {
+        expect(response.is_error).toBe(true)
+        expect(response.content).toContain("separate row column")
+        expect(state.parts).toBe(before)
+      }
+    },
+  )
+
+  it("replays a stale heatmap during an unrelated apply but validates actual edits", async () => {
+    const query = "SELECT * FROM samples"
+    const chartConfig = {
+      xColumn: "ts",
+      queries: [
+        {
+          type: "heatmap" as const,
+          yColumns: ["reading"],
+          partitionByColumn: "site",
+        },
+      ],
+    }
+    const { state } = mountLive(1, [
+      cell("c", query, {
+        mode: "draw",
+        chartConfig,
+        result: {
+          timestamp: 0,
+          activeResultIndex: 0,
+          results: [
+            {
+              type: "dql",
+              query,
+              dataset: [[1000, "west", 2]],
+              count: 1,
+              columns: [
+                { name: "ts", type: "TIMESTAMP" },
+                { name: "site", type: "SYMBOL" },
+                { name: "replacement", type: "DOUBLE" },
+              ],
+            },
+          ],
+        },
+      }),
+      cell("m", "Before", { type: "markdown" }),
+    ])
+    const config = {
+      x_column: "ts",
+      queries: [
+        {
+          type: "heatmap",
+          y_columns: ["reading"],
+          partition_by_column: "site",
+        },
+      ],
+    }
+    const apply = (value: string, chart_config = config) =>
+      dispatchTool(
+        "apply_notebook_state",
+        {
+          buffer_id: 1,
+          cells: [
+            { id: "c", preserve_value: true, chart_config },
+            { id: "m", value },
+          ],
+        },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+    const replay = await apply("After")
+    expect(replay.is_error, replay.content).toBeFalsy()
+    expect(cellById(state, "m")?.value).toBe("After")
+    expect(cellById(state, "c")?.chartConfig).toEqual(chartConfig)
+    const before = state.parts
+    const invalidEdit = await apply("Not committed", {
+      ...config,
+      x_column: "site",
+    })
+    expect(invalidEdit.is_error).toBe(true)
+    expect(invalidEdit.content).toContain("separate row column")
+    expect(state.parts).toBe(before)
+    const fix = await apply("Repaired", {
+      ...config,
+      queries: [{ ...config.queries[0], y_columns: ["replacement"] }],
+    })
+    expect(fix.is_error, fix.content).toBeFalsy()
+    expect(cellById(state, "c")?.chartConfig?.queries[0]?.yColumns).toEqual([
+      "replacement",
+    ])
+  })
 
   it.each([
     { xType: "SYMBOL", resultQuery: "SELECT b FROM t", rejected: false },

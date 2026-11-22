@@ -1,3 +1,4 @@
+import type { UserActionDigestCapture } from "../../providers/AIConversationProvider/userActionDigest"
 import type { AgentPromptImage } from "../localAgent/protocol"
 import { withoutInlineImages } from "./inlineImages"
 import type { Client } from "../questdb/client"
@@ -252,7 +253,9 @@ export type AIFlowCallbacks = {
     conversationId: ConversationId,
     bufferId: number,
   ) => Promise<void>
-  rotateUserActionDigest?: (conversationId: ConversationId) => void
+  captureUserActionDigest?: (
+    conversationId: ConversationId,
+  ) => UserActionDigestCapture | undefined
 }
 
 export type AIFlowResult = {
@@ -566,14 +569,32 @@ export async function executeAIFlow(
   const initialError = dispatchError()
   if (initialError) return { success: false, error: initialError }
 
-  const userMsg = buildUserMessage(config)
+  const isAgentCommand = config.type === "chat" && config.agentCommand === true
+  const capturedDigest = isAgentCommand
+    ? undefined
+    : callbacks.captureUserActionDigest?.(conversationId)
+  const userMsg = buildUserMessage(
+    capturedDigest
+      ? {
+          ...config,
+          notebookContext: {
+            snapshot: null,
+            ...config.notebookContext,
+            digest: capturedDigest.digest,
+          },
+        }
+      : config,
+  )
 
   if (useLastMessage && callbacks.getLastRoundMessages) {
     const { lastUserMessage, lastAssistantMessage } =
       await callbacks.getLastRoundMessages(conversationId)
 
     const preparedError = dispatchError()
-    if (preparedError) return { success: false, error: preparedError }
+    if (preparedError) {
+      capturedDigest?.finish(false)
+      return { success: false, error: preparedError }
+    }
 
     if (
       lastUserMessage &&
@@ -582,6 +603,7 @@ export async function executeAIFlow(
       lastAssistantMessage &&
       !lastAssistantMessage.error
     ) {
+      capturedDigest?.finish(false)
       return {
         success: true,
         cached: true,
@@ -590,8 +612,6 @@ export async function executeAIFlow(
     }
   }
 
-  const isAgentCommand = config.type === "chat" && config.agentCommand === true
-  if (!isAgentCommand) callbacks.rotateUserActionDigest?.(conversationId)
   const flow = ++latestFlow
   const ownsLiveFlow = () => flow === latestFlow && !abortSignal?.aborted
   callbacks.addMessage({
@@ -640,6 +660,7 @@ export async function executeAIFlow(
     ? null
     : providerForModel(settings.model, config.aiAssistantSettings)
   if (!usesLocalAgent && !provider) {
+    capturedDigest?.finish(false)
     callbacks.updateMessage(conversationId, anchorMessageId, {
       error: `No provider found for model: ${settings.model}`,
     })
@@ -672,14 +693,17 @@ export async function executeAIFlow(
   let latestOperationHistory: OperationHistory = []
   let stepsBeforeFirstAttempt: number | null = null
 
-  // Notices decorate this turn's saved timeline, not the shared status or
+  // Records and notices decorate this turn's saved timeline, not the shared status or
   // the reply Markdown. If the same step keeps streaming, render its full
   // Markdown before the notice instead of splitting an open fence.
-  const notices: Array<{ after: number; entry: OperationHistory[number] }> = []
+  const transcriptBlocks: Array<{
+    after: number
+    entry: OperationHistory[number]
+  }> = []
   const publishHistory = () => {
     const history = [...latestOperationHistory]
-    for (let i = notices.length - 1; i >= 0; i--) {
-      const { after, entry } = notices[i]
+    for (let i = transcriptBlocks.length - 1; i >= 0; i--) {
+      const { after, entry } = transcriptBlocks[i]
       history.splice(after, 0, entry)
     }
     callbacks.updateMessage(conversationId, anchorMessageId, {
@@ -710,6 +734,7 @@ export async function executeAIFlow(
   let accumulatedToolCalls: ToolCall[] = []
   let accumulatedText = ""
   let contentTimestamp = 0
+  let getQuestionTranscript: (() => string) | undefined
 
   let rafId = 0
   let hasPendingStreamingUpdate = false
@@ -732,8 +757,9 @@ export async function executeAIFlow(
         }
       if (accumulatedToolCalls.length > 0)
         updates.tool_calls = [...accumulatedToolCalls]
-      if (accumulatedText) {
-        updates.content = accumulatedText
+      const content = getQuestionTranscript?.() ?? accumulatedText
+      if (content) {
+        updates.content = content
         if (contentTimestamp) updates.contentTimestamp = contentTimestamp
       }
       callbacks.updateMessage(
@@ -791,6 +817,19 @@ export async function executeAIFlow(
     void generateChatTitleIfNeeded(config, userMsg.content, callbacks)
   }
 
+  const appendTranscriptBlock = (content: string) => {
+    if (!ownsLiveFlow()) return
+    transcriptBlocks.push({
+      after: dropTransientTail(latestOperationHistory).length,
+      entry: {
+        type: AIOperationStatus.GeneratingResponse,
+        content,
+        timestamp: Date.now(),
+      },
+    })
+    publishHistory()
+  }
+
   const streamingCallback: StreamingCallback = {
     // The agent's context fills as it works; the composer shows it live.
     onContextUsage: (contextUsage) => {
@@ -845,27 +884,23 @@ export async function executeAIFlow(
         tool_calls: undefined,
       })
     },
-    onNotice: (notice) => {
-      notices.push({
-        after: dropTransientTail(latestOperationHistory).length,
-        entry: {
-          type: AIOperationStatus.GeneratingResponse,
-          content: noticeTranscript(notice),
-          timestamp: Date.now(),
-        },
-      })
-      publishHistory()
+    onNotice: (notice) => appendTranscriptBlock(noticeTranscript(notice)),
+    onQuestionRecord: (markdown, getTranscript) => {
+      if (!ownsLiveFlow()) return
+      getQuestionTranscript = getTranscript
+      appendTranscriptBlock(markdown)
+      hasPendingStreamingUpdate = true
+      scheduleUpdate()
     },
-    onTextChunk: (chunk, { standalone = false } = {}) => {
+    onTextChunk: (chunk, { startSection = false } = {}) => {
       if (!ownsLiveFlow()) return
       if (contentTimestamp === 0) contentTimestamp = Date.now()
-      if (standalone || !generatingResponseEmitted) {
-        generatingResponseEmitted = !standalone
+      if (startSection || !generatingResponseEmitted) {
+        generatingResponseEmitted = true
         thinkingStatusEmitted = false
-        // An answered question gets its own history entry and Markdown parse.
         setStatusWithHistory(
           AIOperationStatus.GeneratingResponse,
-          standalone
+          startSection
             ? { markdownBlockOffset: accumulatedText.length }
             : undefined,
         )
@@ -998,9 +1033,61 @@ export async function executeAIFlow(
     },
   }
 
+  const finishTranscript = () => {
+    if (rafId) {
+      cancelAnimationFrame(rafId)
+      rafId = 0
+    }
+    const settledHistory = dropTransientTail(latestOperationHistory)
+    if (settledHistory !== latestOperationHistory) {
+      latestOperationHistory = settledHistory
+      hasPendingOperationHistoryUpdate = true
+    }
+    flushStreamingUpdate()
+    cleanupOrphanedToolCallsForTurn({
+      conversationId,
+      callbacks,
+      emittedToolCallsByMessage,
+      resolvedToolCallIds,
+      toolResultMessages,
+    })
+    callbacks.updateMessage(conversationId, anchorMessageId, {
+      turnDurationMs: Math.round(performance.now() - turnStartedAt),
+    })
+    return callbacks.persistMessages(conversationId)
+  }
+
+  let stoppedTranscript: Promise<void> | undefined
+  let cancellationResult: AIFlowResult | undefined
+  const stopLocalTranscript = () => {
+    capturedDigest?.finish(false)
+    // Stop releases the UI immediately, but the bridge may not settle until
+    // after another chat opens (or this one is deleted). Save while we own it.
+    cancellationResult = processResult({
+      type: config.type,
+      response: { type: "aborted", message: "" },
+      conversationId,
+      anchorMessageId,
+      streamingAssistantMessageId,
+      callbacks,
+      steered: abortSignal?.reason === STEERED_ABORT_REASON,
+    })
+    stoppedTranscript = finishTranscript()
+    if (flow === latestFlow) callbacks.setIsStreaming(false)
+  }
+
   setStatusWithHistory(AIOperationStatus.Processing)
 
   try {
+    if (usesLocalAgent) {
+      if (abortSignal?.aborted) stopLocalTranscript()
+      else
+        abortSignal?.addEventListener("abort", stopLocalTranscript, {
+          once: true,
+        })
+    } else {
+      capturedDigest?.finish(true)
+    }
     const conversationHistory =
       config.type === "chat" ? config.conversationHistory : []
 
@@ -1044,6 +1131,7 @@ export async function executeAIFlow(
               : notebookReadOf(config.notebookContext),
             setStatus: setStatusWithHistoryAndResetFlags,
             streaming: streamingCallback,
+            onPromptSent: capturedDigest && (() => capturedDigest.finish(true)),
             abortSignal,
           })
 
@@ -1069,16 +1157,18 @@ export async function executeAIFlow(
           ? { ...message, content: originalContent.get(message.id)! }
           : message,
     )
-    const flowResult = processResult({
-      type: config.type,
-      response: result,
-      conversationId,
-      anchorMessageId,
-      streamingAssistantMessageId,
-      callbacks,
-      compactedHistory,
-      steered: abortSignal?.reason === STEERED_ABORT_REASON,
-    })
+    const flowResult =
+      cancellationResult ??
+      processResult({
+        type: config.type,
+        response: result,
+        conversationId,
+        anchorMessageId,
+        streamingAssistantMessageId,
+        callbacks,
+        compactedHistory,
+        steered: abortSignal?.reason === STEERED_ABORT_REASON,
+      })
 
     void trackEvent(ConsoleEvent.AI_FLOW_COMPLETE, {
       type: config.type,
@@ -1088,30 +1178,13 @@ export async function executeAIFlow(
 
     return flowResult
   } finally {
-    if (rafId) {
-      cancelAnimationFrame(rafId)
-      rafId = 0
-    }
-    const settledHistory = dropTransientTail(latestOperationHistory)
-    if (settledHistory !== latestOperationHistory) {
-      latestOperationHistory = settledHistory
-      hasPendingOperationHistoryUpdate = true
-    }
-    flushStreamingUpdate()
-    cleanupOrphanedToolCallsForTurn({
-      conversationId,
-      callbacks,
-      emittedToolCallsByMessage,
-      resolvedToolCallIds,
-      toolResultMessages,
-    })
-    callbacks.updateMessage(conversationId, anchorMessageId, {
-      turnDurationMs: Math.round(performance.now() - turnStartedAt),
-    })
+    abortSignal?.removeEventListener("abort", stopLocalTranscript)
+    capturedDigest?.finish(false)
     try {
-      await callbacks.persistMessages(conversationId)
+      if (stoppedTranscript !== undefined) await stoppedTranscript
+      else await finishTranscript()
     } finally {
-      if (flow === latestFlow) {
+      if (stoppedTranscript === undefined && flow === latestFlow) {
         callbacks.setIsStreaming(false)
         // A stopped flow leaves status and cancellation ownership to Stop.
         if (!abortSignal?.aborted) callbacks.setStatus(null)

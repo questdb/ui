@@ -161,10 +161,18 @@ export const Drawer = ({
 
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
 
-  // A text field with content owns Escape: it clears itself first, and the
-  // drawer only closes on the next press.
+  // A text field with content or a control that explicitly handles Escape
+  // gets to handle it before the drawer closes.
   const handleEscapeKeyDown = (event: KeyboardEvent) => {
-    if (isTextFieldWithValue(event.target) || !closeOnEscape || !onDismiss) {
+    const ownsEscape =
+      event.target instanceof HTMLElement &&
+      event.target.hasAttribute("data-drawer-owns-escape")
+    if (
+      ownsEscape ||
+      isTextFieldWithValue(event.target) ||
+      !closeOnEscape ||
+      !onDismiss
+    ) {
       event.preventDefault()
       return
     }

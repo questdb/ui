@@ -86,7 +86,7 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
   >()
   const addMessage = vi.fn<Parameters<AIFlowCallbacks["addMessage"]>, void>()
   const persistMessages = vi.fn(() => Promise.resolve())
-  const rotateUserActionDigest = vi.fn()
+  const captureUserActionDigest = vi.fn()
   const result = await executeAIFlow(
     { ...config, localAgentChannel: channel },
     {
@@ -95,7 +95,7 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
       setStatus: vi.fn(),
       setIsStreaming: vi.fn(),
       persistMessages,
-      rotateUserActionDigest,
+      captureUserActionDigest,
     },
   )
   const prompt = sent.find((msg) => msg.type === "agent_prompt")
@@ -104,7 +104,7 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
     updateMessage,
     addMessage,
     persistMessages,
-    rotateUserActionDigest,
+    captureUserActionDigest,
     result,
   }
 }
@@ -254,8 +254,10 @@ describe("an agent's command", () => {
     expect(message.addMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ agentCommand: true }),
     )
-    expect(command.rotateUserActionDigest).not.toHaveBeenCalled()
-    expect(message.rotateUserActionDigest).toHaveBeenCalledWith(CONVERSATION_ID)
+    expect(command.captureUserActionDigest).not.toHaveBeenCalled()
+    expect(message.captureUserActionDigest).toHaveBeenCalledWith(
+      CONVERSATION_ID,
+    )
   })
 
   it("hands off a previous cloud turn's attached SQL with its visible request", async () => {

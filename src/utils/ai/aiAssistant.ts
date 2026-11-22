@@ -109,8 +109,8 @@ export type StatusCallback = (
 ) => void
 
 export type StreamingCallback = {
-  // A standalone chunk is parsed separately from the Markdown around it.
-  onTextChunk: (chunk: string, options?: { standalone?: boolean }) => void
+  onTextChunk: (chunk: string, options?: { startSection?: boolean }) => void
+  onQuestionRecord?: (markdown: string, getTranscript: () => string) => void
   onNotice?: (
     notice: import("../localAgent/noticeTranscript").NoticeRecord,
   ) => void

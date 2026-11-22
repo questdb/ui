@@ -220,6 +220,7 @@ export const inferChartConfig = (
 export const availableChartTypes = (
   groups: ColumnGroups,
   hasOhlc: boolean,
+  xColumn?: string | null,
 ): ChartType[] => {
   const types: ChartType[] = []
   const hasNumeric = groups.numeric.length > 0
@@ -236,11 +237,13 @@ export const availableChartTypes = (
   )
     types.push("scatter")
   if (hasNumeric && hasCategorical) types.push("pie")
-  // A heatmap's rows are a category; its x is time or another category.
+  // A heatmap can also use numeric X with a separate numeric Value.
+  const hasNumericXAndValue =
+    groups.numeric.length >= 2 && groups.numeric.some((c) => c.name === xColumn)
   if (
     hasNumeric &&
     hasCategorical &&
-    (hasTemporal || groups.categorical.length >= 2)
+    (hasTemporal || groups.categorical.length >= 2 || hasNumericXAndValue)
   )
     types.push("heatmap")
   if (hasTemporal && (hasOhlc || groups.numeric.length >= 4))

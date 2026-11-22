@@ -32,13 +32,15 @@ export const aiConversationStore = {
       db.ai_conversations,
       db.ai_conversation_messages,
       async () => {
+        const updated = await db.ai_conversations.update(conversationId, {
+          hasMessages,
+          ...extraMetaUpdates,
+        })
+        // A late save must not recreate a deleted conversation's transcript.
+        if (!updated) return
         await db.ai_conversation_messages.put({
           conversationId,
           data: compressMessages(messages),
-        })
-        await db.ai_conversations.update(conversationId, {
-          hasMessages,
-          ...extraMetaUpdates,
         })
       },
     )

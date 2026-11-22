@@ -20,7 +20,12 @@ import {
 import { useSettingsDrawerSession } from "../../../src/scenes/Editor/Notebook/settingsDrawer/useSettingsDrawerSession"
 import { highlightSettingsSessions } from "../../../src/scenes/Editor/Notebook/settingsDrawer/settingsDrawerSessions"
 import { ChartSettingsDrawer } from "../../../src/scenes/Editor/Notebook/CellChart/ChartSettingsDrawer"
-import { resolveDraw } from "../../../src/scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
+import type { ChartConfig } from "../../../src/scenes/Editor/Notebook/CellChart/chartTypes"
+import {
+  resolveDraw,
+  toChartResult,
+} from "../../../src/scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
+import type { CellResult } from "../../../src/store/notebook"
 
 const cellId = "review-cell"
 const noOp = () => undefined
@@ -138,7 +143,16 @@ describe("highlight drawer session integration", () => {
 })
 
 describe("chart drawer", () => {
-  it("preserves the disabled heatmap Rows mapping on an unedited Save", () => {
+  const choose = (control: string, value: string) => {
+    fireEvent.keyDown(screen.getByRole("button", { name: control }), {
+      key: "ArrowDown",
+    })
+    fireEvent.click(screen.getByRole("menuitemradio", { name: value }))
+  }
+  const save = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+  it("preserves disabled heatmap Rows through a temporary X collision", () => {
     const query = "SELECT site, bucket, reading FROM samples"
     const saved = {
       xColumn: "bucket",
@@ -182,12 +196,201 @@ describe("chart drawer", () => {
         onSave={onSave}
       />,
     )
-    expect(screen.getByRole("button", { name: "X-axis: bucket" })).toBeVisible()
+    choose("X-axis: bucket", "site")
     expect(
       screen.getByRole("button", { name: "Rows column: site" }),
     ).toBeVisible()
-    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    choose("X-axis: site", "bucket")
+    save()
     expect(onSave).toHaveBeenCalledWith(saved)
+  })
+
+  const statements = ["SELECT * FROM readings", "SELECT * FROM siblings"]
+  const savedHeatmap: ChartConfig = {
+    xColumn: "bucket",
+    queries: [
+      { type: "heatmap", partitionByColumn: "site", yColumns: ["reading"] },
+      { type: "line", yColumns: ["total"], axis: "right" },
+    ],
+  }
+  const results = (
+    rows: (string | number)[][],
+    removeColumn?: string,
+  ): CellResult => ({
+    timestamp: 0,
+    activeResultIndex: 0,
+    results: [
+      {
+        type: "dql",
+        query: statements[0],
+        count: rows.length,
+        columns: [
+          { name: "alt_bucket", type: "SYMBOL" },
+          { name: "bucket", type: "SYMBOL" },
+          { name: "site", type: "SYMBOL" },
+          { name: "reading", type: "DOUBLE" },
+        ].filter((col) => col.name !== removeColumn),
+        dataset: rows,
+      },
+      {
+        type: "dql",
+        query: statements[1],
+        count: 1,
+        columns: [
+          { name: "sibling_ts", type: "TIMESTAMP" },
+          { name: "total", type: "DOUBLE" },
+        ],
+        dataset: [[1000, 20]],
+      },
+    ],
+  })
+  const heatmapRows = [["Z", "A", "west", 10]]
+  const resolve = (result: CellResult, config = savedHeatmap) => {
+    const frame = toChartResult(result, statements)
+    if (frame.kind !== "settled") throw new Error("expected settled results")
+    return {
+      ...resolveDraw(statements, frame.results, config),
+      emptyDqlResults: frame.emptyDqlResults,
+    }
+  }
+  const drawer = (
+    result: CellResult,
+    onSave: (config: ChartConfig) => void,
+    config = savedHeatmap,
+  ) => {
+    const { tabs, effectiveConfig, emptyDqlResults } = resolve(result, config)
+    return (
+      <ChartSettingsDrawer
+        open
+        appearInPlace
+        config={effectiveConfig}
+        tabs={tabs}
+        emptyDqlResults={emptyDqlResults}
+        initialDraft={null}
+        onDraftChange={noOp}
+        onClose={noOp}
+        onSave={onSave}
+      />
+    )
+  }
+
+  it.each([false, true])(
+    "keeps authored X on an unrelated Save with an empty heatmap (already open: %s)",
+    (alreadyOpen) => {
+      const onSave = vi.fn<[ChartConfig], void>()
+      const empty = results([])
+      const view = renderComponent(
+        drawer(alreadyOpen ? results(heatmapRows) : empty, onSave),
+      )
+      if (alreadyOpen) view.rerender(drawer(empty, onSave))
+      expect(
+        screen.getByRole("button", { name: "X-axis: sibling_ts" }),
+      ).toBeVisible()
+      fireEvent.change(screen.getByPlaceholderText("Name (e.g. RSI)"), {
+        target: { value: "Total" },
+      })
+      save()
+      expect(onSave).toHaveBeenCalledWith({
+        ...savedHeatmap,
+        rightAxis: { name: "Total" },
+      })
+      const committed = onSave.mock.calls[0][0]
+      expect(resolve(results(heatmapRows), committed).chart.xColumn).toBe(
+        "bucket",
+      )
+    },
+  )
+
+  it("does not persist a replacement anchor's X on inclusion-only Save", () => {
+    const onSave = vi.fn<[ChartConfig], void>()
+    const result = results(heatmapRows)
+    const view = renderComponent(drawer(result, onSave))
+    const include = () =>
+      screen.getByRole("checkbox", { name: "Include in chart" })
+    fireEvent.click(include())
+    expect(
+      screen.getByRole("button", { name: "X-axis: sibling_ts" }),
+    ).toBeVisible()
+    save()
+    const excluded = onSave.mock.calls[0][0]
+    expect(excluded.xColumn).toBe("bucket")
+    expect(excluded.queries[0]?.enabled).toBe(false)
+    view.unmount()
+    renderComponent(drawer(result, onSave, excluded))
+    fireEvent.click(include())
+    save()
+    expect(onSave).toHaveBeenLastCalledWith(savedHeatmap)
+  })
+
+  it.each([
+    { remove: "site", rows: [["Z", "A", 10]], hasTab: true },
+    { remove: "bucket", rows: [["Z", "west", 10]], hasTab: true },
+    { remove: "reading", rows: [], hasTab: false },
+  ])(
+    "rejects an open draft when current DQL loses $remove",
+    ({ remove, rows, hasTab }) => {
+      const onSave = vi.fn()
+      const view = renderComponent(drawer(results(heatmapRows), onSave))
+      view.rerender(drawer(results(rows, remove), onSave))
+      save()
+      expect(onSave).not.toHaveBeenCalled()
+      if (hasTab) {
+        expect(screen.getByText(/Pick a separate rows column/)).toBeVisible()
+      } else {
+        expect(screen.getByRole("alert")).toHaveTextContent(
+          /a numeric value column/,
+        )
+      }
+      view.rerender(drawer(results(heatmapRows), onSave))
+      save()
+      expect(onSave).toHaveBeenCalledWith(savedHeatmap)
+    },
+  )
+
+  it("offers and saves a heatmap with numeric X, categorical Rows and numeric Value", () => {
+    const onSave = vi.fn()
+    const statement = "SELECT slot, site, reading FROM samples"
+    const { effectiveConfig, tabs } = resolveDraw(
+      [statement],
+      [
+        {
+          query: statement,
+          type: "dql",
+          count: 1,
+          columns: [
+            { name: "slot", type: "INT" },
+            { name: "site", type: "SYMBOL" },
+            { name: "reading", type: "DOUBLE" },
+          ],
+          dataset: [[2, "west", 10]],
+        },
+      ],
+      { xColumn: null, queries: [{ type: "bar", yColumns: ["reading"] }] },
+    )
+    renderComponent(
+      <ChartSettingsDrawer
+        open
+        appearInPlace
+        config={effectiveConfig}
+        tabs={tabs}
+        initialDraft={null}
+        onDraftChange={noOp}
+        onClose={noOp}
+        onSave={onSave}
+      />,
+    )
+    choose("X-axis: site", "slot")
+    choose("Chart type: Bar", "Heatmap")
+    expect(
+      screen.getByRole("button", { name: "Rows column: site" }),
+    ).toBeVisible()
+    save()
+    expect(onSave).toHaveBeenCalledWith({
+      xColumn: "slot",
+      queries: [
+        { type: "heatmap", partitionByColumn: "site", yColumns: ["reading"] },
+      ],
+    })
   })
 
   it.each([false, true])(

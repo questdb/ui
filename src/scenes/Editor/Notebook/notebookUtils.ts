@@ -987,21 +987,25 @@ export const buildAppliedCells = (
         "cells",
       )
     }
-    if (req.chartConfig && req.chartConfig.queries.length === 0) {
-      throw new ApplyNotebookStateError(
-        `Cell at index ${index} has a chart_config with no queries. Provide one entry per ;-split query (apply replaces the chart wholesale).`,
-        "cells",
-      )
-    }
     const statements = chartConfig ? getQueriesFromText(value) : undefined
-    if (req.chartConfig && statements) {
+    if (chartConfig && statements) {
+      const queryCount = chartConfig.queries.length
       const statementCount = statements.length
+      // A reference-line patch can leave every query inferred. Its snapshot
+      // uses an empty override list, which can be replayed as-is.
+      if (queryCount === 0 && !chartConfig.referenceLines?.length) {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index} has a chart_config with no queries. Provide one entry per ;-split query (apply replaces the chart wholesale).`,
+          "cells",
+        )
+      }
       if (
+        queryCount > 0 &&
         statementCount > 0 &&
-        req.chartConfig.queries.length !== statementCount
+        queryCount !== statementCount
       ) {
         throw new ApplyNotebookStateError(
-          `Cell at index ${index} has ${req.chartConfig.queries.length} chart queries but ${statementCount} ;-split statement${statementCount === 1 ? "" : "s"}. Send exactly one entry per statement (index-aligned); apply replaces all per-query configs.`,
+          `Cell at index ${index} has ${queryCount} chart queries but ${statementCount} ;-split statement${statementCount === 1 ? "" : "s"}. Send exactly one entry per statement (index-aligned); apply replaces all per-query configs.`,
           "cells",
         )
       }
@@ -1089,14 +1093,18 @@ export const buildAppliedCells = (
         ? reconcileCellResultForStatements(existing.result, statements)
         : reconcileCellResultForValue(existing.result, value)
       : existing?.result
+    const chartUnchanged =
+      chartConfig != null &&
+      existing != null &&
+      !valueChanged &&
+      (existing.mode === "draw") === isDraw &&
+      isEqual(chartConfig, normalizeChartConfig(existing.chartConfig))
     if (chartConfig && statements) {
       const invalid = validateHeatmapConfig(
         chartConfig,
         statements,
         result,
-        existing != null &&
-          !valueChanged &&
-          isEqual(chartConfig, normalizeChartConfig(existing.chartConfig)),
+        chartUnchanged,
       )
       if (invalid) {
         throw new ApplyNotebookStateError(

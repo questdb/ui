@@ -32,6 +32,7 @@ type LocalAgentTurnParams = {
   notebookRead: NotebookRead | null
   setStatus: StatusCallback
   streaming: StreamingCallback
+  onPromptSent?: () => void
   abortSignal?: AbortSignal
 }
 
@@ -84,6 +85,9 @@ const createUpdateHandler = (
   abortSignal: AbortSignal | undefined,
 ) => {
   let reply = ""
+  const questionRecords: string[] = []
+  const transcript = () =>
+    [reply, ...questionRecords].filter(Boolean).join("\n\n")
   let lastMessageId: string | null = null
   let isThinking = false
   const reportedToolCalls = new Set<string>()
@@ -111,17 +115,20 @@ const createUpdateHandler = (
     setStatus(status, args)
   }
 
-  const handleMessageChunk = (
-    messageId: string | null,
-    text: string,
-    standalone = false,
-  ) => {
-    const isNewMessage = !!reply && messageId !== lastMessageId
-    const chunk = isNewMessage ? `\n\n${text}` : text
+  const handleMessageChunk = (messageId: string | null, text: string) => {
+    const newMessage = messageId !== lastMessageId
+    const followsRecord = newMessage && questionRecords.length > 0
+    // Keep records after their whole ACP message, even when it resumes after
+    // an answer. A different ACP message can start a separate Markdown block.
+    if (followsRecord) {
+      reply = transcript()
+      questionRecords.length = 0
+    }
+    const chunk = newMessage && reply ? `\n\n${text}` : text
     isThinking = false
     lastMessageId = messageId
     reply += chunk
-    if (standalone) streaming.onTextChunk(chunk, { standalone: true })
+    if (followsRecord) streaming.onTextChunk(chunk, { startSection: true })
     else streaming.onTextChunk(chunk)
   }
 
@@ -211,12 +218,11 @@ const createUpdateHandler = (
     if (abortSignal?.aborted) return
     switch (update.kind) {
       case "message_chunk":
+        handleMessageChunk(update.messageId, update.text)
+        return
       case "question_record":
-        handleMessageChunk(
-          update.messageId,
-          update.text,
-          update.kind === "question_record",
-        )
+        questionRecords.push(update.text)
+        streaming.onQuestionRecord?.(update.text, transcript)
         return
       case "thought_chunk":
         handleThoughtChunk(update.text)
@@ -249,7 +255,7 @@ const createUpdateHandler = (
   return {
     handleUpdate,
     handleStatus,
-    reply: () => reply,
+    reply: transcript,
     contextUsage: () => contextUsage,
   }
 }
@@ -262,6 +268,7 @@ export const runLocalAgentTurn = async ({
   notebookRead,
   setStatus,
   streaming,
+  onPromptSent,
   abortSignal,
 }: LocalAgentTurnParams): Promise<GeneratedSQL | AiAssistantAPIError> => {
   if (!isCurrentLocalAgentChannel(channel)) return NOT_CONNECTED
@@ -275,6 +282,7 @@ export const runLocalAgentTurn = async ({
     images,
     notebookRead,
     signal: abortSignal,
+    onSent: onPromptSent,
     onUpdate: handleUpdate,
     onToolStatus: handleStatus,
   })

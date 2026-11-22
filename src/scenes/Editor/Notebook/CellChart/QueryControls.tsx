@@ -124,7 +124,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
 }) => {
   const groups = groupColumns(activeTab.columns)
   const hasOhlc = !!findOhlc(groups.numeric)
-  const baseTypes = availableChartTypes(groups, hasOhlc)
+  const baseTypes = availableChartTypes(groups, hasOhlc, xColumn)
   const types = baseTypes.includes(query.type)
     ? baseTypes
     : [query.type, ...baseTypes]

@@ -50,6 +50,7 @@ export type LocalAgentPrompt = {
   images?: AgentPromptImage[]
   notebookRead: NotebookRead | null
   signal?: AbortSignal
+  onSent?: () => void
   onUpdate: (update: LocalAgentUpdate) => void
   onToolStatus: StatusCallback
 }
@@ -64,6 +65,8 @@ export type LocalAgentSnapshot = {
   state: AgentState
   error: string | null
   config: AgentConfig | null
+  // The first reported model is the baseline for prompts queued before it.
+  initialModelConfig?: NonNullable<AgentConfig["model"]>
   // Questions the agent waits on the user to answer.
   questions: AgentQuestionMessage[]
   // The commands the agent takes, like /review.
@@ -146,6 +149,7 @@ export class LocalAgentChannel {
     images = [],
     notebookRead,
     signal,
+    onSent,
     onUpdate,
     onToolStatus,
   }: LocalAgentPrompt): Promise<AgentTurnResult> {
@@ -163,6 +167,7 @@ export class LocalAgentChannel {
           images,
           notebookRead,
           signal,
+          onSent,
           onUpdate,
           onToolStatus,
         }),
@@ -180,6 +185,7 @@ export class LocalAgentChannel {
       ],
     })
     if (!sent) return Promise.resolve(BRIDGE_DISCONNECTED)
+    onSent?.()
     if (notebookRead) this.options.onNotebookRead(conversationId, notebookRead)
     // Cancels on the wire target the conversation. Once the new prompt is
     // written, no subsequent reconnect may send its predecessor's cancel.
@@ -336,15 +342,19 @@ export class LocalAgentChannel {
 
   private handleMessage(msg: AgentOutboundMessage): void {
     switch (msg.type) {
-      case "agent_status":
+      case "agent_status": {
+        const initialModelConfig =
+          this.snapshot.initialModelConfig ?? msg.config?.model
         this.update({
           state: msg.state,
           error: msg.error,
           config: msg.config,
+          ...(initialModelConfig && { initialModelConfig }),
           commands: msg.commands ?? [],
           acceptsImages: msg.acceptsImages === true,
         })
         return
+      }
       case "agent_update":
         this.turnOf(msg.conversationId, msg.turnId)?.onUpdate(msg.update)
         return

@@ -288,6 +288,11 @@ export const DrawCanvas: React.FC<Props> = ({
         initialDraft={settingsDrawer.initialDraft}
         onDraftChange={settingsDrawer.keepDraft}
         tabs={resolution.tabs}
+        emptyDqlResults={
+          chartResult.kind === "settled"
+            ? chartResult.emptyDqlResults
+            : undefined
+        }
         config={resolution.effectiveConfig}
         onSave={onConfigChange}
         telemetry={notebookChartSettingsTelemetry}

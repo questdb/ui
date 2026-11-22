@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   applyUserActionToDigest,
   createEmptyDigest,
+  createUserActionDigestState,
   isEmptyDigest,
 } from "./userActionDigest"
 import type { UserActionEvent } from "../../utils/notebooks/notebookAIBridge"
@@ -180,3 +181,19 @@ describe("notebook lifecycle events", () => {
     expect(d.notebookStatusChange).toBe("deleted")
   })
 })
+
+it.each([true, false])(
+  "coalesces across a checkpoint only if the capture was not sent (sent: %s)",
+  (sent) => {
+    const state = createUserActionDigestState()
+    state.apply({ kind: "user_added_cell", bufferId: 1, cellId: "sample" })
+    const capture = state.capture()!
+    state.apply({ kind: "user_deleted_cell", bufferId: 1, cellId: "sample" })
+    expect([...capture.digest.added]).toEqual(["sample"])
+    expect([...capture.digest.deleted]).toEqual([])
+    capture.finish(sent)
+    const next = state.capture()
+    if (sent) expect([...next!.digest.deleted]).toEqual(["sample"])
+    else expect(next).toBeUndefined()
+  },
+)

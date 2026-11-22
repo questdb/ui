@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, it, vi } from "vitest"
 import {
@@ -50,9 +50,14 @@ const choice: AgentQuestionField = {
   otherFieldId: null,
 }
 
-it.each(["question", "link"])(
-  "renders the answered %s separately from earlier unfinished Markdown, live and after reopening",
-  async (request) => {
+it.each([
+  ["question", "same message"],
+  ["link", "same message"],
+  ["question", "new message"],
+  ["link", "new message"],
+])(
+  "renders the answered %s separately from the %s Markdown, live and after reopening",
+  async (request, resume) => {
     const settings = {
       ...(JSON.parse(
         fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
@@ -93,15 +98,16 @@ it.each(["question", "link"])(
       const prompt = sent.find((message) => message.type === "agent_prompt")
       if (!prompt) throw new Error("Expected a local agent prompt")
       const { v, conversationId, turnId } = prompt
-      const prefix = "```sql\nSELECT 42;"
-      const suffix = "Here is your sample."
-      const stream = (text: string) =>
+      const sameMessage = resume === "same message"
+      const prefix = sameMessage ? "```sql\nSELECT 42" : "```sql\nSELECT 42;"
+      const suffix = sameMessage ? "\n  + 1;\n```" : "Here is your sample."
+      const stream = (text: string, messageId = "reply") =>
         deliver({
           v,
           conversationId,
           turnId,
           type: "agent_update",
-          update: { kind: "message_chunk", messageId: "reply", text },
+          update: { kind: "message_chunk", messageId, text },
         })
       const link = request === "link"
       const url = "https://example.invalid/setup"
@@ -132,18 +138,26 @@ it.each(["question", "link"])(
         expect(open).toHaveBeenCalledWith(url, "_blank", "noopener,noreferrer")
 
       const answer = link ? "Opened example.invalid" : "Compact"
-      const expectVisibleTranscript = () => {
+      const expectVisibleTranscript = (resumed: boolean) => {
         const card = getByHook("chat-question-record")
         expect(card).toBeVisible()
         expect(card).toHaveTextContent(answer)
         expect(
           getByHook("chat-message-code-block").querySelector("pre")
             ?.textContent,
-        ).toBe("SELECT 42;")
+        ).toBe(
+          sameMessage
+            ? resumed
+              ? "SELECT 42\n  + 1;"
+              : "SELECT 42"
+            : "SELECT 42;",
+        )
+        if (resumed && !sameMessage)
+          expect(screen.getByText(suffix)).toBeVisible()
       }
-      await waitFor(expectVisibleTranscript)
+      await waitFor(() => expectVisibleTranscript(false))
       act(() => {
-        stream(suffix)
+        stream(suffix, sameMessage ? "reply" : "follow-up")
         deliver({
           v,
           conversationId,
@@ -155,6 +169,7 @@ it.each(["question", "link"])(
       await waitFor(() =>
         expect(getByHook("chat-response-copy")).toBeInTheDocument(),
       )
+      expectVisibleTranscript(true)
       await userEvent.click(getByHook("chat-window-close"))
       mounted.unmount()
 
@@ -167,14 +182,17 @@ it.each(["question", "link"])(
         const saved = (
           await aiConversationStore.getMessages(conversationId)
         ).find((message) => message.role === "assistant")
+        const record = `\`\`\`agent-question\n${json}\n\`\`\``
         expect(saved?.content).toBe(
-          `${prefix}\n\n\`\`\`agent-question\n${json}\n\`\`\`\n\n${suffix}`,
+          sameMessage
+            ? `${prefix}${suffix}\n\n${record}`
+            : `${prefix}\n\n${record}\n\n${suffix}`,
         )
       })
 
       renderChat("openai", undefined, settings)
       await openChat()
-      await waitFor(expectVisibleTranscript)
+      await waitFor(() => expectVisibleTranscript(true))
       expect(fetch).not.toHaveBeenCalled()
     } finally {
       unregisterLocalAgentChannel(channel)

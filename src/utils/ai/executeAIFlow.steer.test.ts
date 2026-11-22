@@ -120,6 +120,8 @@ describe("an answer replaced by a new message", () => {
     const stopped = new AbortController()
     const first = startFlow(stopped)
     stopped.abort()
+    expect(first.callbacks.setIsStreaming.mock.calls).toEqual([[false]])
+    first.callbacks.setIsStreaming.mockClear()
     const second = startFlow(new AbortController())
 
     // When the stopped answer ends
@@ -132,12 +134,17 @@ describe("an answer replaced by a new message", () => {
     expect(second.callbacks.setStatus).toHaveBeenCalled()
   })
 
-  it("keeps a delayed limit notice on the stopped turn without reopening streaming", async () => {
+  it("saves Stop immediately and ignores a delayed terminal notice after a newer turn", async () => {
     const agent = connectAgent()
     channel = agent.channel
     const abort = new AbortController()
     const first = startFlow(abort)
     abort.abort()
+    expect(first.callbacks.setIsStreaming.mock.calls).toEqual([[false]])
+    expect(first.callbacks.persistMessages.mock.calls).toEqual([
+      [CONVERSATION_ID],
+    ])
+    const savedChanges = first.callbacks.updateMessage.mock.calls.length
     const second = startFlow(new AbortController(), "conversation-2")
     agent.endTurn("conversation-2", "end_turn")
     await second.flow
@@ -145,13 +152,9 @@ describe("an answer replaced by a new message", () => {
 
     agent.endTurn(CONVERSATION_ID, "max_tokens")
     await first.flow
-    expect(first.callbacks.setIsStreaming).not.toHaveBeenCalled()
-    const history = first.callbacks.updateMessage.mock.calls
-      .filter(([id]) => id === CONVERSATION_ID)
-      .findLast(([, , patch]) => patch.operationHistory)?.[2].operationHistory
-    expect(history?.at(-1)?.content).toContain(
-      "The agent reached its output limit",
-    )
+    expect(first.callbacks.setIsStreaming.mock.calls).toEqual([[false]])
+    expect(first.callbacks.updateMessage).toHaveBeenCalledTimes(savedChanges)
+    expect(first.callbacks.persistMessages).toHaveBeenCalledTimes(1)
   })
 
   it("ends the streaming state, with the cancellation, when the user only stops", async () => {

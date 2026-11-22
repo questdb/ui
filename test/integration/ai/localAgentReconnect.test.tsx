@@ -12,6 +12,7 @@ import {
   getByHook,
   queryByHook,
   sendMessage,
+  seedChat,
 } from "./support/chatHarness"
 import { darkTheme } from "../../../src/theme"
 import { Button } from "../../../src/components/Button"
@@ -39,7 +40,9 @@ import { getLocalAgentChannel } from "../../../src/utils/localAgent/localAgentCh
 import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
 import { EXPECTED_MCP_VERSION as v } from "../../../src/utils/mcp/protocolVersion"
 import * as notebookSnapshot from "../../../src/utils/ai/notebookSnapshot"
+import { emitUserAction } from "../../../src/utils/notebooks/notebookAIBridge"
 import type {
+  AgentCommand,
   AgentPromptMessage,
   AgentTurnResult,
 } from "../../../src/utils/localAgent/protocol"
@@ -109,7 +112,31 @@ const answer = (
   socket.receive({ ...ids, type: "agent_turn_end", result })
 }
 
-const openLocalChat = async (query = false) => {
+const reportReady = (
+  socket: MemorySocket,
+  {
+    model,
+    commands = [],
+    acceptsImages = false,
+  }: {
+    model?: string
+    commands?: AgentCommand[]
+    acceptsImages?: boolean
+  } = {},
+) =>
+  socket.receive({
+    v,
+    type: "agent_status",
+    state: "ready",
+    config: model
+      ? { model: { id: "model", current: model, choices: [] }, effort: null }
+      : null,
+    error: null,
+    commands,
+    acceptsImages,
+  })
+
+const openLocalChat = async (query = false, starting = false) => {
   sockets.length = 0
   vi.stubGlobal("WebSocket", MemorySocket)
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
@@ -180,13 +207,7 @@ const openLocalChat = async (query = false) => {
   act(() => {
     first.open()
     ack(first)
-    first.receive({
-      v,
-      type: "agent_status",
-      state: "ready",
-      config: null,
-      error: null,
-    })
+    if (!starting) reportReady(first)
   })
   const channel = getLocalAgentChannel()
   expect(channel).not.toBeNull()
@@ -268,12 +289,19 @@ it("keeps a prepared prompt queued until the replacement socket acknowledges hel
       "Waiting for the local agent bridge",
     )
     expect(queryByHook("chat-message-user")).not.toBeInTheDocument()
+    const picker = getByHook("chat-model-picker")
+    await userEvent.click(picker)
+    expect(
+      screen.getByRole("combobox", { name: "Search models" }),
+    ).toHaveFocus()
 
     act(() => {
       ack(second, true)
     })
     expect(getLocalAgentChannel()).toBe(channel)
     await waitFor(() => expect(second.prompts()).toHaveLength(1))
+    expect(picker).toBeDisabled()
+    expect(queryByHook("chat-model-picker-menu")).not.toBeInTheDocument()
     expect(JSON.stringify(second.prompts()[0].prompt)).toContain(text)
     expect(queryByHook("chat-queued-message")).not.toBeInTheDocument()
     act(() => {
@@ -285,6 +313,44 @@ it("keeps a prepared prompt queued until the replacement socket acknowledges hel
     await snapshot.release()
   }
 })
+
+it.each(["initial model only", "later model change"])(
+  "revalidates a startup prompt during notebook preparation: %s",
+  async (transition) => {
+    const { bufferId, first, channel } = await openLocalChat(false, true)
+    expect(channel?.getSnapshot().state).toBe("starting")
+    const { build, release, snapshot } = holdSnapshot()
+    const text = "Summarize the sample notebook."
+    try {
+      await sendMessage(text)
+      await waitFor(() => expect(build).toHaveBeenCalledWith(bufferId))
+      expect(first.prompts()).toHaveLength(0)
+      act(() => {
+        reportReady(first, { model: "mock-default" })
+        if (transition === "later model change")
+          reportReady(first, { model: "mock-other" })
+      })
+      expect(getLocalAgentChannel()).toBe(channel)
+      await release()
+      if (transition === "later model change") {
+        expect(first.prompts()).toHaveLength(0)
+        expect(getByHook("chat-queued-message")).toHaveTextContent(
+          "Restore the original destination",
+        )
+        act(() => reportReady(first, { model: "mock-default" }))
+      }
+      await waitFor(() => expect(first.prompts()).toHaveLength(1))
+      const firstBlock = first.prompts()[0].prompt[0]
+      expect(firstBlock?.type === "text" && firstBlock.text).toContain(text)
+      expect(queryByHook("chat-queued-message")).not.toBeInTheDocument()
+      act(() => answer(first, "Sample notebook answer."))
+      await screen.findByText("Sample notebook answer.")
+      expect(fetch).not.toHaveBeenCalled()
+    } finally {
+      await snapshot.release()
+    }
+  },
+)
 
 it("does not record Explain while the bridge is waiting for hello", async () => {
   const { first, reconnect } = await openLocalChat(true)
@@ -411,6 +477,151 @@ it("restores the draft on Stop while leaving the cancel queued for reconnect", a
   expect(fetch).not.toHaveBeenCalled()
 })
 
+it.each(["Edit", "Remove"])(
+  "Stop cancels immediately and holds a native command for explicit %s",
+  async (action) => {
+    const { first } = await openNotebookChat()
+    act(() =>
+      reportReady(first, {
+        acceptsImages: true,
+        commands: [
+          { name: "review", description: "Review a sample", hint: "[topic]" },
+        ],
+      }),
+    )
+    await sendMessage("Show a sample query.")
+    await waitFor(() => expect(first.prompts()).toHaveLength(1))
+    const { conversationId, turnId } = first.prompts()[0]
+    const command = "/review formatting"
+    await sendMessage(command)
+    expect(getByHook("chat-queued-message-text")).toHaveTextContent(command)
+    const input = getByHook("chat-input-textarea")
+    await userEvent.type(input, "Unsent draft.")
+    await userEvent.upload(
+      getByHook("chat-attach-image-input"),
+      new File(["sample"], "draft.png", { type: "image/png" }),
+    )
+    const draftImage = await screen.findByRole("img", { name: "Attachment 1" })
+    const imageSource = draftImage.getAttribute("src")
+
+    await userEvent.click(getByHook("chat-stop-button"))
+    expect(first.frames).toContainEqual({
+      v,
+      type: "agent_cancel",
+      conversationId,
+    })
+    expect(first.prompts()).toHaveLength(1)
+    expect(getByHook("chat-queued-message-text")).toHaveTextContent(command)
+    expect(input).toHaveValue("Unsent draft.")
+    expect(queryByHook("chat-queued-send-now")).not.toBeInTheDocument()
+    await act(() => {
+      first.receive({
+        v,
+        type: "agent_turn_end",
+        conversationId,
+        turnId,
+        result: { outcome: "completed", stopReason: "cancelled", usage: null },
+      })
+      return Promise.resolve()
+    })
+    expect(first.prompts()).toHaveLength(1)
+    expect(getByHook("chat-queued-message-text")).toHaveTextContent(command)
+    expect(input).toHaveValue("Unsent draft.")
+    expect(screen.getByRole("img", { name: "Attachment 1" })).toHaveAttribute(
+      "src",
+      imageSource,
+    )
+
+    if (action === "Remove") {
+      await userEvent.click(getByHook("chat-queued-remove"))
+      expect(input).toHaveValue("Unsent draft.")
+      expect(screen.getByRole("img", { name: "Attachment 1" })).toHaveAttribute(
+        "src",
+        imageSource,
+      )
+      expect(first.prompts()).toHaveLength(1)
+    } else {
+      await userEvent.clear(input)
+      await userEvent.click(
+        screen.getByRole("button", { name: "Remove image 1" }),
+      )
+      await userEvent.click(screen.getByRole("button", { name: "Edit" }))
+      expect(input).toHaveValue(command)
+      expect(first.prompts()).toHaveLength(1)
+      await userEvent.click(
+        screen.getByRole("button", { name: "Send message" }),
+      )
+      await waitFor(() => expect(first.prompts()).toHaveLength(2))
+      expect(first.prompts()[1].prompt).toEqual([
+        { type: "text", text: command },
+      ])
+      act(() => answer(first, "Reviewed the sample."))
+      await screen.findByText("Reviewed the sample.")
+    }
+    expect(queryByHook("chat-queued-message")).not.toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  },
+)
+
+it.each(["", "Circle"])(
+  "Escape closes only the custom answer (draft: %j) and preserves earlier answers",
+  async (draft) => {
+    const { first } = await openNotebookChat()
+    await sendMessage("Show a sample query.")
+    await waitFor(() => expect(first.prompts()).toHaveLength(1))
+    const { conversationId } = first.prompts()[0]
+    act(() =>
+      first.receive({
+        v,
+        type: "agent_question",
+        requestId: "sample-question",
+        conversationId,
+        message: "Choose both display settings",
+        fields: [
+          {
+            id: "color",
+            kind: "choice",
+            title: null,
+            prompt: "Pick a color",
+            options: [{ value: "blue", label: "Blue", description: null }],
+            multiple: false,
+            required: true,
+            otherFieldId: null,
+          },
+          {
+            id: "shape",
+            kind: "choice",
+            title: null,
+            prompt: "Pick a shape",
+            options: [{ value: "square", label: "Square", description: null }],
+            multiple: false,
+            required: true,
+            otherFieldId: "custom-shape",
+          },
+        ],
+      }),
+    )
+    await userEvent.click(screen.getByRole("radio", { name: /Blue/ }))
+    await userEvent.click(
+      screen.getByRole("radio", { name: /Type your own answer/ }),
+    )
+    const custom = screen.getByRole("textbox", { name: "Your own answer" })
+    expect(custom).toHaveFocus()
+    if (draft) await userEvent.type(custom, draft)
+    await userEvent.keyboard("{Escape}")
+    expect(custom).not.toBeInTheDocument()
+    expect(getByHook("ai-chat-window")).toBeVisible()
+    await userEvent.click(screen.getByRole("tab", { name: "Review" }))
+    expect(
+      screen.getByRole("button", { name: /Pick a color\s*Blue/ }),
+    ).toBeVisible()
+    expect(
+      first.frames.some(({ type }) => type === "agent_question_answer"),
+    ).toBe(false)
+    expect(fetch).not.toHaveBeenCalled()
+  },
+)
+
 it("resends seen history to a new channel advertising the same agent ID, but not on reconnect", async () => {
   const { first, channel, reconnect, replace } = await openNotebookChat()
   const question = "What is in the sample notebook?"
@@ -510,3 +721,167 @@ it("keeps the original failed turn if a reconnect starts while Retry prepares", 
     await snapshot.release()
   }
 })
+
+it.each(["reopen", "delete"])(
+  "keeps Stop with its original chat when the bridge settles after switching (%s)",
+  async (action) => {
+    const { first, reconnect } = await openNotebookChat()
+    const other = await seedChat("Other sample chat")
+    await sendMessage("Summarize the sample notebook.")
+    await waitFor(() => expect(first.prompts()).toHaveLength(1))
+    const { conversationId, turnId } = first.prompts()[0]
+    const partial = "The sample notebook contains a chart."
+    const cancelled = "Operation has been cancelled"
+    act(() =>
+      first.receive({
+        v,
+        type: "agent_update",
+        conversationId,
+        turnId,
+        update: {
+          kind: "message_chunk",
+          messageId: "sample-reply",
+          text: partial,
+        },
+      }),
+    )
+    expect(await screen.findByText(partial)).toBeVisible()
+    const second = reconnect()
+    await userEvent.click(
+      screen.getByRole("button", { name: "Stop AI generation" }),
+    )
+    expect(second.frames.map(({ type }) => type)).toEqual(["hello"])
+    const original = await aiConversationStore.getMeta(conversationId)
+    const otherMessages = await aiConversationStore.getMessages(other.id)
+    const openHistory = () => userEvent.click(getByHook("chat-window-history"))
+    await openHistory()
+    await userEvent.click(await screen.findByText(other.conversationName))
+    await waitFor(() => expect(getByHook("chat-input-textarea")).toBeVisible())
+    expect(screen.queryByText(partial)).not.toBeInTheDocument()
+    expect(queryByHook("chat-message-error")).not.toBeInTheDocument()
+    expect(
+      (await aiConversationStore.getMessages(conversationId)).at(-1),
+    ).toMatchObject({
+      content: partial,
+      error: cancelled,
+    })
+
+    if (action === "delete") {
+      await openHistory()
+      const item = (
+        await screen.findByText(original!.conversationName)
+      ).closest('[data-hook="chat-history-item"]')!
+      await userEvent.click(
+        item.querySelector('[data-hook="chat-history-delete"]')!,
+      )
+      await userEvent.click(screen.getByRole("button", { name: "Delete" }))
+      await waitFor(async () =>
+        expect(
+          await aiConversationStore.getMeta(conversationId),
+        ).toBeUndefined(),
+      )
+    }
+
+    await act(() => {
+      ack(second, true)
+      expect(
+        second.frames.filter(({ type }) => type === "agent_cancel"),
+      ).toEqual([{ v, type: "agent_cancel", conversationId }])
+      second.receive({
+        v,
+        type: "agent_turn_end",
+        conversationId,
+        turnId,
+        result: { outcome: "completed", stopReason: "cancelled", usage: null },
+      })
+      return Promise.resolve()
+    })
+    expect(await aiConversationStore.getMessages(other.id)).toEqual(
+      otherMessages,
+    )
+    expect(queryByHook("chat-message-error")).not.toBeInTheDocument()
+    if (action === "delete") {
+      expect(await aiConversationStore.getMeta(conversationId)).toBeUndefined()
+      expect(await aiConversationStore.getMessages(conversationId)).toEqual([])
+    } else {
+      await openHistory()
+      await userEvent.click(await screen.findByText(original!.conversationName))
+      expect(await screen.findByText(partial)).toBeVisible()
+      expect(getByHook("chat-message-error")).toHaveTextContent(cancelled)
+      expect(getByHook("retry-button")).toBeEnabled()
+    }
+    expect(fetch).not.toHaveBeenCalled()
+  },
+)
+
+it.each(["written", "stopped", "failed write"])(
+  "consumes only notebook events actually sent by a waiting follow-up (%s)",
+  async (outcome) => {
+    const { bufferId, first } = await openNotebookChat()
+    const emitDeletion = (cellId: string) =>
+      emitUserAction({
+        kind: "user_deleted_cell",
+        bufferId,
+        cellId,
+      })
+    await sendMessage("Show a sample query.")
+    await waitFor(() => expect(first.prompts()).toHaveLength(1))
+    const { conversationId, turnId } = first.prompts()[0]
+    emitDeletion("first-sample-cell")
+    await sendMessage("Explain the result.")
+    await userEvent.click(getByHook("chat-queued-send-now"))
+    await screen.findByText("Explain the result.")
+    expect(queryByHook("chat-queued-message-text")).not.toBeInTheDocument()
+    expect(first.prompts()).toHaveLength(1)
+    emitDeletion("second-sample-cell")
+
+    if (outcome === "stopped") {
+      await userEvent.click(
+        screen.getByRole("button", { name: "Stop AI generation" }),
+      )
+    } else if (outcome === "failed write") {
+      vi.spyOn(first, "send").mockImplementationOnce(() => {
+        throw new Error("Simulated write failure")
+      })
+    }
+    await act(() => {
+      first.receive({
+        v,
+        type: "agent_turn_end",
+        conversationId,
+        turnId,
+        result: { outcome: "completed", stopReason: "cancelled", usage: null },
+      })
+      return Promise.resolve()
+    })
+    const promptText = (index: number) => {
+      const block = first.prompts()[index]?.prompt[0]
+      return block?.type === "text" ? block.text : undefined
+    }
+    if (outcome === "written") {
+      await waitFor(() => expect(first.prompts()).toHaveLength(2))
+      expect(promptText(1)).toContain("first-sample-cell")
+      expect(promptText(1)).not.toContain("second-sample-cell")
+      act(() => answer(first, "Sample explanation."))
+      await waitFor(() =>
+        expect(getByHook("chat-window-history")).toBeEnabled(),
+      )
+      await sendMessage("Show the remaining sample cells.")
+    } else {
+      expect(first.prompts()).toHaveLength(1)
+      await waitFor(() => expect(getByHook("retry-button")).toBeEnabled())
+      await userEvent.click(getByHook("retry-button"))
+    }
+    const nextIndex = outcome === "written" ? 2 : 1
+    await waitFor(() => expect(first.prompts()).toHaveLength(nextIndex + 1))
+    expect(promptText(nextIndex)).toContain("second-sample-cell")
+    if (outcome === "written") {
+      expect(promptText(nextIndex)).not.toContain("first-sample-cell")
+    } else {
+      expect(promptText(nextIndex)).toContain("first-sample-cell")
+    }
+    act(() => answer(first, "Completed sample answer."))
+    expect(await screen.findByText("Completed sample answer.")).toBeVisible()
+    expect(fetch).not.toHaveBeenCalled()
+  },
+)

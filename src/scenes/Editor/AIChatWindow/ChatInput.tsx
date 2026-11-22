@@ -44,6 +44,7 @@ import {
 import type { AgentPromptImage } from "../../../utils/localAgent/protocol"
 import {
   effectiveAgentModel,
+  modelFromAgentConfig,
   LOCAL_AGENT_MODEL,
 } from "../../../utils/localAgent/localAgentModel"
 import { localAgentPreferencesOf } from "../../../utils/localAgent/localAgentSettings"
@@ -151,33 +152,56 @@ export type QueuedEntry = {
   model: string | null
   channel: ReturnType<typeof useLocalAgentChannel>
   agentModel: string | null
+  agentModelPreference: string | null
+  awaitingInitialAgentModel: boolean
+  heldByStop?: boolean
   waitingFor?: AbortSignal
 }
 
 export type ChatQueue = Record<string, QueuedEntry>
 
+export const agentDestination = (
+  agent: ReturnType<typeof useLocalAgent>,
+  settings: AiAssistantSettings,
+) => {
+  const agentModelPreference = localAgentPreferencesOf(
+    settings,
+    agent?.info.id,
+  ).model
+  return {
+    agentModelPreference,
+    agentModel: agent && effectiveAgentModel(agent, agentModelPreference),
+    initialAgentModel: modelFromAgentConfig(
+      agent?.initialModelConfig,
+      agentModelPreference,
+    ),
+  }
+}
+
 export const queuedAgentModel = (
   agent: ReturnType<typeof useLocalAgent>,
   settings: AiAssistantSettings,
-) =>
-  agent &&
-  effectiveAgentModel(
-    agent,
-    localAgentPreferencesOf(settings, agent.info.id).model,
-  )
+) => agentDestination(agent, settings).agentModel
 
 export const matchesQueuedDestination = (
   entry: QueuedEntry,
   model: string | null,
   channel: QueuedEntry["channel"],
   acceptsImages: boolean,
-  agentModel: string | null,
+  {
+    agentModel,
+    agentModelPreference,
+    initialAgentModel,
+  }: ReturnType<typeof agentDestination>,
 ) =>
   entry.model === model &&
   (model !== LOCAL_AGENT_MODEL ||
     (channel !== null &&
       entry.channel === channel &&
-      entry.agentModel === agentModel)) &&
+      entry.agentModelPreference === agentModelPreference &&
+      (entry.awaitingInitialAgentModel
+        ? initialAgentModel
+        : entry.agentModel) === agentModel)) &&
   (entry.images.length === 0 || acceptsImages)
 
 export const wasQueueCancelled = (entry: QueuedEntry) =>
@@ -348,9 +372,10 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const composerModel = useComposerModel()
     const destinationChannel =
       currentModel === LOCAL_AGENT_MODEL ? localAgentChannel : null
-    const agentModel = destinationChannel
-      ? queuedAgentModel(localAgent, aiAssistantSettings)
-      : null
+    const destination = agentDestination(
+      destinationChannel ? localAgent : null,
+      aiAssistantSettings,
+    )
     const acceptsImages =
       composerModel.usesAgent && localAgent?.acceptsImages === true
 
@@ -370,11 +395,21 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         currentModel,
         destinationChannel,
         acceptsImages,
-        agentModel,
+        destination,
       )
     const queueMismatch = queued !== undefined && !matchesDestination(queued)
     const waitingForBridge =
       currentModel === LOCAL_AGENT_MODEL && !localAgentTransportReady
+    const commandHeld =
+      queued?.agentCommand === true &&
+      (queued.heldByStop || wasQueueCancelled(queued))
+    const draftOccupiesComposer = input !== "" || attachments.length > 0
+    const commandEditBlocked =
+      queued?.agentCommand === true &&
+      (draftOccupiesComposer || isReadingAttachment)
+    const commandEditHint = isReadingAttachment
+      ? "Wait for the draft images to finish loading before choosing Edit."
+      : "Clear the draft text and remove any draft images, then choose Edit again to restore the queued command."
 
     useEffect(() => {
       // Preserve the existing recovery for a cancelled turn. A mismatched
@@ -385,6 +420,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         queueMismatch ||
         !conversationId ||
         !queued ||
+        queued.agentCommand ||
         !wasQueueCancelled(queued) ||
         !unqueue(conversationId, queued)
       )
@@ -537,7 +573,10 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
         if (previous && (agentCommand || previous.agentCommand)) {
           error =
-            "Agent commands must send separately. Wait for the queued message to send, or edit it first."
+            previous.agentCommand &&
+            (previous.heldByStop || wasQueueCancelled(previous))
+              ? "Agent commands must send separately. Edit or remove the held command first."
+              : "Agent commands must send separately. Wait for the queued message to send, or edit it first."
           return current
         }
         if ((previous?.images.length ?? 0) + images.length > MAX_IMAGES) {
@@ -558,7 +597,11 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 agentCommand,
                 model: currentModel,
                 channel: destinationChannel,
-                agentModel,
+                agentModel: destination.agentModel,
+                agentModelPreference: destination.agentModelPreference,
+                awaitingInitialAgentModel:
+                  destination.agentModel === null &&
+                  destination.initialAgentModel === null,
                 waitingFor: isAIInProgress ? getOperationSignal() : undefined,
               },
         }
@@ -653,6 +696,11 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // Takes the queued message back into the input for editing.
     const editQueued = () => {
       if (!conversationId || !queued) return
+      if (
+        queued.agentCommand &&
+        (draftOccupiesComposer || readingAttachment.current)
+      )
+        return
       if (!unqueue(conversationId, queued)) return
       setInput((current) =>
         current ? `${queued.text}\n\n${current}` : queued.text,
@@ -713,9 +761,17 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       // Shift+Enter -> allow default behavior (new line)
     }
 
-    // Stopping keeps the queued message, in the input, for the user to edit.
     const handleStop = () => {
-      editQueued()
+      if (conversationId && queued?.agentCommand) {
+        // A native command must stay separate and require an explicit action.
+        setQueue((current) =>
+          current[conversationId] === queued && !queued.heldByStop
+            ? { ...current, [conversationId]: { ...queued, heldByStop: true } }
+            : current,
+        )
+      } else {
+        editQueued()
+      }
       abortOperation()
     }
 
@@ -725,7 +781,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         !disabled &&
         !queueMismatch &&
         !readingAttachment.current &&
-        (!queued || !wasQueueCancelled(queued)) &&
+        (!queued || (!queued.heldByStop && !wasQueueCancelled(queued))) &&
         (currentModel !== LOCAL_AGENT_MODEL ||
           destinationChannel?.isTransportReady())
       )
@@ -764,7 +820,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     return (
       <InputContainer ref={inputContainerRef}>
-        {question?.url && localAgent ? (
+        {question?.url != null && localAgent ? (
           <LinkRequestCard
             key={question.requestId}
             agentLabel={localAgent.info.label}
@@ -786,7 +842,9 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <QueuedMessage
                 text={queued.text}
                 imageCount={queued.images.length}
-                onSendNow={isAIInProgress ? sendQueuedNow : undefined}
+                onSendNow={
+                  isAIInProgress && !commandHeld ? sendQueuedNow : undefined
+                }
                 sendNowDisabled={
                   disabled ||
                   queueMismatch ||
@@ -795,11 +853,15 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   wasQueueCancelled(queued)
                 }
                 blockedReason={
-                  queueMismatch
-                    ? "Restore the original destination or edit the queued message."
-                    : waitingForBridge
-                      ? "Waiting for the local agent bridge."
-                      : undefined
+                  commandEditBlocked
+                    ? commandEditHint
+                    : commandHeld
+                      ? "Command held. Choose Edit to restore it, or remove it."
+                      : queueMismatch
+                        ? "Restore the original destination or edit the queued message."
+                        : waitingForBridge
+                          ? "Waiting for the local agent bridge."
+                          : undefined
                 }
                 onEdit={editQueued}
                 onRemove={() =>
@@ -890,7 +952,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                     const files = imageFilesOf(event.clipboardData.items)
                     if (files.length === 0) return
                     if (
-                      !acceptsImages &&
+                      (!acceptsImages || attachments.length >= MAX_IMAGES) &&
                       event.clipboardData.getData("text/plain")
                     )
                       return

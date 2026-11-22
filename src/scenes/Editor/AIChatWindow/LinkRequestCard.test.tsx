@@ -47,6 +47,53 @@ describe("LinkRequestCard", () => {
     expect(onAnswer).toHaveBeenCalledWith({})
   })
 
+  it("does not open a valid HTTP link until the answer can be sent", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null)
+    const onAnswer = vi
+      .fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+    const url = "http://example.invalid/setup"
+    renderComponent(
+      <LinkRequestCard
+        agentLabel="Codex"
+        question={{ ...question, url }}
+        onAnswer={onAnswer}
+        onStop={vi.fn()}
+      />,
+    )
+    const button = screen.getByRole("button", { name: /Open page/ })
+    await userEvent.click(button)
+    expect(open).not.toHaveBeenCalled()
+    expect(button).toBeEnabled()
+    await userEvent.click(button)
+    expect(open).toHaveBeenCalledOnce()
+    expect(open).toHaveBeenCalledWith(url, "_blank", "noopener,noreferrer")
+  })
+
+  it("offers an error and Cancel when the address is empty", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null)
+    const onAnswer = vi.fn(() => true)
+    renderComponent(
+      <LinkRequestCard
+        agentLabel="Codex"
+        question={{ ...question, url: "" }}
+        onAnswer={onAnswer}
+        onStop={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "valid HTTP or HTTPS link",
+    )
+    expect(screen.getByRole("button", { name: /Open page/ })).toBeDisabled()
+    expect(
+      screen.queryByRole("button", { name: "Copy link" }),
+    ).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    expect(onAnswer).toHaveBeenCalledWith(null)
+    expect(open).not.toHaveBeenCalled()
+  })
+
   it("declines without opening anything", async () => {
     // Given
     const open = vi.spyOn(window, "open").mockReturnValue(null)

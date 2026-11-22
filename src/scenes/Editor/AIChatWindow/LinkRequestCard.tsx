@@ -46,11 +46,16 @@ const Note = styled.p`
   color: ${({ theme }) => theme.color.contentSecondary};
 `
 
-export const hostOf = (url: string): string => {
+const webAddress = (value: string): URL | null => {
+  if (!/^https?:\/\/[^/?#]/i.test(value) || /[\s\\]/.test(value)) return null
   try {
-    return new URL(url).host
+    const address = new URL(value)
+    return address.hostname &&
+      (address.protocol === "https:" || address.protocol === "http:")
+      ? address
+      : null
   } catch {
-    return url
+    return null
   }
 }
 
@@ -73,18 +78,20 @@ export const LinkRequestCard = ({
   const [answered, setAnswered] = useState(false)
   const [sendFailed, setSendFailed] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const requestedUrl = typeof question.url === "string" ? question.url : ""
+  const address = webAddress(requestedUrl)
 
   useEffect(() => {
     headingRef.current?.focus()
   }, [question.requestId])
 
   const finish = (opened: boolean) => {
-    if (answered) return
+    if (answered || (opened && !address)) return
     const sent = onAnswer(opened ? {} : null)
     setAnswered(sent)
     setSendFailed(!sent)
-    if (sent && opened)
-      window.open(question.url, "_blank", "noopener,noreferrer")
+    if (sent && opened && address)
+      window.open(address.href, "_blank", "noopener,noreferrer")
   }
 
   return (
@@ -115,30 +122,36 @@ export const LinkRequestCard = ({
         </QuestionText>
       )}
       <Address>
-        <Host data-hook="chat-link-host">{hostOf(question.url)}</Host>
-        <Url title={question.url}>{question.url}</Url>
+        {address && <Host data-hook="chat-link-host">{address.host}</Host>}
+        <Url title={requestedUrl}>{requestedUrl}</Url>
       </Address>
-      <Note>Opens in a new tab. Finish there, then come back here.</Note>
+      {address ? (
+        <Note>Opens in a new tab. Finish there, then come back here.</Note>
+      ) : (
+        <Note role="alert">This request needs a valid HTTP or HTTPS link.</Note>
+      )}
       {sendFailed && <AnswerSendError />}
       <Footer>
         <Button
           size="sm"
           variant="primary"
-          disabled={answered}
+          disabled={answered || !address}
           onClick={() => finish(true)}
           trailingIcon={<ArrowSquareOutIcon size={14} />}
           data-hook="chat-link-open"
         >
           Open page
         </Button>
-        <CopyButton
-          text={question.url}
-          size="sm"
-          variant="ghost"
-          title="Copy link"
-          aria-label="Copy link"
-          data-hook="chat-link-copy"
-        />
+        {address && (
+          <CopyButton
+            text={address.href}
+            size="sm"
+            variant="ghost"
+            title="Copy link"
+            aria-label="Copy link"
+            data-hook="chat-link-copy"
+          />
+        )}
         <Button
           size="sm"
           variant="ghost"

@@ -76,7 +76,7 @@ export const resultMatchesQueries = (
   )
 
 // Retain statement position across filtering; SQL text alone is ambiguous.
-type PositionedResult = QueryExecResult & { statementIndex: number }
+export type PositionedResult = QueryExecResult & { statementIndex: number }
 
 export type ChartResult =
   | { kind: "missing" }
@@ -85,6 +85,7 @@ export type ChartResult =
   | {
       kind: "settled"
       results: PositionedResult[]
+      emptyDqlResults: PositionedResult[]
       hadError: boolean
     }
 
@@ -95,14 +96,13 @@ export const toChartResult = (
   if (result == null) return { kind: "missing" }
   if (!resultMatchesQueries(result, queries)) return { kind: "stale" }
   if (hasPendingResult(result)) return { kind: "pending" }
+  const dqlResults = result.results.flatMap((entry, statementIndex) =>
+    entry.type === "dql" ? [{ ...toExecResult(entry), statementIndex }] : [],
+  )
   return {
     kind: "settled",
-    results: successResults(
-      result.results.map((entry, statementIndex) => ({
-        ...toExecResult(entry),
-        statementIndex,
-      })),
-    ),
+    results: successResults(dqlResults),
+    emptyDqlResults: dqlResults.filter((entry) => entry.dataset.length === 0),
     hadError: result.results.some((r) => r.type === "error"),
   }
 }
@@ -195,9 +195,35 @@ export const incompleteHeatmap = (q: ResolvedQuery) =>
   q.partitionByColumn === q.xColumn ||
   !isNumericHeatmapValue(q.columns, q.yColumns[0])
 
-// Use the same settled, statement-matching data the chart uses. Without it,
-// an unchanged saved config may be replayed; edits cannot introduce explicit
-// mixes or a known Rows/X collision without result metadata.
+// Validate the mapping being saved, not the renderer's temporary X fallback.
+// Empty DQL retains enough metadata to check the mapping without plotting it.
+export const heatmapMappingIncomplete = (
+  q: QueryChart,
+  savedX: string | null,
+  metadata: QueryTab | QueryExecResult | undefined,
+  value = q.yColumns[0],
+): boolean => {
+  const rows = q.partitionByColumn
+  if (!rows || !value) return true
+  if (!metadata) return savedX === rows
+
+  const { columns } = metadata
+  const x =
+    savedX ??
+    ("inferredXColumn" in metadata
+      ? metadata.inferredXColumn
+      : inferChartConfig(columns, metadata.dataset, metadata.query).xColumn)
+  return (
+    !x ||
+    rows === x ||
+    !columns.some((c) => c.name === x) ||
+    !columns.some((c) => c.name === rows) ||
+    !isNumericHeatmapValue(columns, value)
+  )
+}
+
+// Use only settled, statement-matching data. Without it, edits cannot
+// introduce explicit mixes or a known Rows/X collision.
 export const validateHeatmapConfig = (
   config: ChartConfig,
   statements: string[],
@@ -210,32 +236,35 @@ export const validateHeatmapConfig = (
 
   const conflict =
     "Heatmaps need a chart of their own. Include only one query or choose a different chart type."
+  const explicitCollision =
+    config.xColumn != null &&
+    enabledHeatmaps.some((q) => q?.partitionByColumn === config.xColumn)
   const frame = toChartResult(result, statements)
   if (frame.kind !== "settled") {
     if (enabledHeatmaps.length > 1) return conflict
-    if (
-      config.xColumn &&
-      enabledHeatmaps[0]?.partitionByColumn === config.xColumn
-    )
-      return HEATMAP_INCOMPLETE_MESSAGE
+    if (explicitCollision) return HEATMAP_INCOMPLETE_MESSAGE
     return enabled.length > 1 && !unchanged ? conflict : null
   }
 
-  const { renderQueries } = resolveDraw(statements, frame.results, config)
-  const heatmaps = renderQueries.filter(({ type }) => type === "heatmap")
-  if (heatmaps.length && renderQueries.length > 1) return conflict
-  if (heatmaps.some(incompleteHeatmap)) return HEATMAP_INCOMPLETE_MESSAGE
-  // An empty DQL result does not participate in the plot, but its Value
-  // column type is still known and can be validated before saving.
+  const { renderQueries, tabs } = resolveDraw(statements, frame.results, config)
   if (
-    result?.results.some((entry, index) => {
-      const q = config.queries[index]
+    renderQueries.length > 1 &&
+    renderQueries.some(({ type }) => type === "heatmap")
+  )
+    return conflict
+  if (explicitCollision) return HEATMAP_INCOMPLETE_MESSAGE
+  // Replaying the same chart may retain mappings whose columns have since
+  // disappeared. This exception does not bypass known conflicts above.
+  if (unchanged) return null
+  if (
+    config.queries.some((q, index) => {
+      if (q?.type !== "heatmap" || q.enabled === false) return false
+      const metadata =
+        tabs.find((tab) => tab.index === index) ??
+        frame.emptyDqlResults.find((entry) => entry.statementIndex === index)
       return (
-        q?.type === "heatmap" &&
-        q.enabled !== false &&
-        entry.type === "dql" &&
-        entry.dataset.length === 0 &&
-        !isNumericHeatmapValue(entry.columns, q.yColumns[0])
+        metadata != null &&
+        heatmapMappingIncomplete(q, config.xColumn, metadata)
       )
     })
   )
@@ -431,7 +460,10 @@ export const resolveDraw = (
   const denseQueries: (QueryChart | null)[] = statements.map((_stmt, i) => {
     const it = placedItems.find((x) => x.index === i)
     if (it) {
-      const qc: QueryChart = { ...it.qc }
+      // A temporary schema change should not erase a saved heatmap mapping
+      // from the draft. Rendering still uses the pruned copy above.
+      const saved = config?.queries[i]
+      const qc: QueryChart = { ...(saved?.type === "heatmap" ? saved : it.qc) }
       const oh = resolveOhlc(qc, it.columns)
       if (oh) qc.ohlc = oh
       return qc
@@ -447,7 +479,8 @@ export const resolveDraw = (
     },
     renderQueries,
     effectiveConfig: {
-      xColumn,
+      // Keep the saved override separate from the current anchor's fallback.
+      xColumn: config?.xColumn ?? null,
       rightAxis: config?.rightAxis,
       ...(config?.referenceLines && { referenceLines: config.referenceLines }),
       queries: denseQueries,

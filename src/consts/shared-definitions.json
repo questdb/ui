@@ -1168,7 +1168,7 @@
                   },
                   "queries": {
                     "type": ["array", "null"],
-                    "description": "One config per `;`-split query, index-aligned — send the FULL array, exactly one entry per statement (its length must equal the cell's `;`-split statement count, else REJECTED). These entries are the chart's per-query configs in full (apply is a PUT); a `null` entry infers that statement. To keep a chart unchanged, re-send its full config from <notebook_context>.",
+                    "description": "One config per `;`-split query, index-aligned — send the FULL array, exactly one entry per statement. A `null` entry infers that statement. With nonempty reference_lines, `[]` can infer all statements without any per-query overrides. To keep a chart unchanged, re-send its full config from <notebook_context>.",
                     "items": {
                       "type": ["object", "null"],
                       "additionalProperties": false,

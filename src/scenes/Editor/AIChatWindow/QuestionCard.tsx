@@ -454,9 +454,11 @@ export const QuestionCard = ({
                     event.stopPropagation()
                     clearCustomDraft(target.id)
                     setEditing(false)
+                    questionTextRef.current?.focus()
                   }
                 }}
                 disabled={answered}
+                data-drawer-owns-escape=""
                 placeholder="Type your own answer"
                 aria-label="Your own answer"
                 data-hook="chat-question-own-answer"
