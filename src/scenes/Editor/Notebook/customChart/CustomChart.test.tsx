@@ -2,7 +2,7 @@
 import React from "react"
 import { act, screen, waitFor } from "@testing-library/react"
 import type { EChartsType } from "echarts"
-import { afterEach, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import { echarts } from "../CellChart/echartsSetup"
 import { primaryXControls } from "../CellChart/liveZoom"
@@ -410,4 +410,240 @@ it("reports a chart type that throws on some rows of its draw", async () => {
       severity: "error",
     }),
   )
+})
+
+it("restores a time chart's share of its refreshed data after a remount", async () => {
+  // Given an unlinked custom time chart zoomed to 10-30% of its data
+  sizeCharts()
+  const chart = (rows: number, brush: boolean) => (
+    <CustomChart
+      bufferId={BUFFER_ID}
+      cellId="a"
+      rawOption={PEER}
+      statements={minutes(rows)}
+      chartTypes={undefined}
+      live={false}
+      isFocused={false}
+      interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
+    />
+  )
+  const { container, rerender } = renderComponent(chart(200, false))
+  const instance = () => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host ? echarts.getInstanceByDom(host) : undefined
+  }
+  await waitFor(() => expect(primaryXControls(instance()!)).not.toHaveLength(0))
+  const first = instance()!
+  act(() => {
+    first.dispatchAction({
+      type: "dataZoom",
+      dataZoomIndex: primaryXControls(first)[0].componentIndex,
+      start: 10,
+      end: 30,
+    })
+  })
+
+  // When new rows arrive, then the chart is drawn on a new instance
+  rerender(chart(300, false))
+  await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+  const shown = values(first)
+  rerender(chart(300, true))
+  await waitFor(() => {
+    expect(instance()).toBeTruthy()
+    expect(instance()).not.toBe(first)
+  })
+
+  // Then it shows the window it showed just before, not the times of the zoom
+  await waitFor(() => expect(values(instance()!)).toEqual(shown))
+})
+
+it("records a zoom on a control that does not move the x axis", async () => {
+  // Given a horizontal bar chart zoomed with a vertical slider on its y axis
+  sizeCharts()
+  const errors: unknown[] = []
+  const chart = (brush: boolean) => (
+    <CustomChart
+      bufferId={BUFFER_ID}
+      cellId="a"
+      rawOption={{
+        xAxis: { type: "value" },
+        yAxis: { type: "category" },
+        series: [{ type: "bar", datasetId: "q0", encode: { x: "v", y: "k" } }],
+        dataZoom: [{ type: "slider", yAxisIndex: 0, orient: "vertical" }],
+      }}
+      statements={[
+        {
+          columns: [
+            { name: "k", type: "SYMBOL" },
+            { name: "v", type: "DOUBLE" },
+          ],
+          rows: Array.from({ length: 20 }, (_, i) => [`k${i}`, i]),
+        },
+      ]}
+      chartTypes={undefined}
+      live={false}
+      isFocused={false}
+      interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
+    />
+  )
+  const { container, rerender } = renderComponent(chart(false))
+  const instance = () => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host ? echarts.getInstanceByDom(host) : undefined
+  }
+  const range = () =>
+    (
+      instance()?.getOption() as
+        | { dataZoom?: { start: number; end: number }[] }
+        | undefined
+    )?.dataZoom?.[0]
+  await waitFor(() => expect(range()).toBeDefined())
+  const first = instance()!
+
+  // When the user zooms it
+  act(() => {
+    try {
+      first.dispatchAction({ type: "dataZoom", start: 20, end: 60 })
+    } catch (error) {
+      errors.push(error)
+    }
+  })
+
+  // Then nothing throws, and a new instance opens on that window
+  expect(errors).toEqual([])
+  rerender(chart(true))
+  await waitFor(() => {
+    expect(instance()).toBeTruthy()
+    expect(instance()).not.toBe(first)
+  })
+  await waitFor(() => expect(range()).toMatchObject({ start: 20, end: 60 }))
+})
+
+describe("chart type draw errors", () => {
+  const dots = {
+    name: "dots",
+    allowed: true,
+    renderItem: `
+      const y = api.value(1)
+      if (y == null || Number.isNaN(y)) throw new Error("y is missing")
+      const p = api.coord([api.value(0), y])
+      return { type: "circle", shape: { cx: p[0], cy: p[1], r: 4 } }
+    `,
+  }
+  const xy = (rows: (number | null)[][]): StatementRows => ({
+    columns: [
+      { name: "x", type: "DOUBLE" },
+      { name: "y", type: "DOUBLE" },
+    ],
+    rows,
+  })
+  const seriesOn = (datasetId: string) => ({
+    type: "custom",
+    renderItem: "dots",
+    datasetId,
+    encode: { x: "x", y: "y" },
+  })
+  const chartIn = (
+    cellId: string,
+    series: object[],
+    statements: (StatementRows | null)[],
+  ) => (
+    <CustomChart
+      bufferId={BUFFER_ID}
+      cellId={cellId}
+      rawOption={{
+        xAxis: { type: "value" },
+        yAxis: { type: "value" },
+        series,
+      }}
+      statements={statements}
+      chartTypes={[dots]}
+      live={false}
+      isFocused={false}
+    />
+  )
+  const threw = (cellId: string) =>
+    (getRenderReport(BUFFER_ID, cellId)?.problems ?? []).filter(
+      (problem) => problem.path === "chartTypes.dots",
+    )
+
+  it("keeps a failing series reported when a later series of the type draws", async () => {
+    // Given one chart whose first series of a type has a NULL and whose
+    // second series of the same type draws cleanly
+    sizeCharts()
+    renderComponent(
+      chartIn(
+        "a",
+        [seriesOn("q0"), seriesOn("q1")],
+        [
+          xy([
+            [1, 10],
+            [2, null],
+          ]),
+          xy([
+            [1, 20],
+            [2, 30],
+          ]),
+        ],
+      ),
+    )
+
+    // Then the report still names the first series' error
+    await waitFor(() => expect(threw("a")).toHaveLength(1))
+  })
+
+  it("keeps an error of an early chunk of a large series reported", async () => {
+    // Given a series of 3,500 rows, drawn in chunks, NULL in the first chunk
+    sizeCharts()
+    renderComponent(
+      chartIn(
+        "a",
+        [seriesOn("q0")],
+        [xy(Array.from({ length: 3500 }, (_, i) => [i, i === 1 ? null : i]))],
+      ),
+    )
+
+    // Then, after the later chunks draw, the report still names the error
+    await waitFor(() => expect(threw("a")).toHaveLength(1), { timeout: 3000 })
+    await act(() => new Promise((resolve) => setTimeout(resolve, 300)))
+    expect(threw("a")).toHaveLength(1)
+  })
+
+  it("keeps each cell's draw errors its own", async () => {
+    // Given two cells drawing the same chart type, only the first failing
+    sizeCharts()
+    renderComponent(
+      <>
+        {chartIn(
+          "a",
+          [seriesOn("q0")],
+          [
+            xy([
+              [1, 10],
+              [2, null],
+            ]),
+          ],
+        )}
+        {chartIn(
+          "b",
+          [seriesOn("q0")],
+          [
+            xy([
+              [1, 10],
+              [2, 20],
+            ]),
+          ],
+        )}
+      </>,
+    )
+
+    // Then the failing cell reports its error and the other cell does not
+    await waitFor(() => {
+      expect(threw("a")).toHaveLength(1)
+      expect(getRenderReport(BUFFER_ID, "b")).toBeDefined()
+    })
+    await act(() => new Promise((resolve) => setTimeout(resolve, 150)))
+    expect(threw("a")).toHaveLength(1)
+    expect(threw("b")).toHaveLength(0)
+  })
 })

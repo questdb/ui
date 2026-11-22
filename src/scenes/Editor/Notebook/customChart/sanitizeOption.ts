@@ -57,6 +57,8 @@ export const SERIES_TYPES = new Set([
 
 const COLOR_KEYS = new Set([
   "color",
+  // A map or geo region's fill.
+  "areaColor",
   "color0",
   "backgroundColor",
   "borderColor",
@@ -82,6 +84,10 @@ const DROPPED_TOOLTIP_KEYS = [
 ]
 
 const DROPPED_TITLE_KEYS = ["link", "sublink", "target", "subtarget"]
+
+// Paths of a whole option: the root, its base option, timeline options and
+// media options.
+const OPTION_SCOPE = /^(|baseOption|options\[\d+\]|media\[\d+\]\.option)$/
 
 const MAX_STRING = 2_000
 
@@ -178,7 +184,12 @@ export const sanitizeOption = (
         report(at, "Fonts come from the console theme.")
         continue
       }
-      if (inside.title && DROPPED_TITLE_KEYS.includes(key)) {
+      // Titles read a link from the option itself too (ECharts falls back to
+      // the global option), so the option's own scopes drop them as well.
+      if (
+        (inside.title || OPTION_SCOPE.test(path)) &&
+        DROPPED_TITLE_KEYS.includes(key)
+      ) {
         report(at, "Links in titles are not allowed.", "error")
         continue
       }

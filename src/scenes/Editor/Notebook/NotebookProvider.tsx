@@ -1012,11 +1012,15 @@ export const NotebookProvider: React.FC<{
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
     setVariableValues: (values) => {
-      const names = Object.keys(values)
-      if (names.length === 0) return
       const current = settingsRef.current.variables ?? []
+      // A click on what is already selected changes nothing: no re-query of
+      // the cells that use it, no save.
+      const names = Object.keys(values).filter(
+        (name) => current.find((v) => v.name === name)?.value !== values[name],
+      )
+      if (names.length === 0) return
       const next = current.map((v) =>
-        Object.hasOwn(values, v.name) ? { ...v, value: values[v.name] } : v,
+        names.includes(v.name) ? { ...v, value: values[v.name] } : v,
       )
       for (const name of names) {
         if (!current.some((v) => v.name === name))
@@ -1027,13 +1031,7 @@ export const NotebookProvider: React.FC<{
       pendingVariableRefreshRef.current = [
         ...new Set([...pendingVariableRefreshRef.current, ...names]),
       ]
-      if (
-        names.some(
-          (name) =>
-            current.find((v) => v.name === name)?.value !== values[name],
-        )
-      )
-        signalUserEdit(bufferId)
+      signalUserEdit(bufferId)
       updateSettings({ variables: next })
     },
     setCellPaneView,

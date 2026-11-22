@@ -5,8 +5,9 @@ import { compile } from "./chartTypeCompile"
 
 // Notebook chart types: ECharts custom series whose `renderItem` an agent
 // wrote as JavaScript. Each is compiled once and registered with ECharts under
-// a name unique to its notebook and source, so options reference it by the
-// short name the notebook gave it.
+// a name unique to its notebook, source and (for a drawing cell) cell, so
+// options reference it by the short name the notebook gave it, and each cell
+// reads its own draw errors.
 //
 // EXPERIMENTAL: the function runs in the console page with the console's
 // privileges. Production should run these charts in a sandboxed iframe.
@@ -17,9 +18,9 @@ type Compiled = {
 }
 
 const compiled = new Map<string, Compiled>()
-// Errors a chart type threw while drawing, by registered name. Cleared when
-// a whole draw of a series runs without one.
-const drawErrors = new Map<string, string>()
+// Errors a chart type threw while drawing, by registered name and series. A
+// series' error is cleared when it starts drawing again.
+const drawErrors = new Map<string, Map<number, string>>()
 const drawErrorListeners = new Set<() => void>()
 let notifyQueued = false
 
@@ -34,10 +35,17 @@ const noteDrawErrorsChanged = () => {
   })
 }
 
-const setDrawError = (registeredName: string, error: string | null) => {
-  if ((drawErrors.get(registeredName) ?? null) === error) return
-  if (error === null) drawErrors.delete(registeredName)
-  else drawErrors.set(registeredName, error)
+const setDrawError = (
+  registeredName: string,
+  series: number,
+  error: string | null,
+) => {
+  const errors = drawErrors.get(registeredName) ?? new Map<number, string>()
+  if ((errors.get(series) ?? null) === error) return
+  if (error === null) errors.delete(series)
+  else errors.set(series, error)
+  if (errors.size > 0) drawErrors.set(registeredName, errors)
+  else drawErrors.delete(registeredName)
   noteDrawErrorsChanged()
 }
 
@@ -49,10 +57,6 @@ export const subscribeDrawErrors = (listener: () => void): (() => void) => {
   }
 }
 
-// ECharts shares `params.context` across one series draw: the first item of a
-// draw clears the type's error, so a throw on any item of it stays reported.
-const PASS = Symbol("chartTypePass")
-
 const hash = (text: string): string => {
   let h = 5381
   for (let i = 0; i < text.length; i++)
@@ -63,32 +67,31 @@ const hash = (text: string): string => {
 const ensureRegistered = (
   bufferId: number,
   type: NotebookChartType,
+  scope: string | undefined,
 ): Compiled => {
-  const registeredName = `nb${bufferId}_${type.name}_${hash(type.renderItem)}`
+  const registeredName = `nb${bufferId}${scope === undefined ? "" : `_${scope}`}_${type.name}_${hash(type.renderItem)}`
   const known = compiled.get(registeredName)
   if (known) return known
   let entry: Compiled
   try {
     const renderItem = compile(type.renderItem)
+    // A series draw starts at its first item (later progressive chunks
+    // continue it): that clears the series' error, and a throw on any item
+    // of the draw sets it.
     const guarded: CustomSeriesRenderItem = (params, api) => {
-      const pass = params.context as Record<symbol, boolean> | undefined
-      let threw: string | null = null
-      let out: ReturnType<CustomSeriesRenderItem>
+      const series = params.seriesIndex
+      if (params.dataIndexInside === 0)
+        setDrawError(registeredName, series, null)
       try {
-        out = renderItem(params, api)
+        return renderItem(params, api)
       } catch (e) {
-        threw = e instanceof Error ? e.message : String(e)
-        out = null as unknown as ReturnType<CustomSeriesRenderItem>
+        setDrawError(
+          registeredName,
+          series,
+          e instanceof Error ? e.message : String(e),
+        )
+        return null as unknown as ReturnType<CustomSeriesRenderItem>
       }
-      if (threw !== null) {
-        setDrawError(registeredName, threw)
-        if (pass) pass[PASS] = true
-      } else if (!pass || !pass[PASS]) {
-        // The first item of a draw, or no draw context: a clean call.
-        if (pass) pass[PASS] = true
-        setDrawError(registeredName, null)
-      }
-      return out
     }
     echarts.registerCustomSeries(registeredName, guarded)
     entry = { registeredName, error: null }
@@ -109,10 +112,14 @@ export type ChartTypeResolution = {
   errors: Map<string, string>
 }
 
-/** The custom series names an option in this notebook may use. */
+/**
+ * The custom series names an option in this notebook may use; `scope` (a
+ * cell) gives a drawing cell names of its own, so its draw errors are its own.
+ */
 export const resolveChartTypes = (
   bufferId: number,
   types: NotebookChartType[] | undefined,
+  scope?: string,
 ): ChartTypeResolution => {
   const renderItems = new Map<string, string>(
     BUILTIN_CUSTOM_SERIES.map((name) => [name, name]),
@@ -127,7 +134,7 @@ export const resolveChartTypes = (
       )
       continue
     }
-    const entry = ensureRegistered(bufferId, type)
+    const entry = ensureRegistered(bufferId, type, scope)
     if (entry.error) errors.set(type.name, entry.error)
     else renderItems.set(type.name, entry.registeredName)
   }
@@ -142,7 +149,8 @@ export const drawErrorsOf = (
   const out = new Map<string, string>()
   for (const name of used) {
     const registered = resolution.renderItems.get(name)
-    const error = registered ? drawErrors.get(registered) : undefined
+    const errors = registered ? drawErrors.get(registered) : undefined
+    const [error] = errors?.values() ?? []
     if (error) out.set(name, error)
   }
   return out

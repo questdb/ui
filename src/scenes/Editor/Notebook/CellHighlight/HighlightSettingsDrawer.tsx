@@ -256,6 +256,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
 
   const serverAccepts = async (
     interactionDraft: InteractionsDraft,
+    onRejected?: () => void,
   ): Promise<boolean> => {
     setSaving(true)
     const server = await serverInteractionErrors(
@@ -271,7 +272,10 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     )
       return false
     setServerProblems(server)
-    if (server) setSection("interactions")
+    if (server) {
+      setSection("interactions")
+      onRejected?.()
+    }
     return server === null
   }
 
@@ -323,7 +327,11 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     }
     if (
       newVariablesInUse(interactionDraft).length > 0 &&
-      !((await serverAccepts(interactionDraft)) && acceptsSaveRef.current)
+      !(
+        (await serverAccepts(interactionDraft, () =>
+          setFocusTabRequest((n) => n + 1),
+        )) && acceptsSaveRef.current
+      )
     )
       return
     onSave({

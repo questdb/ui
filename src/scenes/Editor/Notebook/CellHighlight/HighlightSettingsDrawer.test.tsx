@@ -465,4 +465,43 @@ describe("highlight settings validation", () => {
       expect(screen.getByLabelText("v: threshold 2")).toHaveFocus(),
     )
   })
+
+  it("moves focus to Interactions when the database rejects a new variable on Clear rules", async () => {
+    // Given a click interaction creating a variable the database rejects
+    const validate = vi
+      .spyOn(questClient, "validateQuery")
+      .mockResolvedValue({ error: "table does not exist" } as Awaited<
+        ReturnType<typeof questClient.validateQuery>
+      >)
+    const onSave = vi.fn()
+    renderComponent(<Fixture onSave={onSave} />)
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+    await userEvent.click(
+      await screen.findByRole("tab", { name: "Interactions" }),
+    )
+    fireEvent.click(screen.getByRole("checkbox", { name: /A click sets/ }))
+    await userEvent.click(screen.getByRole("button", { name: /^Variable/ }))
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: "New variable…" }),
+    )
+    fireEvent.change(screen.getByPlaceholderText("e.g. symbol"), {
+      target: { value: "station" },
+    })
+    fireEvent.change(screen.getByPlaceholderText("e.g. 'BTC'"), {
+      target: { value: "(select x from nosuchtable)" },
+    })
+    await userEvent.click(screen.getByRole("tab", { name: "Highlights" }))
+
+    // When the keyboard user presses Clear rules
+    screen.getByRole("button", { name: "Clear rules" }).focus()
+    await userEvent.keyboard("{Enter}")
+
+    // Then nothing is saved and focus is on the tab that shows the problem
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Interactions" })).toHaveFocus(),
+    )
+    expect(validate).toHaveBeenCalled()
+    expect(onSave).not.toHaveBeenCalled()
+    validate.mockRestore()
+  })
 })

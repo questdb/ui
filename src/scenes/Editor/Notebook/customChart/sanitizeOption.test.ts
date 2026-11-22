@@ -60,6 +60,60 @@ describe("sanitizeOption", () => {
       "media[0].option.series[0].renderItem",
     ])
   })
+  it("resolves tones and removes literal colours in map region fills", () => {
+    // Given geo and map region fills
+    const raw = {
+      geo: { map: "world", itemStyle: { areaColor: "$series1:0.3" } },
+      series: [
+        {
+          type: "map",
+          map: "world",
+          itemStyle: { areaColor: "#eeeeee" },
+          emphasis: { itemStyle: { areaColor: "$series2" } },
+        },
+      ],
+    }
+
+    // When
+    const { option, problems } = sanitizeOption(raw, context)
+
+    // Then tones become theme colours and the literal colour is removed
+    const geo = option.geo as { itemStyle: { areaColor: string } }
+    expect(geo.itemStyle.areaColor).toMatch(/^rgba?\(|^#/)
+    expect(geo.itemStyle.areaColor).not.toContain("$")
+    const [map] = option.series as {
+      itemStyle: { areaColor?: string }
+      emphasis: { itemStyle: { areaColor: string } }
+    }[]
+    expect(map.itemStyle.areaColor).toBeUndefined()
+    expect(map.emphasis.itemStyle.areaColor).not.toContain("$")
+    expect(problems.map(({ path }) => path)).toContain(
+      "series[0].itemStyle.areaColor",
+    )
+  })
+
+  it("drops a link set on the option itself, which titles fall back to", () => {
+    // Given links at the option's own level, outside any title
+    const raw = {
+      link: "https://example.invalid/phish",
+      target: "self",
+      title: { text: "Click me" },
+      baseOption: { sublink: "https://example.invalid/sub" },
+      series: [{ type: "bar" }],
+    }
+
+    // When
+    const { option, problems } = sanitizeOption(raw, context)
+
+    // Then no title can open them
+    expect(option).not.toHaveProperty("link")
+    expect(option).not.toHaveProperty("target")
+    expect(option.baseOption).not.toHaveProperty("sublink")
+    expect(problems.map(({ path }) => path)).toEqual(
+      expect.arrayContaining(["link", "target", "baseOption.sublink"]),
+    )
+  })
+
   it("escapes HTML in tooltip templates and drops title links", () => {
     // Given
     const raw = {

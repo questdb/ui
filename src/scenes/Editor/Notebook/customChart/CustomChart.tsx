@@ -129,7 +129,7 @@ export const CustomChart = ({
     optionKey: string
     componentIndex: number
     percent: [number, number]
-    // A partial time window, kept as times: the data refreshes under it.
+    // A partial time window pinned to linked charts' times.
     times?: [number, number]
   } | null>(null)
   // The option whose drawn chart was zoomed: its authored window applies when
@@ -150,17 +150,21 @@ export const CustomChart = ({
           const control = zoomForTarget(controls, target)
           const percent = control?.getPercentRange()
           if (!control || !percent?.every(Number.isFinite)) continue
-          // A full window follows the data domain; only a partial time window
-          // is pinned to the times it shows.
+          // A window held as percentages keeps its share of the refreshed data
+          // and comes back as one. A time window chart sync pinned to its
+          // peers' times comes back as those times.
           const full = percent[0] <= 0 && percent[1] >= 100
-          const times = control.getValueRange("x", 0)
+          const pinned =
+            timeChart &&
+            !full &&
+            control.getRangePropMode?.().every((mode) => mode === "value") ===
+              true
+          const times = pinned ? control.getValueRange("x", 0) : undefined
           lastZoom.current = {
             optionKey,
             componentIndex: control.componentIndex,
             percent,
-            ...(timeChart && !full && times?.every(Number.isFinite)
-              ? { times }
-              : {}),
+            ...(times?.every(Number.isFinite) ? { times } : {}),
           }
           break
         }
@@ -198,8 +202,8 @@ export const CustomChart = ({
     [onInstance, optionKey],
   )
   const resolution = useMemo(
-    () => resolveChartTypes(bufferId, chartTypes),
-    [bufferId, chartTypes],
+    () => resolveChartTypes(bufferId, chartTypes, cellId),
+    [bufferId, chartTypes, cellId],
   )
   const sanitized = useMemo(
     () =>
