@@ -64,6 +64,7 @@ export type ChartContext = {
   colors?: ColorShape
   formats?: ColumnFormats
   clickColumn?: string
+  clickEnabled?: boolean
   preciseTimePointer?: boolean
 }
 
@@ -77,6 +78,7 @@ type XMode = "time" | "value" | "category"
 type SeriesContext = {
   xMode: XMode
   clickColumn?: string
+  clickEnabled?: boolean
   categoryUnion: string[] | null // set only when overlaying series onto a shared category axis; null for a single positional query
 }
 
@@ -115,7 +117,7 @@ const toCategoryLabel = (v: unknown): string => {
 const extractColumnValues = (dataset: Dataset, idx: number): unknown[] =>
   dataset.map((row) => row[idx])
 
-const resolveSeriesRenderSpec = (type: ChartType, hasClickColumn: boolean) => {
+const resolveSeriesRenderSpec = (type: ChartType, clickEnabled: boolean) => {
   const isStep = type === "stepLine" || type === "stepArea"
   const isArea = type === "area" || type === "stepArea"
   const isLineFamily =
@@ -135,7 +137,7 @@ const resolveSeriesRenderSpec = (type: ChartType, hasClickColumn: boolean) => {
     lineExtras.areaStyle = {}
     // ECharts uses a temporary point for hover. It must have a shape to
     // deliver the clicked row, even though regular point symbols stay hidden.
-    lineExtras.symbol = hasClickColumn ? "circle" : "none"
+    lineExtras.symbol = clickEnabled ? "circle" : "none"
     lineExtras.showSymbol = false
   }
   if (isStep) lineExtras.step = "end"
@@ -343,7 +345,10 @@ const buildCartesianSeries = (
 
 const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
   const { seriesType, lineExtras, perfExtras, isStacked } =
-    resolveSeriesRenderSpec(q.type, ctx.clickColumn !== undefined)
+    resolveSeriesRenderSpec(
+      q.type,
+      ctx.clickEnabled === true || ctx.clickColumn !== undefined,
+    )
   const scatter = scatterEncoding(q)
   // A sized or coloured point carries its x in every mode.
   const xValue = (row: Dataset[number], xIdx: number) =>
@@ -1230,6 +1235,7 @@ export const buildEchartsOption = (
     xMode,
     categoryUnion,
     clickColumn: context.clickColumn,
+    clickEnabled: context.clickEnabled,
   }
   const hasCandle = queries.some((q) => q.type === "candlestick")
   const hasBar = queries.some(

@@ -22,7 +22,7 @@ import { RollingNumber } from "./RollingNumber"
 // The query does the work: statement 1 returns the asks and statement 2 the
 // bids, each best level first, with price and size as the first two columns
 // (or the columns named in the visual). A third column, when present, is the
-// running total and also sizes the depth bars.
+// displayed as supplied and can also size the depth bars.
 
 type Level = {
   price: Numeric
@@ -52,21 +52,19 @@ const readSide = (
     return { levels: [], problem: `missing ${roles} column binding.` }
   }
   const clickIdx = columnIndex(rows, clickColumn)
-  let running = 0
   const levels = rows.rows.flatMap((row) => {
     const rawPrice = row[priceIdx]
     if (typeof rawPrice !== "string" && typeof rawPrice !== "number") return []
     const price = asNumeric(rawPrice)
     const size = toNumber(row[sizeIdx])
     if (price === null || size === null) return []
-    running += size
     return [
       {
         price,
         rawPrice,
         size,
         selection: clickColumn === undefined ? rawPrice : row[clickIdx],
-        total: totalIdx >= 0 ? (toNumber(row[totalIdx]) ?? running) : null,
+        total: totalIdx >= 0 ? toNumber(row[totalIdx]) : null,
       },
     ]
   })

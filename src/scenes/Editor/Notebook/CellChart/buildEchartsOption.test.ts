@@ -48,6 +48,12 @@ it.each(["area", "stepArea"] as const)(
       showSymbol: false,
       data: [{ value: 16, columns: { symbol: "ETH" } }],
     })
+    const byName = buildEchartsOption(chart, queries, { clickEnabled: true })
+    expect(seriesList(byName.series)[0]).toMatchObject({
+      symbol: "circle",
+      showSymbol: false,
+      data: [16],
+    })
     const plain = buildEchartsOption(chart, queries)
     expect(seriesList(plain.series)[0]).toMatchObject({
       symbol: "none",

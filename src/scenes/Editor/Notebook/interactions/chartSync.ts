@@ -1,5 +1,11 @@
 import type { EChartsType } from "echarts"
 import type { ChartSync } from "../../../../store/notebook"
+import {
+  isTimeChart,
+  primaryXControls,
+  zoomForTarget,
+  type ZoomTarget,
+} from "../CellChart/liveZoom"
 
 // Links a notebook's time charts: moving over one shows the same time on the
 // others (a crosshair, optionally with their tooltips), and zooming one zooms
@@ -12,29 +18,6 @@ const groups = new Map<number, Set<Member>>()
 const settings = new Map<number, ChartSync>()
 // Set while this module drives charts, so their events are not echoed back.
 let driving = false
-
-const componentOf = (
-  instance: EChartsType,
-  type: "xAxis" | "dataZoom",
-  index: number,
-) => {
-  // The live model exposes generated IDs and the effective timeline/media
-  // options without cloning all series via getOption().
-  const chart = instance as unknown as {
-    getModel():
-      | {
-          getComponent(
-            type: string,
-            index: number,
-          ): { id: string; get(key: "type"): unknown } | undefined
-        }
-      | undefined
-  }
-  return chart.getModel()?.getComponent(type, index)
-}
-
-const isTimeChart = (instance: EChartsType): boolean =>
-  componentOf(instance, "xAxis", 0)?.get("type") === "time"
 
 const xToPixel = (instance: EChartsType, value: number): number | null => {
   try {
@@ -96,36 +79,6 @@ const hideTime = (bufferId: number, source: EChartsType) => {
   })
 }
 
-type Zoom = {
-  id?: string
-  startValue?: number
-  endValue?: number
-  xAxisIndex?: number | number[] | false
-  yAxisIndex?: number | number[] | false
-  radiusAxisIndex?: number | number[] | false
-  angleAxisIndex?: number | number[] | false
-  singleAxisIndex?: number | number[] | false
-  orient?: string
-}
-
-const zoomsOf = (instance: EChartsType): Zoom[] =>
-  (instance.getOption() as { dataZoom?: Zoom[] }).dataZoom ?? []
-
-const controlsPrimaryX = (zoom: Zoom): boolean => {
-  if (zoom.xAxisIndex !== undefined)
-    return Array.isArray(zoom.xAxisIndex)
-      ? zoom.xAxisIndex.includes(0)
-      : zoom.xAxisIndex === 0
-  return (
-    zoom.yAxisIndex === undefined &&
-    zoom.radiusAxisIndex === undefined &&
-    zoom.angleAxisIndex === undefined &&
-    zoom.singleAxisIndex === undefined &&
-    zoom.orient !== "vertical"
-  )
-}
-
-type ZoomTarget = { dataZoomId?: string; dataZoomIndex?: number | number[] }
 const zoomTo = (
   bufferId: number,
   source: EChartsType,
@@ -133,39 +86,23 @@ const zoomTo = (
 ) => {
   const sync = settings.get(bufferId)
   if (!sync?.zoom || !isTimeChart(source)) return
-  const controls = zoomsOf(source)
-  const targets = event?.batch ?? [event]
-  const relevant = targets.some((target) => {
-    if (target?.dataZoomId !== undefined)
-      return controls.some(
-        (zoom, index) =>
-          controlsPrimaryX(zoom) &&
-          (componentOf(source, "dataZoom", index)?.id ?? zoom.id) ===
-            target.dataZoomId,
-      )
-    if (target?.dataZoomIndex !== undefined) {
-      const indexes = Array.isArray(target.dataZoomIndex)
-        ? target.dataZoomIndex
-        : [target.dataZoomIndex]
-      return indexes.some(
-        (index) => controls[index] && controlsPrimaryX(controls[index]),
-      )
-    }
-    return true
-  })
-  if (!relevant) return
-  const zoom = controls.find(controlsPrimaryX)
-  if (zoom?.startValue === undefined || zoom.endValue === undefined) return
+  const controls = primaryXControls(source)
+  const zoom = (event?.batch ?? [event])
+    .map((target) => zoomForTarget(controls, target))
+    .find(Boolean)
+  const range = zoom?.getValueRange("x", 0)
+  if (!range || !range.every(Number.isFinite)) return
+  const [startValue, endValue] = range
   drive(() => {
     for (const { instance } of others(bufferId, source)) {
       if (!isTimeChart(instance)) continue
-      const dataZoomIndex = zoomsOf(instance).findIndex(controlsPrimaryX)
-      if (dataZoomIndex < 0) continue
+      const [peer] = primaryXControls(instance)
+      if (!peer) continue
       instance.dispatchAction({
         type: "dataZoom",
-        dataZoomIndex,
-        startValue: zoom.startValue,
-        endValue: zoom.endValue,
+        dataZoomIndex: peer.componentIndex,
+        startValue,
+        endValue,
       })
     }
   })
@@ -181,6 +118,12 @@ export const joinChartSync = (
   bufferId: number,
   instance: EChartsType,
 ): (() => void) => {
+  let showedTime = false
+  const clearPointer = () => {
+    if (!showedTime) return
+    showedTime = false
+    hideTime(bufferId, instance)
+  }
   const onPointer = (event: unknown) => {
     const sync = settings.get(bufferId)
     if (driving || !sync || sync.crosshair === "off" || !isTimeChart(instance))
@@ -191,12 +134,17 @@ export const joinChartSync = (
       }
     ).axesInfo
     const x = info?.find((a) => a.axisDim === "x" && a.axisIndex === 0)
-    if (typeof x?.value === "number") showTime(bufferId, instance, x.value)
+    if (typeof x?.value === "number") {
+      showedTime = true
+      showTime(bufferId, instance, x.value)
+    } else if (info) {
+      clearPointer()
+    }
   }
   const onOut = () => {
     const sync = settings.get(bufferId)
     if (!driving && sync && sync.crosshair !== "off" && isTimeChart(instance))
-      hideTime(bufferId, instance)
+      clearPointer()
   }
   const onZoom = (event: unknown) => {
     if (!driving)

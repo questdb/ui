@@ -140,6 +140,7 @@ const makeDeps = () => {
       deps.requestResultLoad(cellId)
     }),
     onSnapshotPersisted: vi.fn<[string, SingleQueryResult[]], void>(),
+    isRestoredResultStale: vi.fn(() => false),
   }
   const beginLoadOnRequest = () => {
     deps.requestResultLoad.mockImplementation((cellId: string) => {
@@ -3762,6 +3763,36 @@ describe("CellRefreshEngine", () => {
         "select 1",
       ])
     })
+
+    it.each([100, 400])(
+      "rechecks stale restored grid SQL on reveal after %d ms",
+      async (delay) => {
+        const original = "select @desk"
+        const cell: NotebookCell = {
+          id: "g1",
+          position: 0,
+          value: original,
+          autoRefresh: false,
+          lastRunStatus: "success",
+        }
+        const frame = gridFrame([original])
+        deps.isRestoredResultStale.mockReturnValue(true)
+        harness.beginLoadOnRequest()
+        engine.sync([cell])
+        engine.requestHydrate(cell.id)
+        harness.settleLoad(cell.id, frame)
+        expect(deps.isRestoredResultStale).toHaveBeenCalledWith(frame)
+        expect(deps.executeSingle).not.toHaveBeenCalled()
+
+        engine.sync([
+          { ...cell, value: `${original}; select 42`, result: frame },
+        ])
+        await vi.advanceTimersByTimeAsync(delay)
+        engine.setVisible(cell.id, true)
+        await flushAsync()
+        expect(deps.executeSingle).not.toHaveBeenCalled()
+      },
+    )
 
     it("revives the retained snapshot when the SQL settles back after a collapse", async () => {
       // Given a settled grid whose text collapses mid-edit

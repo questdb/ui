@@ -1,6 +1,7 @@
 import type { EChartsType } from "echarts"
+import { zoomControls, zoomForTarget, type ZoomTarget } from "./liveZoom"
 
-type DataZoomRange = {
+type DataZoomRange = ZoomTarget & {
   start?: number
   end?: number
   startValue?: unknown
@@ -20,14 +21,12 @@ export const zoomWindowForEvent = (
   // Linked charts can receive absolute bounds only. The updated chart model
   // has already converted these to percentages on the peer's own time axis.
   if (first.startValue === undefined && first.endValue === undefined) return
-  const option = instance?.getOption() as
-    | { dataZoom?: DataZoomRange[] }
-    | undefined
-  const zoom = option?.dataZoom?.[0]
-  if (typeof zoom?.start === "number" && typeof zoom.end === "number")
+  const range =
+    instance && zoomForTarget(zoomControls(instance), first)?.getPercentRange()
+  if (range?.every(Number.isFinite))
     return {
-      start: zoom.start,
-      end: zoom.end,
+      start: range[0],
+      end: range[1],
       ...(typeof first.startValue === "number" &&
       typeof first.endValue === "number"
         ? { bounds: { startValue: first.startValue, endValue: first.endValue } }

@@ -255,6 +255,7 @@ export const DrawCanvas: React.FC<Props> = ({
           colors: theme.color,
           formats,
           clickColumn: cell.interactions?.click?.column,
+          clickEnabled: cell.interactions?.click !== undefined,
           preciseTimePointer,
         }),
         cell.interactions,
@@ -467,6 +468,7 @@ export const DrawCanvas: React.FC<Props> = ({
                 option={option}
                 specKey={JSON.stringify([
                   preciseTimePointer,
+                  resolution.chart.horizontal === true,
                   resolution.renderQueries.map(({ percentStack, scatter }) => [
                     percentStack === true,
                     scatter?.size ?? null,

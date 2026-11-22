@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react"
-import type { EChartsOption } from "echarts"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { EChartsOption, EChartsType } from "echarts"
 import styled, { useTheme } from "styled-components"
 import type {
   CellInteractions,
@@ -19,6 +19,12 @@ import { MAP_NAMES, ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
 import { problemsOf } from "./prepareCustomOption"
 import { PaneEmptyState } from "../PaneEmptyState"
 import { chartTypesUsedBy } from "./chartTypeUsage"
+import {
+  isTimeChart,
+  primaryXControls,
+  zoomForTarget,
+} from "../CellChart/liveZoom"
+import type { DataZoomEvent } from "../CellChart/zoomWindow"
 
 const MAPS = new Set<string>(MAP_NAMES)
 
@@ -57,6 +63,50 @@ export const CustomChart = ({
   onInstance,
 }: Props) => {
   const theme = useTheme()
+  const lastTimeZoom = useRef<{
+    option: typeof rawOption
+    range: [number, number]
+  } | null>(null)
+  const chartEvents = useMemo(
+    () => ({
+      ...events,
+      datazoom: (payload: unknown, instance: EChartsType) => {
+        events?.datazoom?.(payload, instance)
+        if (!isTimeChart(instance)) return
+        const event = payload as DataZoomEvent
+        const controls = primaryXControls(instance)
+        const control = (event.batch ?? [event])
+          .map((target) => zoomForTarget(controls, target))
+          .find((candidate) => candidate !== undefined)
+        const range = control?.getValueRange("x", 0)
+        if (range?.every(Number.isFinite))
+          lastTimeZoom.current = { option: rawOption, range }
+      },
+    }),
+    [events, rawOption],
+  )
+  const handleInstance = useCallback(
+    (instance: EChartsType | null) => {
+      const previous = lastTimeZoom.current
+      if (instance && previous?.option === rawOption && isTimeChart(instance)) {
+        const [control] = primaryXControls(instance)
+        if (control) {
+          const [startValue, endValue] = previous.range
+          instance.dispatchAction(
+            {
+              type: "dataZoom",
+              dataZoomIndex: control.componentIndex,
+              startValue,
+              endValue,
+            },
+            { silent: true },
+          )
+        }
+      }
+      onInstance?.(instance)
+    },
+    [onInstance, rawOption],
+  )
   const resolution = useMemo(
     () => resolveChartTypes(bufferId, chartTypes),
     [bufferId, chartTypes],
@@ -172,8 +222,8 @@ export const CustomChart = ({
       zoomable={false}
       fit
       specKey={`${specKey}:${Boolean(interactions?.brush)}`}
-      events={events}
-      onInstance={onInstance}
+      events={chartEvents}
+      onInstance={handleInstance}
     />
   )
 }

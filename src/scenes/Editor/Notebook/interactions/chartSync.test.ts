@@ -11,7 +11,17 @@ const makeChart = (type = "time") => {
   const emit = (event: string, payload?: unknown) =>
     handlers.get(event)?.(payload)
   const chart = {
-    getModel: () => ({ getComponent: () => ({ get: () => type }) }),
+    getModel: () => ({
+      getComponent: () => ({ get: () => type }),
+      queryComponents: () => [
+        { componentIndex: 0, getAxisModel: () => undefined },
+        {
+          componentIndex: 1,
+          getAxisModel: () => ({}),
+          getValueRange: () => [0, 1000],
+        },
+      ],
+    }),
     getOption: vi.fn(() => ({
       xAxis: [{ type }],
       dataZoom: [
@@ -205,7 +215,7 @@ describe("notebook chart sync", () => {
       x: 42,
       y: 100,
     })
-    source.emit("globalout")
+    source.emit("updateAxisPointer", { axesInfo: [] })
     expect(peer.dispatchAction.mock.calls.slice(-2)).toEqual([
       [{ type: "hideTip" }],
       [{ type: "updateAxisPointer", currTrigger: "leave" }],
@@ -255,6 +265,8 @@ describe("notebook chart sync", () => {
       startValue: 0,
       endValue: 1_000,
     })
+    expect(source.getOption).not.toHaveBeenCalled()
+    expect(peer.getOption).not.toHaveBeenCalled()
     expect(source.dispatchAction).not.toHaveBeenCalled()
 
     leave()

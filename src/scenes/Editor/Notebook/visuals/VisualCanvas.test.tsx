@@ -202,6 +202,48 @@ describe("VisualCanvas", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument()
   })
 
+  it("keeps an explicit missing Order book total distinct from size and zero", () => {
+    const columns = ["price", "size", "total"].map((name) => ({
+      name,
+      type: "LONG",
+    }))
+    const { container } = renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "orderBook" }}
+        statements={[
+          {
+            columns,
+            rows: [
+              [101, 7, 42],
+              [102, 11, null],
+            ],
+          },
+          { columns, rows: [[99, 5, 0]] },
+        ]}
+      />,
+    )
+    const rows = Array.from(
+      container.querySelectorAll(
+        '[data-hook="order-book-ask"], [data-hook="order-book-bid"]',
+      ),
+    )
+    const values = Object.fromEntries(
+      rows.map((row) => {
+        const cells = Array.from(
+          row.querySelectorAll("span"),
+          (cell) => cell.textContent,
+        )
+        return [cells[0], cells.slice(1)]
+      }),
+    )
+    expect(values).toEqual({
+      "101": ["7", "42"],
+      "102": ["11", "—"],
+      "99": ["5", "0"],
+    })
+  })
+
   it("reports an incompatible bid schema without hiding valid asks", () => {
     // Given both queries succeeded, but only asks returned the bound size alias
     const price = { name: "price", type: "DOUBLE" }

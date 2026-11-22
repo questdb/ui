@@ -172,6 +172,14 @@ const GridCell = React.memo(function GridCell({
         : toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
   const tone = loaded ? toneOf(rawValue, format) : undefined
   const toneCss = tone ? toneColor(tone, theme.color) : undefined
+  const textTone =
+    format?.signTone && tone
+      ? tone === "positive"
+        ? theme.color.dataPositive
+        : tone === "negative"
+          ? theme.color.dataNegative
+          : toneCss
+      : toneCss
   const highlightMode =
     highlight === undefined
       ? undefined
@@ -242,7 +250,7 @@ const GridCell = React.memo(function GridCell({
         data-hook="grid-cell-text"
         style={{
           textAlign: align,
-          ...(toneCss ? { color: toneCss } : {}),
+          ...(textTone ? { color: textTone } : {}),
           ...(format?.visual ? { position: "relative", zIndex: 1 } : {}),
         }}
       >

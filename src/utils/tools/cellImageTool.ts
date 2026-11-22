@@ -4,7 +4,10 @@ import { NotebookToolError } from "../notebooks/notebookToolError"
 import type { RenderReport } from "../../scenes/Editor/Notebook/renderReports"
 import { renderReportWire } from "../../scenes/Editor/Notebook/renderReports"
 import { HTML_VISUAL_TYPES } from "../../scenes/Editor/Notebook/visuals/visualCatalog"
-import type { CellChartPicture } from "../../scenes/Editor/Notebook/cellChartImages"
+import {
+  waitForCellDraw,
+  type CellChartPicture,
+} from "../../scenes/Editor/Notebook/cellChartImages"
 
 // get_cell_image: a PNG of a draw cell's chart as it is on screen, with the
 // cell's render report. The notebook must be open in the console; a cell
@@ -67,15 +70,41 @@ export const cellImage = async (
     return r ? { render_report: renderReportWire(r) } : {}
   }
   const visual = cell.chartConfig?.visual
-  if (visual && HTML_VISUAL_TYPES.has(visual.type))
+  if (visual && HTML_VISUAL_TYPES.has(visual.type)) {
+    let current = deps.reportOf(bufferId, cellId)
+    if (!current) {
+      const view = await deps.liveView(bufferId)
+      if (
+        view &&
+        (view.maximizedCellId === null || view.maximizedCellId === cellId)
+      ) {
+        const restore = deps.bringIntoView(cellId)
+        try {
+          current =
+            (await waitForCellDraw(
+              () => deps.reportOf(bufferId, cellId),
+              4000,
+              signal,
+            )) ?? undefined
+        } finally {
+          restore()
+        }
+      }
+    }
     return {
       body: {
         picture: false,
-        reason: `The ${visual.type} component is drawn in HTML, not as a chart, so there is no picture. Its render_report says what it drew.`,
-        ...report(),
+        reason: `The ${visual.type} component is drawn in HTML, not as a chart, so there is no picture.`,
+        ...(current
+          ? { render_report: renderReportWire(current) }
+          : {
+              report_status:
+                "The component has not reported a draw in the console.",
+            }),
       },
       picture: null,
     }
+  }
   const live = await deps.liveView(bufferId)
   if (!live)
     throw new NotebookToolError(

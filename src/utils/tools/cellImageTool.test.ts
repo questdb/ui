@@ -69,6 +69,40 @@ describe("get_cell_image", () => {
     expect(result.body.picture).toBe(true)
   })
 
+  it("reveals a cold HTML visual, returns its report and restores the viewport", async () => {
+    const restore = vi.fn()
+    let revealed = false
+    const d = deps({
+      readCells: () =>
+        Promise.resolve([
+          drawCell({
+            chartConfig: {
+              xColumn: null,
+              queries: [],
+              visual: { type: "stat" },
+            },
+          }),
+        ]),
+      reportOf: () =>
+        revealed
+          ? { ...report, kind: "visual", drawn: { tiles: 1 } }
+          : undefined,
+      bringIntoView: vi.fn(() => {
+        revealed = true
+        return restore
+      }),
+      waitForChart: vi.fn(),
+    })
+    const result = await cellImage(1, "c", d)
+    expect(d.bringIntoView).toHaveBeenCalledWith("c")
+    expect(d.waitForChart).not.toHaveBeenCalled()
+    expect(restore).toHaveBeenCalledOnce()
+    expect(result.body).toMatchObject({
+      picture: false,
+      render_report: { kind: "visual", drawn: { tiles: 1 } },
+    })
+  })
+
   it("says why there is no picture", async () => {
     // Given / When
     const html = await cellImage(

@@ -1082,13 +1082,22 @@ export class CellRefreshEngine {
       entry.checkedRestoredBindings = true
       // In particular, a Run snapshot may represent just one of several
       // statements or an arbitrary selection. Do not execute untouched SQL.
+      const effectiveQueries =
+        entry.pendingSql === null
+          ? queries
+          : getQueriesFromText(entry.pendingSql)
       if (
-        coversEditorStatements(current, queries) &&
+        coversEditorStatements(current, effectiveQueries) &&
         deps.isRestoredResultStale?.(current)
       ) {
-        if (entry.kind === "grid" && this.isRunPending(entry.cellId))
-          this.refreshAfterRun.add(entry.cellId)
-        else this.forceRefresh(entry)
+        if (entry.kind === "grid") {
+          // A later reveal must validate the frame again; an ordinary manual
+          // refresh may promote edited SQL and is not gated by coverage.
+          entry.pendingGridVariableRefresh = true
+          this.ensureGridData(entry)
+        } else {
+          this.forceRefresh(entry)
+        }
         return
       }
     }

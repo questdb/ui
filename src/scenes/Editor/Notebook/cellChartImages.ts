@@ -42,20 +42,28 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener("abort", onAbort, { once: true })
   })
 
+export const waitForCellDraw = async <T>(
+  read: () => T | null | undefined,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<T | null> => {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    signal?.throwIfAborted()
+    const value = read()
+    if (value != null || Date.now() >= deadline) return value ?? null
+    await sleep(100, signal)
+  }
+}
+
 /** Waits up to `timeoutMs` for a cell's chart to be drawn. */
-export const waitForCellChart = async (
+export const waitForCellChart = (
   bufferId: number,
   cellId: string,
   timeoutMs: number,
   signal?: AbortSignal,
-): Promise<EChartsType | null> => {
-  const deadline = Date.now() + timeoutMs
-  for (;;) {
-    const instance = cellChartInstance(bufferId, cellId)
-    if (instance || Date.now() >= deadline) return instance
-    await sleep(100, signal)
-  }
-}
+) =>
+  waitForCellDraw(() => cellChartInstance(bufferId, cellId), timeoutMs, signal)
 
 // Agents read pictures, not pixels: 1600 px on the longest side is plenty.
 const MAX_PICTURE_SIDE = 1600
