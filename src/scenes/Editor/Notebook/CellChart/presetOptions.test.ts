@@ -431,6 +431,72 @@ describe("preset options", () => {
     }
   })
 
+  it("clears bounds when Events replaces a threshold helper on a mounted axis", () => {
+    const series = query({
+      columns: [col("ts", "TIMESTAMP"), col("volume", "DOUBLE")],
+      dataset: [
+        ["2026-01-01T00:00:00Z", 10],
+        ["2026-01-01T00:01:00Z", 20],
+      ],
+      xColumn: "ts",
+      yColumns: ["volume"],
+    })
+    const context = {
+      formats: {
+        volume: { thresholds: [{ value: 1000, tone: "warning" as const }] },
+      },
+    }
+    const chart = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 640,
+      height: 360,
+    })
+    const extent = () =>
+      (
+        chart as unknown as {
+          getModel: () => {
+            getComponent: (axis: string) => {
+              axis: { scale: { getExtent: () => number[] } }
+            }
+          }
+        }
+      )
+        .getModel()
+        .getComponent("yAxis")
+        .axis.scale.getExtent()
+    try {
+      chart.setOption(
+        buildEchartsOption(
+          { xColumn: "ts", thresholds: "lines" },
+          [series],
+          context,
+        ),
+      )
+      expect(extent()[1]).toBeGreaterThanOrEqual(1000)
+      chart.setOption(
+        buildEchartsOption(
+          {
+            xColumn: "ts",
+            events: [
+              {
+                index: 1,
+                columns: [col("ts", "TIMESTAMP"), col("note", "STRING")],
+                dataset: [["2026-01-01T00:00:30Z", "Deploy"]],
+                columnsRole: {},
+              },
+            ],
+          },
+          [series],
+          context,
+        ),
+      )
+      expect(extent()).toEqual([10, 20])
+    } finally {
+      chart.dispose()
+    }
+  })
+
   it("builds threshold bands for 160,000 points without spreading them as arguments", () => {
     const names = Array.from({ length: 16 }, (_, i) => `metric${i}`)
     const dataset = Array.from({ length: 10_000 }, (_, i) => [

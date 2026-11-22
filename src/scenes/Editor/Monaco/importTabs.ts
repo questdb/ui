@@ -504,17 +504,36 @@ export const createBufferContentKey = (
   >,
 ): string => {
   if (buffer.notebookViewState) {
+    const { cells, settings } = buffer.notebookViewState
     const cellValues =
-      buffer.notebookViewState.cells?.map((cell) => {
-        const config = cell.type === "markdown" ? undefined : cell.chartConfig
-        if (!config?.visual && !config?.custom) return cell.value
+      cells?.map((cell) => {
+        if (cell.type === "markdown") return cell.value
+        const { chartConfig: config } = cell
+        const formats =
+          cell.formats && Object.keys(cell.formats).length
+            ? cell.formats
+            : undefined
+        if (!config?.visual && !config?.custom && !formats) return cell.value
         return {
           value: cell.value,
-          visual: config.visual,
-          custom: config.custom,
+          visual: config?.visual,
+          custom: config?.custom,
+          formats,
         }
       }) ?? []
-    return `${buffer.label}|${JSON.stringify(cellValues, canonicalSettings)}`
+    // Imports intentionally reset local permission to run renderItem code.
+    // That approval is not part of the saved notebook's content.
+    const chartTypes = settings?.chartTypes
+      ?.map(({ name, renderItem, description }) => ({
+        name,
+        renderItem,
+        description,
+      }))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    const identity = chartTypes?.length
+      ? { cells: cellValues, chartTypes }
+      : cellValues
+    return `${buffer.label}|${JSON.stringify(identity, canonicalSettings)}`
   }
   if (buffer.metricsViewState) {
     return `${buffer.label}|${JSON.stringify(buffer.metricsViewState)}`

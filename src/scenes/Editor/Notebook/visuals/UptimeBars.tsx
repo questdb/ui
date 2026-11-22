@@ -196,6 +196,16 @@ const severityColor = (
   }
 }
 
+const severityTextColor = (
+  severity: Severity | null,
+  colors: ColorShape,
+): string =>
+  severity === "bad"
+    ? colors.dataNegative
+    : severity === "good"
+      ? colors.dataPositive
+      : colors.contentPrimary
+
 const capitalise = (text: string) =>
   text.length > 0 ? text[0].toUpperCase() + text.slice(1) : text
 
@@ -366,13 +376,10 @@ export const UptimeBars = ({
       <Summary>
         <Overall
           $color={overall.color}
-          $labelColor={
-            counts.bad > 0
-              ? colors.dataNegative
-              : counts.warning > 0
-                ? colors.contentPrimary
-                : colors.dataPositive
-          }
+          $labelColor={severityTextColor(
+            counts.bad > 0 ? "bad" : counts.warning > 0 ? "warning" : "good",
+            colors,
+          )}
         >
           {overall.text}
         </Overall>
@@ -429,7 +436,10 @@ export const UptimeBars = ({
               <Head>
                 <Name>{lane}</Name>
                 <Current
-                  $color={severityColor(severityOf(state, severity), colors)}
+                  $color={severityTextColor(
+                    severityOf(state, severity),
+                    colors,
+                  )}
                 >
                   {capitalise(state)}
                 </Current>

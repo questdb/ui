@@ -3932,6 +3932,39 @@ describe("CellRefreshEngine", () => {
       })
     })
 
+    it("refreshes siblings without replaying a statement stopped in the foreground", async () => {
+      const queries = ["select @desk as a", "select @desk as b"]
+      const grid = gridCell("g1", queries.join("; "), queries, false)
+      syncOnScreen([grid])
+      await flushAsync()
+      engine.noteRunStarted("g1")
+      engine.refreshWhere(() => true)
+      const frame = cellResults.get("g1")
+      if (!frame) throw new Error("Expected a result frame")
+      const current = {
+        ...frame,
+        results: frame.results.map((result, index) =>
+          index === 0
+            ? {
+                type: "cancelled" as const,
+                query: result.query,
+                reason: "user" as const,
+              }
+            : result,
+        ),
+      }
+      cellResults.set("g1", current)
+      engine.noteRunFinished("g1", { ...grid, result: current })
+      await flushAsync()
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        queries[1],
+      ])
+      expect(cellResults.get("g1")?.results[0]).toMatchObject({
+        type: "cancelled",
+        reason: "user",
+      })
+    })
+
     it("refreshes a byte-capped result when its statement identities still match", async () => {
       const sql = "select @desk"
       const full = gridCell("g1", sql, [sql], false)

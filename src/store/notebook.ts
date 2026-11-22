@@ -112,6 +112,7 @@ export type ErrorQueryResult = SessionFailure & {
   type: "error"
   query: string
   error: string
+  stoppedByUser?: true
   fetchedAt?: number
 }
 

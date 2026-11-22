@@ -391,6 +391,31 @@ describe("volumeProfileOption", () => {
     expect(result.option).toBeNull()
     expect(result.problems[0]?.message).toContain('column "sell" not found')
   })
+  it.each([{ value: "volume" }, { buy: "volume" }])(
+    "ranks exact LONG volumes for point of control (%j)",
+    (columns) => {
+      const result = volumeProfileOption({
+        ...common,
+        visual: { type: "volumeProfile", columns },
+        statements: [
+          rows(
+            [
+              ["price", "INT"],
+              ["volume", "LONG"],
+            ],
+            [
+              [101, "9007199254740992"],
+              [100, "9007199254740993"],
+            ],
+          ),
+        ],
+      })
+      expect(result.drawn.pointOfControl).toBe("100")
+      expect(result.option?.series).toMatchObject([
+        { markLine: { data: [{ yAxis: 1 }] } },
+      ])
+    },
+  )
   it("keeps raw price metadata in split and single volume bars", () => {
     const statements = [
       rows(
@@ -442,6 +467,37 @@ describe("volumeProfileOption", () => {
 })
 
 describe("sankeyOption", () => {
+  it.each([2000, 2001])(
+    "keeps Sankey layout bounded for %d complete links",
+    (count) => {
+      const built = sankeyOption({
+        visual: { type: "sankey" },
+        colors: lightColors,
+        formats: {},
+        statements: [
+          rows(
+            [
+              ["source", "SYMBOL"],
+              ["target", "SYMBOL"],
+              ["weight", "INT"],
+            ],
+            Array.from({ length: count }, (_, i) => [
+              `from-${i % 50}`,
+              `to-${Math.floor(i / 50)}`,
+              1,
+            ]),
+          ),
+        ],
+      })
+      if (count === 2000) {
+        expect(built.drawn.links).toBe(count)
+        expect(built.option).not.toBeNull()
+      } else {
+        expect(built.option).toBeNull()
+        expect(built.problems[0].message).toContain("limited to 2,000 links")
+      }
+    },
+  )
   it("reports cycles instead of handing an unsupported flow to ECharts", () => {
     const option = sankeyOption({
       visual: { type: "sankey" },

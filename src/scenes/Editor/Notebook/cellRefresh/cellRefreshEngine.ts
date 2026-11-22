@@ -1353,11 +1353,30 @@ export class CellRefreshEngine {
       this.setState(entry, { settledKey: queriesKey })
       return
     }
+    const cancelledSlots = new Set<StatementKey>()
+    if (entry.kind === "grid" && entry.variableRefreshInFlight) {
+      const frame = this.getDeps().getCellResult(entry.cellId)
+      if (coversEditorStatements(frame, queries)) {
+        const keys = statementKeysFor(queries)
+        frame.results.forEach((result, index) => {
+          if (
+            (result.type === "cancelled" && result.reason === "user") ||
+            (result.type === "error" && result.stoppedByUser)
+          )
+            cancelledSlots.add(keys[index])
+        })
+      }
+      if (cancelledSlots.size === queries.length) {
+        entry.variableRefreshInFlight = false
+        entry.manualRefreshInFlight = false
+        return
+      }
+    }
     const ac = new AbortController()
     entry.inFlight = ac
     this.setState(entry, {
       fetching: true,
-      cancelledSlots: new Set(),
+      cancelledSlots,
       fetchCancelled: false,
     })
     const start = performance.now()

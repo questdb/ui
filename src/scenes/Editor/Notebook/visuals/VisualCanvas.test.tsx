@@ -31,7 +31,7 @@ describe("VisualCanvas", () => {
     isFocused: true,
   }
 
-  it("uses the readable positive text color for the Light uptime summary", () => {
+  it("uses the readable positive text color for the Light uptime summary and lane", () => {
     renderComponent(
       <ThemeProvider theme={lightTheme}>
         <VisualCanvas
@@ -55,9 +55,11 @@ describe("VisualCanvas", () => {
     )
     const expected = document.createElement("span")
     expected.style.color = lightTheme.color.dataPositive
-    expect(getComputedStyle(screen.getByText("All operational")).color).toBe(
-      expected.style.color,
-    )
+    for (const label of ["All operational", "Up"]) {
+      expect(getComputedStyle(screen.getByText(label)).color).toBe(
+        expected.style.color,
+      )
+    }
   })
 
   it("mounts only nearby Bullet bars but still reports all rows", () => {

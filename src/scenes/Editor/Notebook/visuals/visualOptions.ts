@@ -701,6 +701,9 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
   }
 }
 
+// ECharts' main-thread Sankey layout searches all links for each edge.
+const MAX_SANKEY_LINKS = 2_000
+
 export const sankeyOption = (ctx: VisualContext): VisualBuild => {
   if (ctx.statements[0]?.partial)
     return missing(
@@ -708,6 +711,10 @@ export const sankeyOption = (ctx: VisualContext): VisualBuild => {
     )
   const e = edges(ctx)
   if (typeof e === "string") return missing(e)
+  if (e.links.length > MAX_SANKEY_LINKS)
+    return missing(
+      `Sankey is limited to ${MAX_SANKEY_LINKS.toLocaleString("en-US")} links to keep layout responsive. Aggregate flows in SQL or choose a graph visual.`,
+    )
   // Labels sit right of their node, except on the last column, where they
   // would run off the chart.
   const depth = new Map<string, number>()
@@ -1228,11 +1235,34 @@ export const volumeProfileOption = ({
     const sell = sellIdx >= 0 ? toNumber(r[sellIdx]) : null
     return buy === null && sell === null ? null : (buy ?? 0) + (sell ?? 0)
   })
+  // Keep exact integer weights for picking the winner even though ECharts
+  // needs floating-point values to lay out the bars.
+  const indices = (valueIdx >= 0 ? [valueIdx] : [buyIdx, sellIdx]).filter(
+    (i) => i >= 0,
+  )
+  const integerVolumes = indices.every((i) =>
+    /^(BYTE|SHORT|INT|LONG)$/.test(rows.columns[i].type.toUpperCase()),
+  )
+  const exactTotal = (row: StatementRows["rows"][number]): bigint | null => {
+    let sum = BigInt(0)
+    for (const i of indices) {
+      const raw = row[i]
+      if (raw == null) continue
+      if (typeof raw === "number" && Number.isSafeInteger(raw))
+        sum += BigInt(raw)
+      else if (typeof raw === "string" && /^-?\d{1,19}$/.test(raw))
+        sum += BigInt(raw)
+      else return null
+    }
+    return sum
+  }
   let poc = -1
-  let highest = -Infinity
+  let highest: number | bigint = -Infinity
   total.forEach((value, index) => {
-    if (value === null || value <= highest) return
-    highest = value
+    if (value === null) return
+    const rank = integerVolumes ? (exactTotal(sorted[index]) ?? value) : value
+    if (rank <= highest) return
+    highest = rank
     poc = index
   })
   const clickIdx = columnIndex(rows, clickColumn)

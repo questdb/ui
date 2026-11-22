@@ -986,10 +986,9 @@ export const NotebookProvider: React.FC<{
         })
     },
     cancelCell,
-    cancelQuery: (cellId, index) => {
-      cellRefreshEngineRef.current?.discardVariableRefresh(cellId)
-      execution.cancelQuery(cellId, index)
-    },
+    // A statement Stop must not discard the pending refresh of its siblings.
+    // The engine keeps the stopped slot out of the variable refresh.
+    cancelQuery: execution.cancelQuery,
     setActiveStatement: execution.setActiveStatement,
     setCellMode,
     clearCellResult,

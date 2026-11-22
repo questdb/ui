@@ -1473,15 +1473,17 @@ export const buildEchartsOption = (
   // Thresholds stay in view even when every value is below them.
   const valueAxes = (
     Array.isArray(formattedYAxis) ? formattedYAxis : [formattedYAxis]
-  ).map((a, i) =>
-    i === 0 && thresholdSeries && thresholdFormat?.thresholds
-      ? {
-          ...(a as object),
-          dataMin: Math.min(...thresholdFormat.thresholds.map((t) => t.value)),
-          dataMax: Math.max(...thresholdFormat.thresholds.map((t) => t.value)),
-        }
-      : a,
-  )
+  ).map((a, i) => {
+    if (i !== 0) return a
+    const values = thresholdSeries && thresholdFormat?.thresholds
+    // The same ECharts axis may survive a save. Explicitly clear its old
+    // threshold extent; an omitted option is retained by setOption's merge.
+    return {
+      ...(a as object),
+      dataMin: values ? Math.min(...values.map((t) => t.value)) : null,
+      dataMax: values ? Math.max(...values.map((t) => t.value)) : null,
+    }
+  })
   const yAxisOut = Array.isArray(formattedYAxis) ? valueAxes : valueAxes[0]
 
   const colorScales = colorScalesOf(series, context)

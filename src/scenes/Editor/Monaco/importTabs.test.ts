@@ -1617,6 +1617,55 @@ describe("deduplication", () => {
         key({ columns: { value: "total" }, type: "stat" }),
       )
     })
+    it("distinguishes saved renderItem source but not local approval", () => {
+      const key = (renderItem: string, allowed: boolean) =>
+        createBufferContentKey({
+          label: "Notebook",
+          value: "",
+          notebookViewState: {
+            cells: [],
+            settings: {
+              chartTypes: [{ name: "glyph", renderItem, allowed }],
+            },
+          },
+        })
+      expect(key("function draw() { return null }", true)).toEqual(
+        key("function draw() { return null }", false),
+      )
+      expect(key("function draw() { return null }", true)).not.toEqual(
+        key("function draw() { return undefined }", false),
+      )
+    })
+
+    it("distinguishes a gauge whose column threshold changed", () => {
+      const key = (threshold: number) =>
+        createBufferContentKey({
+          label: "Notebook",
+          value: "",
+          notebookViewState: {
+            cells: [
+              {
+                id: "a",
+                position: 0,
+                value: "select 85 as load",
+                mode: "draw",
+                chartConfig: {
+                  xColumn: null,
+                  queries: [],
+                  visual: { type: "gauge" },
+                },
+                formats: {
+                  load: {
+                    thresholds: [{ value: threshold, tone: "negative" }],
+                  },
+                },
+              },
+            ],
+          },
+        })
+      expect(key(80)).not.toEqual(key(90))
+    })
+
     it("creates key from label and value for editor tabs", () => {
       const buffer = { label: "Tab1", value: "SELECT 1" }
       expect(createBufferContentKey(buffer)).toBe("Tab1|SELECT 1")
