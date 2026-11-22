@@ -55,6 +55,7 @@ import {
   localAgentDisplayName,
 } from "../localAgent/localAgentModel"
 import { runLocalAgentTurn } from "../localAgent/runLocalAgentTurn"
+import { noticeTranscript } from "../localAgent/noticeTranscript"
 import { localAgentPreferencesOf } from "../localAgent/localAgentSettings"
 import {
   priorConversationFor,
@@ -93,8 +94,11 @@ const withPriorConversation = (
   message: string,
   history: ConversationMessage[],
   sessionId: string | undefined,
+  currentSQL: string | undefined,
 ): string => {
-  const prior = sessionId ? priorConversationFor(history, sessionId) : null
+  const prior = sessionId
+    ? priorConversationFor(history, sessionId, currentSQL)
+    : null
   return prior ? `${prior}\n\n${message}` : message
 }
 
@@ -520,6 +524,19 @@ async function generateChatTitleIfNeeded(
 // started; only the latest flow may end them.
 let latestFlow = 0
 
+export const localAgentDispatchError = (
+  model: string | null,
+  channel: LocalAgentChannel | null,
+): string | null => {
+  if (model === null || !isLocalAgentModel(model)) return null
+  if (!isCurrentLocalAgentChannel(channel)) {
+    return "The selected local agent is no longer connected."
+  }
+  return channel.isTransportReady()
+    ? null
+    : "Waiting for the local agent bridge. Try again after it reconnects."
+}
+
 export async function executeAIFlow(
   config: AIFlowConfig,
   callbacks: AIFlowCallbacks,
@@ -544,9 +561,7 @@ export async function executeAIFlow(
   const dispatchError = () => {
     if (abortSignal?.aborted || config.canDispatch?.() === false)
       return "The request is no longer active."
-    if (usesLocalAgent && !isCurrentLocalAgentChannel(localAgentChannel))
-      return "The selected local agent is no longer connected."
-    return null
+    return localAgentDispatchError(settings.model, localAgentChannel)
   }
   const initialError = dispatchError()
   if (initialError) return { success: false, error: initialError }
@@ -575,8 +590,10 @@ export async function executeAIFlow(
     }
   }
 
-  callbacks.rotateUserActionDigest?.(conversationId)
+  const isAgentCommand = config.type === "chat" && config.agentCommand === true
+  if (!isAgentCommand) callbacks.rotateUserActionDigest?.(conversationId)
   const flow = ++latestFlow
+  const ownsLiveFlow = () => flow === latestFlow && !abortSignal?.aborted
   callbacks.addMessage({
     role: "user",
     content: userMsg.content,
@@ -655,11 +672,23 @@ export async function executeAIFlow(
   let latestOperationHistory: OperationHistory = []
   let stepsBeforeFirstAttempt: number | null = null
 
+  // Notices decorate this turn's saved timeline, not the shared status or
+  // the reply Markdown. If the same step keeps streaming, render its full
+  // Markdown before the notice instead of splitting an open fence.
+  const notices: Array<{ after: number; entry: OperationHistory[number] }> = []
+  const publishHistory = () => {
+    const history = [...latestOperationHistory]
+    for (let i = notices.length - 1; i >= 0; i--) {
+      const { after, entry } = notices[i]
+      history.splice(after, 0, entry)
+    }
+    callbacks.updateMessage(conversationId, anchorMessageId, {
+      operationHistory: history,
+    })
+  }
   const handleStatusUpdate = (history: OperationHistory) => {
     latestOperationHistory = history
-    callbacks.updateMessage(conversationId, anchorMessageId, {
-      operationHistory: [...history],
-    })
+    publishHistory()
   }
 
   // The status belongs to the running answer. A stopped flow may still wind
@@ -670,8 +699,7 @@ export async function executeAIFlow(
   ) => {
     // A provider can clear its own status before the turn is finished. Keep
     // ownership until this flow settles; only the latest flow can release it.
-    if (nextStatus === null || flow !== latestFlow || abortSignal?.aborted)
-      return
+    if (nextStatus === null || !ownsLiveFlow()) return
     callbacks.setStatus(nextStatus, args, handleStatusUpdate)
   }
 
@@ -716,9 +744,7 @@ export async function executeAIFlow(
     }
     if (hasPendingOperationHistoryUpdate) {
       hasPendingOperationHistoryUpdate = false
-      callbacks.updateMessage(conversationId, anchorMessageId, {
-        operationHistory: [...latestOperationHistory],
-      })
+      publishHistory()
     }
   }
 
@@ -768,7 +794,7 @@ export async function executeAIFlow(
   const streamingCallback: StreamingCallback = {
     // The agent's context fills as it works; the composer shows it live.
     onContextUsage: (contextUsage) => {
-      if (abortSignal?.aborted) return
+      if (!ownsLiveFlow()) return
       callbacks.updateMessage(conversationId, anchorMessageId, { contextUsage })
     },
     onBeforeStream: () => {
@@ -819,13 +845,24 @@ export async function executeAIFlow(
         tool_calls: undefined,
       })
     },
+    onNotice: (notice) => {
+      notices.push({
+        after: dropTransientTail(latestOperationHistory).length,
+        entry: {
+          type: AIOperationStatus.GeneratingResponse,
+          content: noticeTranscript(notice),
+          timestamp: Date.now(),
+        },
+      })
+      publishHistory()
+    },
     onTextChunk: (chunk, { standalone = false } = {}) => {
+      if (!ownsLiveFlow()) return
       if (contentTimestamp === 0) contentTimestamp = Date.now()
       if (standalone || !generatingResponseEmitted) {
         generatingResponseEmitted = !standalone
         thinkingStatusEmitted = false
-        // A notice gets its own history entry and Markdown parse, without
-        // changing the saved reply or trying to repair the agent's Markdown.
+        // An answered question gets its own history entry and Markdown parse.
         setStatusWithHistory(
           AIOperationStatus.GeneratingResponse,
           standalone
@@ -850,6 +887,7 @@ export async function executeAIFlow(
       }
     },
     onThinkingChunk: (chunk: string) => {
+      if (!ownsLiveFlow()) return
       if (reasoningTimestamp === 0) reasoningTimestamp = Date.now()
       if (!thinkingStatusEmitted) {
         thinkingStatusEmitted = true
@@ -961,7 +999,6 @@ export async function executeAIFlow(
   }
 
   setStatusWithHistory(AIOperationStatus.Processing)
-  const isAgentCommand = config.type === "chat" && config.agentCommand === true
 
   try {
     const conversationHistory =
@@ -997,6 +1034,9 @@ export async function executeAIFlow(
                   userMsg.content,
                   conversationHistory,
                   localAgentSessionId,
+                  config.type === "chat" && !config.isFirstMessage
+                    ? config.currentSQL
+                    : undefined,
                 ),
             images: config.type === "chat" ? config.images : undefined,
             notebookRead: isAgentCommand

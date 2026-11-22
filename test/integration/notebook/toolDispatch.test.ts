@@ -2004,6 +2004,57 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.chartConfig?.queries[1]).toBeNull()
   })
 
+  it.each([{ rows: [] }, { rows: [[1000, "west", 2]] }])(
+    "rejects known nonnumeric heatmap Value with a settled result (%#)",
+    async ({ rows }) => {
+      const query = "SELECT ts, site, reading FROM samples"
+      const { state } = mountLive(1, [
+        cell("c", query, {
+          result: {
+            timestamp: 0,
+            activeResultIndex: 0,
+            results: [
+              {
+                type: "dql",
+                query,
+                dataset: rows,
+                count: rows.length,
+                columns: [
+                  { name: "ts", type: "TIMESTAMP" },
+                  { name: "site", type: "SYMBOL" },
+                  { name: "reading", type: "DOUBLE" },
+                ],
+              },
+            ],
+          },
+        }),
+      ])
+      const send = (value: string) =>
+        dispatchTool(
+          "set_cell_chart_config",
+          {
+            buffer_id: 1,
+            cell_id: "c",
+            x_column: "ts",
+            queries: [
+              {
+                type: "heatmap",
+                y_columns: [value],
+                partition_by_column: "site",
+              },
+            ],
+          },
+          makeClient(),
+          noopStatus,
+          ALL_GRANTED,
+          dqlValidator,
+        )
+      expect((await send("site")).content).toContain("numeric value column")
+      expect(cellById(state, "c")?.chartConfig).toBeUndefined()
+      expect((await send("reading")).is_error).toBeFalsy()
+    },
+  )
+
   it.each([
     { xType: "SYMBOL", resultQuery: "SELECT b FROM t", rejected: false },
     { xType: "TIMESTAMP", resultQuery: "SELECT b FROM t", rejected: true },

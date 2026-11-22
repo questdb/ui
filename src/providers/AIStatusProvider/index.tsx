@@ -331,7 +331,11 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           JSON.stringify(lastEntry.args ?? null) ===
             JSON.stringify(normalizedArgs)
 
-        if (isDuplicateConsecutiveStatus) {
+        const startsNewOperation =
+          statusRef.current === null ||
+          (statusRef.current === AIOperationStatus.Aborted &&
+            newStatus !== AIOperationStatus.Aborted)
+        if (isDuplicateConsecutiveStatus && !startsNewOperation) {
           if (settledHistory === currentOperationRef.current && !truncated) {
             return
           }
@@ -345,10 +349,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
               content: normalizedArgs.content,
             }),
           }
-          const startsNewOperation =
-            statusRef.current === null ||
-            (statusRef.current === AIOperationStatus.Aborted &&
-              newStatus !== AIOperationStatus.Aborted)
           currentOperationRef.current = startsNewOperation
             ? [statusPayload]
             : [...settledHistory, statusPayload]

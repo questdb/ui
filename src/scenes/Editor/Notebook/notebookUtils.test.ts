@@ -1555,6 +1555,89 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].chartConfig?.queries).toHaveLength(2)
   })
 
+  it("round-trips an unchanged mixed chart without inline results but rejects edits and known conflicts", () => {
+    const value =
+      "SELECT ts, site, reading FROM samples; SELECT ts, value FROM sibling"
+    const chartConfig = {
+      xColumn: "ts",
+      queries: [
+        {
+          type: "heatmap" as const,
+          partitionByColumn: "site",
+          yColumns: ["reading"],
+        },
+        { type: "line" as const, yColumns: ["value"] },
+      ],
+    }
+    const existing: NotebookCell = {
+      id: "heatmap",
+      position: 0,
+      type: "sql",
+      mode: "draw",
+      value,
+      chartConfig,
+    }
+    const request = {
+      cells: [
+        {
+          id: existing.id,
+          preserveValue: true,
+          chartConfig: structuredClone(chartConfig),
+        },
+      ],
+    }
+    expect(
+      buildAppliedCells([existing], request).nextCells[0].chartConfig,
+    ).toEqual(chartConfig)
+    expect(() =>
+      buildAppliedCells([existing], {
+        cells: [
+          {
+            ...request.cells[0],
+            chartConfig: { ...chartConfig, xColumn: "other" },
+          },
+        ],
+      }),
+    ).toThrow(/Heatmaps need a chart of their own/)
+    expect(() =>
+      buildAppliedCells(
+        [
+          {
+            ...existing,
+            result: {
+              timestamp: 1,
+              activeResultIndex: 0,
+              results: [
+                {
+                  type: "dql",
+                  query: "SELECT ts, site, reading FROM samples",
+                  columns: [
+                    { name: "ts", type: "TIMESTAMP" },
+                    { name: "site", type: "SYMBOL" },
+                    { name: "reading", type: "DOUBLE" },
+                  ],
+                  count: 1,
+                  dataset: [[1000, "west", 2]],
+                },
+                {
+                  type: "dql",
+                  query: "SELECT ts, value FROM sibling",
+                  columns: [
+                    { name: "ts", type: "TIMESTAMP" },
+                    { name: "value", type: "DOUBLE" },
+                  ],
+                  count: 1,
+                  dataset: [[1000, 9]],
+                },
+              ],
+            },
+          },
+        ],
+        request,
+      ),
+    ).toThrow(/Heatmaps need a chart of their own/)
+  })
+
   it("keeps an incomplete disabled heatmap when applying a notebook chart config", () => {
     const heatmap = {
       type: "heatmap",

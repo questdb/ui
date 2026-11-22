@@ -1,4 +1,11 @@
-import React, { useState, useMemo, useRef, useEffect } from "react"
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+} from "react"
+import { Description as AlertDialogDescription } from "@radix-ui/react-alert-dialog"
 import styled from "styled-components"
 import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react"
 import { useSelector } from "react-redux"
@@ -95,13 +102,13 @@ const DialogHeader = styled.div`
   border-bottom: 1px solid ${color("interactionNeutral")};
 `
 
-const DialogTitle = styled.h3`
+const DialogTitle = styled(AlertDialog.Title)`
   margin: 0;
   font-weight: 500;
   color: ${color("contentPrimary")};
 `
 
-const DialogDescription = styled.p`
+const DialogDescription = styled(AlertDialogDescription)`
   margin: 2rem;
   font-size: 1.4rem;
   line-height: 1.5;
@@ -120,13 +127,17 @@ const DeleteButton = styled(Button).attrs({ variant: "danger" })``
 
 type ChatHistoryViewProps = {
   currentConversationId: ConversationId | null
+  onDeleteTargetChange: (id: ConversationId | null) => void
+  onConfirmDelete: (id: ConversationId) => Promise<boolean>
 }
 
 export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
   currentConversationId,
+  onDeleteTargetChange,
+  onConfirmDelete,
 }) => {
   const [searchQuery, setSearchQuery] = useState("")
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [conversationToDelete, setConversationToDelete] =
     useState<ConversationId | null>(null)
   const currentItemRef = useRef<HTMLDivElement>(null)
@@ -136,7 +147,6 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
     chatWindowState,
     openChatWindow,
     updateConversationName,
-    deleteConversation,
   } = useAIConversation()
 
   const { status } = useAIStatus()
@@ -182,22 +192,33 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
   }
 
   const handleDeleteClick = (id: ConversationId) => {
+    onDeleteTargetChange(id)
     setConversationToDelete(id)
-    setDeleteDialogOpen(true)
-  }
-
-  const handleConfirmDelete = async () => {
-    if (conversationToDelete) {
-      await deleteConversation(conversationToDelete)
-    }
-    setDeleteDialogOpen(false)
-    setConversationToDelete(null)
   }
 
   const handleCancelDelete = () => {
-    setDeleteDialogOpen(false)
+    onDeleteTargetChange(null)
     setConversationToDelete(null)
   }
+
+  const deleteBlocked =
+    conversationToDelete === chatWindowState.activeConversationId &&
+    isBlockingAIStatus(status)
+
+  const handleConfirmDelete = async () => {
+    if (!conversationToDelete || deleteBlocked || deleting) return
+    setDeleting(true)
+    try {
+      if (await onConfirmDelete(conversationToDelete)) handleCancelDelete()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  useLayoutEffect(
+    () => () => onDeleteTargetChange(null),
+    [onDeleteTargetChange],
+  )
 
   useEffect(() => {
     if (currentItemRef.current) {
@@ -286,8 +307,10 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
       </ListContainer>
 
       <AlertDialog.Root
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
+        open={conversationToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) handleCancelDelete()
+        }}
       >
         <AlertDialog.Portal>
           <ForwardRef>
@@ -299,17 +322,19 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
             </DialogHeader>
             <DialogDescription>
               Are you sure you want to delete this conversation? This action
-              cannot be undone.
+              cannot be undone. Any queued message for this conversation will be
+              discarded.
             </DialogDescription>
             <DialogButtons>
               <AlertDialog.Cancel asChild>
-                <CancelButton onClick={handleCancelDelete}>Cancel</CancelButton>
+                <CancelButton disabled={deleting}>Cancel</CancelButton>
               </AlertDialog.Cancel>
-              <AlertDialog.Action asChild>
-                <DeleteButton onClick={handleConfirmDelete}>
-                  Delete
-                </DeleteButton>
-              </AlertDialog.Action>
+              <DeleteButton
+                disabled={deleting || deleteBlocked}
+                onClick={handleConfirmDelete}
+              >
+                Delete
+              </DeleteButton>
             </DialogButtons>
           </AlertDialog.Content>
         </AlertDialog.Portal>

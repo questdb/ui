@@ -240,6 +240,7 @@ const AIChatWindow: React.FC = () => {
     openBlankChatWindow,
     openHistoryView,
     closeHistoryView,
+    deleteConversation,
     getConversationMeta,
     addMessage,
     removeMessages,
@@ -529,11 +530,52 @@ const AIChatWindow: React.FC = () => {
   const queued = conversationId ? chatQueue[conversationId] : undefined
   const hasReadyLocalAgent = (channel: typeof localAgentChannel) =>
     isCurrentLocalAgentChannel(channel) && channel.isTransportReady()
-  const canDispatchQueued = (entry: QueuedEntry) => {
+  const deleteTargetRef = useRef<string | null>(null)
+  const deletingConversationRef = useRef<string | null>(null)
+  const preparingQueued = useRef(new Set<string>())
+  const [, setQueuePreparation] = useState(0)
+  const setDeleteTarget = useCallback((id: string | null) => {
+    deleteTargetRef.current = id
+    setQueuePreparation((count) => count + 1)
+  }, [])
+
+  const confirmDeleteConversation = async (id: string) => {
+    if (
+      deleteTargetRef.current !== id ||
+      deletingConversationRef.current !== null ||
+      (isOperationBlocking() &&
+        (conversationId === id || getChatDispatchState(id) !== null))
+    ) {
+      return false
+    }
+
+    // Keep the target paused even if history closes during the store write.
+    deletingConversationRef.current = id
+    try {
+      await deleteConversation(id)
+      setChatQueue((current) => {
+        if (!current[id]) return current
+        const { [id]: _deleted, ...rest } = current
+        return rest
+      })
+      return true
+    } catch (error) {
+      console.error("Could not delete conversation", error)
+      toast.error("Could not delete the conversation.")
+      return false
+    } finally {
+      deletingConversationRef.current = null
+      setQueuePreparation((count) => count + 1)
+    }
+  }
+
+  const canDispatchQueued = (id: string, entry: QueuedEntry) => {
     const agent = localAgentChannel?.getSnapshot() ?? null
     return (
       canUse &&
       !isLoadingMessages &&
+      deleteTargetRef.current !== id &&
+      deletingConversationRef.current !== id &&
       !isOperationBlocking() &&
       !getOperationSignal().aborted &&
       !wasQueueCancelled(entry) &&
@@ -548,8 +590,6 @@ const AIChatWindow: React.FC = () => {
       )
     )
   }
-  const preparingQueued = useRef(new Set<string>())
-  const [, setQueuePreparation] = useState(0)
   const dispatchQueuedRef = useRef<
     | ((
         id: string,
@@ -571,7 +611,7 @@ const AIChatWindow: React.FC = () => {
         active?.owner !== owner ||
         active.messages !== conversation.messages ||
         chatQueueRef.current[id] !== entry ||
-        !canDispatchQueued(entry)
+        !canDispatchQueued(id, entry)
       )
         return
 
@@ -630,7 +670,7 @@ const AIChatWindow: React.FC = () => {
       preparingQueued.current.has(conversationId) ||
       !conversation ||
       !queued ||
-      !canDispatchQueued(queued)
+      !canDispatchQueued(conversationId, queued)
     )
       return
     const active = getChatDispatchState(conversationId)
@@ -1129,9 +1169,9 @@ const AIChatWindow: React.FC = () => {
 
   const queryActions = (shouldShowExplainButton || shouldShowFixButton) && (
     <ButtonContainer ref={explainButtonRef}>
-      {shouldShowExplainButton && (
+      {conversation && shouldShowExplainButton && (
         <ExplainQueryButton
-          conversationId={conversation!.id}
+          conversationId={conversation.id}
           queryText={currentSQL.trim()}
         />
       )}
@@ -1200,6 +1240,8 @@ const AIChatWindow: React.FC = () => {
               currentConversationId={
                 chatWindowState.previousConversationId ?? null
               }
+              onDeleteTargetChange={setDeleteTarget}
+              onConfirmDelete={confirmDeleteConversation}
             />
           ) : (
             <ChatPanel>

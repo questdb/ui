@@ -254,7 +254,9 @@ describe("chart drawer", () => {
       expect(onSave).not.toHaveBeenCalled()
       expect(onClose).not.toHaveBeenCalled()
       expect(
-        screen.getByText("Pick a rows column and a value column"),
+        screen.getByText(
+          "Pick a separate rows column and a numeric value column",
+        ),
       ).toBeVisible()
 
       fireEvent.click(include())

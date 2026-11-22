@@ -35,18 +35,56 @@ const barColumns = (bars: SeriesSpec[]): number => {
   return bars.filter((s) => !s.stack).length + stacks.size
 }
 
+const labelFont = (axisLabel: {
+  fontSize?: number | string
+  fontFamily?: string
+}) => `${axisLabel.fontSize ?? 12}px ${axisLabel.fontFamily ?? "sans-serif"}`
+
+export const withBoundedHeatmapLabels = (
+  option: EChartsOption,
+  containerWidth: number,
+): EChartsOption => {
+  const axis = option.yAxis
+  if (Array.isArray(axis) || axis?.type !== "category") return option
+  // Leave room for the plot and the vertical slider, even on narrow panes.
+  const width = Math.max(0, Math.min(160, Math.floor(containerWidth / 3)))
+  const font = labelFont(axis.axisLabel ?? {})
+  const fitted = new Map<string, string>()
+  return {
+    ...option,
+    yAxis: {
+      ...axis,
+      type: "category",
+      axisLabel: {
+        ...axis.axisLabel,
+        formatter: (value: string) => {
+          const cached = fitted.get(value)
+          if (cached !== undefined) return cached
+          const label = format.truncateText(value, width, font, "…")
+          fitted.set(value, label)
+          return label
+        },
+      },
+    },
+  }
+}
+
 const heatmapLabelWidth = (option: EChartsOption): number => {
   const yAxis = firstOf(option.yAxis)
   if (yAxis?.type !== "category" || !("data" in yAxis) || !yAxis.data?.length)
     return 0
-  const { fontSize, fontFamily, margin = 0 } = yAxis.axisLabel ?? {}
-  const font = `${fontSize ?? 12}px ${fontFamily ?? "sans-serif"}`
+  const { formatter, margin = 0 } = yAxis.axisLabel ?? {}
+  const font = labelFont(yAxis.axisLabel ?? {})
   // Use the renderer's text metrics. Consider every row because Y zoom can
   // bring labels that were not sampled by the initial layout into view.
   return (
-    yAxis.data.reduce<number>((max, label) => {
+    yAxis.data.reduce<number>((max, label, index) => {
       const value = typeof label === "object" ? label.value : label
-      return Math.max(max, format.getTextRect(String(value), font).width)
+      const text =
+        typeof formatter === "function"
+          ? formatter(String(value), index)
+          : String(value)
+      return Math.max(max, format.getTextRect(text, font).width)
     }, 0) + margin
   )
 }

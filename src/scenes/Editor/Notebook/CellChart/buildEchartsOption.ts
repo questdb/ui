@@ -431,12 +431,25 @@ const exactHeatmapScale = (
   }
 }
 
+const normalizeHeatmapReading = (value: number, min: number, max: number) => {
+  const span = max - min
+  // The difference of two opposite-sign finite endpoints can overflow.
+  return Number.isFinite(span)
+    ? (value - min) / span
+    : (value / 2 - min / 2) / (max / 2 - min / 2)
+}
+
+const finiteHeatmapReading = (reading: unknown) => {
+  const value = toNumberOrNull(reading)
+  return value !== null && Number.isFinite(value) ? value : null
+}
+
 const numericHeatmapScale = (
   cells: HeatmapReading[],
   perRow: boolean,
   rowCount: number,
 ) => {
-  const values = cells.map(({ reading }) => toNumberOrNull(reading))
+  const values = cells.map(({ reading }) => finiteHeatmapReading(reading))
   const emptyExtent = () => ({ min: Infinity, max: -Infinity })
   const globalExtent = emptyExtent()
   const rowExtents = perRow ? Array.from({ length: rowCount }, emptyExtent) : []
@@ -447,22 +460,55 @@ const numericHeatmapScale = (
     extent.min = Math.min(extent.min, value)
     extent.max = Math.max(extent.max, value)
   })
+  const { min, max } =
+    globalExtent.min === Infinity ? { min: 0, max: 1 } : globalExtent
+  // In chart mode ECharts also divides by the span, so provide normalized
+  // input when the raw range would overflow, but keep the real legend labels.
+  const normalizeChart = !perRow && !Number.isFinite(max - min)
   const shades = cells.map(({ y }, i) => {
     const value = values[i]
     if (value === null) return "-"
-    if (!perRow) return value
-    const { min, max } = rowExtents[y]
-    return max === min ? 1 : (value - min) / (max - min)
+    if (!perRow)
+      return normalizeChart ? normalizeHeatmapReading(value, min, max) : value
+    const extent = rowExtents[y]
+    return extent.max === extent.min
+      ? 1
+      : normalizeHeatmapReading(value, extent.min, extent.max)
   })
-  const { min, max } =
-    perRow || globalExtent.min === Infinity ? { min: 0, max: 1 } : globalExtent
-  return { shades, min, max, labels: scaleLabels(min, max) }
+  return {
+    shades,
+    min: perRow || normalizeChart ? 0 : min,
+    max: perRow || normalizeChart ? 1 : max,
+    labels: scaleLabels(min, max),
+  }
 }
 
 type HeatmapCategory = string | null
 
 const heatmapCategory = (value: unknown): HeatmapCategory =>
   value == null ? null : toCategoryLabel(value)
+
+// Match the builder's slot keys and measurement parsing. Null/unparseable
+// values do not paint a cell and cannot obscure another reading.
+export const hasDuplicateHeatmapReadings = (q: ResolvedQuery): boolean => {
+  const idx = buildColumnIndexMap(q.columns)
+  const x = idx.get(q.xColumn ?? "")
+  const y = idx.get(q.partitionByColumn ?? "")
+  const value = idx.get(q.yColumns[0])
+  if (x === undefined || y === undefined || value === undefined) return false
+  const read = exactNumericReader(q.columns[value]) ?? finiteHeatmapReading
+  const coordinates = new Map<HeatmapCategory, Set<HeatmapCategory>>()
+  for (const row of q.dataset) {
+    if (read(row[value]) === null) continue
+    const xKey = heatmapCategory(row[x])
+    const yKey = heatmapCategory(row[y])
+    const rows = coordinates.get(xKey)
+    if (!rows) coordinates.set(xKey, new Set([yKey]))
+    else if (rows.has(yKey)) return true
+    else rows.add(yKey)
+  }
+  return false
+}
 
 const heatmapLabels = (keys: HeatmapCategory[]): string[] => {
   const used = new Set(keys)

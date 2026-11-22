@@ -178,41 +178,68 @@ export type DrawResolution = {
   tabs: QueryTab[] // one per successful query — for the drawer tab strip
 }
 
-export const HEATMAP_CONFLICT_MESSAGE =
-  "Heatmaps need a chart of their own. Include only one query in Chart settings."
 export const HEATMAP_INCOMPLETE_MESSAGE =
-  "This heatmap needs an X-axis, a row column, and a value column. Update Chart settings."
+  "This heatmap needs an X-axis, a separate row column, and a numeric value column. Update Chart settings."
 
-export const heatmapIssue = (queries: ResolvedQuery[]) => {
-  const heatmaps = queries.filter(({ type }) => type === "heatmap")
-  if (heatmaps.length > 0 && queries.length > 1) return "conflict"
-  if (
-    heatmaps.some((q) => !q.xColumn || !q.partitionByColumn || !q.yColumns[0])
-  ) {
-    return "incomplete"
-  }
-  return null
+export const isNumericHeatmapValue = (
+  columns: ColumnDefinition[],
+  name: string | undefined,
+) => {
+  const column = columns.find((c) => c.name === name)
+  return column != null && classifyColumn(column) === "numeric"
 }
 
+export const incompleteHeatmap = (q: ResolvedQuery) =>
+  !q.xColumn ||
+  !q.partitionByColumn ||
+  q.partitionByColumn === q.xColumn ||
+  !isNumericHeatmapValue(q.columns, q.yColumns[0])
+
 // Use the same settled, statement-matching data the chart uses. Without it,
-// reject only explicit enabled mixes; null slots cannot be inferred without data.
+// an unchanged saved config may be replayed; edits cannot introduce explicit
+// mixes or a known Rows/X collision without result metadata.
 export const validateHeatmapConfig = (
   config: ChartConfig,
   statements: string[],
   result: CellResult | null | undefined,
+  unchanged = false,
 ): string | null => {
   const enabled = config.queries.filter((q) => q && q.enabled !== false)
-  if (!enabled.some((q) => q?.type === "heatmap")) return null
+  const enabledHeatmaps = enabled.filter((q) => q?.type === "heatmap")
+  if (!enabledHeatmaps.length) return null
 
   const conflict =
     "Heatmaps need a chart of their own. Include only one query or choose a different chart type."
   const frame = toChartResult(result, statements)
-  if (frame.kind !== "settled") return enabled.length > 1 ? conflict : null
+  if (frame.kind !== "settled") {
+    if (enabledHeatmaps.length > 1) return conflict
+    if (
+      config.xColumn &&
+      enabledHeatmaps[0]?.partitionByColumn === config.xColumn
+    )
+      return HEATMAP_INCOMPLETE_MESSAGE
+    return enabled.length > 1 && !unchanged ? conflict : null
+  }
 
   const { renderQueries } = resolveDraw(statements, frame.results, config)
-  const issue = heatmapIssue(renderQueries)
-  if (issue === "conflict") return conflict
-  if (issue === "incomplete") return HEATMAP_INCOMPLETE_MESSAGE
+  const heatmaps = renderQueries.filter(({ type }) => type === "heatmap")
+  if (heatmaps.length && renderQueries.length > 1) return conflict
+  if (heatmaps.some(incompleteHeatmap)) return HEATMAP_INCOMPLETE_MESSAGE
+  // An empty DQL result does not participate in the plot, but its Value
+  // column type is still known and can be validated before saving.
+  if (
+    result?.results.some((entry, index) => {
+      const q = config.queries[index]
+      return (
+        q?.type === "heatmap" &&
+        q.enabled !== false &&
+        entry.type === "dql" &&
+        entry.dataset.length === 0 &&
+        !isNumericHeatmapValue(entry.columns, q.yColumns[0])
+      )
+    })
+  )
+    return HEATMAP_INCOMPLETE_MESSAGE
   return null
 }
 
@@ -251,7 +278,13 @@ export const resolveQueryAxes = <T extends QueryAxisCandidate>(
   const allowAnchorExclusion =
     config?.queries.some((q) => q?.type === "heatmap") ?? false
   const enabled = (item: T) => config?.queries[item.index]?.enabled !== false
-  const anchor = allowAnchorExclusion ? items.find(enabled) : items[0]
+  const isHeatmap = (item: T) => config?.queries[item.index]?.type === "heatmap"
+  // A newly populated ordinary sibling must not take over an explicit
+  // heatmap's X mapping. Two enabled, available heatmaps always conflict.
+  const anchor = allowAnchorExclusion
+    ? (items.find((item) => enabled(item) && isHeatmap(item)) ??
+      items.find(enabled))
+    : items[0]
   const xColumn = anchor
     ? chartXAxisOf(anchor, config?.xColumn)
     : (config?.xColumn ?? null)
@@ -261,6 +294,7 @@ export const resolveQueryAxes = <T extends QueryAxisCandidate>(
     const compatible =
       !anchor ||
       isAnchor ||
+      (isHeatmap(anchor) && isHeatmap(item)) ||
       canCombineXAxis(anchor.columns, xColumn, item.columns, ownX)
     return {
       item,
@@ -359,10 +393,7 @@ export const resolveDraw = (
     ...item,
     ownX,
     included,
-    qc:
-      item.qc.type === "heatmap" && item.qc.enabled === false
-        ? item.qc
-        : dropPartitionOnX(item.qc, ownX),
+    qc: item.qc.type === "heatmap" ? item.qc : dropPartitionOnX(item.qc, ownX),
   }))
 
   const tabs: QueryTab[] = []

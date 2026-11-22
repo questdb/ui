@@ -99,6 +99,8 @@ export type QueryControlsProps = {
   isAnchorTab: boolean
   ohlcError: boolean
   heatmapError: boolean
+  heatmapValue: string | undefined
+  onHeatmapValueChange: (value: string) => void
   onUpdateQuery: (patch: Partial<QueryChart>) => void
   onSetQuery: (next: QueryChart) => void
   telemetry?: ChartSettingsTelemetry
@@ -114,6 +116,8 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
   isAnchorTab,
   ohlcError,
   heatmapError,
+  heatmapValue,
+  onHeatmapValueChange,
   onUpdateQuery,
   onSetQuery,
   telemetry,
@@ -296,7 +300,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
             <IncompatibleNote>
               <IncompatibleIcon size={14} weight="fill" />
               <Text color="statusWarning" size="xs" lineHeight="1.2">
-                Pick a rows column and a value column
+                Pick a separate rows column and a numeric value column
               </Text>
             </IncompatibleNote>
           )}
@@ -309,12 +313,14 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           <SelectMenuControl
             name={`value-${idx}`}
             ariaLabel="Value column"
-            value={query.yColumns[0] ?? ""}
-            onValueChange={(value) =>
-              onUpdateQuery({
-                yColumns: value ? [value] : [],
-              })
+            value={
+              (query.type === "heatmap" ? heatmapValue : query.yColumns[0]) ??
+              ""
             }
+            onValueChange={(value) => {
+              if (query.type === "heatmap") onHeatmapValueChange(value)
+              else onUpdateQuery({ yColumns: value ? [value] : [] })
+            }}
             options={[{ label: "Select column", value: "" }, ...numericOptions]}
           />
         </Field>

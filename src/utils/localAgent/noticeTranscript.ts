@@ -1,8 +1,6 @@
 import type { AgentNoticeSeverity } from "./protocol"
 
-// The language of the fenced block that keeps a notice in the agent's reply,
-// where it happened. The chat renders it as a notice; as text, later turns
-// can still read it.
+// The language of the fenced block that renders a notice in the transcript.
 export const NOTICE_RECORD_LANGUAGE = "agent-notice"
 
 export type NoticeRecord = {

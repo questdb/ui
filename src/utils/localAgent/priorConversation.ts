@@ -35,7 +35,21 @@ const visibleText = (message: ConversationMessage): string | null => {
   }
   if (message.role === "assistant") {
     const text = typeof message.content === "string" ? message.content : ""
-    return [text, message.sql && `Suggested SQL:\n${message.sql}`]
+    if (message.isRejected) {
+      const previousSQL = message.previousSQL?.trim()
+      return [
+        "The user rejected this SQL suggestion and reverted to the previous version.",
+        previousSQL && `Restored SQL at that point:\n${previousSQL}`,
+        text && `Historical reply (not an accepted draft):\n${text}`,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    }
+    return [
+      text,
+      message.sql &&
+        `${message.isAccepted ? "SQL accepted at that point" : "Suggested SQL"}:\n${message.sql}`,
+    ]
       .filter(Boolean)
       .join("\n")
   }
@@ -48,6 +62,7 @@ const visibleText = (message: ConversationMessage): string | null => {
 export const priorConversationFor = (
   history: ConversationMessage[],
   sessionId: string,
+  currentSQL?: string,
 ): string | null => {
   const lastSeenTurn = history.findLastIndex(
     (message) =>
@@ -70,7 +85,13 @@ export const priorConversationFor = (
     typeof summary === "string"
       ? `Summary of older turns: ${truncate(withoutInlineImages(summary.slice(SUMMARY_PREFIX.length, -SUMMARY_SUFFIX.length)).trim(), MAX_TOTAL_CHARS / 2)}`
       : null
-  let total = carriedSummary?.length ?? 0
+  const canonical = currentSQL?.trim()
+  const current = canonical
+    ? `Current canonical SQL (use this version, not historical SQL above):\n${truncateWithin(canonical, MAX_MESSAGE_CHARS)}`
+    : currentSQL === ""
+      ? "There is no current canonical SQL query."
+      : null
+  let total = (carriedSummary?.length ?? 0) + (current?.length ?? 0)
   for (let i = unseen.length - 1; i >= 0 && lines.length < MAX_MESSAGES; i--) {
     const message = unseen[i]
     const text = withoutInlineImages(visibleText(message) ?? "").trim()
@@ -86,6 +107,7 @@ export const priorConversationFor = (
     "<earlier_conversation>",
     "The user talked to another assistant in this chat before switching to you. Earlier messages, oldest first:",
     ...lines,
+    ...(current ? [current] : []),
     "</earlier_conversation>",
   ].join("\n")
 }

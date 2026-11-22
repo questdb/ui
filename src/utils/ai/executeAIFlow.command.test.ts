@@ -49,6 +49,7 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
   const sent: AgentInboundMessage[] = []
   let deliver: (msg: AgentOutboundMessage) => void = () => undefined
   const client = {
+    canSendAgentMessage: () => true,
     on: (_event: "agentMessage", handler: typeof deliver) => {
       deliver = handler
       return () => undefined
@@ -85,6 +86,7 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
   >()
   const addMessage = vi.fn<Parameters<AIFlowCallbacks["addMessage"]>, void>()
   const persistMessages = vi.fn(() => Promise.resolve())
+  const rotateUserActionDigest = vi.fn()
   const result = await executeAIFlow(
     { ...config, localAgentChannel: channel },
     {
@@ -93,6 +95,7 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
       setStatus: vi.fn(),
       setIsStreaming: vi.fn(),
       persistMessages,
+      rotateUserActionDigest,
     },
   )
   const prompt = sent.find((msg) => msg.type === "agent_prompt")
@@ -101,6 +104,7 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
     updateMessage,
     addMessage,
     persistMessages,
+    rotateUserActionDigest,
     result,
   }
 }
@@ -250,6 +254,8 @@ describe("an agent's command", () => {
     expect(message.addMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ agentCommand: true }),
     )
+    expect(command.rotateUserActionDigest).not.toHaveBeenCalled()
+    expect(message.rotateUserActionDigest).toHaveBeenCalledWith(CONVERSATION_ID)
   })
 
   it("hands off a previous cloud turn's attached SQL with its visible request", async () => {
@@ -274,6 +280,36 @@ describe("an agent's command", () => {
     expect(text?.type === "text" && text.text).toContain(
       `User: Review this sample\nAttached SQL:\n${sql}\nAssistant: The sample returns one row.`,
     )
+  })
+
+  it("sends the live SQL and rejection decision in a local handoff", async () => {
+    const { prompt } = await runFlow(
+      createChatFlowConfig({
+        ...localConfig,
+        userMessage: "Explain the current query",
+        conversationHistory: [
+          earlierTurns[0],
+          { ...earlierTurns[1], sql: "SELECT 22;", isAccepted: true },
+          {
+            ...earlierTurns[1],
+            id: "a2",
+            sql: "SELECT 33;",
+            previousSQL: "SELECT 22;",
+            isRejected: true,
+          },
+        ],
+        isFirstMessage: false,
+        currentSQL: "SELECT 22;",
+      }),
+    )
+    const block = prompt[0]
+    const text = block?.type === "text" ? block.text : ""
+    expect(text).toContain("rejected this SQL suggestion and reverted")
+    expect(text).toContain("Restored SQL at that point:\nSELECT 22;")
+    expect(text).toContain(
+      "Current canonical SQL (use this version, not historical SQL above):\nSELECT 22;",
+    )
+    expect(text).not.toContain("SELECT 33;")
   })
 
   it("leaves a message that is not a command with what goes before it", async () => {

@@ -2,8 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
-import type { ChartConfig } from "../CellChart/chartTypes"
-import { buildEchartsOption } from "../CellChart/buildEchartsOption"
+import type { ChartConfig, ChartZoomAxis } from "../CellChart/chartTypes"
 import {
   ChartRenderer,
   type ChartRendererHandle,
@@ -11,14 +10,9 @@ import {
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
+import { resolveChartPlot } from "../CellChart/resolveChartPlot"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
-import {
-  HEATMAP_CONFLICT_MESSAGE,
-  HEATMAP_INCOMPLETE_MESSAGE,
-  heatmapIssue,
-  resolveDraw,
-  toChartResult,
-} from "./drawCanvasUtils"
+import { resolveDraw, toChartResult } from "./drawCanvasUtils"
 import { Button } from "../../../../components/Button"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
@@ -33,6 +27,7 @@ import {
 } from "../cellRefresh/cellRefreshEngine"
 import { useChartLoading } from "../cells/useChartLoading"
 import {
+  clearChartZoom,
   getChartZoom,
   setChartZoom,
 } from "../cellVirtualization/chartZoomStore"
@@ -107,6 +102,12 @@ const Canvas = styled.div`
   background: ${({ theme }) => theme.color.surfaceInset};
 `
 
+const ChartWarning = styled.div`
+  flex-shrink: 0;
+  padding: 0.6rem 1.2rem;
+  color: ${({ theme }) => theme.color.statusWarning};
+`
+
 const CancelledState = styled(PaneEmptyState)`
   flex-direction: column;
   gap: 1rem;
@@ -158,12 +159,7 @@ export const DrawCanvas: React.FC<Props> = ({
   const drawState = useCellFetchSelector(cell.id, selectDrawState, shallowEqual)
   const { loading } = useChartLoading(cell)
 
-  const [zoomStart, setZoomStart] = useState(
-    () => getChartZoom(cell.id)?.start ?? 0,
-  )
-  const [zoomEnd, setZoomEnd] = useState(
-    () => getChartZoom(cell.id)?.end ?? 100,
-  )
+  const [zoomWindows, setZoomWindows] = useState(() => getChartZoom(cell.id))
 
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
@@ -181,19 +177,17 @@ export const DrawCanvas: React.FC<Props> = ({
   const hadError = chartResult.kind === "settled" && chartResult.hadError
 
   const handleZoomChange = useCallback(
-    (start: number, end: number) => {
-      setZoomStart(start)
-      setZoomEnd(end)
-      setChartZoom(cell.id, start, end)
+    (axis: ChartZoomAxis, start: number, end: number) => {
+      setChartZoom(cell.id, axis, start, end)
+      setZoomWindows(getChartZoom(cell.id))
     },
     [cell.id],
   )
 
   const handleResetZoom = useCallback(() => {
     chartRendererRef.current?.resetZoom()
-    setZoomStart(0)
-    setZoomEnd(100)
-    setChartZoom(cell.id, 0, 100)
+    clearChartZoom(cell.id)
+    setZoomWindows(undefined)
   }, [cell.id])
 
   const resolution = useMemo(
@@ -210,18 +204,12 @@ export const DrawCanvas: React.FC<Props> = ({
     eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
   }
 
-  const option = useMemo(
-    () => buildEchartsOption(resolution.chart, resolution.renderQueries),
+  const { option, message } = useMemo(
+    () => resolveChartPlot(resolution),
     [resolution],
   )
-
-  const plotted = resolution.renderQueries
-  const issue = heatmapIssue(plotted)
   const empty =
-    issue !== null ||
-    classifyBlock !== null ||
-    queries.length === 0 ||
-    plotted.length === 0
+    classifyBlock !== null || queries.length === 0 || option === null
   const settledForCurrentQueries = settledKey === queriesKey
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
@@ -233,10 +221,8 @@ export const DrawCanvas: React.FC<Props> = ({
     emptyMessage = "Type a query to draw."
   } else if (!settledForCurrentQueries) {
     emptyMessage = "Drawing…"
-  } else if (issue === "conflict") {
-    emptyMessage = HEATMAP_CONFLICT_MESSAGE
-  } else if (issue === "incomplete") {
-    emptyMessage = HEATMAP_INCOMPLETE_MESSAGE
+  } else if (message) {
+    emptyMessage = message
   } else if (hadError) {
     emptyMessage = "Query failed: check the SQL editor for the error."
   } else {
@@ -260,7 +246,7 @@ export const DrawCanvas: React.FC<Props> = ({
             ? "Chart loading was cancelled"
             : empty
               ? emptyMessage
-              : ""}
+              : (message ?? "")}
       </VisuallyHiddenStatus>
       {loading ? (
         <PaneEmptyState aria-hidden="true">
@@ -278,19 +264,22 @@ export const DrawCanvas: React.FC<Props> = ({
             Retry
           </Button>
         </CancelledState>
-      ) : empty ? (
+      ) : empty || !option ? (
         <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
       ) : (
-        <Canvas data-hook="draw-canvas">
-          <ChartRenderer
-            ref={chartRendererRef}
-            option={option}
-            onZoomChange={handleZoomChange}
-            isFocused={isFocused}
-            animate={animatesAt(refreshIntervalMs)}
-            zoomWindow={{ start: zoomStart, end: zoomEnd }}
-          />
-        </Canvas>
+        <>
+          {message && <ChartWarning aria-hidden="true">{message}</ChartWarning>}
+          <Canvas data-hook="draw-canvas">
+            <ChartRenderer
+              ref={chartRendererRef}
+              option={option}
+              onZoomChange={handleZoomChange}
+              isFocused={isFocused}
+              animate={animatesAt(refreshIntervalMs)}
+              zoomWindows={zoomWindows}
+            />
+          </Canvas>
+        </>
       )}
       <ChartSettingsDrawer
         open={settingsDrawer.open}

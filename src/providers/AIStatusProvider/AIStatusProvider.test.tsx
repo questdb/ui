@@ -61,6 +61,22 @@ describe("AIStatusProvider", () => {
     }
   })
 
+  it("acquires Stop for a new turn despite a matching retained Processing step", () => {
+    const status = renderStatus()
+    act(() => {
+      status().setStatus(AIOperationStatus.Processing)
+      status().setStatus(null)
+    })
+    const previous = status().currentOperation[0]
+    const nextSignal = status().getOperationSignal()
+    act(() => status().setStatus(AIOperationStatus.Processing))
+    expect(status().isOperationBlocking()).toBe(true)
+    expect(status().currentOperation).toHaveLength(1)
+    expect(status().currentOperation[0]).not.toBe(previous)
+    act(() => status().abortOperation())
+    expect(nextSignal.aborted).toBe(true)
+  })
+
   it("starts a retried answer over from the steps it showed before its first attempt", () => {
     // Given an attempt that showed a tool step and text before it failed
     const status = renderStatus()

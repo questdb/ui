@@ -10,11 +10,7 @@ import type {
   AgentUpdate,
 } from "./protocol"
 import type { ContextUsage } from "../ai/aiAssistant"
-import {
-  type NoticeRecord,
-  noticeTranscript,
-  stopReasonNotice,
-} from "./noticeTranscript"
+import { stopReasonNotice } from "./noticeTranscript"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { classifyAgentToolCall, questdbToolName } from "./agentToolCalls"
 import { toolStatusOf } from "../tools/toolStatus"
@@ -239,7 +235,7 @@ const createUpdateHandler = (
         streaming.onContextUsage?.(contextUsage)
         return
       case "notice":
-        addNotice({
+        streaming.onNotice?.({
           severity: update.severity,
           title: update.title,
           description: update.description,
@@ -250,17 +246,9 @@ const createUpdateHandler = (
     }
   }
 
-  // A notice stays in the reply where it happened.
-  let notices = 0
-  const addNotice = (notice: NoticeRecord) => {
-    notices += 1
-    handleMessageChunk(`notice:${notices}`, noticeTranscript(notice), true)
-  }
-
   return {
     handleUpdate,
     handleStatus,
-    addNotice,
     reply: () => reply,
     contextUsage: () => contextUsage,
   }
@@ -279,7 +267,7 @@ export const runLocalAgentTurn = async ({
   if (!isCurrentLocalAgentChannel(channel)) return NOT_CONNECTED
 
   const startedAt = Date.now()
-  const { handleUpdate, addNotice, handleStatus, reply, contextUsage } =
+  const { handleUpdate, handleStatus, reply, contextUsage } =
     createUpdateHandler(setStatus, streaming, abortSignal)
   const result = await channel.prompt({
     conversationId,
@@ -297,17 +285,20 @@ export const runLocalAgentTurn = async ({
     durationMs: Date.now() - startedAt,
   })
 
-  if (result.outcome === "completed" && result.stopReason === "cancelled") {
+  if (result.outcome === "completed") {
+    const notice = stopReasonNotice(result.stopReason)
+    if (notice) streaming.onNotice?.(notice)
+  }
+  if (
+    abortSignal?.aborted ||
+    (result.outcome === "completed" && result.stopReason === "cancelled")
+  ) {
     return ABORTED
   }
   if (result.outcome === "failed") {
     setStatus(null)
     return { type: "unknown", message: result.error }
   }
-  // Append the notice before clearing status so it stays in this turn's
-  // operation history, even if no answer text has streamed yet.
-  const stopped = stopReasonNotice(result.stopReason)
-  if (stopped) addNotice(stopped)
   setStatus(null)
   // An agent's answer shows how full its context is. Agents count tokens
   // each their own way, so those are not shown.

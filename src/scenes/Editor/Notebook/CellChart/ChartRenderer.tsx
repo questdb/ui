@@ -16,8 +16,10 @@ import {
   chartZoomDensity,
   X_SLIDER_ZOOM_ID,
   X_WHEEL_ZOOM_ID,
-  type ChartZoomDensity,
+  Y_SLIDER_ZOOM_ID,
+  withBoundedHeatmapLabels,
 } from "./chartDensity"
+import type { ChartZoomAxis, ChartZoomWindows } from "./chartTypes"
 import { createQuestdbTheme } from "./questdbTheme"
 import { useNotebookBufferId } from "../NotebookProvider"
 import {
@@ -32,11 +34,11 @@ export type ChartRendererHandle = {
 type Props = {
   option: EChartsOption
   height?: number | string
-  onZoomChange?: (start: number, end: number) => void
+  onZoomChange?: (axis: ChartZoomAxis, start: number, end: number) => void
   isFocused?: boolean
   animateEntry?: boolean
   animate?: boolean
-  zoomWindow: ZoomWindow
+  zoomWindows: ChartZoomWindows | undefined
 }
 
 // Structural fingerprint — we remount on changes here so stale series from
@@ -84,12 +86,15 @@ type DataZoomEvent = ZoomChange & { batch?: ZoomChange[] }
 const isXZoomControl = (id?: string) =>
   id === X_SLIDER_ZOOM_ID || id === X_WHEEL_ZOOM_ID
 
-type ZoomWindow = { start: number; end: number }
+const ZOOM_AXES = ["x", "y"] as const
+const zoomControlId = { x: X_WHEEL_ZOOM_ID, y: Y_SLIDER_ZOOM_ID }
 
-const isZoomed = ({ start, end }: ZoomWindow): boolean => start > 0 || end < 100
-
-const zoomControlsHidden = (density: ChartZoomDensity): boolean =>
-  !density.slider && !density.wheel
+const axisForControl = (id?: string): ChartZoomAxis | undefined =>
+  id === Y_SLIDER_ZOOM_ID
+    ? "y"
+    : id == null || isXZoomControl(id)
+      ? "x"
+      : undefined
 
 type MountedZoomControl = {
   id?: string
@@ -98,12 +103,27 @@ type MountedZoomControl = {
   show?: boolean
 }
 
-const hasActiveXZoomControl = (mounted: { dataZoom?: unknown }): boolean =>
+const hasActiveZoomControl = (
+  mounted: { dataZoom?: unknown },
+  axis: ChartZoomAxis,
+): boolean =>
   Array.isArray(mounted.dataZoom) &&
   (mounted.dataZoom as MountedZoomControl[]).some(
     (control) =>
-      isXZoomControl(control.id) &&
+      control.id != null &&
+      axisForControl(control.id) === axis &&
       (control.type === "inside" ? !control.disabled : control.show === true),
+  )
+
+const applyZoom = (
+  instance: ReturnType<ReactECharts["getEchartsInstance"]> | undefined,
+  axis: ChartZoomAxis,
+  start: number,
+  end: number,
+) =>
+  instance?.dispatchAction(
+    { type: "dataZoom", dataZoomId: zoomControlId[axis], start, end },
+    { silent: true },
   )
 
 export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
@@ -115,19 +135,18 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       isFocused = true,
       animateEntry = true,
       animate = true,
-      zoomWindow,
+      zoomWindows,
     },
     ref,
   ) {
     const bufferId = useNotebookBufferId()
     const theme = useTheme()
-    const [zoomDensity, setZoomDensity] = useState<ChartZoomDensity | null>(
+    const [size, setSize] = useState<{ width: number; height: number } | null>(
       null,
     )
     const reactEchartsRef = useRef<ReactECharts | null>(null)
     const wrapperRef = useRef<HTMLDivElement | null>(null)
-    const zoomWindowRef = useRef(zoomWindow)
-    const optionRef = useRef(option)
+    const zoomWindowsRef = useRef(zoomWindows)
     // Decided once per mount: a chart mounting into an already-settled
     // notebook (scroll remount) skips the entry animation.
     const animateEntryRef = useRef(
@@ -140,11 +159,13 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       () => createQuestdbTheme(theme.color),
       [theme.color],
     )
-    const optionToDraw = useMemo(
-      () =>
-        zoomDensity === null ? option : withZoomDensity(option, zoomDensity),
-      [option, zoomDensity],
-    )
+    const layout = useMemo(() => {
+      if (!size) return null
+      const bounded = withBoundedHeatmapLabels(option, size.width)
+      const density = chartZoomDensity(bounded, size.width, size.height)
+      return { density, option: withZoomDensity(bounded, density) }
+    }, [option, size])
+    const optionToDraw = layout?.option ?? option
     const key = useMemo(() => structuralKey(optionToDraw), [optionToDraw])
     const suppressEntryAnimation =
       !animateEntryRef.current && !firstInstanceDoneRef.current
@@ -162,39 +183,34 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       return {
         datazoom: (evt: unknown) => {
           const e = evt as DataZoomEvent
-          // Y's slider owns its window; do not save that window as X zoom.
-          const first = (e.batch ?? [e]).find(
-            (change) =>
-              change.dataZoomId == null || isXZoomControl(change.dataZoomId),
-          )
-          if (
-            typeof first?.start === "number" &&
-            typeof first.end === "number"
-          ) {
-            onZoomChange(first.start, first.end)
+          const changes = e.batch ?? [e]
+          for (const axis of ZOOM_AXES) {
+            const change = changes.find(
+              (change) => axisForControl(change.dataZoomId) === axis,
+            )
+            if (
+              typeof change?.start === "number" &&
+              typeof change.end === "number"
+            ) {
+              onZoomChange(axis, change.start, change.end)
+            }
           }
         },
       }
     }, [onZoomChange])
 
-    const measureDensity = useCallback((width: number, height: number) => {
+    const measure = useCallback((width: number, height: number) => {
       if (width <= 0 || height <= 0) return
-      const next = chartZoomDensity(optionRef.current, width, height)
-      setZoomDensity((previous) =>
-        previous?.slider === next.slider &&
-        previous.wheel === next.wheel &&
-        previous.rowSlider === next.rowSlider
+      setSize((previous) =>
+        previous?.width === width && previous.height === height
           ? previous
-          : next,
+          : { width, height },
       )
     }, [])
 
     const resetZoom = useCallback(() => {
-      reactEchartsRef.current?.getEchartsInstance()?.dispatchAction({
-        type: "dataZoom",
-        start: 0,
-        end: 100,
-      })
+      const instance = reactEchartsRef.current?.getEchartsInstance()
+      for (const axis of ZOOM_AXES) applyZoom(instance, axis, 0, 100)
     }, [])
 
     const handleChartReady = useCallback<
@@ -202,21 +218,14 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     >(
       (instance) => {
         firstInstanceDoneRef.current = true
-        const zoom = zoomWindowRef.current
-        if (isZoomed(zoom)) {
-          const mounted = instance.getOption() as { dataZoom?: unknown }
-          if (hasActiveXZoomControl(mounted)) {
-            instance.dispatchAction({
-              type: "dataZoom",
-              dataZoomId: X_WHEEL_ZOOM_ID,
-              start: zoom.start,
-              end: zoom.end,
-            })
+        const mounted = instance.getOption() as { dataZoom?: unknown }
+        for (const axis of ZOOM_AXES) {
+          const window = zoomWindowsRef.current?.[axis]
+          if (!window) continue
+          if (hasActiveZoomControl(mounted, axis)) {
+            applyZoom(instance, axis, window.start, window.end)
           } else {
-            // The remounted chart has no control that could move the window
-            // back: report the zoom as gone, or the owner's Reset button keeps
-            // pointing at a zoom that no longer exists.
-            onZoomChangeRef.current?.(0, 100)
+            onZoomChangeRef.current?.(axis, 0, 100)
           }
         }
         if (animateEntryRef.current) {
@@ -230,19 +239,10 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       [bufferId],
     )
 
-    // The density measurement reads the option from a layout effect, so the
-    // ref syncs in one too, ahead of it.
     useLayoutEffect(() => {
-      optionRef.current = option
-    }, [option])
-
-    useEffect(() => {
-      zoomWindowRef.current = zoomWindow
-    }, [zoomWindow])
-
-    useEffect(() => {
+      zoomWindowsRef.current = zoomWindows
       onZoomChangeRef.current = onZoomChange
-    }, [onZoomChange])
+    }, [onZoomChange, zoomWindows])
 
     // Capture-phase wheel listener must intercept BEFORE ECharts' inner
     // listeners so the page scrolls instead of ECharts preventDefaulting.
@@ -270,7 +270,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         const box = entries[0]?.contentRect
         if (!box) return
         resizeTo(box.width, box.height)
-        measureDensity(box.width, box.height)
+        measure(box.width, box.height)
       })
       observer.observe(wrapper)
 
@@ -279,7 +279,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         requestAnimationFrame(() => {
           const rect = wrapper.getBoundingClientRect()
           resizeTo(rect.width, rect.height)
-          measureDensity(rect.width, rect.height)
+          measure(rect.width, rect.height)
         })
       }
       document.addEventListener("visibilitychange", handleVisibility)
@@ -288,28 +288,30 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         observer.disconnect()
         document.removeEventListener("visibilitychange", handleVisibility)
       }
-    }, [measureDensity])
+    }, [measure])
 
     // The chart mounts once the wrapper is measured, so the first instance
     // already carries the right slider decision instead of remounting for it.
     useLayoutEffect(() => {
       const box = wrapperRef.current?.getBoundingClientRect()
-      if (box) measureDensity(box.width, box.height)
-    }, [measureDensity, option])
+      if (box) measure(box.width, box.height)
+    }, [measure])
 
-    // Without a slider or a wheel nothing can move the window back, so a
-    // window that outlives its controls resets and the owner hears it go.
+    // Losing one axis's controls must not clear the other axis's window.
+    const xZoomActive = layout?.density.slider || layout?.density.wheel
+    const yZoomActive = layout?.density.rowSlider
     useEffect(() => {
-      if (zoomDensity === null || !zoomControlsHidden(zoomDensity)) return
-      if (!isZoomed(zoomWindowRef.current)) return
-      reactEchartsRef.current?.getEchartsInstance()?.dispatchAction({
-        type: "dataZoom",
-        dataZoomId: X_WHEEL_ZOOM_ID,
-        start: 0,
-        end: 100,
-      })
-      onZoomChangeRef.current?.(0, 100)
-    }, [zoomDensity])
+      if (xZoomActive === undefined || yZoomActive === undefined) return
+      for (const axis of ZOOM_AXES) {
+        if (
+          (axis === "x" ? xZoomActive : yZoomActive) ||
+          !zoomWindowsRef.current?.[axis]
+        )
+          continue
+        applyZoom(reactEchartsRef.current?.getEchartsInstance(), axis, 0, 100)
+        onZoomChangeRef.current?.(axis, 0, 100)
+      }
+    }, [xZoomActive, yZoomActive])
 
     useImperativeHandle(ref, () => ({ resetZoom }), [resetZoom])
 
@@ -321,7 +323,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           height: typeof height === "number" ? `${height}px` : height,
         }}
       >
-        {zoomDensity !== null && (
+        {layout !== null && (
           <ReactECharts
             key={`${theme.mode}:${key}`}
             ref={reactEchartsRef}

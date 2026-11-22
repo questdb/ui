@@ -1,6 +1,6 @@
 import React, { useContext } from "react"
 import styled from "styled-components"
-import { Button, Box, Key } from ".."
+import { Button, Box, Key, toast } from ".."
 import { color } from "../../utils"
 import { ctrlCmd } from "../../utils/platform"
 import { useSelector } from "react-redux"
@@ -14,6 +14,7 @@ import type { ConversationId } from "../../providers/AIConversationProvider/type
 import {
   executeAIFlow,
   createExplainFlowConfig,
+  localAgentDispatchError,
 } from "../../utils/ai/executeAIFlow"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -60,6 +61,11 @@ export const ExplainQueryButton = ({
 
   const handleExplainQuery = () => {
     if (!canUse || isOperationBlocking()) return
+    const unavailable = localAgentDispatchError(currentModel, localAgentChannel)
+    if (unavailable) {
+      toast.error(unavailable)
+      return
+    }
     void trackEvent(ConsoleEvent.AI_EXPLAIN_QUERY)
 
     void executeAIFlow(

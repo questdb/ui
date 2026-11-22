@@ -3,14 +3,13 @@ import { useSelector } from "react-redux"
 import { toast } from "../components"
 import { QuestContext } from "../providers"
 import { useAIConversationActions } from "../providers/AIConversationProvider"
-import { LOCAL_AGENT_MODEL } from "../utils/localAgent/localAgentModel"
 import { useLocalAgentChannel } from "../utils/localAgent/LocalAgentContext"
-import { isCurrentLocalAgentChannel } from "../utils/localAgent/localAgentChannel"
 import { useAIStatus } from "../providers/AIStatusProvider"
 import {
   executeAIFlow,
   createSchemaExplainFlowConfig,
   createHealthIssueFlowConfig,
+  localAgentDispatchError,
 } from "../utils/ai/executeAIFlow"
 import { getDocsSectionByUrl } from "../utils/questdbDocsRetrieval"
 import { ISSUE_DOCS_URLS } from "../scenes/Schema/TableDetailsDrawer/healthCheck"
@@ -76,12 +75,20 @@ export const useAIQuickActions = () => {
 
   // Bind to the selected channel before preparation; never look up a new
   // destination after waiting for schema, docs, or the conversation store.
-  const canContinue = (abortSignal: AbortSignal) =>
-    !isOperationBlocking() &&
-    !abortSignal.aborted &&
-    abortSignal === getOperationSignal() &&
-    (currentModel !== LOCAL_AGENT_MODEL ||
-      isCurrentLocalAgentChannel(localAgentChannel))
+  const canContinue = (abortSignal: AbortSignal) => {
+    if (
+      isOperationBlocking() ||
+      abortSignal.aborted ||
+      abortSignal !== getOperationSignal()
+    )
+      return false
+    const unavailable = localAgentDispatchError(currentModel, localAgentChannel)
+    if (unavailable) {
+      toast.error(unavailable)
+      return false
+    }
+    return true
+  }
 
   const captureDispatch = (id: string, abortSignal: AbortSignal) => {
     const active = getChatDispatchState(id)

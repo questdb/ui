@@ -3,15 +3,32 @@ import {
   configuredOpenAI,
   getByHook,
   modelServer,
+  queryByHook,
   renderAISettings,
   storedSettings,
 } from "./test/setupHarness"
-import { screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import React, { useState } from "react"
 import { describe, expect, it } from "vitest"
+import { LocalAgentContext } from "../../utils/localAgent/LocalAgentContext"
+import type {
+  LocalAgentChannel,
+  LocalAgentSnapshot,
+} from "../../utils/localAgent/localAgentChannel"
+import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
 import { Button } from "../Button"
 import { SettingsModal } from "./SettingsModal"
+
+const pairedAgent: LocalAgentSnapshot = {
+  info: { id: "fixture", label: "Test local agent", cwd: "/tmp" },
+  state: "ready",
+  error: null,
+  config: null,
+  questions: [],
+  commands: [],
+  acceptsImages: false,
+}
 
 const levels = [
   {
@@ -99,3 +116,49 @@ describe("AI permission settings", () => {
     expect(getByHook("permissions-trigger")).toHaveTextContent("None")
   })
 })
+
+it.each([configuredOpenAI.selectedModel, LOCAL_AGENT_MODEL])(
+  "opens the saved provider from the Local Agent tab without changing the selected model (%s)",
+  async (selectedModel) => {
+    const server = modelServer()
+    server.reply = () => Response.json({ data: [] })
+    const channel = {
+      getSnapshot: () => pairedAgent,
+      subscribe: () => () => undefined,
+      isTransportReady: () => true,
+    } as unknown as LocalAgentChannel
+    renderAISettings(
+      <LocalAgentContext.Provider value={channel}>
+        <SettingsModal open onOpenChange={() => undefined} />
+      </LocalAgentContext.Provider>,
+      { ...configuredOpenAI, selectedModel },
+    )
+    const user = userEvent.setup()
+    if (selectedModel !== LOCAL_AGENT_MODEL) {
+      await user.click(getByHook("ai-settings-provider-local-agent"))
+    }
+    expect(getByHook("ai-settings-local-agent")).toBeVisible()
+    await user.click(getByHook("ai-settings-add-custom-provider"))
+
+    fireEvent.change(getByHook("custom-provider-name-input"), {
+      target: { value: "Custom Test Provider" },
+    })
+    fireEvent.change(getByHook("custom-provider-base-url-input"), {
+      target: { value: "https://provider.example.invalid/v1" },
+    })
+    await user.click(getByHook("multi-step-modal-next-button"))
+    await waitFor(() =>
+      expect(getByHook("custom-provider-manual-model-input")).toBeVisible(),
+    )
+    fireEvent.change(getByHook("custom-provider-manual-model-input"), {
+      target: { value: "test-model" },
+    })
+    await user.click(getByHook("custom-provider-add-model-button"))
+    await user.click(screen.getByRole("button", { name: "Add Provider" }))
+
+    expect(queryByHook("ai-settings-local-agent")).not.toBeInTheDocument()
+    expect(getByHook("ai-settings-api-key")).toBeVisible()
+    expect(screen.getByText("test-model")).toBeVisible()
+    expect(storedSettings().selectedModel).toBe(selectedModel)
+  },
+)

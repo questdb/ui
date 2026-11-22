@@ -111,6 +111,9 @@ export type StatusCallback = (
 export type StreamingCallback = {
   // A standalone chunk is parsed separately from the Markdown around it.
   onTextChunk: (chunk: string, options?: { standalone?: boolean }) => void
+  onNotice?: (
+    notice: import("../localAgent/noticeTranscript").NoticeRecord,
+  ) => void
   onThinkingChunk?: (chunk: string) => void
   onToolCall?: (call: { id: string; name: string; arguments: string }) => void
   // The model has started a tool call; its arguments are still streaming.

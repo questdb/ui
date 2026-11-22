@@ -15,6 +15,8 @@ import {
 } from "./support/chatHarness"
 import { darkTheme } from "../../../src/theme"
 import { Button } from "../../../src/components/Button"
+import { ToastContainer } from "../../../src/components/Toast"
+import { createQueryKey } from "../../../src/scenes/Editor/Monaco/utils"
 import { TooltipProvider } from "../../../src/components/Tooltip"
 import rootReducer from "../../../src/store/reducers"
 import { db } from "../../../src/store/db"
@@ -107,7 +109,7 @@ const answer = (
   socket.receive({ ...ids, type: "agent_turn_end", result })
 }
 
-const openNotebookChat = async () => {
+const openLocalChat = async (query = false) => {
   sockets.length = 0
   vi.stubGlobal("WebSocket", MemorySocket)
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
@@ -115,19 +117,28 @@ const openNotebookChat = async () => {
     label: "Sample notebook",
     value: "",
     position: 0,
-    notebookViewState: { cells: [] },
+    ...(!query && { notebookViewState: { cells: [] } }),
   })
   const Probe = () => {
     const { connect, status } = useMCPBridge()
-    const { openNotebookChat } = useAIConversationActions()
+    const { openNotebookChat, handleGlyphClick } = useAIConversationActions()
     const { canUse } = useAIStatus()
     return (
       <>
         <Button onClick={() => connect("ws://mock.invalid", "mock-token")}>
           Connect fake bridge
         </Button>
-        <Button onClick={() => void openNotebookChat(bufferId)}>
-          Open sample notebook chat
+        <Button
+          onClick={() =>
+            void (query
+              ? handleGlyphClick({
+                  bufferId,
+                  queryKey: createQueryKey("SELECT 1", 0),
+                })
+              : openNotebookChat(bufferId))
+          }
+        >
+          Open sample chat
         </Button>
         <output data-hook="bridge-status">{`${status}/${canUse}`}</output>
       </>
@@ -153,6 +164,7 @@ const openNotebookChat = async () => {
                   <div id="side-panel-right" />
                   <AIChatWindowLazy />
                   <Probe />
+                  <ToastContainer />
                 </AIStatusProvider>
               </MCPBridgeProvider>
             </AIConversationProvider>
@@ -179,11 +191,9 @@ const openNotebookChat = async () => {
   const channel = getLocalAgentChannel()
   expect(channel).not.toBeNull()
   await userEvent.click(
-    screen.getByRole("button", { name: "Open sample notebook chat" }),
+    screen.getByRole("button", { name: "Open sample chat" }),
   )
-  await screen.findByPlaceholderText(
-    "Ask AI about your tables, or generate a query...",
-  )
+  await waitFor(() => expect(getByHook("chat-input-textarea")).toBeVisible())
   const reconnect = () => {
     act(() => {
       first.close(1006)
@@ -221,6 +231,8 @@ const openNotebookChat = async () => {
   }
   return { bufferId, first, channel, reconnect, replace }
 }
+
+const openNotebookChat = () => openLocalChat()
 
 const holdSnapshot = () => {
   const snapshot = gate()
@@ -272,6 +284,131 @@ it("keeps a prepared prompt queued until the replacement socket acknowledges hel
   } finally {
     await snapshot.release()
   }
+})
+
+it("does not record Explain while the bridge is waiting for hello", async () => {
+  const { first, reconnect } = await openLocalChat(true)
+  const second = reconnect()
+  await userEvent.click(getByHook("button-explain-query"))
+  const feedback = await screen.findByText(/Waiting for the local agent bridge/)
+  expect(feedback.closest('[role="alert"]')).not.toBeNull()
+  expect(first.prompts()).toHaveLength(0)
+  expect(second.prompts()).toHaveLength(0)
+  expect(queryByHook("chat-message-user")).not.toBeInTheDocument()
+  expect(queryByHook("chat-message-error")).not.toBeInTheDocument()
+
+  act(() => ack(second, true))
+  await userEvent.click(getByHook("button-explain-query"))
+  await waitFor(() => expect(second.prompts()).toHaveLength(1))
+  act(() => answer(second, "This query returns one row."))
+  await screen.findByText("This query returns one row.")
+  await waitFor(async () => {
+    const messages = await aiConversationStore.getMessages(
+      second.prompts()[0].conversationId,
+    )
+    expect(messages.map(({ role }) => role)).toEqual(["user", "assistant"])
+  })
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it.each(["cancel", "delete"] as const)(
+  "pauses a reconnecting queue during delete confirmation (%s)",
+  async (decision) => {
+    const { first, reconnect } = await openNotebookChat()
+    await sendMessage("Show a sample query.")
+    await waitFor(() => expect(first.prompts()).toHaveLength(1))
+    const { conversationId } = first.prompts()[0]
+    act(() => answer(first, "Sample query."))
+    await waitFor(() => expect(getByHook("chat-window-history")).toBeEnabled())
+    const second = reconnect()
+    await sendMessage("Explain the sample result.")
+    expect(getByHook("chat-queued-message-text")).toHaveTextContent(
+      "Explain the sample result.",
+    )
+    await userEvent.click(getByHook("chat-window-history"))
+    await userEvent.click(getByHook("chat-history-delete"))
+    const dialog = screen.getByRole("alertdialog", {
+      name: "Delete conversation",
+    })
+    expect(dialog).toBeVisible()
+
+    act(() => ack(second, true))
+    expect(second.prompts()).toHaveLength(0)
+    if (decision === "cancel") {
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }))
+      await waitFor(() => expect(second.prompts()).toHaveLength(1))
+      expect(second.prompts()[0].conversationId).toBe(conversationId)
+      act(() => answer(second, "Sample follow-up."))
+      await waitFor(async () => {
+        expect(
+          await aiConversationStore.getMessages(conversationId),
+        ).toHaveLength(4)
+      })
+    } else {
+      await userEvent.click(screen.getByRole("button", { name: "Delete" }))
+      await waitFor(() => expect(getByHook("chat-history-empty")).toBeVisible())
+      expect(await aiConversationStore.getMeta(conversationId)).toBeUndefined()
+      expect(second.prompts()).toHaveLength(0)
+    }
+    expect(fetch).not.toHaveBeenCalled()
+  },
+)
+
+it("restores the draft on Stop while leaving the cancel queued for reconnect", async () => {
+  const { first, reconnect } = await openNotebookChat()
+  await sendMessage("Show a sample query.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(1))
+  await sendMessage("Keep this follow-up.")
+  await userEvent.type(getByHook("chat-input-textarea"), "Unsent draft.")
+  const { conversationId, turnId } = first.prompts()[0]
+  const question = {
+    v,
+    type: "agent_question",
+    conversationId,
+    requestId: "sample-question",
+    message: "Choose a display style",
+    fields: [
+      {
+        id: "style",
+        kind: "choice",
+        title: null,
+        prompt: "Display style?",
+        options: [{ value: "compact", label: "Compact", description: null }],
+        multiple: false,
+        required: true,
+        otherFieldId: null,
+      },
+    ],
+  }
+  act(() => first.receive(question))
+  expect(getByHook("chat-question-card")).toBeVisible()
+  const second = reconnect()
+  await userEvent.click(screen.getByRole("button", { name: "Stop the agent" }))
+  expect(queryByHook("chat-question-card")).not.toBeInTheDocument()
+  expect(getByHook("chat-input-textarea")).toHaveValue(
+    "Keep this follow-up.\n\nUnsent draft.",
+  )
+  expect(second.frames.map(({ type }) => type)).toEqual(["hello"])
+
+  act(() => {
+    ack(second, true)
+    second.receive({ ...question, requestId: "late-question" })
+  })
+  expect(second.frames.some(({ type }) => type === "agent_cancel")).toBe(true)
+  expect(queryByHook("chat-question-card")).not.toBeInTheDocument()
+  expect(getByHook("chat-input-textarea")).toBeEnabled()
+  expect(second.prompts()).toHaveLength(0)
+  await act(() => {
+    second.receive({
+      v,
+      type: "agent_turn_end",
+      conversationId,
+      turnId,
+      result: { outcome: "completed", stopReason: "cancelled", usage: null },
+    })
+    return Promise.resolve()
+  })
+  expect(fetch).not.toHaveBeenCalled()
 })
 
 it("resends seen history to a new channel advertising the same agent ID, but not on reconnect", async () => {

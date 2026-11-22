@@ -148,8 +148,49 @@ describe("result chart settings", () => {
     await choose(/^Value column/, "baseline")
     await choose(/^Chart type/, "Line")
     fireEvent.click(screen.getByRole("button", { name: "Apply" }))
-    expect(series().map((s) => s.type)).toEqual(["line"])
+    expect(series().map((s) => s.type)).toEqual(["line", "line"])
   })
+
+  it.each([false, true])(
+    "rejects a categorical Value and reports duplicate readings (duplicates: %s)",
+    async (duplicates) => {
+      const seed = {
+        ...heatmapResult,
+        columns: heatmapResult.columns.slice(0, 3),
+        dataset: [
+          ["2026-01-01T00:00:00Z", "west", "0.125"],
+          ["2026-01-01T00:00:00Z", "west", duplicates ? "2.125" : "NaN"],
+        ],
+        count: 2,
+      }
+      mockResults(seed)
+      renderComponent(resultChart(seed, new Client()))
+      await screen.findByLabelText("Renderer input")
+      await choose(/^Chart type/, "Heatmap")
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }))
+      expect(
+        screen.getByText(
+          /pick a separate rows column and a numeric value column/i,
+        ),
+      ).toBeVisible()
+      expect(series()[0].type).not.toBe("custom")
+
+      await choose(/^Value column/, "reading")
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }))
+      if (duplicates) {
+        expect(
+          screen.getByText(
+            /Aggregate the query to one reading per X-axis and Rows combination/,
+          ),
+        ).toBeVisible()
+        expect(
+          screen.queryByLabelText("Renderer input"),
+        ).not.toBeInTheDocument()
+      } else {
+        expect(series()[0].type).toBe("custom")
+      }
+    },
+  )
 
   it.each(["site", "reading"])(
     "guides the user when same-SQL results lose the heatmap %s field",

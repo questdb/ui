@@ -85,7 +85,11 @@ const toolCall = (
 
 const startTurn = (abortSignal?: AbortSignal) => {
   const setStatus = vi.fn<Parameters<StatusCallback>, void>()
-  const streaming = { onTextChunk: vi.fn(), onThinkingChunk: vi.fn() }
+  const streaming = {
+    onTextChunk: vi.fn(),
+    onThinkingChunk: vi.fn(),
+    onNotice: vi.fn(),
+  }
   const turn = runLocalAgentTurn({
     channel: activeChannel,
     conversationId: CONVERSATION_ID,
@@ -415,7 +419,7 @@ describe("runLocalAgentTurn", () => {
     ])
   })
 
-  it("keeps a notice in the reply where the agent sent it", async () => {
+  it("reports a notice without inserting it into an ongoing reply", async () => {
     // Given
     const bridge = createFakeBridge()
     activeChannel = connectChannel(bridge.client).channel
@@ -429,6 +433,7 @@ describe("runLocalAgentTurn", () => {
       title: "Rate limit close",
       description: null,
     })
+    bridge.update({ kind: "message_chunk", messageId: "m1", text: " After." })
     bridge.endTurn({
       outcome: "completed",
       stopReason: "end_turn",
@@ -438,16 +443,20 @@ describe("runLocalAgentTurn", () => {
 
     // Then
     const reply = (result as { explanation: string }).explanation
-    expect(reply).toMatch(/^Before\.\n\n[\s\S]*```agent-notice\n/)
-    expect(reply).toContain('"title":"Rate limit close"')
-    expect(streaming.onTextChunk).toHaveBeenCalledTimes(2)
+    expect(reply).toBe("Before. After.")
+    expect(streaming.onNotice).toHaveBeenCalledWith({
+      severity: "warning",
+      title: "Rate limit close",
+      description: null,
+    })
+    expect(streaming.onTextChunk.mock.calls).toEqual([["Before."], [" After."]])
   })
 
   it("says why a turn stopped short, after what the agent wrote", async () => {
     // Given
     const bridge = createFakeBridge()
     activeChannel = connectChannel(bridge.client).channel
-    const { turn } = startTurn()
+    const { turn, streaming } = startTurn()
 
     // When
     bridge.update({
@@ -464,8 +473,10 @@ describe("runLocalAgentTurn", () => {
 
     // Then
     const reply = (result as { explanation: string }).explanation
-    expect(reply.startsWith("The answer is")).toBe(true)
-    expect(reply).toContain("The agent reached its output limit")
+    expect(reply).toBe("The answer is")
+    expect(streaming.onNotice).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "The agent reached its output limit" }),
+    )
   })
 
   it("drops the leading blank lines of each thinking block", async () => {

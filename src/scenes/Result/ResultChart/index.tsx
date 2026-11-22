@@ -8,19 +8,20 @@ import { Reset } from "../../../components/icons"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
-import { buildEchartsOption } from "../../Editor/Notebook/CellChart/buildEchartsOption"
 import {
   ChartRenderer,
   type ChartRendererHandle,
 } from "../../Editor/Notebook/CellChart/ChartRenderer"
+import { resolveChartPlot } from "../../Editor/Notebook/CellChart/resolveChartPlot"
 import { ChartSettingsPanel } from "../../Editor/Notebook/CellChart/ChartSettingsDrawer"
 import type { ChartSettingsTelemetry } from "../../Editor/Notebook/CellChart/chartSettingsTelemetry"
-import type { ChartConfig } from "../../Editor/Notebook/CellChart/chartTypes"
 import {
-  HEATMAP_INCOMPLETE_MESSAGE,
-  heatmapIssue,
-  resolveDraw,
-} from "../../Editor/Notebook/DrawCanvas/drawCanvasUtils"
+  withChartZoom,
+  type ChartConfig,
+  type ChartZoomAxis,
+  type ChartZoomWindows,
+} from "../../Editor/Notebook/CellChart/chartTypes"
+import { resolveDraw } from "../../Editor/Notebook/DrawCanvas/drawCanvasUtils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import type { QueryRawResult } from "../../../utils/questdb"
 import { Type } from "../../../utils/questdb"
@@ -155,8 +156,7 @@ export const ResultChart: React.FC<Props> = ({
 }) => {
   const chartQuery = useChartQuery({ seed: result, enabled: visible })
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null)
-  const [zoomStart, setZoomStart] = useState(0)
-  const [zoomEnd, setZoomEnd] = useState(100)
+  const [zoomWindows, setZoomWindows] = useState<ChartZoomWindows>()
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
   const trackedChartResultRef = useRef<QueryExecResult | null>(null)
 
@@ -178,40 +178,37 @@ export const ResultChart: React.FC<Props> = ({
     [chartResult, config],
   )
 
-  const option = useMemo(
-    () =>
-      resolution
-        ? buildEchartsOption(resolution.chart, resolution.renderQueries)
-        : null,
+  const plot = useMemo(
+    () => (resolution ? resolveChartPlot(resolution) : null),
     [resolution],
   )
+  const option = plot?.option ?? null
+  const message = plot?.message
 
   const hasChartableColumns =
     resolution?.renderQueries.some(
       (query) => query.yColumns.length > 0 || query.ohlc != null,
     ) ?? false
 
-  const incompleteHeatmap =
-    resolution != null &&
-    heatmapIssue(resolution.renderQueries) === "incomplete"
-
   const shownRowCount = chartResult?.dataset.length ?? 0
   const totalRowCount = chartResult?.count ?? 0
   const isTruncated = totalRowCount > shownRowCount
-  const isZoomed = zoomStart > 0 || zoomEnd < 100
+  const isZoomed = zoomWindows != null
 
   useEffect(() => {
-    setZoomStart(0)
-    setZoomEnd(100)
+    setZoomWindows(undefined)
     chartRendererRef.current?.resetZoom()
   }, [queryKey])
 
-  const handleZoomChange = useCallback((start: number, end: number) => {
-    setZoomStart(start)
-    setZoomEnd(end)
-  }, [])
+  const handleZoomChange = useCallback(
+    (axis: ChartZoomAxis, start: number, end: number) => {
+      setZoomWindows((previous) => withChartZoom(previous, axis, start, end))
+    },
+    [],
+  )
 
   const handleResetZoom = (e: React.MouseEvent) => {
+    setZoomWindows(undefined)
     chartRendererRef.current?.resetZoom()
     if (e.detail === 0) onResetZoomFocus()
   }
@@ -219,8 +216,8 @@ export const ResultChart: React.FC<Props> = ({
   let emptyMessage = "Run a query to draw a chart."
   if (chartResult && chartResult.dataset.length === 0) {
     emptyMessage = "This result has no rows to plot."
-  } else if (incompleteHeatmap) {
-    emptyMessage = HEATMAP_INCOMPLETE_MESSAGE
+  } else if (message) {
+    emptyMessage = message
   } else if (chartResult && !hasChartableColumns) {
     emptyMessage = "This result has no chartable columns."
   }
@@ -229,8 +226,7 @@ export const ResultChart: React.FC<Props> = ({
     option !== null &&
     chartResult !== null &&
     chartResult.dataset.length > 0 &&
-    hasChartableColumns &&
-    !incompleteHeatmap
+    hasChartableColumns
 
   useEffect(() => {
     if (
@@ -322,7 +318,7 @@ export const ResultChart: React.FC<Props> = ({
             option={option}
             onZoomChange={handleZoomChange}
             animateEntry={false}
-            zoomWindow={{ start: zoomStart, end: zoomEnd }}
+            zoomWindows={zoomWindows}
           />
         </ChartArea>
       </Canvas>
@@ -331,9 +327,7 @@ export const ResultChart: React.FC<Props> = ({
     body = (
       <EmptyState>
         <ChartLineIcon size={32} weight="regular" aria-hidden />
-        <span role={incompleteHeatmap ? "status" : undefined}>
-          {emptyMessage}
-        </span>
+        <span role={message ? "status" : undefined}>{emptyMessage}</span>
       </EmptyState>
     )
   }

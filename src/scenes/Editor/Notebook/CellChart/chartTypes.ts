@@ -63,3 +63,31 @@ export const missingQueryFields = (q: QueryChart): string | null => {
   }
   return null
 }
+
+export type ChartSettingsDraft = ChartConfig & {
+  // Heatmap Value edits must not replace the series of the previous type.
+  heatmapValues?: Partial<Record<number, string>>
+}
+
+export type ChartZoomAxis = "x" | "y"
+export type ZoomWindow = { start: number; end: number }
+export type ChartZoomWindows = Partial<Record<ChartZoomAxis, ZoomWindow>>
+
+export const isZoomed = (start: number, end: number) => start > 0 || end < 100
+
+export const withChartZoom = (
+  windows: ChartZoomWindows | undefined,
+  axis: ChartZoomAxis,
+  start: number,
+  end: number,
+): ChartZoomWindows | undefined => {
+  if (isZoomed(start, end)) {
+    if (windows?.[axis]?.start === start && windows[axis].end === end)
+      return windows
+    return { ...windows, [axis]: { start, end } }
+  }
+  if (!windows?.[axis]) return windows
+  const next = { ...windows }
+  delete next[axis]
+  return next.x || next.y ? next : undefined
+}

@@ -1,7 +1,13 @@
-import React, { useState } from "react"
+import React from "react"
 import styled from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
-import { ButtonBase, Dialog, IconButton, Overlay } from "../../../components"
+import {
+  Button,
+  ButtonBase,
+  Dialog,
+  IconButton,
+  Overlay,
+} from "../../../components"
 import type { AgentPromptImage } from "../../../utils/localAgent/protocol"
 
 export const IMAGE_TYPES = [
@@ -79,9 +85,15 @@ const Preview = styled(Dialog.Content)`
   img {
     display: block;
     max-width: calc(90vw - 1.6rem);
-    max-height: calc(85vh - 1.6rem);
+    max-height: calc(85vh - 5.2rem);
+    margin-inline: auto;
     border-radius: 0.4rem;
   }
+`
+
+const PreviewClose = styled(Button)`
+  display: flex;
+  margin: 0.8rem 0 0 auto;
 `
 
 const VisuallyHidden = styled.span`
@@ -105,26 +117,14 @@ export const ImageAttachments = ({
   images: AgentPromptImage[]
   onRemove?: (index: number) => void
   size?: number
-}) => {
-  const [open, setOpen] = useState<number | null>(null)
-  return (
-    <Strip data-hook="chat-image-attachments">
-      {images.map((image, index) => (
-        // eslint-disable-next-line react/no-array-index-key -- images have no id and keep their order
-        <Thumb key={index} $size={size}>
-          {onRemove ? (
+}) => (
+  <Strip data-hook="chat-image-attachments">
+    {images.map((image, index) => (
+      // eslint-disable-next-line react/no-array-index-key -- images have no id and keep their order
+      <Thumb key={index} $size={size}>
+        {onRemove ? (
+          <>
             <img src={imageSrc(image)} alt={`Attachment ${index + 1}`} />
-          ) : (
-            <Enlarge
-              type="button"
-              aria-label={`Open attachment ${index + 1} at full size`}
-              onClick={() => setOpen(index)}
-              data-hook="chat-image-enlarge"
-            >
-              <img src={imageSrc(image)} alt="" />
-            </Enlarge>
-          )}
-          {onRemove && (
             <Remove
               label={`Remove image ${index + 1}`}
               size="sm"
@@ -134,31 +134,40 @@ export const ImageAttachments = ({
             >
               <XIcon size={12} />
             </Remove>
-          )}
-        </Thumb>
-      ))}
-      {open !== null && images[open] && (
-        <Dialog.Root open onOpenChange={(next) => !next && setOpen(null)}>
-          <Dialog.Portal>
-            <Overlay primitive={Dialog.Overlay} />
-            <Preview
-              data-hook="chat-image-preview"
-              aria-describedby={undefined}
-            >
-              <Dialog.Title asChild>
-                <VisuallyHidden>Attachment {open + 1}</VisuallyHidden>
-              </Dialog.Title>
-              <img
-                src={imageSrc(images[open])}
-                alt={`Attachment ${open + 1}`}
-              />
-            </Preview>
-          </Dialog.Portal>
-        </Dialog.Root>
-      )}
-    </Strip>
-  )
-}
+          </>
+        ) : (
+          <Dialog.Root>
+            <Dialog.Trigger asChild>
+              <Enlarge
+                aria-label={`Open attachment ${index + 1} at full size`}
+                data-hook="chat-image-enlarge"
+              >
+                <img src={imageSrc(image)} alt="" />
+              </Enlarge>
+            </Dialog.Trigger>
+            <Dialog.Portal>
+              <Overlay primitive={Dialog.Overlay} />
+              <Preview
+                data-hook="chat-image-preview"
+                aria-describedby={undefined}
+              >
+                <Dialog.Title asChild>
+                  <VisuallyHidden>Attachment {index + 1}</VisuallyHidden>
+                </Dialog.Title>
+                <img src={imageSrc(image)} alt={`Attachment ${index + 1}`} />
+                <Dialog.Close asChild>
+                  <PreviewClose size="sm" variant="secondary">
+                    Close
+                  </PreviewClose>
+                </Dialog.Close>
+              </Preview>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
+      </Thumb>
+    ))}
+  </Strip>
+)
 
 // Reads image files as attachments; the reason for any it cannot take.
 export const readImages = async (

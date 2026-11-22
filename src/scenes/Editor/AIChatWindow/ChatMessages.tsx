@@ -83,6 +83,32 @@ const SCROLL_TO_END_DISTANCE_PX = 120
 // Farther than this, scrolling to the end jumps instead of animating.
 const SMOOTH_SCROLL_MAX_DISTANCE_PX = 3000
 
+// A wheel event bubbles even when its default scroll stays inside the output.
+const wheelStaysInside = (event: WheelEvent, container: HTMLElement) => {
+  for (const target of event.composedPath()) {
+    if (target === container) break
+    if (!(target instanceof Element)) continue
+    const maxScrollTop = target.scrollHeight - target.clientHeight
+    if (maxScrollTop <= 0) continue
+    const { overflow, overflowY, overscrollBehaviorY } =
+      getComputedStyle(target)
+    if (!/^(auto|scroll)$/.test(overflowY || overflow)) continue
+    if (overscrollBehaviorY === "contain" || overscrollBehaviorY === "none") {
+      return true
+    }
+    // Round away subpixel differences at the bottom (scrollHeight and
+    // clientHeight are integers).
+    if (
+      event.deltaY < 0
+        ? target.scrollTop > 0
+        : Math.ceil(target.scrollTop) < maxScrollTop
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
 const MessagesContainer = styled(Box)<{ $scrolled: boolean }>`
   display: flex;
   flex-direction: column;
@@ -737,6 +763,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     }
 
     const handleWheel = (event: WheelEvent) => {
+      if (
+        event.defaultPrevented ||
+        !event.deltaY ||
+        wheelStaysInside(event, container)
+      )
+        return
       userScrolledRef.current = true
       scrollingToEndRef.current = false
       if (event.deltaY < 0) {

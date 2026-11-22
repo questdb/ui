@@ -39,6 +39,13 @@ const markdownExample = `\`\`\`\`markdown\n${noticeExample}\n\`\`\`\``
 it.each([
   { name: "before any answer text", partial: "", stopReason: "max_tokens" },
   {
+    name: "inside an ongoing SQL reply",
+    partial: "```sql\nSELECT 42 AS",
+    suffix: " answer;\n```",
+    midstreamNotice: true,
+    stopReason: "end_turn",
+  },
+  {
     name: "after truncated SQL",
     partial: partialSQL,
     stopReason: "max_tokens",
@@ -56,7 +63,7 @@ it.each([
   },
 ])(
   "renders persisted local-agent history $name",
-  async ({ partial, stopReason, suffix }) => {
+  async ({ partial, stopReason, suffix, midstreamNotice }) => {
     const settings = {
       ...(JSON.parse(
         fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
@@ -107,7 +114,7 @@ it.each([
       expect(getByHook("assistant-mode-thinking")).toBeVisible()
       await act(async () => {
         await Promise.resolve()
-        if (suffix) {
+        if (suffix && !midstreamNotice) {
           deliver({
             ...ids,
             type: "agent_update",
@@ -133,7 +140,18 @@ it.each([
             },
           })
         }
-        if (suffix) {
+        if (midstreamNotice) {
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: {
+              kind: "notice",
+              severity: "warning",
+              title: "Sample warning",
+              description: null,
+            },
+          })
+        } else if (suffix) {
           deliver({
             ...ids,
             type: "agent_update",
@@ -146,6 +164,14 @@ it.each([
               content: null,
             },
           })
+        }
+      })
+      if (midstreamNotice) {
+        expect(getByHook("chat-notice")).toHaveTextContent("Sample warning")
+        expect(queryByHook("chat-response-copy")).not.toBeInTheDocument()
+      }
+      await act(() => {
+        if (suffix) {
           deliver({
             ...ids,
             type: "agent_update",
@@ -157,43 +183,62 @@ it.each([
           type: "agent_turn_end",
           result: { outcome: "completed", stopReason, usage: null },
         })
+        return Promise.resolve()
       })
 
-      await waitFor(() =>
-        expect(getByHook("chat-response-copy")).toBeInTheDocument(),
-      )
+      if (partial) {
+        await waitFor(() =>
+          expect(getByHook("chat-response-copy")).toBeInTheDocument(),
+        )
+      } else {
+        await waitFor(() => expect(getByHook("chat-notice")).toBeVisible())
+        expect(queryByHook("chat-response-copy")).not.toBeInTheDocument()
+      }
       await userEvent.click(getByHook("chat-window-close"))
       mounted.unmount()
       const saved = (
         await aiConversationStore.getMessages(conversationId)
       ).find((message) => message.role === "assistant")
-      if (partial === partialSQL) {
-        expect(saved?.content).toMatch(
-          /^```sql\nSELECT 42;\n+```agent-notice\n/,
-        )
-      } else if (suffix) {
-        expect(saved?.content).toContain(partial + suffix)
-      } else if (partial) {
-        expect(saved?.content).toBe(partial)
+      expect(saved?.content).toBe(partial ? partial + (suffix ?? "") : null)
+      if (midstreamNotice || stopReason === "max_tokens") {
+        expect(
+          saved?.operationHistory?.filter((entry) =>
+            entry.content?.includes("```agent-notice"),
+          ),
+        ).toHaveLength(1)
       }
       renderChat("openai", undefined, settings)
       await openChat()
-      await waitFor(() =>
-        expect(getByHook("chat-response-copy")).toBeInTheDocument(),
-      )
+      if (partial)
+        await waitFor(() =>
+          expect(getByHook("chat-response-copy")).toBeInTheDocument(),
+        )
 
-      if (stopReason === "max_tokens") {
+      if (midstreamNotice) {
+        expect(getByHook("chat-notice")).toHaveTextContent("Sample warning")
+        expect(
+          getByHook("chat-message-code-block").querySelector("pre")
+            ?.textContent,
+        ).toBe("SELECT 42 AS answer;")
+        vi.stubGlobal("isSecureContext", true)
+        const user = userEvent.setup()
+        await user.click(getByHook("chat-response-copy"))
+        await waitFor(async () =>
+          expect(await navigator.clipboard.readText()).toBe(partial + suffix),
+        )
+      } else if (stopReason === "max_tokens") {
+        await waitFor(() => expect(getByHook("chat-notice")).toBeVisible())
         const notice = queryByHook("chat-notice")
         expect(notice).toHaveAttribute("role", "alert")
         expect(notice).toHaveTextContent("The agent reached its output limit")
       } else {
         expect(queryByHook("chat-notice")).toBeNull()
       }
-      if (suffix) {
+      if (suffix && !midstreamNotice) {
         expect(getByHook("chat-message-assistant")).toHaveTextContent(
           partial + suffix,
         )
-      } else if (partial) {
+      } else if (partial && !midstreamNotice) {
         const code = getByHook("chat-message-code-block").querySelector("pre")
         expect(code?.textContent).toBe(
           partial === partialSQL ? "SELECT 42;" : noticeExample,

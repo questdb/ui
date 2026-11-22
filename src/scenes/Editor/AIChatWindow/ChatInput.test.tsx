@@ -9,8 +9,13 @@ import {
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
 import { LOCAL_AGENT_MODEL } from "../../../utils/localAgent/localAgentModel"
+import { Button } from "../../../components"
 import { LocalAgentContext } from "../../../utils/localAgent/LocalAgentContext"
-import type { LocalAgentChannel } from "../../../utils/localAgent/localAgentChannel"
+import type {
+  LocalAgentChannel,
+  LocalAgentSnapshot,
+} from "../../../utils/localAgent/localAgentChannel"
+import type { AgentQuestionMessage } from "../../../utils/localAgent/protocol"
 import { ChatInput, type ChatQueue } from "./ChatInput"
 
 vi.mock("react-redux", () => ({ useSelector: () => [] }))
@@ -72,6 +77,7 @@ const renderInput = (initial: LocalAgentChannel | null = null) => {
     submitted = queue
     return (
       <LocalAgentContext.Provider value={channel}>
+        <Button>Outside chat</Button>
         <ChatInput
           conversationId={id}
           localAgentTransportReady={channel !== null}
@@ -210,6 +216,141 @@ it("does not append ordinary text to a native slash command in the queue", async
     agentCommand: true,
   })
   expect(input).toHaveValue("Explain the sample")
+})
+
+const mixedClipboard = () =>
+  ({
+    items: [
+      {
+        kind: "file",
+        type: "image/png",
+        getAsFile: () =>
+          new File(["sample"], "chart.png", { type: "image/png" }),
+      },
+    ],
+    getData: (type: string) =>
+      ["text/plain", "text"].includes(type) ? "row counts" : "",
+  }) as unknown as DataTransfer
+
+it.each(["API model", "text-only agent"])(
+  "inserts mixed-paste text at the selection for a %s",
+  async (model) => {
+    const channel = fakeChannel("agent")
+    channel.getSnapshot().acceptsImages = false
+    configure(
+      null,
+      model === "API model" ? "openai:gpt-5-mini" : LOCAL_AGENT_MODEL,
+    )
+    renderInput(channel)
+    const user = userEvent.setup()
+    const input = getHook("chat-input-textarea") as HTMLTextAreaElement
+    await user.type(input, "Show chart here")
+    input.setSelectionRange(5, 10)
+    await user.paste(mixedClipboard())
+    expect(input).toHaveValue("Show row counts here")
+    expect(queryHook("chat-image-attachments")).not.toBeInTheDocument()
+    expect(queryHook("chat-attach-error")).not.toBeInTheDocument()
+  },
+)
+
+it("attaches the image rather than inserting mixed-paste text for an image-capable agent", async () => {
+  configure(null, LOCAL_AGENT_MODEL)
+  renderInput(fakeChannel("agent"))
+  const user = userEvent.setup()
+  const input = getHook("chat-input-textarea")
+  await user.type(input, "Existing draft")
+  await user.paste(mixedClipboard())
+  expect(await screen.findByRole("img", { name: "Attachment 1" })).toBeVisible()
+  expect(input).toHaveValue("Existing draft")
+})
+
+const renderQuestions = (...ids: string[]) => {
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+  const questions: AgentQuestionMessage[] = ids.map((requestId) => ({
+    v: "0.6.0",
+    type: "agent_question",
+    requestId,
+    conversationId: "c1",
+    message: "Choose a display style",
+    fields: [
+      {
+        id: "style",
+        kind: "choice",
+        title: null,
+        prompt: null,
+        options: [{ value: "compact", label: "Compact", description: null }],
+        multiple: false,
+        required: true,
+        otherFieldId: null,
+      },
+    ],
+  }))
+  let snapshot: LocalAgentSnapshot = {
+    ...fakeChannel("agent").getSnapshot(),
+    questions,
+  }
+  let listener: (() => void) | undefined
+  const answerQuestion = vi.fn<
+    Parameters<LocalAgentChannel["answerQuestion"]>,
+    boolean
+  >((requestId) => {
+    snapshot = {
+      ...snapshot,
+      questions: snapshot.questions.filter(
+        (pending) => pending.requestId !== requestId,
+      ),
+    }
+    listener?.()
+    return true
+  })
+  const channel = {
+    getSnapshot: () => snapshot,
+    isTransportReady: () => true,
+    subscribe: (notify: () => void) => {
+      listener = notify
+      return () => {
+        listener = undefined
+      }
+    },
+    answerQuestion,
+  } as unknown as LocalAgentChannel
+  renderInput(channel)
+  return answerQuestion
+}
+
+it.each(["answer", "skip"])(
+  "focuses the next question, then the composer after keyboard %s",
+  async (action) => {
+    const answer = renderQuestions("first", "last")
+    const user = userEvent.setup()
+    getHook("chat-question-option").focus()
+    await user.keyboard("{Enter}")
+    expect(answer).toHaveBeenLastCalledWith("first", { style: "compact" })
+    expect(document.getElementById("question-last")).toHaveFocus()
+    expect(queryHook("chat-input-textarea")).not.toBeInTheDocument()
+
+    const skip = action === "skip"
+    getHook(skip ? "chat-question-skip" : "chat-question-option").focus()
+    await user.keyboard("{Enter}")
+    expect(answer).toHaveBeenLastCalledWith(
+      "last",
+      skip ? null : { style: "compact" },
+    )
+    const input = getHook("chat-input-textarea")
+    expect(input).toHaveFocus()
+    await user.keyboard("Follow-up")
+    expect(input).toHaveValue("Follow-up")
+  },
+)
+
+it("does not steal focus from outside the chat when the last question is dismissed", () => {
+  renderQuestions("last")
+  const outside = screen.getByRole("button", { name: "Outside chat" })
+  outside.focus()
+  // Dispatch a click without moving focus off the external control.
+  fireEvent.click(getHook("chat-question-skip"))
+  expect(getHook("chat-input-textarea")).toBeEnabled()
+  expect(outside).toHaveFocus()
 })
 
 it("offers Queue for an image-only draft during a reply", async () => {

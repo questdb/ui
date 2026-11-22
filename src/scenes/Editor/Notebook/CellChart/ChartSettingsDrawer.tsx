@@ -8,8 +8,8 @@ import {
 } from "../../../../components"
 import {
   type ChartConfig,
+  type ChartSettingsDraft,
   type QueryChart,
-  missingQueryFields,
 } from "./chartTypes"
 import {
   ReferenceLinesEditor,
@@ -19,6 +19,7 @@ import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
 import {
   chartXAxisOf,
+  isNumericHeatmapValue,
   resolveQueryAxes,
   type QueryTab,
 } from "../DrawCanvas/drawCanvasUtils"
@@ -78,12 +79,18 @@ const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
 
 const heatmapIncomplete = (
   q: QueryChart | null,
-  resolvedX: string | null | undefined,
+  placement: { item: QueryTab; ownX: string | null } | undefined,
+  value: string | undefined,
 ): boolean =>
   !!q &&
   q.type === "heatmap" &&
   q.enabled !== false &&
-  (missingQueryFields(q) !== null || q.partitionByColumn === resolvedX)
+  (!q.partitionByColumn ||
+    !value ||
+    (placement != null &&
+      (!placement.ownX ||
+        q.partitionByColumn === placement.ownX ||
+        !isNumericHeatmapValue(placement.item.columns, value))))
 
 type SharedProps = {
   tabs: QueryTab[]
@@ -98,8 +105,8 @@ type SettingsProps = SharedProps & {
   onClose?: () => void
   // Drawer only: a draft carried across a cell remount, where edits go, and
   // whether this mount is that remount.
-  initialDraft?: ChartConfig | null
-  onDraftChange?: (draft: ChartConfig) => void
+  initialDraft?: ChartSettingsDraft | null
+  onDraftChange?: (draft: ChartSettingsDraft) => void
   appearInPlace?: boolean
 }
 
@@ -115,7 +122,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
   onDraftChange,
   appearInPlace,
 }) => {
-  const [draft, setDraft] = useState<ChartConfig>(initialDraft ?? config)
+  const [draft, setDraft] = useState<ChartSettingsDraft>(initialDraft ?? config)
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
   // Mounting already open means a remount mid-session: keep the draft.
@@ -124,7 +131,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
   // Every edit lands in the session store as well, so a cell remount
   // mid-session restores it.
   const updateDraft = useCallback(
-    (next: ChartConfig) => {
+    (next: ChartSettingsDraft) => {
       setDraft(next)
       onDraftChange?.(next)
     },
@@ -219,10 +226,19 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ),
     })
 
+  const setHeatmapValue = (index: number, value: string | undefined) =>
+    updateDraft({
+      ...draft,
+      heatmapValues: { ...draft.heatmapValues, [index]: value },
+    })
+  const heatmapValueAt = (index: number) =>
+    draft.heatmapValues?.[index] ?? draft.queries[index]?.yColumns[0]
+
   const setQuery = (index: number, next: QueryChart) =>
     updateDraft({
       ...draft,
       queries: draft.queries.map((q, i) => (i === index ? next : q)),
+      heatmapValues: { ...draft.heatmapValues, [index]: undefined },
     })
 
   const commit = () => {
@@ -237,7 +253,8 @@ const ChartSettings: React.FC<SettingsProps> = ({
     const heatmapIdx = draft.queries.findIndex((q, index) =>
       heatmapIncomplete(
         q,
-        placements.find(({ item }) => item.index === index)?.ownX,
+        placements.find(({ item }) => item.index === index),
+        heatmapValueAt(index),
       ),
     )
     if (heatmapIdx >= 0) {
@@ -253,9 +270,20 @@ const ChartSettings: React.FC<SettingsProps> = ({
       hasRightAxis: hasRight,
       partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
     })
-    const { referenceLines: _lines, ...rest } = { ...draft, xColumn }
+    const { referenceLines: _lines, heatmapValues, ...rest } = draft
+    const queries = rest.queries.map((q, i) => {
+      const value = heatmapValues?.[i]
+      return q?.type === "heatmap" && value !== undefined
+        ? { ...q, yColumns: value ? [value] : [] }
+        : q
+    })
     const referenceLines = savedReferenceLines(draft.referenceLines)
-    onSave(referenceLines ? { ...rest, referenceLines } : rest)
+    onSave({
+      ...rest,
+      xColumn,
+      queries,
+      ...(referenceLines && { referenceLines }),
+    })
     if (presentation === "drawer") onClose?.()
   }
 
@@ -389,7 +417,14 @@ const ChartSettings: React.FC<SettingsProps> = ({
           anchorLabel={anchor?.label ?? "Q1"}
           isAnchorTab={isAnchorTab}
           ohlcError={saveAttempted && candlestickMissingOhlc(query)}
-          heatmapError={saveAttempted && heatmapIncomplete(query, active.ownX)}
+          heatmapError={
+            saveAttempted &&
+            heatmapIncomplete(query, active, heatmapValueAt(active.item.index))
+          }
+          heatmapValue={heatmapValueAt(active.item.index)}
+          onHeatmapValueChange={(value) =>
+            setHeatmapValue(active.item.index, value)
+          }
           onUpdateQuery={(patch) => updateQuery(active.item.index, patch)}
           onSetQuery={(next) => setQuery(active.item.index, next)}
           telemetry={telemetry}
@@ -403,8 +438,8 @@ export const ChartSettingsDrawer: React.FC<
   SharedProps & {
     open: boolean
     onClose: () => void
-    initialDraft: ChartConfig | null
-    onDraftChange: (draft: ChartConfig) => void
+    initialDraft: ChartSettingsDraft | null
+    onDraftChange: (draft: ChartSettingsDraft) => void
     appearInPlace: boolean
   }
 > = (props) => <ChartSettings {...props} presentation="drawer" />

@@ -131,6 +131,53 @@ describe("priorConversationFor", () => {
     expect(prior).toContain("select * from trades where symbol = 'BTC'")
   })
 
+  it("makes the live query authoritative over accepted and rejected historical SQL", () => {
+    const history = [
+      message({ role: "assistant", sql: "SELECT 22;", isAccepted: true }),
+      message({
+        role: "assistant",
+        sql: "SELECT 33;",
+        previousSQL: "SELECT 22;",
+        isRejected: true,
+        content: "A very long rationale ".repeat(300),
+      }),
+    ]
+    const prior = priorConversationFor(history, "session-a", "SELECT 44;")
+    expect(prior).toContain("SQL accepted at that point:\nSELECT 22;")
+    expect(prior).toContain(
+      "rejected this SQL suggestion and reverted to the previous version",
+    )
+    expect(prior).toContain("Restored SQL at that point:\nSELECT 22;")
+    expect(prior).not.toContain("SELECT 33;")
+    expect(prior).toContain(
+      "Current canonical SQL (use this version, not historical SQL above):\nSELECT 44;",
+    )
+  })
+
+  it("reserves current SQL space even when a summary crowds out old decisions", () => {
+    const prior = priorConversationFor(
+      [
+        message({ role: "assistant", sql: "SELECT 33;", isRejected: true }),
+        message({
+          role: "user",
+          hideFromUI: true,
+          content: `## PREVIOUS CONVERSATION SUMMARY:\n\nPreviously discussed SELECT 33;. ${"s".repeat(6_001)}\n\n\n**Continue helping the user from where we left off.**`,
+        }),
+        ...Array.from({ length: 20 }, () =>
+          message({ role: "user", content: "Recent request ".repeat(200) }),
+        ),
+      ],
+      "session-a",
+      "SELECT 22;",
+    )
+    expect(prior).toContain(
+      "Summary of older turns: Previously discussed SELECT 33;",
+    )
+    expect(prior).toContain(
+      "Current canonical SQL (use this version, not historical SQL above):\nSELECT 22;",
+    )
+  })
+
   it("leaves space for attached SQL in the per-message budget", () => {
     const sql = "select * from trades where symbol = 'BTC'"
     const history = [

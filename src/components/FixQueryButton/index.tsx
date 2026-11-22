@@ -1,6 +1,6 @@
 import React, { useContext } from "react"
 import styled from "styled-components"
-import { Button } from ".."
+import { Button, toast } from ".."
 import { AISparkle } from "../AISparkle"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
@@ -13,6 +13,7 @@ import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
 import {
   executeAIFlow,
   createFixFlowConfig,
+  localAgentDispatchError,
 } from "../../utils/ai/executeAIFlow"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -48,6 +49,11 @@ export const FixQueryButton = () => {
 
   const handleFixQuery = () => {
     if (!canUse || isOperationBlocking()) return
+    const unavailable = localAgentDispatchError(currentModel, localAgentChannel)
+    if (unavailable) {
+      toast.error(unavailable)
+      return
+    }
     const conversationId = chatWindowState.activeConversationId
     if (!conversationId) return
     const conversation = getConversationMeta(conversationId)

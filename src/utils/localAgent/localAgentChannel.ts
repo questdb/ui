@@ -193,6 +193,7 @@ export class LocalAgentChannel {
           stopped = resolve
         })
         this.pendingCancels.set(conversationId, turnId)
+        this.clearQuestions(conversationId)
         this.sendCancel(conversationId, turnId)
       }
       const turn: PendingTurn = {
@@ -353,10 +354,10 @@ export class LocalAgentChannel {
         }
         this.settleTurn(msg.conversationId, msg.turnId, msg.result)
         return
-      case "agent_question":
-        // Questions have no wire turn ID. Keep them only for a live turn,
-        // and remove them when that turn settles.
-        if (!this.turns.has(msg.conversationId)) return
+      case "agent_question": {
+        // Questions have no wire turn ID. A stopping turn can no longer ask.
+        const turn = this.turns.get(msg.conversationId)
+        if (!turn || turn.stopping) return
         this.update({
           questions: [
             ...this.snapshot.questions.filter(
@@ -366,6 +367,7 @@ export class LocalAgentChannel {
           ],
         })
         return
+      }
       case "agent_question_closed":
         this.removeQuestion(msg.requestId)
         return
@@ -386,6 +388,10 @@ export class LocalAgentChannel {
     if (!turn) return
     this.turns.delete(conversationId)
     turn.settle(result)
+    this.clearQuestions(conversationId)
+  }
+
+  private clearQuestions(conversationId: string): void {
     const questions = this.snapshot.questions.filter(
       (question) => question.conversationId !== conversationId,
     )

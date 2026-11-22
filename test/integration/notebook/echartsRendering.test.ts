@@ -8,6 +8,7 @@ import {
 
 import {
   chartZoomDensity,
+  withBoundedHeatmapLabels,
   X_SLIDER_ZOOM_ID,
   X_WHEEL_ZOOM_ID,
   Y_SLIDER_ZOOM_ID,
@@ -213,11 +214,55 @@ describe("notebook chart rendering", () => {
     }
   })
 
+  it.each(["row", "chart"] as const)(
+    "draws all finite DOUBLE extremes with distinct colors (%s scale)",
+    (colorScale) => {
+      const readings = [-1e308, 0, 9e307, 1e308]
+      const option = buildEchartsOption({ xColumn: "slot" }, [
+        {
+          index: 0,
+          type: "heatmap",
+          axis: "left",
+          xColumn: "slot",
+          partitionByColumn: "station",
+          yColumns: ["reading"],
+          colorScale,
+          columns: [
+            { name: "slot", type: "INT" },
+            { name: "station", type: "SYMBOL" },
+            { name: "reading", type: "DOUBLE" },
+          ],
+          dataset: readings.map((value, i) => [i, "west", value]),
+        },
+      ])
+      const [series] = option.series as CustomSeriesOption[]
+      expect(series.data).toEqual(
+        readings.map((value, i) => [i, 0, [0, 0.5, 0.95, 1][i], value]),
+      )
+      const render = series.renderItem
+      const colors: unknown[] = []
+      series.renderItem = (params, api) => {
+        const cell = render?.(params, api)
+        expect(cell).toMatchObject({ type: "rect" })
+        colors.push(api.visual("color"))
+        return cell
+      }
+      const chart = createChart()
+      try {
+        chart.setOption(option)
+        expect(new Set(colors).size).toBe(readings.length)
+      } finally {
+        chart.dispose()
+      }
+    },
+  )
+
   const longRowLabel =
-    "us-east-1-production-payments-reconciliation-worker-settlements"
+    "us-east-1-production-payments-reconciliation-worker-settlements".repeat(3)
   it.each([
     ["worker", 21, false],
-    [longRowLabel, 21, true],
+    [longRowLabel, 21, false],
+    [longRowLabel, 90, true],
     [longRowLabel, 2, false],
   ] as const)(
     "uses rendered heatmap column density with row label %s and %i columns",
@@ -242,16 +287,23 @@ describe("notebook chart rendering", () => {
         },
       ])
       try {
+        const bounded = withBoundedHeatmapLabels(option, width)
         chart.setOption({
-          ...withZoomDensity(option, chartZoomDensity(option, width, height)),
+          ...withZoomDensity(bounded, chartZoomDensity(bounded, width, height)),
           animation: false,
         })
+        expect(chart.getOption().yAxis).toMatchObject([{ data: [rowLabel] }])
+        const svg = chart.renderToSVGString()
+        expect(svg.includes(rowLabel)).toBe(rowLabel !== longRowLabel)
+        if (rowLabel === longRowLabel) expect(svg).toContain("…")
+        const tooltip = bounded.tooltip as { formatter: (p: unknown) => string }
+        expect(tooltip.formatter({ value: [0, 0, 0, 0] })).toContain(rowLabel)
         const xOf = (x: number) => chart.convertToPixel({ xAxisIndex: 0 }, x)
         const pitch = xOf(1) - xOf(0)
         expect(pitch).toBeGreaterThan(0)
         expect(pitch < 6).toBe(crowded)
         expect(chart.getOption().dataZoom).toMatchObject([
-          { id: X_WHEEL_ZOOM_ID, disabled: !crowded },
+          { id: X_WHEEL_ZOOM_ID, disabled: pitch >= 18 },
           { id: X_SLIDER_ZOOM_ID, show: crowded },
           { id: Y_SLIDER_ZOOM_ID, show: false },
         ])

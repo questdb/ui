@@ -11,7 +11,11 @@ import {
 } from "../localAgent/localAgentChannel"
 import { LOCAL_AGENT_MODEL } from "../localAgent/localAgentModel"
 import { STEERED_ABORT_REASON } from "../../providers/AIStatusProvider"
-import { createChatFlowConfig, executeAIFlow } from "./executeAIFlow"
+import {
+  createChatFlowConfig,
+  executeAIFlow,
+  type AIFlowCallbacks,
+} from "./executeAIFlow"
 
 vi.mock("../../modules/ConsoleEventTracker", () => ({
   trackEvent: () => Promise.resolve(),
@@ -23,6 +27,7 @@ const connectAgent = () => {
   const sent: AgentInboundMessage[] = []
   let deliver: (msg: AgentOutboundMessage) => void = () => undefined
   const client = {
+    canSendAgentMessage: () => true,
     on: (_event: "agentMessage", handler: typeof deliver) => {
       deliver = handler
       return () => undefined
@@ -37,30 +42,36 @@ const connectAgent = () => {
     onNotebookRead: vi.fn(),
   })
   registerLocalAgentChannel(channel)
-  const endStoppedTurn = () => {
-    const prompt = sent.findLast((msg) => msg.type === "agent_prompt")
+  const endTurn = (conversationId: string, stopReason = "cancelled") => {
+    const prompt = sent.findLast(
+      (msg) =>
+        msg.type === "agent_prompt" && msg.conversationId === conversationId,
+    )
     deliver({
       v: "0.6.0",
       type: "agent_turn_end",
-      conversationId: CONVERSATION_ID,
+      conversationId,
       turnId: prompt?.type === "agent_prompt" ? prompt.turnId : "none",
-      result: { outcome: "completed", stopReason: "cancelled", usage: null },
+      result: { outcome: "completed", stopReason, usage: null },
     })
   }
-  return { channel, endStoppedTurn }
+  return { channel, endTurn, endStoppedTurn: () => endTurn(CONVERSATION_ID) }
 }
 
-const startFlow = (abort: AbortController) => {
+const startFlow = (
+  abort: AbortController,
+  conversationId = CONVERSATION_ID,
+) => {
   const callbacks = {
     addMessage: vi.fn(),
-    updateMessage: vi.fn(),
+    updateMessage: vi.fn<Parameters<AIFlowCallbacks["updateMessage"]>, void>(),
     setStatus: vi.fn(),
     setIsStreaming: vi.fn(),
     persistMessages: vi.fn(() => Promise.resolve()),
   }
   const flow = executeAIFlow(
     createChatFlowConfig({
-      conversationId: CONVERSATION_ID,
+      conversationId,
       userMessage: "Show the latest trades",
       conversationHistory: [],
       isFirstMessage: false,
@@ -119,6 +130,28 @@ describe("an answer replaced by a new message", () => {
     expect(first.callbacks.setIsStreaming).not.toHaveBeenCalledWith(false)
     expect(first.callbacks.setStatus).not.toHaveBeenCalledWith(null)
     expect(second.callbacks.setStatus).toHaveBeenCalled()
+  })
+
+  it("keeps a delayed limit notice on the stopped turn without reopening streaming", async () => {
+    const agent = connectAgent()
+    channel = agent.channel
+    const abort = new AbortController()
+    const first = startFlow(abort)
+    abort.abort()
+    const second = startFlow(new AbortController(), "conversation-2")
+    agent.endTurn("conversation-2", "end_turn")
+    await second.flow
+    expect(second.callbacks.setIsStreaming).toHaveBeenLastCalledWith(false)
+
+    agent.endTurn(CONVERSATION_ID, "max_tokens")
+    await first.flow
+    expect(first.callbacks.setIsStreaming).not.toHaveBeenCalled()
+    const history = first.callbacks.updateMessage.mock.calls
+      .filter(([id]) => id === CONVERSATION_ID)
+      .findLast(([, , patch]) => patch.operationHistory)?.[2].operationHistory
+    expect(history?.at(-1)?.content).toContain(
+      "The agent reached its output limit",
+    )
   })
 
   it("ends the streaming state, with the cancellation, when the user only stops", async () => {

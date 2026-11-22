@@ -1,3 +1,4 @@
+import isEqual from "lodash.isequal"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
@@ -1092,7 +1093,10 @@ export const buildAppliedCells = (
       const invalid = validateHeatmapConfig(
         chartConfig,
         statements,
-        req.view === "editor" ? null : result,
+        result,
+        existing != null &&
+          !valueChanged &&
+          isEqual(chartConfig, normalizeChartConfig(existing.chartConfig)),
       )
       if (invalid) {
         throw new ApplyNotebookStateError(

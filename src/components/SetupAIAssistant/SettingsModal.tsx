@@ -1002,6 +1002,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         providers: updatedProviders,
       })
 
+      setIsAgentTabActive(false)
       setSelectedProvider(providerId)
       setCustomProviderModalOpen(false)
     },

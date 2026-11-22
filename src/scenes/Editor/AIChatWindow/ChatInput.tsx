@@ -286,7 +286,9 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     ref,
   ) => {
     const [input, setInput] = useState("")
+    const inputContainerRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const restoreFocusAfterAnswer = useRef(false)
     const tables = useSelector(selectors.query.getTables)
 
     const tableData = useMemo(() => {
@@ -737,17 +739,37 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       (pending) => pending.conversationId === conversationId,
     )
 
+    const handleQuestionAnswer = (
+      answers: Record<string, string | string[]> | null,
+    ) => {
+      if (!question || !localAgentChannel) return false
+      restoreFocusAfterAnswer.current =
+        inputContainerRef.current?.contains(document.activeElement) ?? false
+      const sent = localAgentChannel.answerQuestion(question.requestId, answers)
+      if (!sent) restoreFocusAfterAnswer.current = false
+      return sent
+    }
+
+    useLayoutEffect(() => {
+      // A next question focuses itself. Only fill a focus gap left by the
+      // last card, never override another control the user moved to.
+      if (
+        restoreFocusAfterAnswer.current &&
+        document.activeElement === document.body
+      ) {
+        textareaRef.current?.focus()
+      }
+      restoreFocusAfterAnswer.current = false
+    }, [question?.requestId])
+
     return (
-      <InputContainer>
+      <InputContainer ref={inputContainerRef}>
         {question?.url && localAgent ? (
           <LinkRequestCard
             key={question.requestId}
             agentLabel={localAgent.info.label}
             question={{ ...question, url: question.url }}
-            onAnswer={(answers) =>
-              localAgentChannel?.answerQuestion(question.requestId, answers) ??
-              false
-            }
+            onAnswer={handleQuestionAnswer}
             onStop={handleStop}
           />
         ) : question && localAgent ? (
@@ -755,10 +777,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
             key={question.requestId}
             agentLabel={localAgent.info.label}
             question={question}
-            onAnswer={(answers) =>
-              localAgentChannel?.answerQuestion(question.requestId, answers) ??
-              false
-            }
+            onAnswer={handleQuestionAnswer}
             onStop={handleStop}
           />
         ) : (
@@ -870,6 +889,11 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   onPaste={(event) => {
                     const files = imageFilesOf(event.clipboardData.items)
                     if (files.length === 0) return
+                    if (
+                      !acceptsImages &&
+                      event.clipboardData.getData("text/plain")
+                    )
+                      return
                     event.preventDefault()
                     void attach(files)
                   }}
