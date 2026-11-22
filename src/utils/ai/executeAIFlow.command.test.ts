@@ -85,13 +85,16 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
   >()
   const addMessage = vi.fn<Parameters<AIFlowCallbacks["addMessage"]>, void>()
   const persistMessages = vi.fn(() => Promise.resolve())
-  const result = await executeAIFlow(config, {
-    addMessage,
-    updateMessage,
-    setStatus: vi.fn(),
-    setIsStreaming: vi.fn(),
-    persistMessages,
-  })
+  const result = await executeAIFlow(
+    { ...config, localAgentChannel: channel },
+    {
+      addMessage,
+      updateMessage,
+      setStatus: vi.fn(),
+      setIsStreaming: vi.fn(),
+      persistMessages,
+    },
+  )
   const prompt = sent.find((msg) => msg.type === "agent_prompt")
   return {
     prompt: prompt?.type === "agent_prompt" ? prompt.prompt : [],

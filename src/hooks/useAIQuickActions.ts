@@ -3,7 +3,10 @@ import { useSelector } from "react-redux"
 import { toast } from "../components"
 import { QuestContext } from "../providers"
 import { useAIConversationActions } from "../providers/AIConversationProvider"
-import { isBlockingAIStatus, useAIStatus } from "../providers/AIStatusProvider"
+import { LOCAL_AGENT_MODEL } from "../utils/localAgent/localAgentModel"
+import { useLocalAgentChannel } from "../utils/localAgent/LocalAgentContext"
+import { isCurrentLocalAgentChannel } from "../utils/localAgent/localAgentChannel"
+import { useAIStatus } from "../providers/AIStatusProvider"
 import {
   executeAIFlow,
   createSchemaExplainFlowConfig,
@@ -44,6 +47,7 @@ type SchemaDisplayData = {
 export const useAIQuickActions = () => {
   const { quest } = useContext(QuestContext)
   const tables = useSelector(selectors.query.getTables)
+  const localAgentChannel = useLocalAgentChannel()
   const {
     setStatus,
     abortController,
@@ -51,7 +55,7 @@ export const useAIQuickActions = () => {
     hasSchemaAccess,
     currentModel,
     apiKey,
-    status,
+    isOperationBlocking,
     aiAssistantSettings,
   } = useAIStatus()
 
@@ -59,6 +63,7 @@ export const useAIQuickActions = () => {
     findConversationByTableId,
     createConversation,
     openChatWindow,
+    getChatDispatchState,
     addMessage,
     removeMessages,
     updateMessage,
@@ -68,6 +73,28 @@ export const useAIQuickActions = () => {
     getLastRoundMessages,
     setScrollToMessageId,
   } = useAIConversationActions()
+
+  // Bind to the selected channel before preparation; never look up a new
+  // destination after waiting for schema, docs, or the conversation store.
+  const abortSignal = abortController?.signal
+  const canContinue = () =>
+    !isOperationBlocking() &&
+    !abortSignal?.aborted &&
+    (currentModel !== LOCAL_AGENT_MODEL ||
+      isCurrentLocalAgentChannel(localAgentChannel))
+
+  const captureDispatch = (id: string) => {
+    const active = getChatDispatchState(id)
+    return () => {
+      const current = getChatDispatchState(id)
+      return (
+        active !== null &&
+        current?.owner === active.owner &&
+        current.messages === active.messages &&
+        canContinue()
+      )
+    }
+  }
 
   const getTableSchema = async (
     tableName: string,
@@ -93,7 +120,7 @@ export const useAIQuickActions = () => {
     kind: TableKind,
     schemaDisplayData?: Omit<SchemaDisplayData, "tableName" | "kind">,
   ) => {
-    if (isBlockingAIStatus(status)) {
+    if (!canContinue()) {
       return
     }
     if (!canUse) {
@@ -108,7 +135,7 @@ export const useAIQuickActions = () => {
     }
 
     const schema = await getTableSchema(name, kind)
-    if (!schema) {
+    if (!schema || !canContinue()) {
       return
     }
 
@@ -116,6 +143,8 @@ export const useAIQuickActions = () => {
 
     if (existingConversation) {
       await openChatWindow(existingConversation.id)
+      const canDispatch = captureDispatch(existingConversation.id)
+      if (!canDispatch()) return
 
       const result = await executeAIFlow(
         createSchemaExplainFlowConfig({
@@ -130,10 +159,12 @@ export const useAIQuickActions = () => {
           },
           settings: { model: currentModel, apiKey },
           aiAssistantSettings,
+          localAgentChannel,
+          canDispatch,
           questClient: quest,
           tables,
           hasSchemaAccess,
-          abortSignal: abortController?.signal,
+          abortSignal,
           useLastMessage: true,
         }),
         {
@@ -156,9 +187,12 @@ export const useAIQuickActions = () => {
     const conversation = await createConversation({
       tableId: id,
     })
+    if (!canContinue()) return
 
     void updateConversationName(conversation.id, `${name} schema explanation`)
     await openChatWindow(conversation.id)
+    const canDispatch = captureDispatch(conversation.id)
+    if (!canDispatch()) return
 
     void executeAIFlow(
       createSchemaExplainFlowConfig({
@@ -173,10 +207,12 @@ export const useAIQuickActions = () => {
         },
         settings: { model: currentModel, apiKey },
         aiAssistantSettings,
+        localAgentChannel,
+        canDispatch,
         questClient: quest,
         tables,
         hasSchemaAccess,
-        abortSignal: abortController?.signal,
+        abortSignal,
       }),
       {
         addMessage,
@@ -196,7 +232,7 @@ export const useAIQuickActions = () => {
     trendSamples?: TimestampedSample[],
     diagnosticContext?: HealthIssueDiagnosticContext,
   ) => {
-    if (isBlockingAIStatus(status)) {
+    if (!canContinue()) {
       return
     }
     if (!canUse) {
@@ -224,6 +260,7 @@ export const useAIQuickActions = () => {
       toast.error(`Cannot fetch details for table '${tableName}'`)
       return
     }
+    if (!canContinue()) return
     const tableDetails = QuestDB.stringifyWithBigInts(
       tableDetailsResponse.data[0],
       2,
@@ -245,10 +282,13 @@ export const useAIQuickActions = () => {
       monitoringDocs = "Documentation unavailable"
     }
 
+    if (!canContinue()) return
     const existingConversation = findConversationByTableId(tableId)
 
     if (existingConversation) {
       await openChatWindow(existingConversation.id)
+      const canDispatch = captureDispatch(existingConversation.id)
+      if (!canDispatch()) return
 
       const result = await executeAIFlow(
         createHealthIssueFlowConfig({
@@ -268,10 +308,12 @@ export const useAIQuickActions = () => {
           trendSamples,
           settings: { model: currentModel, apiKey },
           aiAssistantSettings,
+          localAgentChannel,
+          canDispatch,
           questClient: quest,
           tables,
           hasSchemaAccess,
-          abortSignal: abortController?.signal,
+          abortSignal,
           useLastMessage: true,
         }),
         {
@@ -294,12 +336,15 @@ export const useAIQuickActions = () => {
     const conversation = await createConversation({
       tableId,
     })
+    if (!canContinue()) return
 
     void updateConversationName(
       conversation.id,
       `${tableName}: ${issue.message}`,
     )
     await openChatWindow(conversation.id)
+    const canDispatch = captureDispatch(conversation.id)
+    if (!canDispatch()) return
 
     void executeAIFlow(
       createHealthIssueFlowConfig({
@@ -319,10 +364,12 @@ export const useAIQuickActions = () => {
         trendSamples,
         settings: { model: currentModel, apiKey },
         aiAssistantSettings,
+        localAgentChannel,
+        canDispatch,
         questClient: quest,
         tables,
         hasSchemaAccess,
-        abortSignal: abortController?.signal,
+        abortSignal,
       }),
       {
         addMessage,

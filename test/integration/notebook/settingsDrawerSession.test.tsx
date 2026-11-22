@@ -138,6 +138,58 @@ describe("highlight drawer session integration", () => {
 })
 
 describe("chart drawer", () => {
+  it("preserves the disabled heatmap Rows mapping on an unedited Save", () => {
+    const query = "SELECT site, bucket, reading FROM samples"
+    const saved = {
+      xColumn: "bucket",
+      queries: [
+        {
+          type: "heatmap" as const,
+          enabled: false,
+          partitionByColumn: "site",
+          yColumns: ["reading"],
+        },
+      ],
+    }
+    const { tabs, effectiveConfig, renderQueries } = resolveDraw(
+      [query],
+      [
+        {
+          query,
+          type: "dql",
+          columns: [
+            { name: "site", type: "SYMBOL" },
+            { name: "bucket", type: "SYMBOL" },
+            { name: "reading", type: "DOUBLE" },
+          ],
+          dataset: [["west", "A", 15]],
+          count: 1,
+        },
+      ],
+      saved,
+    )
+    expect(renderQueries).toEqual([])
+    const onSave = vi.fn()
+    renderComponent(
+      <ChartSettingsDrawer
+        open
+        appearInPlace
+        config={effectiveConfig}
+        tabs={tabs}
+        initialDraft={null}
+        onDraftChange={noOp}
+        onClose={noOp}
+        onSave={onSave}
+      />,
+    )
+    expect(screen.getByRole("button", { name: "X-axis: bucket" })).toBeVisible()
+    expect(
+      screen.getByRole("button", { name: "Rows column: site" }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    expect(onSave).toHaveBeenCalledWith(saved)
+  })
+
   it("lets an incompatible query become the anchor and edit its X-axis and reference lines", () => {
     const queries = [
       "SELECT bucket, site, price FROM a",

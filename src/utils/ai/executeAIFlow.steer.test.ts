@@ -65,6 +65,7 @@ const startFlow = (abort: AbortController) => {
       conversationHistory: [],
       isFirstMessage: false,
       settings: { model: LOCAL_AGENT_MODEL, apiKey: "" },
+      localAgentChannel: channel,
       questClient: {} as never,
       hasSchemaAccess: false,
       abortSignal: abort.signal,

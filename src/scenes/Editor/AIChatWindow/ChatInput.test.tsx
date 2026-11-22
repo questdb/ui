@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React, { useState } from "react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { act, fireEvent, screen } from "@testing-library/react"
 import { getHook, queryHook, renderComponent } from "../../../test/component"
 import {
@@ -49,7 +49,7 @@ const fakeChannel = (
     acceptsImages: true,
     config: { model },
     questions: [],
-    commands: [],
+    commands: [{ name: "summary", description: "Summarize", hint: null }],
   }
   return {
     getSnapshot: () => snapshot,
@@ -66,14 +66,20 @@ const renderInput = (initial: LocalAgentChannel | null = null) => {
     channel: LocalAgentChannel | null
     id: string
   }) => {
-    const [queue, setQueue] = useState<ChatQueue>({})
+    const [queue, setQueueState] = useState<ChatQueue>({})
     submitted = queue
     return (
       <LocalAgentContext.Provider value={channel}>
         <ChatInput
           conversationId={id}
           queue={queue}
-          setQueue={setQueue}
+          setQueue={(update) => {
+            const next = update(submitted)
+            if (next === submitted) return false
+            submitted = next
+            setQueueState(next)
+            return true
+          }}
           onContextClick={vi.fn()}
         />
       </LocalAgentContext.Provider>
@@ -140,6 +146,43 @@ it("requires a fresh send when the model on the same agent channel changes", asy
   view.rerender()
   expect(view.submitted()).toBeUndefined()
   expect(getHook("chat-input-textarea")).toHaveValue("Follow-up")
+})
+
+beforeEach(() => {
+  // jsdom has no list scrolling; only exercise composer behavior.
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
+it("keeps a native slash command as a draft while an earlier message is queued", async () => {
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+  const view = renderInput(fakeChannel("agent"))
+  const input = getHook("chat-input-textarea")
+  await userEvent.type(input, "Explain the sample{Enter}")
+  const first = view.submitted()
+  await userEvent.type(input, "/sum")
+  await userEvent.click(await screen.findByRole("option", { name: /summary/ }))
+  expect(view.submitted()).toBe(first)
+  expect(input).toHaveValue("/summary")
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Agent commands must send separately",
+  )
+})
+
+it("does not append ordinary text to a native slash command in the queue", async () => {
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+  const view = renderInput(fakeChannel("agent"))
+  const input = getHook("chat-input-textarea")
+  await userEvent.type(input, "/summary{Enter}")
+  expect(view.submitted()).toMatchObject({
+    text: "/summary",
+    agentCommand: true,
+  })
+  await userEvent.type(input, "Explain the sample{Enter}")
+  expect(view.submitted()).toMatchObject({
+    text: "/summary",
+    agentCommand: true,
+  })
+  expect(input).toHaveValue("Explain the sample")
 })
 
 it("offers Queue for an image-only draft during a reply", async () => {

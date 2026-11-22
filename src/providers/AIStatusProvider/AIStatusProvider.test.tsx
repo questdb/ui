@@ -39,8 +39,24 @@ describe("AIStatusProvider", () => {
       ...configuredOpenAI,
       selectedModel: LOCAL_AGENT_MODEL,
     })
-    expect(status().currentModel).toBeNull()
-    expect(status().canUse).toBe(false)
+    expect(status()).toMatchObject({
+      isConfigured: true,
+      canUse: false,
+      currentModel: null,
+      apiKey: null,
+    })
+    expect(status().models.length).toBeGreaterThan(0)
+  })
+
+  it("exposes model and key as strings when the configured assistant is usable", () => {
+    const current = renderStatus(configuredOpenAI)()
+    expect(current.canUse).toBe(true)
+    if (current.canUse) {
+      const model: string = current.currentModel
+      const key: string = current.apiKey
+      expect(model).toContain("openai:")
+      expect(key).not.toBe("")
+    }
   })
 
   it("starts a retried answer over from the steps it showed before its first attempt", () => {

@@ -6,6 +6,7 @@ import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
+import { useLocalAgentChannel } from "../../utils/localAgent/LocalAgentContext"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
@@ -24,7 +25,9 @@ export const FixQueryButton = () => {
   const { quest } = useContext(QuestContext)
   const { editorRef, executionRefs } = useEditor()
   const tables = useSelector(selectors.query.getTables)
+  const localAgentChannel = useLocalAgentChannel()
   const {
+    canUse,
     setStatus,
     abortController,
     hasSchemaAccess,
@@ -43,6 +46,7 @@ export const FixQueryButton = () => {
   } = useAIConversation()
 
   const handleFixQuery = () => {
+    if (!canUse) return
     const conversationId = chatWindowState.activeConversationId
     if (!conversationId) return
     const conversation = getConversationMeta(conversationId)
@@ -64,7 +68,8 @@ export const FixQueryButton = () => {
         queryText,
         errorMessage,
         errorWord: word ?? undefined,
-        settings: { model: currentModel!, apiKey: apiKey! },
+        settings: { model: currentModel, apiKey },
+        localAgentChannel,
         aiAssistantSettings,
         questClient: quest,
         tables,

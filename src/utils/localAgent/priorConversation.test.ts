@@ -62,6 +62,53 @@ describe("priorConversationFor", () => {
     )
   })
 
+  it("caps the handoff at 20 visible entries, not 20 stored rows", () => {
+    const history = [
+      message({ role: "user", content: "Older visible turn" }),
+      message({ role: "user", content: "Use UTC for dates." }),
+      ...Array.from({ length: 18 }, (_, index) =>
+        message({ role: "assistant", content: `Visible reply ${index}` }),
+      ),
+      ...Array.from({ length: 10 }, () => [
+        message({ role: "tool", content: "{}", hideFromUI: true }),
+        message({ role: "assistant", content: null }),
+      ]).flat(),
+      message({ role: "assistant", content: "Final reply" }),
+    ]
+
+    const prior = priorConversationFor(history, "claude")
+
+    expect(prior?.split("\n").slice(2, -1)).toEqual([
+      "User: Use UTC for dates.",
+      ...Array.from(
+        { length: 18 },
+        (_, index) => `Assistant: Visible reply ${index}`,
+      ),
+      "Assistant: Final reply",
+    ])
+  })
+
+  it("keeps the summary, per-message, and total content budgets", () => {
+    const history = [
+      message({
+        role: "user",
+        hideFromUI: true,
+        content: `## PREVIOUS CONVERSATION SUMMARY:\n\n${"s".repeat(6_001)}\n\n\n**Continue helping the user from where we left off.**`,
+      }),
+      message({ role: "user", content: "x".repeat(2_001) }),
+      message({ role: "user", content: "y".repeat(2_001) }),
+      message({ role: "user", content: "z".repeat(2_001) }),
+    ]
+
+    const prior = priorConversationFor(history, "claude")
+
+    expect(prior?.split("\n").slice(2, -1)).toEqual([
+      `Summary of older turns: ${"s".repeat(6_000)}…`,
+      `User: ${"y".repeat(2_000)}…`,
+      `User: ${"z".repeat(2_000)}…`,
+    ])
+  })
+
   it("includes the SQL shown as a suggestion even when it is not in the assistant's text", () => {
     // Given
     const history = [

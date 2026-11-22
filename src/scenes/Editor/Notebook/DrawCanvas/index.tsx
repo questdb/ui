@@ -12,7 +12,13 @@ import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
-import { resolveDraw, toChartResult } from "./drawCanvasUtils"
+import {
+  HEATMAP_CONFLICT_MESSAGE,
+  HEATMAP_INCOMPLETE_MESSAGE,
+  heatmapIssue,
+  resolveDraw,
+  toChartResult,
+} from "./drawCanvasUtils"
 import { Button } from "../../../../components/Button"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
@@ -210,21 +216,12 @@ export const DrawCanvas: React.FC<Props> = ({
   )
 
   const plotted = resolution.renderQueries
-  const heatmapConflict =
-    plotted.length > 1 && plotted.some((query) => query.type === "heatmap")
-  const incompleteHeatmap = plotted.some(
-    (query) =>
-      query.type === "heatmap" &&
-      (!query.xColumn ||
-        !query.partitionByColumn ||
-        query.yColumns.length === 0),
-  )
+  const issue = heatmapIssue(plotted)
   const empty =
-    incompleteHeatmap ||
+    issue !== null ||
     classifyBlock !== null ||
     queries.length === 0 ||
-    plotted.length === 0 ||
-    heatmapConflict
+    plotted.length === 0
   const settledForCurrentQueries = settledKey === queriesKey
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
@@ -236,12 +233,10 @@ export const DrawCanvas: React.FC<Props> = ({
     emptyMessage = "Type a query to draw."
   } else if (!settledForCurrentQueries) {
     emptyMessage = "Drawing…"
-  } else if (heatmapConflict) {
-    emptyMessage =
-      "Heatmaps need a chart of their own. Include only one query in Chart settings."
-  } else if (incompleteHeatmap) {
-    emptyMessage =
-      "This heatmap needs an X-axis, a row column, and a value column. Update Chart settings."
+  } else if (issue === "conflict") {
+    emptyMessage = HEATMAP_CONFLICT_MESSAGE
+  } else if (issue === "incomplete") {
+    emptyMessage = HEATMAP_INCOMPLETE_MESSAGE
   } else if (hadError) {
     emptyMessage = "Query failed: check the SQL editor for the error."
   } else {

@@ -54,17 +54,29 @@ const plotWidthOf = (
 // floor — since it costs no plot space; the slider waits for the floor itself.
 export const WHEEL_ZOOM_HEADROOM = 3
 
+export const X_WHEEL_ZOOM_ID = "chart-x-wheel"
+export const X_SLIDER_ZOOM_ID = "chart-x-slider"
+export const Y_SLIDER_ZOOM_ID = "chart-y-slider"
+
+export const GRID_BOTTOM_NO_ZOOM = 56
+export const GRID_BOTTOM_WITH_ZOOM = 86
+export const HEATMAP_ROW_FILL = 0.8
+const X_AXIS_LABEL_HEIGHT_PX = 20
+// Leave a little headroom above a one-pixel pointer target.
+const MIN_HEATMAP_ROW_PX = 2
+
 export type ChartZoomDensity = {
   slider: boolean
   wheel: boolean
+  rowSlider: boolean
 }
 
 export const chartZoomDensity = (
   option: EChartsOption,
   containerWidthPx: number,
+  containerHeightPx = 0,
 ): ChartZoomDensity => {
   const plotWidth = plotWidthOf(option, containerWidthPx)
-  if (plotWidth <= 0) return { slider: false, wheel: false }
 
   const series = seriesOf(option)
   const bars = series.filter((s) => s.type === "bar")
@@ -75,7 +87,8 @@ export const chartZoomDensity = (
   const bandSlots = (list: SeriesSpec[]) =>
     Math.max(categorySlots, maxDataLength(list))
 
-  const density = { slider: false, wheel: false }
+  const density = { slider: false, wheel: false, rowSlider: false }
+  if (plotWidth <= 0) return density
   const include = (slots: number, fillRatio: number, minPx: number) => {
     if (slots <= 0) return
     const markPx = (plotWidth / slots) * fillRatio
@@ -92,6 +105,20 @@ export const chartZoomDensity = (
   // Heatmap cells share x slots across rows; count columns, not cells.
   if (series.some((s) => s.type === "custom")) {
     include(categorySlots, 1, MIN_MARK_PX)
+    const yAxis = firstOf(option.yAxis) as
+      | { type?: string; data?: unknown[] }
+      | undefined
+    const grid = firstOf(option.grid)
+    const rowCount = yAxis?.type === "category" ? (yAxis.data?.length ?? 0) : 0
+    const plotHeight =
+      containerHeightPx -
+      (typeof grid?.top === "number" ? grid.top : 0) -
+      (density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM) -
+      X_AXIS_LABEL_HEIGHT_PX
+    density.rowSlider =
+      rowCount > 1 &&
+      plotHeight > 0 &&
+      (plotHeight * HEATMAP_ROW_FILL) / rowCount < MIN_HEATMAP_ROW_PX
   }
   return density
 }

@@ -2,15 +2,23 @@ import { describe, expect, it } from "vitest"
 import { init, type CustomSeriesOption } from "echarts"
 import {
   buildEchartsOption,
+  withZoomDensity,
   type ResolvedQuery,
 } from "../../../src/scenes/Editor/Notebook/CellChart/buildEchartsOption"
 
-const createChart = () =>
+import {
+  chartZoomDensity,
+  X_SLIDER_ZOOM_ID,
+  X_WHEEL_ZOOM_ID,
+  Y_SLIDER_ZOOM_ID,
+} from "../../../src/scenes/Editor/Notebook/CellChart/chartDensity"
+
+const createChart = (height = 400) =>
   init(null, undefined, {
     renderer: "svg",
     ssr: true,
     width: 640,
-    height: 400,
+    height,
   })
 
 describe("notebook chart rendering", () => {
@@ -174,4 +182,90 @@ describe("notebook chart rendering", () => {
       chart.dispose()
     }
   })
+
+  it.each([2, 100])(
+    "uses a row slider to enlarge dense heatmap cells without moving the %i-slot X axis",
+    (xSlots) => {
+      const height = 350
+      const width = 640
+      const rowCount = 500
+      const option = buildEchartsOption({ xColumn: "slot" }, [
+        {
+          index: 0,
+          type: "heatmap",
+          axis: "left",
+          xColumn: "slot",
+          partitionByColumn: "station",
+          yColumns: ["reading"],
+          columns: [
+            { name: "slot", type: "INT" },
+            { name: "station", type: "SYMBOL" },
+            { name: "reading", type: "DOUBLE" },
+          ],
+          dataset: Array.from({ length: rowCount }, (_, i) => [
+            i % xSlots,
+            `station ${String(i).padStart(3, "0")}`,
+            i,
+          ]),
+        },
+      ])
+      const density = chartZoomDensity(option, width, height)
+      expect(density).toEqual({
+        rowSlider: true,
+        wheel: xSlots === 100,
+        slider: xSlots === 100,
+      })
+      expect(chartZoomDensity(option, width, 2400).rowSlider).toBe(false)
+      const chart = createChart(height)
+      try {
+        chart.setOption({
+          ...withZoomDensity(option, density),
+          animation: false,
+        })
+        const xOf = (x: number) => chart.convertToPixel({ xAxisIndex: 0 }, x)
+        const rowHeight = () =>
+          Math.abs(
+            chart.convertToPixel({ yAxisIndex: 0 }, 1) -
+              chart.convertToPixel({ yAxisIndex: 0 }, 0),
+          )
+        const initialRowHeight = rowHeight()
+        const xBefore = [xOf(0), xOf(1)]
+        expect(initialRowHeight).toBeGreaterThan(0)
+        expect(initialRowHeight).toBeLessThan(1)
+        expect(chart.getOption().dataZoom).toMatchObject([
+          { id: X_WHEEL_ZOOM_ID, disabled: xSlots === 2, xAxisIndex: 0 },
+          { id: X_SLIDER_ZOOM_ID, show: xSlots === 100, xAxisIndex: 0 },
+          {
+            id: Y_SLIDER_ZOOM_ID,
+            show: true,
+            yAxisIndex: 0,
+            orient: "vertical",
+          },
+        ])
+        chart.dispatchAction({
+          type: "dataZoom",
+          dataZoomId: Y_SLIDER_ZOOM_ID,
+          start: 0,
+          end: 2,
+        })
+        expect(rowHeight()).toBeGreaterThan(10)
+        expect([xOf(0), xOf(1)]).toEqual(xBefore)
+        expect(chart.renderToSVGString()).toContain("station 001")
+
+        if (xSlots === 100) {
+          const zoomedRowHeight = rowHeight()
+          chart.dispatchAction({
+            type: "dataZoom",
+            dataZoomId: X_WHEEL_ZOOM_ID,
+            start: 0,
+            end: 50,
+          })
+          expect(xOf(1) - xOf(0)).toBeGreaterThan(xBefore[1] - xBefore[0])
+          expect(rowHeight()).toEqual(zoomedRowHeight)
+        }
+      } finally {
+        chart.dispose()
+      }
+    },
+  )
 })

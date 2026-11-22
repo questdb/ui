@@ -129,7 +129,11 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
     value: c.name,
   }))
   const partitionCandidates = groups.categorical.filter(
-    (c) => c.name !== xColumn,
+    (c) =>
+      c.name !== xColumn ||
+      (query.type === "heatmap" &&
+        query.enabled === false &&
+        c.name === query.partitionByColumn),
   )
   const idx = activeTab.index
 
@@ -180,12 +184,12 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
               const oh = findOhlc(groups.numeric)
               if (oh) patch.ohlc = oh
             }
-            if (type === "heatmap") {
-              if (!query.partitionByColumn && partitionCandidates[0])
-                patch.partitionByColumn = partitionCandidates[0].name
-              patch.yColumns = query.yColumns.slice(0, 1)
-              if (patch.yColumns.length === 0 && groups.numeric[0])
-                patch.yColumns = [groups.numeric[0].name]
+            if (
+              type === "heatmap" &&
+              !query.partitionByColumn &&
+              partitionCandidates[0]
+            ) {
+              patch.partitionByColumn = partitionCandidates[0].name
             }
             onUpdateQuery(patch)
           }}

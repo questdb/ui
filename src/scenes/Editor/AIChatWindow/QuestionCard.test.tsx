@@ -205,6 +205,29 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith({ question_0: "Postgres" })
   })
 
+  it.each(["1", "{Enter}"])(
+    "moves focus to the next question when a focused option is picked with %s",
+    async (key) => {
+      const { onAnswer } = renderCard(
+        question([database, { ...features, multiple: false }]),
+      )
+      const firstOption = screen.getByRole("radio", { name: /QuestDB/ })
+      firstOption.focus()
+      expect(firstOption).toHaveFocus()
+
+      await userEvent.keyboard(key)
+      expect(screen.getByText("Which features do you need?")).toHaveFocus()
+
+      await userEvent.keyboard("2")
+      expect(screen.getByRole("tab", { name: "Review" })).toHaveFocus()
+      await userEvent.click(screen.getByRole("button", { name: "Send" }))
+      expect(onAnswer).toHaveBeenCalledWith({
+        question_0: "QuestDB",
+        question_1: "ILP",
+      })
+    },
+  )
+
   it("skips the question on Skip, and Escape does not answer it", async () => {
     // Given
     const { onAnswer, onStop } = renderCard(question([database, features]))

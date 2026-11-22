@@ -26,7 +26,7 @@ export const classifyColumn = (col: ColumnDefinition): ColumnRole => {
   const t = col.type?.toUpperCase()
   if (!t) return "other"
   if (TEMPORAL.has(t)) return "temporal"
-  if (NUMERIC.has(t)) return "numeric"
+  if (NUMERIC.has(t) || t.startsWith("DECIMAL(")) return "numeric"
   if (CATEGORICAL.has(t)) return "categorical"
   return "other"
 }

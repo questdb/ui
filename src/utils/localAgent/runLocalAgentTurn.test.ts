@@ -86,6 +86,7 @@ const startTurn = (abortSignal?: AbortSignal) => {
   const setStatus = vi.fn()
   const streaming = { onTextChunk: vi.fn(), onThinkingChunk: vi.fn() }
   const turn = runLocalAgentTurn({
+    channel: activeChannel,
     conversationId: CONVERSATION_ID,
     userMessage: "Chart the trades table",
     notebookRead: { bufferId: 7, readSeq: 3 },

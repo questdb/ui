@@ -7,6 +7,7 @@ import { useSelector } from "react-redux"
 import { AISparkle } from "../AISparkle"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
+import { useLocalAgentChannel } from "../../utils/localAgent/LocalAgentContext"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { useAIConversationActions } from "../../providers/AIConversationProvider"
 import type { ConversationId } from "../../providers/AIConversationProvider/types"
@@ -38,12 +39,14 @@ export const ExplainQueryButton = ({
 }: ExplainQueryButtonProps) => {
   const { quest } = useContext(QuestContext)
   const tables = useSelector(selectors.query.getTables)
+  const localAgentChannel = useLocalAgentChannel()
   const {
+    canUse,
     setStatus,
     abortController,
     hasSchemaAccess,
-    currentModel: currentModelValue,
-    apiKey: apiKeyValue,
+    currentModel,
+    apiKey,
     aiAssistantSettings,
   } = useAIStatus()
   const {
@@ -55,15 +58,15 @@ export const ExplainQueryButton = ({
   } = useAIConversationActions()
 
   const handleExplainQuery = () => {
+    if (!canUse) return
     void trackEvent(ConsoleEvent.AI_EXPLAIN_QUERY)
-    const currentModel = currentModelValue!
-    const apiKey = apiKeyValue!
 
     void executeAIFlow(
       createExplainFlowConfig({
         conversationId,
         queryText,
         settings: { model: currentModel, apiKey },
+        localAgentChannel,
         aiAssistantSettings,
         questClient: quest,
         tables,

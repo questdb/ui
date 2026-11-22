@@ -17,12 +17,11 @@ import {
 
 // Keep only DQL results that actually returned rows. The chart can't render
 // empty datasets, and non-DQL results (error/ddl/dml) have no columns.
-export const successResults = (
-  results: (QueryExecResult | null)[],
-): QueryExecResult[] =>
+export const successResults = <T extends QueryExecResult>(
+  results: (T | null)[],
+): T[] =>
   results.filter(
-    (r): r is QueryExecResult =>
-      r !== null && r.type === "dql" && r.dataset.length > 0,
+    (r): r is T => r !== null && r.type === "dql" && r.dataset.length > 0,
   )
 
 // Rehydrate a persisted snapshot entry into the QueryExecResult shape DrawCanvas
@@ -76,13 +75,16 @@ export const resultMatchesQueries = (
       normalizeQueryText(r.query) === normalizeQueryText(queries[i]),
   )
 
+// Retain statement position across filtering; SQL text alone is ambiguous.
+type PositionedResult = QueryExecResult & { statementIndex: number }
+
 export type ChartResult =
   | { kind: "missing" }
   | { kind: "stale" }
   | { kind: "pending" }
   | {
       kind: "settled"
-      results: QueryExecResult[]
+      results: PositionedResult[]
       hadError: boolean
     }
 
@@ -95,7 +97,12 @@ export const toChartResult = (
   if (hasPendingResult(result)) return { kind: "pending" }
   return {
     kind: "settled",
-    results: successResults(result.results.map(toExecResult)),
+    results: successResults(
+      result.results.map((entry, statementIndex) => ({
+        ...toExecResult(entry),
+        statementIndex,
+      })),
+    ),
     hadError: result.results.some((r) => r.type === "error"),
   }
 }
@@ -169,6 +176,22 @@ export type DrawResolution = {
   renderQueries: ResolvedQuery[] // enabled & x-compatible, anchor first — for echarts
   effectiveConfig: ChartConfig // dense, statement-aligned — for the settings drawer
   tabs: QueryTab[] // one per successful query — for the drawer tab strip
+}
+
+export const HEATMAP_CONFLICT_MESSAGE =
+  "Heatmaps need a chart of their own. Include only one query in Chart settings."
+export const HEATMAP_INCOMPLETE_MESSAGE =
+  "This heatmap needs an X-axis, a row column, and a value column. Update Chart settings."
+
+export const heatmapIssue = (queries: ResolvedQuery[]) => {
+  const heatmaps = queries.filter(({ type }) => type === "heatmap")
+  if (heatmaps.length > 0 && queries.length > 1) return "conflict"
+  if (
+    heatmaps.some((q) => !q.xColumn || !q.partitionByColumn || !q.yColumns[0])
+  ) {
+    return "incomplete"
+  }
+  return null
 }
 
 const xRoleOf = (columns: ColumnDefinition[], name: string | null) => {
@@ -251,11 +274,15 @@ const pruneQuery = (
   columns: ColumnDefinition[],
 ): QueryChart => {
   const names = new Set(columns.map((c) => c.name))
+  const yColumns = Array.isArray(qc.yColumns) ? qc.yColumns : []
   const next: QueryChart = {
     ...qc,
-    yColumns: (Array.isArray(qc.yColumns) ? qc.yColumns : []).filter((n) =>
-      names.has(n),
-    ),
+    // A heatmap only maps the first column. Do not silently demote a missing
+    // value to another series retained from an earlier chart type.
+    yColumns:
+      qc.type === "heatmap" && !names.has(yColumns[0])
+        ? []
+        : yColumns.filter((n) => names.has(n)),
   }
   if (next.partitionByColumn && !names.has(next.partitionByColumn))
     delete next.partitionByColumn
@@ -279,15 +306,18 @@ const dropPartitionOnX = (
 // flags x-incompatible queries. Pure so it can be memoized and tested.
 export const resolveDraw = (
   statements: string[],
-  results: QueryExecResult[],
+  results: (QueryExecResult &
+    Partial<Pick<PositionedResult, "statementIndex">>)[],
   config: ChartConfig | undefined,
 ): DrawResolution => {
-  const used = new Set<number>()
+  const used = new Set(results.flatMap((r) => r.statementIndex ?? []))
   const items = results.map((r) => {
-    let idx = statements.indexOf(r.query)
-    if (idx >= 0 && used.has(idx)) {
-      idx = statements.findIndex((s, i) => s === r.query && !used.has(i))
-    }
+    // Standalone callers (such as Editor Result) can still pass unindexed rows.
+    const idx =
+      r.statementIndex ??
+      statements.findIndex(
+        (statement, index) => statement === r.query && !used.has(index),
+      )
     if (idx >= 0) used.add(idx)
     const inferred = inferChartConfig(r.columns, r.dataset, r.query)
     const saved = idx >= 0 ? config?.queries[idx] : undefined
@@ -307,7 +337,10 @@ export const resolveDraw = (
     ...item,
     ownX,
     included,
-    qc: dropPartitionOnX(item.qc, ownX),
+    qc:
+      item.qc.type === "heatmap" && item.qc.enabled === false
+        ? item.qc
+        : dropPartitionOnX(item.qc, ownX),
   }))
 
   const tabs: QueryTab[] = []

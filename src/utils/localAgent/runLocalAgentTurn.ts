@@ -21,9 +21,15 @@ import { toolStatusOf } from "../tools/toolStatus"
 import type { StatusArgs } from "../../providers/AIStatusProvider"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import { getLocalAgentChannel, type NotebookRead } from "./localAgentChannel"
+import {
+  isCurrentLocalAgentChannel,
+  type LocalAgentChannel,
+  type LocalAgentUpdate,
+  type NotebookRead,
+} from "./localAgentChannel"
 
 type LocalAgentTurnParams = {
+  channel: LocalAgentChannel | null
   conversationId: string
   userMessage: string
   images?: AgentPromptImage[]
@@ -205,11 +211,16 @@ const createUpdateHandler = (
     handleStatus(AIOperationStatus.GeneratingResponse, { transient: true })
   }
 
-  const handleUpdate = (update: AgentUpdate): void => {
+  const handleUpdate = (update: LocalAgentUpdate): void => {
     if (abortSignal?.aborted) return
     switch (update.kind) {
       case "message_chunk":
-        handleMessageChunk(update.messageId, update.text)
+      case "question_record":
+        handleMessageChunk(
+          update.messageId,
+          update.text,
+          update.kind === "question_record",
+        )
         return
       case "thought_chunk":
         handleThoughtChunk(update.text)
@@ -256,6 +267,7 @@ const createUpdateHandler = (
 }
 
 export const runLocalAgentTurn = async ({
+  channel,
   conversationId,
   userMessage,
   images,
@@ -264,8 +276,7 @@ export const runLocalAgentTurn = async ({
   streaming,
   abortSignal,
 }: LocalAgentTurnParams): Promise<GeneratedSQL | AiAssistantAPIError> => {
-  const channel = getLocalAgentChannel()
-  if (!channel) return NOT_CONNECTED
+  if (!isCurrentLocalAgentChannel(channel)) return NOT_CONNECTED
 
   const startedAt = Date.now()
   const { handleUpdate, addNotice, handleStatus, reply, contextUsage } =

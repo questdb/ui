@@ -64,7 +64,8 @@ export const priorConversationFor = (
       ? `Summary of older turns: ${truncate(withoutInlineImages(summary.slice(SUMMARY_PREFIX.length, -SUMMARY_SUFFIX.length)).trim(), MAX_TOTAL_CHARS / 2)}`
       : null
   let total = carriedSummary?.length ?? 0
-  for (const message of unseen.slice(-MAX_MESSAGES).reverse()) {
+  for (let i = unseen.length - 1; i >= 0 && lines.length < MAX_MESSAGES; i--) {
+    const message = unseen[i]
     const text = withoutInlineImages(visibleText(message) ?? "").trim()
     if (!text) continue
     const line = `${message.role === "user" ? "User" : "Assistant"}: ${truncate(text, MAX_MESSAGE_CHARS)}`

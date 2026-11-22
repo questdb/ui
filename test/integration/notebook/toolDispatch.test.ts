@@ -2053,6 +2053,95 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     },
   )
 
+  it.each([
+    { sibling: null, rows: [[1000, 2]], rejected: true },
+    { sibling: null, rows: [], rejected: false },
+    { sibling: { type: "line", y_columns: ["b"] }, rows: [], rejected: false },
+    {
+      sibling: { type: "line", y_columns: ["b"], enabled: false },
+      rows: [[1000, 2]],
+      rejected: false,
+    },
+  ])(
+    "validates the effective heatmap patch with settled results ($#)",
+    async ({ sibling, rows, rejected }) => {
+      const statements = [
+        "SELECT ts, bucket, site, a FROM t",
+        "SELECT ts, b FROM t",
+      ]
+      const result: NotebookCell["result"] = {
+        timestamp: 0,
+        activeResultIndex: 0,
+        results: [
+          {
+            type: "dql",
+            query: statements[0],
+            count: 1,
+            columns: [
+              { name: "ts", type: "TIMESTAMP" },
+              { name: "bucket", type: "SYMBOL" },
+              { name: "site", type: "SYMBOL" },
+              { name: "a", type: "DOUBLE" },
+            ],
+            dataset: [[1000, "A", "west", 1]],
+          },
+          {
+            type: "dql",
+            query: statements[1],
+            columns: [
+              { name: "ts", type: "TIMESTAMP" },
+              { name: "b", type: "DOUBLE" },
+            ],
+            dataset: rows,
+            count: rows.length,
+          },
+        ],
+      }
+      const { state, runCell } = mountLive(1, [
+        cell("c", statements.join("; "), { result }),
+      ])
+      const runQueryRaw = vi.fn(makeClient().runQueryRaw)
+      const validateSql = vi.fn(dqlValidator)
+      const send = (patch: object) =>
+        dispatchTool(
+          "set_cell_chart_config",
+          { buffer_id: 1, cell_id: "c", ...patch },
+          makeClient({ runQueryRaw }),
+          noopStatus,
+          ALL_GRANTED,
+          validateSql,
+        )
+      const queries = [
+        { type: "heatmap", y_columns: ["a"], partition_by_column: "site" },
+        sibling,
+      ]
+      expect((await send({ x_column: "bucket", queries })).is_error).toBeFalsy()
+      const saved = cellById(state, "c")?.chartConfig
+      const assertPatchOutcome = async (patch: object) => {
+        const response = await send(patch)
+        expect(response.is_error ?? false).toBe(rejected)
+        if (rejected) {
+          const error = JSON.parse(response.content) as {
+            error_code: string
+            message: string
+          }
+          expect(error.error_code).toBe("validation")
+          expect(error.message).toContain("Heatmaps need a chart of their own")
+        }
+        expect(cellById(state, "c")?.chartConfig).toEqual({
+          ...saved,
+          xColumn: rejected ? "bucket" : "ts",
+        })
+      }
+      await assertPatchOutcome({ x_column: "ts" })
+      await assertPatchOutcome({ x_column: "ts", queries })
+      expect(cellById(state, "c")?.result).toBe(result)
+      expect(validateSql).not.toHaveBeenCalled()
+      expect(runQueryRaw).not.toHaveBeenCalled()
+      expect(runCell).not.toHaveBeenCalled()
+    },
+  )
+
   it("rejects a non-empty queries array whose length != the cell's statement count", async () => {
     // Given a two-statement cell
     twoStatementCell()

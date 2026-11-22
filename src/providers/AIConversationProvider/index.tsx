@@ -51,6 +51,11 @@ type AIConversationContextType = {
   chatWindowState: ChatWindowState
   isLoadingMessages: boolean
   isStreaming: boolean
+  getChatDispatchState: (id: ConversationId) => {
+    owner: symbol
+    messages: ConversationMessage[]
+  } | null
+  setHasPendingSubmission: (id: ConversationId, pending: boolean) => void
   setIsStreaming: (streaming: boolean) => void
   scrollToMessageId: string | null
   setScrollToMessageId: (messageId: string | null) => void
@@ -271,6 +276,25 @@ export const AIConversationProvider: React.FC<{
   }, [activeConversationId])
 
   const isOpeningChatWindowRef = useRef(false)
+  const chatDispatchOwner = useRef(Symbol())
+  const pendingSubmissions = useRef(new Set<ConversationId>())
+  const setHasPendingSubmission = useCallback(
+    (id: ConversationId, pending: boolean) => {
+      if (pending) pendingSubmissions.current.add(id)
+      else pendingSubmissions.current.delete(id)
+    },
+    [],
+  )
+  const getChatDispatchState = useCallback(
+    (id: ConversationId) =>
+      !isOpeningChatWindowRef.current && activeConversationIdRef.current === id
+        ? {
+            owner: chatDispatchOwner.current,
+            messages: activeConversationMessagesRef.current,
+          }
+        : null,
+    [],
+  )
 
   const persistMessages = useCallback(
     async (conversationId: ConversationId, updateTimestamp: boolean = true) => {
@@ -712,39 +736,40 @@ export const AIConversationProvider: React.FC<{
       const loadMessages = options?.loadMessages ?? true
 
       if (isOpeningChatWindowRef.current) return
+      const prevId = activeConversationIdRef.current
+      if (
+        prevId === conversationId &&
+        !chatWindowState.isHistoryOpen &&
+        activeSidebar?.type === "aiChat"
+      )
+        return
+
       isOpeningChatWindowRef.current = true
+      if (prevId !== conversationId) {
+        // Revoke dispatch ownership before the outgoing transcript is saved.
+        chatDispatchOwner.current = Symbol()
+        setIsLoadingMessages(true)
+      }
 
       try {
-        const prevId = chatWindowState.activeConversationId
-
         if (prevId && prevId !== conversationId) {
           const prevMeta = conversationMetas.get(prevId)
-          if (prevMeta && activeConversationMessagesRef.current.length === 0) {
+          const empty = activeConversationMessagesRef.current.length === 0
+          if (prevMeta && empty && !pendingSubmissions.current.has(prevId)) {
             await aiConversationStore.deleteConversation(prevId)
           } else {
             await persistMessages(prevId, false)
           }
-        } else if (
-          prevId === conversationId &&
-          !chatWindowState.isHistoryOpen &&
-          activeSidebar?.type === "aiChat"
-        ) {
-          return
-        }
-
-        if (!activeConversationId) {
-          setActiveConversationMessages([])
         }
 
         if (loadMessages && conversationId !== prevId) {
-          setIsLoadingMessages(true)
           const msgs = await aiConversationStore.getMessages(conversationId)
           setActiveConversationMessages(msgs)
-          setIsLoadingMessages(false)
         } else if (!loadMessages) {
           setActiveConversationMessages([])
         }
 
+        activeConversationIdRef.current = conversationId
         setChatWindowState((prev) => ({
           ...prev,
           isHistoryOpen: false,
@@ -765,7 +790,10 @@ export const AIConversationProvider: React.FC<{
     void trackEvent(ConsoleEvent.AI_CHAT_CLOSE)
     dispatch(actions.console.closeSidebar())
     if (chatWindowState.activeConversationId) {
-      if (activeConversationMessagesRef.current.length === 0) {
+      if (
+        activeConversationMessagesRef.current.length === 0 &&
+        !pendingSubmissions.current.has(chatWindowState.activeConversationId)
+      ) {
         void aiConversationStore.deleteConversation(
           chatWindowState.activeConversationId,
         )
@@ -1167,6 +1195,8 @@ export const AIConversationProvider: React.FC<{
   const actionsValue = useMemo<AIConversationActionsContextType>(
     () => ({
       setIsStreaming,
+      getChatDispatchState,
+      setHasPendingSubmission,
       setScrollToMessageId,
       getConversationMeta,
       findConversationByQuery,
@@ -1201,6 +1231,8 @@ export const AIConversationProvider: React.FC<{
     }),
     [
       setIsStreaming,
+      getChatDispatchState,
+      setHasPendingSubmission,
       setScrollToMessageId,
       getConversationMeta,
       findConversationByQuery,
@@ -1242,6 +1274,8 @@ export const AIConversationProvider: React.FC<{
       isLoadingMessages,
       isStreaming,
       setIsStreaming,
+      getChatDispatchState,
+      setHasPendingSubmission,
       scrollToMessageId,
       setScrollToMessageId,
       getConversationMeta,
@@ -1281,6 +1315,8 @@ export const AIConversationProvider: React.FC<{
       isLoadingMessages,
       isStreaming,
       setIsStreaming,
+      getChatDispatchState,
+      setHasPendingSubmission,
       scrollToMessageId,
       setScrollToMessageId,
       getConversationMeta,

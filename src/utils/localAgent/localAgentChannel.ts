@@ -39,13 +39,17 @@ export type NotebookRead = {
   readSeq: number
 }
 
+export type LocalAgentUpdate =
+  | AgentUpdate
+  | { kind: "question_record"; messageId: string; text: string }
+
 export type LocalAgentPrompt = {
   conversationId: string
   text: string
   images?: AgentPromptImage[]
   notebookRead: NotebookRead | null
   signal?: AbortSignal
-  onUpdate: (update: AgentUpdate) => void
+  onUpdate: (update: LocalAgentUpdate) => void
   onToolStatus: StatusCallback
 }
 
@@ -74,7 +78,7 @@ export type LocalAgentChannelOptions = {
 
 type PendingTurn = {
   turnId: string
-  onUpdate: (update: AgentUpdate) => void
+  onUpdate: LocalAgentPrompt["onUpdate"]
   onToolStatus: StatusCallback
   settle: (result: AgentTurnResult) => void
   // Set once the user stops the turn; resolves when the turn has ended.
@@ -264,7 +268,7 @@ export class LocalAgentChannel {
     })
     // The chat keeps the question and the answer in the agent's reply.
     this.turns.get(question.conversationId)?.onUpdate({
-      kind: "message_chunk",
+      kind: "question_record",
       messageId: `question:${requestId}`,
       text: questionTranscript(question, answers),
     })
@@ -298,11 +302,12 @@ export class LocalAgentChannel {
   }
 
   private removeQuestion(requestId: string): void {
-    this.update({
-      questions: this.snapshot.questions.filter(
-        (question) => question.requestId !== requestId,
-      ),
-    })
+    const questions = this.snapshot.questions.filter(
+      (question) => question.requestId !== requestId,
+    )
+    if (questions.length !== this.snapshot.questions.length) {
+      this.update({ questions })
+    }
   }
 
   private handleMessage(msg: AgentOutboundMessage): void {
@@ -326,6 +331,9 @@ export class LocalAgentChannel {
         this.settleTurn(msg.conversationId, msg.turnId, msg.result)
         return
       case "agent_question":
+        // Questions have no wire turn ID. Keep them only for a live turn,
+        // and remove them when that turn settles.
+        if (!this.turns.has(msg.conversationId)) return
         this.update({
           questions: [
             ...this.snapshot.questions.filter(
@@ -355,6 +363,12 @@ export class LocalAgentChannel {
     if (!turn) return
     this.turns.delete(conversationId)
     turn.settle(result)
+    const questions = this.snapshot.questions.filter(
+      (question) => question.conversationId !== conversationId,
+    )
+    if (questions.length !== this.snapshot.questions.length) {
+      this.update({ questions })
+    }
   }
 }
 
@@ -372,3 +386,7 @@ export const unregisterLocalAgentChannel = (
 
 export const getLocalAgentChannel = (): LocalAgentChannel | null =>
   activeChannel
+
+export const isCurrentLocalAgentChannel = (
+  channel: LocalAgentChannel | null | undefined,
+): channel is LocalAgentChannel => channel != null && channel === activeChannel

@@ -797,3 +797,37 @@ describe("buildEchartsOption — heatmap color scale per row", () => {
     expect(opt.visualMap).toMatchObject({ min: 2, max: 9000 })
   })
 })
+
+it("orders exact LONG heatmap X keys and keeps their own cell values", () => {
+  const opt = buildEchartsOption({ xColumn: "slot" }, [
+    resolved({
+      type: "heatmap",
+      xColumn: "slot",
+      partitionByColumn: "site",
+      yColumns: ["reading"],
+      columns: [
+        col("slot", "LONG"),
+        col("site", "SYMBOL"),
+        col("reading", "INT"),
+      ],
+      dataset: [
+        ["9007199254740993", "west", 1],
+        ["9007199254740992", "west", 2],
+        ["-9007199254740992", "west", 3],
+        ["-9007199254740993", "west", 4],
+      ],
+    }),
+  ])
+  expect(firstAxis(opt.xAxis).data).toEqual([
+    "-9007199254740993",
+    "-9007199254740992",
+    "9007199254740992",
+    "9007199254740993",
+  ])
+  expect(seriesList(opt.series)[0].data).toEqual([
+    [3, 0, 1, 1],
+    [2, 0, 2, 2],
+    [1, 0, 3, 3],
+    [0, 0, 4, 4],
+  ])
+})

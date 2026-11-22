@@ -509,6 +509,50 @@ describe("toChartResult", () => {
     }
   })
 
+  it("keeps the second duplicate SQL result in Q2 when Q1 has no rows", () => {
+    const statement = "SELECT ts, site, price FROM samples"
+    const statements = [statement, statement]
+    const columns = [
+      { name: "ts", type: "TIMESTAMP" },
+      { name: "site", type: "SYMBOL" },
+      { name: "price", type: "DOUBLE" },
+    ]
+    const frame = toChartResult(
+      {
+        timestamp: 42,
+        activeResultIndex: 0,
+        results: [
+          { type: "dql", query: statement, columns, count: 0, dataset: [] },
+          {
+            type: "dql",
+            query: ` ${statement};`,
+            columns,
+            count: 1,
+            dataset: [[1000, "west", 21]],
+          },
+        ],
+      },
+      statements,
+    )
+    if (frame.kind !== "settled") throw new Error("expected a settled frame")
+    const resolved = resolveDraw(statements, frame.results, {
+      xColumn: "ts",
+      queries: [
+        { type: "line", yColumns: ["price"], enabled: false },
+        { type: "heatmap", yColumns: ["price"], partitionByColumn: "site" },
+      ],
+    })
+    expect(resolved.tabs.map((tab) => tab.label)).toEqual(["Q2"])
+    expect(resolved.renderQueries).toEqual([
+      expect.objectContaining({
+        index: 1,
+        type: "heatmap",
+        partitionByColumn: "site",
+        dataset: [[1000, "west", 21]],
+      }),
+    ])
+  })
+
   it("settles a mixed frame with hadError and only the chartable statements", () => {
     const mixed: CellResult = {
       results: [

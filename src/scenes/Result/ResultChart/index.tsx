@@ -16,7 +16,11 @@ import {
 import { ChartSettingsPanel } from "../../Editor/Notebook/CellChart/ChartSettingsDrawer"
 import type { ChartSettingsTelemetry } from "../../Editor/Notebook/CellChart/chartSettingsTelemetry"
 import type { ChartConfig } from "../../Editor/Notebook/CellChart/chartTypes"
-import { resolveDraw } from "../../Editor/Notebook/DrawCanvas/drawCanvasUtils"
+import {
+  HEATMAP_INCOMPLETE_MESSAGE,
+  heatmapIssue,
+  resolveDraw,
+} from "../../Editor/Notebook/DrawCanvas/drawCanvasUtils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import type { QueryRawResult } from "../../../utils/questdb"
 import { Type } from "../../../utils/questdb"
@@ -187,6 +191,10 @@ export const ResultChart: React.FC<Props> = ({
       (query) => query.yColumns.length > 0 || query.ohlc != null,
     ) ?? false
 
+  const incompleteHeatmap =
+    resolution != null &&
+    heatmapIssue(resolution.renderQueries) === "incomplete"
+
   const shownRowCount = chartResult?.dataset.length ?? 0
   const totalRowCount = chartResult?.count ?? 0
   const isTruncated = totalRowCount > shownRowCount
@@ -211,6 +219,8 @@ export const ResultChart: React.FC<Props> = ({
   let emptyMessage = "Run a query to draw a chart."
   if (chartResult && chartResult.dataset.length === 0) {
     emptyMessage = "This result has no rows to plot."
+  } else if (incompleteHeatmap) {
+    emptyMessage = HEATMAP_INCOMPLETE_MESSAGE
   } else if (chartResult && !hasChartableColumns) {
     emptyMessage = "This result has no chartable columns."
   }
@@ -219,7 +229,8 @@ export const ResultChart: React.FC<Props> = ({
     option !== null &&
     chartResult !== null &&
     chartResult.dataset.length > 0 &&
-    hasChartableColumns
+    hasChartableColumns &&
+    !incompleteHeatmap
 
   useEffect(() => {
     if (
@@ -320,7 +331,9 @@ export const ResultChart: React.FC<Props> = ({
     body = (
       <EmptyState>
         <ChartLineIcon size={32} weight="regular" aria-hidden />
-        <span>{emptyMessage}</span>
+        <span role={incompleteHeatmap ? "status" : undefined}>
+          {emptyMessage}
+        </span>
       </EmptyState>
     )
   }

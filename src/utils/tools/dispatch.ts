@@ -53,14 +53,13 @@ import {
   UNVERIFIED_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
-  resolveQueryAxes,
-  resultMatchesQueries,
+  HEATMAP_INCOMPLETE_MESSAGE,
+  heatmapIssue,
+  resolveDraw,
+  toChartResult,
 } from "../../scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
-import { inferChartConfig } from "../../scenes/Editor/Notebook/CellChart/inferChartConfig"
-import {
-  hasPendingResult,
-  snapshotResultsMatchQueries,
-} from "../../scenes/Editor/Notebook/statementIdentity"
+import { mergeCellChartConfig } from "../../scenes/Editor/Notebook/cellSizing"
+import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -182,54 +181,26 @@ const readCells = (
     signal,
   )
 
-const hasExplicitHeatmapMix = (
+const validateHeatmapPatch = (
   config: ChartConfig,
   statements: string[],
   result: NotebookCell["result"],
-): boolean => {
-  const isExplicitlyEnabled = (index: number) => {
-    const query = config.queries[index]
-    return query != null && query.enabled !== false
-  }
-  const enabled = config.queries.filter((_, index) =>
-    isExplicitlyEnabled(index),
-  )
-  if (enabled.length < 2 || !enabled.some((q) => q?.type === "heatmap"))
-    return false
+): string | null => {
+  const enabled = config.queries.filter((q) => q && q.enabled !== false)
+  if (!enabled.some((q) => q?.type === "heatmap")) return null
 
-  // Without matching metadata, reject the explicit mix rather than assume
-  // the queries are incompatible. Never run SQL to validate chart settings.
-  if (!resultMatchesQueries(result, statements) || hasPendingResult(result))
-    return true
-  const candidates = result.results.flatMap((entry, index) =>
-    entry.type === "dql" && entry.dataset.length > 0
-      ? [
-          {
-            index,
-            columns: entry.columns,
-            inferredXColumn: inferChartConfig(
-              entry.columns,
-              entry.dataset,
-              entry.query,
-            ).xColumn,
-          },
-        ]
-      : [],
-  )
-  if (
-    candidates.filter(({ index }) => isExplicitlyEnabled(index)).length !==
-    enabled.length
-  )
-    return true
+  const conflict =
+    "Heatmaps need a chart of their own. Include only one query or choose a different chart type."
+  const frame = toChartResult(result, statements)
+  // Without matching results, keep rejecting explicit mixes. Inferred slots
+  // remain unknown; never execute SQL to validate chart settings.
+  if (frame.kind !== "settled") return enabled.length > 1 ? conflict : null
 
-  const { placements } = resolveQueryAxes(candidates, config)
-  const included = placements.filter(
-    ({ item, included }) => included && isExplicitlyEnabled(item.index),
-  )
-  return (
-    included.length > 1 &&
-    included.some(({ item }) => config.queries[item.index]?.type === "heatmap")
-  )
+  const { renderQueries } = resolveDraw(statements, frame.results, config)
+  const issue = heatmapIssue(renderQueries)
+  if (issue === "conflict") return conflict
+  if (issue === "incomplete") return HEATMAP_INCOMPLETE_MESSAGE
+  return null
 }
 
 const runCellBound = (
@@ -1113,15 +1084,19 @@ const runTool = async (
             is_error: true,
           }
         }
-        // A non-null queries array REPLACES every per-query config
-        if (patch.queries && patch.queries.length > 0) {
+        if (patch.xColumn !== undefined || patch.queries?.length) {
           const cell = (await readCells(buffer_id, signal)).find(
             (c) => c.id === cell_id,
           )
           if (cell) {
             const statements = getQueriesFromText(cell.value)
             const statementCount = statements.length
-            if (statementCount > 0 && patch.queries.length !== statementCount) {
+            // A non-empty queries array replaces every per-query config.
+            if (
+              patch.queries?.length &&
+              statementCount > 0 &&
+              patch.queries.length !== statementCount
+            ) {
               return {
                 content: JSON.stringify({
                   error_code: "validation",
@@ -1134,21 +1109,16 @@ const runTool = async (
                 is_error: true,
               }
             }
-            if (
-              hasExplicitHeatmapMix(
-                {
-                  xColumn: patch.xColumn ?? cell.chartConfig?.xColumn ?? null,
-                  queries: patch.queries,
-                },
-                statements,
-                cell.result,
-              )
-            ) {
+            const invalid = validateHeatmapPatch(
+              mergeCellChartConfig(cell, patch),
+              statements,
+              cell.result,
+            )
+            if (invalid) {
               return {
                 content: JSON.stringify({
                   error_code: "validation",
-                  message:
-                    "VALIDATION_ERROR: Heatmaps need a chart of their own. Include only one query or choose a different chart type.",
+                  message: `VALIDATION_ERROR: ${invalid}`,
                 }),
                 is_error: true,
               }

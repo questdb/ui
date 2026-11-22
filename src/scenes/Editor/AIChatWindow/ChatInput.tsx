@@ -1,6 +1,7 @@
 import type { ContextUsage } from "../../../utils/ai/aiAssistant"
 import React, {
   useState,
+  useCallback,
   useRef,
   useEffect,
   useLayoutEffect,
@@ -226,7 +227,7 @@ export type NotebookContext = {
 type ChatInputProps = {
   conversationId: string | null
   queue: ChatQueue
-  setQueue: React.Dispatch<React.SetStateAction<ChatQueue>>
+  setQueue: (update: (current: ChatQueue) => ChatQueue) => boolean
   // The token usage of the chat's latest answer, shown beside the settings.
   contextUsage?: ContextUsage | null
   chatTokens?: TokenUsageCounts | null
@@ -347,8 +348,15 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const acceptsImages =
       composerModel.usesAgent && localAgent?.acceptsImages === true
 
-    const unqueue = (id: string) =>
-      setQueue(({ [id]: _removed, ...rest }) => rest)
+    const unqueue = useCallback(
+      (id: string, entry: QueuedEntry) =>
+        setQueue((current) => {
+          if (current[id] !== entry) return current
+          const { [id]: _removed, ...rest } = current
+          return rest
+        }),
+      [setQueue],
+    )
 
     useEffect(() => {
       if (isAIInProgress || disabled || !conversationId || !queued) return
@@ -362,7 +370,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         )
       )
         return
-      setQueue(({ [conversationId]: _removed, ...rest }) => rest)
+      if (!unqueue(conversationId, queued)) return
       setInput((current) => [queued.text, current].filter(Boolean).join("\n\n"))
       setAttachments((current) => [...queued.images, ...current])
     }, [
@@ -374,7 +382,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       acceptsImages,
       agentModel,
       queued,
-      setQueue,
+      unqueue,
     ])
 
     useEffect(() => {
@@ -504,14 +512,18 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         )
         return false
       }
-      if ((queued?.images.length ?? 0) + images.length > MAX_IMAGES) {
-        setAttachError(
-          `A message takes up to ${MAX_IMAGES} images. Remove an image or wait for the queued message to send.`,
-        )
-        return false
-      }
-      setQueue((current) => {
+      let error: string | null = null
+      const submitted = setQueue((current) => {
         const previous = current[conversationId]
+        if (previous && (agentCommand || previous.agentCommand)) {
+          error =
+            "Agent commands must send separately. Wait for the queued message to send, or edit it first."
+          return current
+        }
+        if ((previous?.images.length ?? 0) + images.length > MAX_IMAGES) {
+          error = `A message takes up to ${MAX_IMAGES} images. Remove an image or wait for the queued message to send.`
+          return current
+        }
         return {
           ...current,
           [conversationId]: previous
@@ -519,8 +531,6 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 ...previous,
                 text: [previous.text, text].filter(Boolean).join("\n\n"),
                 images: [...previous.images, ...images],
-                // Joined to another message, a command is no longer one.
-                agentCommand: false,
               }
             : {
                 text,
@@ -535,6 +545,11 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
               },
         }
       })
+      if (!submitted) {
+        setAttachError(error)
+        return false
+      }
+      setAttachError(null)
       clearInput()
       setAttachments([])
       return true
@@ -594,7 +609,12 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       if (readingAttachment.current) return
       if (runConsoleCommand(command, "")) return
       if (command.hint) return completeCommand(command)
-      sendText(`/${command.name}`, attachments, true)
+      const text = `/${command.name}`
+      if (!sendText(text, attachments, true) && queued) {
+        // Keep the chosen command as a draft, without submitting it as text.
+        setInput(text)
+        setDismissedAt(text)
+      }
     }
 
     const completeCommand = (command: SlashCommand) => {
@@ -615,7 +635,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // Takes the queued message back into the input for editing.
     const editQueued = () => {
       if (!conversationId || !queued) return
-      unqueue(conversationId)
+      if (!unqueue(conversationId, queued)) return
       setInput((current) =>
         current ? `${queued.text}\n\n${current}` : queued.text,
       )
@@ -725,7 +745,9 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 imageCount={queued.images.length}
                 onSendNow={isAIInProgress ? sendQueuedNow : undefined}
                 sendNowDisabled={disabled || isReadingAttachment}
-                onRemove={() => conversationId && unqueue(conversationId)}
+                onRemove={() =>
+                  conversationId && unqueue(conversationId, queued)
+                }
               />
             )}
             <ComposerField

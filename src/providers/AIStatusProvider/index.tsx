@@ -175,6 +175,7 @@ export const dropTransientTail = (
 
 type BaseAIStatusContextType = {
   status: AIOperationStatus | null
+  isOperationBlocking: () => boolean
   setStatus: (
     status: AIOperationStatus | null,
     args?: StatusArgs,
@@ -194,12 +195,12 @@ type BaseAIStatusContextType = {
 export type AIStatusContextType =
   | (BaseAIStatusContextType & {
       isConfigured: true
-      canUse: boolean
+      canUse: true
       currentModel: string
       apiKey: string
     })
   | (BaseAIStatusContextType & {
-      isConfigured: false
+      isConfigured: boolean
       canUse: false
       currentModel: string | null
       apiKey: string | null
@@ -258,12 +259,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     if (!provider) return null
     return getApiKey(provider, aiAssistantSettings)
   }, [hasSelectedLocalAgent, currentModel, aiAssistantSettings])
-
-  const canUse =
-    hasSelectedLocalAgent ||
-    (currentModel !== null &&
-      apiKey !== null &&
-      canUseAiAssistant(aiAssistantSettings))
 
   const models = useMemo(
     () => getAllEnabledModels(aiAssistantSettings),
@@ -371,6 +366,11 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     [],
   )
 
+  const isOperationBlocking = useCallback(
+    () => isBlockingAIStatus(statusRef.current),
+    [],
+  )
+
   const clearOperation = useCallback(() => {
     currentOperationRef.current = []
     setCurrentOperation([])
@@ -438,39 +438,36 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     }
   }, [])
 
+  const baseContext = {
+    status,
+    isOperationBlocking,
+    setStatus,
+    abortController,
+    abortOperation,
+    steerOperation,
+    clearOperation,
+    hasSchemaAccess: hasSchemaAccessValue,
+    currentModel,
+    apiKey,
+    models,
+    currentOperation,
+    aiAssistantSettings,
+  }
   const contextValue: AIStatusContextType =
-    isConfigured || hasSelectedLocalAgent
+    currentModel !== null &&
+    apiKey !== null &&
+    (hasSelectedLocalAgent || canUseAiAssistant(aiAssistantSettings))
       ? {
-          status,
-          setStatus,
-          abortController,
-          abortOperation,
-          steerOperation,
-          clearOperation,
-          isConfigured: true,
-          canUse,
-          hasSchemaAccess: hasSchemaAccessValue,
-          currentModel: currentModel!,
-          apiKey: apiKey!,
-          models,
-          currentOperation,
-          aiAssistantSettings,
-        }
-      : {
-          status,
-          setStatus,
-          abortController,
-          abortOperation,
-          steerOperation,
-          clearOperation,
-          isConfigured: false,
-          canUse: false,
-          hasSchemaAccess: hasSchemaAccessValue,
+          ...baseContext,
           currentModel,
           apiKey,
-          models,
-          currentOperation,
-          aiAssistantSettings,
+          isConfigured: true,
+          canUse: true,
+        }
+      : {
+          ...baseContext,
+          isConfigured: isConfigured || hasSelectedLocalAgent,
+          canUse: false,
         }
 
   return (

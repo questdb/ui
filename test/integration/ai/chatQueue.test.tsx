@@ -12,10 +12,15 @@ import {
   seedChat,
 } from "./support/chatHarness"
 import { describe, expect, it, vi } from "vitest"
-import { screen, waitFor } from "@testing-library/react"
+import React from "react"
+import { Button } from "../../../src/components/Button"
+import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { bufferStore } from "../../../src/store/buffers"
 import { db } from "../../../src/store/db"
+import * as notebookSnapshot from "../../../src/utils/ai/notebookSnapshot"
+import { aiConversationStore } from "../../../src/store/aiConversations"
+import { useAIConversationActions } from "../../../src/providers/AIConversationProvider"
 import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
 
 // A chat whose first answer waits until the test releases it.
@@ -209,6 +214,159 @@ describe("messages written while the assistant answers", () => {
   })
 })
 
+const openHistoryChat = async (title: string) => {
+  await userEvent.click(getByHook("chat-window-history"))
+  await userEvent.click(
+    await screen.findByText(title, {
+      selector: '[data-hook="chat-history-item"] *',
+    }),
+  )
+}
+
+const holdNotebookSnapshot = async () => {
+  const bufferId = await db.buffers.add({
+    label: "Sample notebook",
+    value: "",
+    position: 0,
+    notebookViewState: { cells: [] },
+  })
+  const snapshot = gate()
+  const get = bufferStore.getById
+  const reads = vi.spyOn(bufferStore, "getById").mockImplementation((id) =>
+    get(id).then(async (buffer) => {
+      if (id === bufferId) await snapshot.promise
+      return buffer
+    }),
+  )
+  const builds = vi.spyOn(notebookSnapshot, "buildSnapshot")
+  const releasePreparedSnapshot = async () => {
+    await snapshot.release()
+    await act(async () => {
+      expect(await builds.mock.results[0].value).toMatchObject({ status: "ok" })
+    })
+  }
+  return { bufferId, snapshot, reads, releasePreparedSnapshot }
+}
+
+it("keeps a submitted first message when an empty notebook chat is closed", async () => {
+  const { bufferId, snapshot, reads } = await holdNotebookSnapshot()
+  const server = chatServer("openai", [
+    fixtures.createFinalResponse("openai", "Here is the sample notebook."),
+  ])
+  const OpenNotebook = () => {
+    const { openNotebookChat } = useAIConversationActions()
+    return (
+      <Button onClick={() => void openNotebookChat(bufferId)}>
+        Open notebook chat
+      </Button>
+    )
+  }
+  renderChat("openai", <OpenNotebook />)
+  try {
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open notebook chat" }),
+    )
+    await screen.findByPlaceholderText(
+      "Ask AI about your tables, or generate a query...",
+    )
+    const [original] = await aiConversationStore.getAllMetas()
+    await sendMessage("Summarize the sample notebook.")
+    await waitFor(() => expect(reads).toHaveBeenCalledWith(bufferId))
+    await userEvent.click(getByHook("chat-window-close"))
+    expect(queryByHook("ai-chat-window")).not.toBeInTheDocument()
+    expect(await aiConversationStore.getMeta(original.id)).toBeDefined()
+    await snapshot.release()
+    await waitFor(() => expect(server.requests).toHaveLength(1))
+    expect(lastRequestText(server)).toContain("Summarize the sample notebook.")
+    await waitFor(async () => {
+      const transcript = await aiConversationStore.getMessages(original.id)
+      expect(
+        transcript.some(
+          (message) => message.content === "Here is the sample notebook.",
+        ),
+      ).toBe(true)
+    })
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open notebook chat" }),
+    )
+    await screen.findByText("Here is the sample notebook.")
+  } finally {
+    await snapshot.release()
+  }
+})
+
+it("revokes the outgoing queue owner before waiting for the chat save", async () => {
+  const { bufferId, snapshot, reads, releasePreparedSnapshot } =
+    await holdNotebookSnapshot()
+  const save = gate()
+  const server = chatServer("openai", [
+    fixtures.createFinalResponse("openai", "Resumed the sample."),
+  ])
+  await seedChat("Other sample chat")
+  const original = await seedChat("Original sample chat", {
+    notebookBufferId: bufferId,
+  })
+  const saveMessages =
+    aiConversationStore.saveMessages.bind(aiConversationStore)
+  const saves = vi
+    .spyOn(aiConversationStore, "saveMessages")
+    .mockImplementation(async (...args) => {
+      if (args[0] === original.id && args[2] === undefined) await save.promise
+      await saveMessages(...args)
+    })
+  renderChat()
+  await openChat()
+  try {
+    await sendMessage("Continue the sample.")
+    await waitFor(() => expect(reads).toHaveBeenCalledWith(bufferId))
+    await openHistoryChat("Other sample chat")
+    await waitFor(() =>
+      expect(saves).toHaveBeenCalledWith(
+        original.id,
+        expect.any(Array),
+        undefined,
+      ),
+    )
+    await releasePreparedSnapshot()
+    expect(server.requests).toHaveLength(0)
+    await save.release()
+    await screen.findByText("Question about Other sample chat")
+    await openHistoryChat("Original sample chat")
+    await screen.findByText("Resumed the sample.")
+    expect(server.requests).toHaveLength(1)
+    expect(lastRequestText(server)).toContain("Continue the sample.")
+  } finally {
+    await save.release()
+    await snapshot.release()
+  }
+})
+
+it("dispatches a different chat's queue while the outgoing snapshot is still pending", async () => {
+  const { bufferId, snapshot, reads, releasePreparedSnapshot } =
+    await holdNotebookSnapshot()
+  const server = chatServer("openai", [
+    fixtures.createFinalResponse("openai", "The other chat's answer."),
+  ])
+  await seedChat("Other sample chat")
+  await seedChat("Original sample chat", { notebookBufferId: bufferId })
+  renderChat()
+  await openChat()
+  try {
+    await sendMessage("Continue the original sample.")
+    await waitFor(() => expect(reads).toHaveBeenCalledWith(bufferId))
+    await openHistoryChat("Other sample chat")
+    await screen.findByText("Question about Other sample chat")
+    await sendMessage("Explain the other sample.")
+    await screen.findByText("The other chat's answer.")
+    expect(server.requests).toHaveLength(1)
+    expect(lastRequestText(server)).toContain("Explain the other sample.")
+    await releasePreparedSnapshot()
+    expect(server.requests).toHaveLength(1)
+  } finally {
+    await snapshot.release()
+  }
+})
+
 it.each(["chat switch", "model change"])(
   "revalidates a queued follow-up after a %s during preparation",
   async (change) => {
@@ -251,15 +409,6 @@ it.each(["chat switch", "model change"])(
         return buffer
       }),
     )
-    const openHistoryChat = async (title: string) => {
-      await userEvent.click(getByHook("chat-window-history"))
-      await userEvent.click(
-        await screen.findByText(title, {
-          selector: '[data-hook="chat-history-item"] *',
-        }),
-      )
-      await screen.findByText(`Question about ${title}`)
-    }
     try {
       vi.setSystemTime(Date.now() + 3000)
       await first.release()
@@ -270,6 +419,7 @@ it.each(["chat switch", "model change"])(
         await openChat()
         expect(reads).toHaveBeenCalledTimes(1)
         await openHistoryChat("Other sample chat")
+        await screen.findByText("Question about Other sample chat")
       } else {
         await userEvent.click(getByHook("chat-model-picker"))
         await userEvent.click(

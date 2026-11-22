@@ -46,7 +46,8 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import {
-  getLocalAgentChannel,
+  isCurrentLocalAgentChannel,
+  type LocalAgentChannel,
   type NotebookRead,
 } from "../localAgent/localAgentChannel"
 import {
@@ -77,9 +78,10 @@ const notebookReadOf = (
     : null
 
 const localAgentDisplayNameFor = (
+  channel: LocalAgentChannel | null,
   settings: AiAssistantSettings | undefined,
 ): string => {
-  const agent = getLocalAgentChannel()?.getSnapshot() ?? null
+  const agent = channel?.getSnapshot() ?? null
   const preferredModel =
     agent && settings
       ? localAgentPreferencesOf(settings, agent.info.id).model
@@ -134,6 +136,9 @@ type BaseFlowConfig = {
     apiKey: string
   }
   aiAssistantSettings?: AiAssistantSettings
+  localAgentChannel?: LocalAgentChannel | null
+  // Quick actions can await the cached turn before taking the active transcript.
+  canDispatch?: () => boolean
   questClient: Client
   tables?: Array<Table>
   hasSchemaAccess: boolean
@@ -529,13 +534,31 @@ export async function executeAIFlow(
     useLastMessage,
   } = config
 
-  const userMsg = buildUserMessage(config)
+  const usesLocalAgent = isLocalAgentModel(settings.model)
+  const localAgentChannel = usesLocalAgent
+    ? (config.localAgentChannel ?? null)
+    : null
+  if (config.type === "chat" && config.agentCommand && !usesLocalAgent) {
+    return { success: false, error: "Agent commands require a local agent." }
+  }
+  const dispatchError = () => {
+    if (abortSignal?.aborted || config.canDispatch?.() === false)
+      return "The request is no longer active."
+    if (usesLocalAgent && !isCurrentLocalAgentChannel(localAgentChannel))
+      return "The selected local agent is no longer connected."
+    return null
+  }
+  const initialError = dispatchError()
+  if (initialError) return { success: false, error: initialError }
 
-  callbacks.rotateUserActionDigest?.(conversationId)
+  const userMsg = buildUserMessage(config)
 
   if (useLastMessage && callbacks.getLastRoundMessages) {
     const { lastUserMessage, lastAssistantMessage } =
       await callbacks.getLastRoundMessages(conversationId)
+
+    const preparedError = dispatchError()
+    if (preparedError) return { success: false, error: preparedError }
 
     if (
       lastUserMessage &&
@@ -552,6 +575,7 @@ export async function executeAIFlow(
     }
   }
 
+  callbacks.rotateUserActionDigest?.(conversationId)
   const flow = ++latestFlow
   callbacks.addMessage({
     role: "user",
@@ -576,15 +600,12 @@ export async function executeAIFlow(
 
   // Create turn anchor — first assistant message of this turn
   const anchorMessageId = crypto.randomUUID()
-  const usesLocalAgent = isLocalAgentModel(settings.model)
   const modelLabel = usesLocalAgent
-    ? localAgentDisplayNameFor(config.aiAssistantSettings)
+    ? localAgentDisplayNameFor(localAgentChannel, config.aiAssistantSettings)
     : (getAllModelOptions(config.aiAssistantSettings).find(
         (m) => m.value === settings.model,
       )?.label ?? settings.model)
-  const localAgentId = usesLocalAgent
-    ? getLocalAgentChannel()?.info.id
-    : undefined
+  const localAgentId = localAgentChannel?.info.id
   const turnStartedAt = performance.now()
   callbacks.addMessage({
     id: anchorMessageId,
@@ -954,6 +975,7 @@ export async function executeAIFlow(
             notebookFreshness: buildNotebookFreshness(config.notebookContext),
           })
         : await runLocalAgentTurn({
+            channel: localAgentChannel,
             conversationId,
             userMessage: isAgentCommand
               ? userMsg.content

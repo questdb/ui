@@ -5,7 +5,12 @@ import type {
   AgentOutboundMessage,
   AgentQuestionMessage,
 } from "./protocol"
-import { LocalAgentChannel } from "./localAgentChannel"
+import {
+  LocalAgentChannel,
+  isCurrentLocalAgentChannel,
+  registerLocalAgentChannel,
+  unregisterLocalAgentChannel,
+} from "./localAgentChannel"
 
 vi.mock("../../modules/ConsoleEventTracker", () => ({
   trackEvent: () => Promise.resolve(),
@@ -40,6 +45,21 @@ const connect = () => {
   }
 }
 
+it("identifies the registered channel by instance, not by agent name", () => {
+  const { channel } = connect()
+  const { channel: other } = connect()
+  expect(other.info.id).toBe(channel.info.id)
+  registerLocalAgentChannel(channel)
+  try {
+    expect(isCurrentLocalAgentChannel(channel)).toBe(true)
+    expect(isCurrentLocalAgentChannel(other)).toBe(false)
+    expect(isCurrentLocalAgentChannel(null)).toBe(false)
+  } finally {
+    unregisterLocalAgentChannel(channel)
+  }
+  expect(isCurrentLocalAgentChannel(channel)).toBe(false)
+})
+
 const question = (requestId: string): AgentQuestionMessage => ({
   v: "0.6.0",
   type: "agent_question",
@@ -49,10 +69,14 @@ const question = (requestId: string): AgentQuestionMessage => ({
   fields: [],
 })
 
-const startTurn = (channel: LocalAgentChannel, signal?: AbortSignal) => {
+const startTurn = (
+  channel: LocalAgentChannel,
+  signal?: AbortSignal,
+  conversationId = "c1",
+) => {
   const onUpdate = vi.fn()
   const turn = channel.prompt({
-    conversationId: "c1",
+    conversationId,
     text: "Show trades",
     notebookRead: null,
     signal,
@@ -116,11 +140,15 @@ it.each([false, true])(
       const stopped = startTurn(channel, controller.signal)
       const [first] = sent
       if (first?.type !== "agent_prompt") throw new Error("Expected a prompt")
+      const pending = question("stopped-question")
+      deliver(pending)
+      expect(channel.getSnapshot().questions).toEqual([pending])
       controller.abort()
       await vi.advanceTimersByTimeAsync(5000)
       await expect(stopped.turn).resolves.toMatchObject({
         stopReason: "cancelled",
       })
+      expect(channel.getSnapshot().questions).toEqual([])
       if (reconnectFirst) {
         setConnected(false)
         await expect(startTurn(channel).turn).resolves.toMatchObject({
@@ -142,8 +170,15 @@ it.each([false, true])(
         "agent_prompt",
       ])
 
-      deliver(question("next-question"))
+      const nextQuestion = question("next-question")
+      deliver(nextQuestion)
       deliver(turnEnd(first.turnId))
+      deliver({
+        v: first.v,
+        type: "agent_question_closed",
+        requestId: pending.requestId,
+      })
+      expect(channel.getSnapshot().questions).toEqual([nextQuestion])
       expect(
         channel.answerQuestion("next-question", { database: "questdb" }),
       ).toBe(true)
@@ -201,6 +236,7 @@ describe("LocalAgentChannel questions", () => {
   it("keeps the agent's questions until they are answered or the agent stops waiting", () => {
     // Given
     const { channel, sent, deliver } = connect()
+    startTurn(channel)
     deliver(question("q1"))
     deliver(question("q2"))
 
@@ -209,8 +245,8 @@ describe("LocalAgentChannel questions", () => {
     deliver({ v: "0.6.0", type: "agent_question_closed", requestId: "q2" })
 
     // Then
-    expect(sent).toHaveLength(1)
-    expect(sent[0]).toMatchObject({
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toMatchObject({
       type: "agent_question_answer",
       requestId: "q1",
       answers: { database: "questdb" },
@@ -221,6 +257,7 @@ describe("LocalAgentChannel questions", () => {
   it("keeps an undelivered answer pending so the user can retry after reconnecting", () => {
     // Given
     const { channel, deliver, sent, setConnected } = connect()
+    startTurn(channel)
     const pending = question("q1")
     deliver(pending)
     setConnected(false)
@@ -231,12 +268,34 @@ describe("LocalAgentChannel questions", () => {
     // Then
     expect(channel.getSnapshot().questions).toEqual([pending])
     expect(firstAttempt).toBe(false)
-    expect(sent).toHaveLength(0)
+    expect(sent).toHaveLength(1)
 
     setConnected(true)
     expect(channel.answerQuestion("q1", { database: "questdb" })).toBe(true)
-    expect(sent).toHaveLength(1)
+    expect(sent).toHaveLength(2)
     expect(channel.getSnapshot().questions).toHaveLength(0)
+  })
+
+  it("clears only the ending turn's questions and ignores questions without a live turn", async () => {
+    const { channel, deliver, sent } = connect()
+    const { turn } = startTurn(channel)
+    startTurn(channel, undefined, "c2")
+    const [prompt] = sent
+    if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+    const first = question("q1")
+    const other = { ...question("q2"), conversationId: "c2" }
+    deliver(first)
+    deliver(other)
+    expect(channel.getSnapshot().questions).toEqual([first, other])
+
+    deliver(turnEnd(prompt.turnId))
+    await expect(turn).resolves.toMatchObject({ stopReason: "end_turn" })
+    expect(channel.getSnapshot().questions).toEqual([other])
+    deliver(question("late-question"))
+    expect(channel.getSnapshot().questions).toEqual([other])
+    expect(channel.answerQuestion("late-question", null)).toBe(false)
+    channel.dispose()
+    expect(channel.getSnapshot().questions).toEqual([])
   })
 
   it("adds the question and the answer to the reply of the turn that asked", () => {
@@ -274,7 +333,7 @@ describe("LocalAgentChannel questions", () => {
       { kind: string; messageId: string; text: string },
     ]
     expect(update).toMatchObject({
-      kind: "message_chunk",
+      kind: "question_record",
       messageId: "question:q1",
     })
     expect(update.text).toContain('"answer":"QuestDB"')

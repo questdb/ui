@@ -1,5 +1,13 @@
 import type { CustomSeriesRenderItem, EChartsOption } from "echarts"
-import type { ChartZoomDensity } from "./chartDensity"
+import {
+  GRID_BOTTOM_NO_ZOOM,
+  GRID_BOTTOM_WITH_ZOOM,
+  HEATMAP_ROW_FILL,
+  X_SLIDER_ZOOM_ID,
+  X_WHEEL_ZOOM_ID,
+  Y_SLIDER_ZOOM_ID,
+  type ChartZoomDensity,
+} from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type {
   ChartConfig,
@@ -44,8 +52,6 @@ type SeriesContext = {
 const LEGEND_BOTTOM = 3
 const SLIDER_HEIGHT = 18
 const SLIDER_BOTTOM = 40
-const GRID_BOTTOM_NO_ZOOM = 56
-const GRID_BOTTOM_WITH_ZOOM = 86
 const CHART_FONT_SIZE = 12
 const BAR_OVERLAY_OPACITY = 0.45
 const X_AXIS_NAME_GAP = 26
@@ -347,7 +353,7 @@ const scaleLabels = (min: number, max: number): string[] => {
 
 type HeatmapReading = { y: number; reading: Dataset[number][number] }
 
-const longReading = (value: HeatmapReading["reading"]): bigint | null => {
+const longReading = (value: unknown): bigint | null => {
   if (typeof value === "bigint") return value
   if (typeof value === "string" && /^[+-]?\d+$/.test(value))
     return BigInt(value)
@@ -450,7 +456,20 @@ const buildHeatmapOption = (
     }
     xLabels.sort((a, b) => time(a) - time(b) || a.localeCompare(b))
   } else if (xRole === "numeric") {
-    xLabels.sort((a, b) => Number(xValues.get(a)) - Number(xValues.get(b)))
+    if (q.columns[xIdx].type?.toUpperCase() === "LONG") {
+      const keys = new Map(
+        xLabels.map((label) => [label, longReading(xValues.get(label))]),
+      )
+      xLabels.sort((a, b) => {
+        const aKey = keys.get(a) ?? null
+        const bKey = keys.get(b) ?? null
+        if (aKey === null) return bKey === null ? 0 : -1
+        if (bKey === null) return 1
+        return aKey < bKey ? -1 : aKey > bKey ? 1 : 0
+      })
+    } else {
+      xLabels.sort((a, b) => Number(xValues.get(a)) - Number(xValues.get(b)))
+    }
   }
   const xSlot = new Map(xLabels.map((label, i) => [label, i]))
   const rowLabels = [...rowSet].sort()
@@ -557,9 +576,6 @@ const buildHeatmapOption = (
     ],
   }
 }
-
-// The share of a row its cells fill; the rest is the gap between rows.
-export const HEATMAP_ROW_FILL = 0.8
 
 // A cell spans its whole slot along x, half a pixel more on each side so
 // neighbors leave no seam, and HEATMAP_ROW_FILL of its row. A cell without a
@@ -913,32 +929,59 @@ export const buildEchartsOption = (
   }
 }
 
-// Every cartesian chart embeds both zoom components, and density only toggles
-// their visibility — never the option's structure, which would remount the
-// chart through its structural key. Wheel zoom arms while marks are merely
-// tight (it costs no plot space); the slider costs plot height, so it waits
-// until marks fall under the readable floor. The renderer measures the density
-// from its own width.
+// All cartesian charts embed both X controls. Heatmaps also get a separate
+// Y slider, so the wheel retains its horizontal behavior. Density toggles
+// visibility without changing which controls can hold a zoom window.
 export const withZoomDensity = (
   option: EChartsOption,
   density: ChartZoomDensity,
 ): EChartsOption => {
   if (option.xAxis == null) return option
+  const hasRowAxis =
+    !Array.isArray(option.yAxis) && option.yAxis?.type === "category"
+  const rowSlider = hasRowAxis && density.rowSlider
+  const bottom = density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM
   return {
     ...option,
     grid: {
       ...(option.grid as object),
-      bottom: density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
+      bottom,
+      ...(rowSlider && { right: 48 }),
     },
     dataZoom: [
-      { type: "inside", disabled: !density.wheel },
       {
+        id: X_WHEEL_ZOOM_ID,
+        type: "inside",
+        xAxisIndex: 0,
+        disabled: !density.wheel,
+      },
+      {
+        id: X_SLIDER_ZOOM_ID,
         type: "slider",
+        xAxisIndex: 0,
         show: density.slider,
         height: SLIDER_HEIGHT,
         bottom: SLIDER_BOTTOM,
         textStyle: { fontSize: CHART_FONT_SIZE },
       },
+      ...(hasRowAxis
+        ? [
+            {
+              id: Y_SLIDER_ZOOM_ID,
+              type: "slider" as const,
+              yAxisIndex: 0,
+              orient: "vertical" as const,
+              show: rowSlider,
+              right: 12,
+              top: 36,
+              bottom,
+              width: SLIDER_HEIGHT,
+              showDetail: false,
+              showDataShadow: false as const,
+              ...(!rowSlider && { start: 0, end: 100 }),
+            },
+          ]
+        : []),
     ],
   }
 }

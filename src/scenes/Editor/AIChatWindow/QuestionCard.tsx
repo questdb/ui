@@ -256,6 +256,10 @@ export const QuestionCard = ({
   const [answered, setAnswered] = useState(false)
   const [sendFailed, setSendFailed] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const questionTextRef = useRef<HTMLParagraphElement>(null)
+  const textAnswerRef = useRef<HTMLInputElement>(null)
+  const reviewTabRef = useRef<HTMLButtonElement>(null)
+  const focusAfterAdvance = useRef(false)
   const field = fields[tab] as AgentQuestionField | undefined
   const canSend = fields.every(
     (candidate) => !candidate.required || isAnswered(candidate, answers),
@@ -264,6 +268,16 @@ export const QuestionCard = ({
   useEffect(() => {
     headingRef.current?.focus()
   }, [question.requestId])
+
+  useEffect(() => {
+    if (!focusAfterAdvance.current) return
+    focusAfterAdvance.current = false
+    const target =
+      tab === reviewTab
+        ? reviewTabRef.current
+        : (textAnswerRef.current ?? questionTextRef.current)
+    target?.focus()
+  }, [tab, reviewTab])
 
   const finish = (result: Answers | null) => {
     if (answered) return
@@ -284,6 +298,7 @@ export const QuestionCard = ({
       if (fields.every((f) => !f.required || isAnswered(f, next))) finish(next)
       return
     }
+    focusAfterAdvance.current = true
     goTo(tab + 1)
   }
 
@@ -509,6 +524,7 @@ export const QuestionCard = ({
             type="button"
             role="tab"
             aria-selected={onReview}
+            ref={reviewTabRef}
             onClick={() => goTo(reviewTab)}
             data-hook="chat-question-review-tab"
           >
@@ -539,7 +555,11 @@ export const QuestionCard = ({
       ) : (
         field && (
           <>
-            <QuestionText data-hook="chat-question-text">
+            <QuestionText
+              ref={questionTextRef}
+              tabIndex={-1}
+              data-hook="chat-question-text"
+            >
               {views[tab].text}
               {field.kind === "choice" && field.multiple && (
                 <Hint> Select all that apply</Hint>
@@ -549,6 +569,7 @@ export const QuestionCard = ({
               renderChoice(field)
             ) : (
               <Input
+                ref={textAnswerRef}
                 autoFocus
                 value={valuesOf(answers[field.id])[0] ?? ""}
                 onChange={(event) =>
