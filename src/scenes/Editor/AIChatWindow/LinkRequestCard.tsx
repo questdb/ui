@@ -10,6 +10,7 @@ import {
   Footer,
   Header,
   Heading,
+  QuestionBody,
   QuestionText,
 } from "./QuestionCard"
 
@@ -90,8 +91,6 @@ export const LinkRequestCard = ({
     const sent = onAnswer(opened ? {} : null)
     setAnswered(sent)
     setSendFailed(!sent)
-    if (sent && opened && address)
-      window.open(address.href, "_blank", "noopener,noreferrer")
   }
 
   return (
@@ -116,27 +115,37 @@ export const LinkRequestCard = ({
           dataHook="chat-question-stop"
         />
       </Header>
-      {question.message && (
-        <QuestionText data-hook="chat-link-message">
-          {question.message}
-        </QuestionText>
-      )}
-      <Address>
-        {address && <Host data-hook="chat-link-host">{address.host}</Host>}
-        <Url title={requestedUrl}>{requestedUrl}</Url>
-      </Address>
-      {address ? (
-        <Note>Opens in a new tab. Finish there, then come back here.</Note>
-      ) : (
-        <Note role="alert">This request needs a valid HTTP or HTTPS link.</Note>
-      )}
-      {sendFailed && <AnswerSendError />}
+      <QuestionBody>
+        {question.message && (
+          <QuestionText data-hook="chat-link-message">
+            {question.message}
+          </QuestionText>
+        )}
+        <Address>
+          {address && <Host data-hook="chat-link-host">{address.host}</Host>}
+          <Url title={requestedUrl}>{requestedUrl}</Url>
+        </Address>
+        {address ? (
+          <Note>
+            Open this page in a new tab or copy the link. After opening it, come
+            back and confirm.
+          </Note>
+        ) : (
+          <Note role="alert">
+            This request needs a valid HTTP or HTTPS link.
+          </Note>
+        )}
+        {sendFailed && <AnswerSendError />}
+      </QuestionBody>
       <Footer>
         <Button
           size="sm"
-          variant="primary"
+          variant="secondary"
           disabled={answered || !address}
-          onClick={() => finish(true)}
+          onClick={() => {
+            if (address)
+              window.open(address.href, "_blank", "noopener,noreferrer")
+          }}
           trailingIcon={<ArrowSquareOutIcon size={14} />}
           data-hook="chat-link-open"
         >
@@ -152,6 +161,15 @@ export const LinkRequestCard = ({
             data-hook="chat-link-copy"
           />
         )}
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={answered || !address}
+          onClick={() => finish(true)}
+          data-hook="chat-link-confirm"
+        >
+          I opened the page
+        </Button>
         <Button
           size="sm"
           variant="ghost"

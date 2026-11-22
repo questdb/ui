@@ -126,12 +126,12 @@ it("records a notebook baseline only when the prompt is written", async () => {
 it("binds a progress reporter to the channel's current turn", async () => {
   const { channel, client, sent, deliver } = connect()
   const { client: otherClient } = connect()
-  expect(channel.captureToolStatus(client, "c1")).toBeUndefined()
+  expect(channel.captureToolRequest(client, "c1")).toBeUndefined()
   const first = startTurn(channel)
   const [firstPrompt] = sent
   if (firstPrompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
-  expect(channel.captureToolStatus(otherClient, "c1")).toBeUndefined()
-  const reportFirst = channel.captureToolStatus(client, "c1")
+  expect(channel.captureToolRequest(otherClient, "c1")).toBeUndefined()
+  const reportFirst = channel.captureToolRequest(client, "c1")?.setStatus
   const status = AIOperationStatus.InspectingNotebook
   reportFirst?.(status)
   expect(first.onToolStatus).toHaveBeenCalledOnce()
@@ -145,10 +145,28 @@ it("binds a progress reporter to the channel's current turn", async () => {
   reportFirst?.(status)
   expect(next.onToolStatus).not.toHaveBeenCalled()
   expect(first.onToolStatus).toHaveBeenCalledOnce()
-  channel.captureToolStatus(client, "c1")?.(status)
+  channel.captureToolRequest(client, "c1")?.setStatus(status)
   expect(next.onToolStatus).toHaveBeenCalledWith(status, undefined)
   deliver(turnEnd(secondPrompt.turnId))
   await next.turn
+})
+
+it("cancels a notebook request captured for the stopped turn", async () => {
+  const { channel, client, deliver, sent } = connect()
+  const controller = new AbortController()
+  const { turn } = startTurn(channel, controller.signal)
+  const [prompt] = sent
+  if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+
+  const owned = channel.captureToolRequest(client, "c1")
+  expect(owned?.signal.aborted).toBe(false)
+  const onAbort = vi.fn()
+  owned?.signal.addEventListener("abort", onAbort)
+  controller.abort()
+  expect(owned?.signal.aborted).toBe(true)
+  expect(onAbort).toHaveBeenCalledOnce()
+  deliver(turnEnd(prompt.turnId))
+  await turn
 })
 
 it.each([1000, 6000])(
@@ -240,7 +258,7 @@ it.each([false, true])(
         channel.answerQuestion("next-question", { database: "questdb" }),
       ).toBe(true)
       expect(next.onUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ messageId: "question:next-question" }),
+        expect.objectContaining({ kind: "question_record" }),
       )
       deliver(turnEnd(second.turnId))
       await expect(next.turn).resolves.toMatchObject({ stopReason: "end_turn" })
@@ -386,13 +404,12 @@ describe("LocalAgentChannel questions", () => {
     channel.answerQuestion("q1", { database: "questdb" })
 
     // Then
-    const [update] = onUpdate.mock.calls[0] as [
-      { kind: string; messageId: string; text: string },
-    ]
-    expect(update).toMatchObject({
+    expect(onUpdate).toHaveBeenCalledWith({
       kind: "question_record",
-      messageId: "question:q1",
+      record: {
+        questions: [{ question: "Which database?", answer: "QuestDB" }],
+        skipped: false,
+      },
     })
-    expect(update.text).toContain('"answer":"QuestDB"')
   })
 })

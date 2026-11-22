@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react"
+import React, { useLayoutEffect, useRef } from "react"
 import styled from "styled-components"
 import type { SlashCommand } from "./slashCommands"
 
@@ -6,12 +6,14 @@ const Menu = styled.div`
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(100% + 0.6rem);
+  bottom: var(--command-popup-bottom, calc(100% + 0.6rem));
+  top: var(--command-popup-top, auto);
   z-index: 20;
   display: flex;
   flex-direction: column;
   padding: 0.4rem;
-  max-height: 28rem;
+  box-sizing: border-box;
+  max-height: min(28rem, var(--command-popup-room, 28rem));
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid ${({ theme }) => theme.color.borderDefault};
@@ -19,6 +21,64 @@ const Menu = styled.div`
   background: ${({ theme }) => theme.color.surfaceRaised};
   box-shadow: 0 0.8rem 2.4rem ${({ theme }) => theme.color.shadowMedium};
 `
+
+const useCommandPopup = (highlighted?: number) => {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const popup = ref.current
+    const anchor = popup?.parentElement
+    const panel = anchor?.closest("[data-chat-panel]")
+    if (!popup || !anchor || !panel) return
+
+    const update = () => {
+      const { top, bottom } = panel.getBoundingClientRect()
+      const anchorTop = anchor.getBoundingClientRect().top
+      const inset = 6
+      const roomAbove = anchorTop - top - 2 * inset
+      // When the transcript cannot fit even a full row, overlay the top of
+      // the chat panel instead. The textarea retains keyboard focus.
+      const overlay = roomAbove < 48
+      popup.style.setProperty(
+        "--command-popup-top",
+        overlay ? `${top - anchorTop + inset}px` : "auto",
+      )
+      popup.style.setProperty(
+        "--command-popup-bottom",
+        overlay ? "auto" : `${inset}px`,
+      )
+      popup.style.setProperty(
+        "--command-popup-room",
+        `${Math.max(0, overlay ? bottom - top - 2 * inset : roomAbove)}px`,
+      )
+      revealActiveOption(popup)
+    }
+
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(panel)
+    observer.observe(anchor)
+    if (anchor.parentElement) observer.observe(anchor.parentElement)
+    return () => observer.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (ref.current) revealActiveOption(ref.current)
+  }, [highlighted])
+
+  return ref
+}
+
+const revealActiveOption = (popup: HTMLDivElement) => {
+  const active = popup.querySelector('[role="option"][aria-selected="true"]')
+  if (!active) return
+  const option = active.getBoundingClientRect()
+  const top = popup.getBoundingClientRect().top + popup.clientTop
+  const bottom = top + popup.clientHeight
+  // Scroll only the menu, not the clipped drawer or surrounding composer.
+  if (option.top < top) popup.scrollTop += option.top - top
+  else if (option.bottom > bottom) popup.scrollTop += option.bottom - bottom
+}
 
 const Row = styled.div<{ $active: boolean }>`
   display: grid;
@@ -88,15 +148,18 @@ const ArgumentHint = styled(Menu)`
 `
 
 // The argument a command takes, until the user types it, as the menu left it.
-export const CommandArgumentHint = ({ command }: { command: SlashCommand }) => (
-  <ArgumentHint role="note" data-hook="chat-command-hint">
-    <Name>
-      /{command.name}
-      {command.hint && <Hint> {command.hint}</Hint>}
-    </Name>
-    <Description>{command.description}</Description>
-  </ArgumentHint>
-)
+export const CommandArgumentHint = ({ command }: { command: SlashCommand }) => {
+  const ref = useCommandPopup()
+  return (
+    <ArgumentHint ref={ref} role="note" data-hook="chat-command-hint">
+      <Name>
+        /{command.name}
+        {command.hint && <Hint> {command.hint}</Hint>}
+      </Name>
+      <Description>{command.description}</Description>
+    </ArgumentHint>
+  )
+}
 
 type SlashCommandMenuProps = {
   id: string
@@ -116,17 +179,11 @@ export const SlashCommandMenu = ({
   onHighlight,
   onChoose,
 }: SlashCommandMenuProps) => {
-  const listRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    listRef.current
-      ?.querySelector(`#${CSS.escape(commandOptionId(id, highlighted))}`)
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" })
-  }, [id, highlighted])
+  const ref = useCommandPopup(highlighted)
 
   return (
-    <Menu data-hook="chat-command-menu">
-      <div ref={listRef} id={id} role="listbox" aria-label="Commands">
+    <Menu ref={ref} data-hook="chat-command-menu">
+      <div id={id} role="listbox" aria-label="Commands">
         {commands.map((command, index) => (
           <Row
             key={command.name}

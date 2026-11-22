@@ -110,7 +110,10 @@ export type StatusCallback = (
 
 export type StreamingCallback = {
   onTextChunk: (chunk: string, options?: { startSection?: boolean }) => void
-  onQuestionRecord?: (markdown: string, getTranscript: () => string) => void
+  onQuestionRecord?: (
+    record: import("../localAgent/questionTranscript").QuestionRecord,
+    getTranscript: () => string,
+  ) => void
   onNotice?: (
     notice: import("../localAgent/noticeTranscript").NoticeRecord,
   ) => void

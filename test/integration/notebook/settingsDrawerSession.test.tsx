@@ -143,7 +143,7 @@ describe("highlight drawer session integration", () => {
 })
 
 describe("chart drawer", () => {
-  const choose = (control: string, value: string) => {
+  const choose = (control: string | RegExp, value: string) => {
     fireEvent.keyDown(screen.getByRole("button", { name: control }), {
       key: "ArrowDown",
     })
@@ -248,24 +248,20 @@ describe("chart drawer", () => {
   const resolve = (result: CellResult, config = savedHeatmap) => {
     const frame = toChartResult(result, statements)
     if (frame.kind !== "settled") throw new Error("expected settled results")
-    return {
-      ...resolveDraw(statements, frame.results, config),
-      emptyDqlResults: frame.emptyDqlResults,
-    }
+    return resolveDraw(statements, frame.results, config, frame.emptyDqlResults)
   }
   const drawer = (
     result: CellResult,
     onSave: (config: ChartConfig) => void,
     config = savedHeatmap,
   ) => {
-    const { tabs, effectiveConfig, emptyDqlResults } = resolve(result, config)
+    const { tabs, effectiveConfig } = resolve(result, config)
     return (
       <ChartSettingsDrawer
         open
         appearInPlace
         config={effectiveConfig}
         tabs={tabs}
-        emptyDqlResults={emptyDqlResults}
         initialDraft={null}
         onDraftChange={noOp}
         onClose={noOp}
@@ -284,8 +280,11 @@ describe("chart drawer", () => {
       )
       if (alreadyOpen) view.rerender(drawer(empty, onSave))
       expect(
-        screen.getByRole("button", { name: "X-axis: sibling_ts" }),
+        screen.getByRole("button", { name: "X-axis: bucket" }),
       ).toBeVisible()
+      expect(resolve(empty).renderQueries.map(({ index }) => index)).toEqual([
+        1,
+      ])
       fireEvent.change(screen.getByPlaceholderText("Name (e.g. RSI)"), {
         target: { value: "Total" },
       })
@@ -323,22 +322,24 @@ describe("chart drawer", () => {
   })
 
   it.each([
-    { remove: "site", rows: [["Z", "A", 10]], hasTab: true },
-    { remove: "bucket", rows: [["Z", "west", 10]], hasTab: true },
-    { remove: "reading", rows: [], hasTab: false },
+    { remove: "site", rows: [["Z", "A", 10]] },
+    { remove: "bucket", rows: [["Z", "west", 10]] },
+    { remove: "reading", rows: [] },
   ])(
     "rejects an open draft when current DQL loses $remove",
-    ({ remove, rows, hasTab }) => {
+    ({ remove, rows }) => {
       const onSave = vi.fn()
       const view = renderComponent(drawer(results(heatmapRows), onSave))
       view.rerender(drawer(results(rows, remove), onSave))
       save()
       expect(onSave).not.toHaveBeenCalled()
-      if (hasTab) {
-        expect(screen.getByText(/Pick a separate rows column/)).toBeVisible()
-      } else {
+      expect(screen.getByText(/Pick a separate rows column/)).toBeVisible()
+      if (remove === "bucket") {
+        expect(
+          screen.getByRole("button", { name: "X-axis: bucket (missing)" }),
+        ).toBeVisible()
         expect(screen.getByRole("alert")).toHaveTextContent(
-          /a numeric value column/,
+          /Select a new X-axis column/,
         )
       }
       view.rerender(drawer(results(heatmapRows), onSave))
@@ -346,6 +347,86 @@ describe("chart drawer", () => {
       expect(onSave).toHaveBeenCalledWith(savedHeatmap)
     },
   )
+
+  it("repairs X on the empty query's own metadata instead of the plotted sibling", () => {
+    const onSave = vi.fn()
+    renderComponent(drawer(results([], "bucket"), onSave))
+    fireEvent.click(screen.getByRole("tab", { name: "Q2" }))
+    expect(
+      screen.getByRole("button", { name: "X-axis: sibling_ts" }),
+    ).toBeVisible()
+    save()
+    expect(onSave).not.toHaveBeenCalled()
+    expect(screen.getByRole("tab", { name: "Q1" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    )
+    expect(screen.getByText(/This query returned no rows/)).toBeVisible()
+    expect(
+      screen.getByRole("button", { name: "Rows column: site" }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole("button", { name: "Value column: reading" }),
+    ).toBeVisible()
+    choose("X-axis: bucket (missing)", "alt_bucket")
+    save()
+    expect(onSave).toHaveBeenCalledWith({
+      ...savedHeatmap,
+      xColumn: "alt_bucket",
+    })
+  })
+
+  it("lets users repair a value column that changed type on an empty query", () => {
+    const onSave = vi.fn()
+    const empty = results([])
+    const first = empty.results[0]
+    if (first.type !== "dql") throw new Error("expected DQL metadata")
+    first.columns = [
+      ...first.columns.map((column) =>
+        column.name === "reading" ? { ...column, type: "SYMBOL" } : column,
+      ),
+      { name: "backup_reading", type: "DOUBLE" },
+    ]
+    renderComponent(drawer(empty, onSave))
+    save()
+    expect(onSave).not.toHaveBeenCalled()
+    choose(/^Value column:/, "backup_reading")
+    save()
+    expect(onSave).toHaveBeenCalledWith({
+      ...savedHeatmap,
+      queries: [
+        { ...savedHeatmap.queries[0]!, yColumns: ["backup_reading"] },
+        savedHeatmap.queries[1],
+      ],
+    })
+  })
+
+  it("lets users exclude an empty query with an invalid value mapping", () => {
+    const onSave = vi.fn()
+    const empty = results([], "reading")
+    const view = renderComponent(drawer(empty, onSave))
+    save()
+    expect(onSave).not.toHaveBeenCalled()
+    expect(screen.getByRole("button", { name: /Value column/ })).toBeVisible()
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include in chart" }))
+    save()
+    const excluded = {
+      ...savedHeatmap,
+      queries: [
+        { ...savedHeatmap.queries[0]!, enabled: false },
+        savedHeatmap.queries[1],
+      ],
+    }
+    expect(onSave).toHaveBeenLastCalledWith(excluded)
+    view.unmount()
+    renderComponent(drawer(empty, onSave, excluded))
+    expect(
+      screen.getByRole("checkbox", { name: "Include in chart" }),
+    ).not.toBeChecked()
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include in chart" }))
+    save()
+    expect(onSave).toHaveBeenCalledTimes(1)
+  })
 
   it("offers and saves a heatmap with numeric X, categorical Rows and numeric Value", () => {
     const onSave = vi.fn()

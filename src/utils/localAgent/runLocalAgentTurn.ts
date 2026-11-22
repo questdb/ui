@@ -11,6 +11,7 @@ import type {
 } from "./protocol"
 import type { ContextUsage } from "../ai/aiAssistant"
 import { stopReasonNotice } from "./noticeTranscript"
+import { questionRecordText } from "./questionTranscript"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { classifyAgentToolCall, questdbToolName } from "./agentToolCalls"
 import { toolStatusOf } from "../tools/toolStatus"
@@ -221,8 +222,8 @@ const createUpdateHandler = (
         handleMessageChunk(update.messageId, update.text)
         return
       case "question_record":
-        questionRecords.push(update.text)
-        streaming.onQuestionRecord?.(update.text, transcript)
+        questionRecords.push(questionRecordText(update.record))
+        streaming.onQuestionRecord?.(update.record, transcript)
         return
       case "thought_chunk":
         handleThoughtChunk(update.text)
@@ -240,13 +241,24 @@ const createUpdateHandler = (
         contextUsage = { used: update.used, size: update.size }
         streaming.onContextUsage?.(contextUsage)
         return
-      case "notice":
-        streaming.onNotice?.({
-          severity: update.severity,
-          title: update.title,
-          description: update.description,
-        })
+      case "notice": {
+        // This is a structured bridge event, but its wire fields still need
+        // to be safe to pass directly to the transcript renderer.
+        const { severity, title, description } = update
+        if (
+          (severity === "info" ||
+            severity === "warning" ||
+            severity === "error") &&
+          typeof title === "string"
+        ) {
+          streaming.onNotice?.({
+            severity,
+            title,
+            description: typeof description === "string" ? description : null,
+          })
+        }
         return
+      }
       default:
         return
     }

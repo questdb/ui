@@ -33,7 +33,7 @@ import {
   useLocalAgent,
   useLocalAgentChannel,
 } from "../../../utils/localAgent/LocalAgentContext"
-import { QuestionCard } from "./QuestionCard"
+import { QuestionCard, type QuestionDrafts } from "./QuestionCard"
 import { LinkRequestCard } from "./LinkRequestCard"
 import {
   IMAGE_TYPES,
@@ -70,13 +70,15 @@ import type { TokenUsageCounts } from "./ComposerControls/TokenUsage"
 import { QueuedMessage } from "./QueuedMessage"
 import { ctrlCmd } from "../../../utils/platform"
 
-const InputContainer = styled(Box)`
+const InputContainer = styled(Box)<{ $hasQuestion: boolean }>`
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.8rem;
   padding: 1rem 1.2rem;
-  flex-shrink: 0;
+  flex-shrink: ${({ $hasQuestion }) => ($hasQuestion ? 1 : 0)};
+  min-height: 0;
+  max-height: 100%;
   width: 100%;
   margin-top: auto;
   border-top: 1px solid ${color("interactionNeutral")};
@@ -265,6 +267,7 @@ type ChatInputProps = {
   }) => void
   disabled?: boolean
   localAgentTransportReady?: boolean
+  questionDrafts?: QuestionDrafts
   placeholder?: string
   contextSQL?: string
   contextTableId?: number
@@ -301,6 +304,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onCommandNote,
       disabled = false,
       localAgentTransportReady = false,
+      questionDrafts,
       placeholder = "Ask a question or request a refinement...",
       contextSQL,
       contextTableId,
@@ -400,16 +404,19 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const queueMismatch = queued !== undefined && !matchesDestination(queued)
     const waitingForBridge =
       currentModel === LOCAL_AGENT_MODEL && !localAgentTransportReady
-    const commandHeld =
-      queued?.agentCommand === true &&
-      (queued.heldByStop || wasQueueCancelled(queued))
+    const queueHeld =
+      queued?.heldByStop ||
+      (queued?.agentCommand === true && wasQueueCancelled(queued))
     const draftOccupiesComposer = input !== "" || attachments.length > 0
-    const commandEditBlocked =
-      queued?.agentCommand === true &&
-      (draftOccupiesComposer || isReadingAttachment)
-    const commandEditHint = isReadingAttachment
-      ? "Wait for the draft images to finish loading before choosing Edit."
-      : "Clear the draft text and remove any draft images, then choose Edit again to restore the queued command."
+    const queueEditHint = !queued
+      ? undefined
+      : isReadingAttachment
+        ? "Wait for the draft images to finish loading before choosing Edit."
+        : queued.agentCommand && draftOccupiesComposer
+          ? "Clear the draft text and remove any draft images, then choose Edit again to restore the queued command."
+          : queued.images.length + attachments.length > MAX_IMAGES
+            ? `Remove draft images before editing; a message can contain up to ${MAX_IMAGES} images.`
+            : undefined
 
     useEffect(() => {
       // Preserve the existing recovery for a cancelled turn. A mismatched
@@ -421,6 +428,9 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         !conversationId ||
         !queued ||
         queued.agentCommand ||
+        queueHeld ||
+        queueEditHint ||
+        readingAttachment.current ||
         !wasQueueCancelled(queued) ||
         !unqueue(conversationId, queued)
       )
@@ -433,6 +443,8 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       queueMismatch,
       conversationId,
       queued,
+      queueHeld,
+      queueEditHint,
       unqueue,
     ])
 
@@ -566,6 +578,10 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       let error: string | null = null
       const submitted = setQueue((current) => {
         const previous = current[conversationId]
+        if (previous?.heldByStop && !previous.agentCommand) {
+          error = "Edit or remove the held queued message before sending."
+          return current
+        }
         if (previous && !matchesDestination(previous)) {
           error =
             "Restore the queued message’s destination, or edit or remove it first."
@@ -696,11 +712,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // Takes the queued message back into the input for editing.
     const editQueued = () => {
       if (!conversationId || !queued) return
-      if (
-        queued.agentCommand &&
-        (draftOccupiesComposer || readingAttachment.current)
-      )
-        return
+      if (queueEditHint || readingAttachment.current) return
       if (!unqueue(conversationId, queued)) return
       setInput((current) =>
         current ? `${queued.text}\n\n${current}` : queued.text,
@@ -721,7 +733,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.nativeEvent.isComposing) return
+      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
       if (menuOpen) {
         const move = (by: number) => {
           e.preventDefault()
@@ -762,8 +774,16 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }
 
     const handleStop = () => {
-      if (conversationId && queued?.agentCommand) {
-        // A native command must stay separate and require an explicit action.
+      if (
+        conversationId &&
+        queued &&
+        (queued.agentCommand ||
+          queueHeld ||
+          queueMismatch ||
+          queueEditHint ||
+          readingAttachment.current)
+      ) {
+        // Preserve the destination and both buffers until the user chooses Edit or Remove.
         setQueue((current) =>
           current[conversationId] === queued && !queued.heldByStop
             ? { ...current, [conversationId]: { ...queued, heldByStop: true } }
@@ -819,7 +839,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }, [question?.requestId])
 
     return (
-      <InputContainer ref={inputContainerRef}>
+      <InputContainer ref={inputContainerRef} $hasQuestion={Boolean(question)}>
         {question?.url != null && localAgent ? (
           <LinkRequestCard
             key={question.requestId}
@@ -833,6 +853,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
             key={question.requestId}
             agentLabel={localAgent.info.label}
             question={question}
+            drafts={questionDrafts}
             onAnswer={handleQuestionAnswer}
             onStop={handleStop}
           />
@@ -843,7 +864,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 text={queued.text}
                 imageCount={queued.images.length}
                 onSendNow={
-                  isAIInProgress && !commandHeld ? sendQueuedNow : undefined
+                  isAIInProgress && !queueHeld ? sendQueuedNow : undefined
                 }
                 sendNowDisabled={
                   disabled ||
@@ -853,16 +874,16 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   wasQueueCancelled(queued)
                 }
                 blockedReason={
-                  commandEditBlocked
-                    ? commandEditHint
-                    : commandHeld
-                      ? "Command held. Choose Edit to restore it, or remove it."
-                      : queueMismatch
-                        ? "Restore the original destination or edit the queued message."
-                        : waitingForBridge
-                          ? "Waiting for the local agent bridge."
-                          : undefined
+                  queueEditHint ??
+                  (queueHeld
+                    ? `${queued.agentCommand ? "Command" : "Queued message"} held. Choose Edit to restore it, or remove it.`
+                    : queueMismatch
+                      ? "Restore the original destination or edit the queued message."
+                      : waitingForBridge
+                        ? "Waiting for the local agent bridge."
+                        : undefined)
                 }
+                editDisabled={Boolean(queueEditHint)}
                 onEdit={editQueued}
                 onRemove={() =>
                   conversationId && unqueue(conversationId, queued)
@@ -952,7 +973,9 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                     const files = imageFilesOf(event.clipboardData.items)
                     if (files.length === 0) return
                     if (
-                      (!acceptsImages || attachments.length >= MAX_IMAGES) &&
+                      (!acceptsImages ||
+                        attachments.length >= MAX_IMAGES ||
+                        readingAttachment.current) &&
                       event.clipboardData.getData("text/plain")
                     )
                       return

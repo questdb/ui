@@ -3,21 +3,18 @@ import React from "react"
 import { screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { renderComponent } from "../../../test/component"
-import { noticeTranscript } from "../../../utils/localAgent/noticeTranscript"
-import { AssistantMarkdown } from "./AssistantMarkdown"
+import { NoticeRecord } from "./NoticeRecord"
 
 describe("a notice in an agent's reply", () => {
   it("shows as a notice, with its severity and description", () => {
     // When
     renderComponent(
-      <AssistantMarkdown
-        content={`Done.${noticeTranscript({
+      <NoticeRecord
+        notice={{
           severity: "warning",
           title: "The agent reached its step limit",
           description: "Ask it to continue.",
-        })}`}
-        messageId="m1"
-        onOpenInEditor={() => undefined}
+        }}
       />,
     )
 
@@ -26,6 +23,5 @@ describe("a notice in an agent's reply", () => {
     expect(notice).toHaveAttribute("data-severity", "warning")
     expect(notice).toHaveTextContent("The agent reached its step limit")
     expect(notice).toHaveTextContent("Ask it to continue.")
-    expect(screen.queryByText(/agent-notice/)).toBeNull()
   })
 })

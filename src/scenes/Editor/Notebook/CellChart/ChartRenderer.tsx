@@ -18,6 +18,7 @@ import {
   X_WHEEL_ZOOM_ID,
   Y_SLIDER_ZOOM_ID,
   withBoundedHeatmapLabels,
+  withFittedHeatmapLegend,
 } from "./chartDensity"
 import type { ChartZoomAxis, ChartZoomWindows } from "./chartTypes"
 import { createQuestdbTheme } from "./questdbTheme"
@@ -163,7 +164,13 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       if (!size) return null
       const bounded = withBoundedHeatmapLabels(option, size.width)
       const density = chartZoomDensity(bounded, size.width, size.height)
-      return { density, option: withZoomDensity(bounded, density) }
+      return {
+        density,
+        option: withZoomDensity(
+          withFittedHeatmapLegend(bounded, size.width),
+          density,
+        ),
+      }
     }, [option, size])
     const optionToDraw = layout?.option ?? option
     const key = useMemo(() => structuralKey(optionToDraw), [optionToDraw])

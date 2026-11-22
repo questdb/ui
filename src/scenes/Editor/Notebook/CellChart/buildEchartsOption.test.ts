@@ -526,7 +526,31 @@ describe("buildEchartsOption — reference lines", () => {
     ])
   })
 
-  it("puts a line on the other axis when its own has no series", () => {
+  it("hides a right threshold without changing the left scale, then restores it", () => {
+    const chart = {
+      xColumn: "ts",
+      referenceLines: [
+        { axis: "right" as const, value: 70, label: "RSI threshold" },
+      ],
+    }
+    for (const queries of [[price, rsi], [price], [price, rsi]]) {
+      const option = buildEchartsOption(chart, queries)
+      if (queries.length === 1) {
+        expect(seriesList(option.series)).toHaveLength(1)
+        expect(firstAxis(option.yAxis)).toMatchObject({
+          min: undefined,
+          max: undefined,
+        })
+      } else {
+        expect(seriesList(option.series)[2]).toMatchObject({ yAxisIndex: 1 })
+        expect(markLineOf(option, 2)?.data[0].label.formatter).toBe(
+          "RSI threshold",
+        )
+      }
+    }
+  })
+
+  it("puts an implicit left line on the right in a right-only chart", () => {
     // When
     const opt = buildEchartsOption(
       { xColumn: "ts", referenceLines: [{ value: 70 }] },
@@ -589,6 +613,9 @@ describe("buildEchartsOption — heatmap", () => {
     expect(xAxis.data).toHaveLength(2)
     // One day's hours show their time alone.
     expect(xAxis.axisLabel.formatter(xAxis.data[1])).toBe("01:00")
+    expect(xAxis.axisLabel.formatter("2026-11-01T01:00:34.000000Z")).toBe(
+      "01:00:34",
+    )
     expect(firstAxis(opt.yAxis).data).toEqual(["BTCUSD", "EURUSD"])
     expect(seriesList(opt.series)[0]).toMatchObject({
       type: "custom",
@@ -666,7 +693,7 @@ describe("buildEchartsOption — heatmap", () => {
 
   it.each([
     [1.2342, ["1.2342", "1.2341"]],
-    [1.2351, ["1.235", "1.234"]],
+    [1.2351, ["1.2351", "1.2341"]],
   ] as const)(
     "distinguishes the legend bounds with a maximum of %s",
     (max, text) => {
@@ -837,8 +864,10 @@ it.each(["chart", "row"] as const)(
           : [readings[2], readings[0]],
     })
     const tooltip = opt.tooltip as { formatter: (p: unknown) => string }
+    const scale =
+      colorScale === "row" ? "" : `<br/>Scale: ${readings[0]} to ${readings[2]}`
     expect(tooltip.formatter({ value: data[0] })).toBe(
-      `${readings[2]}<br/>west: <b>${readings[2]}</b>`,
+      `${readings[2]}<br/>west: <b>${readings[2]}</b>${scale}`,
     )
   },
 )

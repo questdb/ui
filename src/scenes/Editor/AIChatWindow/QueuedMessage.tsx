@@ -62,6 +62,7 @@ type QueuedMessageProps = {
   onSendNow?: () => void
   sendNowDisabled: boolean
   blockedReason?: string
+  editDisabled?: boolean
   onEdit: () => void
   onRemove: () => void
 }
@@ -74,6 +75,7 @@ export const QueuedMessage = ({
   onSendNow,
   sendNowDisabled,
   blockedReason,
+  editDisabled,
   onEdit,
   onRemove,
 }: QueuedMessageProps) => (
@@ -101,7 +103,9 @@ export const QueuedMessage = ({
         <Shortcut aria-hidden="true">{ctrlCmd} ↵</Shortcut>
       </TextButton>
     )}
-    <TextButton onClick={onEdit}>Edit</TextButton>
+    <TextButton onClick={onEdit} disabled={editDisabled}>
+      Edit
+    </TextButton>
     <IconButton
       label="Remove queued message"
       size="sm"

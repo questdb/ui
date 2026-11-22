@@ -21,7 +21,10 @@ import { ComposerControls } from "../../../scenes/Editor/AIChatWindow/ComposerCo
 import type { AiAssistantSettings } from "../../../providers/LocalStorageProvider/types"
 
 vi.mock("../../../providers/AIConversationProvider", () => ({
-  useAIConversation: () => ({ isStreaming: false }),
+  useAIConversation: () => ({
+    isStreaming: false,
+    conversationMetas: new Map(),
+  }),
   useAIConversationActions: () => ({
     openOrCreateBlankChatWindow: vi.fn(),
     closeChatWindow: vi.fn(),

@@ -330,8 +330,7 @@ describe("ai provider setup flows", () => {
 
     // Execution uses that identity to select the OpenAI provider.
     interceptAIChatRequest("openai", "overlappingOpenAIModel")
-    cy.getByDataHook("ai-chat-button").click()
-    cy.getByDataHook("chat-input-textarea").type("hello")
+    cy.getByDataHook("chat-input-textarea").should("be.visible").type("hello")
     cy.getByDataHook("chat-send-button").click()
     // Then
     cy.wait("@overlappingOpenAIModel").then(({ request }) => {
@@ -548,14 +547,13 @@ describe("ai provider setup flows", () => {
       })
     })
 
-    // When - Select first OpenAI model and open chat
+    // When - Select first OpenAI model in the open chat
     cy.then(() => {
       cy.getByDataHook("chat-model-picker-option")
         .contains(openaiEnabledModels[0])
         .click()
     })
     interceptChatAnswer("openai", "openaiChat", "OpenAI answer")
-    cy.getByDataHook("ai-chat-button").click()
     cy.getByDataHook("ai-chat-window").should("be.visible")
     cy.getByDataHook("chat-input-textarea").type("Test message for OpenAI")
     cy.getByDataHook("chat-send-button").click()

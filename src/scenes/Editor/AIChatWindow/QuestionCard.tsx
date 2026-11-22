@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled from "styled-components"
 import { CheckIcon, PencilSimpleIcon } from "@phosphor-icons/react"
 import { Button, ButtonBase } from "../../../components"
@@ -15,11 +21,23 @@ import {
 
 type Answers = Record<string, string | string[]>
 
+type QuestionDraft = {
+  tab: number
+  answers: Answers
+  editing: boolean
+  customDrafts: Map<string, string>
+}
+
+// Keep drafts only for the live request objects, never in saved chat history.
+export type QuestionDrafts = WeakMap<AgentQuestionMessage, QuestionDraft>
+
 export const Card = styled.section`
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
   width: 100%;
+  min-height: 0;
+  overflow-y: auto;
   padding: 1.2rem;
   border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 0.8rem;
@@ -28,6 +46,7 @@ export const Card = styled.section`
 
 export const Header = styled.div`
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 0.8rem;
 `
@@ -41,6 +60,19 @@ export const Heading = styled.h3`
 
   &:focus {
     outline: none;
+  }
+`
+
+export const QuestionBody = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  /* Keep a scrollable slice in the body even if the card itself must scroll. */
+  min-height: 3.2rem;
+  overflow-y: auto;
+
+  > * {
+    flex-shrink: 0;
   }
 `
 
@@ -102,8 +134,6 @@ const Options = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  max-height: 30rem;
-  overflow-y: auto;
 `
 
 const Option = styled(ButtonBase)`
@@ -209,6 +239,8 @@ const ReviewAnswer = styled.span<{ $missing: boolean }>`
 
 export const Footer = styled.div`
   display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.8rem;
 `
@@ -218,6 +250,10 @@ const KeyHint = styled.span`
   font-size: 1.1rem;
   color: ${({ theme }) => theme.color.contentMuted};
 `
+
+// WebKit may dispatch the candidate-confirmation Enter after compositionend.
+const isImeKey = (event: React.KeyboardEvent) =>
+  event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229
 
 const valuesOf = (answer: string | string[] | undefined): string[] =>
   (Array.isArray(answer) ? answer : [answer ?? ""]).filter(
@@ -230,6 +266,7 @@ const isAnswered = (field: AgentQuestionField, answers: Answers): boolean =>
 type QuestionCardProps = {
   agentLabel: string
   question: AgentQuestionMessage
+  drafts?: QuestionDrafts
   onAnswer: (answers: Answers | null) => boolean
   onStop: () => void
 }
@@ -242,6 +279,7 @@ type QuestionCardProps = {
 export const QuestionCard = ({
   agentLabel,
   question,
+  drafts,
   onAnswer,
   onStop,
 }: QuestionCardProps) => {
@@ -249,16 +287,26 @@ export const QuestionCard = ({
   const views = useMemo(() => questionViews(question), [question])
   const single = fields.length === 1
   const reviewTab = fields.length
-  const [tab, setTab] = useState(0)
-  const [answers, setAnswers] = useState<Answers>({})
-  const [editing, setEditing] = useState(false)
-  const [customDrafts, setCustomDrafts] = useState(new Map<string, string>())
+  const [tab, setTab] = useState(() => drafts?.get(question)?.tab ?? 0)
+  const [answers, setAnswers] = useState<Answers>(
+    () => drafts?.get(question)?.answers ?? {},
+  )
+  const [editing, setEditing] = useState(
+    () => drafts?.get(question)?.editing ?? false,
+  )
+  const [customDrafts, setCustomDrafts] = useState(
+    () => drafts?.get(question)?.customDrafts ?? new Map<string, string>(),
+  )
+  useLayoutEffect(() => {
+    drafts?.set(question, { tab, answers, editing, customDrafts })
+  }, [drafts, question, tab, answers, editing, customDrafts])
   const [answered, setAnswered] = useState(false)
   const [sendFailed, setSendFailed] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const questionTextRef = useRef<HTMLParagraphElement>(null)
   const textAnswerRef = useRef<HTMLInputElement>(null)
   const reviewTabRef = useRef<HTMLButtonElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const focusAfterAdvance = useRef(false)
   const field = fields[tab] as AgentQuestionField | undefined
   const draft =
@@ -275,7 +323,8 @@ export const QuestionCard = ({
     headingRef.current?.focus()
   }, [question.requestId])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
     if (!focusAfterAdvance.current) return
     focusAfterAdvance.current = false
     const target =
@@ -292,9 +341,12 @@ export const QuestionCard = ({
     setSendFailed(!sent)
   }
 
-  const goTo = (next: number) => {
+  const goTo = (next: number, focus = false) => {
+    const destination = Math.max(0, Math.min(single ? 0 : reviewTab, next))
+    if (destination === tab) return
+    focusAfterAdvance.current = focus
     setEditing(false)
-    setTab(Math.max(0, Math.min(single ? 0 : reviewTab, next)))
+    setTab(destination)
   }
 
   // After a pick: the next question, or the review after the last one. A
@@ -304,8 +356,7 @@ export const QuestionCard = ({
       if (fields.every((f) => !f.required || isAnswered(f, next))) finish(next)
       return
     }
-    focusAfterAdvance.current = true
-    goTo(tab + 1)
+    goTo(tab + 1, true)
   }
 
   const setAnswer = (id: string, value: string | string[] | null) =>
@@ -370,16 +421,17 @@ export const QuestionCard = ({
   }
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (answered || event.target instanceof HTMLInputElement) return
+    if (answered || isImeKey(event) || event.target instanceof HTMLInputElement)
+      return
     if (event.metaKey || event.ctrlKey || event.altKey) return
     if (event.key === "ArrowLeft" && !single) {
       event.preventDefault()
-      goTo(tab - 1)
+      goTo(tab - 1, true)
       return
     }
     if (event.key === "ArrowRight" && !single) {
       event.preventDefault()
-      goTo(tab + 1)
+      goTo(tab + 1, true)
       return
     }
     if (!field || field.kind !== "choice" || !/^[1-9]$/.test(event.key)) return
@@ -444,7 +496,7 @@ export const QuestionCard = ({
                   )
                 }}
                 onKeyDown={(event) => {
-                  if (event.nativeEvent.isComposing) return
+                  if (isImeKey(event)) return
                   if (event.key === "Enter") {
                     event.preventDefault()
                     const next = commitOwnAnswer(target)
@@ -528,95 +580,97 @@ export const QuestionCard = ({
         />
       </Header>
 
-      {!single && (
-        <Tabs role="tablist" aria-label="Questions">
-          {fields.map((candidate, index) => (
-            <Tab
-              key={candidate.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === index}
-              onClick={() => goTo(index)}
-              data-hook="chat-question-tab"
-            >
-              {isAnswered(candidate, answers) && (
-                <CheckIcon size={12} weight="bold" aria-hidden="true" />
-              )}
-              {views[index].label}
-            </Tab>
-          ))}
-          <Tab
-            type="button"
-            role="tab"
-            aria-selected={onReview}
-            ref={reviewTabRef}
-            onClick={() => goTo(reviewTab)}
-            data-hook="chat-question-review-tab"
-          >
-            Review
-          </Tab>
-        </Tabs>
-      )}
-
-      {onReview ? (
-        <Review>
-          {fields.map((candidate, index) => {
-            const summary = answerSummary(candidate, answers)
-            return (
-              <ReviewItem
+      <QuestionBody ref={bodyRef}>
+        {!single && (
+          <Tabs role="tablist" aria-label="Questions">
+            {fields.map((candidate, index) => (
+              <Tab
                 key={candidate.id}
                 type="button"
+                role="tab"
+                aria-selected={tab === index}
                 onClick={() => goTo(index)}
-                data-hook="chat-question-review-item"
+                data-hook="chat-question-tab"
               >
-                <ReviewQuestion>{views[index].text}</ReviewQuestion>
-                <ReviewAnswer $missing={!summary}>
-                  {summary ?? "Not answered"}
-                </ReviewAnswer>
-              </ReviewItem>
-            )
-          })}
-        </Review>
-      ) : (
-        field && (
-          <>
-            <QuestionText
-              ref={questionTextRef}
-              tabIndex={-1}
-              data-hook="chat-question-text"
+                {isAnswered(candidate, answers) && (
+                  <CheckIcon size={12} weight="bold" aria-hidden="true" />
+                )}
+                {views[index].label}
+              </Tab>
+            ))}
+            <Tab
+              type="button"
+              role="tab"
+              aria-selected={onReview}
+              ref={reviewTabRef}
+              onClick={() => goTo(reviewTab)}
+              data-hook="chat-question-review-tab"
             >
-              {views[tab].text}
-              {field.kind === "choice" && field.multiple && (
-                <Hint> Select all that apply</Hint>
-              )}
-            </QuestionText>
-            {field.kind === "choice" ? (
-              renderChoice(field)
-            ) : (
-              <Input
-                ref={textAnswerRef}
-                autoFocus
-                value={valuesOf(answers[field.id])[0] ?? ""}
-                onChange={(event) =>
-                  setAnswer(field.id, event.target.value || null)
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                    event.preventDefault()
-                    next()
-                  }
-                }}
-                placeholder="Type your answer"
-                aria-label={views[tab].text}
-                disabled={answered}
-                data-hook="chat-question-text-answer"
-              />
-            )}
-          </>
-        )
-      )}
+              Review
+            </Tab>
+          </Tabs>
+        )}
 
-      {sendFailed && <AnswerSendError />}
+        {onReview ? (
+          <Review>
+            {fields.map((candidate, index) => {
+              const summary = answerSummary(candidate, answers)
+              return (
+                <ReviewItem
+                  key={candidate.id}
+                  type="button"
+                  onClick={() => goTo(index, true)}
+                  data-hook="chat-question-review-item"
+                >
+                  <ReviewQuestion>{views[index].text}</ReviewQuestion>
+                  <ReviewAnswer $missing={!summary}>
+                    {summary ?? "Not answered"}
+                  </ReviewAnswer>
+                </ReviewItem>
+              )
+            })}
+          </Review>
+        ) : (
+          field && (
+            <>
+              <QuestionText
+                ref={questionTextRef}
+                tabIndex={-1}
+                data-hook="chat-question-text"
+              >
+                {views[tab].text}
+                {field.kind === "choice" && field.multiple && (
+                  <Hint> Select all that apply</Hint>
+                )}
+              </QuestionText>
+              {field.kind === "choice" ? (
+                renderChoice(field)
+              ) : (
+                <Input
+                  ref={textAnswerRef}
+                  autoFocus
+                  value={valuesOf(answers[field.id])[0] ?? ""}
+                  onChange={(event) =>
+                    setAnswer(field.id, event.target.value || null)
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !isImeKey(event)) {
+                      event.preventDefault()
+                      next()
+                    }
+                  }}
+                  placeholder="Type your answer"
+                  aria-label={views[tab].text}
+                  disabled={answered}
+                  data-hook="chat-question-text-answer"
+                />
+              )}
+            </>
+          )
+        )}
+
+        {sendFailed && <AnswerSendError />}
+      </QuestionBody>
       <Footer>
         {onReview && (
           <Button

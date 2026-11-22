@@ -21,8 +21,9 @@ import {
   chartXAxisOf,
   heatmapMappingIncomplete,
   HEATMAP_INCOMPLETE_MESSAGE,
+  missingHeatmapX,
+  missingHeatmapXMessage,
   resolveQueryAxes,
-  type PositionedResult,
   type QueryTab,
 } from "../DrawCanvas/drawCanvasUtils"
 import {
@@ -81,7 +82,6 @@ const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
 
 type SharedProps = {
   tabs: QueryTab[]
-  emptyDqlResults?: PositionedResult[]
   config: ChartConfig
   onSave: (next: ChartConfig) => void
   telemetry?: ChartSettingsTelemetry
@@ -103,7 +103,6 @@ const ChartSettings: React.FC<SettingsProps> = ({
   open,
   onClose,
   tabs,
-  emptyDqlResults,
   config,
   onSave,
   telemetry,
@@ -167,11 +166,22 @@ const ChartSettings: React.FC<SettingsProps> = ({
   const active =
     placements.find(({ item }) => item.index === activeIndex) ?? placements[0]
   const activeTab = active?.item
-  // With everything excluded, keep X editable for the selected query so it
-  // can be configured before it is included again.
-  const xTab = anchor ?? activeTab
+  // Use an empty heatmap's own metadata when repairing it, without making
+  // it an anchor for the queries that have data.
+  const xTab = activeTab?.empty ? activeTab : (anchor ?? activeTab)
+  const isHeatmapX =
+    xTab != null && draft.queries[xTab.index]?.type === "heatmap"
   const selectedX =
-    anchor || !xTab ? xColumn : chartXAxisOf(xTab, draft.xColumn)
+    !xTab || xTab === anchor
+      ? xColumn
+      : chartXAxisOf(xTab, draft.xColumn, isHeatmapX)
+  const missingX =
+    isHeatmapX &&
+    xTab &&
+    selectedX != null &&
+    missingHeatmapX(xTab.columns, selectedX)
+      ? selectedX
+      : null
   const xGroups = xTab ? groupColumns(xTab.columns) : null
   const xCandidates = xGroups
     ? [...xGroups.temporal, ...xGroups.categorical, ...xGroups.numeric]
@@ -230,8 +240,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
     heatmapMappingIncomplete(
       q,
       draft.xColumn,
-      tabs.find((tab) => tab.index === index) ??
-        emptyDqlResults?.find((entry) => entry.statementIndex === index),
+      tabs.find((tab) => tab.index === index),
       heatmapValueAt(index),
     )
   const heatmapIdx = saveAttempted
@@ -315,13 +324,23 @@ const ChartSettings: React.FC<SettingsProps> = ({
           name="x-axis"
           ariaLabel="X-axis"
           value={selectedX ?? ""}
-          placeholder="Select column"
+          placeholder={
+            missingX != null ? `${missingX} (missing)` : "Select column"
+          }
+          ariaInvalid={missingX != null || undefined}
           onValueChange={(value) => changeXColumn(value || null)}
           options={xCandidates.map((c) => ({
             label: c.name,
             value: c.name,
           }))}
         />
+        {missingX != null && (
+          <div role="alert">
+            <Text color="statusWarning">
+              {missingHeatmapXMessage(missingX)}
+            </Text>
+          </div>
+        )}
       </Field>
 
       {hasRight && (
@@ -392,8 +411,9 @@ const ChartSettings: React.FC<SettingsProps> = ({
               <Tab
                 key={t.index}
                 type="button"
-                $active={t.index === activeIndex}
+                $active={t.index === activeTab?.index}
                 role="tab"
+                aria-selected={t.index === activeTab?.index}
                 onClick={() => setActiveIndex(t.index)}
                 title={
                   compatible

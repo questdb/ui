@@ -219,6 +219,28 @@ describe("priorConversationFor", () => {
       "User: Show trades",
     )
   })
+  it("carries bounded canonical SQL even when same-channel history has nothing to replay", () => {
+    const history = [
+      message({
+        role: "assistant",
+        content: "Done.",
+        localAgentSessionId: "session-a",
+      }),
+      message({
+        role: "user",
+        content: "Applied a suggestion",
+        hideFromUI: true,
+      }),
+    ]
+    const sql = "SELECT " + "x".repeat(10_000)
+    const handoff = priorConversationFor(history, "session-a", sql)
+    expect(handoff).not.toContain("<earlier_conversation>")
+    expect(handoff).not.toContain("Applied a suggestion")
+    expect(handoff?.split("\n").at(-1)).toBe(`${sql.slice(0, 1_999)}…`)
+    expect(priorConversationFor(history, "session-a", "")).toBe(
+      "There is no current canonical SQL query.",
+    )
+  })
 })
 
 it("sends only the turns after the agent's last answer when the chat switched away and back", () => {

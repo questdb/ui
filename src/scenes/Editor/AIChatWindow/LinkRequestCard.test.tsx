@@ -21,7 +21,7 @@ afterEach(() => {
 })
 
 describe("LinkRequestCard", () => {
-  it("shows where the page leads, opens it in a new tab and tells the agent", async () => {
+  it("opens an isolated tab and reports opening only after the user confirms", async () => {
     // Given
     const open = vi.spyOn(window, "open").mockReturnValue(null)
     const onAnswer = vi.fn(() => true)
@@ -44,10 +44,16 @@ describe("LinkRequestCard", () => {
       "_blank",
       "noopener,noreferrer",
     )
+    expect(onAnswer).not.toHaveBeenCalled()
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeEnabled()
+    await userEvent.click(
+      screen.getByRole("button", { name: "I opened the page" }),
+    )
     expect(onAnswer).toHaveBeenCalledWith({})
+    expect(open).toHaveBeenCalledOnce()
   })
 
-  it("does not open a valid HTTP link until the answer can be sent", async () => {
+  it("keeps launch, copy and confirmation available after an unsuccessful send", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null)
     const onAnswer = vi
       .fn()
@@ -64,11 +70,15 @@ describe("LinkRequestCard", () => {
     )
     const button = screen.getByRole("button", { name: /Open page/ })
     await userEvent.click(button)
-    expect(open).not.toHaveBeenCalled()
-    expect(button).toBeEnabled()
-    await userEvent.click(button)
-    expect(open).toHaveBeenCalledOnce()
     expect(open).toHaveBeenCalledWith(url, "_blank", "noopener,noreferrer")
+    const confirm = screen.getByRole("button", { name: "I opened the page" })
+    await userEvent.click(confirm)
+    expect(screen.getByRole("alert")).toHaveTextContent(/Could not send/)
+    expect(button).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeEnabled()
+    await userEvent.click(confirm)
+    expect(onAnswer.mock.calls).toEqual([[{}], [{}]])
+    expect(open).toHaveBeenCalledOnce()
   })
 
   it("offers an error and Cancel when the address is empty", async () => {

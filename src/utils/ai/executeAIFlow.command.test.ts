@@ -45,7 +45,11 @@ const localConfig = {
   hasSchemaAccess: false,
 }
 
-const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
+const runFlow = async (
+  config: AIFlowConfig,
+  onAgentReply?: () => void,
+  historyForChannel?: (sessionId: string) => ConversationMessage[],
+) => {
   const sent: AgentInboundMessage[] = []
   let deliver: (msg: AgentOutboundMessage) => void = () => undefined
   const client = {
@@ -88,7 +92,14 @@ const runFlow = async (config: AIFlowConfig, onAgentReply?: () => void) => {
   const persistMessages = vi.fn(() => Promise.resolve())
   const captureUserActionDigest = vi.fn()
   const result = await executeAIFlow(
-    { ...config, localAgentChannel: channel },
+    {
+      ...config,
+      ...(config.type === "chat" &&
+        historyForChannel && {
+          conversationHistory: historyForChannel(channel.sessionId),
+        }),
+      localAgentChannel: channel,
+    },
     {
       addMessage,
       updateMessage,
@@ -312,6 +323,39 @@ describe("an agent's command", () => {
       "Current canonical SQL (use this version, not historical SQL above):\nSELECT 22;",
     )
     expect(text).not.toContain("SELECT 33;")
+  })
+
+  it("sends the newly applied SQL on a same-channel follow-up", async () => {
+    const { prompt } = await runFlow(
+      createChatFlowConfig({
+        ...localConfig,
+        userMessage: "Explain the current query",
+        conversationHistory: [],
+        isFirstMessage: false,
+        currentSQL: "SELECT 11;",
+      }),
+      undefined,
+      (sessionId) => [
+        earlierTurns[0],
+        {
+          ...earlierTurns[1],
+          sql: "SELECT 22;",
+          localAgentSessionId: sessionId,
+        },
+        {
+          ...earlierTurns[0],
+          id: "apply",
+          content: "Applied an older suggestion",
+          hideFromUI: true,
+        },
+      ],
+    )
+    const block = prompt[0]
+    const text = block?.type === "text" ? block.text : ""
+    expect(text).toContain("Current canonical SQL")
+    expect(text).toContain("SELECT 11;")
+    expect(text).not.toContain("SELECT 22;")
+    expect(text).not.toContain("Applied an older suggestion")
   })
 
   it("leaves a message that is not a command with what goes before it", async () => {

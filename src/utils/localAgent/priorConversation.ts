@@ -88,7 +88,7 @@ export const priorConversationFor = (
   const canonical = currentSQL?.trim()
   const current = canonical
     ? `Current canonical SQL (use this version, not historical SQL above):\n${truncateWithin(canonical, MAX_MESSAGE_CHARS)}`
-    : currentSQL === ""
+    : canonical === ""
       ? "There is no current canonical SQL query."
       : null
   let total = (carriedSummary?.length ?? 0) + (current?.length ?? 0)
@@ -102,7 +102,7 @@ export const priorConversationFor = (
     total += line.length
   }
   if (carriedSummary) lines.unshift(carriedSummary)
-  if (lines.length === 0) return null
+  if (lines.length === 0) return current
   return [
     "<earlier_conversation>",
     "The user talked to another assistant in this chat before switching to you. Earlier messages, oldest first:",

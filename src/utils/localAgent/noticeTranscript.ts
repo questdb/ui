@@ -1,40 +1,9 @@
 import type { AgentNoticeSeverity } from "./protocol"
 
-// The language of the fenced block that renders a notice in the transcript.
-export const NOTICE_RECORD_LANGUAGE = "agent-notice"
-
 export type NoticeRecord = {
   severity: AgentNoticeSeverity
   title: string
   description: string | null
-}
-
-const SEVERITIES: ReadonlySet<string> = new Set(["info", "warning", "error"])
-
-export const noticeTranscript = (notice: NoticeRecord): string => {
-  // Backticks are escaped so that the text cannot close the fence.
-  const json = JSON.stringify(notice).replace(/`/g, "\\u0060")
-  return `\n\n\`\`\`${NOTICE_RECORD_LANGUAGE}\n${json}\n\`\`\`\n\n`
-}
-
-export const parseNoticeRecord = (text: string): NoticeRecord | null => {
-  try {
-    const parsed = JSON.parse(text) as Partial<NoticeRecord> | null
-    if (
-      !parsed ||
-      typeof parsed.title !== "string" ||
-      !SEVERITIES.has(parsed.severity ?? "")
-    )
-      return null
-    return {
-      severity: parsed.severity as AgentNoticeSeverity,
-      title: parsed.title,
-      description:
-        typeof parsed.description === "string" ? parsed.description : null,
-    }
-  } catch {
-    return null
-  }
 }
 
 // Why a turn that did not end normally ended, for the user; null for a turn

@@ -39,6 +39,10 @@ import { AIChatWindowLazy } from "../../../src/scenes/Editor/AIChatWindow/AIChat
 import { getLocalAgentChannel } from "../../../src/utils/localAgent/localAgentChannel"
 import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
 import { EXPECTED_MCP_VERSION as v } from "../../../src/utils/mcp/protocolVersion"
+import {
+  HELLO_TIMEOUT_MS,
+  MAX_RECONNECT_ATTEMPTS,
+} from "../../../src/utils/mcp/MCPBridgeClient"
 import * as notebookSnapshot from "../../../src/utils/ai/notebookSnapshot"
 import { emitUserAction } from "../../../src/utils/notebooks/notebookAIBridge"
 import type {
@@ -254,6 +258,47 @@ const openLocalChat = async (query = false, starting = false) => {
 }
 
 const openNotebookChat = () => openLocalChat()
+
+it("settles a pending turn when replacement sockets never acknowledge hello", async () => {
+  const { first, reconnect } = await openNotebookChat()
+  await sendMessage("Describe the sample notebook.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(1))
+  expect(screen.getByRole("button", { name: "Chat history" })).toBeDisabled()
+
+  // The chat harness only fakes Date. Include the handshake and retry timers.
+  const now = Date.now()
+  vi.useRealTimers()
+  vi.useFakeTimers({ now, toFake: ["Date", "setTimeout", "clearTimeout"] })
+  try {
+    let waiting = reconnect()
+    for (let attempt = 1; attempt <= MAX_RECONNECT_ATTEMPTS; attempt++) {
+      act(() => {
+        vi.advanceTimersByTime(HELLO_TIMEOUT_MS)
+      })
+      expect(waiting.readyState).toBe(3)
+      if (attempt < MAX_RECONNECT_ATTEMPTS) {
+        // Foregrounding speeds up a scheduled retry without resetting it.
+        act(() => {
+          document.dispatchEvent(new Event("visibilitychange"))
+        })
+        const next = sockets.at(-1)!
+        expect(next).not.toBe(waiting)
+        act(() => next.open())
+        waiting = next
+      }
+    }
+    expect(sockets).toHaveLength(1 + MAX_RECONNECT_ATTEMPTS)
+    expect(getByHook("bridge-status")).toHaveTextContent("disconnected/")
+    expect(getLocalAgentChannel()).toBeNull()
+  } finally {
+    vi.useRealTimers()
+  }
+  await screen.findByText("The connection to the local agent bridge was lost.")
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Chat history" })).toBeEnabled(),
+  )
+  expect(fetch).not.toHaveBeenCalled()
+})
 
 const holdSnapshot = () => {
   const snapshot = gate()
@@ -806,7 +851,7 @@ it.each(["reopen", "delete"])(
     } else {
       await openHistory()
       await userEvent.click(await screen.findByText(original!.conversationName))
-      expect(await screen.findByText(partial)).toBeVisible()
+      await waitFor(() => expect(screen.getByText(partial)).toBeVisible())
       expect(getByHook("chat-message-error")).toHaveTextContent(cancelled)
       expect(getByHook("retry-button")).toBeEnabled()
     }

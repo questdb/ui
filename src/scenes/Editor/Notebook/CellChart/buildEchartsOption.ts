@@ -354,15 +354,6 @@ const compactTimestamp = (label: string): string => {
   return hhmm === "00:00" ? date : `${date} ${hhmm}`
 }
 
-const formatScaleValue = (value: number): string =>
-  Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(4)))
-
-const scaleLabels = (min: number, max: number): string[] => {
-  const low = formatScaleValue(min)
-  const high = formatScaleValue(max)
-  return min !== max && low === high ? [String(max), String(min)] : [high, low]
-}
-
 type HeatmapReading = { y: number; reading: Dataset[number][number] }
 
 const longReading = (value: unknown): bigint | null => {
@@ -479,7 +470,7 @@ const numericHeatmapScale = (
     shades,
     min: perRow || normalizeChart ? 0 : min,
     max: perRow || normalizeChart ? 1 : max,
-    labels: scaleLabels(min, max),
+    labels: [String(max), String(min)],
   }
 }
 
@@ -580,8 +571,12 @@ const buildHeatmapOption = (
   const rowKeys = [...rowSet].sort()
   const rowLabels = heatmapLabels(rowKeys)
   // Slots of a single day show their time alone.
-  const timeOf = (label: string) =>
-    /T(\d{2}:\d{2}(:\d{2}(?<!:00))?)/.exec(label)?.[1] ?? label
+  const timeOf = (label: string) => {
+    const match = /T(\d{2}:\d{2})(:\d{2})?/.exec(label)
+    if (!match) return label
+    const [, time, seconds = ""] = match
+    return seconds === ":00" ? time : `${time}${seconds}`
+  }
   const sameDay =
     xRole === "temporal" &&
     new Set(xLabels.map((label) => label.slice(0, 10))).size === 1 &&
@@ -613,6 +608,9 @@ const buildHeatmapOption = (
     typeof reading === "bigint" ? String(reading) : (reading ?? "-"),
   ])
 
+  const scaleTooltip = perRow
+    ? ""
+    : `<br/>Scale: ${escapeHtml(labels[1])} to ${escapeHtml(labels[0])}`
   return {
     useUTC: true,
     tooltip: {
@@ -624,7 +622,7 @@ const buildHeatmapOption = (
         ).value
         return `${escapeHtml(xLabels[x] ?? "")}<br/>${escapeHtml(
           rowLabels[y] ?? "",
-        )}: <b>${escapeHtml(String(value))}</b>`
+        )}: <b>${escapeHtml(String(value))}</b>${scaleTooltip}`
       },
     },
     grid: {
@@ -666,7 +664,11 @@ const buildHeatmapOption = (
       itemHeight: 140,
       text: perRow ? ["Row high", "Row low"] : labels,
       textGap: 8,
-      textStyle: chartText,
+      padding: 5,
+      textStyle: { ...chartText, fontFamily: "Helvetica, Arial, sans-serif" },
+      // Exact and per-row readings use internal shades, not measurement units.
+      // Let the cell tooltip show the actual reading instead of those numbers.
+      hoverLink: false,
     },
     // Drawn cell by cell, like Grafana's state timeline: a row's cells run
     // into each other, and rows keep a gap between them.
@@ -708,8 +710,9 @@ const referenceLineSeries = (series: Series[], lines: ReferenceLine[]) => {
   const plottedAxes = new Set(series.map((s) => s.yAxisIndex ?? 0))
   const markers = new Map<number, Series>()
   for (const line of lines) {
-    const wanted = line.axis === "right" ? 1 : 0
-    const axis = plottedAxes.has(wanted) ? wanted : 1 - wanted
+    // Never draw a right-axis threshold in the left series' units. Preserve
+    // the default-left fallback for right-only charts.
+    const axis = line.axis === "right" || !plottedAxes.has(0) ? 1 : 0
     if (!plottedAxes.has(axis)) continue
     const target = markers.get(axis) ?? {
       id: `reference-lines-${axis}`,

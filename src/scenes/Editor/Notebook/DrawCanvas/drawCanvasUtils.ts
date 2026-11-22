@@ -163,6 +163,7 @@ type QueryAxisCandidate = {
   index: number
   columns: ColumnDefinition[]
   inferredXColumn: string | null
+  empty?: true // metadata-only: editable, but does not participate in the plot
 }
 
 export type QueryTab = QueryAxisCandidate & {
@@ -181,6 +182,14 @@ export type DrawResolution = {
 export const HEATMAP_INCOMPLETE_MESSAGE =
   "This heatmap needs an X-axis, a separate row column, and a numeric value column. Update Chart settings."
 
+export const missingHeatmapX = (
+  columns: ColumnDefinition[],
+  x: string | null,
+) => x != null && !columns.some((column) => column.name === x)
+
+export const missingHeatmapXMessage = (x: string) =>
+  `The heatmap query no longer returns “${x}”. Select a new X-axis column in Chart settings.`
+
 export const isNumericHeatmapValue = (
   columns: ColumnDefinition[],
   name: string | undefined,
@@ -195,12 +204,11 @@ export const incompleteHeatmap = (q: ResolvedQuery) =>
   q.partitionByColumn === q.xColumn ||
   !isNumericHeatmapValue(q.columns, q.yColumns[0])
 
-// Validate the mapping being saved, not the renderer's temporary X fallback.
 // Empty DQL retains enough metadata to check the mapping without plotting it.
 export const heatmapMappingIncomplete = (
   q: QueryChart,
   savedX: string | null,
-  metadata: QueryTab | QueryExecResult | undefined,
+  metadata: QueryTab | undefined,
   value = q.yColumns[0],
 ): boolean => {
   const rows = q.partitionByColumn
@@ -208,11 +216,7 @@ export const heatmapMappingIncomplete = (
   if (!metadata) return savedX === rows
 
   const { columns } = metadata
-  const x =
-    savedX ??
-    ("inferredXColumn" in metadata
-      ? metadata.inferredXColumn
-      : inferChartConfig(columns, metadata.dataset, metadata.query).xColumn)
+  const x = savedX ?? metadata.inferredXColumn
   return (
     !x ||
     rows === x ||
@@ -228,7 +232,6 @@ export const validateHeatmapConfig = (
   config: ChartConfig,
   statements: string[],
   result: CellResult | null | undefined,
-  unchanged = false,
 ): string | null => {
   const enabled = config.queries.filter((q) => q && q.enabled !== false)
   const enabledHeatmaps = enabled.filter((q) => q?.type === "heatmap")
@@ -243,25 +246,25 @@ export const validateHeatmapConfig = (
   if (frame.kind !== "settled") {
     if (enabledHeatmaps.length > 1) return conflict
     if (explicitCollision) return HEATMAP_INCOMPLETE_MESSAGE
-    return enabled.length > 1 && !unchanged ? conflict : null
+    return enabled.length > 1 ? conflict : null
   }
 
-  const { renderQueries, tabs } = resolveDraw(statements, frame.results, config)
+  const { renderQueries, tabs } = resolveDraw(
+    statements,
+    frame.results,
+    config,
+    frame.emptyDqlResults,
+  )
   if (
     renderQueries.length > 1 &&
     renderQueries.some(({ type }) => type === "heatmap")
   )
     return conflict
   if (explicitCollision) return HEATMAP_INCOMPLETE_MESSAGE
-  // Replaying the same chart may retain mappings whose columns have since
-  // disappeared. This exception does not bypass known conflicts above.
-  if (unchanged) return null
   if (
     config.queries.some((q, index) => {
       if (q?.type !== "heatmap" || q.enabled === false) return false
-      const metadata =
-        tabs.find((tab) => tab.index === index) ??
-        frame.emptyDqlResults.find((entry) => entry.statementIndex === index)
+      const metadata = tabs.find((tab) => tab.index === index)
       return (
         metadata != null &&
         heatmapMappingIncomplete(q, config.xColumn, metadata)
@@ -293,8 +296,9 @@ const canCombineXAxis = (
 export const chartXAxisOf = (
   query: QueryAxisCandidate,
   savedX: string | null | undefined,
+  heatmap: boolean,
 ): string | null =>
-  savedX != null && query.columns.some((c) => c.name === savedX)
+  savedX != null && (heatmap || query.columns.some((c) => c.name === savedX))
     ? savedX
     : query.inferredXColumn
 
@@ -311,16 +315,17 @@ export const resolveQueryAxes = <T extends QueryAxisCandidate>(
   // A newly populated ordinary sibling must not take over an explicit
   // heatmap's X mapping. Two enabled, available heatmaps always conflict.
   const anchor = allowAnchorExclusion
-    ? (items.find((item) => enabled(item) && isHeatmap(item)) ??
-      items.find(enabled))
-    : items[0]
+    ? (items.find((item) => !item.empty && enabled(item) && isHeatmap(item)) ??
+      items.find((item) => !item.empty && enabled(item)))
+    : items.find((item) => !item.empty)
   const xColumn = anchor
-    ? chartXAxisOf(anchor, config?.xColumn)
+    ? chartXAxisOf(anchor, config?.xColumn, isHeatmap(anchor))
     : (config?.xColumn ?? null)
   const placements = items.map((item) => {
     const isAnchor = item === anchor
     const ownX = isAnchor ? xColumn : item.inferredXColumn
     const compatible =
+      item.empty === true ||
       !anchor ||
       isAnchor ||
       (isHeatmap(anchor) && isHeatmap(item)) ||
@@ -329,7 +334,11 @@ export const resolveQueryAxes = <T extends QueryAxisCandidate>(
       item,
       ownX,
       compatible,
-      included: anchor != null && compatible && (isAnchor || enabled(item)),
+      included:
+        !item.empty &&
+        anchor != null &&
+        compatible &&
+        (isAnchor || enabled(item)),
     }
   })
   return { anchor, xColumn, placements, allowAnchorExclusion }
@@ -394,6 +403,7 @@ export const resolveDraw = (
   results: (QueryExecResult &
     Partial<Pick<PositionedResult, "statementIndex">>)[],
   config: ChartConfig | undefined,
+  emptyDqlResults: PositionedResult[] = [],
 ): DrawResolution => {
   const used = new Set(results.flatMap((r) => r.statementIndex ?? []))
   const items = results.map((r) => {
@@ -454,6 +464,28 @@ export const resolveDraw = (
       name: it.qc.name,
     })
   })
+
+  // Only saved heatmaps need settings-only tabs: their mappings can be
+  // validated (and need to be repairable) even when no rows can be plotted.
+  for (const {
+    statementIndex: index,
+    columns,
+    dataset,
+    query,
+  } of emptyDqlResults) {
+    if (config?.queries[index]?.type !== "heatmap") continue
+    const inferred = inferChartConfig(columns, dataset, query)
+    tabs.push({
+      index,
+      label: `Q${index + 1}`,
+      query,
+      columns,
+      inferredXColumn: inferred.xColumn,
+      inferredChart: inferred.chart,
+      empty: true,
+    })
+  }
+  if (emptyDqlResults.length > 0) tabs.sort((a, b) => a.index - b.index)
 
   // Dense, statement-aligned config for the drawer: a concrete QueryChart per
   // statement that ran, else the saved override, else `null` for unresolved statements.

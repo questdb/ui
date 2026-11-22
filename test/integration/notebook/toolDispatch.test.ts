@@ -1932,6 +1932,39 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       name: "Renamed",
       chartConfig: saved,
     })
+
+    expect(
+      (
+        await tool("set_cell_chart_config", {
+          cell_id: "c",
+          reference_lines: [],
+        })
+      ).is_error,
+    ).toBeFalsy()
+    const cleared = await tool("get_notebook_state")
+    expect(cleared.is_error).toBeFalsy()
+    const { cells: clearedCells } = JSON.parse(cleared.content) as {
+      cells: { chart_config: object }[]
+    }
+    expect(clearedCells[0].chart_config).toEqual({
+      x_column: null,
+      queries: [],
+    })
+    const replay = await tool("apply_notebook_state", {
+      cells: [
+        {
+          id: "c",
+          preserve_value: true,
+          name: "Renamed after clear",
+          chart_config: { right_axis: null, ...clearedCells[0].chart_config },
+        },
+      ],
+    })
+    expect(replay.is_error, replay.content).toBeFalsy()
+    expect(cellById(state, "c")).toMatchObject({
+      name: "Renamed after clear",
+      chartConfig: { xColumn: null, queries: [] },
+    })
   })
 
   it("treats null fields on set_cell_chart_config as 'omit' (not overwrite)", async () => {

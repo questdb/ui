@@ -46,6 +46,7 @@ import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
+import type { QuestionDrafts } from "./QuestionCard"
 import {
   ChatInput,
   agentDestination,
@@ -266,6 +267,7 @@ const AIChatWindow: React.FC = () => {
     aiAssistantSettings,
   } = useAIStatus()
   const localAgentChannel = useLocalAgentChannel()
+  const questionDrafts = useRef<QuestionDrafts>(new WeakMap())
   const localAgentTransportReady = useLocalAgentTransportReady()
   const tables = useSelector(selectors.query.getTables)
   const { active: activeExecution } = useQueryExecutionState()
@@ -1244,7 +1246,7 @@ const AIChatWindow: React.FC = () => {
               onConfirmDelete={confirmDeleteConversation}
             />
           ) : (
-            <ChatPanel>
+            <ChatPanel data-chat-panel="">
               {shouldShowMessages && queryActions}
               {shouldShowMessages ? (
                 <ChatMessages
@@ -1311,6 +1313,7 @@ const AIChatWindow: React.FC = () => {
                 onCommandNote={addCommandNote}
                 disabled={!canUse}
                 localAgentTransportReady={localAgentTransportReady}
+                questionDrafts={questionDrafts.current}
                 placeholder={getPlaceholder()}
                 contextSQL={queryInfo.queryText}
                 contextTableId={conversation?.tableId}

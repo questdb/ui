@@ -6,6 +6,7 @@ import {
   fixtures,
   getByHook,
   openChat,
+  queryByHook,
   renderChat,
   sendMessage,
 } from "./support/chatHarness"
@@ -50,6 +51,51 @@ const choice: AgentQuestionField = {
   otherFieldId: null,
 }
 
+const localAgentSettings = {
+  ...(JSON.parse(
+    fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
+  ) as AiAssistantSettings),
+  selectedModel: "local-agent",
+}
+
+const mockAgent = () => {
+  const sent: AgentInboundMessage[] = []
+  let deliver!: (message: AgentOutboundMessage) => void
+  const client = {
+    canSendAgentMessage: () => true,
+    on: (event: string, handler: typeof deliver) => {
+      if (event === "agentMessage") deliver = handler
+      return () => undefined
+    },
+    sendAgentMessage: (message: AgentInboundMessage) => {
+      sent.push(message)
+      return true
+    },
+  } as unknown as MCPBridgeClient
+  const channel = new LocalAgentChannel(client, {
+    info: { id: "claude", label: "Mock local agent", cwd: "/tmp" },
+    onNotebookRead: vi.fn(),
+  })
+  bridge.channel = channel
+  registerLocalAgentChannel(channel)
+  deliver({
+    v: "0.6.0",
+    type: "agent_status",
+    state: "ready",
+    config: null,
+    error: null,
+  })
+  return {
+    sent,
+    deliver,
+    dispose: () => {
+      unregisterLocalAgentChannel(channel)
+      bridge.channel = null
+      channel.dispose()
+    },
+  }
+}
+
 it.each([
   ["question", "same message"],
   ["link", "same message"],
@@ -58,40 +104,10 @@ it.each([
 ])(
   "renders the answered %s separately from the %s Markdown, live and after reopening",
   async (request, resume) => {
-    const settings = {
-      ...(JSON.parse(
-        fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
-      ) as AiAssistantSettings),
-      selectedModel: "local-agent",
-    }
+    const settings = localAgentSettings
     const open = vi.spyOn(window, "open").mockReturnValue(null)
-    const sent: AgentInboundMessage[] = []
-    let deliver!: (message: AgentOutboundMessage) => void
-    const client = {
-      canSendAgentMessage: () => true,
-      on: (event: string, handler: typeof deliver) => {
-        if (event === "agentMessage") deliver = handler
-        return () => undefined
-      },
-      sendAgentMessage: (message: AgentInboundMessage) => {
-        sent.push(message)
-        return true
-      },
-    } as unknown as MCPBridgeClient
-    const channel = new LocalAgentChannel(client, {
-      info: { id: "claude", label: "Mock local agent", cwd: "/tmp" },
-      onNotebookRead: vi.fn(),
-    })
-    bridge.channel = channel
-    registerLocalAgentChannel(channel)
+    const { sent, deliver, dispose } = mockAgent()
     try {
-      deliver({
-        v: "0.6.0",
-        type: "agent_status",
-        state: "ready",
-        config: null,
-        error: null,
-      })
       const mounted = renderChat("openai", undefined, settings)
       await openChat()
       await sendMessage("Show a sample query")
@@ -110,8 +126,10 @@ it.each([
           update: { kind: "message_chunk", messageId, text },
         })
       const link = request === "link"
-      const url = "https://example.invalid/setup"
-      const question = link ? "Open the setup page" : choice.prompt
+      const url = "https://example.invalid/setup?state=sample"
+      const question = link
+        ? "Open the setup page at example.invalid"
+        : choice.prompt
       act(() => {
         stream(prefix)
         deliver({
@@ -119,7 +137,7 @@ it.each([
           conversationId,
           type: "agent_question",
           requestId: "request-1",
-          message: question ?? "",
+          message: link ? `Open the setup page at ${url}` : (question ?? ""),
           ...(link && { url }),
           fields: link ? [] : [choice],
         })
@@ -128,14 +146,19 @@ it.each([
       await userEvent.click(
         getByHook(link ? "chat-link-open" : "chat-question-option"),
       )
+      if (link) {
+        expect(open).toHaveBeenCalledWith(url, "_blank", "noopener,noreferrer")
+        expect(sent.at(-1)?.type).not.toBe("agent_question_answer")
+        expect(queryByHook("chat-question-record")).not.toBeInTheDocument()
+        expect(getByHook("chat-link-copy")).toBeEnabled()
+        await userEvent.click(getByHook("chat-link-confirm"))
+      }
       expect(sent.at(-1)).toEqual({
         v,
         type: "agent_question_answer",
         requestId: "request-1",
         answers: link ? {} : { style: "compact" },
       })
-      if (link)
-        expect(open).toHaveBeenCalledWith(url, "_blank", "noopener,noreferrer")
 
       const answer = link ? "Opened example.invalid" : "Compact"
       const expectVisibleTranscript = (resumed: boolean) => {
@@ -173,20 +196,27 @@ it.each([
       await userEvent.click(getByHook("chat-window-close"))
       mounted.unmount()
 
-      const json = JSON.stringify({
+      const record = {
         questions: [{ question, answer }],
         skipped: false,
         ...(link && { link: true }),
-      })
+      }
+      const recordText = link
+        ? `${question}\n${answer}`
+        : `Question: ${question}\nAnswer: ${answer}`
       await waitFor(async () => {
         const saved = (
           await aiConversationStore.getMessages(conversationId)
         ).find((message) => message.role === "assistant")
-        const record = `\`\`\`agent-question\n${json}\n\`\`\``
+        expect(saved?.operationHistory).toContainEqual(
+          expect.objectContaining({
+            transcriptBlock: { kind: "question", record },
+          }),
+        )
         expect(saved?.content).toBe(
           sameMessage
-            ? `${prefix}${suffix}\n\n${record}`
-            : `${prefix}\n\n${record}\n\n${suffix}`,
+            ? `${prefix}${suffix}\n\n${recordText}`
+            : `${prefix}\n\n${recordText}\n\n${suffix}`,
         )
       })
 
@@ -195,9 +225,74 @@ it.each([
       await waitFor(() => expectVisibleTranscript(true))
       expect(fetch).not.toHaveBeenCalled()
     } finally {
-      unregisterLocalAgentChannel(channel)
-      bridge.channel = null
-      channel.dispose()
+      dispose()
     }
   },
 )
+
+it("restores only the active question draft after the drawer temporarily closes", async () => {
+  const { sent, deliver, dispose } = mockAgent()
+  try {
+    renderChat("openai", undefined, localAgentSettings)
+    await openChat()
+    await sendMessage("Choose a display style")
+    const prompt = sent.find((message) => message.type === "agent_prompt")
+    if (!prompt) throw new Error("Expected a local agent prompt")
+    const { v, conversationId, turnId } = prompt
+    const fields: AgentQuestionField[] = [
+      choice,
+      {
+        id: "label",
+        kind: "text",
+        title: "Label",
+        prompt: "What label?",
+        required: true,
+      },
+    ]
+    const ask = (requestId: string) =>
+      act(() =>
+        deliver({
+          v,
+          conversationId,
+          type: "agent_question",
+          requestId,
+          message: "Display preferences",
+          fields,
+        }),
+      )
+    ask("request-1")
+    await userEvent.click(getByHook("chat-question-option"))
+    await userEvent.type(getByHook("chat-question-text-answer"), "Sample label")
+    const original = getByHook("chat-question-card")
+    await userEvent.click(getByHook("chat-window-close"))
+    expect(original).not.toBeInTheDocument()
+    await openChat()
+    expect(getByHook("chat-question-text-answer")).toHaveValue("Sample label")
+    await userEvent.click(getByHook("chat-question-review-tab"))
+    expect(
+      screen.getByRole("button", { name: /Which display style\? Compact/ }),
+    ).toBeVisible()
+    expect(
+      sent.some((message) => message.type === "agent_question_answer"),
+    ).toBe(false)
+
+    act(() =>
+      deliver({ v, type: "agent_question_closed", requestId: "request-1" }),
+    )
+    ask("request-2")
+    await userEvent.click(getByHook("chat-question-review-tab"))
+    expect(screen.getAllByText("Not answered")).toHaveLength(2)
+    expect(getByHook("chat-question-send")).toBeDisabled()
+    act(() =>
+      deliver({
+        v,
+        conversationId,
+        turnId,
+        type: "agent_turn_end",
+        result: { outcome: "completed", stopReason: "end_turn", usage: null },
+      }),
+    )
+  } finally {
+    dispose()
+  }
+})

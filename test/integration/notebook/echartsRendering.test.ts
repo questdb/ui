@@ -9,6 +9,7 @@ import {
 import {
   chartZoomDensity,
   withBoundedHeatmapLabels,
+  withFittedHeatmapLegend,
   X_SLIDER_ZOOM_ID,
   X_WHEEL_ZOOM_ID,
   Y_SLIDER_ZOOM_ID,
@@ -256,6 +257,59 @@ describe("notebook chart rendering", () => {
       }
     },
   )
+
+  it("fits long signed DECIMAL scale labels at narrow widths and restores exact labels on resize", () => {
+    const low = "-1234567890123456789012345678.123456789012345678"
+    const high = "9876543210987654321098765432.987654321098765432"
+    const option = buildEchartsOption({ xColumn: "slot" }, [
+      {
+        index: 0,
+        type: "heatmap",
+        axis: "left",
+        xColumn: "slot",
+        partitionByColumn: "station",
+        yColumns: ["reading"],
+        columns: [
+          { name: "slot", type: "INT" },
+          { name: "station", type: "SYMBOL" },
+          { name: "reading", type: "DECIMAL(46,18)" },
+        ],
+        dataset: [
+          [1, "west", low],
+          [2, "west", high],
+        ],
+      },
+    ])
+    const chart = createChart(400, 320)
+    try {
+      for (const [width, endpoints] of [
+        [320, ["9.876…e27", "-1.234…e27"]],
+        [800, [high, low]],
+      ] as const) {
+        chart.resize({ width })
+        const fitted = withFittedHeatmapLegend(option, width)
+        expect(fitted.visualMap).toMatchObject({ text: endpoints, show: true })
+        chart.setOption({ ...fitted, animation: false })
+        const list = chart.getZr().storage.getDisplayList(true)
+        for (const endpoint of endpoints) {
+          const label = list.find(
+            (el) => (el.style as { text?: string }).text === endpoint,
+          )
+          expect(label).toBeDefined()
+          const bounds = label!.getBoundingRect().clone()
+          bounds.applyTransform(label!.getComputedTransform())
+          expect(bounds.x).toBeGreaterThanOrEqual(0)
+          expect(bounds.x + bounds.width).toBeLessThanOrEqual(width)
+        }
+        const tooltip = fitted.tooltip as { formatter: (p: unknown) => string }
+        expect(tooltip.formatter({ value: [0, 0, 0, low] })).toContain(
+          `Scale: ${low} to ${high}`,
+        )
+      }
+    } finally {
+      chart.dispose()
+    }
+  })
 
   const longRowLabel =
     "us-east-1-production-payments-reconciliation-worker-settlements".repeat(3)

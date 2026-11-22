@@ -22,6 +22,8 @@ import {
   useLocalAgent,
   useLocalAgentSchemaAccess,
 } from "../../utils/localAgent/LocalAgentContext"
+import type { NoticeRecord } from "../../utils/localAgent/noticeTranscript"
+import type { QuestionRecord } from "../../utils/localAgent/questionTranscript"
 import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
 
 export const useAIStatus = () => {
@@ -135,6 +137,10 @@ export type ToolDiff = {
   truncated?: boolean
 }
 
+export type TranscriptBlock =
+  | { kind: "question"; record: QuestionRecord }
+  | { kind: "notice"; notice: NoticeRecord }
+
 export type StatusEntry = {
   type: AIOperationStatus
   args?: StatusArgs
@@ -142,6 +148,8 @@ export type StatusEntry = {
   // When the step's tool finished, if the step reported it.
   endedAt?: number
   content?: string
+  // Only typed in-app events populate this; it is never parsed from Markdown.
+  transcriptBlock?: TranscriptBlock
 }
 
 export type OperationHistory = StatusEntry[]

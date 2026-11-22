@@ -69,6 +69,67 @@ export const withBoundedHeatmapLabels = (
   }
 }
 
+// Work on the text, not a double: converting a LONG or DECIMAL here could
+// change its magnitude or round two distinct endpoints to the same value.
+const compactScaleEndpoint = (label: string) => {
+  const match = /^([+-]?)(\d*)(?:\.(\d*))?(?:e([+-]?\d+))?$/i.exec(label.trim())
+  if (!match) return null
+  const [, sign, whole, fraction = "", power = "0"] = match
+  const digits = whole + fraction
+  const first = digits.search(/[1-9]/)
+  if (first === -1) return "0"
+  const significant = digits.slice(first).replace(/0+$/, "")
+  const tail = significant.slice(1, 4)
+  const exponent = Number(power) + whole.length - first - 1
+  return `${sign}${significant[0]}${tail ? `.${tail}` : ""}${significant.length > 4 ? "…" : ""}e${exponent}`
+}
+
+export const withFittedHeatmapLegend = (
+  option: EChartsOption,
+  containerWidth: number,
+): EChartsOption => {
+  const map = option.visualMap
+  if (Array.isArray(map) || map?.type !== "continuous" || !map.text)
+    return option
+
+  const font = labelFont(map.textStyle ?? {})
+  const widthOf = (labels: string[]) =>
+    labels.reduce(
+      (width, label) => width + format.getTextRect(label, font).width,
+      0,
+    )
+  // Account for both text gaps, component padding and a small edge inset.
+  const available = containerWidth - 2 * ((map.textGap ?? 8) + 5 + 3)
+  const minRampWidth = 48
+  const fits = (labels: string[]) => available - widthOf(labels) >= minRampWidth
+  let labels = map.text
+  if (!fits(labels)) {
+    const compact = labels.map(compactScaleEndpoint)
+    // Never replace the explicitly per-row labels with a chart-wide range.
+    if (compact.every((label) => label != null)) {
+      labels =
+        (compact[0] !== compact[1] || labels[0] === labels[1]) && fits(compact)
+          ? compact
+          : ["Max", "Min"]
+    }
+  }
+  const rampWidth = Math.floor(available - widthOf(labels))
+  return {
+    ...option,
+    visualMap: {
+      ...map,
+      // At impractically small widths, don't show a clipped scale. Exact
+      // chart endpoints remain in each cell's tooltip.
+      show: rampWidth >= minRampWidth,
+      itemHeight: Math.max(
+        minRampWidth,
+        Math.min(map.itemHeight ?? 140, rampWidth),
+      ),
+      text: labels,
+    },
+  }
+}
+
 const heatmapLabelWidth = (option: EChartsOption): number => {
   const yAxis = firstOf(option.yAxis)
   if (yAxis?.type !== "category" || !("data" in yAxis) || !yAxis.data?.length)

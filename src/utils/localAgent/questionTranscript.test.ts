@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AgentQuestionMessage } from "./protocol"
-import { parseQuestionRecord, questionTranscript } from "./questionTranscript"
+import { buildQuestionRecord, questionRecordText } from "./questionTranscript"
 
 const question: AgentQuestionMessage = {
   v: "0.6.0",
@@ -45,21 +45,16 @@ const question: AgentQuestionMessage = {
   ],
 }
 
-const recordOf = (text: string) => {
-  const match = /^```agent-question\n([\s\S]*)\n```$/.exec(text)
-  return match ? parseQuestionRecord(match[1]) : null
-}
-
-describe("questionTranscript", () => {
+describe("buildQuestionRecord", () => {
   it("keeps each question with its answer by label, the user's own answer included", () => {
     // When
-    const text = questionTranscript(question, {
+    const record = buildQuestionRecord(question, {
       database_custom: "SQLite",
       features: ["sql", "ilp"],
     })
 
     // Then
-    expect(recordOf(text)).toEqual({
+    expect(record).toEqual({
       questions: [
         { question: "Database", answer: "SQLite" },
         { question: "Features", answer: "SQL, ILP" },
@@ -69,25 +64,17 @@ describe("questionTranscript", () => {
     })
   })
 
-  it("keeps a backtick in an answer from closing the block, and records skipped questions", () => {
+  it("preserves a literal answer and records skipped questions", () => {
     // When
-    const withBackticks = questionTranscript(question, {
+    const withBackticks = buildQuestionRecord(question, {
       database_custom: "use ```sqlite```",
     })
-    const skipped = questionTranscript(question, null)
+    const skipped = buildQuestionRecord(question, null)
 
     // Then
-    expect(withBackticks.match(/```/g)).toHaveLength(2)
-    expect(recordOf(withBackticks)?.questions[0].answer).toBe(
-      "use ```sqlite```",
-    )
-    expect(recordOf(skipped)).toMatchObject({ skipped: true })
-  })
-
-  it("ignores a block that is not a question record", () => {
-    // Then
-    expect(parseQuestionRecord("not json")).toBeNull()
-    expect(parseQuestionRecord('{"other":1}')).toBeNull()
+    expect(withBackticks.questions[0].answer).toBe("use ```sqlite```")
+    expect(skipped).toMatchObject({ skipped: true })
+    expect(questionRecordText(skipped)).toContain("Answer: Skipped")
   })
 
   it("keeps only where a link led, not its address", () => {
@@ -103,12 +90,10 @@ describe("questionTranscript", () => {
     }
 
     // When
-    const opened = questionTranscript(link, {})
-    const body = /```agent-question\n([^]*)\n```/.exec(opened)?.[1] ?? ""
-
+    const opened = buildQuestionRecord(link, {})
     // Then
-    expect(opened).not.toContain("secret")
-    expect(parseQuestionRecord(body)).toEqual({
+    expect(questionRecordText(opened)).not.toContain("secret")
+    expect(opened).toEqual({
       questions: [
         { question: "Sign in to Example.", answer: "Opened auth.example.com" },
       ],

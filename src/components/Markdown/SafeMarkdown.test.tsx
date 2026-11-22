@@ -106,6 +106,16 @@ describe("SafeMarkdown", () => {
     expect(html).toContain("<strong>bold</strong>")
   })
 
+  it("keeps the destination prefix for angle-bracketed inline images", () => {
+    const data = "data:image/png;base64,AAAA"
+    expect(render(`![sample](  <${data}>)`, "inline")).toContain(
+      `src="${data}"`,
+    )
+    expect(render(`\`![sample](  <${data}>)\``, "inline")).toContain(
+      `![sample](  &lt;${data}&gt;)`,
+    )
+  })
+
   it("drops images with unsafe src even when images are allowed", () => {
     expect(render("![x](javascript:alert(1))", true)).not.toContain("<img")
     expect(render("![x](vbscript:msgbox(1))", true)).not.toContain("<img")

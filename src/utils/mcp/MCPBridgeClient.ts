@@ -67,6 +67,7 @@ type EventMap = {
   agentMessage: AgentOutboundMessage
 }
 
+export const HELLO_TIMEOUT_MS = 10_000
 const HEARTBEAT_INTERVAL_MS = 5_000
 const PONG_TIMEOUT_MS = 10_000
 const RECONNECT_INTERVAL_MS = 3_000
@@ -120,6 +121,7 @@ export class MCPBridgeClient {
     Set<Listener<EventMap[keyof EventMap]>>
   >()
   private pendingResults: ToolResultMessage[] = []
+  private helloTimer: ReturnType<typeof setTimeout> | null = null
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private pongTimer: ReturnType<typeof setTimeout> | null = null
   private outstandingPing: { nonce: string; sentAt: number } | null = null
@@ -199,16 +201,19 @@ export class MCPBridgeClient {
   disconnect(reason: CloseReason = "user_disconnect"): void {
     this.explicitlyClosed = true
     this.cancelReconnect()
+    this.clearHelloTimer()
     this.stopHeartbeat()
     this.detachVisibilityListener()
-    if (this.ws && this.ws.readyState <= WebSocket.OPEN) {
+    const socket = this.ws
+    this.ws = null
+    this.hadSession = false
+    if (socket && socket.readyState <= WebSocket.OPEN) {
       try {
-        this.ws.close(1000, reason)
+        socket.close(1000, reason)
       } catch {
         // Some envs throw on double-close.
       }
     }
-    this.ws = null
     this.pendingResults = []
     this.setStatus("disconnected")
   }
@@ -245,10 +250,11 @@ export class MCPBridgeClient {
   }
 
   private openSocket(): void {
-    if (this.ws && this.ws.readyState <= WebSocket.OPEN) return
+    if (this.explicitlyClosed || this.ws) return
     this.setStatus(
       this._status === "reconnecting" ? "reconnecting" : "connecting",
     )
+    if (this.explicitlyClosed) return
     // Never log the URL — the query string carries the auth token.
     const fullUrl = this.buildSocketUrl()
     const factory =
@@ -266,13 +272,21 @@ export class MCPBridgeClient {
       return
     }
     this.ws = socket
-    socket.addEventListener("open", this.onOpen)
-    socket.addEventListener("message", this.onMessage)
-    socket.addEventListener("close", this.onClose)
-    socket.addEventListener("error", this.onError)
+    socket.addEventListener("open", () => {
+      if (this.ws === socket) this.onOpen(socket)
+    })
+    socket.addEventListener("message", (ev) => {
+      if (this.ws === socket) this.onMessage(ev)
+    })
+    socket.addEventListener("close", (ev) => {
+      if (this.ws === socket) this.onClose(ev)
+    })
+    socket.addEventListener("error", (ev) => {
+      if (this.ws === socket) this.onError(ev)
+    })
   }
 
-  private onOpen = (): void => {
+  private onOpen(socket: WebSocket): void {
     // Never log the token, not even a prefix — 4 bytes is enough to
     // confirm an exfiltrated token if a leak appears elsewhere.
     const hello: HelloMessage = {
@@ -286,9 +300,29 @@ export class MCPBridgeClient {
       tools: this.opts.tools,
       permissions: this.permissions,
     }
+    // Stay in `connecting`/`reconnecting` until the bridge acks, but do not
+    // leave pending turns waiting forever on an open, silent socket.
+    this.clearHelloTimer()
+    this.helloTimer = setTimeout(() => {
+      if (this.ws !== socket) return
+      this.clearHelloTimer()
+      // Retire this socket before closing it. A late close or ack must not
+      // interfere with the next socket, and close might not arrive promptly.
+      this.ws = null
+      try {
+        socket.close(WS_CLOSE_CODES.protocol_violation, "hello_timeout")
+      } catch {
+        // Retry even if the socket could not be closed.
+      }
+      this.scheduleReconnect()
+    }, HELLO_TIMEOUT_MS)
     this.send(hello)
-    // Stay in `connecting`/`reconnecting` until the bridge acks — consumers
-    // must not treat the session as usable before hello_ack.
+  }
+
+  private clearHelloTimer(): void {
+    if (this.helloTimer === null) return
+    clearTimeout(this.helloTimer)
+    this.helloTimer = null
   }
 
   private onMessage = (ev: MessageEvent): void => {
@@ -355,6 +389,7 @@ export class MCPBridgeClient {
         terminal: TERMINAL_BRIDGE_CLOSE_CODES.has(code),
       })
     }
+    this.clearHelloTimer()
     this.stopHeartbeat()
     this.ws = null
     if (this.explicitlyClosed) {
@@ -384,6 +419,8 @@ export class MCPBridgeClient {
   }
 
   private handleHelloAck(msg: HelloAckMessage): void {
+    const socket = this.ws
+    this.clearHelloTimer()
     this.sessionId = msg.sessionId
     if (!this.everHadSession) {
       this.everHadSession = true
@@ -404,7 +441,9 @@ export class MCPBridgeClient {
       this.pendingResults = []
       for (const m of flushing) this.send(m)
     }
-    this.startHeartbeat(msg.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS)
+    if (this.ws === socket) {
+      this.startHeartbeat(msg.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS)
+    }
   }
 
   private handlePong(msg: PongMessage): void {
@@ -472,7 +511,10 @@ export class MCPBridgeClient {
 
   private scheduleReconnect(): void {
     if (this.explicitlyClosed) return
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
     this.consecutiveFailedAttempts += 1
     if (this.consecutiveFailedAttempts > MAX_CONSECUTIVE_FAILED_ATTEMPTS) {
       void trackEvent(ConsoleEvent.MCP_CONNECT_FAILED)
@@ -480,6 +522,7 @@ export class MCPBridgeClient {
       return
     }
     this.setStatus("reconnecting")
+    if (this.explicitlyClosed || this.ws) return
     const delay = jittered(RECONNECT_INTERVAL_MS)
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
@@ -504,6 +547,8 @@ export class MCPBridgeClient {
       if (document.visibilityState !== "visible") return
       if (this.explicitlyClosed) return
       if (this._status === "connected" || this._status === "connecting") return
+      // An open or opening retry already owns this attempt and its budget.
+      if (this.ws) return
       // Don't resurrect a gave-up session on tab focus — the user must
       // click "Try again" to opt back in.
       if (this.consecutiveFailedAttempts > MAX_CONSECUTIVE_FAILED_ATTEMPTS) {
@@ -513,8 +558,7 @@ export class MCPBridgeClient {
         clearTimeout(this.reconnectTimer)
         this.reconnectTimer = null
       }
-      // Wake-from-sleep deserves a fresh retry budget.
-      this.consecutiveFailedAttempts = 0
+      // Foregrounding can speed up a retry, not restart its budget.
       this.openSocket()
     }
     document.addEventListener("visibilitychange", handler)

@@ -847,8 +847,22 @@ const normalizeChartConfig = (
     xColumn: cfg.xColumn ?? null,
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
-  if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
-  if (cfg.referenceLines?.length) next.referenceLines = cfg.referenceLines
+  // Canonicalize optional fields that disappear in a chart snapshot.
+  if (cfg.rightAxis) {
+    const { name, min, max } = cfg.rightAxis
+    next.rightAxis = {
+      ...(name && { name }),
+      ...(min != null && { min }),
+      ...(max != null && { max }),
+    }
+  }
+  if (cfg.referenceLines?.length) {
+    next.referenceLines = cfg.referenceLines.map(({ value, axis, label }) => ({
+      value,
+      ...(axis === "right" && { axis }),
+      ...(label && { label }),
+    }))
+  }
   return next
 }
 
@@ -945,6 +959,13 @@ export const buildAppliedCells = (
     }
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
+    const valueChanged = existing != null && existing.value !== value
+    const chartUnchanged =
+      chartConfig != null &&
+      existing != null &&
+      !valueChanged &&
+      existing.mode === resolvedMode &&
+      isEqual(chartConfig, normalizeChartConfig(existing.chartConfig))
     // PUT semantics like chartConfig: an omitted config clears the rules.
     const highlightConfig = req.highlightConfig ?? undefined
 
@@ -991,9 +1012,13 @@ export const buildAppliedCells = (
     if (chartConfig && statements) {
       const queryCount = chartConfig.queries.length
       const statementCount = statements.length
-      // A reference-line patch can leave every query inferred. Its snapshot
-      // uses an empty override list, which can be replayed as-is.
-      if (queryCount === 0 && !chartConfig.referenceLines?.length) {
+      // Clearing the last reference line can leave a saved, inference-only
+      // chart. Allow its empty override list on an unchanged replay.
+      if (
+        queryCount === 0 &&
+        !chartUnchanged &&
+        !chartConfig.referenceLines?.length
+      ) {
         throw new ApplyNotebookStateError(
           `Cell at index ${index} has a chart_config with no queries. Provide one entry per ;-split query (apply replaces the chart wholesale).`,
           "cells",
@@ -1085,27 +1110,17 @@ export const buildAppliedCells = (
       }
     }
 
-    const valueChanged = existing != null && existing.value !== value
-    // Results carry over by statement content: validate against the same frame
-    // the updated cell would keep. Do not load snapshots or execute queries.
+    // Results carry over by statement content: validate edits against the same
+    // frame the updated cell would keep. Do not load snapshots or execute queries.
     const result = valueChanged
       ? statements && existing.result != null
         ? reconcileCellResultForStatements(existing.result, statements)
         : reconcileCellResultForValue(existing.result, value)
       : existing?.result
-    const chartUnchanged =
-      chartConfig != null &&
-      existing != null &&
-      !valueChanged &&
-      (existing.mode === "draw") === isDraw &&
-      isEqual(chartConfig, normalizeChartConfig(existing.chartConfig))
-    if (chartConfig && statements) {
-      const invalid = validateHeatmapConfig(
-        chartConfig,
-        statements,
-        result,
-        chartUnchanged,
-      )
+    // A schema change or a newly populated sibling can invalidate the saved
+    // plot without changing the chart. Do not block unrelated snapshot edits.
+    if (chartConfig && statements && !chartUnchanged) {
+      const invalid = validateHeatmapConfig(chartConfig, statements, result)
       if (invalid) {
         throw new ApplyNotebookStateError(
           `Cell at index ${index}: ${invalid}`,

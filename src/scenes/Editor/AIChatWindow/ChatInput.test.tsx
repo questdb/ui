@@ -127,6 +127,40 @@ it("keeps a mismatched queue across composer remounts until explicit Edit", asyn
   expect(getHook("chat-input-textarea")).toHaveValue("Queued follow-up")
 })
 
+it("holds the queued destination when Stop is pressed after switching models", async () => {
+  const controller = new AbortController()
+  const abortOperation = vi.fn(() => controller.abort())
+  const operations = {
+    abortOperation,
+    getOperationSignal: () => controller.signal,
+  }
+  configure(AIOperationStatus.Processing, "openai:gpt-5.4", operations)
+  const view = renderInput()
+  await userEvent.type(
+    getHook("chat-input-textarea"),
+    "Follow-up{Enter}Separate draft",
+  )
+  configure(AIOperationStatus.Processing, "openai:gpt-5-mini", operations)
+  view.rerender()
+  await userEvent.click(getHook("chat-stop-button"))
+  expect(abortOperation).toHaveBeenCalledOnce()
+  expect(view.submitted()).toMatchObject({
+    text: "Follow-up",
+    model: "openai:gpt-5.4",
+    heldByStop: true,
+  })
+  expect(getHook("chat-input-textarea")).toHaveValue("Separate draft")
+
+  configure(null, "openai:gpt-5.4", operations)
+  view.rerender()
+  expect(getHook("chat-queued-message")).toHaveTextContent("Follow-up")
+  await userEvent.click(screen.getByRole("button", { name: "Edit" }))
+  expect(view.submitted()).toBeUndefined()
+  expect(getHook("chat-input-textarea")).toHaveValue(
+    "Follow-up\n\nSeparate draft",
+  )
+})
+
 it("cannot steer or append a new draft to a queue for a replaced local connection", async () => {
   const steerOperation = vi.fn()
   configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL, { steerOperation })
@@ -458,6 +492,26 @@ it("preserves an image draft when adding it would exceed the queued limit", asyn
     screen.getByRole("button", { name: "Remove image 2" }),
   ).toBeInTheDocument()
   expect(screen.getByText(/a message takes up to 4 images/i)).toBeVisible()
+
+  const edit = screen.getByRole("button", { name: "Edit" })
+  expect(edit).toBeDisabled()
+  expect(getHook("chat-queued-message")).toHaveTextContent(
+    /Remove draft images before editing/,
+  )
+  await userEvent.click(getHook("chat-input-textarea"))
+  await userEvent.keyboard("{ArrowUp}")
+  expect(getHook("chat-queued-message")).toHaveTextContent("3 images")
+  expect(
+    screen.queryByRole("button", { name: "Remove image 3" }),
+  ).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole("button", { name: "Remove image 2" }))
+  await userEvent.click(edit)
+  expect(queryHook("chat-queued-message")).not.toBeInTheDocument()
+  expect(
+    screen.getByRole("button", { name: "Remove image 4" }),
+  ).toBeInTheDocument()
+  await userEvent.click(screen.getByRole("button", { name: "Queue message" }))
+  expect(getHook("chat-queued-message")).toHaveTextContent("4 images")
 })
 
 it("keeps attached images in a draft rather than sending without them", async () => {
@@ -521,6 +575,38 @@ it("blocks Send and both Enter shortcuts until the attachment is ready", async (
     text: "Read this chart",
     images: [{ mimeType: "image/png", data: "c2FtcGxl" }],
   })
+})
+
+it("allows the native text paste while an earlier image is still loading", async () => {
+  configure(null, LOCAL_AGENT_MODEL)
+  renderInput(fakeChannel("agent"))
+  const finish = holdAttachment()
+  const clipboardImage = new File(["sample"], "clipboard.png", {
+    type: "image/png",
+  })
+  const textarea = getHook("chat-input-textarea")
+  const clipboardData = {
+    items: [
+      {
+        kind: "file",
+        type: clipboardImage.type,
+        getAsFile: () => clipboardImage,
+      },
+    ],
+    getData: () => "Caption from the clipboard",
+  }
+  // jsdom does not perform the default insertion; assert the event is not cancelled.
+  expect(fireEvent.paste(textarea, { clipboardData })).toBe(true)
+  expect(
+    fireEvent.paste(textarea, {
+      clipboardData: { ...clipboardData, getData: () => "" },
+    }),
+  ).toBe(false)
+  expect(screen.getByRole("alert")).toHaveTextContent(/finish reading/)
+  await finish()
+  expect(screen.getAllByRole("button", { name: /Remove image/ })).toHaveLength(
+    1,
+  )
 })
 
 it("does not steer a queued message while reading the current draft image", async () => {

@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 import React from "react"
 import { screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { renderComponent } from "../../../test/component"
-import { questionTranscript } from "../../../utils/localAgent/questionTranscript"
-import { AssistantMarkdown } from "./AssistantMarkdown"
+import { buildQuestionRecord } from "../../../utils/localAgent/questionTranscript"
+import { QuestionRecord } from "./QuestionRecord"
 
 describe("an answered question in the agent's reply", () => {
   it("shows the question and quotes only the user's answer", () => {
     // Given a reply that holds an answered question
-    const record = questionTranscript(
+    const record = buildQuestionRecord(
       {
         v: "0.6.0",
         type: "agent_question",
@@ -35,18 +35,10 @@ describe("an answered question in the agent's reply", () => {
     )
 
     // When
-    renderComponent(
-      <AssistantMarkdown
-        content={`Let me check first.\n\n${record}\n\nUsing QuestDB.`}
-        messageId="m1"
-        onOpenInEditor={vi.fn()}
-      />,
-    )
+    renderComponent(<QuestionRecord record={record} />)
 
     // Then
     expect(screen.getByText("Which database should we use?")).toBeVisible()
     expect(screen.getByText("QuestDB")).toBeVisible()
-    expect(screen.queryByText(/agent-question|"questions"/)).toBeNull()
-    expect(screen.getByText("Using QuestDB.")).toBeVisible()
   })
 })

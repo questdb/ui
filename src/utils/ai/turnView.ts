@@ -1,6 +1,9 @@
 import type { ConversationMessage } from "../../providers/AIConversationProvider/types"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
-import type { StatusEntry } from "../../providers/AIStatusProvider"
+import type {
+  StatusEntry,
+  TranscriptBlock,
+} from "../../providers/AIStatusProvider"
 
 export type AssistantTurn = {
   anchorIndex: number
@@ -150,7 +153,10 @@ export type TimelineContent = {
   timestamp: number
 }
 
-export type TimelineItem = TimelineOperations | TimelineContent
+export type TimelineItem =
+  | TimelineOperations
+  | TimelineContent
+  | { type: "record"; block: TranscriptBlock; timestamp: number }
 
 export function buildInterleavedTimeline(
   operationHistory: StatusEntry[],
@@ -163,7 +169,13 @@ export function buildInterleavedTimeline(
       if (last?.type === "operations" && last.endTimestamp === undefined) {
         last.endTimestamp = entry.timestamp
       }
-      if (entry.content?.trim()) {
+      if (entry.transcriptBlock) {
+        timeline.push({
+          type: "record",
+          block: entry.transcriptBlock,
+          timestamp: entry.timestamp,
+        })
+      } else if (entry.content?.trim()) {
         timeline.push({
           type: "content",
           content: entry.content,

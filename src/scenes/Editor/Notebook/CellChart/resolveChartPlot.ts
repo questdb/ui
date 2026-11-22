@@ -5,6 +5,8 @@ import {
 import {
   incompleteHeatmap,
   HEATMAP_INCOMPLETE_MESSAGE,
+  missingHeatmapX,
+  missingHeatmapXMessage,
   type DrawResolution,
 } from "../DrawCanvas/drawCanvasUtils"
 
@@ -19,6 +21,9 @@ export const resolveChartPlot = ({ chart, renderQueries }: DrawResolution) => {
     return { option: null, message: HEATMAP_CONFLICT_MESSAGE }
   const heatmap = heatmaps[0]
   if (heatmap) {
+    const { xColumn, columns } = heatmap
+    if (xColumn != null && missingHeatmapX(columns, xColumn))
+      return { option: null, message: missingHeatmapXMessage(xColumn) }
     if (incompleteHeatmap(heatmap))
       return { option: null, message: HEATMAP_INCOMPLETE_MESSAGE }
     if (hasDuplicateHeatmapReadings(heatmap))

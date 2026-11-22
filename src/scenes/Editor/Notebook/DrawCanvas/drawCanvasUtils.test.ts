@@ -11,6 +11,7 @@ import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig } from "../CellChart/chartTypes"
+import { resolveChartPlot } from "../CellChart/resolveChartPlot"
 
 const dql = (
   columns: ColumnDefinition[],
@@ -312,6 +313,36 @@ describe("resolveDraw — unresolved statements use a null slot, not an inert co
     // blank placeholder that would later suppress inference.
     expect(effectiveConfig.queries[0]).toBeNull()
     expect(effectiveConfig.queries[1]).not.toBeNull()
+  })
+
+  it("keeps a missing authored heatmap X instead of plotting the inferred column", () => {
+    const config: ChartConfig = {
+      xColumn: "bucket",
+      queries: [
+        { type: "heatmap", partitionByColumn: "site", yColumns: ["reading"] },
+      ],
+    }
+    const query = dql(
+      [
+        { name: "alt_bucket", type: "SYMBOL" },
+        { name: "site", type: "SYMBOL" },
+        { name: "reading", type: "DOUBLE" },
+      ],
+      [["alt", "west", 2]],
+    )
+    const stale = resolveDraw([query.query], [query], config)
+    expect(stale.renderQueries[0].xColumn).toBe("bucket")
+    const stalePlot = resolveChartPlot(stale)
+    expect(stalePlot.option).toBeNull()
+    expect(stalePlot.message).toMatch(
+      /no longer returns “bucket”\. Select a new X-axis/,
+    )
+    const inferred = resolveDraw([query.query], [query], {
+      ...config,
+      xColumn: null,
+    })
+    expect(inferred.renderQueries[0].xColumn).toBe("alt_bucket")
+    expect(resolveChartPlot(inferred).option).not.toBeNull()
   })
 
   it("does not plot a disabled heatmap when it is the only query with rows", () => {

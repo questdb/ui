@@ -6,6 +6,8 @@ import type { ConversationMessage } from "../../../providers/AIConversationProvi
 import { AIOperationStatus } from "../../../providers/AIStatusProvider"
 import { color } from "../../../utils"
 import { AssistantMarkdown } from "./AssistantMarkdown"
+import { QuestionRecord } from "./QuestionRecord"
+import { NoticeRecord } from "./NoticeRecord"
 import type { OpenInEditorContent } from "./ChatMessages"
 import { buildInterleavedTimeline } from "../../../utils/ai/turnView"
 import {
@@ -99,7 +101,7 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
       const hasGeneratingResponseContent = filteredHistory.some(
         (op) =>
           op.type === AIOperationStatus.GeneratingResponse &&
-          !!op.content?.trim(),
+          (!!op.transcriptBlock || !!op.content?.trim()),
       )
       return {
         operationHistory: filteredHistory.filter(
@@ -155,7 +157,7 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
 
     if (timeline && timeline.length > 0) {
       const firstContentIndex = timeline.findIndex(
-        (item) => item.type === "content",
+        (item) => item.type !== "operations",
       )
 
       return (
@@ -187,11 +189,17 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
                 $withCopyGutter={isFirstContent}
                 data-hook="chat-response-content"
               >
-                <AssistantMarkdown
-                  content={item.content}
-                  messageId={anchorMessage.id}
-                  onOpenInEditor={onOpenInEditor}
-                />
+                {item.type === "content" ? (
+                  <AssistantMarkdown
+                    content={item.content}
+                    messageId={anchorMessage.id}
+                    onOpenInEditor={onOpenInEditor}
+                  />
+                ) : item.block.kind === "question" ? (
+                  <QuestionRecord record={item.block.record} />
+                ) : (
+                  <NoticeRecord notice={item.block.notice} />
+                )}
                 {isFirstContent && responseActions}
               </ExplanationContent>
             )

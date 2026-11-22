@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react"
-import { screen } from "@testing-library/react"
+import { fireEvent, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../test/component"
@@ -221,6 +221,65 @@ describe("QuestionCard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Skip" }))
     expect(onAnswer.mock.calls).toEqual([[null]])
   })
+
+  it("keeps focus in the question form across keyboard navigation", async () => {
+    const { onAnswer } = renderCard(question([database, features]))
+    const option = screen.getByRole("radio", { name: /Postgres/ })
+    option.focus()
+    await userEvent.keyboard("{ArrowRight}")
+    expect(option).not.toBeInTheDocument()
+    expect(screen.getByText(/Which features do you need/)).toHaveFocus()
+    await userEvent.keyboard("{ArrowRight}")
+    expect(screen.getByRole("tab", { name: "Review" })).toHaveFocus()
+    await userEvent.keyboard("{ArrowLeft}1")
+    expect(screen.getByRole("checkbox", { name: /SQL/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    )
+    expect(onAnswer).not.toHaveBeenCalled()
+  })
+
+  it.each(["text", "custom"])(
+    "ignores WebKit's IME Enter in a %s answer",
+    async (kind) => {
+      const { onAnswer } = renderCard(
+        question(
+          kind === "custom"
+            ? [database]
+            : [
+                {
+                  id: "label",
+                  kind: "text",
+                  title: null,
+                  prompt: "Label?",
+                  required: true,
+                },
+              ],
+        ),
+      )
+      if (kind === "custom")
+        await userEvent.click(
+          screen.getByRole("radio", { name: /Type your own answer/ }),
+        )
+      const input = screen.getByRole("textbox")
+      await userEvent.type(input, "Sample label")
+      fireEvent.keyDown(input, {
+        key: "Enter",
+        isComposing: false,
+        keyCode: 229,
+      })
+      expect(input).toHaveFocus()
+      expect(onAnswer).not.toHaveBeenCalled()
+      await userEvent.keyboard("{Enter}")
+      expect(onAnswer.mock.calls).toEqual([
+        [
+          {
+            [kind === "custom" ? "question_0_custom" : "label"]: "Sample label",
+          },
+        ],
+      ])
+    },
+  )
 
   it("picks an option with its number key", async () => {
     // Given

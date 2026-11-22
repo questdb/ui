@@ -149,6 +149,11 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           <CopyButton type="button" text={activeTab.query} size="sm" iconOnly />
         </QueryLabelRow>
         <SqlPre code={activeTab.query} />
+        {activeTab.empty && (
+          <Text color="contentSecondary" size="xs">
+            This query returned no rows. You can still edit its column mapping.
+          </Text>
+        )}
       </FieldGroup>
 
       {!compatible && (

@@ -32,9 +32,7 @@ vi.mock("../../../src/utils/localAgent/LocalAgentContext", async (load) => ({
 }))
 
 const partialSQL = "```sql\nSELECT 42;"
-const noticeExample =
-  '```agent-notice\n{"severity":"info","title":"Example","description":null}\n```'
-const markdownExample = `\`\`\`\`markdown\n${noticeExample}\n\`\`\`\``
+const markdownExample = "```markdown\n**Sample formatting**\n```"
 
 it.each([
   { name: "before any answer text", partial: "", stopReason: "max_tokens" },
@@ -202,8 +200,8 @@ it.each([
       expect(saved?.content).toBe(partial ? partial + (suffix ?? "") : null)
       if (midstreamNotice || stopReason === "max_tokens") {
         expect(
-          saved?.operationHistory?.filter((entry) =>
-            entry.content?.includes("```agent-notice"),
+          saved?.operationHistory?.filter(
+            (entry) => entry.transcriptBlock?.kind === "notice",
           ),
         ).toHaveLength(1)
       }
@@ -241,7 +239,7 @@ it.each([
       } else if (partial && !midstreamNotice) {
         const code = getByHook("chat-message-code-block").querySelector("pre")
         expect(code?.textContent).toBe(
-          partial === partialSQL ? "SELECT 42;" : noticeExample,
+          partial === partialSQL ? "SELECT 42;" : "**Sample formatting**",
         )
       }
       await userEvent.click(getByHook("assistant-mode-processing-collapsed"))

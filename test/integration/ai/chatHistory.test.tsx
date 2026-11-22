@@ -54,6 +54,30 @@ describe("chat history", () => {
     expect(await db.ai_conversations.count()).toBe(2)
   })
 
+  it("opens saved chats offline on a local-only selection without changing the destination", async () => {
+    await seedChat("Saved local chat")
+    const settings = {
+      modelValueFormat: 2 as const,
+      selectedModel: "local-agent",
+      providers: {},
+    }
+    const mounted = renderChat("openai", undefined, settings)
+    await screen.findByRole("button", { name: "Open AI Assistant" })
+    await openChat()
+    expect(getByHook("chat-message-user")).toHaveTextContent(
+      "Question about Saved local chat",
+    )
+    expect(getByHook("chat-input-textarea")).toBeDisabled()
+    await userEvent.click(getByHook("chat-window-close"))
+    await openChat()
+    expect(getByHook("chat-input-textarea")).toBeDisabled()
+    expect(
+      JSON.parse(localStorage.getItem("ai.assistant.settings") ?? "{}"),
+    ).toMatchObject({ selectedModel: "local-agent" })
+    expect(fetch).not.toHaveBeenCalled()
+    mounted.unmount()
+  })
+
   it("shows an image-only message without displaying the agent's workspace context", async () => {
     // Given
     await seedChat("Image-only chat", {

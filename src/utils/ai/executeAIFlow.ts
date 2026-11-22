@@ -56,7 +56,6 @@ import {
   localAgentDisplayName,
 } from "../localAgent/localAgentModel"
 import { runLocalAgentTurn } from "../localAgent/runLocalAgentTurn"
-import { noticeTranscript } from "../localAgent/noticeTranscript"
 import { localAgentPreferencesOf } from "../localAgent/localAgentSettings"
 import {
   priorConversationFor,
@@ -817,13 +816,15 @@ export async function executeAIFlow(
     void generateChatTitleIfNeeded(config, userMsg.content, callbacks)
   }
 
-  const appendTranscriptBlock = (content: string) => {
+  const appendTranscriptBlock = (
+    transcriptBlock: NonNullable<OperationHistory[number]["transcriptBlock"]>,
+  ) => {
     if (!ownsLiveFlow()) return
     transcriptBlocks.push({
       after: dropTransientTail(latestOperationHistory).length,
       entry: {
         type: AIOperationStatus.GeneratingResponse,
-        content,
+        transcriptBlock,
         timestamp: Date.now(),
       },
     })
@@ -884,11 +885,11 @@ export async function executeAIFlow(
         tool_calls: undefined,
       })
     },
-    onNotice: (notice) => appendTranscriptBlock(noticeTranscript(notice)),
-    onQuestionRecord: (markdown, getTranscript) => {
+    onNotice: (notice) => appendTranscriptBlock({ kind: "notice", notice }),
+    onQuestionRecord: (record, getTranscript) => {
       if (!ownsLiveFlow()) return
       getQuestionTranscript = getTranscript
-      appendTranscriptBlock(markdown)
+      appendTranscriptBlock({ kind: "question", record })
       hasPendingStreamingUpdate = true
       scheduleUpdate()
     },

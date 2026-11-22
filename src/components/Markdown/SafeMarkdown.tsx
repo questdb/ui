@@ -33,7 +33,7 @@ import remarkGfm from "remark-gfm"
 // for a short key before parsing and put back when the image renders.
 const INLINE_IMAGE_KEY = "inline-image:"
 const INLINE_IMAGE_DATA =
-  /(?<=\]\(\s*<?)data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+/g
+  /(\]\(\s*<?)(data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+)/g
 
 type MarkdownNode = {
   value?: string
@@ -50,10 +50,13 @@ const withInlineImagesKeyed = (markdown: string) => {
   while (prefixes.has(String(next))) next++
   const prefix = `${INLINE_IMAGE_KEY}${next}:`
   const images: string[] = []
-  const keyed = markdown.replace(INLINE_IMAGE_DATA, (data) => {
-    images.push(data)
-    return `${prefix}${images.length - 1}`
-  })
+  const keyed = markdown.replace(
+    INLINE_IMAGE_DATA,
+    (_, destination: string, data: string) => {
+      images.push(data)
+      return `${destination}${prefix}${images.length - 1}`
+    },
+  )
   const pattern = new RegExp(`${prefix}(\\d+)`, "g")
   const restore = (value: string) =>
     value.replace(pattern, (key, index) => images[Number(index)] ?? key)

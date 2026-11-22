@@ -154,10 +154,10 @@ describe("runLocalAgentTurn", () => {
     const { turn, setStatus } = startTurn()
     bridge.update(toolCall("t1", "mcp.questdb_console.run_query"))
     bridge.update(toolCall("guardian_assessment:1", "Guardian Review"))
-    const reportQuery = channel.captureToolStatus(
+    const reportQuery = channel.captureToolRequest(
       bridge.client,
       CONVERSATION_ID,
-    )
+    )?.setStatus
     reportQuery?.(AIOperationStatus.RunningQuery, { content: "SELECT 1" })
     bridge.update(toolCall("t2", "tool_search 'questdb_console'"))
     bridge.update(toolCall("t3", "pwd"))

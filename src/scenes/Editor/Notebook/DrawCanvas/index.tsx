@@ -191,8 +191,16 @@ export const DrawCanvas: React.FC<Props> = ({
   }, [cell.id])
 
   const resolution = useMemo(
-    () => resolveDraw(queries, results, cell.chartConfig),
-    [queries, results, cell.chartConfig],
+    () =>
+      resolveDraw(
+        queries,
+        results,
+        cell.chartConfig,
+        chartResult.kind === "settled"
+          ? chartResult.emptyDqlResults
+          : undefined,
+      ),
+    [queries, results, cell.chartConfig, chartResult],
   )
 
   // The refresh replaces the cancelled state, and Retry with it; a focused
@@ -288,11 +296,6 @@ export const DrawCanvas: React.FC<Props> = ({
         initialDraft={settingsDrawer.initialDraft}
         onDraftChange={settingsDrawer.keepDraft}
         tabs={resolution.tabs}
-        emptyDqlResults={
-          chartResult.kind === "settled"
-            ? chartResult.emptyDqlResults
-            : undefined
-        }
         config={resolution.effectiveConfig}
         onSave={onConfigChange}
         telemetry={notebookChartSettingsTelemetry}

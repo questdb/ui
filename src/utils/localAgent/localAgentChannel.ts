@@ -15,7 +15,7 @@ import type {
   AgentTurnResult,
   AgentUpdate,
 } from "./protocol"
-import { questionTranscript } from "./questionTranscript"
+import { buildQuestionRecord, type QuestionRecord } from "./questionTranscript"
 
 const CANCEL_GRACE_MS = 5_000
 
@@ -42,7 +42,7 @@ export type NotebookRead = {
 
 export type LocalAgentUpdate =
   | AgentUpdate
-  | { kind: "question_record"; messageId: string; text: string }
+  | { kind: "question_record"; record: QuestionRecord }
 
 export type LocalAgentPrompt = {
   conversationId: string
@@ -84,6 +84,7 @@ type PendingTurn = {
   turnId: string
   onUpdate: LocalAgentPrompt["onUpdate"]
   onToolStatus: StatusCallback
+  toolSignal: AbortSignal
   settle: (result: AgentTurnResult) => void
   // Set once the user stops the turn; resolves when the turn has ended.
   stopping: Promise<void> | null
@@ -194,10 +195,12 @@ export class LocalAgentChannel {
     return new Promise((resolve) => {
       let cancelTimer: ReturnType<typeof setTimeout> | undefined
       let stopped = () => {}
+      const toolAborter = new AbortController()
       const cancel = () => {
         turn.stopping = new Promise((resolve) => {
           stopped = resolve
         })
+        toolAborter.abort(signal?.reason)
         this.pendingCancels.set(conversationId, turnId)
         this.clearQuestions(conversationId)
         this.sendCancel(conversationId, turnId)
@@ -206,6 +209,7 @@ export class LocalAgentChannel {
         turnId,
         onUpdate,
         onToolStatus,
+        toolSignal: toolAborter.signal,
         stopping: null,
         startCancelGrace: () => {
           // Replay never extends the grace that started on the first write.
@@ -217,6 +221,7 @@ export class LocalAgentChannel {
         settle: (result) => {
           clearTimeout(cancelTimer)
           signal?.removeEventListener("abort", cancel)
+          toolAborter.abort()
           resolve(result)
           stopped()
         },
@@ -227,17 +232,14 @@ export class LocalAgentChannel {
     })
   }
 
-  // Bind status reporting when the console receives the call, not when the
-  // tool eventually reports progress. This does not authorize the call.
-  captureToolStatus(
-    client: MCPBridgeClient,
-    conversationId: string,
-  ): StatusCallback | undefined {
+  // Capture the exact turn at receipt, not when the tool eventually reports
+  // progress. Ownership is for status and cancellation, not authorization.
+  captureToolRequest(client: MCPBridgeClient, conversationId: string) {
     if (this.disposed || client !== this.client) return undefined
     const turn = this.turns.get(conversationId)
     if (!turn || turn.stopping) return undefined
     let queryId: string | undefined
-    return (status, args) => {
+    const setStatus: StatusCallback = (status, args) => {
       if (this.turns.get(conversationId) !== turn || turn.stopping) return
       // Equal SQL may be run more than once in the same turn. Key each
       // console query's progress and outcome without retaining the wire ID.
@@ -247,6 +249,7 @@ export class LocalAgentChannel {
       }
       turn.onToolStatus(status, args)
     }
+    return { setStatus, signal: turn.toolSignal }
   }
 
   resume(): void {
@@ -299,8 +302,7 @@ export class LocalAgentChannel {
     // The chat keeps the question and the answer in the agent's reply.
     this.turns.get(question.conversationId)?.onUpdate({
       kind: "question_record",
-      messageId: `question:${requestId}`,
-      text: questionTranscript(question, answers),
+      record: buildQuestionRecord(question, answers),
     })
     this.removeQuestion(requestId)
     return true

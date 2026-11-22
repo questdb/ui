@@ -11,7 +11,11 @@ import { MCPBridgeClient } from "../../utils/mcp/MCPBridgeClient"
 import type { MCPBridgeClientStatus } from "../../utils/mcp/MCPBridgeClient"
 import { dispatchMCPTool } from "../../utils/mcp/dispatchMCPTool"
 import { createNotebookFreshness } from "../../utils/notebooks/notebookFreshness"
-import { mcpTools } from "../../utils/tools/tools"
+import {
+  declaresBufferId,
+  mcpTools,
+  mutatesNotebook,
+} from "../../utils/tools/tools"
 import {
   EXPECTED_MCP_VERSION,
   type BridgeVersionMismatch,
@@ -281,17 +285,24 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         return true
       }
       const { conversationId } = call
-      const setStatus =
+      const ownedTool =
         conversationId === undefined
           ? undefined
-          : getLocalAgentChannel()?.captureToolStatus(client, conversationId)
+          : getLocalAgentChannel()?.captureToolRequest(client, conversationId)
+      const turnSignal =
+        mutatesNotebook(call.name) || declaresBufferId(call.name)
+          ? ownedTool?.signal
+          : undefined
+      const abortWithTurn = () => aborter.abort(turnSignal?.reason)
+      if (turnSignal?.aborted) abortWithTurn()
+      else turnSignal?.addEventListener("abort", abortWithTurn, { once: true })
       void (async () => {
         try {
           const result = await dispatchMCPTool(call, {
             ...dispatchCtxRef.current,
             ...(conversationId !== undefined && {
               freshness: agentFreshnessFor(conversationId),
-              setStatus,
+              setStatus: ownedTool?.setStatus,
             }),
             signal: aborter.signal,
           })
@@ -346,6 +357,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             isError: true,
           })
         } finally {
+          turnSignal?.removeEventListener("abort", abortWithTurn)
           if (deadlineTimer !== null) window.clearTimeout(deadlineTimer)
           inflightAbortersRef.current.delete(call.requestId)
         }
