@@ -140,7 +140,7 @@ const makeDeps = () => {
       deps.requestResultLoad(cellId)
     }),
     onSnapshotPersisted: vi.fn<[string, SingleQueryResult[]], void>(),
-    isRestoredResultStale: vi.fn(() => false),
+    hasStaleStatementBindings: vi.fn<[SingleQueryResult], boolean>(() => false),
   }
   const beginLoadOnRequest = () => {
     deps.requestResultLoad.mockImplementation((cellId: string) => {
@@ -1399,6 +1399,25 @@ describe("CellRefreshEngine", () => {
     ])
     const state = engine.getState("c1")
     expect(state?.settledKey).toBe(state?.queriesKey)
+  })
+
+  it("refetches unchanged Draw SQL with stale variable bindings during edit settle", async () => {
+    syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
+    await flushAsync()
+    deps.hasStaleStatementBindings.mockImplementation(
+      (result) => result.query === "select 1",
+    )
+    engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+    expect(deps.executeSingle.mock.calls.slice(2).map(([sql]) => sql)).toEqual([
+      "select 1",
+      "select 3",
+    ])
+    expect(cellResults.get("c1")?.results.map((r) => r.query)).toEqual([
+      "select 1",
+      "select 3",
+    ])
   })
 
   it("stamps only the executed statement on an edit; the carried one keeps its fetch time", async () => {
@@ -3847,12 +3866,14 @@ describe("CellRefreshEngine", () => {
           lastRunStatus: "success",
         }
         const frame = gridFrame([original])
-        deps.isRestoredResultStale.mockReturnValue(true)
+        deps.hasStaleStatementBindings.mockReturnValue(true)
         harness.beginLoadOnRequest()
         engine.sync([cell])
         engine.requestHydrate(cell.id)
         harness.settleLoad(cell.id, frame)
-        expect(deps.isRestoredResultStale).toHaveBeenCalledWith(frame)
+        expect(deps.hasStaleStatementBindings).toHaveBeenCalledWith(
+          frame.results[0],
+        )
         expect(deps.executeSingle).not.toHaveBeenCalled()
 
         engine.sync([

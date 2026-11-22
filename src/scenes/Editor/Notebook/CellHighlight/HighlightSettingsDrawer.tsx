@@ -94,6 +94,7 @@ type Props = {
   focus?: { section: string; column?: string } | null
   // The identity a cell without highlight settings uses.
   defaultIdentity?: string[]
+  hasSavedIdentity?: boolean
   // Rows of the current result that share a key under a chosen identity.
   duplicateCountOf: (identityColumns: string[]) => number
   onSave: (next: GridSettingsSave) => void
@@ -109,7 +110,9 @@ export const highlightToSave = (
   identityColumns: string[],
   rules: HighlightConfig["rules"],
   defaultIdentity: string[],
+  hasSavedIdentity = false,
 ): HighlightConfig | null =>
+  !hasSavedIdentity &&
   rules.length === 0 &&
   identityColumns.length === defaultIdentity.length &&
   identityColumns.every((c, i) => c === defaultIdentity[i])
@@ -137,6 +140,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   samples = {},
   focus,
   defaultIdentity = [],
+  hasSavedIdentity,
   duplicateCountOf,
   onSave,
   onCancel,
@@ -280,6 +284,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
         current.identityColumns,
         current.rules.filter(isCompleteRule),
         defaultIdentity,
+        hasSavedIdentity,
       ),
       formats: tidyFormats(formatsRef.current),
       gridMode: gridModeRef.current,
@@ -303,6 +308,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
         draftRef.current.identityColumns,
         [],
         defaultIdentity,
+        hasSavedIdentity,
       ),
       formats: tidyFormats(formatsRef.current),
       gridMode: gridModeRef.current,

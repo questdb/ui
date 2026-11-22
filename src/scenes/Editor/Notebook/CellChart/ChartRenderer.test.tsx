@@ -96,6 +96,43 @@ it("does not retain a removed overlay when a plain series takes its slot", async
   })
 })
 
+it("removes a horizontal bar chart's unused top scale", async () => {
+  setChartSize()
+  const view = (secondary: boolean) => (
+    <ChartRenderer
+      animate={false}
+      zoomWindow={{ start: 0, end: 100 }}
+      height={400}
+      option={{
+        xAxis: secondary
+          ? [
+              { type: "value" },
+              { type: "value", position: "top", name: "Secondary" },
+            ]
+          : { type: "value" },
+        yAxis: { type: "category", data: ["East", "West"] },
+        series: [
+          { type: "bar", name: "Primary", data: [1, 2], xAxisIndex: 0 },
+          {
+            type: "bar",
+            name: "Secondary",
+            data: [3, 4],
+            xAxisIndex: secondary ? 1 : 0,
+          },
+        ],
+      }}
+    />
+  )
+  const { container, rerender } = renderComponent(view(true))
+  const options = () => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host && echarts.getInstanceByDom(host)?.getOption()
+  }
+  await waitFor(() => expect(options()?.xAxis).toHaveLength(2))
+  rerender(view(false))
+  await waitFor(() => expect(options()?.xAxis).toHaveLength(1))
+})
+
 it("uses the current data and restores zoom when the chart theme changes", async () => {
   setChartSize()
   // Given a mounted chart that has already merged a newer result

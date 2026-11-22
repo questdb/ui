@@ -9,6 +9,7 @@ import { Button } from "../../../../components/Button"
 import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
 import {
   HighlightSettingsDrawer,
+  highlightToSave,
   type GridSettingsSave,
 } from "./HighlightSettingsDrawer"
 import {
@@ -84,6 +85,14 @@ const Fixture = ({
 }
 
 describe("highlight settings validation", () => {
+  it("retains an explicit identity matching the active statement's default", () => {
+    expect(highlightToSave(["k"], [], ["k"], true)).toEqual({
+      identityColumns: ["k"],
+      rules: [],
+    })
+    expect(highlightToSave(["k"], [], ["k"])).toBeNull()
+  })
+
   it("keeps invalid thresholds editable and only submits a valid correction", async () => {
     // Given
     const onSave = vi.fn()

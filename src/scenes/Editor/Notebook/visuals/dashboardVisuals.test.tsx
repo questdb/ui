@@ -82,6 +82,24 @@ describe("dashboard visuals", () => {
     expect(onSelect).toHaveBeenCalledWith("9007199254740993")
   })
 
+  it("renders the exact size of a LONG without compact formatting", () => {
+    const columns = [
+      { name: "price", type: "DOUBLE" },
+      { name: "size", type: "LONG" },
+    ]
+    renderComponent(
+      <OrderBook
+        formats={{ size: { decimals: 0 } }}
+        statements={[
+          { columns, rows: [[102, "9007199254740993"]] },
+          { columns, rows: [[100, "9007199254740992"]] },
+        ]}
+      />,
+    )
+    expect(screen.getByText("9,007,199,254,740,993")).toBeVisible()
+    expect(screen.getByText("9,007,199,254,740,992")).toBeVisible()
+  })
+
   it("rolls only changed mid-price digits and resets for a different query", () => {
     // Given a book with a mid price of 100.10 at two decimal places
     const columns = [

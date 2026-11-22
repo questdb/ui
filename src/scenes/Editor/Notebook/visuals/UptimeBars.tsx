@@ -189,8 +189,9 @@ const severityColor = (
     case "warning":
       return colors.statusWarning
     case "good":
-    case "neutral":
       return colors.chartUp
+    case "neutral":
+      return colors.statusInfo
     default:
       return colors.borderDefault
   }

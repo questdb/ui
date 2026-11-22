@@ -139,16 +139,49 @@ const Spark = styled.svg`
   pointer-events: none;
 `
 
-const Sparkline = ({ values, color }: { values: number[]; color: string }) => {
-  const id = useMemo(() => `spark-${Math.random().toString(36).slice(2)}`, [])
-  if (values.length < 2) return null
+const SPARKLINE_BUCKETS = 100
+const sparklineGeometryCache = new WeakMap<number[], string>()
+
+export const sparklineGeometry = (values: number[]): string => {
+  const cached = sparklineGeometryCache.get(values)
+  if (cached !== undefined) return cached
+  if (values.length < 2) return ""
   const min = Math.min(...values)
   const max = Math.max(...values)
-  const span = max - min || 1
-  const points = values.map(
-    (v, i) =>
-      `${(i / (values.length - 1)) * 100},${30 - ((v - min) / span) * 26 - 2}`,
-  )
+  // Keep each bucket's extrema in time order, plus the endpoints.
+  const indexes: number[] = [0]
+  const step = Math.ceil((values.length - 2) / SPARKLINE_BUCKETS) || 1
+  for (let start = 1; start < values.length - 1; start += step) {
+    let low = start
+    let high = start
+    for (
+      let i = start + 1;
+      i < Math.min(start + step, values.length - 1);
+      i++
+    ) {
+      if (values[i] < values[low]) low = i
+      if (values[i] > values[high]) high = i
+    }
+    indexes.push(Math.min(low, high))
+    if (low !== high) indexes.push(Math.max(low, high))
+  }
+  indexes.push(values.length - 1)
+  const scale = Number.isFinite(max - min) ? 1 : 2
+  const span = max / scale - min / scale || 1
+  const points = indexes
+    .map(
+      (i) =>
+        `${(i / (values.length - 1)) * 100},${28 - ((values[i] / scale - min / scale) / span) * 26}`,
+    )
+    .join(" ")
+  sparklineGeometryCache.set(values, points)
+  return points
+}
+
+const Sparkline = ({ values, color }: { values: number[]; color: string }) => {
+  const id = useMemo(() => `spark-${Math.random().toString(36).slice(2)}`, [])
+  const points = sparklineGeometry(values)
+  if (!points) return null
   return (
     <Spark viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden>
       <defs>
@@ -157,12 +190,9 @@ const Sparkline = ({ values, color }: { values: number[]; color: string }) => {
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <polygon
-        points={`0,30 ${points.join(" ")} 100,30`}
-        fill={`url(#${id})`}
-      />
+      <polygon points={`0,30 ${points} 100,30`} fill={`url(#${id})`} />
       <polyline
-        points={points.join(" ")}
+        points={points}
         fill="none"
         stroke={color}
         strokeWidth="1.4"
@@ -232,13 +262,13 @@ export const statTiles = (
 
   const sparkRows = statements[visual.sparklineQuery ?? 1] ?? undefined
   const sparks = new Map<string, number[]>()
+  const k = sparkRows ? firstColumnOf(sparkRows, "categorical") : -1
   if (sparkRows && sparkRows.rows.length > 0) {
     const t = firstColumnOf(sparkRows, "temporal")
     const v =
       columnIndex(sparkRows, rows.columns[valueIdx].name) >= 0
         ? columnIndex(sparkRows, rows.columns[valueIdx].name)
         : firstColumnOf(sparkRows, "numeric")
-    const k = firstColumnOf(sparkRows, "categorical")
     if (v < 0)
       problems.push("sparkline: the sparkline statement has no numeric column.")
     else {
@@ -271,7 +301,7 @@ export const statTiles = (
       caption: captionIdx >= 0 ? toLabel(row[captionIdx]) : null,
       value: row[valueIdx],
       change: changeIdx >= 0 ? toNumber(row[changeIdx]) : null,
-      spark: sparks.get(labelIdx >= 0 ? label : "") ?? sparks.get("") ?? [],
+      spark: sparks.get(k >= 0 && labelIdx >= 0 ? label : "") ?? [],
     }
   })
   return {

@@ -28,6 +28,7 @@ type Level = {
   price: Numeric
   rawPrice: string | number
   size: number
+  rawSize: string | number
   total: number | string | null
   selection: unknown
 }
@@ -56,7 +57,9 @@ const readSide = (
     const rawPrice = row[priceIdx]
     if (typeof rawPrice !== "string" && typeof rawPrice !== "number") return []
     const price = asNumeric(rawPrice)
-    const size = toNumber(row[sizeIdx])
+    const rawSize = row[sizeIdx]
+    if (typeof rawSize !== "string" && typeof rawSize !== "number") return []
+    const size = toNumber(rawSize)
     if (price === null || size === null) return []
     const total = totalIdx >= 0 ? row[totalIdx] : null
     return [
@@ -64,6 +67,7 @@ const readSide = (
         price,
         rawPrice,
         size,
+        rawSize,
         selection: clickColumn === undefined ? rawPrice : row[clickIdx],
         total:
           typeof total === "number" || typeof total === "string" ? total : null,
@@ -328,7 +332,7 @@ export const OrderBook = ({
           style={{ width: `${(depthOf(level) / maxDepth) * 100}%` }}
         />
         <span>{formatValue(level.rawPrice, priceFormat)}</span>
-        <span>{formatValue(level.size, sizeFormat)}</span>
+        <span>{formatValue(level.rawSize, sizeFormat)}</span>
         {cols === 3 && <span>{formatValue(level.total, totalFormat)}</span>}
       </Row>
     )

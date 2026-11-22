@@ -106,6 +106,10 @@ import { clearSettingsDrawerSessions } from "./settingsDrawer/settingsDrawerSess
 import { createResultTrendStore } from "./result-table/resultTrendStore"
 import { captureResultTrends } from "./result-table/resultTrendCapture"
 import { ResultTrendProvider } from "./result-table/ResultTrendContext"
+import {
+  createNotebookRowHistories,
+  RowHistoriesProvider,
+} from "./result-table/LiveRowsHistoryContext"
 import type { CellVirtualizationEngine } from "./cellVirtualization/cellVirtualizationEngine"
 import {
   CellResultHydrationEngine,
@@ -318,6 +322,8 @@ export const NotebookProvider: React.FC<{
   // Baselines for "previous result" highlight rules live with the notebook,
   // so a cell remount (maximize, restore) keeps them.
   const resultTrendStore = useMemo(() => createResultTrendStore(), [])
+  // Keep stable row ranks when the layout remounts a cell; scroll stays view-local.
+  const rowHistories = useMemo(() => createNotebookRowHistories(), [bufferId])
   // Results the hydration engine read back from storage, so their flashes
   // are timed from the save and never replay.
   const restoredResults = useMemo(() => new WeakSet<CellResult>(), [])
@@ -380,6 +386,10 @@ export const NotebookProvider: React.FC<{
   useEffect(() => {
     resultHydration.sync(store.cells)
   }, [store.cells])
+
+  useEffect(() => {
+    rowHistories.retainCells(store.cells)
+  }, [rowHistories, store.cells])
 
   // Reconcile live cells against the persisted snapshot index on mount:
   //   - snapshots whose cell no longer exists (out-of-band divergence, e.g. an
@@ -677,16 +687,13 @@ export const NotebookProvider: React.FC<{
       executeSingle,
       validateWithGlobals,
       setCellResult,
-      isRestoredResultStale: (result) =>
-        result.results.some(
-          (statement) =>
-            statement.type === "dql" &&
-            statement.effectiveQuery !== undefined &&
-            hasChangedBindings(
-              statement.query,
-              statement.effectiveQuery,
-              settingsRef.current.variables,
-            ),
+      hasStaleStatementBindings: (statement) =>
+        statement.type === "dql" &&
+        statement.effectiveQuery !== undefined &&
+        hasChangedBindings(
+          statement.query,
+          statement.effectiveQuery,
+          settingsRef.current.variables,
         ),
       getCellResult: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
@@ -1085,7 +1092,9 @@ export const NotebookProvider: React.FC<{
             <CellVirtualizationProvider value={cellVirtualizationEngine}>
               <CellResultHydrationProvider value={resultHydration}>
                 <ResultTrendProvider value={resultTrendStore}>
-                  {children}
+                  <RowHistoriesProvider value={rowHistories}>
+                    {children}
+                  </RowHistoriesProvider>
                 </ResultTrendProvider>
               </CellResultHydrationProvider>
             </CellVirtualizationProvider>

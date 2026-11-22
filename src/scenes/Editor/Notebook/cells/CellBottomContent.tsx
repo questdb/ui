@@ -20,6 +20,7 @@ import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
+import { useRowHistories } from "../result-table/LiveRowsHistoryContext"
 import { cellColumnsOf } from "../result-table/highlightConfig"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
@@ -72,7 +73,14 @@ export const CellBottomContent: React.FC<Props> = ({
     shallowEqual,
   )
   const resultStatus = useCellResultStatus(cell.id)
-  const viewportStore = useMemo(() => createResultGridViewportStore(), [])
+  const rowHistories = useRowHistories()
+  const viewportStore = useMemo(
+    () =>
+      createResultGridViewportStore(
+        cell.gridMode === "stable" ? rowHistories?.forCell(cell.id) : undefined,
+      ),
+    [cell.id, cell.gridMode, rowHistories],
+  )
 
   // Tabs follow the editor's statements; results attach to them by content.
   // A statement with no result renders the neutral "Not run" slot. A frame no

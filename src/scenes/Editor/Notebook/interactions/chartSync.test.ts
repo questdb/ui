@@ -139,6 +139,21 @@ describe("notebook chart sync", () => {
     }
   })
 
+  it("forwards a full reset as percentages, not a fixed time range", () => {
+    const source = makeChart()
+    const peer = makeChart()
+    setChartSync(1, { crosshair: "off", zoom: true })
+    join(1, source)
+    join(1, peer)
+    source.emit("datazoom", { dataZoomIndex: 1, start: 0, end: 100 })
+    expect(peer.dispatchAction).toHaveBeenCalledWith({
+      type: "dataZoom",
+      dataZoomIndex: 1,
+      start: 0,
+      end: 100,
+    })
+  })
+
   it("reads the peer's calculated zoom window from a value-only event", () => {
     // Given a time chart using a different scale from its sender
     const chart = echarts.init(null, undefined, {

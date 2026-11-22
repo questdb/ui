@@ -92,7 +92,10 @@ const structuralKey = (option: EChartsOption): string => {
   const xAxis = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis
   const yAxis = Array.isArray(option.yAxis) ? option.yAxis[0] : option.yAxis
   const hasZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
-  const axisCount = Array.isArray(option.yAxis) ? "2y" : "1y"
+  const axisCount = [
+    Array.isArray(option.xAxis) ? option.xAxis.length : Number(Boolean(xAxis)),
+    Array.isArray(option.yAxis) ? option.yAxis.length : Number(Boolean(yAxis)),
+  ].join(",")
   const scales = Array.isArray(option.visualMap)
     ? option.visualMap
     : option.visualMap

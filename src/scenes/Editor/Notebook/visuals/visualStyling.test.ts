@@ -11,14 +11,14 @@ import {
   treemapOption,
   volumeProfileOption,
 } from "./visualOptions"
-import { statTiles } from "./StatTiles"
+import { sparklineGeometry, statTiles } from "./StatTiles"
 import { bulletRows } from "./Bullets"
 import { clickedValue } from "../interactions/chartInteractions"
 import type { StatementRows } from "./statementRows"
 
 const rows = (
   columns: [string, string][],
-  data: (string | number | boolean)[][],
+  data: StatementRows["rows"],
 ): StatementRows => ({
   columns: columns.map(([name, type]) => ({ name, type })),
   rows: data,
@@ -765,6 +765,57 @@ describe("gaugeOption", () => {
 })
 
 describe("statTiles", () => {
+  it("bounds sparkline geometry while retaining endpoints and spikes", () => {
+    const values = Array.from({ length: 9_600 }, () => 0)
+    values[2_345] = -50
+    values[2_346] = 50
+    const points = sparklineGeometry(values).split(" ")
+    const xs = points.map((p) => Number(p.split(",")[0]))
+    expect(points.length).toBeLessThanOrEqual(202)
+    expect(xs[0]).toBe(0)
+    expect(xs.at(-1)).toBe(100)
+    expect(xs).toEqual([...xs].sort((a, b) => a - b))
+    expect(points.find((p) => p.endsWith(",28"))).toBeDefined()
+    expect(points.find((p) => p.endsWith(",2"))).toBeDefined()
+  })
+
+  it("uses unlabeled history for every tile only when the history has no label column", () => {
+    const summary = rows(
+      [
+        ["site", "SYMBOL"],
+        ["value", "LONG"],
+      ],
+      [
+        ["East", 2],
+        ["West", 5],
+      ],
+    )
+    const labeled = rows(
+      [
+        ["site", "SYMBOL"],
+        ["value", "LONG"],
+      ],
+      [
+        ["East", 1],
+        ["East", 2],
+        [null, 7],
+        [null, 9],
+      ],
+    )
+    const common = rows([["value", "LONG"]], [[7], [9]])
+    const visual = { type: "stat" } as const
+
+    expect(
+      statTiles(visual, [summary, labeled]).tiles.map((tile) => tile.spark),
+    ).toEqual([[1, 2], []])
+    expect(
+      statTiles(visual, [summary, common]).tiles.map((tile) => tile.spark),
+    ).toEqual([
+      [7, 9],
+      [7, 9],
+    ])
+  })
+
   it("reads a caption column under each value", () => {
     // Given
     const summary = rows(

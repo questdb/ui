@@ -67,6 +67,20 @@ const highlightConfig: HighlightConfig = {
 }
 
 describe("dashboard grid", () => {
+  it("does not use a sibling's numeric format for a text identifier", () => {
+    const grid = (type: string, value: CellValue) => (
+      <ResultGrid
+        dataSource={inMemoryDataSource([{ name: "code", type }], [[value]], -1)}
+        maxColumnWidth="auto"
+        columnFormats={{ code: { kind: "percent", decimals: 2 } }}
+      />
+    )
+    const { rerender } = renderComponent(grid("DOUBLE", 0.25))
+    expect(screen.getByText("25.00%")).toBeVisible()
+    rerender(grid("VARCHAR", "0012"))
+    expect(screen.getByText("0012")).toBeVisible()
+  })
+
   it("uses the readable light-theme text tone for positive thresholds", () => {
     renderComponent(
       <ThemeProvider theme={lightTheme}>

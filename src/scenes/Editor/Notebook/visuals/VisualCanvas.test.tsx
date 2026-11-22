@@ -62,6 +62,49 @@ describe("VisualCanvas", () => {
     }
   })
 
+  it("distinguishes Neutral uptime buckets from Good ones without counting downtime", () => {
+    const { container } = renderComponent(
+      <ThemeProvider theme={lightTheme}>
+        <VisualCanvas
+          {...defaults}
+          visual={{
+            type: "uptime",
+            columns: { end: "end_time" },
+            buckets: 10,
+            severity: { up: "good", maintenance: "neutral" },
+          }}
+          statements={[
+            {
+              columns: [
+                { name: "ts", type: "TIMESTAMP" },
+                { name: "lane", type: "SYMBOL" },
+                { name: "state", type: "SYMBOL" },
+                { name: "end_time", type: "TIMESTAMP" },
+              ],
+              rows: [
+                ["2026-01-01T00:00:00Z", "api", "up", "2026-01-01T05:00:00Z"],
+                [
+                  "2026-01-01T05:00:00Z",
+                  "api",
+                  "maintenance",
+                  "2026-01-01T10:00:00Z",
+                ],
+              ],
+            },
+          ]}
+        />
+      </ThemeProvider>,
+    )
+    const bars = container.querySelectorAll(
+      '[data-hook="uptime-bars"] [data-lane-index="0"] i',
+    )
+    expect(bars).toHaveLength(10)
+    expect(getComputedStyle(bars[0]).backgroundColor).not.toBe(
+      getComputedStyle(bars[9]).backgroundColor,
+    )
+    expect(screen.getByText("100 % uptime")).toBeVisible()
+  })
+
   it("drops all removed Stat tiles even when their labels repeat", () => {
     const view = (rows: (string | number)[][]) => (
       <VisualCanvas

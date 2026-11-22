@@ -51,7 +51,8 @@ export const tabPastCodeEditor = (
     event.key !== "Tab" ||
     event.shiftKey ||
     !(event.target instanceof HTMLElement) ||
-    !event.target.matches(CODE_EDITOR_FRAME)
+    !event.target.matches(CODE_EDITOR_FRAME) ||
+    !panel?.contains(event.target)
   )
     return false
   const next = controlAfter(panel, event.target)

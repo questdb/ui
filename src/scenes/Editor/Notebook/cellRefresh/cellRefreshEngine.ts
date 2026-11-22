@@ -114,7 +114,7 @@ export type CellRefreshDeps = {
   ) => Promise<ValidateQueryResult>
   setCellResult: (cellId: string, result: CellResult | undefined) => void
   getCellResult: (cellId: string) => CellResult | null | undefined
-  isRestoredResultStale?: (result: CellResult) => boolean
+  hasStaleStatementBindings?: (result: SingleQueryResult) => boolean
   isDrawCell: (cellId: string) => boolean
   isCellRunning: (cellId: string) => boolean
   resultLoadStatus: (cellId: string) => CellResultStatus
@@ -1113,7 +1113,9 @@ export class CellRefreshEngine {
           : getQueriesFromText(entry.pendingSql)
       if (
         coversEditorStatements(current, effectiveQueries) &&
-        deps.isRestoredResultStale?.(current)
+        current.results.some((result) =>
+          deps.hasStaleStatementBindings?.(result),
+        )
       ) {
         if (entry.kind === "grid") {
           // A later reveal must validate the frame again; an ordinary manual
@@ -1473,9 +1475,13 @@ export class CellRefreshEngine {
       const carried = previousFrame
         ? chartableResultsByKey(previousFrame)
         : new Map<StatementKey, SingleQueryResult>()
-      const carriedResults = statementKeysFor(queries).map((key) =>
-        carried.get(key),
-      )
+      const carriedResults = statementKeysFor(queries).map((key) => {
+        const previous = carried.get(key)
+        // A SQL edit can supersede a variable refresh before its frame lands.
+        return previous && !deps.hasStaleStatementBindings?.(previous)
+          ? previous
+          : undefined
+      })
       const fetchStartedAt = Date.now()
       const out = await Promise.all(
         queries.map((q, index) => {

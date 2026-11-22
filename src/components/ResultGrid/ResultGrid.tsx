@@ -156,11 +156,14 @@ const GridCell = React.memo(function GridCell({
   flashStartedAt,
   flashDurationMs,
   onCellClick,
-  format,
+  format: savedFormat,
   scale,
 }: GridCellProps) {
   const theme = useTheme()
   const colType = col?.type ?? ""
+  // Formats are saved by name, but a sibling statement can use that name
+  // for a different SQL type.
+  const format = formatTargetOf(colType) === null ? undefined : savedFormat
   const align = isLeftAligned(colType) ? "left" : "right"
   const sparklinePoints =
     loaded && format?.visual === "sparkline"

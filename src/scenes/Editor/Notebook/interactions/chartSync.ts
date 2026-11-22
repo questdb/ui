@@ -79,20 +79,29 @@ const hideTime = (bufferId: number, source: EChartsType) => {
   })
 }
 
+type ZoomEventTarget = ZoomTarget & { start?: number; end?: number }
+
 const zoomTo = (
   bufferId: number,
   source: EChartsType,
-  event?: ZoomTarget & { batch?: ZoomTarget[] },
+  event?: ZoomEventTarget & { batch?: ZoomEventTarget[] },
 ) => {
   const sync = settings.get(bufferId)
   if (!sync?.zoom || !isTimeChart(source)) return
   const controls = primaryXControls(source)
-  const zoom = (event?.batch ?? [event])
-    .map((target) => zoomForTarget(controls, target))
-    .find(Boolean)
-  const range = zoom?.getValueRange("x", 0)
-  if (!range || !range.every(Number.isFinite)) return
-  const [startValue, endValue] = range
+  const sourceZoom = (event?.batch ?? [event])
+    .map((target) => ({ target, zoom: zoomForTarget(controls, target) }))
+    .find(({ zoom }) => zoom !== undefined)
+  const range = sourceZoom?.zoom?.getValueRange("x", 0)
+  // A percentage reset means "follow all data", including future samples.
+  // An ordinary partial window still needs absolute bounds for sparse peers.
+  const reset = sourceZoom?.target?.start === 0 && sourceZoom.target.end === 100
+  const bounds = reset
+    ? { start: 0, end: 100 }
+    : range?.every(Number.isFinite)
+      ? { startValue: range[0], endValue: range[1] }
+      : null
+  if (!bounds) return
   drive(() => {
     for (const { instance } of others(bufferId, source)) {
       if (!isTimeChart(instance)) continue
@@ -101,8 +110,7 @@ const zoomTo = (
       instance.dispatchAction({
         type: "dataZoom",
         dataZoomIndex: peer.componentIndex,
-        startValue,
-        endValue,
+        ...bounds,
       })
     }
   })

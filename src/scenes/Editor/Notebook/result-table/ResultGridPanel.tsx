@@ -425,6 +425,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         samples={samples}
         focus={highlightDrawer.request?.focus}
         defaultIdentity={defaultIdentity}
+        hasSavedIdentity={savedHighlightConfig !== undefined}
         duplicateCountOf={duplicateCountOf}
         onSave={saveGridSettings}
         onCancel={highlightDrawer.cancel}
