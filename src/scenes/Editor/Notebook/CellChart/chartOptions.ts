@@ -63,6 +63,8 @@ export const withoutUnofferedOptions = (
   chart: ChartConfig,
   tabs: QueryTab[],
 ): ChartConfig => {
+  // No tab means we cannot assess availability from the current results.
+  if (tabs.length === 0) return chart
   const offered = chartOptionsOffered(chart, tabs, {})
   const next = { ...chart }
   if (!offered.lieDown) delete next.horizontal

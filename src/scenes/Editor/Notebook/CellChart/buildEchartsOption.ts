@@ -29,6 +29,7 @@ export type ResolvedQuery = {
   index: number
   columns: ColumnDefinition[]
   dataset: Dataset
+  partial?: boolean
   xColumn: string | null // for value extraction
   type: ChartType
   yColumns: string[]
@@ -170,10 +171,19 @@ const alignPointsToCategoryUnion = (
   xIdx: number,
   union: string[],
   toPoint: (row: Dataset[number]) => unknown,
+  combine?: (a: unknown, b: unknown) => unknown,
 ): unknown[] => {
   const byCategory = new Map<string, unknown>()
-  for (const row of rows)
-    byCategory.set(toCategoryLabel(row[xIdx]), toPoint(row))
+  for (const row of rows) {
+    const key = toCategoryLabel(row[xIdx])
+    const point = toPoint(row)
+    byCategory.set(
+      key,
+      combine && byCategory.has(key)
+        ? combine(byCategory.get(key), point)
+        : point,
+    )
+  }
   return union.map((label) => byCategory.get(label) ?? null)
 }
 
@@ -303,7 +313,10 @@ export const percentStackProblem = (
   queries: ResolvedQuery[],
 ): string | undefined => {
   for (const q of queries) {
-    if (!isPercentStack(q) || q.partitionByColumn == null) continue
+    if (!isPercentStack(q)) continue
+    if (q.partial)
+      return `Q${q.index + 1}: a 100% stack requires complete results. Narrow the query or aggregate the result in SQL.`
+    if (q.partitionByColumn == null) continue
     const idx = buildColumnIndexMap(q.columns)
     const partIdx = idx.get(q.partitionByColumn)
     const xIdx = q.xColumn == null ? undefined : idx.get(q.xColumn)
@@ -496,8 +509,33 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
         ? { value, columns: { [clickColumn]: row[clickIdx] } }
         : value
     }
+    const combineShare = (a: unknown, b: unknown) => {
+      const left = toNumberOrNull(pointValue(a))
+      const right = toNumberOrNull(pointValue(b))
+      const value =
+        left === null && right === null
+          ? null
+          : Math.abs(left ?? 0) + Math.abs(right ?? 0)
+      if (clickColumn === undefined || !isClickPoint(a) || !isClickPoint(b))
+        return value
+      return {
+        value,
+        columns: {
+          [clickColumn]:
+            a.columns[clickColumn] === b.columns[clickColumn]
+              ? a.columns[clickColumn]
+              : undefined,
+        },
+      }
+    }
     return !scatter && ctx.xMode === "category" && ctx.categoryUnion
-      ? alignPointsToCategoryUnion(rows, xIdx, ctx.categoryUnion, toPoint)
+      ? alignPointsToCategoryUnion(
+          rows,
+          xIdx,
+          ctx.categoryUnion,
+          toPoint,
+          isPercentStack(q) ? combineShare : undefined,
+        )
       : rows.map(toPoint)
   }
   const stack = isStacked ? `stack-${q.index}` : undefined

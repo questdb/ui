@@ -4003,6 +4003,31 @@ describe("CellRefreshEngine", () => {
       })
     })
 
+    it("does not replay a stopped refresh slot after a sibling reruns", async () => {
+      const queries = [
+        "select @desk as a",
+        "select @desk as b",
+        "select @desk as c",
+      ]
+      const grid = gridCell("g1", queries.join("; "), queries, false)
+      syncOnScreen([grid])
+      await flushAsync()
+      deps.executeSingle.mockImplementation(() => new Promise(() => undefined))
+      engine.refreshWhere(() => true)
+      await flushAsync()
+      engine.cancelSlot("g1", keyOf(queries[0]))
+      engine.noteRunStarted("g1", true)
+      deps.executeSingle.mockImplementation((sql) =>
+        Promise.resolve(dqlResult(sql)),
+      )
+      engine.noteRunFinished("g1", grid)
+      await flushAsync()
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        ...queries,
+        ...queries.slice(1),
+      ])
+    })
+
     it("refreshes siblings without replaying a statement stopped in the foreground", async () => {
       const queries = ["select @desk as a", "select @desk as b"]
       const grid = gridCell("g1", queries.join("; "), queries, false)

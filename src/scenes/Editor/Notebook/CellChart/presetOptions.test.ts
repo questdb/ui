@@ -240,6 +240,86 @@ describe("preset options", () => {
     },
   )
 
+  it("keeps the saved preset options when a refresh has no query tabs", () => {
+    const config = {
+      xColumn: "venue",
+      horizontal: true,
+      queries: [{ type: "bar" as const, yColumns: ["price"] }],
+    }
+    expect(withoutUnofferedOptions(config, [])).toEqual(config)
+  })
+
+  it("includes repeated categorical observations in percentage totals", () => {
+    const mix = query({
+      type: "stackedBar",
+      percentStack: true,
+      xColumn: "site",
+      yColumns: ["mw"],
+      partitionByColumn: "fuel",
+      columns: [
+        col("site", "SYMBOL"),
+        col("fuel", "SYMBOL"),
+        col("mw", "DOUBLE"),
+      ],
+      dataset: [
+        ["North", "gas", 30],
+        ["North", "gas", 20],
+        ["North", "wind", 50],
+      ],
+    })
+    const [gas, wind] = seriesOf(buildEchartsOption({ xColumn: "site" }, [mix]))
+    expect(gas.data).toEqual([50])
+    expect(wind.data).toEqual([50])
+  })
+
+  it("rejects a capped denominator but leaves absolute bars drawable", () => {
+    const sql = "select ts, fuel, mw"
+    const resolved = resolveDraw(
+      [sql],
+      [
+        {
+          type: "dql",
+          query: sql,
+          count: 3,
+          columns: [
+            col("ts", "TIMESTAMP"),
+            col("fuel", "SYMBOL"),
+            col("mw", "DOUBLE"),
+          ],
+          dataset: [
+            ["2026-01-01T00:00:00Z", "gas", 2],
+            ["2026-01-01T01:00:00Z", "wind", 1],
+          ],
+        },
+      ],
+      {
+        xColumn: "ts",
+        queries: [
+          {
+            type: "stackedBar",
+            yColumns: ["mw"],
+            partitionByColumn: "fuel",
+            percentStack: true,
+          },
+        ],
+      },
+    )
+    expect(drawProblems(resolved, undefined)).toContainEqual({
+      severity: "error",
+      message:
+        "Q1: a 100% stack requires complete results. Narrow the query or aggregate the result in SQL.",
+    })
+    expect(
+      buildEchartsOption(resolved.chart, resolved.renderQueries).series,
+    ).toBeUndefined()
+    expect(
+      buildEchartsOption(
+        resolved.chart,
+        resolved.renderQueries.map((q) => ({ ...q, percentStack: false })),
+      ).series,
+    ).toHaveLength(2)
+  })
+
   it("enables per-row Band hit targets only for configured selections", () => {
     const band = query({
       type: "band",

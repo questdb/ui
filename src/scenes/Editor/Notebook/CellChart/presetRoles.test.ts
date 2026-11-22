@@ -661,6 +661,46 @@ describe("role chart types", () => {
     expect(drawn.children[0].shape.points).toHaveLength(20)
   })
 
+  it("gives each Band row its own non-silent footprint inside the fill", () => {
+    const api = {
+      value: (dim: number, i: number) => [i * 10, 2, 8][dim],
+      coord: ([x, y]: number[]) => [x, y],
+      visual: () => "teal",
+    }
+    const draw = (i: number, clickEnabled: boolean) =>
+      (
+        areaRangeRenderItem as unknown as (
+          p: unknown,
+          a: unknown,
+        ) => {
+          children: { silent?: boolean; shape: { points: number[][] } }[]
+        }
+      )(
+        {
+          dataIndexInside: i,
+          dataInsideLength: 2,
+          encode: { x: [0], y: [1, 2] },
+          itemPayload: { clickEnabled },
+        },
+        api,
+      ).children
+    const hits = [draw(0, true), draw(1, true)].map((shapes) =>
+      shapes.filter((shape) => !shape.silent),
+    )
+    expect(hits.map((points) => points.length)).toEqual([1, 1])
+    expect(
+      hits.map(([shape]) => [
+        Math.min(...shape.shape.points.map(([x]) => x)),
+        Math.max(...shape.shape.points.map(([x]) => x)),
+      ]),
+    ).toEqual([
+      [0, 5],
+      [5, 10],
+    ])
+    expect(draw(0, false)).toEqual([])
+    expect(draw(1, false).map((shape) => shape.silent)).toEqual([true])
+  })
+
   it("sizes range bars on a time axis by the plot's length", () => {
     // Given 4 bars on a 400 px wide time axis (no category band)
     const params = {

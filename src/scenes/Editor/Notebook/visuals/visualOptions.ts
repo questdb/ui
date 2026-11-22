@@ -592,7 +592,14 @@ export const sunburstOption = (ctx: VisualContext): VisualBuild => {
           sort: undefined,
           nodeClick: false,
           itemStyle: { borderColor: colors.surfaceInset, borderWidth: 1.5 },
-          label: { color: colors.contentPrimary, fontSize: 11, minAngle: 8 },
+          label: {
+            color: colors.contentPrimary,
+            backgroundColor: colors.surfaceInset,
+            padding: [1, 3],
+            borderRadius: 2,
+            fontSize: 11,
+            minAngle: 8,
+          },
           data: withColorValues(h.tree),
         },
       ] as EChartsOption["series"],
@@ -968,6 +975,7 @@ export const mapOption = ({
           {
             type: "effectScatter",
             coordinateSystem: "geo",
+            showEffectOn: "emphasis",
             rippleEffect: { scale: 2.5, brushType: "stroke" },
             itemStyle: { color: colors.contentAccent },
             symbolSize: (v: number[]) =>

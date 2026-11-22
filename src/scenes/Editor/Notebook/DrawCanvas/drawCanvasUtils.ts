@@ -330,6 +330,7 @@ export const resolveDraw = (
       index: it.idx,
       columns: it.r.columns,
       dataset: it.r.dataset,
+      ...(it.r.count > it.r.dataset.length ? { partial: true } : {}),
       xColumn: ownX,
       type: it.qc.type,
       yColumns: it.qc.yColumns ?? [],

@@ -323,6 +323,7 @@ type Entry = {
   pendingGridVariableRefresh: boolean
   manualRefreshInFlight: boolean
   variableRefreshInFlight: boolean
+  replayStoppedSlots?: ReadonlySet<StatementKey>
   // A zero-survivor collapse dropped the display but kept the disk snapshot;
   // the next settle with no result asks hydration for a non-destructive
   // revive, so undo gets its rows back.
@@ -522,12 +523,8 @@ export class CellRefreshEngine {
   cancelSlot(cellId: string, statementKey: StatementKey) {
     const entry = this.entries.get(cellId)
     if (!entry || entry.kind !== "grid") return
-    const slotAbort = entry.slotAborts.get(statementKey)
-    if (slotAbort) {
-      slotAbort.abort()
-      return
-    }
     if (!entry.inFlight) return
+    entry.slotAborts.get(statementKey)?.abort()
     const cancelledSlots = new Set(entry.state.cancelledSlots)
     cancelledSlots.add(statementKey)
     this.setState(entry, { cancelledSlots })
@@ -571,6 +568,7 @@ export class CellRefreshEngine {
       if (entry.kind === "grid" && entry.state.classifyBlock?.kind === "write")
         continue
       refreshed++
+      entry.replayStoppedSlots = undefined
       if (entry.kind === "grid" && this.isRunPending(entry.cellId)) {
         this.refreshAfterRun.add(entry.cellId)
         continue
@@ -784,8 +782,15 @@ export class CellRefreshEngine {
     )
     const entry = this.entries.get(cellId)
     if (!entry) return
-    if (singleStatement && entry.variableRefreshInFlight)
+    if (singleStatement && entry.variableRefreshInFlight) {
       this.refreshAfterRun.add(cellId)
+      entry.replayStoppedSlots = new Set([
+        ...(entry.replayStoppedSlots ?? []),
+        ...entry.state.cancelledSlots,
+      ])
+    } else if (!singleStatement) {
+      entry.replayStoppedSlots = undefined
+    }
     this.abortRound(entry)
     entry.manualRefreshInFlight = false
   }
@@ -836,7 +841,10 @@ export class CellRefreshEngine {
   discardVariableRefresh(cellId: string) {
     this.refreshAfterRun.delete(cellId)
     const entry = this.entries.get(cellId)
-    if (entry) entry.pendingGridVariableRefresh = false
+    if (entry) {
+      entry.pendingGridVariableRefresh = false
+      entry.replayStoppedSlots = undefined
+    }
   }
 
   private isRunPending(cellId: string): boolean {
@@ -1365,9 +1373,12 @@ export class CellRefreshEngine {
     }
     const cancelledSlots = new Set<StatementKey>()
     if (entry.kind === "grid" && entry.variableRefreshInFlight) {
+      const keys = statementKeysFor(queries)
+      for (const key of keys)
+        if (entry.replayStoppedSlots?.has(key)) cancelledSlots.add(key)
+      entry.replayStoppedSlots = undefined
       const frame = this.getDeps().getCellResult(entry.cellId)
       if (coversEditorStatements(frame, queries)) {
-        const keys = statementKeysFor(queries)
         frame.results.forEach((result, index) => {
           if (
             (result.type === "cancelled" && result.reason === "user") ||

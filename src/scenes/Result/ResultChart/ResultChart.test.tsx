@@ -2,6 +2,7 @@
 import { renderComponent } from "../../../test/component"
 import React from "react"
 import { fireEvent, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import type { EChartsOption } from "echarts"
 import { Client, Type } from "../../../utils/questdb"
@@ -104,6 +105,60 @@ describe("result chart settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }))
     await waitFor(() => expect(series()[0].type).toBe("bar"))
     expect(series()[0].data).toEqual(result.dataset)
+  })
+
+  it("explains why Apply cannot draw an over-limit percentage stack", async () => {
+    const dense = {
+      ...result,
+      columns: [...result.columns, { name: "cohort", type: "STRING" }],
+      dataset: Array.from({ length: 31 }, (_, i) => [
+        new Date(i * 1000).toISOString(),
+        i + 1,
+        `cohort${i}`,
+      ]),
+      count: 31,
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify(dense), { status: 200 })),
+      ),
+    )
+    renderComponent(
+      <QuestContext.Provider
+        value={{
+          quest: new Client(),
+          questExecution: {} as React.ContextType<
+            typeof QuestContext
+          >["questExecution"],
+          buildVersion: { type: "oss", version: "test" },
+          commitHash: "test",
+        }}
+      >
+        <ResultChart
+          result={dense}
+          visible
+          onResetZoomFocus={() => undefined}
+        />
+      </QuestContext.Provider>,
+    )
+    await screen.findByLabelText("Renderer input")
+    await userEvent.click(screen.getByRole("button", { name: /^Chart type/ }))
+    await userEvent.click(
+      await screen.findByRole("menuitemradio", { name: "Area" }),
+    )
+    await userEvent.click(screen.getByRole("button", { name: /^Partition by/ }))
+    await userEvent.click(
+      await screen.findByRole("menuitemradio", { name: "cohort" }),
+    )
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /Stack to 100%/ }),
+    )
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "supports up to 30 partitions",
+    )
+    expect(screen.queryByLabelText("Renderer input")).not.toBeInTheDocument()
   })
 
   it("starts loading the chart code once the chart view shows", () => {

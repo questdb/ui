@@ -7,6 +7,7 @@ import {
   mapOption,
   sankeyOption,
   stateTimelineOption,
+  sunburstOption,
   treemapOption,
   volumeProfileOption,
 } from "./visualOptions"
@@ -357,6 +358,51 @@ it("explicitly clears obsolete point-map bounds for a global frame", () => {
       [35, 139],
     ])?.geo,
   ).toMatchObject({ boundingCoords: null })
+})
+
+it("gives Sunburst labels a theme surface independent of the sector fill", () => {
+  const { option } = sunburstOption({
+    visual: { type: "sunburst" },
+    formats: {},
+    colors: lightColors,
+    statements: [
+      rows(
+        [
+          ["market", "SYMBOL"],
+          ["volume", "INT"],
+        ],
+        [
+          ["Alpha", 10],
+          ["Beta", 10],
+        ],
+      ),
+    ],
+  })
+  expect(series(option)[0].label).toMatchObject({
+    color: lightColors.contentPrimary,
+    backgroundColor: lightColors.surfaceInset,
+  })
+})
+
+it("does not start World map ripples on a settled coordinate frame", () => {
+  const { option } = mapOption({
+    visual: { type: "map" },
+    formats: {},
+    colors: lightColors,
+    statements: [
+      rows(
+        [
+          ["lat", "DOUBLE"],
+          ["lon", "DOUBLE"],
+        ],
+        [[37, -122]],
+      ),
+    ],
+  })
+  expect(series(option)[0]).toMatchObject({
+    type: "effectScatter",
+    showEffectOn: "emphasis",
+  })
 })
 
 it("keeps the mapped point’s exact selection field separate from its coordinates", () => {

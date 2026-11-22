@@ -8,7 +8,10 @@ import { Reset } from "../../../components/icons"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
-import { buildEchartsOption } from "../../Editor/Notebook/CellChart/buildEchartsOption"
+import {
+  buildEchartsOption,
+  percentStackProblem,
+} from "../../Editor/Notebook/CellChart/buildEchartsOption"
 import type { ChartRendererHandle } from "../../Editor/Notebook/CellChart/ChartRenderer"
 import {
   ChartSuspense,
@@ -188,6 +191,12 @@ export const ResultChart: React.FC<Props> = ({
     [resolution],
   )
 
+  const stackProblem = useMemo(
+    () =>
+      resolution ? percentStackProblem(resolution.renderQueries) : undefined,
+    [resolution],
+  )
+
   const hasChartableColumns =
     resolution?.renderQueries.some(
       (query) =>
@@ -223,6 +232,7 @@ export const ResultChart: React.FC<Props> = ({
   }
 
   const canDraw =
+    stackProblem === undefined &&
     option !== null &&
     chartResult !== null &&
     chartResult.dataset.length > 0 &&
@@ -284,6 +294,17 @@ export const ResultChart: React.FC<Props> = ({
       <EmptyState $tone="danger" data-hook="result-chart-error">
         <WarningIcon size={32} weight="fill" aria-hidden />
         <span>{chartQuery.message}</span>
+      </EmptyState>
+    )
+  } else if (stackProblem) {
+    body = (
+      <EmptyState
+        $tone="danger"
+        role="alert"
+        data-hook="result-chart-stack-error"
+      >
+        <WarningIcon size={32} weight="fill" aria-hidden />
+        <span>{stackProblem}</span>
       </EmptyState>
     )
   } else if (canDraw) {
