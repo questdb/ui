@@ -221,6 +221,10 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     const instanceRef = useRef<EChartsType | null>(null)
     useEffect(
       () => () => {
+        // A remount's new instance can become ready before this deferred
+        // cleanup runs; only the disposed instance of the old key is released.
+        const instance = instanceRef.current
+        if (instance && !instance.isDisposed()) return
         instanceRef.current = null
         onInstanceRef.current?.(null)
       },

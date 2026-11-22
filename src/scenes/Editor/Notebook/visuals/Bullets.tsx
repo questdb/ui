@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import styled, { useTheme } from "styled-components"
+import styled, { keyframes, useTheme } from "styled-components"
 import {
   formatValue,
   toneColor,
@@ -46,8 +46,7 @@ const Item = styled.div`
   }
 
   &:hover > [data-card] {
-    opacity: 1;
-    transform: translateY(0);
+    display: block;
   }
 `
 
@@ -121,6 +120,13 @@ const Target = styled.i`
   background: ${({ theme }) => theme.color.contentPrimary};
 `
 
+const cardIn = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem);
+  }
+`
+
 const Card = styled.div`
   position: absolute;
   z-index: 3;
@@ -134,11 +140,13 @@ const Card = styled.div`
   box-shadow: 0 6px 20px ${({ theme }) => theme.color.shadowMedium};
   font-size: 1.2rem;
   pointer-events: none;
-  opacity: 0;
-  transform: translateY(-0.4rem);
-  transition:
-    opacity 120ms ease-out,
-    transform 120ms ease-out;
+  /* Hidden cards take no room, so they add no scroll range to the list. */
+  display: none;
+  animation: ${cardIn} 120ms ease-out;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
 
   dl {
     display: grid;

@@ -415,6 +415,35 @@ export const DrawCanvas: React.FC<Props> = ({
     emptyMessage = "No data to plot."
   }
 
+  // A settled draw with nothing to show replaces the previous report, so the
+  // agent does not read an earlier draw's series as the current chart.
+  const settledEmpty =
+    empty &&
+    !loading &&
+    !cancelled &&
+    classifyBlock === null &&
+    queries.length > 0 &&
+    settledForCurrentQueries
+  useEffect(() => {
+    if (!settledEmpty) return
+    setRenderReport(bufferId, cell.id, {
+      kind: drawKind,
+      ...(visual ? { visualConfig: visual } : {}),
+      drawn: visual ? { type: visual.type } : {},
+      problems: [
+        { message: emptyMessage, severity: hadError ? "error" : "warning" },
+      ],
+    })
+  }, [
+    bufferId,
+    cell.id,
+    drawKind,
+    emptyMessage,
+    hadError,
+    settledEmpty,
+    visual,
+  ])
+
   useEffect(() => {
     const reset = (payload?: { cellId?: string; localOnly?: boolean }) => {
       if (payload?.cellId === cell.id) handleResetZoom(payload.localOnly)

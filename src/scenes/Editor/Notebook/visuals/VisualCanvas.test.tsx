@@ -164,6 +164,31 @@ describe("VisualCanvas", () => {
     )
   })
 
+  it("keeps Bullet hover cards out of the layout until a row is hovered", () => {
+    const { container } = renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "bullet" }}
+        statements={[
+          {
+            columns: [
+              { name: "desk", type: "SYMBOL" },
+              { name: "reading", type: "DOUBLE" },
+            ],
+            rows: [
+              ["East", 4],
+              ["West", 6],
+            ],
+          },
+        ]}
+      />,
+    )
+    const cards = container.querySelectorAll("[data-card]")
+    expect(cards).toHaveLength(2)
+    for (const card of Array.from(cards))
+      expect(getComputedStyle(card).display).toBe("none")
+  })
+
   it("mounts only nearby Bullet bars but still reports all rows", () => {
     const width = vi
       .spyOn(HTMLElement.prototype, "offsetWidth", "get")
@@ -380,6 +405,35 @@ describe("VisualCanvas", () => {
       "The query returned no rows.",
     )
   })
+
+  it.each(["stat", "liquidityHeatmap"] as const)(
+    "reports a failed first statement of a %s visual as a failure, not as no rows",
+    (type) => {
+      renderComponent(
+        <VisualCanvas
+          {...defaults}
+          visual={{ type }}
+          statements={[
+            null,
+            {
+              columns: [
+                { name: "ts", type: "TIMESTAMP" },
+                { name: "price", type: "DOUBLE" },
+              ],
+              rows: [["2026-01-01T00:00:00Z", 1]],
+            },
+          ]}
+          statementErrors={["table does not exist", null]}
+        />,
+      )
+      const message = "Query failed: table does not exist"
+      expect(screen.getByRole("alert")).toHaveTextContent(message)
+      expect(screen.queryByText("The query returned no rows.")).toBeNull()
+      expect(getRenderReport(bufferId, cellId)?.problems).toEqual([
+        { message, severity: "error" },
+      ])
+    },
+  )
 
   it("reports a rejected map download instead of continuing to load", async () => {
     renderComponent(

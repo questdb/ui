@@ -288,18 +288,21 @@ const enforceRendererPolicy = (
       enforceRendererPolicy(child, inTitle, inTreemapData),
     )
   if (!isRecord(node)) return node
+  // Tree series inherit `link` from the series and its levels into every
+  // node, so navigation is removed at all three scopes.
+  const treeSeries = node.type === "treemap" || node.type === "sunburst"
   return Object.fromEntries(
     Object.entries(node)
       .filter(
-        ([key]) => !(inTitle || inTreemapData) || !TITLE_NAVIGATION.has(key),
+        ([key]) =>
+          !(inTitle || inTreemapData || treeSeries) ||
+          !TITLE_NAVIGATION.has(key),
       )
       .map(([key, value]) => {
         const child = enforceRendererPolicy(
           value,
           key === "title" || inTitle,
-          ((node.type === "treemap" || node.type === "sunburst") &&
-            key === "data") ||
-            inTreemapData,
+          (treeSeries && (key === "data" || key === "levels")) || inTreemapData,
         )
         if (key !== "tooltip") return [key, child]
         const normalize = (tooltip: unknown) => {

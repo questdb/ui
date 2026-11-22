@@ -4,7 +4,7 @@ import React from "react"
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
-import { OrderBook } from "./OrderBook"
+import { MAX_ORDER_BOOK_LEVELS, OrderBook, orderBookDrawn } from "./OrderBook"
 import { StatTiles } from "./StatTiles"
 import type { StatementRows } from "./statementRows"
 
@@ -195,5 +195,36 @@ describe("dashboard visuals", () => {
     // Then the same bar receives the new width instead of remounting to flash
     expect(container.querySelector('[data-hook="order-book-ask"] i')).toBe(bar)
     expect(bar).toHaveStyle({ width: "40%" })
+  })
+  it("lists the levels nearest the spread of a deep book and says how many", () => {
+    const columns = [
+      { name: "price", type: "DOUBLE" },
+      { name: "size", type: "DOUBLE" },
+    ]
+    const depth = MAX_ORDER_BOOK_LEVELS + 300
+    const statements = [
+      {
+        columns,
+        rows: Array.from({ length: depth }, (_, i) => [101 + i, 1]),
+      },
+      { columns, rows: Array.from({ length: 3 }, (_, i) => [99 - i, 1]) },
+    ]
+    const { container } = renderComponent(
+      <OrderBook formats={{}} statements={statements} />,
+    )
+    const asks = container.querySelectorAll('[data-hook="order-book-ask"]')
+    expect(asks).toHaveLength(MAX_ORDER_BOOK_LEVELS)
+    // The best ask sits next to the mid price; the deepest shown is the cap.
+    expect(asks[asks.length - 1]).toHaveTextContent("101")
+    expect(asks[0]).toHaveTextContent(String(100 + MAX_ORDER_BOOK_LEVELS))
+    expect(
+      container.querySelectorAll('[data-hook="order-book-bid"]'),
+    ).toHaveLength(3)
+    const notice = `Showing the first ${MAX_ORDER_BOOK_LEVELS} of ${depth} asks.`
+    expect(screen.getByText(notice)).toBeVisible()
+    expect(orderBookDrawn(statements)).toMatchObject({
+      drawn: { asks: MAX_ORDER_BOOK_LEVELS, bids: 3 },
+      problems: [{ message: notice, severity: "warning" }],
+    })
   })
 })

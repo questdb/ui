@@ -340,6 +340,19 @@ describe("CellRefreshEngine", () => {
       expect(snapshot.results).toHaveLength(1)
     })
 
+    it("persists the run token of the frame it saves", async () => {
+      // Given a draw cell whose fetch settles a frame
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then the snapshot keeps that frame's run token for rehydration
+      const snapshot = vi.mocked(persistCellSnapshot).mock.calls[0][0]
+      const current = cellResults.get("c1")
+      expect(snapshot.results).toBe(current?.results)
+      expect(typeof current?.timestamp).toBe("number")
+      expect(snapshot.runToken).toBe(current?.timestamp)
+    })
+
     it("notifies the persisted frame with the exact array held by the cell", async () => {
       // Given a draw cell whose fetch persists
       // When the save confirms

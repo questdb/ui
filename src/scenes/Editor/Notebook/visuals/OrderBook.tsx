@@ -35,6 +35,17 @@ type Level = {
 
 type Side = { levels: Level[]; totalName?: string; problem?: string }
 
+// A ladder lists the levels nearest the spread; deeper levels of an unlimited
+// book would only cost render time on every refresh.
+export const MAX_ORDER_BOOK_LEVELS = 200
+
+const shownLevels = (side: Side) => side.levels.slice(0, MAX_ORDER_BOOK_LEVELS)
+
+const levelLimitNotice = (side: Side, name: "asks" | "bids") =>
+  side.levels.length > MAX_ORDER_BOOK_LEVELS
+    ? `Showing the first ${MAX_ORDER_BOOK_LEVELS.toLocaleString()} of ${side.levels.length.toLocaleString()} ${name}.`
+    : undefined
+
 const readSide = (
   rows: StatementRows | null,
   columns: VisualColumns | undefined,
@@ -282,9 +293,13 @@ export const OrderBook = ({
   const totalFormat = (totalName && formats[totalName]) || sizeFormat
   const cols = totalName ? 3 : 2
   const depthOf = (l: Level) => toNumber(l.total) ?? l.size
+  const shownAsks = shownLevels(asks)
+  const shownBids = shownLevels(bids)
+  const asksNotice = levelLimitNotice(asks, "asks")
+  const bidsNotice = levelLimitNotice(bids, "bids")
   const maxDepth = Math.max(
-    ...asks.levels.map(depthOf),
-    ...bids.levels.map(depthOf),
+    ...shownAsks.map(depthOf),
+    ...shownBids.map(depthOf),
     1e-12,
   )
   const bestAsk = asks.levels[0]?.price
@@ -353,7 +368,10 @@ export const OrderBook = ({
         ) : asks.levels.length === 0 ? (
           <Empty>No asks</Empty>
         ) : (
-          [...asks.levels].reverse().map((l) => row(l, "ask"))
+          <>
+            {asksNotice && <Empty>{asksNotice}</Empty>}
+            {[...shownAsks].reverse().map((l) => row(l, "ask"))}
+          </>
         )}
         <Mid ref={midRef}>
           <MidPrice data-hook="order-book-mid-price">
@@ -380,7 +398,10 @@ export const OrderBook = ({
         ) : bids.levels.length === 0 ? (
           <Empty>No bids</Empty>
         ) : (
-          bids.levels.map((l) => row(l, "bid"))
+          <>
+            {shownBids.map((l) => row(l, "bid"))}
+            {bidsNotice && <Empty>{bidsNotice}</Empty>}
+          </>
         )}
       </Ladder>
     </Root>
@@ -395,8 +416,14 @@ export const orderBookDrawn = (
   const asks = readSide(statements[0], columns)
   const bids = readSide(statements[1], columns)
   return {
-    drawn: { asks: asks.levels.length, bids: bids.levels.length },
+    drawn: {
+      asks: shownLevels(asks).length,
+      bids: shownLevels(bids).length,
+    },
     problems: [
+      ...[levelLimitNotice(asks, "asks"), levelLimitNotice(bids, "bids")]
+        .filter((notice): notice is string => notice !== undefined)
+        .map((message) => ({ message, severity: "warning" as const })),
       ...(["Ask", "Bid"] as const).flatMap((side, index) => {
         const error = statementErrors?.[index]
         return error

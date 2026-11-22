@@ -494,20 +494,23 @@ export const treemapOption = (ctx: VisualContext): VisualBuild => {
                   : formatValue(v, valueFormat)
               return `{name|${name}}\n{value|${second}}`
             },
+            // Palette fills are too light for primary text in the dark
+            // theme; a surface halo keeps labels legible on every tile.
             rich: {
               name: {
                 fontSize: 12,
                 fontWeight: 600,
                 color: colors.contentPrimary,
                 lineHeight: 16,
-                textBorderWidth: 0,
+                textBorderColor: colors.surfaceInset,
+                textBorderWidth: 3,
               },
               value: {
                 fontSize: 11,
                 color: colors.contentPrimary,
-                opacity: 0.75,
                 lineHeight: 14,
-                textBorderWidth: 0,
+                textBorderColor: colors.surfaceInset,
+                textBorderWidth: 3,
               },
             },
           },

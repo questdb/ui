@@ -300,6 +300,33 @@ describe("buildCustomOption", () => {
     ])
   })
 
+  it("removes sunburst navigation inherited from the series and its levels", () => {
+    const { option } = buildCustomOption(
+      {
+        series: [
+          {
+            type: "sunburst",
+            nodeClick: "link",
+            link: "https://example.com/report",
+            target: "blank",
+            levels: [{}, { link: "https://example.com/level", r0: 10 }],
+            data: [{ name: "Desk", value: 3 }],
+          },
+        ],
+      },
+      [],
+      false,
+    )
+    expect(option.series).toEqual([
+      {
+        type: "sunburst",
+        nodeClick: "link",
+        levels: [{}, { r0: 10 }],
+        data: [{ name: "Desk", value: 3 }],
+      },
+    ])
+  })
+
   it("removes navigation metadata from titles at the renderer boundary", () => {
     const title = {
       text: "Daily volume",

@@ -1,4 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { PaneEmptyState } from "../PaneEmptyState"
 import styled, { useTheme } from "styled-components"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -267,6 +274,40 @@ const useWidth = () => {
   return [setNode, node, width] as const
 }
 
+// A lane's bars re-render only when that lane's buckets or hovered bar
+// change, not on every bar the pointer enters elsewhere.
+const LaneBars = memo(function LaneBars({
+  lane,
+  buckets,
+  count,
+  gap,
+  activeIndex,
+  severity,
+  onEnter,
+}: {
+  lane: string
+  buckets: Bucket[]
+  count: number
+  gap: number
+  activeIndex: number | null
+  severity: VisualConfig["severity"]
+  onEnter: (lane: string, index: number) => void
+}) {
+  const { color: colors } = useTheme()
+  return (
+    <Bars $count={count} $gap={gap}>
+      {buckets.map((bucket, index) => (
+        <Bar
+          key={bucket.from}
+          $active={activeIndex === index}
+          $color={severityColor(bucketSeverity(bucket, severity), colors)}
+          onMouseEnter={() => onEnter(lane, index)}
+        />
+      ))}
+    </Bars>
+  )
+})
+
 type Props = {
   visual: VisualConfig
   statements: (StatementRows | null)[]
@@ -284,6 +325,15 @@ export const UptimeBars = ({
   const [ref, scrollElement, width] = useWidth()
   const [hover, setHover] = useState<{ lane: string; index: number } | null>(
     null,
+  )
+  const enterBar = useCallback(
+    (lane: string, index: number) =>
+      setHover((previous) =>
+        previous?.lane === lane && previous.index === index
+          ? previous
+          : { lane, index },
+      ),
+    [],
   )
   const read = useMemo(
     () => readStateSegments(visual, statements[0], clickColumn),
@@ -443,19 +493,15 @@ export const UptimeBars = ({
                   {capitalise(state)}
                 </Current>
               </Head>
-              <Bars $count={count} $gap={gap}>
-                {buckets.map((bucket, index) => (
-                  <Bar
-                    key={bucket.from}
-                    $active={hover?.lane === lane && hover.index === index}
-                    $color={severityColor(
-                      bucketSeverity(bucket, severity),
-                      colors,
-                    )}
-                    onMouseEnter={() => setHover({ lane, index })}
-                  />
-                ))}
-              </Bars>
+              <LaneBars
+                lane={lane}
+                buckets={buckets}
+                count={count}
+                gap={gap}
+                activeIndex={hover?.lane === lane ? hover.index : null}
+                severity={severity}
+                onEnter={enterBar}
+              />
               <Foot>
                 <span>{span} ago</span>
                 <hr />

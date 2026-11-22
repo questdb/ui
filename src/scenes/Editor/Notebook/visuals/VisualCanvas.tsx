@@ -144,11 +144,20 @@ export const VisualCanvas = ({
     ? (value: unknown) => setVariables({ [click.variable]: sqlLiteral(value) })
     : undefined
 
+  // Every visual but the order book (which reports each side) draws from the
+  // first statement, so its failure is the visual's failure, not "no rows".
+  const primaryError =
+    visual.type === "orderBook" ? null : (statementErrors?.[0] ?? null)
+  const primaryFailure =
+    primaryError === null ? null : `Query failed: ${primaryError}`
+
   // What was drawn, for the agent.
   useEffect(() => {
     let drawn: Record<string, number | string | boolean> = {}
     let problems: { message: string; severity: "error" | "warning" }[] = []
-    if (built) {
+    if (primaryFailure) {
+      problems = [{ message: primaryFailure, severity: "error" }]
+    } else if (built) {
       drawn = built.drawn
       problems = built.problems
     } else if (visual.type === "orderBook") {
@@ -207,9 +216,12 @@ export const VisualCanvas = ({
     visual,
     statements,
     statementErrors,
+    primaryFailure,
     click?.column,
   ])
 
+  if (primaryFailure)
+    return <PaneEmptyState role="alert">{primaryFailure}</PaneEmptyState>
   switch (visual.type) {
     case "stat":
       return (

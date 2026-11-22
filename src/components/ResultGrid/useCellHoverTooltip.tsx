@@ -18,7 +18,8 @@ const SHOW_DELAY_MS = 700
 // the "+N more" note is accurate and nothing is clipped without indication.
 const MAX_TOOLTIP_CHARS = 400
 const TOOLTIP_MAX_WIDTH = "min(800px, 90vw)"
-const CELL_ID_PATTERN = /^cell-(\d+)-(\d+)$/
+// Cells carry their coordinate separately from the grid-scoped element id.
+const CELL_COORDINATE_PATTERN = /^cell-(\d+)-(\d+)$/
 const TARGET_SELECTOR =
   '[data-hook="grid-cell"], [data-hook="grid-header-name"]'
 
@@ -82,7 +83,9 @@ const resolveTruncatedText = (
     return target.textContent ?? ""
   }
   const cellText = target.querySelector('[data-hook="grid-cell-text"]')
-  const match = CELL_ID_PATTERN.exec(target.id)
+  const match = CELL_COORDINATE_PATTERN.exec(
+    target.getAttribute("data-grid-coordinate") ?? "",
+  )
   if (!match || !(cellText instanceof HTMLElement)) return null
   const [, row, col] = match
   const value = getData(Number(row), Number(col))

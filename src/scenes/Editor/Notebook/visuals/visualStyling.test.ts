@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { lightColors } from "../../../../theme"
+import { darkColors, lightColors } from "../../../../theme"
 import {
   gaugeOption,
   graphOption,
@@ -358,6 +358,37 @@ it("explicitly clears obsolete point-map bounds for a global frame", () => {
       [35, 139],
     ])?.geo,
   ).toMatchObject({ boundingCoords: null })
+})
+
+it("outlines Dark Treemap labels with the chart surface on palette tiles", () => {
+  const { option } = treemapOption({
+    visual: { type: "treemap" },
+    formats: {},
+    colors: darkColors,
+    statements: [
+      rows(
+        [
+          ["market", "SYMBOL"],
+          ["volume", "INT"],
+        ],
+        [
+          ["Alpha", 10],
+          ["Beta", 10],
+        ],
+      ),
+    ],
+  })
+  const { rich } = series(option)[0].label as {
+    rich: Record<"name" | "value", Record<string, unknown>>
+  }
+  for (const style of [rich.name, rich.value]) {
+    expect(style).toMatchObject({
+      color: darkColors.contentPrimary,
+      textBorderColor: darkColors.surfaceInset,
+      textBorderWidth: 3,
+    })
+    expect(style.opacity).toBeUndefined()
+  }
 })
 
 it("gives Sunburst labels a theme surface independent of the sector fill", () => {
