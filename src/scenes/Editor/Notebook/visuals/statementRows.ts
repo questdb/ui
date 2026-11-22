@@ -106,6 +106,8 @@ export type TreeNode = {
   // The row's value of a colour column, when given.
   colorValue?: number
   columns?: Record<string, StatementRows["rows"][number][number]>
+  // The node stands for a NULL path value.
+  isNull?: boolean
 }
 
 /**
@@ -138,6 +140,9 @@ export const treeFromPath = (
         children.set(name, child)
         ;(node.children ??= []).push(child)
       }
+      // A NULL path value reads as an empty name; an unbound click on it
+      // selects NULL.
+      if (row[p] === null || row[p] === undefined) child.isNull = true
       if (level === pathIdx.length - 1) {
         child.value = (child.value ?? 0) + (toNumber(row[valueIdx]) ?? 0)
         if (column !== undefined && !ambiguous.has(child)) {

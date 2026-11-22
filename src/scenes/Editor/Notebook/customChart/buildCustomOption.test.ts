@@ -17,6 +17,53 @@ const rows = (
 })
 
 describe("buildCustomOption", () => {
+  it.each([
+    ["tree", { shape: "tree", path: "sector" }],
+    ["tuples", { shape: "tuples", columns: "sector" }],
+    ["lines", { shape: "lines", columns: 4 }],
+  ])(
+    "reports a %s placeholder with a field of the wrong type instead of throwing",
+    (_shape, spec) => {
+      const built = buildCustomOption(
+        { series: [{ type: "treemap", data: { $rows: spec } }] },
+        [rows([["sector", "SYMBOL"]], [["tech"]])],
+        false,
+      )
+      expect(built.problems).toContainEqual(
+        expect.objectContaining({ severity: "error" }),
+      )
+    },
+  )
+
+  it("selects NULL for an unbound click on an item with a NULL name", () => {
+    const built = buildCustomOption(
+      {
+        series: [
+          {
+            type: "pie",
+            data: { $rows: { shape: "items", name: "desk", value: "v" } },
+          },
+        ],
+      },
+      [
+        rows(
+          [
+            ["desk", "SYMBOL"],
+            ["v", "DOUBLE"],
+          ],
+          [
+            ["a", 1],
+            [null as unknown as string, 2],
+          ],
+        ),
+      ],
+      false,
+    )
+    const [pie] = built.option.series as { data: object[] }[]
+    expect(pie.data[0]).not.toHaveProperty("selection")
+    expect(pie.data[1]).toMatchObject({ name: "", selection: null })
+  })
+
   it("applies the data:-only image rule to symbols bound from rows", () => {
     // Given an option that binds a text column into a mark line's symbols
     const pixel = "image://data:image/png;base64,AAAA"

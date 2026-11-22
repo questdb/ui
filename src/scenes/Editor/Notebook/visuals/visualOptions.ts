@@ -297,7 +297,10 @@ export const stateTimelineOption = ({
   )
   const laneIndex = new Map(lanes.map((lane, index) => [lane, index]))
   const stateIndex = new Map(states.map((state, index) => [state, index]))
-  type Item = number[] | { value: number[]; columns: Record<string, unknown> }
+  type Item =
+    | number[]
+    | { value: number[]; columns: Record<string, unknown> }
+    | { value: number[]; selection: null }
   const seriesData = states.map((): Item[] => [])
   for (const segment of segs) {
     const lane = laneIndex.get(segment.lane)
@@ -307,7 +310,10 @@ export const stateTimelineOption = ({
     seriesData[state].push(
       clickColumn !== undefined && segment.selection !== undefined
         ? { value, columns: { [clickColumn]: segment.selection } }
-        : value,
+        : // A NULL lane's name is empty: an unbound click selects NULL.
+          clickColumn === undefined && read.nullLanes?.has(segment.lane)
+          ? { value, selection: null }
+          : value,
     )
   }
   const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16)
@@ -394,6 +400,7 @@ const withColorValues = (nodes: TreeNode[]): unknown[] =>
     name: n.name,
     value: n.colorValue !== undefined ? [n.value, n.colorValue] : n.value,
     ...(n.columns ? { columns: n.columns } : {}),
+    ...(n.isNull ? { selection: null } : {}),
     ...(n.children ? { children: withColorValues(n.children) } : {}),
   }))
 

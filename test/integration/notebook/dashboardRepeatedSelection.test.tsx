@@ -307,3 +307,21 @@ it("keeps a running re-query when its value is clicked again", async () => {
   expect(observation().queries).toBe(1)
   expect(screen.getByText("Refreshing...")).toBeInTheDocument()
 })
+
+it("does not re-run a cell already showing the clicked value", async () => {
+  // Given the dependent cell re-ran for west after a click
+  const { observation, clickMark } = await setup(9905)
+  clickMark("west", 9)
+  await waitFor(() => expect(observation().dependent).toBe("west"))
+
+  // When the user clicks west again
+  clickMark("west", 9)
+  await act(() => new Promise((resolve) => setTimeout(resolve, 400)))
+
+  // Then its rows already match, and nothing runs
+  expect(observation()).toEqual({
+    binding: "'west'",
+    dependent: "west",
+    queries: 1,
+  })
+})

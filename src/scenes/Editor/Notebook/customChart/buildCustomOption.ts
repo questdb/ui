@@ -87,7 +87,37 @@ type Report = (
   severity?: OptionProblem["severity"],
 ) => void
 
+// A placeholder that does not bind (a wrong field type in an agent's or an
+// imported option) reports a problem and binds nothing: it must not take the
+// console down with it.
 const resolveRows = (
+  spec: RowsSpec,
+  statements: (StatementRows | null)[],
+  path: string,
+  report: Report,
+): unknown => {
+  for (const key of ["columns", "path"] as const)
+    if (spec[key] !== undefined && !Array.isArray(spec[key])) {
+      report(
+        `${path}.${key}`,
+        `${key} must be a list of column names.`,
+        "error",
+      )
+      return []
+    }
+  try {
+    return bindRows(spec, statements, path, report)
+  } catch (error) {
+    report(
+      path,
+      `The rows could not be bound: ${error instanceof Error ? error.message : String(error)}`,
+      "error",
+    )
+    return []
+  }
+}
+
+const bindRows = (
   spec: RowsSpec,
   statements: (StatementRows | null)[],
   path: string,
@@ -139,6 +169,11 @@ const resolveRows = (
       const valueIdx = values.map((v, k) => col(v, "value", k + 1))
       return rows.rows.map((row) => ({
         name: nameIdx < 0 ? "" : toLabel(row[nameIdx]),
+        // A NULL name: an unbound click selects NULL, not the item's value.
+        ...(nameIdx >= 0 &&
+        (row[nameIdx] === null || row[nameIdx] === undefined)
+          ? { selection: null }
+          : {}),
         value:
           valueIdx.length === 1
             ? chartNumber(row[valueIdx[0]])
@@ -166,6 +201,7 @@ const resolveRows = (
         nodes.map((n) => ({
           name: n.name,
           value: n.colorValue !== undefined ? [n.value, n.colorValue] : n.value,
+          ...(n.isNull ? { selection: null } : {}),
           ...(n.children ? { children: withColor(n.children) } : {}),
         }))
       return withColor(tree)

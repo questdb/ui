@@ -1031,16 +1031,23 @@ export const NotebookProvider: React.FC<{
       if (repeated.length > 0) {
         const used = affectedVariables(repeated, current)
         const fetching = cellRefreshEngine.readRefreshState()
-        cellRefreshEngine.refreshWhere(
-          (cellId, sql) =>
-            usesVariables(sql, used) &&
-            fetching.get(cellId)?.refreshing !== true &&
-            (
-              store.cellsRef.current.find((c) => c.id === cellId)?.result
-                ?.results ?? []
-            ).some(hasStaleBindings),
-          store.cellsRef.current,
-        )
+        const running: string[] = []
+        cellRefreshEngine.refreshWhere((cellId, sql) => {
+          if (!usesVariables(sql, used)) return false
+          const stale = (
+            store.cellsRef.current.find((c) => c.id === cellId)?.result
+              ?.results ?? []
+          ).some(hasStaleBindings)
+          if (!stale) return false
+          // A running round may not cover a statement the user stopped:
+          // check again once it ends.
+          if (fetching.get(cellId)?.refreshing === true) {
+            running.push(cellId)
+            return false
+          }
+          return true
+        }, store.cellsRef.current)
+        cellRefreshEngine.recheckBindingsAfterRound(running)
       }
       if (names.length === 0) return
       const next = current.map((v) =>

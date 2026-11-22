@@ -210,6 +210,31 @@ describe("ChartTypesDialog", () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  it("keeps focus in the dialog after the keyboard confirms or cancels a deletion", async () => {
+    // Given a type that cells use
+    const { dialog } = renderDialog()
+    const remove = within(dialog).getByRole("button", { name: "Delete" })
+
+    // When the keyboard user asks to delete it, then keeps editing
+    remove.focus()
+    await userEvent.keyboard("{Enter}")
+    const ask = await screen.findByRole("alertdialog")
+    within(ask).getByRole("button", { name: "Keep editing" }).focus()
+    await userEvent.keyboard("{Enter}")
+
+    // Then focus is back on the Delete button
+    await waitFor(() => expect(remove).toHaveFocus())
+
+    // When the user asks again and confirms
+    await userEvent.keyboard("{Enter}")
+    const confirm = await screen.findByRole("alertdialog")
+    within(confirm).getByRole("button", { name: "Delete" }).focus()
+    await userEvent.keyboard("{Enter}")
+
+    // Then focus is in the dialog that stays open, not on the page
+    await waitFor(() => expect(dialog).toHaveFocus())
+  })
+
   it("follows changes made elsewhere: at once when clean, on request when edited", async () => {
     // Given an open dialog with nothing edited
     const { dialog, changeTypes } = renderDialog()

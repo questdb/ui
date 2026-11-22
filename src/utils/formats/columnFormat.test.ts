@@ -18,6 +18,12 @@ describe("formatValue", () => {
     expect(formatValue(1536, { kind: "bytes" })).toBe("1.5 KB")
     expect(formatValue(1500, { kind: "duration" })).toBe("1.5 s")
     expect(formatValue(42.5, { kind: "duration" })).toBe("42.5 ms")
+    // A remainder that rounds up carries into the larger unit
+    expect(formatValue(119_600, { kind: "duration" })).toBe("2 m 0 s")
+    expect(formatValue(3_599_500, { kind: "duration" })).toBe("1 h 0 m")
+    expect(formatValue(7_170_000, { kind: "duration" })).toBe("2 h 0 m")
+    expect(formatValue(59_999.5, { kind: "duration" })).toBe("1 m 0 s")
+    expect(formatValue(90_000, { kind: "duration" })).toBe("1 m 30 s")
     expect(formatValue(16_700_000_000, { compact: true })).toBe("16.7B")
   })
 

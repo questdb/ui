@@ -213,6 +213,7 @@ export const ChartTypesDialog: React.FC<Props> = ({
   const [base, setBase] = useState(types)
   const nameRef = useRef<HTMLInputElement>(null)
   const beforeConfirm = useRef<HTMLElement | null>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -307,6 +308,7 @@ export const ChartTypesDialog: React.FC<Props> = ({
             <Overlay primitive={Dialog.Overlay} />
           </ForwardRef>
           <Content
+            ref={contentRef}
             maxwidth="100rem"
             data-hook="chart-types-dialog"
             aria-describedby={undefined}
@@ -497,11 +499,15 @@ export const ChartTypesDialog: React.FC<Props> = ({
                         <Button
                           variant="secondary"
                           prefixIcon={<TrashIcon size={16} />}
-                          onClick={() =>
-                            selectedUsers.length > 0
-                              ? setConfirm("delete")
-                              : remove(selected)
-                          }
+                          onClick={(event) => {
+                            if (selectedUsers.length === 0) {
+                              remove(selected)
+                              return
+                            }
+                            beforeConfirm.current =
+                              event.currentTarget as HTMLElement
+                            setConfirm("delete")
+                          }}
                         >
                           Delete
                         </Button>
@@ -544,12 +550,16 @@ export const ChartTypesDialog: React.FC<Props> = ({
           </ForwardRef>
           <AlertDialog.Content
             maxwidth="44rem"
+            // Focus goes back to the control that asked, or, when that went
+            // with the confirmed action (a deleted type's Delete button), to
+            // the dialog that stays open.
             onCloseAutoFocus={(event) => {
               const previous = beforeConfirm.current
               beforeConfirm.current = null
-              if (!open || !previous?.isConnected) return
+              if (!open) return
               event.preventDefault()
-              previous.focus()
+              if (previous?.isConnected) previous.focus()
+              else contentRef.current?.focus()
             }}
           >
             <AlertDialog.Title>

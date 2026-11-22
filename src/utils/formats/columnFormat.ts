@@ -148,16 +148,15 @@ const formatDuration = (ms: number, decimals: number | undefined): string => {
   if (abs < 1)
     return `${sign}${grouped(0, decimals ?? 3).format(abs * 1000)} µs`
   if (abs < 1000) return `${sign}${grouped(0, decimals ?? 1).format(abs)} ms`
-  if (abs < 60_000)
+  // Each unit is rounded before it is split, so a remainder that rounds up
+  // carries into the larger unit (2 m 0 s, not 1 m 60 s).
+  if (Number((abs / 1000).toFixed(decimals ?? 2)) < 60)
     return `${sign}${grouped(0, decimals ?? 2).format(abs / 1000)} s`
-  if (abs < 3_600_000) {
-    const m = Math.floor(abs / 60_000)
-    const s = Math.round((abs % 60_000) / 1000)
-    return `${sign}${m} m ${s} s`
-  }
-  const h = Math.floor(abs / 3_600_000)
-  const m = Math.round((abs % 3_600_000) / 60_000)
-  return `${sign}${h} h ${m} m`
+  const seconds = Math.round(abs / 1000)
+  if (seconds < 3600)
+    return `${sign}${Math.floor(seconds / 60)} m ${seconds % 60} s`
+  const minutes = Math.round(abs / 60_000)
+  return `${sign}${Math.floor(minutes / 60)} h ${minutes % 60} m`
 }
 
 const formatNumberBody = (

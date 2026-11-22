@@ -47,28 +47,51 @@ const MAPS = new Set<string>(MAP_NAMES)
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
 
 // Whether series `index` of a drawn option draws items with the registered
-// chart type: a custom series of that type with data or a non-empty dataset.
+// chart type: a custom series of that type (in the base option, or in a
+// timeline option merged over it) with data, or reading a statement that
+// has rows. Datasets of the option's own count as drawing.
 const drawsWith = (
   option: Record<string, unknown>,
   statements: (StatementRows | null)[],
   registered: string,
   index: number,
 ): boolean => {
+  const seriesAt = (scope: unknown): Record<string, unknown>[] => {
+    if (typeof scope !== "object" || scope === null) return []
+    const series = (scope as { series?: unknown }).series
+    const list = Array.isArray(series) ? series : [series]
+    const at: unknown = list[index]
+    return typeof at === "object" && at !== null
+      ? [at as Record<string, unknown>]
+      : []
+  }
   const base =
     typeof option.baseOption === "object" && option.baseOption !== null
-      ? (option.baseOption as Record<string, unknown>)
+      ? option.baseOption
       : option
-  const list = Array.isArray(base.series) ? base.series : [base.series]
-  const series = list[index] as Record<string, unknown> | undefined
-  if (series?.type !== "custom" || series.renderItem !== registered)
-    return false
-  if (Array.isArray(series.data)) return series.data.length > 0
-  const ours =
-    typeof series.datasetId === "string"
-      ? /^q(\d+)$/.exec(series.datasetId)
-      : null
-  if (ours) return (statements[Number(ours[1])]?.rows.length ?? 0) > 0
-  return true
+  const timeline: unknown[] = Array.isArray(option.options)
+    ? option.options
+    : []
+  const scopes = [base as unknown, ...timeline].flatMap(seriesAt)
+  return scopes.some((series) => {
+    // Timeline options are merged over the base series at the same index.
+    const merged = { ...scopes[0], ...series }
+    if (merged.type !== "custom" || merged.renderItem !== registered)
+      return false
+    if (Array.isArray(merged.data)) return merged.data.length > 0
+    const statement =
+      typeof merged.datasetId === "string"
+        ? /^q(\d+)$/.exec(merged.datasetId)?.[1]
+        : merged.datasetId === undefined
+          ? String(
+              typeof merged.datasetIndex === "number" ? merged.datasetIndex : 0,
+            )
+          : undefined
+    // Our datasets come first: q<n> is dataset n.
+    if (statement === undefined || Number(statement) >= statements.length)
+      return true
+    return (statements[Number(statement)]?.rows.length ?? 0) > 0
+  })
 }
 
 const MAP_LOAD_FAILED =

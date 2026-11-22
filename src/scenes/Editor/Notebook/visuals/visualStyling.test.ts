@@ -620,6 +620,84 @@ it("selects NULL for an unbound click on a World map point with a NULL label", (
   expect(set).toHaveBeenCalledWith({ place: "null" })
 })
 
+it.each(["treemap", "sunburst"] as const)(
+  "selects NULL for an unbound click on a %s node with a NULL path value",
+  (type) => {
+    // Given sectors, one of them NULL
+    const build = type === "treemap" ? treemapOption : sunburstOption
+    const { option } = build({
+      visual: { type, columns: { path: ["sector"], value: "volume" } },
+      formats: {},
+      colors: lightColors,
+      statements: [
+        rows(
+          [
+            ["sector", "SYMBOL"],
+            ["volume", "DOUBLE"],
+          ],
+          [
+            [null, 7],
+            ["tech", 3],
+          ],
+        ),
+      ],
+    })
+    const [tree] = series(option)
+    const nodes = tree.data as { name: string }[]
+    const set = vi.fn()
+    const events = interactionEvents({ click: { variable: "pick" } }, set, true)
+
+    // When the user clicks the NULL node, named "" and sized 7
+    events.click(
+      {
+        componentType: "series",
+        name: "",
+        value: 7,
+        data: nodes.find((node) => node.name === ""),
+      },
+      {} as never,
+    )
+
+    // Then the variable is NULL, not the size
+    expect(set).toHaveBeenCalledWith({ pick: "null" })
+  },
+)
+
+it("selects NULL for an unbound click on a state timeline segment of a NULL lane", () => {
+  // Given a lane with no name
+  const { option } = stateTimelineOption({
+    visual: { type: "stateTimeline" },
+    formats: {},
+    colors: lightColors,
+    statements: [
+      rows(
+        [
+          ["ts", "TIMESTAMP"],
+          ["host", "SYMBOL"],
+          ["state", "SYMBOL"],
+        ],
+        [["2026-01-01T00:00:00Z", null, "up"]],
+      ),
+    ],
+  })
+  const [segments] = series(option)
+  const set = vi.fn()
+
+  // When the user clicks its segment, which ECharts names ""
+  interactionEvents({ click: { variable: "host" } }, set).click(
+    {
+      componentType: "series",
+      name: "",
+      value: (segments.data as { value: number[] }[])[0].value,
+      data: (segments.data as unknown[])[0],
+    },
+    {} as never,
+  )
+
+  // Then the variable is NULL, not the segment's start time
+  expect(set).toHaveBeenCalledWith({ host: "null" })
+})
+
 it("keeps a World map point with a NULL value missing, not 0", () => {
   const { option } = mapOption({
     visual: { type: "map" },

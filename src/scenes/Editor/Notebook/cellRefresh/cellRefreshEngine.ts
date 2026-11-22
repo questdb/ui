@@ -335,6 +335,9 @@ type Entry = {
   snapshotRetained: boolean
   ensureAttempted: boolean
   checkedRestoredBindings: boolean
+  // A selection repeated the value of a variable while this cell's round was
+  // running: once it ends, rows still read with other values run again.
+  recheckBindingsAfterRound?: boolean
   lastFetchedAt: number
   // The interval the running loop last settled on, back to the floor on an
   // auto-refresh change. A restarted loop waits out the rest of it before its
@@ -1723,6 +1726,26 @@ export class CellRefreshEngine {
       entry.variableRefreshInFlight = false
       entry.lastFetchedAt = Date.now()
       this.setState(entry, { fetching: false, slotFetching: new Set() })
+      if (entry.recheckBindingsAfterRound) {
+        entry.recheckBindingsAfterRound = false
+        const deps = this.getDeps()
+        const stale = (deps.getCellResult(entry.cellId)?.results ?? []).some(
+          (result) => deps.hasStaleStatementBindings?.(result) === true,
+        )
+        if (stale) this.forceRefresh(entry, entry.kind === "grid")
+      }
+    }
+  }
+
+  /**
+   * Cells whose round is running when a selection repeats a variable's
+   * value: once the round ends, a cell still showing rows read with other
+   * values (a statement the user stopped) runs again.
+   */
+  recheckBindingsAfterRound(cellIds: Iterable<string>) {
+    for (const cellId of cellIds) {
+      const entry = this.entries.get(cellId)
+      if (entry?.state.fetching) entry.recheckBindingsAfterRound = true
     }
   }
 

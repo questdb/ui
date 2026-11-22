@@ -643,6 +643,61 @@ describe("chart type draw errors", () => {
     },
   )
 
+  it("drops a draw error once the default dataset's statement has no rows", async () => {
+    // Given a series reading the first statement without naming it
+    sizeCharts()
+    const series = [
+      { type: "custom", renderItem: "dots", encode: { x: "x", y: "y" } },
+    ]
+    const { rerender } = renderComponent(
+      chartIn("a", series, [
+        xy([
+          [1, 10],
+          [2, null],
+        ]),
+      ]),
+    )
+    await waitFor(() => expect(threw("a")).toHaveLength(1))
+
+    // When the statement returns no rows
+    rerender(chartIn("a", series, [xy([])]))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 150)))
+
+    // Then the report no longer names the error
+    expect(threw("a")).toHaveLength(0)
+  })
+
+  it("reports a draw error of a series set only in a timeline option", async () => {
+    // Given a timeline whose option draws with the failing type
+    sizeCharts()
+    renderComponent(
+      <CustomChart
+        bufferId={BUFFER_ID}
+        cellId="a"
+        rawOption={{
+          baseOption: {
+            timeline: { data: ["a"] },
+            xAxis: { type: "value" },
+            yAxis: { type: "value" },
+          },
+          options: [{ series: [seriesOn("q0")] }],
+        }}
+        statements={[
+          xy([
+            [1, 10],
+            [2, null],
+          ]),
+        ]}
+        chartTypes={[dots]}
+        live={false}
+        isFocused={false}
+      />,
+    )
+
+    // Then the report names the error
+    await waitFor(() => expect(threw("a")).toHaveLength(1))
+  })
+
   it("keeps each cell's draw errors its own", async () => {
     // Given two cells drawing the same chart type, only the first failing
     sizeCharts()
