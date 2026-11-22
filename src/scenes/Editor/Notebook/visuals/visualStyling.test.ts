@@ -173,8 +173,19 @@ describe("stateTimelineOption", () => {
     // Then
     const yAxis = (option as { yAxis: { data: string[] } }).yAxis
     expect(yAxis.data).toEqual(["R-1", "R-2", "R-10"])
-    const names = series(option).map((s) => s.name)
-    expect(names).toEqual(["moving", "picking", "charging", "error"])
+    const stateSeries = series(option)
+    expect(stateSeries.map((s) => s.name)).toEqual([
+      "moving",
+      "picking",
+      "charging",
+      "error",
+    ])
+    expect(stateSeries.map((s) => (s.data as number[][])[0].slice(2))).toEqual([
+      [0, 0],
+      [0, 1],
+      [1, 2],
+      [2, 3],
+    ])
     const colorOf = (name: string) =>
       (
         series(option).find((s) => s.name === name) as {

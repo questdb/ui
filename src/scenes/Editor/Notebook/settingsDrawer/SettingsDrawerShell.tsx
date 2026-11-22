@@ -283,6 +283,10 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
       if (tabPastCodeEditor(e, panelRef.current)) return
       if (e.key !== "Escape") return
       if (isRadixPopperOpen()) return
+      // A foreground dialog owns the key before it reaches our drawer.
+      const target = e.target instanceof Element ? e.target : null
+      const dialog = target?.closest('[role="dialog"], [role="alertdialog"]')
+      if (dialog && dialog !== panelRef.current) return
       // In a code editor, Escape first closes the editor's own widgets
       // (suggestions, find), then leaves the editor; the next one dismisses.
       const editor =

@@ -3929,6 +3929,24 @@ describe("CellRefreshEngine", () => {
       expect(deps.executeSingle).not.toHaveBeenCalled()
     })
 
+    it.each([true, false])(
+      "does not execute statements appended during a Run (editor synced: %s)",
+      async (synced) => {
+        const sql = "select @desk"
+        const grid = gridCell("g1", sql, [sql], false)
+        syncOnScreen([grid])
+        await flushAsync()
+        engine.noteRunStarted("g1")
+        engine.refreshWhere(() => true, [grid])
+
+        const edited = { ...grid, value: `${sql}; select 42` }
+        if (synced) syncOnScreen([edited])
+        engine.noteRunFinished("g1", edited)
+        await flushAsync()
+        expect(deps.executeSingle).not.toHaveBeenCalled()
+      },
+    )
+
     it("remembers a changed variable before the first Run creates a grid entry", async () => {
       // Given a first Run whose validation hasn't produced a placeholder
       const sql = "select @desk"

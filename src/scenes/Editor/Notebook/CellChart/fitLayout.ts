@@ -20,6 +20,7 @@ export const CHART_PADDING = { top: 16, right: 24, bottom: 16, left: 24 }
 const LEGEND_BAND = 28
 const LEGEND_BOTTOM = 3
 const VISUAL_MAP_BAND = 34
+const PIECEWISE_ITEM_HEIGHT = 14
 const SLIDER_BAND = 34
 const SLIDER_HEIGHT = 18
 const TITLE_BAND = 26
@@ -149,11 +150,18 @@ const placeBottomBands = (option: Box, size: Size): Bands => {
         left: "center",
         bottom,
         itemWidth: 10,
-        ...(map.type === "piecewise"
-          ? {}
-          : {
-              itemHeight: Math.min(160, Math.max(size.width * 0.35, 60)),
-            }),
+        // In a horizontal piecewise scale, itemHeight is the swatch's
+        // vertical height, not the length of a rotated continuous gradient.
+        itemHeight:
+          map.type === "piecewise"
+            ? Math.min(
+                Math.max(
+                  parse(map.itemHeight, size.height, PIECEWISE_ITEM_HEIGHT),
+                  1,
+                ),
+                18,
+              )
+            : Math.min(160, Math.max(size.width * 0.35, 60)),
       }
       delete placed.top
       delete placed.right

@@ -46,6 +46,7 @@ export const clickedValue = (
     if (
       typeof data === "object" &&
       data !== null &&
+      !Array.isArray(data) &&
       Object.hasOwn(data, column)
     )
       return (data as Record<string, unknown>)[column]

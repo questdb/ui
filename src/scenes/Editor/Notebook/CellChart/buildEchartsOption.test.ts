@@ -25,6 +25,37 @@ const firstAxis = (axis: unknown): Record<string, unknown> =>
 const seriesList = (s: unknown): Record<string, unknown>[] =>
   (Array.isArray(s) ? s : [s]) as Record<string, unknown>[]
 
+it.each(["area", "stepArea"] as const)(
+  "enables hover hit targets for a bound %s",
+  (type) => {
+    const chart = { xColumn: "label" }
+    const queries = [
+      resolved({
+        columns: [
+          col("label", "STRING"),
+          col("price", "DOUBLE"),
+          col("symbol", "SYMBOL"),
+        ],
+        dataset: [["B", 16, "ETH"]],
+        xColumn: "label",
+        type,
+        yColumns: ["price"],
+      }),
+    ]
+    const bound = buildEchartsOption(chart, queries, { clickColumn: "symbol" })
+    expect(seriesList(bound.series)[0]).toMatchObject({
+      symbol: "circle",
+      showSymbol: false,
+      data: [{ value: 16, columns: { symbol: "ETH" } }],
+    })
+    const plain = buildEchartsOption(chart, queries)
+    expect(seriesList(plain.series)[0]).toMatchObject({
+      symbol: "none",
+      showSymbol: false,
+    })
+  },
+)
+
 describe("buildEchartsOption — order-book depth (numeric value x-axis + step)", () => {
   const depthColumns = [
     col("price", "DOUBLE"),

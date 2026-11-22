@@ -805,15 +805,27 @@ export class CellRefreshEngine {
     )
       this.createEntry(currentCell, "grid")
     const entry = this.entries.get(cellId)
+    if (entry?.kind !== "grid" || entry.state.classifyBlock?.kind === "write")
+      return
+
+    const frame = currentCell?.result ?? this.getDeps().getCellResult(cellId)
+    // forceRefresh can promote debounced edits. Neither that statement list nor
+    // the live editor (which can be ahead of sync) may outrun the landed frame.
+    const queries =
+      entry.pendingSql === null
+        ? entry.state.queries
+        : getQueriesFromText(entry.pendingSql)
     if (
-      entry?.kind === "grid" &&
-      entry.state.classifyBlock?.kind !== "write" &&
-      coversEditorStatements(
-        currentCell?.result ?? this.getDeps().getCellResult(cellId),
-        entry.state.queries,
-      )
+      !coversEditorStatements(frame, queries) ||
+      (currentCell &&
+        !coversEditorStatements(frame, getQueriesFromText(currentCell.value)))
     )
-      this.forceRefresh(entry)
+      return
+    if (!entry.visible || this.documentHidden) {
+      entry.pendingGridVariableRefresh = true
+      return
+    }
+    this.forceRefresh(entry)
   }
 
   discardVariableRefresh(cellId: string) {

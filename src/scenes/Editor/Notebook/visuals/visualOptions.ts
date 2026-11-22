@@ -291,6 +291,21 @@ export const stateTimelineOption = ({
       return [state, color]
     }),
   )
+  const laneIndex = new Map(lanes.map((lane, index) => [lane, index]))
+  const stateIndex = new Map(states.map((state, index) => [state, index]))
+  type Item = number[] | { value: number[]; columns: Record<string, unknown> }
+  const seriesData = states.map((): Item[] => [])
+  for (const segment of segs) {
+    const lane = laneIndex.get(segment.lane)
+    const state = stateIndex.get(segment.state)
+    if (lane === undefined || state === undefined) continue
+    const value = [segment.start, segment.end, lane, state]
+    seriesData[state].push(
+      clickColumn !== undefined && segment.selection !== undefined
+        ? { value, columns: { [clickColumn]: segment.selection } }
+        : value,
+    )
+  }
   const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16)
   return {
     option: {
@@ -315,25 +330,13 @@ export const stateTimelineOption = ({
         splitArea: { show: true },
       },
       legend: { bottom: 0, data: states },
-      series: states.map((state) => ({
+      series: states.map((state, index) => ({
         type: "custom",
         name: state,
         renderItem: STATE_TIMELINE,
         encode: { x: [0, 1], y: 2 },
         itemStyle: { color: stateColors.get(state) },
-        data: segs
-          .filter((s) => s.state === state)
-          .map((s) => {
-            const value = [
-              s.start,
-              s.end,
-              lanes.indexOf(s.lane),
-              states.indexOf(state),
-            ]
-            return clickColumn !== undefined && s.selection !== undefined
-              ? { value, columns: { [clickColumn]: s.selection } }
-              : value
-          }),
+        data: seriesData[index],
       })) as EChartsOption["series"],
     },
     drawn: {

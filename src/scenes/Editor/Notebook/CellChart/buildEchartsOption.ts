@@ -115,7 +115,7 @@ const toCategoryLabel = (v: unknown): string => {
 const extractColumnValues = (dataset: Dataset, idx: number): unknown[] =>
   dataset.map((row) => row[idx])
 
-const resolveSeriesRenderSpec = (type: ChartType) => {
+const resolveSeriesRenderSpec = (type: ChartType, hasClickColumn: boolean) => {
   const isStep = type === "stepLine" || type === "stepArea"
   const isArea = type === "area" || type === "stepArea"
   const isLineFamily =
@@ -133,7 +133,10 @@ const resolveSeriesRenderSpec = (type: ChartType) => {
   const lineExtras: Record<string, unknown> = {}
   if (isArea) {
     lineExtras.areaStyle = {}
-    lineExtras.symbol = "none"
+    // ECharts uses a temporary point for hover. It must have a shape to
+    // deliver the clicked row, even though regular point symbols stay hidden.
+    lineExtras.symbol = hasClickColumn ? "circle" : "none"
+    lineExtras.showSymbol = false
   }
   if (isStep) lineExtras.step = "end"
   // Scatter/bar use `large` for big point/bar sets; lines downsample with LTTB.
@@ -340,7 +343,7 @@ const buildCartesianSeries = (
 
 const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
   const { seriesType, lineExtras, perfExtras, isStacked } =
-    resolveSeriesRenderSpec(q.type)
+    resolveSeriesRenderSpec(q.type, ctx.clickColumn !== undefined)
   const scatter = scatterEncoding(q)
   // A sized or coloured point carries its x in every mode.
   const xValue = (row: Dataset[number], xIdx: number) =>

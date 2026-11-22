@@ -5,6 +5,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { Button } from "../../../../components/Button"
+import { Dialog } from "../../../../components/Dialog"
 import { DrawSettingsDrawer } from "./DrawSettingsDrawer"
 import { questClient } from "../../../../utils/questdb/queryClient"
 import type { DrawSettings } from "./drawSettings"
@@ -76,18 +77,21 @@ const Fixture = ({
   statementsOverride,
   tabsOverride,
   effectiveOverride,
+  children,
 }: {
   saved: DrawSettings
   onSave: (next: DrawSettings) => void
   statementsOverride?: StatementRows[]
   tabsOverride?: QueryTab[]
   effectiveOverride?: ChartConfig
+  children?: React.ReactNode
 }) => {
   const [overlay, setOverlay] = useState<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   return (
     <>
       <Button onClick={() => setOpen(true)}>Open settings</Button>
+      {children}
       <CellOverlaySlot ref={setOverlay} />
       <CellOverlayProvider value={overlay}>
         <DrawSettingsDrawer
@@ -160,6 +164,47 @@ describe("draw settings drawer", () => {
       removeEventListener() {},
     }))
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null)
+  })
+
+  it("keeps a dirty drawer open when Escape closes the foreground dialog", async () => {
+    renderComponent(
+      <Fixture saved={{ chartConfig: effective }} onSave={vi.fn()}>
+        <Dialog.Root>
+          <Dialog.Trigger>Open chart types</Dialog.Trigger>
+          <Dialog.Portal>
+            <Dialog.Content>
+              <Dialog.Title>Chart types</Dialog.Title>
+              <Dialog.Description>
+                Manage reusable chart types
+              </Dialog.Description>
+              <Button>Manage</Button>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      </Fixture>,
+    )
+    await userEvent.click(screen.getByRole("button", { name: "Open settings" }))
+    const drawer = await screen.findByRole("dialog", { name: "Chart settings" })
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: "Component" }),
+    )
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open chart types" }),
+    )
+    const foreground = await screen.findByRole("dialog", {
+      name: "Chart types",
+    })
+    await waitFor(() =>
+      expect(
+        within(foreground).getByRole("button", { name: "Manage" }),
+      ).toHaveFocus(),
+    )
+    await userEvent.keyboard("{Escape}")
+    await waitFor(() => expect(foreground).not.toBeInTheDocument())
+    expect(drawer).toBeVisible()
+    expect(
+      within(drawer).getByRole("button", { name: "Component" }),
+    ).toHaveAttribute("aria-pressed", "true")
   })
 
   it("keeps a component when the drawer saves without changes", async () => {

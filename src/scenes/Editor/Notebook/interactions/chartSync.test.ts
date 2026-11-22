@@ -54,6 +54,81 @@ const move = {
 }
 
 describe("notebook chart sync", () => {
+  it("links generated time zoom IDs without linking generated Y zoom IDs", () => {
+    const makeLiveChart = () => {
+      const instance = echarts.init(null, undefined, {
+        renderer: "svg",
+        ssr: true,
+        width: 600,
+        height: 400,
+      })
+      instance.setOption({
+        xAxis: { type: "time", min: 0, max: 1000 },
+        yAxis: { type: "value", min: 0, max: 100 },
+        dataZoom: [
+          { type: "slider", xAxisIndex: 0 },
+          { type: "slider", yAxisIndex: 0 },
+        ],
+        series: [
+          {
+            type: "line",
+            data: [
+              [0, 5],
+              [1000, 95],
+            ],
+          },
+        ],
+      })
+      return instance
+    }
+    const source = makeLiveChart()
+    const peer = makeLiveChart()
+    const leaveSource = joinChartSync(1, source)
+    const leavePeer = joinChartSync(1, peer)
+    setChartSync(1, { crosshair: "off", zoom: true })
+    const model = (
+      source as unknown as {
+        getModel(): {
+          getComponent(type: "dataZoom", index: number): { id: string }
+        }
+      }
+    ).getModel()
+    const peerZoom = vi.fn()
+    peer.on("datazoom", peerZoom)
+    try {
+      const zoomOptions = source.getOption() as { dataZoom: { id?: string }[] }
+      expect(zoomOptions.dataZoom.map(({ id }) => id)).toEqual([
+        undefined,
+        undefined,
+      ])
+      source.dispatchAction({
+        type: "dataZoom",
+        dataZoomId: model.getComponent("dataZoom", 1).id,
+        start: 10,
+        end: 90,
+      })
+      expect(peerZoom).not.toHaveBeenCalled()
+      source.dispatchAction({
+        type: "dataZoom",
+        dataZoomId: model.getComponent("dataZoom", 0).id,
+        start: 20,
+        end: 80,
+      })
+      expect(peerZoom).toHaveBeenCalledOnce()
+      expect(peer.getOption()).toMatchObject({
+        dataZoom: [
+          { startValue: 200, endValue: 800 },
+          { start: 0, end: 100 },
+        ],
+      })
+    } finally {
+      leaveSource()
+      leavePeer()
+      source.dispose()
+      peer.dispose()
+    }
+  })
+
   it("reads the peer's calculated zoom window from a value-only event", () => {
     // Given a time chart using a different scale from its sender
     const chart = echarts.init(null, undefined, {

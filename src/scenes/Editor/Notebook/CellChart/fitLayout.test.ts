@@ -7,6 +7,21 @@ const first = (value: unknown): Box =>
   (Array.isArray(value) ? value[0] : value) as Box
 
 describe("fitLayout", () => {
+  it("fits horizontal piecewise swatches within their band", () => {
+    const result = fitLayout(
+      {
+        visualMap: [
+          { type: "piecewise" },
+          { type: "piecewise", itemHeight: 8 },
+          { type: "piecewise", itemHeight: 100 },
+        ] as { type: string; itemHeight?: number }[],
+      },
+      { width: 480, height: 150 },
+    )
+    expect(result.visualMap.map(({ itemHeight }) => itemHeight)).toEqual([
+      14, 8, 18,
+    ])
+  })
   it("gives two visible color scales separate bands", () => {
     const result = fitLayout(
       { visualMap: [{ seriesIndex: 0 }, { seriesIndex: 1 }] },

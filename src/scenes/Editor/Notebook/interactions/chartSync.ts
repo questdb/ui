@@ -13,21 +13,28 @@ const settings = new Map<number, ChartSync>()
 // Set while this module drives charts, so their events are not echoed back.
 let driving = false
 
-const isTimeChart = (instance: EChartsType): boolean => {
-  // getOption clones every series. Axis-only inspection must not do that
-  // on the pointer path, and must reflect current timeline/media options.
+const componentOf = (
+  instance: EChartsType,
+  type: "xAxis" | "dataZoom",
+  index: number,
+) => {
+  // The live model exposes generated IDs and the effective timeline/media
+  // options without cloning all series via getOption().
   const chart = instance as unknown as {
     getModel():
       | {
           getComponent(
-            type: "xAxis",
+            type: string,
             index: number,
-          ): { get(key: "type"): unknown } | undefined
+          ): { id: string; get(key: "type"): unknown } | undefined
         }
       | undefined
   }
-  return chart.getModel()?.getComponent("xAxis", 0)?.get("type") === "time"
+  return chart.getModel()?.getComponent(type, index)
 }
+
+const isTimeChart = (instance: EChartsType): boolean =>
+  componentOf(instance, "xAxis", 0)?.get("type") === "time"
 
 const xToPixel = (instance: EChartsType, value: number): number | null => {
   try {
@@ -131,7 +138,10 @@ const zoomTo = (
   const relevant = targets.some((target) => {
     if (target?.dataZoomId !== undefined)
       return controls.some(
-        (zoom) => zoom.id === target.dataZoomId && controlsPrimaryX(zoom),
+        (zoom, index) =>
+          controlsPrimaryX(zoom) &&
+          (componentOf(source, "dataZoom", index)?.id ?? zoom.id) ===
+            target.dataZoomId,
       )
     if (target?.dataZoomIndex !== undefined) {
       const indexes = Array.isArray(target.dataZoomIndex)

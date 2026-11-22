@@ -11,8 +11,7 @@ import { echarts } from "./echartsSetup"
 
 vi.mock("../NotebookProvider", () => ({ useNotebookBufferId: () => undefined }))
 
-it("uses the current data and restores zoom when the chart theme changes", async () => {
-  // Given a mounted chart that has already merged a newer result
+const setChartSize = () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
     new DOMRect(0, 620, 700, 400),
   )
@@ -29,6 +28,7 @@ it("uses the current data and restores zoom when the chart theme changes", async
         {
           canvas: this,
           measureText: (text: string) => ({ width: text.length * 7 }),
+          createLinearGradient: () => ({ addColorStop: () => undefined }),
         },
         {
           get: (target, key): unknown =>
@@ -37,6 +37,11 @@ it("uses the current data and restores zoom when the chart theme changes", async
       ) as unknown as CanvasRenderingContext2D
     } as unknown as typeof HTMLCanvasElement.prototype.getContext,
   )
+}
+
+it("uses the current data and restores zoom when the chart theme changes", async () => {
+  setChartSize()
+  // Given a mounted chart that has already merged a newer result
   const option = (reading: number): EChartsOption => ({
     xAxis: { type: "time" },
     yAxis: { type: "value" },
@@ -94,4 +99,51 @@ it("uses the current data and restores zoom when the chart theme changes", async
     expect(currentReading()).toBe(88)
     expect(currentZoom()).toContainEqual(zoom)
   })
+})
+
+it("matches each scatter color scale to the new series order after a refresh", async () => {
+  setChartSize()
+  const view = (names: string[], first: number[]) => (
+    <ChartRenderer
+      option={{
+        xAxis: { type: "value" },
+        yAxis: { type: "value" },
+        series: names.map((name) => ({
+          type: "scatter",
+          name,
+          data: [[1, 2]],
+        })),
+        visualMap: [
+          { min: 0, max: 10, seriesIndex: first },
+          {
+            min: 10,
+            max: 20,
+            seriesIndex: names
+              .map((_, index) => index)
+              .filter((index) => !first.includes(index)),
+          },
+        ],
+      }}
+      zoomWindow={{ start: 0, end: 100 }}
+      animate={false}
+      height={400}
+    />
+  )
+  const { container, rerender } = renderComponent(view(["a1", "b1", "b2"], [0]))
+  const targets = () => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    if (!host) return undefined
+    const option = echarts.getInstanceByDom(host)?.getOption() as
+      | {
+          series: { name: string }[]
+          visualMap: { seriesIndex: number[] }[]
+        }
+      | undefined
+    return option?.visualMap.map(({ seriesIndex }) =>
+      seriesIndex.map((i) => option.series[i].name),
+    )
+  }
+  await waitFor(() => expect(targets()).toEqual([["a1"], ["b1", "b2"]]))
+  rerender(view(["a1", "a2", "b1"], [0, 1]))
+  await waitFor(() => expect(targets()).toEqual([["a1", "a2"], ["b1"]]))
 })

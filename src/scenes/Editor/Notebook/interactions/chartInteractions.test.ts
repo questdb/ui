@@ -40,6 +40,17 @@ describe("clickedValue", () => {
     ).toBe("9007199254740993")
   })
 
+  it("reads the SQL alias length rather than the dataset row's width", () => {
+    const row = [10, 42]
+    expect(
+      clickedValue(
+        { data: row, value: row, dimensionNames: ["x", "length"] },
+        "length",
+      ),
+    ).toBe(42)
+    expect(clickedValue({ data: row, value: row }, "length")).toBeUndefined()
+  })
+
   it("reads the named column from a dataset row, else the item name", () => {
     // Given
     const params = {

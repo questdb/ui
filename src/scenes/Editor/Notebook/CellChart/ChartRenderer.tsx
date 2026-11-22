@@ -89,17 +89,26 @@ const structuralKey = (option: EChartsOption): string => {
   const hasZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
   const axisCount = Array.isArray(option.yAxis) ? "2y" : "1y"
   const scales = Array.isArray(option.visualMap)
-    ? option.visualMap.length
+    ? option.visualMap
     : option.visualMap
-      ? 1
-      : 0
+      ? [option.visualMap]
+      : []
+  const targets = scales.map(({ seriesIndex }) => seriesIndex ?? null)
+  // ECharts' merge can keep named series at their old positions. An
+  // index-targeted scale needs the refreshed option's series order instead.
+  const scaleLayout = targets.some(
+    (index) => typeof index === "number" || Array.isArray(index),
+  )
+    ? JSON.stringify([series.map(({ id, name }) => [id, name]), targets])
+    : ""
   return [
     seriesTypes.join("|"),
     (xAxis as { type?: string } | undefined)?.type ?? "",
     (yAxis as { type?: string } | undefined)?.type ?? "",
     axisCount,
     hasZoom ? "z" : "nz",
-    scales,
+    scales.length,
+    scaleLayout,
     option.brush ? "brush" : "no-brush",
   ].join("::")
 }

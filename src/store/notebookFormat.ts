@@ -68,8 +68,9 @@ export const migrateNotebookFormat = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const isName = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0 && value.length <= 200
+// These names identify returned SQL columns, not notebook identifiers.
+const isColumnName = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0
 
 const ROLE_KEYS: (keyof VisualColumns)[] = [
   "value",
@@ -104,10 +105,11 @@ export const sanitizeVisualConfig = (
     const columns: VisualColumns = {}
     for (const key of ROLE_KEYS) {
       const column = value.columns[key]
-      if (isName(column)) (columns as Record<string, string>)[key] = column
+      if (isColumnName(column))
+        (columns as Record<string, string>)[key] = column
     }
     if (Array.isArray(value.columns.path)) {
-      const path = value.columns.path.filter(isName)
+      const path = value.columns.path.filter(isColumnName)
       if (path.length > 0) columns.path = path
     }
     if (Object.keys(columns).length > 0) visual.columns = columns
@@ -147,7 +149,7 @@ export const sanitizeEventColumns = (
   if (!isRecord(value)) return undefined
   const out: EventColumns = {}
   for (const key of ["time", "end", "label", "tone"] as const) {
-    if (isName(value[key])) out[key] = value[key]
+    if (isColumnName(value[key])) out[key] = value[key]
   }
   return out
 }
@@ -216,8 +218,7 @@ export const sanitizeInteractions = (
   const out: CellInteractions = {}
   if (isRecord(value.click) && isVariableName(value.click.variable)) {
     out.click = { variable: value.click.variable }
-    if (typeof value.click.column === "string" && value.click.column.length > 0)
-      out.click.column = value.click.column
+    if (isColumnName(value.click.column)) out.click.column = value.click.column
   }
   if (
     isRecord(value.brush) &&
