@@ -141,17 +141,26 @@ export const resolveChartTypes = (
   return { renderItems, errors }
 }
 
-/** Errors thrown while drawing, by the notebook's name for the type. */
+/**
+ * Errors thrown while drawing, by the notebook's name for the type. With
+ * `drawing`, only series that still draw items with the type count: a series
+ * removed, switched to another type or left without rows does not draw again
+ * to clear its error.
+ */
 export const drawErrorsOf = (
   resolution: ChartTypeResolution,
   used: string[],
+  drawing?: (registered: string, series: number) => boolean,
 ): Map<string, string> => {
   const out = new Map<string, string>()
   for (const name of used) {
     const registered = resolution.renderItems.get(name)
-    const errors = registered ? drawErrors.get(registered) : undefined
-    const [error] = errors?.values() ?? []
-    if (error) out.set(name, error)
+    if (!registered) continue
+    for (const [series, error] of drawErrors.get(registered) ?? []) {
+      if (drawing && !drawing(registered, series)) continue
+      out.set(name, error)
+      break
+    }
   }
   return out
 }

@@ -714,6 +714,47 @@ describe("VisualCanvas", () => {
     },
   )
 
+  it.each(["stat", "uptime"] as const)(
+    "writes NULL for an unbound click on a %s item with a NULL label",
+    async (type) => {
+      // Given rows whose label is NULL, as QuestDB sends it
+      const setVariables = vi.fn()
+      renderComponent(
+        <VisualCanvas
+          {...defaults}
+          visual={{ type }}
+          interactions={{ click: { variable: "pick" } }}
+          setVariables={setVariables}
+          statements={[
+            type === "stat"
+              ? {
+                  columns: [
+                    { name: "desk", type: "SYMBOL" },
+                    { name: "volume", type: "DOUBLE" },
+                  ],
+                  rows: [[null, 5]],
+                }
+              : {
+                  columns: [
+                    { name: "ts", type: "TIMESTAMP" },
+                    { name: "lane", type: "SYMBOL" },
+                    { name: "state", type: "SYMBOL" },
+                  ],
+                  rows: [["2026-01-01T00:00:00Z", null, "up"]],
+                },
+          ]}
+        />,
+      )
+
+      // When the user activates the item
+      screen.getAllByRole("button")[0].focus()
+      await userEvent.keyboard("{Enter}")
+
+      // Then the variable holds NULL, which matches the NULL rows
+      expect(setVariables).toHaveBeenCalledWith({ pick: "null" })
+    },
+  )
+
   it("writes a bound LONG click as a number and shows that tile selected", async () => {
     // Given stat tiles whose click sets a LONG id, sent as text
     const setVariables = vi.fn()

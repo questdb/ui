@@ -471,8 +471,13 @@ export const UptimeBars = ({
                   Math.max(barsWidth - 260, 0),
                 )
               : 0
+          // An unbound click selects the lane's name: NULL for a NULL lane.
           const selection =
-            clickColumn === undefined ? lane : read.selectionByLane?.get(lane)
+            clickColumn === undefined
+              ? read.nullLanes?.has(lane)
+                ? null
+                : lane
+              : read.selectionByLane?.get(lane)
           const activate =
             onSelect && selection !== undefined
               ? () => onSelect(selection)

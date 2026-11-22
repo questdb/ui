@@ -26,6 +26,8 @@ export type StateSegments = {
   states: string[]
   segments: Segment[]
   selectionByLane?: ReadonlyMap<string, unknown>
+  // Lanes whose value is NULL (they read as an empty label).
+  nullLanes?: ReadonlySet<string>
   from: number
   to: number
 }
@@ -97,11 +99,13 @@ export const readStateSegments = (
 
   const clickIdx = columnIndex(rows, clickColumn)
   const selectionByLane = new Map<string, unknown>()
+  const nullLanes = new Set<string>()
   const open: (Omit<Segment, "end"> & { end: number | null })[] = []
   for (const row of rows.rows) {
     const start = toTime(row[timeIdx])
     if (start === null) continue
     const lane = toLabel(row[laneIdx])
+    if (row[laneIdx] === null || row[laneIdx] === undefined) nullLanes.add(lane)
     const selection: unknown = row[clickIdx]
     if (clickIdx >= 0) {
       if (!selectionByLane.has(lane)) selectionByLane.set(lane, selection)
@@ -137,6 +141,7 @@ export const readStateSegments = (
     states: [...new Set(segments.map((s) => s.state))],
     segments,
     ...(clickColumn === undefined ? {} : { selectionByLane }),
+    nullLanes,
     from,
     to,
   }

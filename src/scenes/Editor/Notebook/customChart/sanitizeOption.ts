@@ -176,6 +176,12 @@ export const sanitizeOption = (
     if (Array.isArray(node))
       return node.map((child, i) => walk(child, `${path}[${i}]`, inside))
     if (!isRecord(node)) return node
+    // A `$rows` placeholder names columns, not colours or images: its keys
+    // (such as a tree's `color` column) are left to the row binding, which
+    // applies the image rule to the bound values.
+    const keys = Object.keys(node)
+    if (keys.length === 1 && keys[0] === "$rows" && isRecord(node.$rows))
+      return { $rows: { ...node.$rows } }
 
     const out: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(node)) {

@@ -609,6 +609,40 @@ describe("chart type draw errors", () => {
     expect(threw("a")).toHaveLength(1)
   })
 
+  it.each([
+    ["the failing series is removed", [seriesOn("q0")], null],
+    ["the failing series' statement returns no rows", undefined, []],
+  ] as const)(
+    "drops a draw error once %s",
+    async (_label, nextSeries, nextRows) => {
+      // Given a clean series and a failing series of the same chart type
+      sizeCharts()
+      const clean = xy([
+        [1, 10],
+        [2, 20],
+      ])
+      const failing = xy([
+        [1, 10],
+        [2, null],
+      ])
+      const both = [seriesOn("q0"), seriesOn("q1")]
+      const { rerender } = renderComponent(chartIn("a", both, [clean, failing]))
+      await waitFor(() => expect(threw("a")).toHaveLength(1))
+
+      // When the failing series stops drawing with the type
+      rerender(
+        chartIn("a", nextSeries ? [...nextSeries] : both, [
+          clean,
+          nextRows === null ? failing : xy([...nextRows]),
+        ]),
+      )
+      await act(() => new Promise((resolve) => setTimeout(resolve, 150)))
+
+      // Then the report no longer names its error
+      expect(threw("a")).toHaveLength(0)
+    },
+  )
+
   it("keeps each cell's draw errors its own", async () => {
     // Given two cells drawing the same chart type, only the first failing
     sizeCharts()

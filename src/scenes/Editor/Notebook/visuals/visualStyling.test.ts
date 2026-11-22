@@ -585,6 +585,41 @@ it("sets no variable for an unbound click on a World map point with no name", ()
   expect(set).not.toHaveBeenCalled()
 })
 
+it("selects NULL for an unbound click on a World map point with a NULL label", () => {
+  // Given lat/lon points labelled by city, one with no city
+  const { option } = mapOption({
+    visual: { type: "map" },
+    formats: {},
+    colors: lightColors,
+    statements: [
+      rows(
+        [
+          ["city", "SYMBOL"],
+          ["lat", "DOUBLE"],
+          ["lon", "DOUBLE"],
+        ],
+        [[null, 51.5, -0.12]],
+      ),
+    ],
+  })
+  const [points] = series(option)
+  const set = vi.fn()
+
+  // When the user clicks that point
+  interactionEvents({ click: { variable: "place" } }, set).click(
+    {
+      componentType: "series",
+      name: "",
+      value: [-0.12, 51.5, 1],
+      data: (points.data as unknown[])[0],
+    },
+    {} as never,
+  )
+
+  // Then the variable is NULL, not the longitude
+  expect(set).toHaveBeenCalledWith({ place: "null" })
+})
+
 it("keeps a World map point with a NULL value missing, not 0", () => {
   const { option } = mapOption({
     visual: { type: "map" },

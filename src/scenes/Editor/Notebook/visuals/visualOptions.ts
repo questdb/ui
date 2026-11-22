@@ -992,9 +992,14 @@ export const mapOption = ({
             data: rows.rows.map((r, i) => ({
               name: labelIdx >= 0 ? toLabel(r[labelIdx]) : "",
               // A point without a label column has no name an unbound click
-              // could select (its value array starts with the longitude).
-              ...(labelIdx < 0 && clickColumn === undefined
-                ? { selection: undefined }
+              // could select (its value array starts with the longitude); a
+              // NULL label selects NULL.
+              ...(clickColumn === undefined
+                ? labelIdx < 0
+                  ? { selection: undefined }
+                  : r[labelIdx] === null || r[labelIdx] === undefined
+                    ? { selection: null }
+                    : {}
                 : {}),
               value: [toNumber(r[lonIdx]), toNumber(r[latIdx]), values[i]],
               // A point with no value is drawn hollow, unlike a real 0.

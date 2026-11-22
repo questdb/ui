@@ -302,6 +302,18 @@ export const NotebookProvider: React.FC<{
   const focusedCellIdRef = useRef(focusedCellId)
   const maximizedCellIdRef = useRef(maximizedCellId)
   const settingsRef = useRef(settings)
+  // Whether a statement's rows were read with other variable values than the
+  // current ones.
+  const hasStaleBindings = (
+    statement: NonNullable<NotebookCell["result"]>["results"][number],
+  ) =>
+    statement.type === "dql" &&
+    statement.effectiveQuery !== undefined &&
+    hasChangedBindings(
+      statement.query,
+      statement.effectiveQuery,
+      settingsRef.current.variables,
+    )
   const activeCellQueryKeysRef = useRef<Map<string, QueryKey>>(new Map())
   const notebookRunIdRef = useRef(0)
   const liveActionsRef = useRef<LiveNotebookActions>(NOOP_LIVE_ACTIONS)
@@ -693,14 +705,7 @@ export const NotebookProvider: React.FC<{
       executeSingle,
       validateWithGlobals,
       setCellResult,
-      hasStaleStatementBindings: (statement) =>
-        statement.type === "dql" &&
-        statement.effectiveQuery !== undefined &&
-        hasChangedBindings(
-          statement.query,
-          statement.effectiveQuery,
-          settingsRef.current.variables,
-        ),
+      hasStaleStatementBindings: hasStaleBindings,
       getCellResult: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
       isDrawCell: (cellId) =>
@@ -1013,11 +1018,30 @@ export const NotebookProvider: React.FC<{
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
     setVariableValues: (values) => {
       const current = settingsRef.current.variables ?? []
-      // A click on what is already selected changes nothing: no re-query of
-      // the cells that use it, no save.
       const names = Object.keys(values).filter(
         (name) => current.find((v) => v.name === name)?.value !== values[name],
       )
+      // A click on what is already selected saves nothing and re-runs only
+      // the cells still showing rows for another value (after Apply in the
+      // Variables popover, or a stopped re-query); a cell already fetching
+      // keeps its fetch.
+      const repeated = Object.keys(values).filter(
+        (name) => !names.includes(name),
+      )
+      if (repeated.length > 0) {
+        const used = affectedVariables(repeated, current)
+        const fetching = cellRefreshEngine.readRefreshState()
+        cellRefreshEngine.refreshWhere(
+          (cellId, sql) =>
+            usesVariables(sql, used) &&
+            fetching.get(cellId)?.refreshing !== true &&
+            (
+              store.cellsRef.current.find((c) => c.id === cellId)?.result
+                ?.results ?? []
+            ).some(hasStaleBindings),
+          store.cellsRef.current,
+        )
+      }
       if (names.length === 0) return
       const next = current.map((v) =>
         names.includes(v.name) ? { ...v, value: values[v.name] } : v,

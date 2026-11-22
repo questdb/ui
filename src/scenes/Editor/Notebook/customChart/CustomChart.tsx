@@ -46,6 +46,31 @@ const MAPS = new Set<string>(MAP_NAMES)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
 
+// Whether series `index` of a drawn option draws items with the registered
+// chart type: a custom series of that type with data or a non-empty dataset.
+const drawsWith = (
+  option: Record<string, unknown>,
+  statements: (StatementRows | null)[],
+  registered: string,
+  index: number,
+): boolean => {
+  const base =
+    typeof option.baseOption === "object" && option.baseOption !== null
+      ? (option.baseOption as Record<string, unknown>)
+      : option
+  const list = Array.isArray(base.series) ? base.series : [base.series]
+  const series = list[index] as Record<string, unknown> | undefined
+  if (series?.type !== "custom" || series.renderItem !== registered)
+    return false
+  if (Array.isArray(series.data)) return series.data.length > 0
+  const ours =
+    typeof series.datasetId === "string"
+      ? /^q(\d+)$/.exec(series.datasetId)
+      : null
+  if (ours) return (statements[Number(ours[1])]?.rows.length ?? 0) > 0
+  return true
+}
+
 const MAP_LOAD_FAILED =
   "Could not load the world map. Reload the console to try again."
 
@@ -277,7 +302,11 @@ export const CustomChart = ({
     const timer = window.setTimeout(() => {
       const problems: RenderProblem[] = [
         ...problemsOf({ resolution, sanitized, built }),
-        ...[...drawErrorsOf(resolution, used)].map(([name, message]) => ({
+        ...[
+          ...drawErrorsOf(resolution, used, (registered, index) =>
+            drawsWith(built.option, statements, registered, index),
+          ),
+        ].map(([name, message]) => ({
           path: `chartTypes.${name}`,
           message: `Chart type "${name}" threw while drawing: ${message}`,
           severity: "error" as const,

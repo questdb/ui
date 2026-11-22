@@ -60,6 +60,34 @@ describe("sanitizeOption", () => {
       "media[0].option.series[0].renderItem",
     ])
   })
+  it("keeps the colour column of a tree bound from rows", () => {
+    // Given a treemap whose nodes take a colour value from a column
+    const raw = {
+      series: [
+        {
+          type: "treemap",
+          data: {
+            $rows: {
+              shape: "tree",
+              path: ["sector"],
+              value: "cap",
+              color: "chg",
+            },
+          },
+        },
+      ],
+    }
+
+    // When
+    const { option, problems } = sanitizeOption(raw, context)
+
+    // Then the column name is kept for the binding, not taken for a colour
+    expect((option.series as { data: unknown }[])[0].data).toEqual({
+      $rows: { shape: "tree", path: ["sector"], value: "cap", color: "chg" },
+    })
+    expect(problems).toEqual([])
+  })
+
   it("resolves tones and removes literal colours in map region fills", () => {
     // Given geo and map region fills
     const raw = {

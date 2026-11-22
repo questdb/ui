@@ -302,9 +302,14 @@ export const statTiles = (
   const tiles = rows.rows.slice(0, MAX_STAT_TILES).map((row) => {
     const label =
       labelIdx >= 0 ? toLabel(row[labelIdx]) : rows.columns[valueIdx].name
+    // An unbound click selects the tile's name: NULL for a NULL label.
+    const unbound =
+      labelIdx >= 0 && (row[labelIdx] === null || row[labelIdx] === undefined)
+        ? null
+        : label
     return {
       label,
-      selection: clickColumn === undefined ? label : row[clickIdx],
+      selection: clickColumn === undefined ? unbound : row[clickIdx],
       caption: captionIdx >= 0 ? toLabel(row[captionIdx]) : null,
       value: row[valueIdx],
       change: changeIdx >= 0 ? toNumber(row[changeIdx]) : null,
