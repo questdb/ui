@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { EChartsType } from "echarts"
 import {
   clickedValue,
+  columnTypeOf,
   interactionEvents,
   sqlLiteral,
   withBrush,
@@ -23,6 +24,20 @@ describe("sqlLiteral", () => {
     expect(sqlLiteral("O'Hare")).toBe("'O''Hare'")
     expect(sqlLiteral(1.5)).toBe("1.5")
     expect(sqlLiteral(null)).toBe("null")
+  })
+
+  it("keeps LONG and DECIMAL values, which arrive as text, numeric", () => {
+    // Given values as the console receives them, with their column types
+    expect(sqlLiteral("42", "LONG")).toBe("42")
+    expect(sqlLiteral("-9223372036854775807", "LONG")).toBe(
+      "-9223372036854775807",
+    )
+    expect(sqlLiteral("1.50", "DECIMAL(10,2)")).toBe("1.50m")
+    // Text columns, and text that is not a number, stay quoted
+    expect(sqlLiteral("42", "VARCHAR")).toBe("'42'")
+    expect(sqlLiteral("42", "SYMBOL")).toBe("'42'")
+    expect(sqlLiteral("n/a", "LONG")).toBe("'n/a'")
+    expect(sqlLiteral("42")).toBe("'42'")
   })
 })
 
@@ -97,6 +112,27 @@ describe("interactionEvents", () => {
 
     events.click({ name: "Tokyo", data: { columns: { code: null } } }, instance)
     expect(setVariables).toHaveBeenCalledWith({ desk: "null" })
+  })
+
+  it("sets a clicked LONG column as a number", () => {
+    // Given a click bound to a LONG id column of the cell's statements
+    const setVariables = vi.fn()
+    const statements = [
+      { columns: [{ name: "id", type: "LONG" }] },
+      { columns: [{ name: "label", type: "VARCHAR" }] },
+    ]
+    const events = interactionEvents(
+      { click: { variable: "sel", column: "id" } },
+      setVariables,
+      false,
+      (name) => columnTypeOf(statements, name),
+    )
+
+    // When the clicked item carries the id as the console's decimal text
+    events.click({ data: { columns: { id: "42" } } }, {} as EChartsType)
+
+    // Then the variable holds the number, as the interaction contract says
+    expect(setVariables).toHaveBeenCalledWith({ sel: "42" })
   })
 
   it("sets the time window variables from a drag and clears the brush", () => {

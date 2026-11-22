@@ -415,6 +415,39 @@ it("gives Sunburst labels a theme surface independent of the sector fill", () =>
   })
 })
 
+it("sizes World map points by magnitude when every value is negative", () => {
+  const { option } = mapOption({
+    visual: { type: "map" },
+    formats: {},
+    colors: lightColors,
+    statements: [
+      rows(
+        [
+          ["lat", "DOUBLE"],
+          ["lon", "DOUBLE"],
+          ["pnl", "DOUBLE"],
+        ],
+        [
+          [37, -122, -100],
+          [35, 139, -1],
+          [51, 0, -0.001],
+        ],
+      ),
+    ],
+  })
+  const [points] = series(option)
+  const sizeOf = points.symbolSize as (value: number[]) => number
+  const sizes = (points.data as { value: number[] }[]).map((d) =>
+    sizeOf(d.value),
+  )
+  // Then the largest loss gets the largest point, and all stay within 6–24 px
+  expect(sizes[0]).toBe(24)
+  for (const size of sizes) {
+    expect(size).toBeGreaterThanOrEqual(6)
+    expect(size).toBeLessThanOrEqual(24)
+  }
+})
+
 it("does not start World map ripples on a settled coordinate frame", () => {
   const { option } = mapOption({
     visual: { type: "map" },

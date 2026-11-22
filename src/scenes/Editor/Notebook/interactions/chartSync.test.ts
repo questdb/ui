@@ -300,7 +300,14 @@ describe("notebook chart sync", () => {
     })
     expect(source.getOption).not.toHaveBeenCalled()
     expect(peer.getOption).not.toHaveBeenCalled()
-    expect(source.dispatchAction).not.toHaveBeenCalled()
+    // The source is pinned to the same absolute window, without an echo
+    expect(source.dispatchAction).toHaveBeenCalledTimes(1)
+    expect(source.dispatchAction).toHaveBeenCalledWith({
+      type: "dataZoom",
+      dataZoomIndex: 1,
+      startValue: 0,
+      endValue: 1_000,
+    })
 
     leave()
     expect(peer.off.mock.calls.map(([event]) => event)).toEqual([
@@ -311,6 +318,6 @@ describe("notebook chart sync", () => {
     source.emit("datazoom")
     peer.emit("datazoom")
     expect(peer.dispatchAction).toHaveBeenCalledTimes(1)
-    expect(source.dispatchAction).not.toHaveBeenCalled()
+    expect(source.dispatchAction).toHaveBeenCalledTimes(1)
   })
 })

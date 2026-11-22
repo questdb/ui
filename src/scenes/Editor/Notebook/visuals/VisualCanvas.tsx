@@ -10,6 +10,7 @@ import {
 import { setRenderReport } from "../renderReports"
 import { PaneEmptyState } from "../PaneEmptyState"
 import {
+  columnTypeOf,
   sqlLiteral,
   type SetVariables,
 } from "../interactions/chartInteractions"
@@ -140,8 +141,10 @@ export const VisualCanvas = ({
       click?.column,
     ],
   )
+  const clickType = columnTypeOf(statements, click?.column)
   const select = click
-    ? (value: unknown) => setVariables({ [click.variable]: sqlLiteral(value) })
+    ? (value: unknown) =>
+        setVariables({ [click.variable]: sqlLiteral(value, clickType) })
     : undefined
 
   // Every visual but the order book (which reports each side) draws from the

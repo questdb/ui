@@ -51,6 +51,7 @@ import {
 } from "../CellChart/lazyCharts"
 import {
   armBrush,
+  columnTypeOf,
   interactionEvents,
   withBrush,
 } from "../interactions/chartInteractions"
@@ -321,12 +322,19 @@ export const DrawCanvas: React.FC<Props> = ({
     setChartSync(bufferId, settings.chartSync)
   }, [bufferId, settings.chartSync])
 
+  // Clicks read the column types of the latest result; the handlers stay the
+  // same across refreshes, so the chart does not rebind them on every result.
+  const resultRef = useRef(cell.result)
+  useEffect(() => {
+    resultRef.current = cell.result
+  }, [cell.result])
   const events = useMemo(
     () =>
       interactionEvents(
         cell.interactions,
         setVariableValues,
         visual?.type === "treemap" || visual?.type === "sunburst",
+        (name) => columnTypeOf(resultRef.current?.results, name),
       ),
     [cell.interactions, setVariableValues, visual?.type],
   )
@@ -415,32 +423,37 @@ export const DrawCanvas: React.FC<Props> = ({
     emptyMessage = "No data to plot."
   }
 
-  // A settled draw with nothing to show replaces the previous report, so the
-  // agent does not read an earlier draw's series as the current chart.
-  const settledEmpty =
+  // A draw with nothing to show (settled empty, blocked or cancelled) replaces
+  // the previous report, so the agent does not read an earlier draw's series
+  // as the current chart.
+  const reportedEmpty =
     empty &&
-    !loading &&
-    !cancelled &&
-    classifyBlock === null &&
     queries.length > 0 &&
-    settledForCurrentQueries
+    (classifyBlock !== null ||
+      (!loading && (cancelled || settledForCurrentQueries)))
+  const emptyReportMessage =
+    classifyBlock === null && cancelled
+      ? "Chart loading was cancelled."
+      : emptyMessage
+  const emptyReportSeverity =
+    classifyBlock !== null || (!cancelled && hadError) ? "error" : "warning"
   useEffect(() => {
-    if (!settledEmpty) return
+    if (!reportedEmpty) return
     setRenderReport(bufferId, cell.id, {
       kind: drawKind,
       ...(visual ? { visualConfig: visual } : {}),
       drawn: visual ? { type: visual.type } : {},
       problems: [
-        { message: emptyMessage, severity: hadError ? "error" : "warning" },
+        { message: emptyReportMessage, severity: emptyReportSeverity },
       ],
     })
   }, [
     bufferId,
     cell.id,
     drawKind,
-    emptyMessage,
-    hadError,
-    settledEmpty,
+    emptyReportMessage,
+    emptyReportSeverity,
+    reportedEmpty,
     visual,
   ])
 

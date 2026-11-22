@@ -50,6 +50,30 @@ const Item = styled.div`
   }
 `
 
+// The card's figures for assistive technology, which cannot hover a row.
+const Details = styled.dl`
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+`
+
+// Opens a row's card on the side of the row with more room in the list.
+const placeCard = (event: React.MouseEvent<HTMLDivElement>) => {
+  const item = event.currentTarget
+  const list = item.closest('[data-hook="bullets"]')
+  if (!list) return
+  const row = item.getBoundingClientRect()
+  const view = list.getBoundingClientRect()
+  item.toggleAttribute(
+    "data-card-above",
+    view.bottom - row.bottom < row.top - view.top,
+  )
+}
+
 const Top = styled.div`
   display: flex;
   align-items: baseline;
@@ -146,6 +170,13 @@ const Card = styled.div`
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
+  }
+
+  /* Near the bottom of the list the card opens upwards, so it is not cut off
+     at the pane's edge. */
+  [data-card-above] > & {
+    top: auto;
+    bottom: calc(100% - 0.4rem);
   }
 
   dl {
@@ -274,10 +305,35 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
           : theme.color.contentPrimary
     const use = target && value !== null ? value / target : null
     const name = labelIdx >= 0 ? toLabel(row[labelIdx]) : valueName
+    const details = (
+      <>
+        <dt>{valueName}</dt>
+        <dd>{formatValue(value, format)}</dd>
+        {target !== null && (
+          <>
+            <dt>Limit</dt>
+            <dd>{formatValue(target, format)}</dd>
+            <dt>Used</dt>
+            <dd>{formatValue(use, { kind: "percent", decimals: 1 })}</dd>
+            <dt>Headroom</dt>
+            <dd>
+              {formatValue(value === null ? null : target - value, format)}
+            </dd>
+          </>
+        )}
+        {notches.map((n) => (
+          <React.Fragment key={n.value}>
+            <dt>{statusOf(n.tone) ?? n.tone} from</dt>
+            <dd>{formatValue(n.value, format)}</dd>
+          </React.Fragment>
+        ))}
+      </>
+    )
     return (
       <Item
         key={index}
         data-index={index}
+        onMouseEnter={placeCard}
         ref={windowed ? window.measureElement : undefined}
         style={
           start === undefined
@@ -319,29 +375,9 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
           )}
           {target !== null && <Target style={{ left: pct(target) }} />}
         </Track>
-        <Card data-card>
-          <dl>
-            <dt>{valueName}</dt>
-            <dd>{formatValue(value, format)}</dd>
-            {target !== null && (
-              <>
-                <dt>Limit</dt>
-                <dd>{formatValue(target, format)}</dd>
-                <dt>Used</dt>
-                <dd>{formatValue(use, { kind: "percent", decimals: 1 })}</dd>
-                <dt>Headroom</dt>
-                <dd>
-                  {formatValue(value === null ? null : target - value, format)}
-                </dd>
-              </>
-            )}
-            {notches.map((n) => (
-              <React.Fragment key={n.value}>
-                <dt>{statusOf(n.tone) ?? n.tone} from</dt>
-                <dd>{formatValue(n.value, format)}</dd>
-              </React.Fragment>
-            ))}
-          </dl>
+        <Details>{details}</Details>
+        <Card data-card aria-hidden>
+          <dl>{details}</dl>
         </Card>
       </Item>
     )

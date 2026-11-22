@@ -66,8 +66,31 @@ const Spark = styled.svg`
   height: calc(100% - 0.6rem);
 `
 
-export const sparklinePointsOf = (value: unknown): string | undefined => {
-  if (!Array.isArray(value)) return undefined
+// A cell is at most a few hundred pixels wide: each bucket keeps its lowest
+// and highest sample in order, so peaks survive while the polyline stays small.
+const SPARKLINE_BUCKETS = 100
+const sparklinePointsCache = new WeakMap<unknown[], string | undefined>()
+
+const sampledIndexes = (values: number[]): number[] => {
+  const last = values.length - 1
+  if (values.length <= SPARKLINE_BUCKETS * 2 + 2) return values.map((_, i) => i)
+  const indexes = [0]
+  const step = Math.ceil((values.length - 2) / SPARKLINE_BUCKETS)
+  for (let start = 1; start < last; start += step) {
+    let low = start
+    let high = start
+    for (let i = start + 1; i < Math.min(start + step, last); i++) {
+      if (values[i] < values[low]) low = i
+      if (values[i] > values[high]) high = i
+    }
+    indexes.push(Math.min(low, high))
+    if (low !== high) indexes.push(Math.max(low, high))
+  }
+  indexes.push(last)
+  return indexes
+}
+
+const computeSparklinePoints = (value: unknown[]): string | undefined => {
   const values: number[] = []
   let min = Infinity
   let max = -Infinity
@@ -81,12 +104,21 @@ export const sparklinePointsOf = (value: unknown): string | undefined => {
   if (values.length < 2) return undefined
   const span = max - min || 1
   if (!Number.isFinite(span)) return undefined
-  return values
+  return sampledIndexes(values)
     .map(
-      (v, i) =>
-        `${(i / (values.length - 1)) * 100},${20 - ((v - min) / span) * 18 - 1}`,
+      (i) =>
+        `${(i / (values.length - 1)) * 100},${20 - ((values[i] - min) / span) * 18 - 1}`,
     )
     .join(" ")
+}
+
+/** Polyline points for an array cell, cached per array value. */
+export const sparklinePointsOf = (value: unknown): string | undefined => {
+  if (!Array.isArray(value)) return undefined
+  if (sparklinePointsCache.has(value)) return sparklinePointsCache.get(value)
+  const points = computeSparklinePoints(value)
+  sparklinePointsCache.set(value, points)
+  return points
 }
 
 export const CellVisualLayer = ({

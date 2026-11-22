@@ -176,7 +176,27 @@ const Card = styled.div`
   li {
     display: contents;
   }
+
+  /* In a lane near the bottom of the pane the card opens above the bars, so
+     it is not cut off at the pane's edge. */
+  [data-card-above] > & {
+    top: auto;
+    bottom: calc(100% - 3.2rem);
+  }
 `
+
+// Opens a lane's bucket card on the side of the lane with more room.
+const placeCard = (event: React.MouseEvent<HTMLDivElement>) => {
+  const lane = event.currentTarget
+  const root = lane.closest('[data-hook="uptime-bars"]')
+  if (!root) return
+  const shown = lane.getBoundingClientRect()
+  const view = root.getBoundingClientRect()
+  lane.toggleAttribute(
+    "data-card-above",
+    view.bottom - shown.bottom < shown.top - view.top,
+  )
+}
 
 const Dot = styled.span<{ $color: string }>`
   align-self: center;
@@ -480,6 +500,7 @@ export const UptimeBars = ({
                   activate()
                 })
               }
+              onMouseEnter={placeCard}
               onMouseLeave={() => setHover(null)}
             >
               <Head>

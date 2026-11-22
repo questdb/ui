@@ -326,6 +326,23 @@ export const OrderBook = ({
     centred.current = true
   }, [asks, bids])
 
+  // The mid bar sticks to the ladder edge a keyboard user scrolls towards, so
+  // focus scrolling can land a level under it: move that level past the bar.
+  const revealFocusedLevel = (event: React.FocusEvent<HTMLDivElement>) => {
+    const ladder = ladderRef.current
+    const midRow = midRef.current
+    const level = event.target
+    if (!ladder || !midRow || midRow.contains(level)) return
+    const shown = level.getBoundingClientRect()
+    const bar = midRow.getBoundingClientRect()
+    if (shown.bottom <= bar.top || shown.top >= bar.bottom) return
+    const view = ladder.getBoundingClientRect()
+    const pinnedToTop = bar.top - view.top < view.bottom - bar.bottom
+    ladder.scrollTop += pinnedToTop
+      ? shown.top - bar.bottom
+      : shown.bottom - bar.top
+  }
+
   const row = (level: Level, side: "ask" | "bid") => {
     const activate =
       onSelect && level.selection !== undefined
@@ -360,7 +377,7 @@ export const OrderBook = ({
         <span>Size</span>
         {cols === 3 && <span>Total</span>}
       </Head>
-      <Ladder ref={ladderRef}>
+      <Ladder ref={ladderRef} onFocus={revealFocusedLevel}>
         {statementErrors?.[0] ? (
           <Empty role="alert">Ask query failed: {statementErrors[0]}</Empty>
         ) : asks.problem ? (

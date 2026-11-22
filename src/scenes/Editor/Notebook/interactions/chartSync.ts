@@ -102,9 +102,22 @@ const zoomTo = (
       ? { startValue: range[0], endValue: range[1] }
       : null
   if (!bounds) return
+  const peers = others(bufferId, source).filter(({ instance }) =>
+    isTimeChart(instance),
+  )
+  if (peers.length === 0) return
   drive(() => {
-    for (const { instance } of others(bufferId, source)) {
-      if (!isTimeChart(instance)) continue
+    // The source keeps the same absolute window as its peers. A percentage
+    // window would slide over the next refresh's time range while the peers
+    // stay on the times the user picked.
+    if (!reset && sourceZoom?.zoom) {
+      source.dispatchAction({
+        type: "dataZoom",
+        dataZoomIndex: sourceZoom.zoom.componentIndex,
+        ...bounds,
+      })
+    }
+    for (const { instance } of peers) {
       const [peer] = primaryXControls(instance)
       if (!peer) continue
       instance.dispatchAction({

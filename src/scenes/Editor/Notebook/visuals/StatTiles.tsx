@@ -4,7 +4,7 @@ import { RollingNumber } from "./RollingNumber"
 import { PaneEmptyState } from "../PaneEmptyState"
 import { Check } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../components/Button"
-import { sqlLiteral } from "../interactions/chartInteractions"
+import { columnTypeOf, sqlLiteral } from "../interactions/chartInteractions"
 import {
   formatValue,
   toneColor,
@@ -345,6 +345,8 @@ export const StatTiles = ({
   )
   if (tiles.length === 0)
     return <PaneEmptyState>{problems[0] ?? "No data to plot."}</PaneEmptyState>
+  // Tiles select from the first statement's rows.
+  const clickType = columnTypeOf(statements.slice(0, 1), clickColumn)
   const limitNotice = statTileLimitNotice(statements)
   const format = valueName ? formats[valueName] : undefined
   const changeFormat = changeName ? formats[changeName] : undefined
@@ -378,7 +380,7 @@ export const StatTiles = ({
             ? () => onSelect(tile.selection)
             : undefined
         const selected =
-          activate && sqlLiteral(tile.selection) === selectedValue
+          activate && sqlLiteral(tile.selection, clickType) === selectedValue
         return (
           <TileRoot
             as={activate ? "button" : "div"}

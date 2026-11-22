@@ -93,9 +93,11 @@ const resolveTruncatedText = (
   const fullText = formatCellValueForCopy(value, getColumn(Number(col)))
   // Most types render full text clipped by CSS; arrays are cut at format
   // time to fit the column, so the ellipsis check alone would miss them.
+  // A column format deliberately shows other text than the raw value, so only
+  // clipping makes that cell's text truncated.
   const isTruncated =
     cellText.scrollWidth > cellText.clientWidth ||
-    cellText.textContent !== fullText
+    (cellText.dataset.formatted !== "true" && cellText.textContent !== fullText)
   return isTruncated ? fullText : null
 }
 

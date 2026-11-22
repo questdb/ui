@@ -17,9 +17,13 @@ import { ResultTrendProvider } from "./ResultTrendContext"
 import { createResultTrendStore } from "./resultTrendStore"
 import { createResultGridViewportStore } from "./resultGridViewportStore"
 
+const notebook = vi.hoisted(() => ({
+  actions: {} as Record<string, unknown>,
+  state: { settings: {} } as { settings: Record<string, unknown> },
+}))
 vi.mock("../NotebookProvider", () => ({
-  useNotebookActions: () => ({}),
-  useNotebookState: () => ({ settings: {} }),
+  useNotebookActions: () => notebook.actions,
+  useNotebookState: () => notebook.state,
 }))
 
 vi.hoisted(() => {
@@ -160,6 +164,160 @@ describe("dashboard grid", () => {
     expect(
       screen.getAllByRole("gridcell").map((cell) => cell.textContent),
     ).toEqual(["ETH", "2.0", "BTC", "10.0▲"])
+  })
+
+  it.each(["stable", "stream"] as const)(
+    "does not replay a %s grid's last flash when its released result is read back",
+    (gridMode) => {
+      vi.useFakeTimers({ toFake: ["Date"] })
+      vi.stubGlobal("matchMedia", () => ({
+        matches: false,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }))
+      try {
+        const store = createResultTrendStore()
+        const flashConfig: HighlightConfig = {
+          identityColumns: ["symbol"],
+          rules: [
+            {
+              id: "changed",
+              kind: "previous",
+              target: { kind: "column", name: "price" },
+              appliesTo: "cell",
+              condition: { op: "changed" },
+              enabled: true,
+              display: "temporary",
+              color: "dataPositive",
+            },
+          ],
+        }
+        const panel = (data: DqlQueryResult) => (
+          <ResultTrendProvider value={store}>
+            <ResultGridPanel
+              data={data}
+              statementKey="prices"
+              runToken={1}
+              cellId="trades"
+              bufferId={1}
+              isFocused={false}
+              isRunning={false}
+              onReRun={vi.fn()}
+              onYieldFocus={vi.fn()}
+              cellColumns={columns}
+              viewportStore={createResultGridViewportStore()}
+              highlightConfig={flashConfig}
+              refreshIntervalMs={undefined}
+              gridMode={gridMode}
+            />
+          </ResultTrendProvider>
+        )
+        const priceCell = () =>
+          screen.getByText("10.0").closest('[role="gridcell"]') as HTMLElement
+
+        // Given a refresh that changed BTC's price and flashed it
+        vi.setSystemTime(1_000_000)
+        const first = frame([
+          ["BTC", 1],
+          ["ETH", 2],
+        ])
+        store.capture("trades", "prices", first, ["symbol"], {
+          at: 1_000_000,
+          restored: false,
+        })
+        const live = renderComponent(panel(first))
+        vi.setSystemTime(1_005_000)
+        const next = frame([
+          ["BTC", 10],
+          ["ETH", 2],
+        ])
+        store.capture("trades", "prices", next, ["symbol"], {
+          at: 1_005_000,
+          restored: false,
+        })
+        live.rerender(panel(next))
+        expect(priceCell().style.animationDelay).toBe("0ms")
+
+        // When the offscreen result is released and read back a minute later
+        live.unmount()
+        store.releaseCell("trades")
+        vi.setSystemTime(1_065_000)
+        const readBack = structuredClone(next)
+        store.capture("trades", "prices", readBack, ["symbol"], {
+          at: 1_005_000,
+          restored: true,
+        })
+        renderComponent(panel(readBack))
+
+        // Then the flash stays timed from the refresh that changed the price
+        expect(priceCell()).toHaveAttribute("data-highlight", "temporary")
+        expect(priceCell().style.animationDelay).toBe("-60000ms")
+      } finally {
+        vi.useRealTimers()
+        vi.unstubAllGlobals()
+      }
+    },
+  )
+
+  it("sets and shows a clicked LONG id as a number", () => {
+    // Given a grid whose click sets the id of the row, a LONG sent as text
+    const setVariableValues = vi.fn()
+    notebook.actions = { setVariableValues }
+    const ids = [
+      { name: "id", type: "LONG" },
+      { name: "desk", type: "SYMBOL" },
+    ]
+    const panel = () => (
+      <ResultTrendProvider value={createResultTrendStore()}>
+        <ResultGridPanel
+          data={{
+            type: "dql",
+            query: "select id, desk from desks",
+            columns: ids,
+            dataset: [
+              ["41", "east"],
+              ["42", "west"],
+            ],
+            count: 2,
+          }}
+          statementKey="desks"
+          runToken={1}
+          cellId="desks"
+          bufferId={1}
+          isFocused={false}
+          isRunning={false}
+          onReRun={vi.fn()}
+          onYieldFocus={vi.fn()}
+          cellColumns={ids}
+          viewportStore={createResultGridViewportStore()}
+          highlightConfig={{ identityColumns: [], rules: [] }}
+          interactions={{ click: { variable: "sel", column: "id" } }}
+          refreshIntervalMs={undefined}
+        />
+      </ResultTrendProvider>
+    )
+    try {
+      const { rerender } = renderComponent(panel())
+
+      // When the user clicks the second row
+      fireEvent.click(screen.getByText("west"))
+
+      // Then the variable holds the number, and that row shows as selected
+      expect(setVariableValues).toHaveBeenCalledWith({ sel: "42" })
+      notebook.state = {
+        settings: { variables: [{ name: "sel", value: "42" }] },
+      }
+      rerender(panel())
+      expect(
+        screen.getByText("west").closest('[role="gridcell"]'),
+      ).toHaveAttribute("data-highlight")
+      expect(
+        screen.getByText("east").closest('[role="gridcell"]'),
+      ).not.toHaveAttribute("data-highlight")
+    } finally {
+      notebook.actions = {}
+      notebook.state = { settings: {} }
+    }
   })
 
   it.each(["Enter", " "])(

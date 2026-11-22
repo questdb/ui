@@ -49,6 +49,41 @@ describe("dashboard visuals", () => {
     expect(eth).toHaveFocus()
   })
 
+  it("marks the tile of a LONG id the variable holds as a number", () => {
+    // Given tiles that select their LONG id, which arrives as text
+    renderComponent(
+      <StatTiles
+        visual={{ type: "stat" }}
+        formats={{}}
+        clickColumn="id"
+        statements={[
+          {
+            columns: [
+              { name: "desk", type: "SYMBOL" },
+              { name: "pnl", type: "DOUBLE" },
+              { name: "id", type: "LONG" },
+            ],
+            rows: [
+              ["east", 1, "41"],
+              ["west", 2, "42"],
+            ],
+          },
+        ]}
+        onSelect={vi.fn()}
+        selectedValue="42"
+      />,
+    )
+    // Then the tile with that id is the pressed one
+    expect(screen.getByRole("button", { name: /west/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    )
+    expect(screen.getByRole("button", { name: /east/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    )
+  })
+
   it("keeps exact LONG prices distinct when calculating spread and midpoint", async () => {
     // Given adjacent LONGs that collapse to the same double
     const columns = [
@@ -196,6 +231,60 @@ describe("dashboard visuals", () => {
     expect(container.querySelector('[data-hook="order-book-ask"] i')).toBe(bar)
     expect(bar).toHaveStyle({ width: "40%" })
   })
+  it.each([
+    ["top", "ask", [0, 36], [10, 32], -26],
+    ["bottom", "bid", [264, 300], [270, 292], 28],
+  ] as const)(
+    "scrolls a focused level out from under the mid bar stuck to the %s",
+    (_edge, side, [barTop, barBottom], [rowTop, rowBottom], scrolled) => {
+      // Given a clickable ladder that scrolled the mid bar to one of its edges
+      const columns = [
+        { name: "price", type: "DOUBLE" },
+        { name: "size", type: "DOUBLE" },
+      ]
+      const { container } = renderComponent(
+        <OrderBook
+          formats={{}}
+          onSelect={vi.fn()}
+          statements={[
+            { columns, rows: [[101, 1]] },
+            { columns, rows: [[99, 1]] },
+          ]}
+        />,
+      )
+      const level = container.querySelector<HTMLElement>(
+        `[data-hook="order-book-${side}"]`,
+      )
+      const bar = screen.getByText("Spread", { exact: false }).parentElement
+      const ladder = bar?.parentElement
+      if (!level || !bar || !ladder) throw new Error("order book not rendered")
+      let scrollTop = 500
+      Object.defineProperty(ladder, "scrollTop", {
+        configurable: true,
+        get: () => scrollTop,
+        set: (next: number) => {
+          scrollTop = next
+        },
+      })
+      const rect = (top: number, bottom: number) =>
+        new DOMRect(0, top, 300, bottom - top)
+      vi.spyOn(ladder, "getBoundingClientRect").mockReturnValue(rect(0, 300))
+      vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(
+        rect(barTop, barBottom),
+      )
+      vi.spyOn(level, "getBoundingClientRect").mockReturnValue(
+        rect(rowTop, rowBottom),
+      )
+
+      // When keyboard focus lands on a level the bar covers
+      level.focus()
+
+      // Then the ladder scrolls just far enough to show that level
+      expect(level).toHaveFocus()
+      expect(scrollTop).toBe(500 + scrolled)
+    },
+  )
+
   it("lists the levels nearest the spread of a deep book and says how many", () => {
     const columns = [
       { name: "price", type: "DOUBLE" },

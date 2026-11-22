@@ -15,10 +15,24 @@ vi.mock("../cellRefresh/CellRefreshContext", async (orig) => {
   return {
     ...actual,
     // A settled fetch for the cell's current SQL (settledKey === queriesKey).
+    // Tests may override the block, Stop and settle state the engine reports.
     useCellFetchSelector: (_id: string, select: (s: unknown) => unknown) => {
-      const g = globalThis as unknown as { __sql: string }
+      const g = globalThis as unknown as {
+        __sql: string
+        __fetch?: {
+          classifyBlock?: unknown
+          fetchCancelled?: boolean
+          settled?: boolean
+        }
+      }
       const s = engine.pendingCellFetchState(g.__sql)
-      return select({ ...s, settledKey: s.queriesKey })
+      const o = g.__fetch ?? {}
+      return select({
+        ...s,
+        settledKey: o.settled === false ? null : s.queriesKey,
+        ...(o.classifyBlock ? { classifyBlock: o.classifyBlock } : {}),
+        ...(o.fetchCancelled ? { fetchCancelled: true } : {}),
+      })
     },
   }
 })
@@ -101,7 +115,10 @@ const ui = (cell: NotebookCell) => (
 const getCell = (cell: NotebookCell) =>
   serializeCell([cell], cell.id, BUFFER_ID, false, undefined, "loaded")
 
-afterEach(() => clearRenderReport(BUFFER_ID, "c1"))
+afterEach(() => {
+  clearRenderReport(BUFFER_ID, "c1")
+  ;(globalThis as unknown as { __fetch?: unknown }).__fetch = undefined
+})
 
 describe("DrawCanvas render report", () => {
   it.each([
@@ -131,6 +148,56 @@ describe("DrawCanvas render report", () => {
       expect(screen.getAllByText(message).length).toBeGreaterThan(0)
       const report = getCell(second).render_report
       expect(report?.kind).toBe("chart")
+      expect(report?.drawn).toEqual({})
+      expect(report?.problems).toEqual([{ message, severity }])
+    },
+  )
+
+  it.each([
+    [
+      "its SQL becomes a write",
+      "INSERT INTO trades VALUES (now(), 1)",
+      { classifyBlock: { kind: "write", queryType: "INSERT" } },
+      "Cannot draw a write query ('INSERT'). Switch to Run mode to execute this SQL.",
+      "error",
+    ],
+    [
+      "its SQL cannot be classified",
+      SQL,
+      { classifyBlock: { kind: "failed", message: "validate failed" } },
+      "Cannot classify cell SQL (validate failed). Refusing to draw until the query can be classified safely.",
+      "error",
+    ],
+    [
+      "its next draw is stopped",
+      SQL,
+      { fetchCancelled: true, settled: false },
+      "Chart loading was cancelled.",
+      "warning",
+    ],
+  ] as const)(
+    "replaces the previous draw's report when %s",
+    (_label, sql, fetch, message, severity) => {
+      const g = globalThis as unknown as { __sql: string; __fetch?: unknown }
+      g.__sql = SQL
+      const first = cellWith(dql(5))
+      const { rerender } = renderComponent(ui(first))
+      expect(getCell(first).render_report?.drawn).toEqual({
+        series: 1,
+        points: 5,
+        events: 0,
+      })
+
+      // When the cell is blocked or its draw is stopped with nothing drawn
+      g.__sql = sql
+      g.__fetch = fetch
+      const second = { ...cellWith(dql(0)), value: sql, result: undefined }
+      act(() => {
+        rerender(ui(second))
+      })
+
+      // Then the agent reads the state the pane shows, not the old chart
+      const report = getCell(second).render_report
       expect(report?.drawn).toEqual({})
       expect(report?.problems).toEqual([{ message, severity }])
     },

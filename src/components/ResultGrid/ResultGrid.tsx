@@ -169,11 +169,16 @@ const GridCell = React.memo(function GridCell({
     loaded && format?.visual === "sparkline"
       ? sparklinePointsOf(rawValue)
       : undefined
+  const formattedNumber =
+    loaded &&
+    sparklinePoints === undefined &&
+    formatsNumbers(format) &&
+    !Array.isArray(rawValue)
   const displayValue = !loaded
     ? ""
     : sparklinePoints !== undefined
       ? ""
-      : formatsNumbers(format) && !Array.isArray(rawValue)
+      : formattedNumber
         ? toSingleLineDisplay(formatValue(rawValue, format))
         : toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
   const tone = loaded ? toneOf(rawValue, format) : undefined
@@ -253,6 +258,7 @@ const GridCell = React.memo(function GridCell({
       )}
       <CellText
         data-hook="grid-cell-text"
+        data-formatted={formattedNumber ? "true" : undefined}
         style={{
           textAlign: align,
           ...(textTone ? { color: textTone } : {}),

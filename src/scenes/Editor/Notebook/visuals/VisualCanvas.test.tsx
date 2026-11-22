@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react"
-import { screen } from "@testing-library/react"
+import { fireEvent, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
@@ -187,6 +187,89 @@ describe("VisualCanvas", () => {
     expect(cards).toHaveLength(2)
     for (const card of Array.from(cards))
       expect(getComputedStyle(card).display).toBe("none")
+  })
+
+  it("gives screen readers a Bullet row's headroom and threshold boundaries", () => {
+    // Given bullets with a limit column and a thresholded value format
+    renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "bullet" }}
+        formats={{
+          used: {
+            thresholds: [
+              { value: 0, tone: "positive" },
+              { value: 70, tone: "warning" },
+              { value: 90, tone: "negative" },
+            ],
+          },
+        }}
+        statements={[
+          {
+            columns: [
+              { name: "desk", type: "SYMBOL" },
+              { name: "used", type: "DOUBLE" },
+              { name: "limit", type: "DOUBLE" },
+            ],
+            rows: [["East", 75, 100]],
+          },
+        ]}
+      />,
+    )
+
+    // Then the figures the hover card shows are in the accessibility tree once
+    expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
+      ["used", "Limit", "Used", "Headroom", "Near limit from", "Breach from"],
+    )
+    const headroom = screen
+      .getAllByRole("term")
+      .find((term) => term.textContent === "Headroom")
+    expect(headroom?.nextElementSibling).toHaveTextContent("25")
+  })
+
+  it("opens a lower Bullet row's hover card upwards, inside the list", () => {
+    const { container } = renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "bullet" }}
+        statements={[
+          {
+            columns: [
+              { name: "desk", type: "SYMBOL" },
+              { name: "reading", type: "DOUBLE" },
+            ],
+            rows: [
+              ["East", 4],
+              ["West", 6],
+            ],
+          },
+        ]}
+      />,
+    )
+    const list = container.querySelector<HTMLElement>('[data-hook="bullets"]')
+    const [first, last] = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-index]"),
+    )
+    if (!list || !first || !last) throw new Error("bullets not rendered")
+    vi.spyOn(list, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 300, 200),
+    )
+    vi.spyOn(first, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 10, 300, 50),
+    )
+    vi.spyOn(last, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 140, 300, 50),
+    )
+
+    // When the pointer enters the top row, then the bottom row
+    fireEvent.mouseEnter(first)
+    fireEvent.mouseEnter(last)
+
+    // Then the top row's card opens below it and the bottom row's above it
+    expect(first).not.toHaveAttribute("data-card-above")
+    expect(last).toHaveAttribute("data-card-above")
+    const card = last.querySelector("[data-card]")
+    expect(card && getComputedStyle(card).top).toBe("auto")
   })
 
   it("mounts only nearby Bullet bars but still reports all rows", () => {

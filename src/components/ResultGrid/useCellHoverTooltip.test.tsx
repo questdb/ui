@@ -57,3 +57,37 @@ it("previews a clipped cell value after the hover delay", () => {
       ?.textContent,
   ).toBe("a" + "b".repeat(399))
 })
+
+it("does not preview a formatted number that fits its cell", () => {
+  // Given a price-formatted cell whose formatted text is fully visible
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(100)
+  renderComponent(
+    <ResultGrid
+      dataSource={inMemoryDataSource(
+        [{ name: "price", type: "DOUBLE" }],
+        [[1234.5], [null]],
+        -1,
+      )}
+      columnFormats={{ price: { kind: "price", decimals: 2 } }}
+      maxColumnWidth="auto"
+    />,
+  )
+  const texts = document.querySelectorAll('[data-hook="grid-cell-text"]')
+  expect(Array.from(texts, (text) => text.textContent)).toEqual([
+    "1,234.50",
+    "—",
+  ])
+  vi.useFakeTimers()
+  for (const text of Array.from(texts)) {
+    // When the pointer rests on it past the hover delay
+    fireEvent.mouseOver(text)
+    act(() => {
+      vi.advanceTimersByTime(700)
+    })
+    // Then no preview of the raw value opens
+    expect(
+      document.querySelector('[data-hook="grid-cell-tooltip-value"]'),
+    ).toBeNull()
+    fireEvent.mouseOut(text)
+  }
+})

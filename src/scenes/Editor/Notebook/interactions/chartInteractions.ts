@@ -6,14 +6,42 @@ import type { ChartEventHandler } from "../CellChart/ChartRenderer"
 // clicked item's value, a drag across a time chart sets a time window. Values
 // become SQL literals, since a variable holds an expression.
 
-/** A value as a SQL literal: numbers as they are, text quoted. */
-export const sqlLiteral = (value: unknown): string => {
+const INTEGER_TYPES = new Set(["BYTE", "SHORT", "INT", "LONG"])
+
+/**
+ * A value as a SQL literal: numbers as they are, text quoted. LONG and
+ * DECIMAL values arrive as decimal text, so the column's SQL type, when
+ * known, keeps them numbers: `42`, and `1.50m` for a DECIMAL.
+ */
+export const sqlLiteral = (value: unknown, type?: string): string => {
   if (value === null || value === undefined) return "null"
   if (typeof value === "number")
     return Number.isFinite(value) ? String(value) : "null"
   if (typeof value === "boolean") return value ? "true" : "false"
+  if (typeof value === "string" && type !== undefined) {
+    if (INTEGER_TYPES.has(type) && /^-?\d+$/.test(value)) return value
+    if (type.startsWith("DECIMAL") && /^-?\d+(\.\d+)?$/.test(value))
+      return `${value}m`
+  }
   const text = typeof value === "string" ? value : JSON.stringify(value)
   return `'${text.replace(/'/g, "''")}'`
+}
+
+/** The SQL type of the first statement column with this name. */
+export const columnTypeOf = (
+  statements: readonly unknown[] | undefined,
+  name: string | undefined,
+): string | undefined => {
+  if (name === undefined) return undefined
+  for (const statement of statements ?? []) {
+    const columns = (statement as { columns?: unknown } | null)?.columns
+    if (!Array.isArray(columns)) continue
+    const column = (columns as { name?: unknown; type?: unknown }[]).find(
+      (c) => c.name === name,
+    )
+    if (typeof column?.type === "string") return column.type
+  }
+  return undefined
 }
 
 /** A time as a quoted ISO timestamp QuestDB compares with timestamps. */
@@ -71,6 +99,7 @@ export const interactionEvents = (
   interactions: CellInteractions | undefined,
   setVariables: SetVariables,
   requireSourceColumn = false,
+  columnType?: (name: string) => string | undefined,
 ): Record<string, ChartEventHandler> => {
   const events: Record<string, ChartEventHandler> = {}
   const click = interactions?.click
@@ -82,7 +111,9 @@ export const interactionEvents = (
         return
       const value = clickedValue(p, click.column, requireSourceColumn)
       if (click.column !== undefined && value === undefined) return
-      setVariables({ [click.variable]: sqlLiteral(value) })
+      const type =
+        click.column === undefined ? undefined : columnType?.(click.column)
+      setVariables({ [click.variable]: sqlLiteral(value, type) })
     }
   }
   const brush = interactions?.brush

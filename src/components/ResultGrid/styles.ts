@@ -80,6 +80,8 @@ export const HeaderCell = styled.div<{ $align: string; $frozen?: boolean }>`
 `
 
 // Over the type line, at the side away from the text, so it takes no width.
+// Inset past the 10px a column resizer reaches into each neighbouring header,
+// so no part of the button sits under a resize handle.
 export const HeaderFormatButton = styled(Button)<{
   $align: string
   $formatted: boolean
@@ -87,7 +89,7 @@ export const HeaderFormatButton = styled(Button)<{
   && {
     position: absolute;
     bottom: 0.2rem;
-    ${({ $align }) => ($align === "right" ? "left" : "right")}: 0.4rem;
+    ${({ $align }) => ($align === "right" ? "left" : "right")}: 1.1rem;
     visibility: ${({ $formatted }) => ($formatted ? "visible" : "hidden")};
     height: 1.8rem;
     width: 1.8rem;

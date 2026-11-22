@@ -962,7 +962,9 @@ export const mapOption = ({
     const values = rows.rows.map((r) =>
       valueIdx >= 0 ? (toNumber(r[valueIdx]) ?? 0) : 1,
     )
-    const max = Math.max(...values, 1e-9)
+    // Sizes scale with magnitude, so the scale is the largest magnitude: a
+    // negative value must not be measured against a positive (or no) maximum.
+    const max = values.reduce((m, v) => Math.max(m, Math.abs(v)), 1e-9)
     return {
       option: {
         tooltip: {

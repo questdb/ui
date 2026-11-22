@@ -204,7 +204,9 @@ const ResultGridPanelInner: React.FC<Props> = ({
         ? data.columns.findIndex((c) => c.name === click.column)
         : column
       if (index < 0) return
-      setVariableValues({ [click.variable]: sqlLiteral(row[index]) })
+      setVariableValues({
+        [click.variable]: sqlLiteral(row[index], data.columns[index]?.type),
+      })
     }
   }, [interactions, data.columns, setVariableValues])
   const saveViewport = useCallback(
@@ -249,13 +251,14 @@ const ResultGridPanelInner: React.FC<Props> = ({
     : -1
   const isSelected = useMemo(() => {
     if (selectedValue === undefined || selectedColumn < 0) return null
+    const type = data.columns[selectedColumn]?.type
     const rows = new Set(
       data.dataset.flatMap((row, i) =>
-        sqlLiteral(row[selectedColumn]) === selectedValue ? [i] : [],
+        sqlLiteral(row[selectedColumn], type) === selectedValue ? [i] : [],
       ),
     )
     return rows.size > 0 ? (row: number) => rows.has(row) : null
-  }, [data.dataset, selectedColumn, selectedValue])
+  }, [data.columns, data.dataset, selectedColumn, selectedValue])
   const highlights = useMemo(
     () =>
       isNew || isSelected
@@ -378,7 +381,9 @@ const ResultGridPanelInner: React.FC<Props> = ({
         runToken={runToken}
         cellHighlights={highlights.lookup}
         flashParity={(liveRevision || revision) % 2 === 0 ? 0 : 1}
-        flashStartedAt={Math.max(capturedAt, liveAt)}
+        // A flash is timed from the result's landing: a result read back from
+        // storage, or a remounted live view, never replays it.
+        flashStartedAt={trend ? capturedAt : liveAt}
         flashDurationMs={flashDurationFor(refreshIntervalMs)}
         isFocused={isFocused}
         initialColumnSizing={columnLayout?.columnSizing}

@@ -59,3 +59,38 @@ it("redraws only the lanes whose hovered bar changed", () => {
     5 * barsPerLane,
   )
 })
+
+it("opens a lower lane's bucket card above its bars, inside the pane", () => {
+  // Given two lanes, the second at the bottom of the pane
+  renderComponent(
+    <UptimeBars
+      visual={{ type: "uptime", buckets: 90 }}
+      statements={[statement(2)]}
+    />,
+  )
+  const root = document.querySelector<HTMLElement>('[data-hook="uptime-bars"]')
+  const [top, bottom] = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-lane-index]"),
+  )
+  if (!root || !top || !bottom) throw new Error("uptime not rendered")
+  vi.spyOn(root, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 400, 200),
+  )
+  vi.spyOn(top, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 40, 400, 70),
+  )
+  vi.spyOn(bottom, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 120, 400, 70),
+  )
+
+  // When the pointer rests on a bar of the top lane, then of the bottom lane
+  fireEvent.mouseOver(top.querySelectorAll("i")[10])
+  expect(top).not.toHaveAttribute("data-card-above")
+  fireEvent.mouseOut(top.querySelectorAll("i")[10])
+  fireEvent.mouseOver(bottom.querySelectorAll("i")[10])
+
+  // Then the bottom lane's card opens upwards, over its own heading
+  expect(bottom).toHaveAttribute("data-card-above")
+  const card = bottom.lastElementChild
+  expect(card && getComputedStyle(card).top).toBe("auto")
+})
