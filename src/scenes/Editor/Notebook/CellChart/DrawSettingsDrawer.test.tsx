@@ -787,6 +787,43 @@ describe("draw settings drawer", () => {
     })
   })
 
+  it.each(["line", "events"] as const)(
+    "keeps horizontal when a Formats save sees only the %s sibling",
+    async (type) => {
+      const onSave = vi.fn()
+      const chart: ChartConfig = {
+        ...effective,
+        horizontal: true,
+        queries: [
+          { type: "bar", yColumns: ["price"] },
+          { type, yColumns: ["price"] },
+        ],
+      }
+      renderComponent(
+        <Fixture
+          saved={{ chartConfig: chart }}
+          onSave={onSave}
+          effectiveOverride={chart}
+          tabsOverride={[
+            {
+              ...tabs[0],
+              index: 1,
+              label: "Q2",
+              inferredChart: { type, yColumns: ["price"] },
+            },
+          ]}
+        />,
+      )
+      const drawer = await openDrawer()
+      await userEvent.click(
+        within(drawer).getByRole("tab", { name: "Formats" }),
+      )
+      fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+      await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+      expect(savedOf(onSave).chartConfig.horizontal).toBe(true)
+    },
+  )
+
   it("does not save horizontal once the chart is no longer bars", async () => {
     // Given a bar chart laid down
     const onSave = vi.fn()

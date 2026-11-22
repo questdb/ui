@@ -67,6 +67,7 @@ export type ChartContext = {
   clickColumn?: string
   clickEnabled?: boolean
   preciseTimePointer?: boolean
+  sharedTimePointer?: boolean
 }
 
 type Series = Record<string, unknown>
@@ -312,6 +313,8 @@ const MAX_PERCENT_STACK_SLOTS = 40_000
 export const percentStackProblem = (
   queries: ResolvedQuery[],
 ): string | undefined => {
+  const anchor = queries[0]
+  if (anchor && anchor.type !== "pie" && drawsAlone(anchor)) return
   for (const q of queries) {
     if (!isPercentStack(q)) continue
     if (q.partial)
@@ -1489,14 +1492,24 @@ export const buildEchartsOption = (
     axisLabel,
     nameTextStyle: axisName,
   }
+  // Item tooltips do not activate a time-axis pointer automatically.
+  const onlyPoints =
+    series.length > 0 && series.every((s) => s.type === "scatter")
   const xAxis: EChartsOption["xAxis"] =
     xMode === "time"
       ? {
           type: "time",
           ...xAxisName,
-          ...(context.preciseTimePointer
-            ? { axisPointer: { snap: false } }
-            : {}),
+          ...(onlyPoints
+            ? {
+                axisPointer: {
+                  show: context.sharedTimePointer === true,
+                  snap: false,
+                },
+              }
+            : context.preciseTimePointer
+              ? { axisPointer: { snap: false } }
+              : {}),
           // Extend the time axis 5% on each side so range bars sit inside the
           // plot. Candles and bars need no room: ECharts 6.1 keeps their
           // shapes inside the axis (containShape).
@@ -1519,8 +1532,6 @@ export const buildEchartsOption = (
           }
 
   // Points are read one at a time; everything else across x.
-  const onlyPoints =
-    series.length > 0 && series.every((s) => s.type === "scatter")
   const tooltip: EChartsOption["tooltip"] = {
     trigger: onlyPoints ? "item" : "axis",
     textStyle: chartText,

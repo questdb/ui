@@ -203,6 +203,28 @@ describe("fitLayout", () => {
     expect(tree.right).toBeGreaterThan(CHART_PADDING.right + 90)
   })
 
+  it("leaves a drawable Sankey box even when labels are wider than the pane", () => {
+    const result = fitLayout(
+      {
+        series: [
+          {
+            type: "sankey",
+            data: [{ name: "A" }, { name: "long endpoint ".repeat(30) }],
+            links: [
+              { source: "A", target: "long endpoint ".repeat(30), value: 1 },
+            ],
+          },
+        ],
+      },
+      SIZE,
+    )
+    const box = first(result.series)
+    expect(box.left).toBeGreaterThanOrEqual(0)
+    expect(SIZE.width - Number(box.left) - Number(box.right)).toBeGreaterThan(
+      100,
+    )
+  })
+
   it("gives a calendar square cells that fit", () => {
     // Given 13 weeks
     const option = {

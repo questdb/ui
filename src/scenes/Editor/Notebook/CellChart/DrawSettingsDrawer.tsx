@@ -316,7 +316,9 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     // lines, thresholds on a pie) are not saved.
     const result = settingsOf({
       ...draft,
-      chart: withoutUnofferedOptions(draft.chart, tabs),
+      chart: draft.chartEdited
+        ? withoutUnofferedOptions(draft.chart, tabs)
+        : draft.chart,
     })
     if (!result.ok) {
       setSaveError(result.error)

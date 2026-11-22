@@ -786,7 +786,7 @@ export class CellRefreshEngine {
       this.refreshAfterRun.add(cellId)
       entry.replayStoppedSlots = new Set([
         ...(entry.replayStoppedSlots ?? []),
-        ...entry.state.cancelledSlots,
+        ...(entry.inFlight ? entry.state.cancelledSlots : []),
       ])
     } else if (!singleStatement) {
       entry.replayStoppedSlots = undefined

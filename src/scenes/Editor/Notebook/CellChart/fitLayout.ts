@@ -691,7 +691,13 @@ export const fitLayout = <T extends object>(input: T, size: Size): T => {
     )
     let left = x1 + part.room.left
     let top = y1 + part.room.top
-    let right = size.width - x2 + part.room.right
+    // Long Sankey labels may clip, but must not turn layout width negative
+    // and move the data graphics outside the chart.
+    const rightRoom =
+      part.target.type === "sankey"
+        ? Math.min(part.room.right, Math.max(0, (x2 - x1) * 0.45))
+        : part.room.right
+    let right = size.width - x2 + rightRoom
     let bottomPx = size.height - y2 + part.room.bottom
     const target = part.target
     delete target.width

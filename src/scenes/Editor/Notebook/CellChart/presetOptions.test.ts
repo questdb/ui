@@ -272,6 +272,49 @@ describe("preset options", () => {
     expect(wind.data).toEqual([50])
   })
 
+  it("does not validate a stack the standalone heatmap ignores", () => {
+    const heatmap = query({
+      index: 0,
+      type: "heatmap",
+      xColumn: "ts",
+      columns: [
+        col("ts", "TIMESTAMP"),
+        col("market", "SYMBOL"),
+        col("amount", "DOUBLE"),
+      ],
+      dataset: [["2026-01-01T00:00:00Z", "A", 1]],
+      roles: { x: "ts", y: "market", value: "amount" },
+    })
+    const capped = query({
+      index: 1,
+      type: "area",
+      partial: true,
+      percentStack: true,
+    })
+    expect(
+      seriesOf(buildEchartsOption({ xColumn: "ts" }, [heatmap, capped]))[0]
+        .type,
+    ).toBe("heatmap")
+  })
+
+  it("gives linked timestamp Scatter a time pointer without changing item tooltips", () => {
+    const scatter = query({
+      type: "scatter",
+      xColumn: "ts",
+      yColumns: ["price"],
+      columns: [col("ts", "TIMESTAMP"), col("price", "DOUBLE")],
+      dataset: [["2026-01-01T00:00:00Z", 2]],
+    })
+    const build = (sharedTimePointer: boolean) =>
+      buildEchartsOption({ xColumn: "ts" }, [scatter], { sharedTimePointer })
+    expect(build(true).xAxis).toMatchObject({
+      type: "time",
+      axisPointer: { show: true, snap: false },
+    })
+    expect(build(true).tooltip).toMatchObject({ trigger: "item" })
+    expect(build(false).xAxis).toMatchObject({ axisPointer: { show: false } })
+  })
+
   it("rejects a capped denominator but leaves absolute bars drawable", () => {
     const sql = "select ts, fuel, mw"
     const resolved = resolveDraw(

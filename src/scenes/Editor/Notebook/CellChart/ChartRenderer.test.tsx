@@ -39,6 +39,63 @@ const setChartSize = () => {
   )
 }
 
+it("does not retain a removed overlay when a plain series takes its slot", async () => {
+  setChartSize()
+  const view = (withMarker: boolean) => (
+    <ChartRenderer
+      animate={false}
+      zoomWindow={{ start: 0, end: 100 }}
+      height={400}
+      option={{
+        xAxis: { type: "value" },
+        yAxis: { type: "value" },
+        series: [
+          {
+            type: "line",
+            name: "Price",
+            data: [
+              [0, 4],
+              [1, 6],
+            ],
+          },
+          withMarker
+            ? {
+                type: "line",
+                name: "Thresholds",
+                data: [],
+                markLine: { data: [{ yAxis: 5 }] },
+              }
+            : {
+                type: "line",
+                name: "Volume",
+                data: [
+                  [0, 2],
+                  [1, 9],
+                ],
+              },
+        ],
+      }}
+    />
+  )
+  const { container, rerender } = renderComponent(view(true))
+  const current = () => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host ? echarts.getInstanceByDom(host) : undefined
+  }
+  const original = current()
+  expect(original).toBeDefined()
+  rerender(view(false))
+  await waitFor(() => {
+    expect(current()).toBeDefined()
+    expect(current()).not.toBe(original)
+    const options = current()?.getOption() as {
+      series: { name: string; markLine?: unknown }[]
+    }
+    expect(options.series.map((s) => s.name)).toEqual(["Price", "Volume"])
+    expect(options.series.some((s) => s.markLine != null)).toBe(false)
+  })
+})
+
 it("uses the current data and restores zoom when the chart theme changes", async () => {
   setChartSize()
   // Given a mounted chart that has already merged a newer result

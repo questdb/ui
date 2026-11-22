@@ -250,6 +250,8 @@ export const DrawCanvas: React.FC<Props> = ({
   const theme = useTheme()
   const { settings } = useNotebookState()
   const preciseTimePointer = settings.chartSync?.crosshair === "line"
+  const sharedTimePointer =
+    preciseTimePointer || settings.chartSync?.crosshair === "tooltip"
   const formats = useMemo(() => cell.formats ?? {}, [cell.formats])
   const option = useMemo(
     () =>
@@ -260,10 +262,18 @@ export const DrawCanvas: React.FC<Props> = ({
           clickColumn: cell.interactions?.click?.column,
           clickEnabled: cell.interactions?.click !== undefined,
           preciseTimePointer,
+          sharedTimePointer,
         }),
         cell.interactions,
       ),
-    [resolution, theme.color, formats, cell.interactions, preciseTimePointer],
+    [
+      resolution,
+      theme.color,
+      formats,
+      cell.interactions,
+      preciseTimePointer,
+      sharedTimePointer,
+    ],
   )
   const { setVariableValues, updateSettings, getVariables } =
     useNotebookActions()

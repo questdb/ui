@@ -77,12 +77,16 @@ const structuralKey = (option: EChartsOption): string => {
       areaStyle?: unknown
       step?: unknown
       stack?: unknown
+      markLine?: unknown
+      markArea?: unknown
     }
     return [
       spec.type ?? "",
       spec.areaStyle ? "a" : "",
       spec.step ? "s" : "",
       spec.stack ? "k" : "",
+      spec.markLine ? "l" : "",
+      spec.markArea ? "m" : "",
     ].join("")
   })
   const xAxis = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis
