@@ -16,6 +16,7 @@ import {
   Y_SLIDER_ZOOM_ID,
   type ChartZoomDensity,
 } from "./chartDensity"
+import { escapeHtml } from "../../../../utils/escapeHtml"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type {
   ChartConfig,
@@ -50,6 +51,8 @@ export type ChartGlobals = {
   xColumn: string | null
   rightAxis?: ChartConfig["rightAxis"]
   referenceLines?: ReferenceLine[]
+  // Settings place a query on the left axis, even if it has no series now.
+  leftAxisConfigured?: boolean
 }
 
 type Series = Record<string, unknown>
@@ -335,15 +338,6 @@ const buildPieChartOption = (
   }
 }
 
-const escapeHtml = (text: string): string =>
-  text.replace(
-    /[&<>"']/g,
-    (ch) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        ch
-      ] ?? ch,
-  )
-
 // "2026-11-18T12:00:00.000000Z" → "2026-11-18 12:00", and a midnight to
 // its date alone: a heatmap's time slots are labels, not a time axis.
 const compactTimestamp = (label: string): string => {
@@ -544,10 +538,14 @@ const buildHeatmapOption = (
   }
   const xKeys = [...xValues.keys()]
   if (xRole === "temporal") {
-    const time = (key: HeatmapCategory) => {
-      const ms = Date.parse(key ?? "")
-      return Number.isNaN(ms) ? Number(xValues.get(key)) : ms
-    }
+    // Parse each key once, not on every comparison.
+    const times = new Map(
+      xKeys.map((key) => {
+        const ms = Date.parse(key ?? "")
+        return [key, Number.isNaN(ms) ? Number(xValues.get(key)) : ms]
+      }),
+    )
+    const time = (key: HeatmapCategory) => times.get(key) ?? Number.NaN
     xKeys.sort((a, b) => time(a) - time(b) || (a ?? "").localeCompare(b ?? ""))
   } else if (xRole === "numeric") {
     const read = exactNumericReader(q.columns[xIdx])
@@ -706,13 +704,21 @@ const renderHeatmapCell: CustomSeriesRenderItem = (_params, api) => {
 }
 
 // Reference lines belong to the axes, not a selectable legend entry.
-const referenceLineSeries = (series: Series[], lines: ReferenceLine[]) => {
+const referenceLineSeries = (
+  series: Series[],
+  lines: ReferenceLine[],
+  leftAxisConfigured = false,
+) => {
   const plottedAxes = new Set(series.map((s) => s.yAxisIndex ?? 0))
   const markers = new Map<number, Series>()
   for (const line of lines) {
-    // Never draw a right-axis threshold in the left series' units. Preserve
-    // the default-left fallback for right-only charts.
-    const axis = line.axis === "right" || !plottedAxes.has(0) ? 1 : 0
+    // Never draw a threshold in the other axis' units. Preserve the
+    // default-left fallback for charts configured right-only; a left query
+    // that has no series right now hides its lines instead.
+    const axis =
+      line.axis === "right" || (!plottedAxes.has(0) && !leftAxisConfigured)
+        ? 1
+        : 0
     if (!plottedAxes.has(axis)) continue
     const target = markers.get(axis) ?? {
       id: `reference-lines-${axis}`,
@@ -926,7 +932,11 @@ export const buildEchartsOption = (
 
   const hasRight = queries.some((q) => q.axis === "right")
   const referenceLines = chart.referenceLines ?? []
-  const markers = referenceLineSeries(series, referenceLines)
+  const markers = referenceLineSeries(
+    series,
+    referenceLines,
+    chart.leftAxisConfigured,
+  )
   // Where each line landed: on the right axis only when a right series took it.
   const linesOn = (axisIndex: number) =>
     markers

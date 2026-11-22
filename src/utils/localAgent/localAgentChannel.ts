@@ -35,6 +35,14 @@ const CANCELLED: AgentTurnResult = {
   usage: null,
 }
 
+const ignoreStatus: StatusCallback = () => undefined
+
+const stoppedTurnSignal = () => {
+  const aborter = new AbortController()
+  aborter.abort()
+  return aborter.signal
+}
+
 export type NotebookRead = {
   bufferId: number
   readSeq: number
@@ -237,7 +245,14 @@ export class LocalAgentChannel {
   captureToolRequest(client: MCPBridgeClient, conversationId: string) {
     if (this.disposed || client !== this.client) return undefined
     const turn = this.turns.get(conversationId)
-    if (!turn || turn.stopping) return undefined
+    // A request that arrives after Stop still belongs to the stopped turn,
+    // also once the local grace ended before the agent confirmed the cancel.
+    if (turn?.stopping)
+      return { setStatus: ignoreStatus, signal: turn.toolSignal }
+    if (!turn && this.pendingCancels.has(conversationId)) {
+      return { setStatus: ignoreStatus, signal: stoppedTurnSignal() }
+    }
+    if (!turn) return undefined
     let queryId: string | undefined
     const setStatus: StatusCallback = (status, args) => {
       if (this.turns.get(conversationId) !== turn || turn.stopping) return

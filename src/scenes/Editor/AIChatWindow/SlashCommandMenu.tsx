@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef } from "react"
 import styled from "styled-components"
+import { floatingSurfaceStyles } from "../../../components/overlayStyles"
 import type { SlashCommand } from "./slashCommands"
 
 const Menu = styled.div`
@@ -16,10 +17,7 @@ const Menu = styled.div`
   max-height: min(28rem, var(--command-popup-room, 28rem));
   overflow-x: hidden;
   overflow-y: auto;
-  border: 1px solid ${({ theme }) => theme.color.borderDefault};
-  border-radius: 0.8rem;
-  background: ${({ theme }) => theme.color.surfaceRaised};
-  box-shadow: 0 0.8rem 2.4rem ${({ theme }) => theme.color.shadowMedium};
+  ${floatingSurfaceStyles}
 `
 
 const useCommandPopup = (highlighted?: number) => {

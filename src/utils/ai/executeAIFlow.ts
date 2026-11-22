@@ -1092,6 +1092,12 @@ export async function executeAIFlow(
     const conversationHistory =
       config.type === "chat" ? config.conversationHistory : []
 
+    // Only a regular chat turn carries the earlier transcript. Quick
+    // actions and commands must not mark those earlier turns as seen.
+    const marksHistorySeen =
+      localAgentSessionId !== undefined &&
+      config.type === "chat" &&
+      !isAgentCommand
     const result: Awaited<ReturnType<typeof continueConversation>> =
       providerSettings
         ? await continueConversation({
@@ -1132,22 +1138,18 @@ export async function executeAIFlow(
               : notebookReadOf(config.notebookContext),
             setStatus: setStatusWithHistoryAndResetFlags,
             streaming: streamingCallback,
-            onPromptSent: capturedDigest && (() => capturedDigest.finish(true)),
+            onPromptSent: () => {
+              capturedDigest?.finish(true)
+              // The agent has read this turn's history once the prompt is
+              // written, even if the turn is then stopped or fails.
+              if (marksHistorySeen) {
+                callbacks.updateMessage(conversationId, anchorMessageId, {
+                  localAgentSessionId,
+                })
+              }
+            },
             abortSignal,
           })
-
-    // Only a regular chat turn carries the earlier transcript. Quick
-    // actions and commands must not mark those earlier turns as seen.
-    if (
-      localAgentSessionId &&
-      config.type === "chat" &&
-      !isAgentCommand &&
-      !isAiAssistantError(result)
-    ) {
-      callbacks.updateMessage(conversationId, anchorMessageId, {
-        localAgentSessionId,
-      })
-    }
 
     const originalContent = new Map(
       conversationHistory.map((message) => [message.id, message.content]),

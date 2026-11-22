@@ -835,7 +835,8 @@ const normalizeQueryChart = (q: QueryChart): QueryChart => {
   if (q.axis) next.axis = q.axis
   if (q.enabled === false) next.enabled = false
   if (q.name) next.name = q.name
-  if (q.colorScale === "row") next.colorScale = "row"
+  // Like the tool wire, keep a row scale only where it applies.
+  if (q.type === "heatmap" && q.colorScale === "row") next.colorScale = "row"
   return next
 }
 
@@ -964,7 +965,8 @@ export const buildAppliedCells = (
       chartConfig != null &&
       existing != null &&
       !valueChanged &&
-      existing.mode === resolvedMode &&
+      // Run is stored as an absent mode; the snapshot reports it as "run".
+      (existing.mode === "draw") === (resolvedMode === "draw") &&
       isEqual(chartConfig, normalizeChartConfig(existing.chartConfig))
     // PUT semantics like chartConfig: an omitted config clears the rules.
     const highlightConfig = req.highlightConfig ?? undefined

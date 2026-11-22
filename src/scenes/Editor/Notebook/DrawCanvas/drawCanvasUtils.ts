@@ -503,11 +503,22 @@ export const resolveDraw = (
     return config?.queries[i] ?? null
   })
 
+  // A left query with no rows must not move left-axis lines onto the right.
+  const leftAxisConfigured = denseQueries.some(
+    (q) =>
+      q != null &&
+      q.enabled !== false &&
+      q.axis !== "right" &&
+      q.type !== "pie" &&
+      q.type !== "heatmap",
+  )
+
   return {
     chart: {
       xColumn,
       rightAxis: config?.rightAxis,
       referenceLines: config?.referenceLines,
+      leftAxisConfigured,
     },
     renderQueries,
     effectiveConfig: {

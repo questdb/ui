@@ -562,6 +562,24 @@ describe("buildEchartsOption — reference lines", () => {
     expect(markLineOf(opt, 1)?.data[0].yAxis).toBe(70)
   })
 
+  it("hides a left line while the configured left query plots nothing", () => {
+    // When
+    const opt = buildEchartsOption(
+      {
+        xColumn: "ts",
+        referenceLines: [{ value: 150 }],
+        leftAxisConfigured: true,
+      },
+      [rsi],
+    )
+
+    // Then
+    expect(seriesList(opt.series)).toHaveLength(1)
+    expect(
+      (opt.yAxis as { max?: unknown }[]).every((axis) => axis.max == null),
+    ).toBe(true)
+  })
+
   it("grows a self-scaling axis to keep its lines in view, and leaves it be otherwise", () => {
     // When
     const opt = buildEchartsOption(

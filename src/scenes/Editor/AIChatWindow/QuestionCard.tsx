@@ -18,6 +18,8 @@ import {
   answerSummary,
   questionViews,
 } from "../../../utils/localAgent/questionDisplay"
+import { isImeKeyEvent } from "../../../utils/isImeKeyEvent"
+import { focusCardHeading } from "./focusCardHeading"
 
 type Answers = Record<string, string | string[]>
 
@@ -251,10 +253,6 @@ const KeyHint = styled.span`
   color: ${({ theme }) => theme.color.contentMuted};
 `
 
-// WebKit may dispatch the candidate-confirmation Enter after compositionend.
-const isImeKey = (event: React.KeyboardEvent) =>
-  event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229
-
 const valuesOf = (answer: string | string[] | undefined): string[] =>
   (Array.isArray(answer) ? answer : [answer ?? ""]).filter(
     (value) => value.trim() !== "",
@@ -320,7 +318,7 @@ export const QuestionCard = ({
   )
 
   useEffect(() => {
-    headingRef.current?.focus()
+    focusCardHeading(headingRef.current)
   }, [question.requestId])
 
   useLayoutEffect(() => {
@@ -421,7 +419,11 @@ export const QuestionCard = ({
   }
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (answered || isImeKey(event) || event.target instanceof HTMLInputElement)
+    if (
+      answered ||
+      isImeKeyEvent(event) ||
+      event.target instanceof HTMLInputElement
+    )
       return
     if (event.metaKey || event.ctrlKey || event.altKey) return
     if (event.key === "ArrowLeft" && !single) {
@@ -496,7 +498,7 @@ export const QuestionCard = ({
                   )
                 }}
                 onKeyDown={(event) => {
-                  if (isImeKey(event)) return
+                  if (isImeKeyEvent(event)) return
                   if (event.key === "Enter") {
                     event.preventDefault()
                     const next = commitOwnAnswer(target)
@@ -654,7 +656,7 @@ export const QuestionCard = ({
                     setAnswer(field.id, event.target.value || null)
                   }
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !isImeKey(event)) {
+                    if (event.key === "Enter" && !isImeKeyEvent(event)) {
                       event.preventDefault()
                       next()
                     }

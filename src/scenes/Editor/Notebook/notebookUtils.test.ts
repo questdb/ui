@@ -10,6 +10,7 @@ import {
   createDefaultNotebookViewState,
   MAX_NOTEBOOK_CELLS,
 } from "../../../store/notebook"
+import type { ChartConfig } from "./CellChart/chartTypes"
 import type { CellResultStatusReader } from "./cellSizing"
 import {
   cellModeChangePatch,
@@ -1658,6 +1659,85 @@ describe("buildAppliedCells", () => {
         buildAppliedCells([refreshed], { cells: [{ ...replay, ...edit }] }),
       ).toThrow(/Heatmaps need a chart of their own/)
     }
+  })
+
+  it("treats a snapshot replay of an unchanged chart as unchanged", () => {
+    const value =
+      "SELECT ts, site, reading FROM samples; SELECT ts, value FROM sibling"
+    const heatmap = {
+      type: "heatmap" as const,
+      partitionByColumn: "site",
+      yColumns: ["reading"],
+    }
+    const conflicting = (
+      mode: NotebookCell["mode"],
+      sibling: ChartConfig["queries"][number],
+    ): NotebookCell => ({
+      id: "heatmap",
+      position: 0,
+      type: "sql",
+      ...(mode && { mode }),
+      value,
+      chartConfig: { xColumn: "ts", queries: [heatmap, sibling] },
+      result: {
+        timestamp: 1,
+        activeResultIndex: 0,
+        results: [
+          {
+            type: "dql",
+            query: "SELECT ts, site, reading FROM samples",
+            columns: [
+              { name: "ts", type: "TIMESTAMP" },
+              { name: "site", type: "SYMBOL" },
+              { name: "reading", type: "DOUBLE" },
+            ],
+            count: 1,
+            dataset: [[1000, "west", 2]],
+          },
+          {
+            type: "dql",
+            query: "SELECT ts, value FROM sibling",
+            columns: [
+              { name: "ts", type: "TIMESTAMP" },
+              { name: "value", type: "DOUBLE" },
+            ],
+            count: 1,
+            dataset: [[1000, 9]],
+          },
+        ],
+      },
+    })
+    const line = { type: "line" as const, yColumns: ["value"] }
+
+    // A run cell stores no mode; the snapshot reports it as "run".
+    const runCell = conflicting(undefined, line)
+    expect(
+      buildAppliedCells([runCell], {
+        cells: [
+          {
+            id: runCell.id,
+            preserveValue: true,
+            mode: "run",
+            chartConfig: structuredClone(runCell.chartConfig),
+          },
+        ],
+      }).nextCells[0].mode,
+    ).toBeUndefined()
+
+    // A row scale left on a sibling that is no longer a heatmap does not
+    // survive the tool wire, and is not an edit either.
+    const drawCell = conflicting("draw", { ...line, colorScale: "row" })
+    expect(() =>
+      buildAppliedCells([drawCell], {
+        cells: [
+          {
+            id: drawCell.id,
+            preserveValue: true,
+            chartConfig: { xColumn: "ts", queries: [heatmap, line] },
+          },
+        ],
+      }),
+    ).not.toThrow()
   })
 
   it("keeps an incomplete disabled heatmap when applying a notebook chart config", () => {

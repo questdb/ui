@@ -74,6 +74,28 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith({ question_0: "QuestDB" })
   })
 
+  it("does not take focus or keystrokes from an editor outside the chat", async () => {
+    // Given the user is typing SQL outside the chat
+    renderComponent(<textarea aria-label="SQL editor" />)
+    const editor = screen.getByRole("textbox", { name: "SQL editor" })
+    editor.focus()
+    await userEvent.keyboard("LIMIT ")
+
+    // When a question arrives
+    const { onAnswer } = renderCard(question([database]))
+    await userEvent.keyboard("1")
+
+    // Then
+    expect(editor).toHaveFocus()
+    expect(editor).toHaveValue("LIMIT 1")
+    expect(onAnswer).not.toHaveBeenCalled()
+  })
+
+  it("focuses its heading when nothing else holds focus", () => {
+    renderCard(question([database]))
+    expect(screen.getByRole("heading", { name: /Claude Code/ })).toHaveFocus()
+  })
+
   it("lets the user send a choice again after a failed delivery", async () => {
     // Given
     const { onAnswer } = renderCard(question([database]))

@@ -1111,6 +1111,48 @@ describe("sanitizeBuffer", () => {
       })
     })
 
+    it("keeps valid chart reference lines and drops malformed ones", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "c1",
+              value: "SELECT 1",
+              chartConfig: {
+                xColumn: "ts",
+                queries: [{ type: "line", yColumns: ["price"] }],
+                referenceLines: [
+                  { value: 70, axis: "right", label: "Overbought" },
+                  { value: 30, axis: "left", label: "" },
+                  { value: Number.NaN },
+                  { value: "90" },
+                  "junk",
+                ],
+              },
+            },
+            {
+              id: "c2",
+              value: "SELECT 2",
+              chartConfig: {
+                xColumn: "ts",
+                queries: [{ type: "line", yColumns: ["price"] }],
+                referenceLines: [{ value: Infinity }],
+              },
+            },
+          ],
+        },
+      }
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      expect(cells?.[0].chartConfig?.referenceLines).toEqual([
+        { value: 70, axis: "right", label: "Overbought" },
+        { value: 30 },
+      ])
+      expect(cells?.[1].chartConfig).not.toHaveProperty("referenceLines")
+    })
+
     it("keeps valid highlight rules through pane migration and drops malformed rules", () => {
       // Given a legacy maximized cell with valid rules and another with an unknown rule kind
       const valid = {

@@ -30,6 +30,7 @@ import {
   type ModelOption,
   type ModelSelection,
 } from "./modelOptions"
+import { isImeKeyEvent } from "../../../../utils/isImeKeyEvent"
 
 const Content = styled(RadixPopover.Content)`
   ${menuContainerStyles}
@@ -389,7 +390,7 @@ export const ModelPicker = ({
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.nativeEvent.isComposing) return
+    if (isImeKeyEvent(event)) return
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault()
       moveHighlight(event.key === "ArrowDown" ? 1 : -1)

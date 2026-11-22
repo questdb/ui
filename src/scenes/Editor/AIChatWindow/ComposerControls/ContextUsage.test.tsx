@@ -17,7 +17,7 @@ describe("ContextUsage", () => {
     expect(ring()).toHaveAttribute("data-level", "normal")
   })
 
-  it("turns orange once the context is 80% full", () => {
+  it("turns to the warning color once the context is 80% full", () => {
     // When
     renderComponent(<ContextUsage usage={{ used: 160_000, size: 200_000 }} />)
 

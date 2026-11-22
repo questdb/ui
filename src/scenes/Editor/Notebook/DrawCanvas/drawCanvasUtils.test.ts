@@ -315,6 +315,36 @@ describe("resolveDraw — unresolved statements use a null slot, not an inert co
     expect(effectiveConfig.queries[1]).not.toBeNull()
   })
 
+  it("keeps a left line off the right axis while the left query has no rows", () => {
+    const statements = ["SELECT ts, price FROM a", "SELECT ts, rsi FROM b"]
+    const config: ChartConfig = {
+      xColumn: "ts",
+      queries: [
+        { type: "line", yColumns: ["price"] },
+        { type: "line", yColumns: ["rsi"], axis: "right" },
+      ],
+      referenceLines: [{ value: 150, label: "Price target" }],
+    }
+    const rsi = dql(
+      [
+        { name: "ts", type: "TIMESTAMP" },
+        { name: "rsi", type: "DOUBLE" },
+      ],
+      [[1000, 40]],
+      statements[1],
+    )
+    const resolution = resolveDraw(
+      statements,
+      [{ ...rsi, statementIndex: 1 }],
+      config,
+    )
+    expect(resolution.chart.leftAxisConfigured).toBe(true)
+    const series = resolveChartPlot(resolution).option?.series as {
+      id?: string
+    }[]
+    expect(series.map(({ id }) => id)).not.toContain("reference-lines-1")
+  })
+
   it("keeps a missing authored heatmap X instead of plotting the inferred column", () => {
     const config: ChartConfig = {
       xColumn: "bucket",

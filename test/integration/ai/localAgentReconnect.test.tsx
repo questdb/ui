@@ -716,6 +716,46 @@ it("resends seen history to a new channel advertising the same agent ID, but not
   expect(fetch).not.toHaveBeenCalled()
 })
 
+it("does not resend a stopped turn to the agent that already received it", async () => {
+  const { first } = await openNotebookChat()
+  await sendMessage("Count from 1 to 3000.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(1))
+  const { conversationId, turnId } = first.prompts()[0]
+  act(() =>
+    first.receive({
+      v,
+      conversationId,
+      turnId,
+      type: "agent_update",
+      update: { kind: "message_chunk", messageId: "partial", text: "1 2 3" },
+    }),
+  )
+  await screen.findByText("1 2 3")
+  await userEvent.click(
+    screen.getByRole("button", { name: "Stop AI generation" }),
+  )
+  await act(() => {
+    first.receive({
+      v,
+      type: "agent_turn_end",
+      conversationId,
+      turnId,
+      result: { outcome: "completed", stopReason: "cancelled", usage: null },
+    })
+    return Promise.resolve()
+  })
+
+  await sendMessage("What did I ask last?")
+  await waitFor(() => expect(first.prompts()).toHaveLength(2))
+  const next = first.prompts()[1].prompt[0]
+  expect(next?.type === "text" && next.text).not.toContain(
+    "<earlier_conversation>",
+  )
+  act(() => answer(first, "You asked me to count."))
+  expect(await screen.findByText("You asked me to count.")).toBeVisible()
+  expect(fetch).not.toHaveBeenCalled()
+})
+
 it("keeps the original failed turn if a reconnect starts while Retry prepares", async () => {
   const { bufferId, first, channel, reconnect } = await openNotebookChat()
   await sendMessage("Show a sample query")

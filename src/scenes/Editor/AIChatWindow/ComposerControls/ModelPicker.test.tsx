@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react"
-import { screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
@@ -157,6 +157,30 @@ describe("ModelPicker", () => {
     await userEvent.keyboard("{ArrowDown}{Enter}")
 
     // Then
+    expect(onSelect).toHaveBeenCalledWith({
+      kind: "api",
+      model: "openai:GPT 5",
+    })
+  })
+
+  it("does not pick a model on the Enter that confirms an IME candidate", async () => {
+    // Given
+    const { onSelect } = renderPicker()
+    await userEvent.click(screen.getByRole("button", { name: /Model:/ }))
+    const search = screen.getByRole("combobox")
+    await userEvent.type(search, "gpt")
+
+    // When WebKit confirms the candidate after compositionend
+    fireEvent.keyDown(search, {
+      key: "Enter",
+      isComposing: false,
+      keyCode: 229,
+    })
+
+    // Then
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(search).toBeInTheDocument()
+    await userEvent.keyboard("{Enter}")
     expect(onSelect).toHaveBeenCalledWith({
       kind: "api",
       model: "openai:GPT 5",

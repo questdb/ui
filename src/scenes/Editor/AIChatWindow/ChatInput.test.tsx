@@ -367,7 +367,11 @@ it("inserts mixed-paste text at the selection when the image slots are full", as
 })
 
 const renderQuestions = (...ids: string[]) => {
-  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+  // Stop cancels the turn, and the channel clears its questions.
+  let stopTurn = () => {}
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL, {
+    abortOperation: () => stopTurn(),
+  })
   const questions: AgentQuestionMessage[] = ids.map((requestId) => ({
     v: "0.6.0",
     type: "agent_question",
@@ -416,6 +420,10 @@ const renderQuestions = (...ids: string[]) => {
     },
     answerQuestion,
   } as unknown as LocalAgentChannel
+  stopTurn = () => {
+    snapshot = { ...snapshot, questions: [] }
+    listener?.()
+  }
   renderInput(channel)
   return answerQuestion
 }
@@ -453,6 +461,27 @@ it("does not steal focus from outside the chat when the last question is dismiss
   fireEvent.click(getHook("chat-question-skip"))
   expect(getHook("chat-input-textarea")).toBeEnabled()
   expect(outside).toHaveFocus()
+})
+
+it("returns focus to the composer when Stop removes a question", async () => {
+  renderQuestions("last")
+  const user = userEvent.setup()
+  getHook("chat-question-stop").focus()
+  await user.keyboard("{Enter}")
+  expect(queryHook("chat-question-option")).not.toBeInTheDocument()
+  expect(getHook("chat-input-textarea")).toHaveFocus()
+})
+
+it("does not send on the Enter that confirms an IME candidate", async () => {
+  configure(null, "openai:gpt-5")
+  const { submitted } = renderInput()
+  const input = getHook("chat-input-textarea")
+  await userEvent.type(input, "Explain this")
+  fireEvent.keyDown(input, { key: "Enter", isComposing: false, keyCode: 229 })
+  expect(submitted()).toBeUndefined()
+  expect(input).toHaveValue("Explain this")
+  await userEvent.keyboard("{Enter}")
+  expect(submitted()).toMatchObject({ text: "Explain this" })
 })
 
 it("offers Queue for an image-only draft during a reply", async () => {

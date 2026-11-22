@@ -4,8 +4,8 @@ import { Tooltip } from "../../../../components/Tooltip"
 import { formatTokenCount } from "../../../../utils/ai/tokenCount"
 import type { ContextUsage as Usage } from "../../../../utils/ai/aiAssistant"
 
-// Past this share of the context, the ring turns orange: the model will soon
-// compact or drop the earliest turns.
+// Past this share of the context, the ring shows a warning: the model will
+// soon compact or drop the earliest turns.
 export const CONTEXT_WARNING_SHARE = 0.8
 
 const SIZE = 16
@@ -29,9 +29,9 @@ const Root = styled.span`
   }
 `
 
-// How full an agent's context is, as a ring: grey, then orange once it is
-// nearly full, when the agent will soon compact it. The tooltip has the
-// numbers.
+// How full an agent's context is, as a ring: grey, then the warning color
+// once it is nearly full, when the agent will soon compact it. The tooltip
+// has the numbers.
 export const ContextUsage = ({ usage }: { usage: Usage }) => {
   const theme = useTheme()
   const share = Math.min(1, Math.max(0, usage.used / usage.size))
@@ -75,7 +75,7 @@ export const ContextUsage = ({ usage }: { usage: Usage }) => {
             fill="none"
             stroke={
               nearlyFull
-                ? theme.color.dataSeries5
+                ? theme.color.statusWarning
                 : theme.color.contentSecondary
             }
             strokeWidth={STROKE}

@@ -69,6 +69,7 @@ import { ComposerControls } from "./ComposerControls"
 import type { TokenUsageCounts } from "./ComposerControls/TokenUsage"
 import { QueuedMessage } from "./QueuedMessage"
 import { ctrlCmd } from "../../../utils/platform"
+import { isImeKeyEvent } from "../../../utils/isImeKeyEvent"
 
 const InputContainer = styled(Box)<{ $hasQuestion: boolean }>`
   display: flex;
@@ -733,7 +734,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
+      if (isImeKeyEvent(e)) return
       if (menuOpen) {
         const move = (by: number) => {
           e.preventDefault()
@@ -826,6 +827,13 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       return sent
     }
 
+    // Stop removes the card too: return focus as an answer would.
+    const handleQuestionStop = () => {
+      restoreFocusAfterAnswer.current =
+        inputContainerRef.current?.contains(document.activeElement) ?? false
+      handleStop()
+    }
+
     useLayoutEffect(() => {
       // A next question focuses itself. Only fill a focus gap left by the
       // last card, never override another control the user moved to.
@@ -846,7 +854,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
             agentLabel={localAgent.info.label}
             question={{ ...question, url: question.url }}
             onAnswer={handleQuestionAnswer}
-            onStop={handleStop}
+            onStop={handleQuestionStop}
           />
         ) : question && localAgent ? (
           <QuestionCard
@@ -855,7 +863,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
             question={question}
             drafts={questionDrafts}
             onAnswer={handleQuestionAnswer}
-            onStop={handleStop}
+            onStop={handleQuestionStop}
           />
         ) : (
           <>

@@ -169,6 +169,34 @@ it("cancels a notebook request captured for the stopped turn", async () => {
   await turn
 })
 
+it("refuses notebook requests that reach a stopped turn until the agent ends it", async () => {
+  vi.useFakeTimers()
+  const { channel, client, deliver, sent } = connect()
+  try {
+    const controller = new AbortController()
+    const { turn, onToolStatus } = startTurn(channel, controller.signal)
+    const [prompt] = sent
+    if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+    controller.abort()
+
+    // In transit when Stop was sent.
+    const stopping = channel.captureToolRequest(client, "c1")
+    expect(stopping?.signal.aborted).toBe(true)
+    stopping?.setStatus(AIOperationStatus.InspectingNotebook)
+    expect(onToolStatus).not.toHaveBeenCalled()
+
+    // The local grace ended before the agent confirmed the cancel.
+    await vi.advanceTimersByTimeAsync(5000)
+    await turn
+    expect(channel.captureToolRequest(client, "c1")?.signal.aborted).toBe(true)
+
+    deliver(turnEnd(prompt.turnId))
+    expect(channel.captureToolRequest(client, "c1")).toBeUndefined()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
 it.each([1000, 6000])(
   "replays Stop on reconnect at %i ms and clears it on matching end",
   async (reconnectAt) => {
