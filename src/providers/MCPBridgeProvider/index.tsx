@@ -280,19 +280,18 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         return true
       }
+      const { conversationId } = call
+      const setStatus =
+        conversationId === undefined
+          ? undefined
+          : getLocalAgentChannel()?.captureToolStatus(client, conversationId)
       void (async () => {
         try {
-          const { conversationId } = call
           const result = await dispatchMCPTool(call, {
             ...dispatchCtxRef.current,
             ...(conversationId !== undefined && {
               freshness: agentFreshnessFor(conversationId),
-              setStatus: (status, args) =>
-                getLocalAgentChannel()?.reportToolStatus(
-                  conversationId,
-                  status,
-                  args,
-                ),
+              setStatus,
             }),
             signal: aborter.signal,
           })

@@ -1,8 +1,16 @@
 import type { CustomSeriesRenderItem, EChartsOption } from "echarts"
 import {
+  asNumeric,
+  compareValues,
+  differenceOf,
+  ratioOf,
+  type Numeric,
+} from "../../../../components/ResultGrid/highlight/comparable"
+import {
   GRID_BOTTOM_NO_ZOOM,
   GRID_BOTTOM_WITH_ZOOM,
   HEATMAP_ROW_FILL,
+  HEATMAP_ROW_SLIDER_GRID_RIGHT,
   X_SLIDER_ZOOM_ID,
   X_WHEEL_ZOOM_ID,
   Y_SLIDER_ZOOM_ID,
@@ -16,7 +24,11 @@ import type {
   ReferenceLine,
   SeriesAxis,
 } from "./chartTypes"
-import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
+import {
+  MAX_PARTITION_SERIES,
+  classifyColumn,
+  isDecimalColumn,
+} from "./inferChartConfig"
 
 type Dataset = (boolean | string | number | null)[][]
 
@@ -361,35 +373,61 @@ const longReading = (value: unknown): bigint | null => {
   return null
 }
 
-const longHeatmapScale = (cells: HeatmapReading[], perRow: boolean) => {
-  const values = cells.map(({ reading }) => longReading(reading))
-  const extents = new Map<number, { min: bigint; max: bigint }>()
+const exactNumericReader = (column: ColumnDefinition) =>
+  column.type?.toUpperCase() === "LONG"
+    ? longReading
+    : isDecimalColumn(column)
+      ? asNumeric
+      : null
+
+const exactHeatmapScale = (
+  cells: HeatmapReading[],
+  perRow: boolean,
+  parse: (reading: HeatmapReading["reading"]) => Numeric | null,
+) => {
+  const values = cells.map(({ reading }) => parse(reading))
+  type Endpoint = { value: Numeric; index: number }
+  const extents = new Map<number, { min: Endpoint; max: Endpoint }>()
   cells.forEach(({ y }, i) => {
     const value = values[i]
     if (value === null) return
     const key = perRow ? y : 0
     const extent = extents.get(key)
-    if (!extent) extents.set(key, { min: value, max: value })
-    else {
-      if (value < extent.min) extent.min = value
-      if (value > extent.max) extent.max = value
+    if (!extent) {
+      const endpoint = { value, index: i }
+      extents.set(key, { min: endpoint, max: endpoint })
+    } else {
+      if (compareValues(value, extent.min.value) < 0)
+        extent.min = { value, index: i }
+      if (compareValues(value, extent.max.value) > 0)
+        extent.max = { value, index: i }
     }
   })
+  const ranges = new Map(
+    [...extents].map(([key, { min, max }]) => [
+      key,
+      { min: min.value, span: differenceOf(max.value, min.value) },
+    ]),
+  )
   const shades = cells.map(({ y }, i) => {
     const value = values[i]
-    const extent = extents.get(perRow ? y : 0)
-    if (value === null || !extent) return "-"
-    const { min, max } = extent
-    if (min === max) return perRow ? 1 : 0.5
-    // Subtract before converting: adjacent LONGs can have the same double.
-    return Number(value - min) / Number(max - min)
+    const range = ranges.get(perRow ? y : 0)
+    if (value === null || !range) return "-"
+    if (range.span.unscaled === BigInt(0)) return perRow ? 1 : 0.5
+    // Subtract before converting: adjacent exact values can have the same double.
+    return ratioOf(differenceOf(value, range.min), range.span)
   })
   const extent = extents.get(0)
   return {
     shades,
     min: 0,
     max: 1,
-    labels: extent ? [String(extent.max), String(extent.min)] : ["1", "0"],
+    labels: extent
+      ? [
+          String(cells[extent.max.index].reading),
+          String(cells[extent.min.index].reading),
+        ]
+      : ["1", "0"],
   }
 }
 
@@ -421,6 +459,25 @@ const numericHeatmapScale = (
   return { shades, min, max, labels: scaleLabels(min, max) }
 }
 
+type HeatmapCategory = string | null
+
+const heatmapCategory = (value: unknown): HeatmapCategory =>
+  value == null ? null : toCategoryLabel(value)
+
+const heatmapLabels = (keys: HeatmapCategory[]): string[] => {
+  const used = new Set(keys)
+  const unusedLabel = (base: string) => {
+    let label = base
+    for (let n = 2; used.has(label); n++) label = `${base} (${n})`
+    return label
+  }
+  return keys.map((key) => {
+    if (key === null) return unusedLabel("[NULL]")
+    if (key === "") return unusedLabel("[empty]")
+    return key
+  })
+}
+
 // A grid of cells: x along the bottom, one row per value of the partition
 // column, and each cell colored by its value.
 const buildHeatmapOption = (
@@ -441,38 +498,41 @@ const buildHeatmapOption = (
   // Time and numbers run in order along x, whatever the query's ORDER BY: a
   // query sorted by row first lists each row's times in turn. Categories
   // keep the order they came in.
-  const xValues = new Map<string, unknown>()
-  const rowSet = new Set<string>()
+  const xValues = new Map<HeatmapCategory, HeatmapReading["reading"]>()
+  const rowSet = new Set<HeatmapCategory>()
   for (const row of q.dataset) {
-    const x = toCategoryLabel(row[xIdx])
+    const x = heatmapCategory(row[xIdx])
     if (!xValues.has(x)) xValues.set(x, row[xIdx])
-    rowSet.add(toCategoryLabel(row[rowIdx]))
+    rowSet.add(heatmapCategory(row[rowIdx]))
   }
-  const xLabels = [...xValues.keys()]
+  const xKeys = [...xValues.keys()]
   if (xRole === "temporal") {
-    const time = (label: string) => {
-      const ms = Date.parse(label)
-      return Number.isNaN(ms) ? Number(xValues.get(label)) : ms
+    const time = (key: HeatmapCategory) => {
+      const ms = Date.parse(key ?? "")
+      return Number.isNaN(ms) ? Number(xValues.get(key)) : ms
     }
-    xLabels.sort((a, b) => time(a) - time(b) || a.localeCompare(b))
+    xKeys.sort((a, b) => time(a) - time(b) || (a ?? "").localeCompare(b ?? ""))
   } else if (xRole === "numeric") {
-    if (q.columns[xIdx].type?.toUpperCase() === "LONG") {
-      const keys = new Map(
-        xLabels.map((label) => [label, longReading(xValues.get(label))]),
+    const read = exactNumericReader(q.columns[xIdx])
+    if (read) {
+      const values = new Map(
+        xKeys.map((key) => [key, read(xValues.get(key) ?? null)]),
       )
-      xLabels.sort((a, b) => {
-        const aKey = keys.get(a) ?? null
-        const bKey = keys.get(b) ?? null
-        if (aKey === null) return bKey === null ? 0 : -1
-        if (bKey === null) return 1
-        return aKey < bKey ? -1 : aKey > bKey ? 1 : 0
+      xKeys.sort((a, b) => {
+        const aValue = values.get(a) ?? null
+        const bValue = values.get(b) ?? null
+        if (aValue === null) return bValue === null ? 0 : -1
+        if (bValue === null) return 1
+        return compareValues(aValue, bValue)
       })
     } else {
-      xLabels.sort((a, b) => Number(xValues.get(a)) - Number(xValues.get(b)))
+      xKeys.sort((a, b) => Number(xValues.get(a)) - Number(xValues.get(b)))
     }
   }
-  const xSlot = new Map(xLabels.map((label, i) => [label, i]))
-  const rowLabels = [...rowSet].sort()
+  const xSlot = new Map(xKeys.map((key, i) => [key, i]))
+  const xLabels = heatmapLabels(xKeys)
+  const rowKeys = [...rowSet].sort()
+  const rowLabels = heatmapLabels(rowKeys)
   // Slots of a single day show their time alone.
   const timeOf = (label: string) =>
     /T(\d{2}:\d{2}(:\d{2}(?<!:00))?)/.exec(label)?.[1] ?? label
@@ -486,20 +546,20 @@ const buildHeatmapOption = (
       : sameDay
         ? timeOf
         : compactTimestamp
-  const rowSlot = new Map(rowLabels.map((label, i) => [label, i]))
+  const rowSlot = new Map(rowKeys.map((key, i) => [key, i]))
 
   // Each cell: x slot, row, the value it is colored by, and its own value.
   // On a scale per row, a cell is colored by where it falls in its row.
   const cells = q.dataset.map((row) => ({
-    x: xSlot.get(toCategoryLabel(row[xIdx])) ?? 0,
-    y: rowSlot.get(toCategoryLabel(row[rowIdx])) ?? 0,
+    x: xSlot.get(heatmapCategory(row[xIdx])) ?? 0,
+    y: rowSlot.get(heatmapCategory(row[rowIdx])) ?? 0,
     reading: row[valueIdx],
   }))
   const perRow = q.colorScale === "row"
-  const { shades, min, max, labels } =
-    q.columns[valueIdx].type?.toUpperCase() === "LONG"
-      ? longHeatmapScale(cells, perRow)
-      : numericHeatmapScale(cells, perRow, rowLabels.length)
+  const readExact = exactNumericReader(q.columns[valueIdx])
+  const { shades, min, max, labels } = readExact
+    ? exactHeatmapScale(cells, perRow, readExact)
+    : numericHeatmapScale(cells, perRow, rowLabels.length)
   const data = cells.map(({ x, y, reading }, i) => [
     x,
     y,
@@ -543,7 +603,7 @@ const buildHeatmapOption = (
       type: "category",
       data: rowLabels,
       inverse: true,
-      axisLabel,
+      axisLabel: { ...axisLabel, fontFamily: "sans-serif", margin: 8 },
       nameTextStyle: axisName,
       splitArea: { show: false },
     },
@@ -737,7 +797,11 @@ export const buildEchartsOption = (
       axisName,
       anchorRole,
     )
-  if (single && anchor.type === "scatter" && anchorRole === "numeric")
+  // ECharts value axes coerce their positions to doubles. Keep exact DECIMAL
+  // labels and positions on a category axis instead.
+  const numericXAxis =
+    anchorRole === "numeric" && anchorCol != null && !isDecimalColumn(anchorCol)
+  if (single && anchor.type === "scatter" && numericXAxis)
     return buildScatterChartOption(
       anchor,
       chart.referenceLines ?? [],
@@ -748,11 +812,7 @@ export const buildEchartsOption = (
     )
 
   const xMode: XMode =
-    anchorRole === "temporal"
-      ? "time"
-      : anchorRole === "numeric"
-        ? "value"
-        : "category"
+    anchorRole === "temporal" ? "time" : numericXAxis ? "value" : "category"
 
   // A single, non-partitioned query renders positionally: one axis slot and one
   // value per row, so duplicate categorical x values are preserved. The deduped
@@ -946,7 +1006,7 @@ export const withZoomDensity = (
     grid: {
       ...(option.grid as object),
       bottom,
-      ...(rowSlider && { right: 48 }),
+      ...(rowSlider && { right: HEATMAP_ROW_SLIDER_GRID_RIGHT }),
     },
     dataZoom: [
       {

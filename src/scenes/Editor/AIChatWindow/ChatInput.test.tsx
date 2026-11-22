@@ -37,6 +37,7 @@ const configure = (
     status,
     currentModel,
     aiAssistantSettings: {},
+    getOperationSignal: () => new AbortController().signal,
     ...overrides,
   } as ReturnType<typeof useAIStatus>)
 
@@ -53,6 +54,7 @@ const fakeChannel = (
   }
   return {
     getSnapshot: () => snapshot,
+    isTransportReady: () => true,
     subscribe: () => () => undefined,
   } as unknown as LocalAgentChannel
 }
@@ -72,6 +74,7 @@ const renderInput = (initial: LocalAgentChannel | null = null) => {
       <LocalAgentContext.Provider value={channel}>
         <ChatInput
           conversationId={id}
+          localAgentTransportReady={channel !== null}
           queue={queue}
           setQueue={(update) => {
             const next = update(submitted)
@@ -93,42 +96,58 @@ const renderInput = (initial: LocalAgentChannel | null = null) => {
   }
 }
 
-it("restores a queued draft if the selected model changes before delivery", async () => {
-  // Given a follow-up queued for the local agent
+it("keeps a mismatched queue across composer remounts until explicit Edit", async () => {
   configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
-  const view = renderInput()
+  const channel = fakeChannel("original")
+  const view = renderInput(channel)
   await userEvent.type(
     getHook("chat-input-textarea"),
     "Queued follow-up{Enter}",
   )
-  expect(getHook("chat-queued-message-text")).toHaveTextContent(
-    "Queued follow-up",
-  )
+  const entry = view.submitted()
 
-  // When the pending turn ends and the API model becomes active
   configure(null, "openai:gpt-5-mini")
-  view.rerender()
+  view.rerender(null, "c2")
+  view.rerender(null, "c1")
+  expect(view.submitted()).toBe(entry)
+  expect(getHook("chat-queued-message")).toHaveTextContent(
+    "Restore the original destination",
+  )
+  expect(getHook("chat-input-textarea")).toHaveValue("")
 
-  // Then the draft requires an explicit send with the new model
+  await userEvent.click(screen.getByRole("button", { name: "Edit" }))
   expect(view.submitted()).toBeUndefined()
   expect(queryHook("chat-queued-message")).not.toBeInTheDocument()
   expect(getHook("chat-input-textarea")).toHaveValue("Queued follow-up")
 })
 
-it("requires a fresh send when the local connection is replaced", async () => {
-  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
-  const view = renderInput(fakeChannel("old"))
-  await userEvent.type(getHook("chat-input-textarea"), "Follow-up{Enter}")
-  expect(getHook("chat-queued-message-text")).toHaveTextContent("Follow-up")
+it("cannot steer or append a new draft to a queue for a replaced local connection", async () => {
+  const steerOperation = vi.fn()
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL, { steerOperation })
+  const original = fakeChannel("agent")
+  const view = renderInput(original)
+  const input = getHook("chat-input-textarea")
+  await userEvent.type(input, "Follow-up{Enter}")
+  const entry = view.submitted()
 
-  configure(null, LOCAL_AGENT_MODEL)
-  view.rerender(fakeChannel("new"))
+  // Matching the name does not make a fresh connection the same destination.
+  view.rerender(fakeChannel("agent"))
+  expect(getHook("chat-queued-send-now")).toBeDisabled()
+  await userEvent.click(getHook("chat-queued-send-now"))
+  await userEvent.keyboard("{Control>}{Enter}{/Control}")
+  await userEvent.type(input, "New draft{Enter}")
+  await userEvent.keyboard("{Control>}{Enter}{/Control}")
+  expect(steerOperation).not.toHaveBeenCalled()
+  expect(view.submitted()).toBe(entry)
+  expect(input).toHaveValue("New draft")
 
-  expect(view.submitted()).toBeUndefined()
-  expect(getHook("chat-input-textarea")).toHaveValue("Follow-up")
+  view.rerender(original)
+  expect(getHook("chat-queued-send-now")).toBeEnabled()
+  await userEvent.click(getHook("chat-queued-send-now"))
+  expect(steerOperation).toHaveBeenCalledOnce()
 })
 
-it("requires a fresh send when the model on the same agent channel changes", async () => {
+it("keeps the queue for its original model on the same agent channel", async () => {
   configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
   const model = {
     current: "fast",
@@ -144,8 +163,16 @@ it("requires a fresh send when the model on the same agent channel changes", asy
   model.current = "deep"
   configure(null, LOCAL_AGENT_MODEL)
   view.rerender()
-  expect(view.submitted()).toBeUndefined()
-  expect(getHook("chat-input-textarea")).toHaveValue("Follow-up")
+  expect(view.submitted()?.agentModel).toBe("fast")
+  expect(getHook("chat-queued-message")).toHaveTextContent(
+    "Restore the original destination",
+  )
+  expect(getHook("chat-input-textarea")).toHaveValue("")
+  model.current = "fast"
+  view.rerender()
+  expect(getHook("chat-queued-message")).not.toHaveTextContent(
+    "Restore the original destination",
+  )
 })
 
 beforeEach(() => {

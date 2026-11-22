@@ -490,6 +490,7 @@ type ChatMessagesProps = {
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
   onRetry?: (userMessageId: string) => void
+  retryDisabled?: boolean
   onCancelQuery?: (queryKey: QueryKey) => void
   // Query execution status
   runningQueryKey?: QueryKey | null
@@ -572,6 +573,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onOpenInEditor,
   onApplyToEditor,
   onRetry,
+  retryDisabled,
   onCancelQuery,
   runningQueryKey,
   queryNotifications,
@@ -1356,6 +1358,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     onRetry(messages[userMessageIndex].id)
                   }
                 }}
+                disabled={retryDisabled}
+                title={
+                  retryDisabled
+                    ? "Waiting for the local agent bridge"
+                    : undefined
+                }
                 data-hook="retry-button"
               >
                 Retry
@@ -1384,14 +1392,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
         {visibleEntries.map((entry) => {
           const id =
             entry.type === "user" ? entry.message.id : entry.anchorMessage.id
-          const lastId =
-            entry.type === "user"
-              ? entry.message.id
-              : (entry.turnMessages[entry.turnMessages.length - 1]?.id ?? id)
           return (
             <React.Fragment key={`entry-${id}`}>
               {renderEntry(entry)}
-              {notesAfter(lastId)}
+              {notesAfter(id)}
             </React.Fragment>
           )
         })}

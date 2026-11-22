@@ -158,6 +158,34 @@ describe("QuestionCard", () => {
     expect(onAnswer.mock.calls).toEqual([[{ question_0: "Postgres" }]])
   })
 
+  it("keeps each custom draft across tabs without adding it to the submitted answers", async () => {
+    const { onAnswer } = renderCard(
+      question([database, { ...features, otherFieldId: "custom_feature" }]),
+    )
+    const openDraft = async (role: "radio" | "checkbox") => {
+      await userEvent.click(
+        screen.getByRole(role, { name: /Type your own answer/ }),
+      )
+      return screen.getByRole("textbox", { name: "Your own answer" })
+    }
+    const databaseTab = screen.getByRole("tab", { name: "Database" })
+    const featuresTab = screen.getByRole("tab", { name: "Features" })
+    const reviewTab = screen.getByRole("tab", { name: "Review" })
+    await userEvent.type(await openDraft("radio"), "SQLite")
+    await userEvent.click(featuresTab)
+    await userEvent.type(await openDraft("checkbox"), "Charts")
+    await userEvent.click(databaseTab)
+    expect(await openDraft("radio")).toHaveValue("SQLite")
+    await userEvent.click(featuresTab)
+    expect(await openDraft("checkbox")).toHaveValue("Charts")
+    await userEvent.click(screen.getByRole("button", { name: "Review" }))
+    expect(onAnswer).not.toHaveBeenCalled()
+    expect(reviewTab).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByText("Not answered")).toBeVisible()
+    await userEvent.click(screen.getByRole("button", { name: "Send" }))
+    expect(onAnswer.mock.calls).toEqual([[{ custom_feature: "Charts" }]])
+  })
+
   it("confirms a custom answer on a multiple-choice step before review", async () => {
     const { onAnswer } = renderCard(
       question([database, { ...features, otherFieldId: "custom_feature" }]),

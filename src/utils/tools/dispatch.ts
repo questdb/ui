@@ -52,12 +52,7 @@ import {
   isUnverifiableExecError,
   UNVERIFIED_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
-import {
-  HEATMAP_INCOMPLETE_MESSAGE,
-  heatmapIssue,
-  resolveDraw,
-  toChartResult,
-} from "../../scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
+import { validateHeatmapConfig } from "../../scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
 import { mergeCellChartConfig } from "../../scenes/Editor/Notebook/cellSizing"
 import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
@@ -180,28 +175,6 @@ const readCells = (
     (view) => Promise.resolve(view.cells),
     signal,
   )
-
-const validateHeatmapPatch = (
-  config: ChartConfig,
-  statements: string[],
-  result: NotebookCell["result"],
-): string | null => {
-  const enabled = config.queries.filter((q) => q && q.enabled !== false)
-  if (!enabled.some((q) => q?.type === "heatmap")) return null
-
-  const conflict =
-    "Heatmaps need a chart of their own. Include only one query or choose a different chart type."
-  const frame = toChartResult(result, statements)
-  // Without matching results, keep rejecting explicit mixes. Inferred slots
-  // remain unknown; never execute SQL to validate chart settings.
-  if (frame.kind !== "settled") return enabled.length > 1 ? conflict : null
-
-  const { renderQueries } = resolveDraw(statements, frame.results, config)
-  const issue = heatmapIssue(renderQueries)
-  if (issue === "conflict") return conflict
-  if (issue === "incomplete") return HEATMAP_INCOMPLETE_MESSAGE
-  return null
-}
 
 const runCellBound = (
   bufferId: number,
@@ -1109,7 +1082,7 @@ const runTool = async (
                 is_error: true,
               }
             }
-            const invalid = validateHeatmapPatch(
+            const invalid = validateHeatmapConfig(
               mergeCellChartConfig(cell, patch),
               statements,
               cell.result,

@@ -221,8 +221,14 @@ export class MCPBridgeClient {
     this.pendingResults.push(msg)
   }
 
+  canSendAgentMessage(): boolean {
+    return (
+      this._status === "connected" && this.ws?.readyState === WebSocket.OPEN
+    )
+  }
+
   sendAgentMessage(msg: AgentInboundMessage): boolean {
-    return this._status === "connected" && this.send(msg)
+    return this.canSendAgentMessage() && this.send(msg)
   }
 
   private buildSocketUrl(): string {

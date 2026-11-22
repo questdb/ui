@@ -13,11 +13,11 @@ import {
   Y_SLIDER_ZOOM_ID,
 } from "../../../src/scenes/Editor/Notebook/CellChart/chartDensity"
 
-const createChart = (height = 400) =>
+const createChart = (height = 400, width = 640) =>
   init(null, undefined, {
     renderer: "svg",
     ssr: true,
-    width: 640,
+    width,
     height,
   })
 
@@ -182,6 +182,93 @@ describe("notebook chart rendering", () => {
       chart.dispose()
     }
   })
+
+  it("renders distinct X positions with exact DECIMAL category labels", () => {
+    const chart = createChart()
+    const xValues = ["1234.123456789012345678", "1234.123456789012345679"]
+    try {
+      chart.setOption(
+        buildEchartsOption({ xColumn: "slot" }, [
+          {
+            index: 0,
+            type: "bar",
+            axis: "left",
+            xColumn: "slot",
+            yColumns: ["reading"],
+            columns: [
+              { name: "slot", type: "DECIMAL(38,18)" },
+              { name: "reading", type: "INT" },
+            ],
+            dataset: xValues.map((x, i) => [x, i + 1]),
+          },
+        ]),
+      )
+      const xOf = (x: string) => chart.convertToPixel({ xAxisIndex: 0 }, x)
+      expect(xOf(xValues[1]) - xOf(xValues[0])).toBeGreaterThan(0)
+      expect(chart.getOption().xAxis).toMatchObject([
+        { type: "category", data: xValues },
+      ])
+    } finally {
+      chart.dispose()
+    }
+  })
+
+  const longRowLabel =
+    "us-east-1-production-payments-reconciliation-worker-settlements"
+  it.each([
+    ["worker", 21, false],
+    [longRowLabel, 21, true],
+    [longRowLabel, 2, false],
+  ] as const)(
+    "uses rendered heatmap column density with row label %s and %i columns",
+    (rowLabel, slots, crowded) => {
+      const width = 480
+      const height = 300
+      const chart = createChart(height, width)
+      const option = buildEchartsOption({ xColumn: "slot" }, [
+        {
+          index: 0,
+          type: "heatmap",
+          axis: "left",
+          xColumn: "slot",
+          partitionByColumn: "station",
+          yColumns: ["reading"],
+          columns: [
+            { name: "slot", type: "INT" },
+            { name: "station", type: "SYMBOL" },
+            { name: "reading", type: "DOUBLE" },
+          ],
+          dataset: Array.from({ length: slots }, (_, i) => [i, rowLabel, i]),
+        },
+      ])
+      try {
+        chart.setOption({
+          ...withZoomDensity(option, chartZoomDensity(option, width, height)),
+          animation: false,
+        })
+        const xOf = (x: number) => chart.convertToPixel({ xAxisIndex: 0 }, x)
+        const pitch = xOf(1) - xOf(0)
+        expect(pitch).toBeGreaterThan(0)
+        expect(pitch < 6).toBe(crowded)
+        expect(chart.getOption().dataZoom).toMatchObject([
+          { id: X_WHEEL_ZOOM_ID, disabled: !crowded },
+          { id: X_SLIDER_ZOOM_ID, show: crowded },
+          { id: Y_SLIDER_ZOOM_ID, show: false },
+        ])
+        if (crowded) {
+          chart.dispatchAction({
+            type: "dataZoom",
+            dataZoomId: X_SLIDER_ZOOM_ID,
+            start: 0,
+            end: 30,
+          })
+          expect(xOf(1) - xOf(0)).toBeGreaterThan(pitch)
+        }
+      } finally {
+        chart.dispose()
+      }
+    },
+  )
 
   it.each([2, 100])(
     "uses a row slider to enlarge dense heatmap cells without moving the %i-slot X axis",

@@ -50,7 +50,7 @@ export const useAIQuickActions = () => {
   const localAgentChannel = useLocalAgentChannel()
   const {
     setStatus,
-    abortController,
+    getOperationSignal,
     canUse,
     hasSchemaAccess,
     currentModel,
@@ -76,14 +76,14 @@ export const useAIQuickActions = () => {
 
   // Bind to the selected channel before preparation; never look up a new
   // destination after waiting for schema, docs, or the conversation store.
-  const abortSignal = abortController?.signal
-  const canContinue = () =>
+  const canContinue = (abortSignal: AbortSignal) =>
     !isOperationBlocking() &&
-    !abortSignal?.aborted &&
+    !abortSignal.aborted &&
+    abortSignal === getOperationSignal() &&
     (currentModel !== LOCAL_AGENT_MODEL ||
       isCurrentLocalAgentChannel(localAgentChannel))
 
-  const captureDispatch = (id: string) => {
+  const captureDispatch = (id: string, abortSignal: AbortSignal) => {
     const active = getChatDispatchState(id)
     return () => {
       const current = getChatDispatchState(id)
@@ -91,7 +91,7 @@ export const useAIQuickActions = () => {
         active !== null &&
         current?.owner === active.owner &&
         current.messages === active.messages &&
-        canContinue()
+        canContinue(abortSignal)
       )
     }
   }
@@ -120,7 +120,8 @@ export const useAIQuickActions = () => {
     kind: TableKind,
     schemaDisplayData?: Omit<SchemaDisplayData, "tableName" | "kind">,
   ) => {
-    if (!canContinue()) {
+    const abortSignal = getOperationSignal()
+    if (!canContinue(abortSignal)) {
       return
     }
     if (!canUse) {
@@ -135,7 +136,7 @@ export const useAIQuickActions = () => {
     }
 
     const schema = await getTableSchema(name, kind)
-    if (!schema || !canContinue()) {
+    if (!schema || !canContinue(abortSignal)) {
       return
     }
 
@@ -143,7 +144,7 @@ export const useAIQuickActions = () => {
 
     if (existingConversation) {
       await openChatWindow(existingConversation.id)
-      const canDispatch = captureDispatch(existingConversation.id)
+      const canDispatch = captureDispatch(existingConversation.id, abortSignal)
       if (!canDispatch()) return
 
       const result = await executeAIFlow(
@@ -187,11 +188,11 @@ export const useAIQuickActions = () => {
     const conversation = await createConversation({
       tableId: id,
     })
-    if (!canContinue()) return
+    if (!canContinue(abortSignal)) return
 
     void updateConversationName(conversation.id, `${name} schema explanation`)
     await openChatWindow(conversation.id)
-    const canDispatch = captureDispatch(conversation.id)
+    const canDispatch = captureDispatch(conversation.id, abortSignal)
     if (!canDispatch()) return
 
     void executeAIFlow(
@@ -232,7 +233,8 @@ export const useAIQuickActions = () => {
     trendSamples?: TimestampedSample[],
     diagnosticContext?: HealthIssueDiagnosticContext,
   ) => {
-    if (!canContinue()) {
+    const abortSignal = getOperationSignal()
+    if (!canContinue(abortSignal)) {
       return
     }
     if (!canUse) {
@@ -260,7 +262,7 @@ export const useAIQuickActions = () => {
       toast.error(`Cannot fetch details for table '${tableName}'`)
       return
     }
-    if (!canContinue()) return
+    if (!canContinue(abortSignal)) return
     const tableDetails = QuestDB.stringifyWithBigInts(
       tableDetailsResponse.data[0],
       2,
@@ -282,12 +284,12 @@ export const useAIQuickActions = () => {
       monitoringDocs = "Documentation unavailable"
     }
 
-    if (!canContinue()) return
+    if (!canContinue(abortSignal)) return
     const existingConversation = findConversationByTableId(tableId)
 
     if (existingConversation) {
       await openChatWindow(existingConversation.id)
-      const canDispatch = captureDispatch(existingConversation.id)
+      const canDispatch = captureDispatch(existingConversation.id, abortSignal)
       if (!canDispatch()) return
 
       const result = await executeAIFlow(
@@ -336,14 +338,14 @@ export const useAIQuickActions = () => {
     const conversation = await createConversation({
       tableId,
     })
-    if (!canContinue()) return
+    if (!canContinue(abortSignal)) return
 
     void updateConversationName(
       conversation.id,
       `${tableName}: ${issue.message}`,
     )
     await openChatWindow(conversation.id)
-    const canDispatch = captureDispatch(conversation.id)
+    const canDispatch = captureDispatch(conversation.id, abortSignal)
     if (!canDispatch()) return
 
     void executeAIFlow(

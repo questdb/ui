@@ -52,8 +52,10 @@ export type ConversationMessage = Message & {
   model?: string
   // Wall-clock time for the whole assistant turn, stored on its anchor.
   turnDurationMs?: number
-  // Set on regular chat turns that handed their earlier history to this agent.
+  // Legacy agent type marker; it does not identify a session.
   localAgentId?: string
+  // Set on regular chat turns that handed their earlier history to this session.
+  localAgentSessionId?: string
   displayType?: UserMessageDisplayType
   displayUserMessage?: string
   displaySchemaData?: SchemaDisplayData

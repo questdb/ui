@@ -798,6 +798,84 @@ describe("buildEchartsOption — heatmap color scale per row", () => {
   })
 })
 
+it.each(["chart", "row"] as const)(
+  "uses exact DECIMAL X order and normalizes exact DECIMAL differences (%s)",
+  (colorScale) => {
+    const readings = [
+      "1234.123456789012345678",
+      "1234.123456789012345679",
+      "1234.123456789012345680",
+    ]
+    const opt = buildEchartsOption({ xColumn: "slot" }, [
+      resolved({
+        type: "heatmap",
+        xColumn: "slot",
+        partitionByColumn: "site",
+        yColumns: ["reading"],
+        columns: [
+          col("slot", "DECIMAL(38,18)"),
+          col("site", "SYMBOL"),
+          col("reading", "DECIMAL(38,18)"),
+        ],
+        dataset: [2, 0, 1].map((i) => [readings[i], "west", readings[i]]),
+        colorScale,
+      }),
+    ])
+    expect(firstAxis(opt.xAxis).data).toEqual(readings)
+    const data = seriesList(opt.series)[0].data as unknown[][]
+    expect(data).toEqual([
+      [2, 0, 1, readings[2]],
+      [0, 0, 0, readings[0]],
+      [1, 0, 0.5, readings[1]],
+    ])
+    expect(opt.visualMap).toMatchObject({
+      min: 0,
+      max: 1,
+      text:
+        colorScale === "row"
+          ? ["Row high", "Row low"]
+          : [readings[2], readings[0]],
+    })
+    const tooltip = opt.tooltip as { formatter: (p: unknown) => string }
+    expect(tooltip.formatter({ value: data[0] })).toBe(
+      `${readings[2]}<br/>west: <b>${readings[2]}</b>`,
+    )
+  },
+)
+
+it("keeps null and empty heatmap rows separate from each other and literal labels", () => {
+  const categories = [null, "", "[NULL]", "[empty]", "[NULL] (2)"]
+  const opt = buildEchartsOption({ xColumn: "slot" }, [
+    resolved({
+      type: "heatmap",
+      xColumn: "slot",
+      partitionByColumn: "site",
+      yColumns: ["reading"],
+      columns: [
+        col("slot", "INT"),
+        col("site", "VARCHAR"),
+        col("reading", "INT"),
+      ],
+      dataset: categories.map((category, i) => [1, category, i]),
+    }),
+  ])
+  const rows = firstAxis(opt.yAxis).data as string[]
+  const data = seriesList(opt.series)[0].data as [
+    number,
+    number,
+    number,
+    number,
+  ][]
+  expect(new Set(data.map((cell) => cell[1])).size).toBe(categories.length)
+  expect(data.map((cell) => rows[cell[1]])).toEqual([
+    "[NULL] (3)",
+    "[empty] (2)",
+    "[NULL]",
+    "[empty]",
+    "[NULL] (2)",
+  ])
+})
+
 it("orders exact LONG heatmap X keys and keeps their own cell values", () => {
   const opt = buildEchartsOption({ xColumn: "slot" }, [
     resolved({

@@ -105,6 +105,28 @@ describe("isResultChartable", () => {
 })
 
 describe("inferChartConfig", () => {
+  it("offers parameterized DECIMAL heatmap values without changing legacy inference", () => {
+    const decimal = col("price", "DECIMAL(38,18)")
+    const count = col("count", "INT")
+    expect(inferChartConfig([decimal, count], [], "")).toEqual({
+      xColumn: "price",
+      chart: { type: "bar", yColumns: ["count"] },
+    })
+    const columns = [
+      col("ts", "TIMESTAMP"),
+      col("site", "SYMBOL"),
+      decimal,
+      count,
+    ]
+    expect(inferChartConfig(columns, [], "")).toEqual({
+      xColumn: "ts",
+      chart: { type: "line", yColumns: ["count"], partitionByColumn: "site" },
+    })
+    expect(
+      availableChartTypes(groupColumns(columns.slice(0, 3)), false),
+    ).toContain("heatmap")
+  })
+
   it("picks candlestick for OHLC + temporal", () => {
     const columns = [
       col("ts", "TIMESTAMP"),

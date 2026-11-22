@@ -252,7 +252,7 @@ export const QuestionCard = ({
   const [tab, setTab] = useState(0)
   const [answers, setAnswers] = useState<Answers>({})
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState("")
+  const [customDrafts, setCustomDrafts] = useState(new Map<string, string>())
   const [answered, setAnswered] = useState(false)
   const [sendFailed, setSendFailed] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -261,6 +261,12 @@ export const QuestionCard = ({
   const reviewTabRef = useRef<HTMLButtonElement>(null)
   const focusAfterAdvance = useRef(false)
   const field = fields[tab] as AgentQuestionField | undefined
+  const draft =
+    field?.kind === "choice" && field.otherFieldId
+      ? (customDrafts.get(field.id) ??
+        valuesOf(answers[field.otherFieldId])[0] ??
+        "")
+      : ""
   const canSend = fields.every(
     (candidate) => !candidate.required || isAnswered(candidate, answers),
   )
@@ -310,6 +316,14 @@ export const QuestionCard = ({
       return next
     })
 
+  const clearCustomDraft = (id: string) =>
+    setCustomDrafts((current) => {
+      if (!current.has(id)) return current
+      const next = new Map(current)
+      next.delete(id)
+      return next
+    })
+
   const pick = (target: AgentQuestionField, value: string) => {
     if (target.kind !== "choice") return
     if (target.multiple) {
@@ -323,7 +337,10 @@ export const QuestionCard = ({
       return
     }
     const next = { ...answers, [target.id]: value }
-    if (target.otherFieldId) delete next[target.otherFieldId]
+    if (target.otherFieldId) {
+      delete next[target.otherFieldId]
+      clearCustomDraft(target.id)
+    }
     setAnswers(next)
     setEditing(false)
     moveOn(next)
@@ -331,7 +348,6 @@ export const QuestionCard = ({
 
   const openOwnAnswer = (target: AgentQuestionField) => {
     if (target.kind !== "choice" || !target.otherFieldId) return
-    setDraft(valuesOf(answers[target.otherFieldId])[0] ?? "")
     setEditing(true)
   }
 
@@ -344,6 +360,7 @@ export const QuestionCard = ({
     // A single choice has one answer: the user's own replaces the pick.
     if (text && !target.multiple) delete next[target.id]
     setAnswers(next)
+    clearCustomDraft(target.id)
     setEditing(false)
     return next
   }
@@ -420,7 +437,12 @@ export const QuestionCard = ({
               <Input
                 autoFocus
                 value={draft}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setCustomDrafts((current) =>
+                    new Map(current).set(target.id, value),
+                  )
+                }}
                 onKeyDown={(event) => {
                   if (event.nativeEvent.isComposing) return
                   if (event.key === "Enter") {
@@ -430,6 +452,7 @@ export const QuestionCard = ({
                   } else if (event.key === "Escape") {
                     event.preventDefault()
                     event.stopPropagation()
+                    clearCustomDraft(target.id)
                     setEditing(false)
                   }
                 }}

@@ -173,7 +173,7 @@ it("does not mark earlier chat turns as seen after a local schema explanation", 
   expect(followUp.updateMessage).toHaveBeenCalledWith(
     CONVERSATION_ID,
     expect.any(String),
-    { localAgentId: "claude" },
+    { localAgentSessionId: channel?.sessionId },
   )
 })
 
@@ -233,11 +233,9 @@ describe("an agent's command", () => {
     // Then
     expect(prompt[0]).toEqual({ type: "text", text: "/review the last edit" })
     // The earlier turns still go with the agent's next message.
-    expect(updateMessage).not.toHaveBeenCalledWith(
-      CONVERSATION_ID,
-      expect.anything(),
-      expect.objectContaining({ localAgentId: "claude" }),
-    )
+    expect(
+      updateMessage.mock.calls.some(([, , patch]) => patch.localAgentSessionId),
+    ).toBe(false)
   })
 
   it("is saved as a command, so a retry sends it as one again", async () => {
@@ -251,6 +249,30 @@ describe("an agent's command", () => {
     )
     expect(message.addMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ agentCommand: true }),
+    )
+  })
+
+  it("hands off a previous cloud turn's attached SQL with its visible request", async () => {
+    const sql = "SELECT 1"
+    const { prompt } = await runFlow(
+      createChatFlowConfig({
+        ...localConfig,
+        userMessage: "Can I use that in a chart?",
+        conversationHistory: [
+          {
+            ...earlierTurns[0],
+            content: `Current SQL query: ${sql}\nUser request: Review this sample`,
+            displayUserMessage: "Review this sample",
+            sql,
+          },
+          { ...earlierTurns[1], content: "The sample returns one row." },
+        ],
+        isFirstMessage: false,
+      }),
+    )
+    const text = prompt[0]
+    expect(text?.type === "text" && text.text).toContain(
+      `User: Review this sample\nAttached SQL:\n${sql}\nAssistant: The sample returns one row.`,
     )
   })
 

@@ -20,3 +20,13 @@ export const useLocalAgent = (): LocalAgentSnapshot | null => {
     channel?.getSnapshot ?? noSnapshot,
   )
 }
+
+const notReady = () => false
+
+export const useLocalAgentTransportReady = (): boolean => {
+  const channel = useLocalAgentChannel()
+  return useSyncExternalStore(
+    channel?.subscribeToTransport ?? subscribeToNothing,
+    channel?.isTransportReady ?? notReady,
+  )
+}

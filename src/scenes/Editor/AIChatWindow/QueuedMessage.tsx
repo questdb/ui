@@ -9,6 +9,7 @@ const Root = styled.div`
   display: flex;
   align-items: center;
   gap: 0.8rem;
+  flex-wrap: wrap;
   min-width: 0;
   padding: 0.4rem 0.4rem 0.4rem 1.2rem;
   border: 1px solid ${({ theme }) => theme.color.borderDefault};
@@ -28,7 +29,7 @@ const Copy = styled.span`
   align-items: baseline;
   gap: 0.8rem;
   flex: 1;
-  min-width: 0;
+  min-width: 8rem;
 `
 
 const Label = styled.span`
@@ -51,11 +52,17 @@ const Text = styled.span`
   color: ${({ theme }) => theme.color.contentPrimary};
 `
 
+const BlockedReason = styled(Label)`
+  flex-basis: 100%;
+`
+
 type QueuedMessageProps = {
   text: string
   imageCount?: number
   onSendNow?: () => void
   sendNowDisabled: boolean
+  blockedReason?: string
+  onEdit: () => void
   onRemove: () => void
 }
 
@@ -66,6 +73,8 @@ export const QueuedMessage = ({
   imageCount = 0,
   onSendNow,
   sendNowDisabled,
+  blockedReason,
+  onEdit,
   onRemove,
 }: QueuedMessageProps) => (
   <Root role="status" data-hook="chat-queued-message">
@@ -92,6 +101,7 @@ export const QueuedMessage = ({
         <Shortcut aria-hidden="true">{ctrlCmd} ↵</Shortcut>
       </TextButton>
     )}
+    <TextButton onClick={onEdit}>Edit</TextButton>
     <IconButton
       label="Remove queued message"
       size="sm"
@@ -100,5 +110,6 @@ export const QueuedMessage = ({
     >
       <XIcon size={14} />
     </IconButton>
+    {blockedReason && <BlockedReason>{blockedReason}</BlockedReason>}
   </Root>
 )

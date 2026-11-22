@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import type { MCPBridgeClient } from "../mcp/MCPBridgeClient"
 import type {
   AgentInboundMessage,
@@ -31,12 +32,15 @@ const connect = () => {
       return true
     },
   } as unknown as MCPBridgeClient
+  const onNotebookRead = vi.fn()
   const channel = new LocalAgentChannel(client, {
     info: { id: "claude", label: "Claude Code", cwd: "/tmp/workspace" },
-    onNotebookRead: vi.fn(),
+    onNotebookRead,
   })
   return {
     channel,
+    client,
+    onNotebookRead,
     sent,
     deliver: (msg: AgentOutboundMessage) => deliver(msg),
     setConnected: (value: boolean) => {
@@ -75,15 +79,16 @@ const startTurn = (
   conversationId = "c1",
 ) => {
   const onUpdate = vi.fn()
+  const onToolStatus = vi.fn()
   const turn = channel.prompt({
     conversationId,
     text: "Show trades",
     notebookRead: null,
     signal,
     onUpdate,
-    onToolStatus: vi.fn(),
+    onToolStatus,
   })
-  return { turn, onUpdate }
+  return { turn, onUpdate, onToolStatus }
 }
 
 const turnEnd = (turnId: string): AgentOutboundMessage => ({
@@ -92,6 +97,58 @@ const turnEnd = (turnId: string): AgentOutboundMessage => ({
   conversationId: "c1",
   turnId,
   result: { outcome: "completed", stopReason: "end_turn", usage: null },
+})
+
+it("records a notebook baseline only when the prompt is written", async () => {
+  const { channel, onNotebookRead, sent, deliver, setConnected } = connect()
+  const send = (readSeq: number) =>
+    channel.prompt({
+      conversationId: "c1",
+      text: "Summarize the notebook",
+      notebookRead: { bufferId: 1, readSeq },
+      onUpdate: vi.fn(),
+      onToolStatus: vi.fn(),
+    })
+  const turn = send(2)
+  const [prompt] = sent
+  if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+  deliver(turnEnd(prompt.turnId))
+  await expect(turn).resolves.toMatchObject({ outcome: "completed" })
+
+  setConnected(false)
+  await expect(send(3)).resolves.toMatchObject({ outcome: "failed" })
+  expect(sent).toHaveLength(1)
+  expect(onNotebookRead.mock.calls).toEqual([
+    ["c1", { bufferId: 1, readSeq: 2 }],
+  ])
+})
+
+it("binds a progress reporter to the channel's current turn", async () => {
+  const { channel, client, sent, deliver } = connect()
+  const { client: otherClient } = connect()
+  expect(channel.captureToolStatus(client, "c1")).toBeUndefined()
+  const first = startTurn(channel)
+  const [firstPrompt] = sent
+  if (firstPrompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+  expect(channel.captureToolStatus(otherClient, "c1")).toBeUndefined()
+  const reportFirst = channel.captureToolStatus(client, "c1")
+  const status = AIOperationStatus.InspectingNotebook
+  reportFirst?.(status)
+  expect(first.onToolStatus).toHaveBeenCalledOnce()
+  deliver(turnEnd(firstPrompt.turnId))
+  await first.turn
+
+  const next = startTurn(channel)
+  const secondPrompt = sent.at(-1)
+  if (secondPrompt?.type !== "agent_prompt")
+    throw new Error("Expected a prompt")
+  reportFirst?.(status)
+  expect(next.onToolStatus).not.toHaveBeenCalled()
+  expect(first.onToolStatus).toHaveBeenCalledOnce()
+  channel.captureToolStatus(client, "c1")?.(status)
+  expect(next.onToolStatus).toHaveBeenCalledWith(status, undefined)
+  deliver(turnEnd(secondPrompt.turnId))
+  await next.turn
 })
 
 it.each([1000, 6000])(

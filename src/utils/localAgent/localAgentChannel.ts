@@ -1,5 +1,6 @@
 import type { StatusCallback } from "../ai/aiAssistant"
 import type { MCPBridgeClient } from "../mcp/MCPBridgeClient"
+import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -89,6 +90,8 @@ type PendingTurn = {
 // The console side of one paired agent bridge. It runs turns, keeps the
 // agent's status and pending questions for the UI, and forwards preferences.
 export class LocalAgentChannel {
+  // An opaque history marker for this channel's lifetime, including reconnects.
+  readonly sessionId = crypto.randomUUID()
   private turns = new Map<string, PendingTurn>()
   // The local Stop grace can expire before the bridge sees the cancel.
   private pendingCancels = new Map<string, string>()
@@ -129,6 +132,14 @@ export class LocalAgentChannel {
 
   getSnapshot = (): LocalAgentSnapshot => this.snapshot
 
+  // Transport readiness is separate from agent state and channel identity.
+  // The bridge publishes connected only after the hello acknowledgement.
+  isTransportReady = (): boolean =>
+    !this.disposed && this.client.canSendAgentMessage()
+
+  subscribeToTransport = (listener: () => void): (() => void) =>
+    this.client.on("status", listener)
+
   prompt({
     conversationId,
     text,
@@ -157,8 +168,6 @@ export class LocalAgentChannel {
         }),
       )
     }
-    if (notebookRead) this.options.onNotebookRead(conversationId, notebookRead)
-
     const turnId = crypto.randomUUID()
     const sent = this.client.sendAgentMessage({
       v: EXPECTED_MCP_VERSION,
@@ -171,6 +180,7 @@ export class LocalAgentChannel {
       ],
     })
     if (!sent) return Promise.resolve(BRIDGE_DISCONNECTED)
+    if (notebookRead) this.options.onNotebookRead(conversationId, notebookRead)
     // Cancels on the wire target the conversation. Once the new prompt is
     // written, no subsequent reconnect may send its predecessor's cancel.
     this.pendingCancels.delete(conversationId)
@@ -210,13 +220,26 @@ export class LocalAgentChannel {
     })
   }
 
-  // The console runs every QuestDB tool call itself; the status it reports
-  // goes to the turn of the conversation that made the call.
-  reportToolStatus(
+  // Bind status reporting when the console receives the call, not when the
+  // tool eventually reports progress. This does not authorize the call.
+  captureToolStatus(
+    client: MCPBridgeClient,
     conversationId: string,
-    ...status: Parameters<StatusCallback>
-  ): void {
-    this.turns.get(conversationId)?.onToolStatus(...status)
+  ): StatusCallback | undefined {
+    if (this.disposed || client !== this.client) return undefined
+    const turn = this.turns.get(conversationId)
+    if (!turn || turn.stopping) return undefined
+    let queryId: string | undefined
+    return (status, args) => {
+      if (this.turns.get(conversationId) !== turn || turn.stopping) return
+      // Equal SQL may be run more than once in the same turn. Key each
+      // console query's progress and outcome without retaining the wire ID.
+      if (status === AIOperationStatus.RunningQuery) {
+        queryId ??= crypto.randomUUID()
+        args = { ...args, callId: queryId }
+      }
+      turn.onToolStatus(status, args)
+    }
   }
 
   resume(): void {

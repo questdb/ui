@@ -1,7 +1,10 @@
 import type { CommandNoteEntry } from "./CommandNote"
 import { isCurrentLocalAgentChannel } from "../../../utils/localAgent/localAgentChannel"
 import { LOCAL_AGENT_MODEL } from "../../../utils/localAgent/localAgentModel"
-import { useLocalAgentChannel } from "../../../utils/localAgent/LocalAgentContext"
+import {
+  useLocalAgentChannel,
+  useLocalAgentTransportReady,
+} from "../../../utils/localAgent/LocalAgentContext"
 import React, {
   useMemo,
   useState,
@@ -45,7 +48,8 @@ import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
 import {
   ChatInput,
-  canDeliverQueued,
+  matchesQueuedDestination,
+  wasQueueCancelled,
   queuedAgentModel,
   type QueuedEntry,
   type ChatInputHandle,
@@ -86,7 +90,10 @@ import type {
 } from "../../../utils/ai/executeAIFlow"
 import { QueryInNotification } from "../Monaco/query-in-notification"
 import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
-import { getLastTurnWithUnactionedDiff } from "../../../utils/ai/turnView"
+import {
+  getLastTurnWithUnactionedDiff,
+  projectConversationTurns,
+} from "../../../utils/ai/turnView"
 import { runDetachedQuery } from "../../../utils/runDetachedQuery"
 
 const CancelButton = styled(Button)`
@@ -250,7 +257,7 @@ const AIChatWindow: React.FC = () => {
     status: aiStatus,
     isOperationBlocking,
     setStatus,
-    abortController,
+    getOperationSignal,
     canUse,
     hasSchemaAccess,
     currentModel,
@@ -258,6 +265,7 @@ const AIChatWindow: React.FC = () => {
     aiAssistantSettings,
   } = useAIStatus()
   const localAgentChannel = useLocalAgentChannel()
+  const localAgentTransportReady = useLocalAgentTransportReady()
   const tables = useSelector(selectors.query.getTables)
   const { active: activeExecution } = useQueryExecutionState()
   const runningQueryKey = activeExecution?.queryKey ?? null
@@ -340,6 +348,11 @@ const AIChatWindow: React.FC = () => {
   }) => {
     const conversationId = chatWindowState.activeConversationId
     if (!conversationId) return
+    const lastEntry = projectConversationTurns(messages).visibleEntries.at(-1)
+    const afterMessageId =
+      lastEntry?.type === "user"
+        ? lastEntry.message.id
+        : (lastEntry?.anchorMessage.id ?? null)
     setCommandNotes((current) => ({
       ...current,
       [conversationId]: [
@@ -347,7 +360,7 @@ const AIChatWindow: React.FC = () => {
         {
           ...note,
           id: crypto.randomUUID(),
-          afterMessageId: messages[messages.length - 1]?.id ?? null,
+          afterMessageId,
         },
       ],
     }))
@@ -514,16 +527,19 @@ const AIChatWindow: React.FC = () => {
 
   const conversationId = chatWindowState.activeConversationId
   const queued = conversationId ? chatQueue[conversationId] : undefined
+  const hasReadyLocalAgent = (channel: typeof localAgentChannel) =>
+    isCurrentLocalAgentChannel(channel) && channel.isTransportReady()
   const canDispatchQueued = (entry: QueuedEntry) => {
     const agent = localAgentChannel?.getSnapshot() ?? null
     return (
       canUse &&
       !isLoadingMessages &&
       !isOperationBlocking() &&
-      !abortController?.signal.aborted &&
+      !getOperationSignal().aborted &&
+      !wasQueueCancelled(entry) &&
       (currentModel !== LOCAL_AGENT_MODEL ||
-        isCurrentLocalAgentChannel(localAgentChannel)) &&
-      canDeliverQueued(
+        hasReadyLocalAgent(localAgentChannel)) &&
+      matchesQueuedDestination(
         entry,
         currentModel,
         localAgentChannel,
@@ -579,7 +595,7 @@ const AIChatWindow: React.FC = () => {
           questClient: quest,
           tables,
           hasSchemaAccess,
-          abortSignal: abortController?.signal,
+          abortSignal: getOperationSignal(),
           notebookContext,
         }),
         {
@@ -893,7 +909,7 @@ const AIChatWindow: React.FC = () => {
     }
     if (!canUse) return
     const channel = usesLocalAgent ? localAgentChannel : null
-    if (usesLocalAgent && !isCurrentLocalAgentChannel(channel)) return
+    if (usesLocalAgent && !hasReadyLocalAgent(channel)) return
     const agent = channel?.getSnapshot() ?? null
     const agentModel = queuedAgentModel(agent, aiAssistantSettings)
     if (userMessage.images?.length && !agent?.acceptsImages) {
@@ -910,7 +926,7 @@ const AIChatWindow: React.FC = () => {
 
     const attempt = Symbol()
     latestRetry.current = attempt
-    const abortSignal = abortController?.signal
+    const abortSignal = getOperationSignal()
     const stillOwnsRetry = () => {
       const chat = getChatDispatchState(conversationId)
       const selection = retrySelection.current
@@ -920,13 +936,14 @@ const AIChatWindow: React.FC = () => {
         chat?.owner === active.owner &&
         chat.messages === messages &&
         !isOperationBlocking() &&
-        !abortSignal?.aborted &&
+        !abortSignal.aborted &&
+        abortSignal === getOperationSignal() &&
         selection?.model === currentModel &&
         selection.apiKey === apiKey &&
         selection.hasSchemaAccess === hasSchemaAccess &&
         (!usesLocalAgent ||
           (selection.channel === channel &&
-            isCurrentLocalAgentChannel(channel) &&
+            hasReadyLocalAgent(channel) &&
             queuedAgentModel(currentAgent, selection.settings) === agentModel &&
             (!userMessage.images?.length || currentAgent?.acceptsImages)))
       )
@@ -1003,6 +1020,7 @@ const AIChatWindow: React.FC = () => {
           })
       }
       // Only consume the failed turn once the retry is ready to start.
+      if (!stillOwnsRetry()) return
       removeMessages(
         messages.slice(userMessageIndex).map((message) => message.id),
       )
@@ -1028,11 +1046,14 @@ const AIChatWindow: React.FC = () => {
   const explainButtonRef = useRef<HTMLDivElement | null>(null)
 
   const handleExplainQuery = useCallback(() => {
-    const button = explainButtonRef.current?.querySelector(
+    if (isOperationBlocking()) return false
+    const button = explainButtonRef.current?.querySelector<HTMLButtonElement>(
       'button[data-hook="button-explain-query"]',
-    ) as HTMLButtonElement
-    button?.click()
-  }, [])
+    )
+    if (!button?.isConnected || button.disabled) return false
+    button.click()
+    return true
+  }, [isOperationBlocking])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -1040,10 +1061,9 @@ const AIChatWindow: React.FC = () => {
       if (!((e.metaKey || e.ctrlKey) && (e.key === "e" || e.key === "E"))) {
         return
       }
-      e.preventDefault()
-      handleExplainQuery()
+      if (handleExplainQuery()) e.preventDefault()
     },
-    [shouldShowExplainButton],
+    [shouldShowExplainButton, handleExplainQuery],
   )
 
   useEffect(() => {
@@ -1194,6 +1214,10 @@ const AIChatWindow: React.FC = () => {
                   onOpenInEditor={handleOpenInEditor}
                   onApplyToEditor={handleApplyToEditor}
                   onRetry={handleRetry}
+                  retryDisabled={
+                    currentModel === LOCAL_AGENT_MODEL &&
+                    !localAgentTransportReady
+                  }
                   onCancelQuery={handleCancelQuery}
                   runningQueryKey={runningQueryKey}
                   queryNotifications={queryNotifications}
@@ -1244,6 +1268,7 @@ const AIChatWindow: React.FC = () => {
                 chatTokens={chatTokens}
                 onCommandNote={addCommandNote}
                 disabled={!canUse}
+                localAgentTransportReady={localAgentTransportReady}
                 placeholder={getPlaceholder()}
                 contextSQL={queryInfo.queryText}
                 contextTableId={conversation?.tableId}

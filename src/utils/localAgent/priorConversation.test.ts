@@ -42,6 +42,7 @@ describe("priorConversationFor", () => {
         role: "user",
         content: "<workspace>…</workspace>\nShow trades",
         displayUserMessage: "Show trades",
+        sql: "select * from trades where symbol = 'BTC'",
       }),
       message({ role: "assistant", content: "Here is the query." }),
       message({ role: "tool", content: "{}", hideFromUI: true }),
@@ -56,6 +57,8 @@ describe("priorConversationFor", () => {
         "<earlier_conversation>",
         "The user talked to another assistant in this chat before switching to you. Earlier messages, oldest first:",
         "User: Show trades",
+        "Attached SQL:",
+        "select * from trades where symbol = 'BTC'",
         "Assistant: Here is the query.",
         "</earlier_conversation>",
       ].join("\n"),
@@ -128,15 +131,46 @@ describe("priorConversationFor", () => {
     expect(prior).toContain("select * from trades where symbol = 'BTC'")
   })
 
-  it("sends nothing once the same agent has answered in this chat", () => {
-    // Given
+  it("leaves space for attached SQL in the per-message budget", () => {
+    const sql = "select * from trades where symbol = 'BTC'"
+    const history = [
+      message({
+        role: "user",
+        displayUserMessage: "Show trades ".repeat(200),
+        sql,
+      }),
+    ]
+    const prior = priorConversationFor(history, "session-a")
+    expect(prior).toContain("User: Show trades")
+    expect(prior).toContain(`Attached SQL:\n${sql}`)
+    expect(
+      prior?.split("\n").slice(2, -1).join("\n").length,
+    ).toBeLessThanOrEqual(2_006)
+  })
+
+  it("does not let legacy agent ID markers suppress unseen history", () => {
     const history = [
       message({ role: "user", content: "Show trades" }),
       message({ role: "assistant", content: "Done.", localAgentId: "claude" }),
     ]
+    expect(priorConversationFor(history, "claude")).toContain(
+      "User: Show trades",
+    )
+  })
 
-    // When / Then
-    expect(priorConversationFor(history, "claude")).toBeNull()
+  it("sends nothing once the same session has answered in this chat", () => {
+    const history = [
+      message({ role: "user", content: "Show trades" }),
+      message({
+        role: "assistant",
+        content: "Done.",
+        localAgentSessionId: "session-a",
+      }),
+    ]
+    expect(priorConversationFor(history, "session-a")).toBeNull()
+    expect(priorConversationFor(history, "session-b")).toContain(
+      "User: Show trades",
+    )
   })
 })
 
@@ -144,13 +178,17 @@ it("sends only the turns after the agent's last answer when the chat switched aw
   // Given
   const history = [
     message({ role: "user", content: "Show trades" }),
-    message({ role: "assistant", content: "Done.", localAgentId: "claude" }),
+    message({
+      role: "assistant",
+      content: "Done.",
+      localAgentSessionId: "session-a",
+    }),
     message({ role: "user", content: "Now chart it" }),
     message({ role: "assistant", content: "Here is a chart query." }),
   ]
 
   // When
-  const prior = priorConversationFor(history, "claude")
+  const prior = priorConversationFor(history, "session-a")
 
   // Then
   expect(prior).toContain(

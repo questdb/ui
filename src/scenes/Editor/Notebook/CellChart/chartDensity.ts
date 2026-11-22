@@ -1,4 +1,5 @@
 import type { EChartsOption } from "echarts"
+import { format } from "echarts/core"
 
 // A bar or candle body narrower than this reads as a line, not a shape.
 export const MIN_MARK_PX = 6
@@ -34,9 +35,26 @@ const barColumns = (bars: SeriesSpec[]): number => {
   return bars.filter((s) => !s.stack).length + stacks.size
 }
 
+const heatmapLabelWidth = (option: EChartsOption): number => {
+  const yAxis = firstOf(option.yAxis)
+  if (yAxis?.type !== "category" || !("data" in yAxis) || !yAxis.data?.length)
+    return 0
+  const { fontSize, fontFamily, margin = 0 } = yAxis.axisLabel ?? {}
+  const font = `${fontSize ?? 12}px ${fontFamily ?? "sans-serif"}`
+  // Use the renderer's text metrics. Consider every row because Y zoom can
+  // bring labels that were not sampled by the initial layout into view.
+  return (
+    yAxis.data.reduce<number>((max, label) => {
+      const value = typeof label === "object" ? label.value : label
+      return Math.max(max, format.getTextRect(String(value), font).width)
+    }, 0) + margin
+  )
+}
+
 const plotWidthOf = (
   option: EChartsOption,
   containerWidthPx: number,
+  heatmap: boolean,
 ): number => {
   const grid = firstOf(option.grid) as
     | { left?: number; right?: number }
@@ -46,7 +64,7 @@ const plotWidthOf = (
     containerWidthPx -
     (grid?.left ?? 0) -
     (grid?.right ?? 0) -
-    Y_AXIS_LABEL_WIDTH_PX * yAxisCount
+    (heatmap ? heatmapLabelWidth(option) : Y_AXIS_LABEL_WIDTH_PX * yAxisCount)
   )
 }
 
@@ -61,6 +79,7 @@ export const Y_SLIDER_ZOOM_ID = "chart-y-slider"
 export const GRID_BOTTOM_NO_ZOOM = 56
 export const GRID_BOTTOM_WITH_ZOOM = 86
 export const HEATMAP_ROW_FILL = 0.8
+export const HEATMAP_ROW_SLIDER_GRID_RIGHT = 48
 const X_AXIS_LABEL_HEIGHT_PX = 20
 // Leave a little headroom above a one-pixel pointer target.
 const MIN_HEATMAP_ROW_PX = 2
@@ -76,9 +95,9 @@ export const chartZoomDensity = (
   containerWidthPx: number,
   containerHeightPx = 0,
 ): ChartZoomDensity => {
-  const plotWidth = plotWidthOf(option, containerWidthPx)
-
   const series = seriesOf(option)
+  const heatmap = series.some((s) => s.type === "custom")
+  const plotWidth = plotWidthOf(option, containerWidthPx, heatmap)
   const bars = series.filter((s) => s.type === "bar")
   const candles = series.filter((s) => s.type === "candlestick")
   const points = series.filter((s) => s.type === "line" || s.type === "scatter")
@@ -88,10 +107,15 @@ export const chartZoomDensity = (
     Math.max(categorySlots, maxDataLength(list))
 
   const density = { slider: false, wheel: false, rowSlider: false }
-  if (plotWidth <= 0) return density
-  const include = (slots: number, fillRatio: number, minPx: number) => {
+  if (plotWidth <= 0 && !heatmap) return density
+  const include = (
+    slots: number,
+    fillRatio: number,
+    minPx: number,
+    width = plotWidth,
+  ) => {
     if (slots <= 0) return
-    const markPx = (plotWidth / slots) * fillRatio
+    const markPx = (width / slots) * fillRatio
     density.slider ||= markPx < minPx
     density.wheel ||= markPx < minPx * WHEEL_ZOOM_HEADROOM
   }
@@ -103,8 +127,8 @@ export const chartZoomDensity = (
   }
   include(maxDataLength(points), 1, MIN_POINT_PX)
   // Heatmap cells share x slots across rows; count columns, not cells.
-  if (series.some((s) => s.type === "custom")) {
-    include(categorySlots, 1, MIN_MARK_PX)
+  if (heatmap) {
+    if (categorySlots > 1) include(categorySlots, 1, MIN_MARK_PX)
     const yAxis = firstOf(option.yAxis) as
       | { type?: string; data?: unknown[] }
       | undefined
@@ -119,6 +143,15 @@ export const chartZoomDensity = (
       rowCount > 1 &&
       plotHeight > 0 &&
       (plotHeight * HEATMAP_ROW_FILL) / rowCount < MIN_HEATMAP_ROW_PX
+    if (density.rowSlider && categorySlots > 1) {
+      const right = typeof grid?.right === "number" ? grid.right : 0
+      include(
+        categorySlots,
+        1,
+        MIN_MARK_PX,
+        plotWidth + right - HEATMAP_ROW_SLIDER_GRID_RIGHT,
+      )
+    }
   }
   return density
 }

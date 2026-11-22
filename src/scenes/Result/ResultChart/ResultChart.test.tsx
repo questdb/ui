@@ -124,8 +124,15 @@ describe("result chart settings", () => {
 
   it("keeps the selected lines through an uncommitted Heatmap detour", async () => {
     const quest = new Client()
-    mockResults(heatmapResult)
-    renderComponent(resultChart(heatmapResult, quest))
+    const lineResult = {
+      ...heatmapResult,
+      columns: heatmapResult.columns.map((column) =>
+        column.name === "reading" ? { ...column, type: "DOUBLE" } : column,
+      ),
+      dataset: [["2026-01-01T00:00:00Z", "west", 0.125, 2]],
+    }
+    mockResults(lineResult)
+    renderComponent(resultChart(lineResult, quest))
     await screen.findByLabelText("Renderer input")
     expect(series().map((s) => s.type)).toEqual(["line", "line"])
 
@@ -164,9 +171,7 @@ describe("result chart settings", () => {
       const view = renderComponent(resultChart(first, quest))
       await screen.findByLabelText("Renderer input")
       await choose(/^Chart type/, "Heatmap")
-      expect(
-        screen.getByRole("button", { name: "Value column: reading" }),
-      ).toBeVisible()
+      await choose(/^Value column/, "reading")
       fireEvent.click(screen.getByRole("button", { name: "Apply" }))
       expect(series()[0].type).toBe("custom")
 

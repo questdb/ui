@@ -14,7 +14,7 @@ import {
 import { describe, expect, it, vi } from "vitest"
 import React from "react"
 import { Button } from "../../../src/components/Button"
-import { act, screen, waitFor } from "@testing-library/react"
+import { act, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { bufferStore } from "../../../src/store/buffers"
 import { db } from "../../../src/store/db"
@@ -425,9 +425,10 @@ it.each(["chat switch", "model change"])(
         await userEvent.click(
           await screen.findByRole("option", { name: "GPT 5" }),
         )
-        expect(getByHook("chat-input-textarea")).toHaveValue(
-          "Group the sample by symbol.",
+        expect(getByHook("chat-queued-message")).toHaveTextContent(
+          "Restore the original destination",
         )
+        expect(getByHook("chat-input-textarea")).toHaveValue("")
       }
       await snapshot.release()
       expect(server.requests).toHaveLength(1)
@@ -438,7 +439,17 @@ it.each(["chat switch", "model change"])(
       if (change === "chat switch") {
         await openHistoryChat("Original sample chat")
       } else {
-        await userEvent.click(getByHook("chat-send-button"))
+        await userEvent.click(getByHook("chat-window-history"))
+        await userEvent.click(
+          screen.getByRole("button", { name: "Back to chat" }),
+        )
+        expect(getByHook("chat-queued-message-text")).toHaveTextContent(
+          "Group the sample by symbol.",
+        )
+        await userEvent.click(getByHook("chat-model-picker"))
+        await userEvent.click(
+          await screen.findByRole("option", { name: "GPT 5 Mini" }),
+        )
       }
       await waitFor(() => expect(server.requests).toHaveLength(2))
       expect(lastRequestText(server)).toContain("Group the sample by symbol.")
@@ -494,4 +505,133 @@ it("reopens with an unavailable local selection and requires an explicit API pic
   expect(getByHook("chat-input-textarea")).toBeEnabled()
   expect(selectedModel()).toBe("openai:gpt-5-mini")
   expect(server.requests).toHaveLength(0)
+})
+
+it("does not interrupt an answer when the queued destination changes in Settings", async () => {
+  const { first, server } = slowFirstAnswer()
+  server.other = () =>
+    Response.json({
+      object: "list",
+      data: [
+        { id: "gpt-5.4", object: "model", created: 1772000000 },
+        { id: "gpt-5-mini", object: "model", created: 1754500000 },
+      ],
+    })
+  renderChat("openai", undefined, {
+    modelValueFormat: 2,
+    selectedModel: "openai:gpt-5.4",
+    providers: {
+      openai: {
+        apiKey: "mock",
+        enabledModels: ["openai:gpt-5.4", "openai:gpt-5-mini"],
+        grantSchemaAccess: false,
+      },
+    },
+  })
+  await openChat()
+  await sendMessage("Show the latest trades.")
+  await waitFor(() => expect(server.requests).toHaveLength(1))
+  try {
+    await sendMessage("Group them by symbol.")
+    await userEvent.click(getByHook("chat-assistant-settings"))
+    await userEvent.click(getByHook("ai-settings-manage-models"))
+    const oldModel = await waitFor(() => {
+      const row = getAllByHook("manage-models-model-row").find((item) =>
+        item.textContent?.endsWith("gpt-5.4"),
+      )
+      expect(row).toBeDefined()
+      return within(row!).getByRole("checkbox")
+    })
+    await userEvent.click(oldModel)
+    await userEvent.click(getByHook("manage-models-save"))
+    await userEvent.click(getByHook("ai-settings-save"))
+    expect(getByHook("chat-model-picker")).toHaveTextContent("GPT 5 Mini")
+    expect(getByHook("chat-queued-send-now")).toBeDisabled()
+    await userEvent.click(getByHook("chat-queued-send-now"))
+    await userEvent.click(getByHook("chat-input-textarea"))
+    await userEvent.keyboard("{Meta>}{Enter}{/Meta}")
+    expect(server.requests[0].request.signal.aborted).toBe(false)
+    expect(server.requests).toHaveLength(1)
+    expect(getByHook("chat-queued-message-text")).toHaveTextContent(
+      "Group them by symbol.",
+    )
+    await first.release()
+    await screen.findByText("The first answer.")
+    expect(getByHook("chat-queued-message-text")).toHaveTextContent(
+      "Group them by symbol.",
+    )
+  } finally {
+    await first.release()
+  }
+})
+
+it("stopping another chat does not cancel a queue waiting on a completed answer", async () => {
+  const notebookId = await db.buffers.add({
+    label: "Sample notebook",
+    value: "",
+    position: 0,
+    notebookViewState: { cells: [] },
+  })
+  const first = gate()
+  const snapshot = gate()
+  const server: ReturnType<typeof chatServer> = chatServer("openai", [
+    async () => {
+      await first.promise
+      return fixtures.createFinalResponse("openai", "First chat answer.")
+    },
+    () =>
+      Promise.resolve(streamUntilAborted(server.requests[1].request.signal)),
+    fixtures.createFinalResponse("openai", "Queued answer."),
+  ])
+  await seedChat("Other sample chat")
+  await seedChat("Original sample chat", {
+    notebookBufferId: notebookId,
+    messages: [
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: "What is in the notebook?",
+        timestamp: Date.now(),
+      },
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Previous sample answer.",
+        timestamp: Date.now(),
+      },
+    ],
+  })
+  renderChat()
+  await openChat()
+  await sendMessage("Show a sample.")
+  await waitFor(() => expect(server.requests).toHaveLength(1))
+  const get = bufferStore.getById
+  const reads = vi.spyOn(bufferStore, "getById").mockImplementation((id) =>
+    get(id).then(async (buffer) => {
+      if (id === notebookId) await snapshot.promise
+      return buffer
+    }),
+  )
+  try {
+    await sendMessage("Group the sample by symbol.")
+    await first.release()
+    await waitFor(() => expect(reads).toHaveBeenCalledWith(notebookId))
+    await openHistoryChat("Other sample chat")
+    await screen.findByText("Question about Other sample chat")
+    vi.setSystemTime(Date.now() + 3000)
+    await sendMessage("Explain the other sample.")
+    await waitFor(() => expect(server.requests).toHaveLength(2))
+    await userEvent.click(getByHook("chat-stop-button"))
+    expect(server.requests[1].request.signal.aborted).toBe(true)
+    expect(server.requests[0].request.signal.aborted).toBe(false)
+    await openHistoryChat("Original sample chat")
+    expect(getByHook("chat-input-textarea")).toHaveValue("")
+    vi.setSystemTime(Date.now() + 3000)
+    await snapshot.release()
+    await screen.findByText("Queued answer.")
+    expect(lastRequestText(server)).toContain("Group the sample by symbol.")
+  } finally {
+    await first.release()
+    await snapshot.release()
+  }
 })

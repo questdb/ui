@@ -89,8 +89,8 @@ describe("chat recovery", () => {
       )
       await openChat()
       await sendMessage(question)
-      await waitFor(() => expect(getByHook("chat-message-error")).toBeVisible())
-      expect(getByHook("retry-button")).toBeVisible()
+      await waitFor(() => expect(getByHook("retry-button")).toBeEnabled())
+      expect(getByHook("chat-message-error")).toBeVisible()
       expect(server.requests).toHaveLength(1)
 
       // When the user retries after the provider recovers
@@ -153,8 +153,9 @@ describe("chat recovery", () => {
     await finishRetries(releaseFirstResponse)
 
     // Then the real chat stops streaming and offers Retry without a false success
+    vi.useRealTimers()
+    await waitFor(() => expect(getByHook("retry-button")).toBeEnabled())
     expect(getByHook("chat-message-error")).toBeVisible()
-    expect(getByHook("retry-button")).toBeVisible()
     expect(queryByHook("chat-stop-button")).not.toBeInTheDocument()
     expect(requests).toHaveLength(9)
     expect(
@@ -163,6 +164,5 @@ describe("chat recovery", () => {
           request.url === "http://localhost:11434/v1/chat/completions",
       ),
     ).toBe(true)
-    await finishScroll()
   })
 })

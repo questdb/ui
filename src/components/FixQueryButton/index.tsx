@@ -29,7 +29,8 @@ export const FixQueryButton = () => {
   const {
     canUse,
     setStatus,
-    abortController,
+    getOperationSignal,
+    isOperationBlocking,
     hasSchemaAccess,
     currentModel,
     apiKey,
@@ -46,7 +47,7 @@ export const FixQueryButton = () => {
   } = useAIConversation()
 
   const handleFixQuery = () => {
-    if (!canUse) return
+    if (!canUse || isOperationBlocking()) return
     const conversationId = chatWindowState.activeConversationId
     if (!conversationId) return
     const conversation = getConversationMeta(conversationId)
@@ -74,7 +75,7 @@ export const FixQueryButton = () => {
         questClient: quest,
         tables,
         hasSchemaAccess,
-        abortSignal: abortController?.signal,
+        abortSignal: getOperationSignal(),
       }),
       {
         addMessage,

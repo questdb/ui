@@ -92,9 +92,9 @@ const localAgentDisplayNameFor = (
 const withPriorConversation = (
   message: string,
   history: ConversationMessage[],
-  agentId: string | undefined,
+  sessionId: string | undefined,
 ): string => {
-  const prior = agentId ? priorConversationFor(history, agentId) : null
+  const prior = sessionId ? priorConversationFor(history, sessionId) : null
   return prior ? `${prior}\n\n${message}` : message
 }
 
@@ -605,7 +605,7 @@ export async function executeAIFlow(
     : (getAllModelOptions(config.aiAssistantSettings).find(
         (m) => m.value === settings.model,
       )?.label ?? settings.model)
-  const localAgentId = localAgentChannel?.info.id
+  const localAgentSessionId = localAgentChannel?.sessionId
   const turnStartedAt = performance.now()
   callbacks.addMessage({
     id: anchorMessageId,
@@ -668,7 +668,10 @@ export async function executeAIFlow(
     nextStatus: AIOperationStatus | null,
     args?: StatusArgs,
   ) => {
-    if (abortSignal?.aborted) return
+    // A provider can clear its own status before the turn is finished. Keep
+    // ownership until this flow settles; only the latest flow can release it.
+    if (nextStatus === null || flow !== latestFlow || abortSignal?.aborted)
+      return
     callbacks.setStatus(nextStatus, args, handleStatusUpdate)
   }
 
@@ -733,10 +736,15 @@ export async function executeAIFlow(
     args?: StatusArgs,
   ) => {
     if (nextStatus !== null) {
-      if (nextStatus !== AIOperationStatus.Thinking) {
+      // A transient status with the same type still interrupts the durable
+      // text entry. Start or recover a durable entry before the next chunk.
+      if (args?.transient || nextStatus !== AIOperationStatus.Thinking) {
         thinkingStatusEmitted = false
       }
-      if (nextStatus !== AIOperationStatus.GeneratingResponse) {
+      if (
+        args?.transient ||
+        nextStatus !== AIOperationStatus.GeneratingResponse
+      ) {
         generatingResponseEmitted = false
       }
     }
@@ -833,6 +841,7 @@ export async function executeAIFlow(
         latestOperationHistory[latestOperationHistory.length - 1]
       if (
         lastEntry &&
+        !lastEntry.args?.transient &&
         lastEntry.type === AIOperationStatus.GeneratingResponse
       ) {
         lastEntry.content = (lastEntry.content ?? "") + chunk
@@ -853,7 +862,11 @@ export async function executeAIFlow(
       scheduleUpdate()
       const lastEntry =
         latestOperationHistory[latestOperationHistory.length - 1]
-      if (lastEntry && lastEntry.type === AIOperationStatus.Thinking) {
+      if (
+        lastEntry &&
+        !lastEntry.args?.transient &&
+        lastEntry.type === AIOperationStatus.Thinking
+      ) {
         lastEntry.content = (lastEntry.content ?? "") + chunk
         hasPendingOperationHistoryUpdate = true
         scheduleUpdate()
@@ -962,6 +975,7 @@ export async function executeAIFlow(
             conversationHistory: conversationHistory
               .filter((m) => !m.isCompacted)
               .map((m) =>
+                m.role === "assistant" &&
                 typeof m.content === "string" &&
                 m.content.includes("](data:image/")
                   ? { ...m, content: withoutInlineImages(m.content) }
@@ -982,7 +996,7 @@ export async function executeAIFlow(
               : withPriorConversation(
                   userMsg.content,
                   conversationHistory,
-                  localAgentId,
+                  localAgentSessionId,
                 ),
             images: config.type === "chat" ? config.images : undefined,
             notebookRead: isAgentCommand
@@ -996,12 +1010,14 @@ export async function executeAIFlow(
     // Only a regular chat turn carries the earlier transcript. Quick
     // actions and commands must not mark those earlier turns as seen.
     if (
-      localAgentId &&
+      localAgentSessionId &&
       config.type === "chat" &&
       !isAgentCommand &&
       !isAiAssistantError(result)
     ) {
-      callbacks.updateMessage(conversationId, anchorMessageId, { localAgentId })
+      callbacks.updateMessage(conversationId, anchorMessageId, {
+        localAgentSessionId,
+      })
     }
 
     const originalContent = new Map(
@@ -1052,12 +1068,14 @@ export async function executeAIFlow(
     callbacks.updateMessage(conversationId, anchorMessageId, {
       turnDurationMs: Math.round(performance.now() - turnStartedAt),
     })
-    await callbacks.persistMessages(conversationId)
-    if (flow === latestFlow) {
-      callbacks.setIsStreaming(false)
-      // Ends the status on every path, including errors that return before
-      // anything streamed. A stopped flow leaves it to the Stop.
-      if (!abortSignal?.aborted) callbacks.setStatus(null)
+    try {
+      await callbacks.persistMessages(conversationId)
+    } finally {
+      if (flow === latestFlow) {
+        callbacks.setIsStreaming(false)
+        // A stopped flow leaves status and cancellation ownership to Stop.
+        if (!abortSignal?.aborted) callbacks.setStatus(null)
+      }
     }
   }
 }

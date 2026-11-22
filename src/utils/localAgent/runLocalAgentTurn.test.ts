@@ -7,6 +7,7 @@ import type {
   AgentUpdate,
 } from "./protocol"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
+import type { StatusCallback } from "../ai/aiAssistant"
 import {
   LocalAgentChannel,
   registerLocalAgentChannel,
@@ -83,7 +84,7 @@ const toolCall = (
 })
 
 const startTurn = (abortSignal?: AbortSignal) => {
-  const setStatus = vi.fn()
+  const setStatus = vi.fn<Parameters<StatusCallback>, void>()
   const streaming = { onTextChunk: vi.fn(), onThinkingChunk: vi.fn() }
   const turn = runLocalAgentTurn({
     channel: activeChannel,
@@ -149,9 +150,11 @@ describe("runLocalAgentTurn", () => {
     const { turn, setStatus } = startTurn()
     bridge.update(toolCall("t1", "mcp.questdb_console.run_query"))
     bridge.update(toolCall("guardian_assessment:1", "Guardian Review"))
-    channel.reportToolStatus(CONVERSATION_ID, AIOperationStatus.RunningQuery, {
-      content: "SELECT 1",
-    })
+    const reportQuery = channel.captureToolStatus(
+      bridge.client,
+      CONVERSATION_ID,
+    )
+    reportQuery?.(AIOperationStatus.RunningQuery, { content: "SELECT 1" })
     bridge.update(toolCall("t2", "tool_search 'questdb_console'"))
     bridge.update(toolCall("t3", "pwd"))
     bridge.endTurn({
@@ -162,10 +165,12 @@ describe("runLocalAgentTurn", () => {
     await turn
 
     // Then
+    const callId = setStatus.mock.calls[2]?.[1]?.callId
+    expect(callId).toBeTypeOf("string")
     expect(setStatus.mock.calls).toEqual([
       [AIOperationStatus.RunningQuery, { transient: true }],
       [AIOperationStatus.ReviewingToolCall, { transient: true }],
-      [AIOperationStatus.RunningQuery, { content: "SELECT 1" }],
+      [AIOperationStatus.RunningQuery, { content: "SELECT 1", callId }],
       [AIOperationStatus.LoadingTools, { transient: true }],
       [
         AIOperationStatus.UsingAgentTools,

@@ -194,6 +194,28 @@ export const heatmapIssue = (queries: ResolvedQuery[]) => {
   return null
 }
 
+// Use the same settled, statement-matching data the chart uses. Without it,
+// reject only explicit enabled mixes; null slots cannot be inferred without data.
+export const validateHeatmapConfig = (
+  config: ChartConfig,
+  statements: string[],
+  result: CellResult | null | undefined,
+): string | null => {
+  const enabled = config.queries.filter((q) => q && q.enabled !== false)
+  if (!enabled.some((q) => q?.type === "heatmap")) return null
+
+  const conflict =
+    "Heatmaps need a chart of their own. Include only one query or choose a different chart type."
+  const frame = toChartResult(result, statements)
+  if (frame.kind !== "settled") return enabled.length > 1 ? conflict : null
+
+  const { renderQueries } = resolveDraw(statements, frame.results, config)
+  const issue = heatmapIssue(renderQueries)
+  if (issue === "conflict") return conflict
+  if (issue === "incomplete") return HEATMAP_INCOMPLETE_MESSAGE
+  return null
+}
+
 const xRoleOf = (columns: ColumnDefinition[], name: string | null) => {
   const col = name != null ? columns.find((c) => c.name === name) : undefined
   return col ? classifyColumn(col) : "other"
@@ -264,7 +286,7 @@ const resolveOhlc = (
 
   if (qc.ohlc && allPresent(qc.ohlc)) return qc.ohlc
 
-  return findOhlc(groupColumns(columns).numeric)
+  return findOhlc(groupColumns(columns, false).numeric)
 }
 
 // Drop references to columns the query no longer returns (e.g. a column removed

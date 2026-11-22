@@ -2,6 +2,8 @@
 import React from "react"
 import { act } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
+import { LocalAgentChannel } from "../../utils/localAgent/localAgentChannel"
+import type { MCPBridgeClient } from "../../utils/mcp/MCPBridgeClient"
 import {
   configuredOpenAI,
   renderAISettings,
@@ -131,6 +133,54 @@ describe("AIStatusProvider", () => {
       { name: "ls", callId: "a" },
       { name: "bash", callId: "b" },
     ])
+  })
+
+  it("keeps separate records and outcomes for equal local query statuses", async () => {
+    const status = renderStatus()
+    const client = {
+      on: () => () => undefined,
+      sendAgentMessage: () => true,
+    } as unknown as MCPBridgeClient
+    const channel = new LocalAgentChannel(client, {
+      info: { id: "test", label: "Sample agent", cwd: "/tmp" },
+      onNotebookRead: () => undefined,
+    })
+    const conversationId = "sample-chat"
+    const turn = channel.prompt({
+      conversationId,
+      text: "Run the sample twice",
+      notebookRead: null,
+      onUpdate: () => undefined,
+      onToolStatus: (type, args) => status().setStatus(type, args),
+    })
+    try {
+      const query = AIOperationStatus.RunningQuery
+      const args = { content: "SELECT 1" }
+      const reportFirst = channel.captureToolStatus(client, conversationId)
+      const reportSecond = channel.captureToolStatus(client, conversationId)
+      act(() => {
+        reportFirst?.(query, args)
+        reportFirst?.(query, { ...args, ended: true })
+        status().setStatus(query, { transient: true })
+        reportSecond?.(query, args)
+        reportSecond?.(query, { ...args, failed: "Sample query failed" })
+      })
+      const entries = status().currentOperation
+      expect(entries).toHaveLength(2)
+      expect(entries.map((entry) => entry.type)).toEqual([query, query])
+      expect(entries.map((entry) => entry.args?.content)).toEqual([
+        args.content,
+        args.content,
+      ])
+      expect(entries.map((entry) => entry.args?.failed)).toEqual([
+        undefined,
+        "Sample query failed",
+      ])
+      expect(entries.every((entry) => entry.endedAt !== undefined)).toBe(true)
+    } finally {
+      channel.dispose()
+      await turn
+    }
   })
 
   it("records when a step's tool finished, without adding a step", () => {

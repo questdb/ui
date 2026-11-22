@@ -1958,10 +1958,17 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       partition_by_column: "site",
     }
     const line = { type: "line", y_columns: ["b"] }
-    const send = (queries: unknown[]) =>
+    const send = (queries: unknown[], apply = false) =>
       dispatchTool(
-        "set_cell_chart_config",
-        { buffer_id: 1, cell_id: "c", queries },
+        apply ? "apply_notebook_state" : "set_cell_chart_config",
+        apply
+          ? {
+              buffer_id: 1,
+              cells: [
+                { id: "c", preserve_value: true, chart_config: { queries } },
+              ],
+            }
+          : { buffer_id: 1, cell_id: "c", queries },
         makeClient(),
         noopStatus,
         ALL_GRANTED,
@@ -1983,12 +1990,17 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(error.error_code).toBe("validation")
     expect(error.message).toContain("Heatmaps need a chart of their own")
     expect(cellById(state, "c")?.chartConfig).toEqual(saved)
+    const beforeApply = state.parts
+    expect((await send([heatmap, line], true)).content).toContain(
+      "Heatmaps need a chart of their own",
+    )
+    expect(state.parts).toBe(beforeApply)
 
     expect(
       (await send([{ ...heatmap, enabled: false }, line])).is_error,
     ).toBeFalsy()
     expect(cellById(state, "c")?.chartConfig?.queries[0]?.enabled).toBe(false)
-    expect((await send([heatmap, null])).is_error).toBeFalsy()
+    expect((await send([heatmap, null], true)).is_error).toBeFalsy()
     expect(cellById(state, "c")?.chartConfig?.queries[1]).toBeNull()
   })
 
@@ -2055,6 +2067,11 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
   it.each([
     { sibling: null, rows: [[1000, 2]], rejected: true },
+    {
+      sibling: { type: "line", y_columns: ["b"] },
+      rows: [[1000, 2]],
+      rejected: true,
+    },
     { sibling: null, rows: [], rejected: false },
     { sibling: { type: "line", y_columns: ["b"] }, rows: [], rejected: false },
     {
@@ -2063,7 +2080,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       rejected: false,
     },
   ])(
-    "validates the effective heatmap patch with settled results ($#)",
+    "validates the same effective heatmap on patch and full apply with settled results ($#)",
     async ({ sibling, rows, rejected }) => {
       const statements = [
         "SELECT ts, bucket, site, a FROM t",
@@ -2098,7 +2115,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         ],
       }
       const { state, runCell } = mountLive(1, [
-        cell("c", statements.join("; "), { result }),
+        cell("c", statements.join("; "), { mode: "draw", result }),
       ])
       const runQueryRaw = vi.fn(makeClient().runQueryRaw)
       const validateSql = vi.fn(dqlValidator)
@@ -2135,8 +2152,45 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       }
       await assertPatchOutcome({ x_column: "ts" })
       await assertPatchOutcome({ x_column: "ts", queries })
-      expect(cellById(state, "c")?.result).toBe(result)
       expect(validateSql).not.toHaveBeenCalled()
+
+      const apply = (xColumn: string) =>
+        dispatchTool(
+          "apply_notebook_state",
+          {
+            buffer_id: 1,
+            cells: [
+              {
+                id: "c",
+                preserve_value: true,
+                chart_config: { x_column: xColumn, queries },
+              },
+            ],
+          },
+          makeClient({ runQueryRaw }),
+          noopStatus,
+          ALL_GRANTED,
+          validateSql,
+        )
+      // A categorical anchor does not combine with the sibling's temporal X.
+      expect((await apply("bucket")).is_error).toBeFalsy()
+      const beforeApply = state.parts
+      const applied = await apply("ts")
+      expect(applied.is_error ?? false).toBe(rejected)
+      if (rejected) {
+        const error = JSON.parse(applied.content) as {
+          error_code: string
+          message: string
+        }
+        expect(error.error_code).toBe("validation")
+        expect(error.message).toContain("Heatmaps need a chart of their own")
+        expect(state.parts).toBe(beforeApply)
+      } else {
+        expect(cellById(state, "c")?.chartConfig?.xColumn).toBe("ts")
+      }
+      expect(cellById(state, "c")?.result).toBe(result)
+      // Full apply still does its ordinary draw SQL classification, not execution.
+      expect(validateSql.mock.calls.flat()).toEqual(statements)
       expect(runQueryRaw).not.toHaveBeenCalled()
       expect(runCell).not.toHaveBeenCalled()
     },

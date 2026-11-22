@@ -22,11 +22,23 @@ const PIE_THRESHOLD = 12
 export const MAX_AUTO_PARTITION_CARDINALITY = 20
 export const MAX_PARTITION_SERIES = 30
 
-export const classifyColumn = (col: ColumnDefinition): ColumnRole => {
+export const isDecimalColumn = (col: ColumnDefinition): boolean => {
+  const type = col.type?.toUpperCase()
+  return type === "DECIMAL" || type?.startsWith("DECIMAL(") === true
+}
+
+export const classifyColumn = (
+  col: ColumnDefinition,
+  includeParameterizedDecimals = true,
+): ColumnRole => {
   const t = col.type?.toUpperCase()
   if (!t) return "other"
   if (TEMPORAL.has(t)) return "temporal"
-  if (NUMERIC.has(t) || t.startsWith("DECIMAL(")) return "numeric"
+  if (
+    NUMERIC.has(t) ||
+    (includeParameterizedDecimals && t.startsWith("DECIMAL("))
+  )
+    return "numeric"
   if (CATEGORICAL.has(t)) return "categorical"
   return "other"
 }
@@ -38,7 +50,10 @@ export type ColumnGroups = {
   other: ColumnDefinition[]
 }
 
-export const groupColumns = (columns: ColumnDefinition[]): ColumnGroups => {
+export const groupColumns = (
+  columns: ColumnDefinition[],
+  includeParameterizedDecimals = true,
+): ColumnGroups => {
   const groups: ColumnGroups = {
     temporal: [],
     numeric: [],
@@ -46,7 +61,7 @@ export const groupColumns = (columns: ColumnDefinition[]): ColumnGroups => {
     other: [],
   }
   for (const col of columns) {
-    groups[classifyColumn(col)].push(col)
+    groups[classifyColumn(col, includeParameterizedDecimals)].push(col)
   }
   return groups
 }
@@ -110,7 +125,9 @@ export const inferChartConfig = (
   dataset: (boolean | string | number | null)[][],
   query: string,
 ): InferredChart => {
-  const groups = groupColumns(columns)
+  // Parameterized DECIMAL is available in settings, but should not change
+  // how existing non-heatmap queries pick their axes and series by default.
+  const groups = groupColumns(columns, false)
   const hints = parseQueryHints(query)
 
   const capSeries = (cols: ColumnDefinition[]): string[] =>

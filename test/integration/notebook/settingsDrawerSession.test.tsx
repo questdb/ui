@@ -190,6 +190,87 @@ describe("chart drawer", () => {
     expect(onSave).toHaveBeenCalledWith(saved)
   })
 
+  it.each([false, true])(
+    "rejects a Rows/X collision after re-anchoring (initially excluded: %s)",
+    (excluded) => {
+      const statements = [
+        "SELECT site, reading FROM samples",
+        "SELECT bucket, site, reading FROM samples",
+      ]
+      const heatmap = {
+        type: "heatmap" as const,
+        enabled: !excluded,
+        partitionByColumn: "site",
+        yColumns: ["reading"],
+      }
+      const site = { name: "site", type: "SYMBOL" }
+      const reading = { name: "reading", type: "DOUBLE" }
+      const { tabs, effectiveConfig } = resolveDraw(
+        statements,
+        [
+          {
+            type: "dql",
+            query: statements[0],
+            count: 1,
+            columns: [site, reading],
+            dataset: [["west", 10]],
+          },
+          {
+            type: "dql",
+            query: statements[1],
+            count: 1,
+            columns: [{ name: "bucket", type: "SYMBOL" }, site, reading],
+            dataset: [["A", "west", 20]],
+          },
+        ],
+        {
+          xColumn: "site",
+          queries: [{ type: "line", yColumns: ["reading"] }, heatmap],
+        },
+      )
+      const onSave = vi.fn()
+      const onClose = vi.fn()
+      renderComponent(
+        <ChartSettingsDrawer
+          open
+          appearInPlace
+          config={effectiveConfig}
+          tabs={tabs}
+          initialDraft={null}
+          onDraftChange={noOp}
+          onClose={onClose}
+          onSave={onSave}
+        />,
+      )
+      const include = () =>
+        screen.getByRole("checkbox", { name: "Include in chart" })
+      const save = () =>
+        fireEvent.click(screen.getByRole("button", { name: "Save" }))
+      fireEvent.click(include())
+      fireEvent.click(screen.getByRole("tab", { name: "Q2" }))
+      if (excluded) fireEvent.click(include())
+      expect(screen.getByRole("button", { name: "X-axis: site" })).toBeVisible()
+      save()
+      expect(onSave).not.toHaveBeenCalled()
+      expect(onClose).not.toHaveBeenCalled()
+      expect(
+        screen.getByText("Pick a rows column and a value column"),
+      ).toBeVisible()
+
+      fireEvent.click(include())
+      save()
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          xColumn: "site",
+          queries: [
+            expect.objectContaining({ enabled: false }),
+            { ...heatmap, enabled: false },
+          ],
+        }),
+      )
+    },
+  )
+
   it("lets an incompatible query become the anchor and edit its X-axis and reference lines", () => {
     const queries = [
       "SELECT bucket, site, price FROM a",

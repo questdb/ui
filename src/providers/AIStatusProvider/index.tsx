@@ -18,7 +18,6 @@ import {
   getApiKey,
 } from "../../utils/ai"
 import type { AiAssistantSettings } from "../LocalStorageProvider/types"
-import { useAIConversation } from "../AIConversationProvider"
 import {
   useLocalAgent,
   useLocalAgentSchemaAccess,
@@ -181,7 +180,7 @@ type BaseAIStatusContextType = {
     args?: StatusArgs,
     onUpdate?: (history: OperationHistory) => void,
   ) => void
-  abortController: AbortController | null
+  getOperationSignal: () => AbortSignal
   abortOperation: () => void
   // Stops the running answer because the user sent a new message instead.
   steerOperation: () => void
@@ -213,17 +212,16 @@ interface AIStatusProviderProps {
 export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   children,
 }) => {
-  const { isStreaming } = useAIConversation()
   const { aiAssistantSettings } = useLocalStorage()
   const localAgent = useLocalAgent()
   const localAgentSchemaAccess = useLocalAgentSchemaAccess()
   const [status, setStatusState] = useState<AIOperationStatus | null>(null)
   const [currentOperation, setCurrentOperation] = useState<OperationHistory>([])
-  const [abortController, setAbortController] = useState<AbortController>(
-    new AbortController(),
+  const abortControllerRef = useRef(new AbortController())
+  const getOperationSignal = useCallback(
+    () => abortControllerRef.current.signal,
+    [],
   )
-  const isStreamingRef = useRef(isStreaming)
-  const abortControllerRef = useRef<AbortController | null>(null)
   const statusRef = useRef<AIOperationStatus | null>(null)
   const currentOperationRef = useRef<OperationHistory>([])
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -359,6 +357,11 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           onUpdate([...currentOperationRef.current])
         }
       }
+      if (newStatus === null && isBlockingAIStatus(statusRef.current)) {
+        // A normally settled turn is no longer the owner of Stop. Do not
+        // abort its signal: a submitted follow-up may still be waiting on it.
+        abortControllerRef.current = new AbortController()
+      }
       setCurrentOperation([...currentOperationRef.current])
       statusRef.current = newStatus
       setStatusState(newStatus)
@@ -378,13 +381,9 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
 
   const stopOperation = useCallback(
     (reason?: typeof STEERED_ABORT_REASON) => {
-      if (
-        abortControllerRef.current &&
-        statusRef.current !== null &&
-        statusRef.current !== AIOperationStatus.Aborted
-      ) {
-        abortControllerRef.current?.abort(reason)
-        setAbortController(new AbortController())
+      if (isBlockingAIStatus(statusRef.current)) {
+        abortControllerRef.current.abort(reason)
+        abortControllerRef.current = new AbortController()
         setStatus(AIOperationStatus.Aborted)
       }
     },
@@ -399,6 +398,8 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   useEffect(() => {
     if (status === AIOperationStatus.Aborted && timeoutRef.current === null) {
       timeoutRef.current = setTimeout(() => {
+        timeoutRef.current = null
+        if (statusRef.current !== AIOperationStatus.Aborted) return
         currentOperationRef.current = []
         setCurrentOperation([])
         setStatus(null)
@@ -413,25 +414,8 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   }, [status])
 
   useEffect(() => {
-    abortControllerRef.current = abortController
-  }, [abortController])
-
-  useEffect(() => {
-    if (
-      isStreamingRef.current &&
-      !isStreaming &&
-      statusRef.current !== AIOperationStatus.Aborted
-    ) {
-      setStatus(null)
-    }
-    isStreamingRef.current = isStreaming
-  }, [isStreaming])
-
-  useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
+      abortControllerRef.current.abort()
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
       }
@@ -442,7 +426,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     status,
     isOperationBlocking,
     setStatus,
-    abortController,
+    getOperationSignal,
     abortOperation,
     steerOperation,
     clearOperation,

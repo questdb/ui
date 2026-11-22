@@ -37,12 +37,14 @@ import {
   type QueryChart,
   missingQueryFields,
 } from "./CellChart/chartTypes"
+import { validateHeatmapConfig } from "./DrawCanvas/drawCanvasUtils"
 export type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText } from "../Monaco/utils"
 import type { RunCancellation } from "./runCancellation"
 import {
   derivePositionalFrame,
   deriveStatementFrame,
+  reconcileCellResultForStatements,
   reconcileCellResultForValue,
 } from "./statementIdentity"
 import { carriedRunError, carriedRunStatus } from "./runHistory"
@@ -990,8 +992,9 @@ export const buildAppliedCells = (
         "cells",
       )
     }
-    if (req.chartConfig && req.chartConfig.queries.length > 0) {
-      const statementCount = getQueriesFromText(value).length
+    const statements = chartConfig ? getQueriesFromText(value) : undefined
+    if (req.chartConfig && statements) {
+      const statementCount = statements.length
       if (
         statementCount > 0 &&
         req.chartConfig.queries.length !== statementCount
@@ -1077,20 +1080,36 @@ export const buildAppliedCells = (
       }
     }
 
+    const valueChanged = existing != null && existing.value !== value
+    // Results carry over by statement content: validate against the same frame
+    // the updated cell would keep. Do not load snapshots or execute queries.
+    const result = valueChanged
+      ? statements && existing.result != null
+        ? reconcileCellResultForStatements(existing.result, statements)
+        : reconcileCellResultForValue(existing.result, value)
+      : existing?.result
+    if (chartConfig && statements) {
+      const invalid = validateHeatmapConfig(
+        chartConfig,
+        statements,
+        req.view === "editor" ? null : result,
+      )
+      if (invalid) {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index}: ${invalid}`,
+          "cells",
+        )
+      }
+    }
+
     if (existing) {
       updated.push(existing.id)
-      const valueChanged = existing.value !== value
-      // Results carry over by statement content: unchanged statements keep
-      // theirs, zero survivors collapse the frame. A released cell (result on
-      // disk only) keeps its snapshot — hydration reconciles it on load.
       let next: NotebookCell = {
         ...existing,
         id: existing.id,
         position: index,
         value,
-        result: valueChanged
-          ? reconcileCellResultForValue(existing.result, value)
-          : existing.result,
+        result,
       }
       const resultDropped =
         valueChanged && existing.result != null && next.result === null

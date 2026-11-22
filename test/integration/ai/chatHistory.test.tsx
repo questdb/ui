@@ -6,6 +6,9 @@ import {
   queryByHook,
   seedChat,
   getAllByHook,
+  chatServer,
+  fixtures,
+  sendMessage,
 } from "./support/chatHarness"
 import { describe, expect, it } from "vitest"
 import { fireEvent, waitFor, screen } from "@testing-library/react"
@@ -76,6 +79,38 @@ describe("chat history", () => {
       expect(bubble).toContainElement(getByHook("chat-image-enlarge"))
       expect(bubble).not.toHaveTextContent(/workspace/i)
     })
+  })
+
+  it("keeps a user's literal Markdown while stripping inline images from assistant history", async () => {
+    const userImage = "![dot](data:image/png;base64,iVBORw0KGgo=)"
+    const assistantImage = "![preview](data:image/png;base64,iVBORw0KGgo=)"
+    await seedChat("Markdown discussion", {
+      messages: [
+        {
+          id: "user",
+          role: "user",
+          content: `Explain ${userImage}`,
+          timestamp: 1,
+        },
+        {
+          id: "assistant",
+          role: "assistant",
+          content: `Here is ${assistantImage}`,
+          timestamp: 2,
+        },
+      ],
+    })
+    const server = chatServer("openai", [
+      fixtures.createFinalResponse("openai", "That is an inline image."),
+    ])
+    renderChat()
+    await openChat()
+    await sendMessage("What was the exact Markdown syntax?")
+    await screen.findByText("That is an inline image.")
+    const history = JSON.stringify(server.requests[0]?.body.input)
+    expect(history).toContain(userImage)
+    expect(history).toContain("Here is [image: preview]")
+    expect(history).not.toContain(assistantImage)
   })
 
   it("filters stored conversations and handles clear and Escape without closing too early", async () => {

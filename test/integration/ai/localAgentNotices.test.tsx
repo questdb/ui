@@ -48,9 +48,15 @@ it.each([
     partial: markdownExample,
     stopReason: "end_turn",
   },
+  {
+    name: "after a delayed housekeeping completion",
+    partial: "The sample is ready.",
+    suffix: " The preview is included.",
+    stopReason: "max_tokens",
+  },
 ])(
   "renders persisted local-agent history $name",
-  async ({ partial, stopReason }) => {
+  async ({ partial, stopReason, suffix }) => {
     const settings = {
       ...(JSON.parse(
         fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
@@ -60,8 +66,9 @@ it.each([
     const sent: AgentInboundMessage[] = []
     let deliver!: (message: AgentOutboundMessage) => void
     const client = {
-      on: (_event: "agentMessage", handler: typeof deliver) => {
-        deliver = handler
+      canSendAgentMessage: () => true,
+      on: (event: string, handler: typeof deliver) => {
+        if (event === "agentMessage") deliver = handler
         return () => undefined
       },
       sendAgentMessage: (message: AgentInboundMessage) => {
@@ -100,6 +107,21 @@ it.each([
       expect(getByHook("assistant-mode-thinking")).toBeVisible()
       await act(async () => {
         await Promise.resolve()
+        if (suffix) {
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: {
+              kind: "tool_call",
+              toolCallId: "lookup",
+              title: "tool_search",
+              name: "tool_search",
+              toolKind: null,
+              status: "pending",
+              content: null,
+            },
+          })
+        }
         if (partial) {
           deliver({
             ...ids,
@@ -109,6 +131,25 @@ it.each([
               messageId: "reply",
               text: partial,
             },
+          })
+        }
+        if (suffix) {
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: {
+              kind: "tool_call_update",
+              toolCallId: "lookup",
+              status: "completed",
+              title: null,
+              error: null,
+              content: null,
+            },
+          })
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: { kind: "message_chunk", messageId: "reply", text: suffix },
           })
         }
         deliver({
@@ -130,6 +171,8 @@ it.each([
         expect(saved?.content).toMatch(
           /^```sql\nSELECT 42;\n+```agent-notice\n/,
         )
+      } else if (suffix) {
+        expect(saved?.content).toContain(partial + suffix)
       } else if (partial) {
         expect(saved?.content).toBe(partial)
       }
@@ -146,7 +189,11 @@ it.each([
       } else {
         expect(queryByHook("chat-notice")).toBeNull()
       }
-      if (partial) {
+      if (suffix) {
+        expect(getByHook("chat-message-assistant")).toHaveTextContent(
+          partial + suffix,
+        )
+      } else if (partial) {
         const code = getByHook("chat-message-code-block").querySelector("pre")
         expect(code?.textContent).toBe(
           partial === partialSQL ? "SELECT 42;" : noticeExample,

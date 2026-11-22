@@ -43,7 +43,8 @@ export const ExplainQueryButton = ({
   const {
     canUse,
     setStatus,
-    abortController,
+    getOperationSignal,
+    isOperationBlocking,
     hasSchemaAccess,
     currentModel,
     apiKey,
@@ -58,7 +59,7 @@ export const ExplainQueryButton = ({
   } = useAIConversationActions()
 
   const handleExplainQuery = () => {
-    if (!canUse) return
+    if (!canUse || isOperationBlocking()) return
     void trackEvent(ConsoleEvent.AI_EXPLAIN_QUERY)
 
     void executeAIFlow(
@@ -71,7 +72,7 @@ export const ExplainQueryButton = ({
         questClient: quest,
         tables,
         hasSchemaAccess,
-        abortSignal: abortController?.signal,
+        abortSignal: getOperationSignal(),
       }),
       {
         addMessage,

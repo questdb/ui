@@ -76,11 +76,14 @@ const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
   return new Set([o.open, o.high, o.low, o.close]).size !== 4
 }
 
-const heatmapIncomplete = (q: QueryChart | null): boolean =>
+const heatmapIncomplete = (
+  q: QueryChart | null,
+  resolvedX: string | null | undefined,
+): boolean =>
   !!q &&
   q.type === "heatmap" &&
   q.enabled !== false &&
-  missingQueryFields(q) !== null
+  (missingQueryFields(q) !== null || q.partitionByColumn === resolvedX)
 
 type SharedProps = {
   tabs: QueryTab[]
@@ -231,7 +234,12 @@ const ChartSettings: React.FC<SettingsProps> = ({
       setActiveIndex(badIdx)
       return
     }
-    const heatmapIdx = draft.queries.findIndex(heatmapIncomplete)
+    const heatmapIdx = draft.queries.findIndex((q, index) =>
+      heatmapIncomplete(
+        q,
+        placements.find(({ item }) => item.index === index)?.ownX,
+      ),
+    )
     if (heatmapIdx >= 0) {
       telemetry?.onSaveBlocked?.("heatmap_incomplete")
       setSaveAttempted(true)
@@ -381,7 +389,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
           anchorLabel={anchor?.label ?? "Q1"}
           isAnchorTab={isAnchorTab}
           ohlcError={saveAttempted && candlestickMissingOhlc(query)}
-          heatmapError={saveAttempted && heatmapIncomplete(query)}
+          heatmapError={saveAttempted && heatmapIncomplete(query, active.ownX)}
           onUpdateQuery={(patch) => updateQuery(active.item.index, patch)}
           onSetQuery={(next) => setQuery(active.item.index, next)}
           telemetry={telemetry}

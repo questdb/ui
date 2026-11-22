@@ -25,14 +25,6 @@ const finishRetries = async (releaseFirstResponse: () => void) => {
   })
 }
 
-const finishScroll = async () => {
-  await act(async () => {
-    const scrolled = new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await vi.advanceTimersByTimeAsync(0)
-    await scrolled
-  })
-}
-
 describe("chat recovery", () => {
   it("opens the schema chat and reports the provider failure after bounded retries", async () => {
     // Given the real schema quick action and a provider that keeps returning HTTP 500
@@ -86,7 +78,9 @@ describe("chat recovery", () => {
     await waitFor(() => expect(providerBodies).toHaveLength(1))
     await finishRetries(releaseFirstResponse)
 
-    // Then the chat shows a retryable error with the actual schema request preserved
+    // Then the chat shows a retryable error once the failed turn is saved.
+    vi.useRealTimers()
+    await waitFor(() => expect(getByHook("retry-button")).toBeEnabled())
     expect(sqlRequests).toEqual(["SHOW CREATE TABLE 'test_trades';"])
     expect(providerBodies).toHaveLength(9)
     expect(
@@ -94,8 +88,6 @@ describe("chat recovery", () => {
     ).toBe(true)
     expect(getByHook("ai-chat-window")).toBeVisible()
     expect(getByHook("chat-message-error")).toBeVisible()
-    expect(getByHook("retry-button")).toBeVisible()
     expect(queryByHook("chat-stop-button")).not.toBeInTheDocument()
-    await finishScroll()
   })
 })

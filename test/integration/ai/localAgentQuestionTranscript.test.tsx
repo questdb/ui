@@ -63,8 +63,9 @@ it.each(["question", "link"])(
     const sent: AgentInboundMessage[] = []
     let deliver!: (message: AgentOutboundMessage) => void
     const client = {
-      on: (_event: "agentMessage", handler: typeof deliver) => {
-        deliver = handler
+      canSendAgentMessage: () => true,
+      on: (event: string, handler: typeof deliver) => {
+        if (event === "agentMessage") deliver = handler
         return () => undefined
       },
       sendAgentMessage: (message: AgentInboundMessage) => {

@@ -8,13 +8,30 @@ const SUMMARY_PREFIX = "## PREVIOUS CONVERSATION SUMMARY:\n\n"
 const SUMMARY_SUFFIX =
   "\n\n\n**Continue helping the user from where we left off.**"
 
+const truncate = (text: string, limit: number): string =>
+  text.length > limit ? `${text.slice(0, limit)}…` : text
+
+const truncateWithin = (text: string, budget: number): string =>
+  text.length > budget ? truncate(text, budget - 1) : text
+
+const withAttachedSql = (text: string, sql: string): string => {
+  if (text.slice(0, MAX_MESSAGE_CHARS).includes(sql)) return text
+  const heading = `${text ? "\n" : ""}Attached SQL:\n`
+  const budget = MAX_MESSAGE_CHARS - heading.length
+  // Leave room for both the request and the SQL, even if either is long.
+  const requestBudget = Math.max(Math.floor(budget / 2), budget - sql.length)
+  const request = truncateWithin(text, requestBudget)
+  return `${request}${heading}${truncateWithin(sql, budget - request.length)}`
+}
+
 const visibleText = (message: ConversationMessage): string | null => {
   if (message.hideFromUI || message.isCompacted) return null
   if (message.role === "user") {
-    return (
+    const text =
       message.displayUserMessage ??
-      (typeof message.content === "string" ? message.content : null)
-    )
+      (typeof message.content === "string" ? message.content : "")
+    const sql = message.sql?.trim()
+    return sql ? withAttachedSql(text, sql) : text
   }
   if (message.role === "assistant") {
     const text = typeof message.content === "string" ? message.content : ""
@@ -25,28 +42,18 @@ const visibleText = (message: ConversationMessage): string | null => {
   return null
 }
 
-const truncate = (text: string, limit: number): string =>
-  text.length > limit ? `${text.slice(0, limit)}…` : text
-
-const unseenByAgent = (
-  history: ConversationMessage[],
-  agentId: string,
-): ConversationMessage[] => {
-  const lastAgentTurn = history.findLastIndex(
-    (message) => message.localAgentId === agentId,
-  )
-  return history.slice(lastAgentTurn + 1)
-}
-
-// The agent keeps its own history per conversation. When a chat switches to
-// the agent after talking to another model, the agent has not seen those
-// turns, so its next message carries a transcript of everything since its
-// last answered turn.
+// A transcript covers everything since the last answer on this channel, not
+// answers from another bridge advertising the same agent ID. Legacy markers
+// lack that distinction and cannot suppress history.
 export const priorConversationFor = (
   history: ConversationMessage[],
-  agentId: string,
+  sessionId: string,
 ): string | null => {
-  const unseen = unseenByAgent(history, agentId)
+  const lastSeenTurn = history.findLastIndex(
+    (message) =>
+      message.role === "assistant" && message.localAgentSessionId === sessionId,
+  )
+  const unseen = history.slice(lastSeenTurn + 1)
   const lines: string[] = []
   // Compaction already keeps the old turns out of the live context. Carry
   // their summary separately so a busy recent tail cannot crowd it out.
