@@ -1429,9 +1429,11 @@ export const buildEchartsOption = (
       )
     : withAxisFormat(yAxis as Record<string, unknown>, axisFormats[0])
 
-  // Bars lying down, when every series is a bar of some kind.
+  // For two value axes ECharts always uses x as the bar's base axis:
+  // swapping the dimensions would swap the data but not rotate the bars.
   const horizontal =
     chart.horizontal === true &&
+    xMode !== "value" &&
     series.length > 0 &&
     queries.every((q) => HORIZONTAL_TYPES.has(q.type))
 

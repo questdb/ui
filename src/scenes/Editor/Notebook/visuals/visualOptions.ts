@@ -623,6 +623,11 @@ const edges = (ctx: VisualContext) => {
   }
 }
 
+// Force repulsion is quadratic in endpoint count, independent of the result
+// row cap. Keep every link but choose ECharts' bounded circular layout above
+// the force budget.
+const MAX_FORCE_GRAPH_NODES = 500
+
 export const graphOption = (ctx: VisualContext): VisualBuild => {
   const e = edges(ctx)
   if (typeof e === "string") return missing(e)
@@ -634,6 +639,7 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
   }
   const maxWeight = Math.max(...weight.values(), 1)
   const maxLink = Math.max(...e.links.map((l) => l.value), 1)
+  const force = e.nodes.length <= MAX_FORCE_GRAPH_NODES
   const format = e.valueName ? formats[e.valueName] : undefined
   return {
     option: {
@@ -657,12 +663,14 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
       series: [
         {
           type: "graph",
-          layout: "force",
+          layout: force ? "force" : "circular",
           roam: true,
-          draggable: true,
-          force: { repulsion: 220, edgeLength: [60, 160], gravity: 0.08 },
+          draggable: force,
+          ...(force && {
+            force: { repulsion: 220, edgeLength: [60, 160], gravity: 0.08 },
+          }),
           label: {
-            show: true,
+            show: force,
             position: "right",
             color: colors.contentPrimary,
             fontSize: 11,

@@ -81,6 +81,35 @@ it("retains a graph edge's query column for selection", () => {
   )
 })
 
+it("keeps all links in a large graph without scheduling force layout", () => {
+  const links = Array.from({ length: 251 }, (_, i) => [
+    `from-${i}`,
+    `to-${i}`,
+    1,
+  ])
+  const { option, drawn } = graphOption({
+    visual: { type: "graph" },
+    colors: lightColors,
+    formats: {},
+    statements: [
+      rows(
+        [
+          ["from", "SYMBOL"],
+          ["to", "SYMBOL"],
+          ["weight", "INT"],
+        ],
+        links,
+      ),
+    ],
+  })
+  expect(drawn).toEqual({ nodes: 502, links: 251 })
+  expect(series(option)[0]).toMatchObject({
+    layout: "circular",
+    draggable: false,
+  })
+  expect(series(option)[0].links).toHaveLength(251)
+})
+
 describe("stateTimelineOption", () => {
   it("carries each segment's bound source value through time sorting", () => {
     // Given two readings for the same lane with different selection values

@@ -211,11 +211,12 @@ describe("VisualCanvas", () => {
       <VisualCanvas
         {...defaults}
         visual={{ type: "orderBook" }}
+        formats={{ total: { kind: "number", decimals: 0 } }}
         statements={[
           {
             columns,
             rows: [
-              [101, 7, 42],
+              [101, 7, "9007199254740993"],
               [102, 11, null],
             ],
           },
@@ -238,7 +239,7 @@ describe("VisualCanvas", () => {
       }),
     )
     expect(values).toEqual({
-      "101": ["7", "42"],
+      "101": ["7", "9,007,199,254,740,993"],
       "102": ["11", "—"],
       "99": ["5", "0"],
     })

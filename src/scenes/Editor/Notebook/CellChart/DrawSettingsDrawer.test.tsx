@@ -257,6 +257,26 @@ describe("draw settings drawer", () => {
     )
   })
 
+  it("explains that Custom tooltips and axes use the authored option", async () => {
+    renderComponent(
+      <Fixture saved={{ chartConfig: effective }} onSave={vi.fn()} />,
+    )
+    await userEvent.click(screen.getByRole("button", { name: "Open settings" }))
+    const drawer = await screen.findByRole("dialog", { name: "Chart settings" })
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: "Custom" }),
+    )
+    await userEvent.click(within(drawer).getByRole("tab", { name: "Formats" }))
+    expect(
+      within(drawer).getByText(
+        /Custom charts use the tooltip and axis formats/,
+      ),
+    ).toBeVisible()
+    expect(
+      within(drawer).queryByRole("button", { name: /Format a column/ }),
+    ).toBeNull()
+  })
+
   it("starts a custom option from the chart and refuses to save broken JSON", async () => {
     // Given
     const onSave = vi.fn()
@@ -437,6 +457,57 @@ describe("draw settings drawer", () => {
     // Then focus moves past the editor instead of back into it
     expect(document.activeElement).toBe(
       within(drawer).getByRole("button", { name: "Cancel" }),
+    )
+  })
+
+  it("offers X-axis columns from the series rather than leading Events", async () => {
+    const eventTab: QueryTab = {
+      ...tabs[0],
+      query: "select event_time from events",
+      xColumn: "event_time",
+      columns: [{ name: "event_time", type: "TIMESTAMP" }],
+    }
+    const chartConfig: ChartConfig = {
+      ...effective,
+      queries: [{ type: "events", yColumns: [] }, effective.queries[0]],
+    }
+    renderComponent(
+      <Fixture
+        saved={{ chartConfig }}
+        effectiveOverride={chartConfig}
+        tabsOverride={[eventTab, { ...tabs[0], index: 1, label: "Q2" }]}
+        onSave={vi.fn()}
+      />,
+    )
+    const drawer = await openDrawer()
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^X-axis/ }),
+    )
+    expect(screen.getByRole("menuitemradio", { name: "ts" })).toBeVisible()
+    expect(
+      screen.queryByRole("menuitemradio", { name: "event_time" }),
+    ).toBeNull()
+  })
+
+  it("focuses the added format when the last column removes its picker", async () => {
+    renderComponent(
+      <Fixture saved={{ chartConfig: effective }} onSave={vi.fn()} />,
+    )
+    await userEvent.click(screen.getByRole("button", { name: "Open settings" }))
+    const drawer = await screen.findByRole("dialog", { name: "Chart settings" })
+    await userEvent.click(within(drawer).getByRole("tab", { name: "Formats" }))
+    const picker = within(drawer).getByRole("button", {
+      name: /Format a column/,
+    })
+    picker.focus()
+    await userEvent.keyboard("{Enter}")
+    const price = await screen.findByRole("menuitemradio", { name: "price" })
+    await waitFor(() => expect(price).toHaveFocus())
+    await userEvent.keyboard("{Enter}")
+    await waitFor(() =>
+      expect(
+        within(drawer).getByRole("button", { name: /^price/, expanded: true }),
+      ).toHaveFocus(),
     )
   })
 

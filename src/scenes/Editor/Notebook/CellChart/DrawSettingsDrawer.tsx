@@ -378,7 +378,14 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         />
       )}
 
-      {section === "formats" && (
+      {section === "formats" && draft.kind === "custom" && (
+        <Text color="contentSecondary" size="sm">
+          Custom charts use the tooltip and axis formats in their chart option.
+          Column formats are kept for grid results, presets, and components.
+        </Text>
+      )}
+
+      {section === "formats" && draft.kind !== "custom" && (
         <ColumnFormatsEditor
           formats={draft.formats}
           onChange={(formats) => updateDraft({ ...draft, formats })}

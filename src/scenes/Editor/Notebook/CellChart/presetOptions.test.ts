@@ -69,6 +69,28 @@ describe("preset options", () => {
     })
   })
 
+  it("does not swap dimensions for a bar with a numeric base axis", () => {
+    const bars = query({
+      type: "bar",
+      columns: [col("level", "LONG"), col("volume", "DOUBLE")],
+      xColumn: "level",
+      yColumns: ["volume"],
+      dataset: [
+        [10, 100],
+        [20, 200],
+      ],
+    })
+    const option = buildEchartsOption({ xColumn: "level", horizontal: true }, [
+      bars,
+    ])
+    expect(first(option.xAxis)).toMatchObject({ type: "value", name: "level" })
+    expect(seriesOf(option)[0].data).toEqual([
+      [10, 100],
+      [20, 200],
+    ])
+    expect(seriesOf(option)[0].encode).toBeUndefined()
+  })
+
   it("keeps a chart with lines upright even when horizontal is set", () => {
     // Given
     const line = { ...venues, index: 1, type: "line" as const }

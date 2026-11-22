@@ -79,7 +79,9 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
   offerEvents,
   formats,
 }) => {
-  const anchorTab = tabs[0]
+  const anchorTab = tabs.find(
+    (tab) => draft.queries[tab.index]?.type !== "events",
+  )
   const anchorGroups = anchorTab
     ? groupColumns(anchorTab.columns)
     : { temporal: [], numeric: [], categorical: [], other: [] }
@@ -89,7 +91,7 @@ export const PresetChartFields: React.FC<PresetFieldsProps> = ({
     ...anchorGroups.numeric,
   ]
 
-  const activeTab = tabs.find((t) => t.index === activeIndex) ?? anchorTab
+  const activeTab = tabs.find((t) => t.index === activeIndex) ?? tabs[0]
   const isAnchorTab = activeTab != null && activeTab.index === anchorTab?.index
   const query: QueryChart | undefined =
     activeTab != null

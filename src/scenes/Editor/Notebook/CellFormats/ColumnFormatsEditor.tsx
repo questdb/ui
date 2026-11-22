@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { TrashIcon } from "@phosphor-icons/react"
 import { IconButton, Text } from "../../../../components"
@@ -50,6 +50,19 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
   const [expanded, setExpanded] = useState<string | null>(
     focusColumn ?? (entries.length === 1 ? entries[0][0] : null),
   )
+
+  const lastAddedToggle = useRef<HTMLButtonElement>(null)
+  const [focusLastAdded, setFocusLastAdded] = useState<string | null>(null)
+  useEffect(() => {
+    if (focusLastAdded === null) return
+    // The last choice removes the menu trigger, so the usual Radix handback
+    // has nowhere to go. Wait until its focus scope has closed.
+    const frame = requestAnimationFrame(() => {
+      lastAddedToggle.current?.focus()
+      setFocusLastAdded(null)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [focusLastAdded])
 
   const setFormat = (column: string, format: ColumnFormat | null) => {
     const next = { ...formats }
@@ -104,6 +117,9 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
                 title={column}
                 details={summarise(format)}
                 expanded={open}
+                toggleRef={
+                  focusLastAdded === column ? lastAddedToggle : undefined
+                }
                 onToggle={() => setExpanded(open ? null : column)}
                 actions={
                   <IconButton
@@ -137,6 +153,7 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
           placeholder="+ Format a column"
           onValueChange={(column) => {
             if (!column) return
+            if (unformatted.length === 1) setFocusLastAdded(column)
             setFormat(column, {})
             setExpanded(column)
           }}

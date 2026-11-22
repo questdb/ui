@@ -28,7 +28,7 @@ type Level = {
   price: Numeric
   rawPrice: string | number
   size: number
-  total: number | null
+  total: number | string | null
   selection: unknown
 }
 
@@ -58,13 +58,15 @@ const readSide = (
     const price = asNumeric(rawPrice)
     const size = toNumber(row[sizeIdx])
     if (price === null || size === null) return []
+    const total = totalIdx >= 0 ? row[totalIdx] : null
     return [
       {
         price,
         rawPrice,
         size,
         selection: clickColumn === undefined ? rawPrice : row[clickIdx],
-        total: totalIdx >= 0 ? toNumber(row[totalIdx]) : null,
+        total:
+          typeof total === "number" || typeof total === "string" ? total : null,
       },
     ]
   })
@@ -275,7 +277,7 @@ export const OrderBook = ({
   const totalName = asks.totalName ?? bids.totalName
   const totalFormat = (totalName && formats[totalName]) || sizeFormat
   const cols = totalName ? 3 : 2
-  const depthOf = (l: Level) => l.total ?? l.size
+  const depthOf = (l: Level) => toNumber(l.total) ?? l.size
   const maxDepth = Math.max(
     ...asks.levels.map(depthOf),
     ...bids.levels.map(depthOf),

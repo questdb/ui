@@ -87,6 +87,7 @@ type Props = {
   actions?: ReactNode
   muted?: boolean
   toggleLabel?: string
+  toggleRef?: React.Ref<HTMLButtonElement>
   dataHook?: string
   children: ReactNode
 }
@@ -100,6 +101,7 @@ export const ExpandableSettingsItem = ({
   actions,
   muted,
   toggleLabel,
+  toggleRef,
   dataHook,
   children,
 }: Props) => {
@@ -111,6 +113,7 @@ export const ExpandableSettingsItem = ({
       <Header>
         {leading}
         <Toggle
+          ref={toggleRef}
           aria-expanded={expanded}
           aria-controls={bodyId}
           aria-label={toggleLabel}

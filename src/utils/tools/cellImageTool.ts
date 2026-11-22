@@ -71,7 +71,13 @@ export const cellImage = async (
   }
   const visual = cell.chartConfig?.visual
   if (visual && HTML_VISUAL_TYPES.has(visual.type)) {
-    let current = deps.reportOf(bufferId, cellId)
+    const reportForVisual = () => {
+      const current = deps.reportOf(bufferId, cellId)
+      return current?.kind === "visual" && current.drawn.type === visual.type
+        ? current
+        : undefined
+    }
+    let current = reportForVisual()
     if (!current) {
       const view = await deps.liveView(bufferId)
       if (
@@ -81,11 +87,7 @@ export const cellImage = async (
         const restore = deps.bringIntoView(cellId)
         try {
           current =
-            (await waitForCellDraw(
-              () => deps.reportOf(bufferId, cellId),
-              4000,
-              signal,
-            )) ?? undefined
+            (await waitForCellDraw(reportForVisual, 4000, signal)) ?? undefined
         } finally {
           restore()
         }

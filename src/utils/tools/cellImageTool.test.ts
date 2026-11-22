@@ -69,39 +69,42 @@ describe("get_cell_image", () => {
     expect(result.body.picture).toBe(true)
   })
 
-  it("reveals a cold HTML visual, returns its report and restores the viewport", async () => {
-    const restore = vi.fn()
-    let revealed = false
-    const d = deps({
-      readCells: () =>
-        Promise.resolve([
-          drawCell({
-            chartConfig: {
-              xColumn: null,
-              queries: [],
-              visual: { type: "stat" },
-            },
-          }),
-        ]),
-      reportOf: () =>
-        revealed
-          ? { ...report, kind: "visual", drawn: { tiles: 1 } }
-          : undefined,
-      bringIntoView: vi.fn(() => {
-        revealed = true
-        return restore
-      }),
-      waitForChart: vi.fn(),
-    })
-    const result = await cellImage(1, "c", d)
-    expect(d.bringIntoView).toHaveBeenCalledWith("c")
-    expect(d.waitForChart).not.toHaveBeenCalled()
-    expect(restore).toHaveBeenCalledOnce()
-    expect(result.body).toMatchObject({
-      picture: false,
-      render_report: { kind: "visual", drawn: { tiles: 1 } },
-    })
-  })
+  it.each([undefined, report])(
+    "reveals a current HTML visual even when a different chart report is cached (%s)",
+    async (cached) => {
+      const restore = vi.fn()
+      let revealed = false
+      const d = deps({
+        readCells: () =>
+          Promise.resolve([
+            drawCell({
+              chartConfig: {
+                xColumn: null,
+                queries: [],
+                visual: { type: "stat" },
+              },
+            }),
+          ]),
+        reportOf: () =>
+          revealed
+            ? { ...report, kind: "visual", drawn: { type: "stat", tiles: 1 } }
+            : cached,
+        bringIntoView: vi.fn(() => {
+          revealed = true
+          return restore
+        }),
+        waitForChart: vi.fn(),
+      })
+      const result = await cellImage(1, "c", d)
+      expect(d.bringIntoView).toHaveBeenCalledWith("c")
+      expect(d.waitForChart).not.toHaveBeenCalled()
+      expect(restore).toHaveBeenCalledOnce()
+      expect(result.body).toMatchObject({
+        picture: false,
+        render_report: { kind: "visual", drawn: { type: "stat", tiles: 1 } },
+      })
+    },
+  )
 
   it("says why there is no picture", async () => {
     // Given / When
@@ -109,6 +112,11 @@ describe("get_cell_image", () => {
       1,
       "c",
       deps({
+        reportOf: () => ({
+          ...report,
+          kind: "visual",
+          drawn: { type: "stat", tiles: 1 },
+        }),
         readCells: () =>
           Promise.resolve([
             drawCell({
@@ -134,7 +142,7 @@ describe("get_cell_image", () => {
       reason: expect.stringMatching(
         /stat component is drawn in HTML/,
       ) as string,
-      render_report: { kind: "chart" },
+      render_report: { kind: "visual" },
     })
     expect(nothing.body.reason).toMatch(/draws no chart right now/)
     expect(tooLarge.body.reason).toMatch(/too large/)

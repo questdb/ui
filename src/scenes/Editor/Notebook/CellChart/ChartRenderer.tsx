@@ -15,6 +15,7 @@ import { withZoomDensity } from "./buildEchartsOption"
 import { fitLayout } from "./fitLayout"
 import { chartZoomDensity, type ChartZoomDensity } from "./chartDensity"
 import { createQuestdbTheme } from "./questdbTheme"
+import { isTimeChart, primaryXControls } from "./liveZoom"
 import {
   zoomWindowForEvent,
   type DataZoomEvent,
@@ -267,7 +268,20 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         onInstanceRef.current?.(instance)
         firstInstanceDoneRef.current = true
         const zoom = zoomWindowRef.current
-        if (isZoomed(zoom)) {
+        const linkedControl =
+          zoom.bounds && isTimeChart(instance)
+            ? primaryXControls(instance)[0]
+            : undefined
+        if (zoom.bounds && linkedControl) {
+          instance.dispatchAction(
+            {
+              type: "dataZoom",
+              dataZoomIndex: linkedControl.componentIndex,
+              ...zoom.bounds,
+            },
+            { silent: true },
+          )
+        } else if (isZoomed(zoom)) {
           const mounted = instance.getOption() as { dataZoom?: unknown }
           if (hasActiveZoomControl(mounted)) {
             instance.dispatchAction(
@@ -368,7 +382,8 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     useEffect(() => {
       if (!zoomable) return
       if (zoomDensity === null || !zoomControlsHidden(zoomDensity)) return
-      if (!isZoomed(zoomWindowRef.current)) return
+      if (!isZoomed(zoomWindowRef.current) || zoomWindowRef.current.bounds)
+        return
       resetZoom()
       onZoomChangeRef.current?.(0, 100)
     }, [zoomDensity, resetZoom, zoomable])

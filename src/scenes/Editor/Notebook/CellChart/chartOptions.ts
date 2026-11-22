@@ -1,6 +1,7 @@
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import { drawsAlone, thresholdSource } from "./buildEchartsOption"
+import { groupColumns } from "./inferChartConfig"
 import type { ChartConfig, ChartType, QueryChart } from "./chartTypes"
 
 const LYING_TYPES: ChartType[] = ["bar", "stackedBar", "rangeBar"]
@@ -33,6 +34,14 @@ export const chartOptionsOffered = (
       : []
   })
   const anchor = drawn[0]
+  const anchorTab = tabs.find(
+    (tab) => chart.queries[tab.index]?.type !== "events",
+  )
+  const numericX =
+    anchorTab != null &&
+    groupColumns(anchorTab.columns).numeric.some(
+      ({ name }) => name === (chart.xColumn ?? anchorTab.xColumn),
+    )
   // A pie draws alone only as the only query; next to others it is left out.
   const ownAxes =
     anchor !== undefined &&
@@ -41,6 +50,7 @@ export const chartOptionsOffered = (
   return {
     lieDown:
       drawn.length > 0 &&
+      !numericX &&
       !ownAxes &&
       drawn.every((q) => LYING_TYPES.includes(q.type)),
     thresholds: !ownAxes,

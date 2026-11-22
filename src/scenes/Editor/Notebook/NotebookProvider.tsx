@@ -785,11 +785,14 @@ export const NotebookProvider: React.FC<{
       } finally {
         // Balance noteRunStarted on every outcome — denied, skipped,
         // superseded, thrown included — or refresh stays gated forever.
+        const ownsRun = activeCellQueryKeysRef.current.get(cellId) === queryKey
+        if (signal?.aborted && ownsRun)
+          cellRefreshEngineRef.current?.discardVariableRefresh(cellId)
         cellRefreshEngineRef.current?.noteRunFinished(
           cellId,
           store.cellsRef.current.find((cell) => cell.id === cellId),
         )
-        if (activeCellQueryKeysRef.current.get(cellId) === queryKey) {
+        if (ownsRun) {
           activeCellQueryKeysRef.current.delete(cellId)
           questExecution.releaseExecution(queryKey, scopeKey)
         }

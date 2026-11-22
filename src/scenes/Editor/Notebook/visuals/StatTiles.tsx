@@ -368,7 +368,15 @@ export const StatTiles = ({
             </Value>
             {tile.caption && <Caption>{tile.caption}</Caption>}
             {tile.change !== null && changeTone && (
-              <Change $color={toneColor(changeTone, theme.color)}>
+              <Change
+                $color={
+                  changeTone === "positive"
+                    ? theme.color.dataPositive
+                    : changeTone === "negative"
+                      ? theme.color.dataNegative
+                      : theme.color.contentMuted
+                }
+              >
                 {tile.change > 0 ? "▲ " : tile.change < 0 ? "▼ " : ""}
                 {formatValue(
                   Math.abs(tile.change),

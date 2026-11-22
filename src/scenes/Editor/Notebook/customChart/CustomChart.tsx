@@ -75,12 +75,18 @@ export const CustomChart = ({
         if (!isTimeChart(instance)) return
         const event = payload as DataZoomEvent
         const controls = primaryXControls(instance)
-        const control = (event.batch ?? [event])
-          .map((target) => zoomForTarget(controls, target))
-          .find((candidate) => candidate !== undefined)
-        const range = control?.getValueRange("x", 0)
-        if (range?.every(Number.isFinite))
-          lastTimeZoom.current = { option: rawOption, range }
+        for (const target of event.batch ?? [event]) {
+          const control = zoomForTarget(controls, target)
+          if (!control) continue
+          // A full percentage window follows the data domain. Persisting its
+          // current endpoints as values would pin it to a stale domain.
+          const range = control.getValueRange("x", 0)
+          if (target.start === 0 && target.end === 100)
+            lastTimeZoom.current = null
+          else if (range?.every(Number.isFinite))
+            lastTimeZoom.current = { option: rawOption, range }
+          break
+        }
       },
     }),
     [events, rawOption],
