@@ -101,6 +101,45 @@ it("uses the current data and restores zoom when the chart theme changes", async
   })
 })
 
+it("discards timestamp zoom bounds when remounting on a numeric axis", async () => {
+  setChartSize()
+  const onZoomChange = vi.fn()
+  const view = (axis: "time" | "value") => (
+    <ChartRenderer
+      option={{
+        xAxis: { type: axis },
+        yAxis: { type: "value" },
+        dataZoom: [{ type: "inside" }],
+        series: [
+          {
+            type: "line",
+            data: Array.from({ length: 500 }, (_, i) => [i * 1000, i]),
+          },
+        ],
+      }}
+      zoomWindow={{
+        start: 20,
+        end: 80,
+        bounds: { startValue: 1767225799800, endValue: 1767226399200 },
+      }}
+      onZoomChange={onZoomChange}
+      animate={false}
+      height={400}
+    />
+  )
+  const { rerender, container } = renderComponent(view("time"))
+  rerender(view("value"))
+  await waitFor(() => {
+    expect(onZoomChange).toHaveBeenCalledWith(0, 100)
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    expect(
+      host && echarts.getInstanceByDom(host)?.getOption().dataZoom,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ start: 0, end: 100 })]),
+    )
+  })
+})
+
 it("matches each scatter color scale to the new series order after a refresh", async () => {
   setChartSize()
   const view = (names: string[], first: number[]) => (

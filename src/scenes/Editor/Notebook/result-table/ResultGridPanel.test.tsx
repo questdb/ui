@@ -159,6 +159,33 @@ describe("dashboard grid", () => {
     },
   )
 
+  it("points each grid's active descendant to its own mounted cell", () => {
+    const activate = vi.fn()
+    renderComponent(
+      <>
+        <ResultGrid
+          dataSource={inMemoryDataSource(columns, [["east", 1]], -1)}
+          maxColumnWidth="auto"
+          onCellActivate={vi.fn()}
+        />
+        <ResultGrid
+          dataSource={inMemoryDataSource(columns, [["west", 2]], -1)}
+          maxColumnWidth="auto"
+          onCellActivate={activate}
+        />
+      </>,
+    )
+    const grid = screen.getAllByRole("grid")[1]
+    grid.focus()
+    fireEvent.keyDown(grid, { key: "ArrowDown" })
+    const activeId = grid.getAttribute("aria-activedescendant")
+    const active = activeId ? document.getElementById(activeId) : null
+    expect(active).toHaveTextContent("west")
+    expect(grid).toContainElement(active)
+    fireEvent.keyDown(grid, { key: "Enter" })
+    expect(activate).toHaveBeenCalledWith(["west", 2], 0)
+  })
+
   it("preserves the digits of a formatted LONG value from the database", () => {
     renderComponent(
       <ResultGrid

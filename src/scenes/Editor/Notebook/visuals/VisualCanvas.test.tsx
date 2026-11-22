@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import { clearRenderReport, getRenderReport } from "../renderReports"
 import { VisualCanvas } from "./VisualCanvas"
+import { ThemeProvider } from "styled-components"
+import { lightTheme } from "../../../../theme"
 
 vi.mock("../customChart/maps", () => ({
   MAP_NAMES: ["world"],
@@ -28,6 +30,72 @@ describe("VisualCanvas", () => {
     live: false,
     isFocused: true,
   }
+
+  it("uses the readable positive text color for the Light uptime summary", () => {
+    renderComponent(
+      <ThemeProvider theme={lightTheme}>
+        <VisualCanvas
+          {...defaults}
+          visual={{ type: "uptime" }}
+          statements={[
+            {
+              columns: [
+                { name: "ts", type: "TIMESTAMP" },
+                { name: "lane", type: "SYMBOL" },
+                { name: "state", type: "SYMBOL" },
+              ],
+              rows: [
+                ["2026-01-01T00:00:00Z", "db", "up"],
+                ["2026-01-01T00:01:00Z", "db", "up"],
+              ],
+            },
+          ]}
+        />
+      </ThemeProvider>,
+    )
+    const expected = document.createElement("span")
+    expected.style.color = lightTheme.color.dataPositive
+    expect(getComputedStyle(screen.getByText("All operational")).color).toBe(
+      expected.style.color,
+    )
+  })
+
+  it("mounts only nearby Bullet bars but still reports all rows", () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "offsetWidth", "get")
+      .mockReturnValue(600)
+    const height = vi
+      .spyOn(HTMLElement.prototype, "offsetHeight", "get")
+      .mockReturnValue(180)
+    try {
+      const view = renderComponent(
+        <VisualCanvas
+          {...defaults}
+          visual={{ type: "bullet" }}
+          statements={[
+            {
+              columns: [
+                { name: "device", type: "SYMBOL" },
+                { name: "reading", type: "DOUBLE" },
+              ],
+              rows: Array.from({ length: 1000 }, (_, i) => [`device ${i}`, i]),
+            },
+          ]}
+        />,
+      )
+      expect(screen.getByText("device 0")).toBeInTheDocument()
+      expect(screen.queryByText("device 999")).not.toBeInTheDocument()
+      expect(
+        view.container.querySelectorAll("[data-index]").length,
+      ).toBeLessThan(20)
+      expect(getRenderReport(bufferId, cellId)).toMatchObject({
+        drawn: { type: "bullet", bars: 1000 },
+      })
+    } finally {
+      width.mockRestore()
+      height.mockRestore()
+    }
+  })
 
   it("shows and reports how many stat tiles were omitted", () => {
     renderComponent(

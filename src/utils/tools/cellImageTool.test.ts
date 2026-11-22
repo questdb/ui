@@ -69,7 +69,16 @@ describe("get_cell_image", () => {
     expect(result.body.picture).toBe(true)
   })
 
-  it.each([undefined, report])(
+  it.each([
+    undefined,
+    report,
+    {
+      ...report,
+      kind: "visual" as const,
+      drawn: { type: "stat", tiles: 5 },
+      visualConfig: { type: "stat" as const, columns: { value: "old" } },
+    },
+  ])(
     "reveals a current HTML visual even when a different chart report is cached (%s)",
     async (cached) => {
       const restore = vi.fn()
@@ -87,7 +96,12 @@ describe("get_cell_image", () => {
           ]),
         reportOf: () =>
           revealed
-            ? { ...report, kind: "visual", drawn: { type: "stat", tiles: 1 } }
+            ? {
+                ...report,
+                kind: "visual",
+                drawn: { type: "stat", tiles: 1 },
+                visualConfig: { type: "stat" },
+              }
             : cached,
         bringIntoView: vi.fn(() => {
           revealed = true
@@ -115,6 +129,7 @@ describe("get_cell_image", () => {
         reportOf: () => ({
           ...report,
           kind: "visual",
+          visualConfig: { type: "stat" },
           drawn: { type: "stat", tiles: 1 },
         }),
         readCells: () =>

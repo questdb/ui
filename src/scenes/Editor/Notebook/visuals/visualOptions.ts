@@ -1061,6 +1061,7 @@ export const liquidityHeatmapOption = ({
   statements,
   colors,
   formats,
+  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
@@ -1083,18 +1084,20 @@ export const liquidityHeatmapOption = ({
     need(rows, priceIdx, "price", c.price) ??
     need(rows, valueIdx, "value", c.value)
   if (err) return missing(err)
-  const cells = rows.rows
-    .map((r) => [
-      toTime(r[timeIdx]),
-      toNumber(r[priceIdx]),
-      toNumber(r[valueIdx]),
-    ])
-    .filter((v): v is [number, number, number] => v.every((x) => x !== null))
+  const clickIdx = columnIndex(rows, clickColumn)
+  const cells = rows.rows.flatMap((row) => {
+    const time = toTime(row[timeIdx])
+    const price = toNumber(row[priceIdx])
+    const size = toNumber(row[valueIdx])
+    if (time === null || price === null || size === null) return []
+    const value: [number, number, number] = [time, price, size]
+    return [{ value, row }]
+  })
   if (cells.length === 0)
     return missing("No drawable liquidity measurements were returned.")
-  const dt = smallestStep(cells.map((v) => v[0]))
-  const dp = smallestStep(cells.map((v) => v[1]))
-  const values = cells.map((v) => v[2])
+  const dt = smallestStep(cells.map(({ value }) => value[0]))
+  const dp = smallestStep(cells.map(({ value }) => value[1]))
+  const values = cells.map(({ value }) => value[2])
   const priceFormat = formats[rows.columns[priceIdx].name] ?? {
     kind: "number" as const,
   }
@@ -1106,7 +1109,11 @@ export const liquidityHeatmapOption = ({
       renderItem: HEAT_CELLS,
       itemPayload: { dt, dp },
       encode: { x: 0, y: 1 },
-      data: cells,
+      data: cells.map(({ value, row }) =>
+        clickColumn !== undefined && clickIdx >= 0
+          ? { value, columns: { [clickColumn]: row[clickIdx] } }
+          : value,
+      ),
       progressive: 0,
     },
   ]

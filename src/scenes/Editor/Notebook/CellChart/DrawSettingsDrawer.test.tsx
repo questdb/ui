@@ -166,6 +166,35 @@ describe("draw settings drawer", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null)
   })
 
+  it("offers a time window drag even when Events is the first result", async () => {
+    const config: ChartConfig = {
+      ...effective,
+      queries: [{ type: "events", yColumns: [] }, ...effective.queries],
+    }
+    renderComponent(
+      <Fixture
+        saved={{ chartConfig: config }}
+        effectiveOverride={config}
+        tabsOverride={[
+          {
+            ...tabs[0],
+            columns: [{ name: "event_time", type: "TIMESTAMP" }],
+            inferredChart: { type: "events", yColumns: [] },
+          },
+          { ...tabs[0], index: 1, label: "Q2" },
+        ]}
+        onSave={vi.fn()}
+      />,
+    )
+    const drawer = await openDrawer()
+    await userEvent.click(
+      within(drawer).getByRole("tab", { name: "Interactions" }),
+    )
+    expect(
+      within(drawer).getByRole("checkbox", { name: /sets a time window/ }),
+    ).toBeEnabled()
+  })
+
   it("keeps a dirty drawer open when Escape closes the foreground dialog", async () => {
     renderComponent(
       <Fixture saved={{ chartConfig: effective }} onSave={vi.fn()}>

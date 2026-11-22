@@ -8,7 +8,11 @@ export type RenderProblem = {
   severity: "error" | "warning"
 }
 
+import type { VisualConfig } from "./CellChart/chartTypes"
+
 export type RenderReport = {
+  /** Internal provenance; not exposed on the wire. */
+  visualConfig?: VisualConfig
   kind: "chart" | "custom" | "visual"
   // What was drawn, e.g. { series: 2, points: 240 } or { asks: 12, bids: 12 }.
   drawn: Record<string, number | string | boolean>

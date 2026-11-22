@@ -12,7 +12,7 @@ export const resizeGridColumn = (column, delta) =>
     })
 
 export const freezeGridThrough = (column) =>
-  cy.get(`#cell-0-${column}`).then(($cell) => {
+  cy.get(`[data-grid-coordinate='cell-0-${column}']`).then(($cell) => {
     const x = $cell[0].getBoundingClientRect().right
     cy.get('[data-hook="grid-freeze-handle"]').then(($handle) => {
       const rect = $handle[0].getBoundingClientRect()

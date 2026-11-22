@@ -965,7 +965,7 @@ export const NotebookProvider: React.FC<{
       // any COMMIT clears that statement's refresh error — a committed error
       // result is newer than the stale refresh failure it replaces.
       const engine = cellRefreshEngineRef.current
-      engine?.noteRunStarted(cellId)
+      engine?.noteRunStarted(cellId, true)
       const result = store.cellsRef.current.find((c) => c.id === cellId)?.result
       const statementKey = result
         ? statementKeysFor(result.results.map((r) => r.query))[index]
@@ -979,7 +979,10 @@ export const NotebookProvider: React.FC<{
           return outcome.ok
         })
         .finally(() => {
-          cellRefreshEngineRef.current?.noteRunFinished(cellId)
+          engine?.noteRunFinished(
+            cellId,
+            store.cellsRef.current.find((cell) => cell.id === cellId),
+          )
         })
     },
     cancelCell,

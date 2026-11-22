@@ -169,7 +169,7 @@ Cypress.Commands.add("getGridRows", () =>
 )
 
 Cypress.Commands.add("getGridCellAt", (row, col) =>
-  cy.get(`#cell-${row}-${col}`),
+  cy.get(`[data-grid-coordinate='cell-${row}-${col}']`),
 )
 
 Cypress.Commands.add("getActiveCell", () =>
@@ -189,7 +189,7 @@ Cypress.Commands.add("gridToolbar", (name) =>
 )
 
 Cypress.Commands.add("selectGridCell", (row, col) => {
-  const selector = `#cell-${row}-${col}`
+  const selector = `[data-grid-coordinate='cell-${row}-${col}']`
   cy.get(selector).click()
   cy.get(selector).should("have.attr", "aria-selected", "true")
 })

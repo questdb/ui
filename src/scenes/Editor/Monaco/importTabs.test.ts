@@ -1598,6 +1598,25 @@ describe("sanitizeBuffer", () => {
 
 describe("deduplication", () => {
   describe("createBufferContentKey", () => {
+    it("does not identify a saved visual as the same notebook as a preset", () => {
+      const spec = { type: "stat", columns: { value: "total" } }
+      const key = (visual?: typeof spec) =>
+        createBufferContentKey({
+          label: "Totals",
+          notebookViewState: {
+            cells: [
+              {
+                value: "select 1 as total",
+                chartConfig: { xColumn: null, queries: [], visual },
+              },
+            ],
+          },
+        } as unknown as Parameters<typeof createBufferContentKey>[0])
+      expect(key(spec)).not.toEqual(key())
+      expect(key(spec)).toEqual(
+        key({ columns: { value: "total" }, type: "stat" }),
+      )
+    })
     it("creates key from label and value for editor tabs", () => {
       const buffer = { label: "Tab1", value: "SELECT 1" }
       expect(createBufferContentKey(buffer)).toBe("Tab1|SELECT 1")

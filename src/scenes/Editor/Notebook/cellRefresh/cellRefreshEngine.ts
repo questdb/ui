@@ -322,6 +322,7 @@ type Entry = {
   pendingManualRefresh: boolean
   pendingGridVariableRefresh: boolean
   manualRefreshInFlight: boolean
+  variableRefreshInFlight: boolean
   // A zero-survivor collapse dropped the display but kept the disk snapshot;
   // the next settle with no result asks hydration for a non-destructive
   // revive, so undo gets its rows back.
@@ -592,7 +593,7 @@ export class CellRefreshEngine {
       }
       // Matching SQL can be unchanged while its bound variables have changed.
       // Supersede even a manual fetch, which may hold the old values.
-      this.forceRefresh(entry)
+      this.forceRefresh(entry, entry.kind === "grid")
     }
     // During the first Run's validation there may not be a result, or even
     // a placeholder, to make the cell an entry yet.
@@ -611,15 +612,17 @@ export class CellRefreshEngine {
     return refreshed
   }
 
-  private forceRefresh(entry: Entry) {
+  private forceRefresh(entry: Entry, variable = false) {
     if (!entry.visible || this.documentHidden) {
-      entry.pendingManualRefresh = true
+      if (variable) entry.pendingGridVariableRefresh = true
+      else entry.pendingManualRefresh = true
       return
     }
     entry.pendingManualRefresh = false
     this.promotePendingSql(entry)
     this.abortRound(entry)
     entry.manualRefreshInFlight = true
+    entry.variableRefreshInFlight = variable
     if (this.shouldPoll(entry)) {
       entry.lastFetchedAt = 0
       entry.poll?.abort()
@@ -774,13 +777,15 @@ export class CellRefreshEngine {
   // A run start always wins over a refresh: the in-flight round is cancelled,
   // and the pending-run count keeps new rounds out for the run's WHOLE span —
   // the classification barrier included, where isCellRunning is still false.
-  noteRunStarted(cellId: string) {
+  noteRunStarted(cellId: string, singleStatement = false) {
     this.pendingRunCounts.set(
       cellId,
       (this.pendingRunCounts.get(cellId) ?? 0) + 1,
     )
     const entry = this.entries.get(cellId)
     if (!entry) return
+    if (singleStatement && entry.variableRefreshInFlight)
+      this.refreshAfterRun.add(cellId)
     this.abortRound(entry)
     entry.manualRefreshInFlight = false
   }
@@ -825,7 +830,7 @@ export class CellRefreshEngine {
       entry.pendingGridVariableRefresh = true
       return
     }
-    this.forceRefresh(entry)
+    this.forceRefresh(entry, true)
   }
 
   discardVariableRefresh(cellId: string) {
@@ -865,6 +870,7 @@ export class CellRefreshEngine {
       pendingManualRefresh: false,
       pendingGridVariableRefresh: false,
       manualRefreshInFlight: false,
+      variableRefreshInFlight: false,
       snapshotRetained: false,
       ensureAttempted: false,
       checkedRestoredBindings: false,
@@ -945,7 +951,8 @@ export class CellRefreshEngine {
   // finishRound no-ops (inFlight is nulled here), so nothing else would — a
   // replacement round deferred behind the poll jitter can die with the poll,
   // and `fetching` would stay stuck on for a hidden cell.
-  private abortRound(entry: Entry) {
+  private abortRound(entry: Entry, keepVariableIntent = false) {
+    if (!keepVariableIntent) entry.variableRefreshInFlight = false
     entry.inFlight?.abort()
     entry.inFlight = null
     for (const abort of entry.slotAborts.values()) abort.abort()
@@ -1157,7 +1164,7 @@ export class CellRefreshEngine {
         ) {
           if (this.isRunPending(entry.cellId))
             this.refreshAfterRun.add(entry.cellId)
-          else this.forceRefresh(entry)
+          else this.forceRefresh(entry, true)
           return
         }
       }
@@ -1235,7 +1242,10 @@ export class CellRefreshEngine {
       // poll — hand it back to pending so resume() redeems the click.
       if (entry.manualRefreshInFlight && !entry.inFlight) {
         entry.manualRefreshInFlight = false
-        entry.pendingManualRefresh = true
+        if (entry.variableRefreshInFlight)
+          entry.pendingGridVariableRefresh = true
+        else entry.pendingManualRefresh = true
+        entry.variableRefreshInFlight = false
       }
       return
     }
@@ -1294,7 +1304,7 @@ export class CellRefreshEngine {
     if (!manual && entry.inFlight && entry.manualRefreshInFlight) return
     // Supersede any in-flight round up front, so a slow earlier response can't
     // land after the query changed — including when it's cleared to empty.
-    this.abortRound(entry)
+    this.abortRound(entry, reason !== "manual" || entry.variableRefreshInFlight)
     this.stopResultLoadWait(entry)
     const { queries, queriesKey } = entry.state
     if (queries.length === 0) {
@@ -1650,6 +1660,7 @@ export class CellRefreshEngine {
     if (entry.inFlight === ac) {
       entry.inFlight = null
       entry.manualRefreshInFlight = false
+      entry.variableRefreshInFlight = false
       entry.lastFetchedAt = Date.now()
       this.setState(entry, { fetching: false, slotFetching: new Set() })
     }

@@ -17,6 +17,31 @@ const rows = (
 })
 
 describe("buildCustomOption", () => {
+  it("warns when a filter can only see a partial statement dataset", () => {
+    const built = buildCustomOption(
+      {
+        dataset: [
+          {
+            id: "alerts",
+            fromDatasetId: "q0",
+            transform: {
+              type: "filter",
+              config: { dimension: "state", "=": "ALERT" },
+            },
+          },
+        ],
+        series: [{ type: "scatter", datasetId: "alerts" }],
+      },
+      [{ ...rows([["state", "SYMBOL"]], [["OK"]]), partial: true }],
+      true,
+    )
+    expect(
+      built.problems.some(
+        ({ severity, message }) =>
+          severity === "warning" && message.includes("returned only part"),
+      ),
+    ).toBe(true)
+  })
   it("loads maps used only by nested chart options", () => {
     expect(
       mapsUsedBy({

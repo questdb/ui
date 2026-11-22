@@ -1,4 +1,5 @@
-import React from "react"
+import React, { useMemo, useRef } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import styled, { useTheme } from "styled-components"
 import {
   formatValue,
@@ -206,23 +207,40 @@ type Props = {
 
 export const Bullets = ({ visual, statements, formats }: Props) => {
   const theme = useTheme()
-  const read = bulletRows(visual, statements[0])
+  const listRef = useRef<HTMLDivElement>(null)
+  const read = useMemo(
+    () => bulletRows(visual, statements[0]),
+    [visual, statements],
+  )
+  const count = "error" in read ? 0 : read.rows.rows.length
+  const windowed = count > 50
+  const window = useVirtualizer({
+    count,
+    enabled: windowed,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 54,
+    overscan: 4,
+    paddingStart: 10,
+    paddingEnd: 10,
+    gap: 4,
+  })
+  const extent = useMemo(() => {
+    if ("error" in read || visual.max !== undefined) return visual.max ?? 1
+    let max = 1e-12
+    const { rows, valueIdx, targetIdx } = read
+    for (const row of rows.rows) {
+      const value = toNumber(row[valueIdx]) ?? 0
+      const target = targetIdx >= 0 ? (toNumber(row[targetIdx]) ?? 0) * 1.1 : 0
+      max = Math.max(max, value, target)
+    }
+    return max
+  }, [read, visual.max])
   if ("error" in read) return <PaneEmptyState>{read.error}</PaneEmptyState>
   const { rows, valueIdx, targetIdx, labelIdx } = read
   const valueName = rows.columns[valueIdx].name
   const format = formats[valueName]
-  const values = rows.rows.map((r) => toNumber(r[valueIdx]))
-  const targets = rows.rows.map((r) =>
-    targetIdx >= 0 ? toNumber(r[targetIdx]) : null,
-  )
   const min = visual.min ?? 0
-  const max =
-    visual.max ??
-    Math.max(
-      ...values.map((value) => value ?? 0),
-      ...targets.map((t) => (t ?? 0) * 1.1),
-      1e-12,
-    )
+  const max = extent
   const span = max - min || 1
   const pct = (v: number) =>
     `${Math.max(0, Math.min(100, ((v - min) / span) * 100))}%`
@@ -230,77 +248,105 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
     (t) => t.value > min && t.value < max,
   )
 
+  const positions = windowed
+    ? window.getVirtualItems().map(({ index, start }) => ({ index, start }))
+    : rows.rows.map((_, index) => ({ index, start: undefined }))
+  const items = positions.map(({ index, start }) => {
+    const row = rows.rows[index]
+    const value = toNumber(row[valueIdx])
+    const target = targetIdx >= 0 ? toNumber(row[targetIdx]) : null
+    const tone = toneOf(value, format)
+    const color = tone ? toneColor(tone, theme.color) : theme.color.chartSeries1
+    const status = statusOf(tone)
+    const use = target && value !== null ? value / target : null
+    const name = labelIdx >= 0 ? toLabel(row[labelIdx]) : valueName
+    return (
+      <Item
+        key={index}
+        data-index={index}
+        ref={windowed ? window.measureElement : undefined}
+        style={
+          start === undefined
+            ? undefined
+            : {
+                position: "absolute",
+                left: "1.2rem",
+                right: "1.2rem",
+                top: start,
+              }
+        }
+      >
+        <Top>
+          <Name>{name}</Name>
+          {status && <Status $color={color}>{status}</Status>}
+          <Figures>
+            {value === null ? "No measurement" : formatValue(value, format)}
+            {value !== null && target !== null && (
+              <small> of {formatValue(target, format)}</small>
+            )}
+            {use !== null && (
+              <small>
+                {" "}
+                · {formatValue(use, { kind: "percent", decimals: 0 })}
+              </small>
+            )}
+          </Figures>
+        </Top>
+        <Track>
+          {notches.map((n) => (
+            <Notch key={n.value} style={{ left: pct(n.value) }} />
+          ))}
+          {value !== null && (
+            <Fill style={{ width: pct(value), background: color }} />
+          )}
+          {target !== null && <Target style={{ left: pct(target) }} />}
+        </Track>
+        <Card data-card>
+          <dl>
+            <dt>{valueName}</dt>
+            <dd>{formatValue(value, format)}</dd>
+            {target !== null && (
+              <>
+                <dt>Limit</dt>
+                <dd>{formatValue(target, format)}</dd>
+                <dt>Used</dt>
+                <dd>{formatValue(use, { kind: "percent", decimals: 1 })}</dd>
+                <dt>Headroom</dt>
+                <dd>
+                  {formatValue(value === null ? null : target - value, format)}
+                </dd>
+              </>
+            )}
+            {notches.map((n) => (
+              <React.Fragment key={n.value}>
+                <dt>{statusOf(n.tone) ?? n.tone} from</dt>
+                <dd>{formatValue(n.value, format)}</dd>
+              </React.Fragment>
+            ))}
+          </dl>
+        </Card>
+      </Item>
+    )
+  })
   return (
-    <List data-hook="bullets">
-      {rows.rows.map((row, i) => {
-        const value = values[i]
-        const target = targets[i]
-        const tone = toneOf(value, format)
-        const color = tone
-          ? toneColor(tone, theme.color)
-          : theme.color.chartSeries1
-        const status = statusOf(tone)
-        const use = target && value !== null ? value / target : null
-        const name = labelIdx >= 0 ? toLabel(row[labelIdx]) : valueName
-        return (
-          <Item key={name}>
-            <Top>
-              <Name>{name}</Name>
-              {status && <Status $color={color}>{status}</Status>}
-              <Figures>
-                {value === null ? "No measurement" : formatValue(value, format)}
-                {value !== null && target !== null && (
-                  <small> of {formatValue(target, format)}</small>
-                )}
-                {use !== null && (
-                  <small>
-                    {" "}
-                    · {formatValue(use, { kind: "percent", decimals: 0 })}
-                  </small>
-                )}
-              </Figures>
-            </Top>
-            <Track>
-              {notches.map((n) => (
-                <Notch key={n.value} style={{ left: pct(n.value) }} />
-              ))}
-              {value !== null && (
-                <Fill style={{ width: pct(value), background: color }} />
-              )}
-              {target !== null && <Target style={{ left: pct(target) }} />}
-            </Track>
-            <Card data-card>
-              <dl>
-                <dt>{valueName}</dt>
-                <dd>{formatValue(value, format)}</dd>
-                {target !== null && (
-                  <>
-                    <dt>Limit</dt>
-                    <dd>{formatValue(target, format)}</dd>
-                    <dt>Used</dt>
-                    <dd>
-                      {formatValue(use, { kind: "percent", decimals: 1 })}
-                    </dd>
-                    <dt>Headroom</dt>
-                    <dd>
-                      {formatValue(
-                        value === null ? null : target - value,
-                        format,
-                      )}
-                    </dd>
-                  </>
-                )}
-                {notches.map((n) => (
-                  <React.Fragment key={n.value}>
-                    <dt>{statusOf(n.tone) ?? n.tone} from</dt>
-                    <dd>{formatValue(n.value, format)}</dd>
-                  </React.Fragment>
-                ))}
-              </dl>
-            </Card>
-          </Item>
-        )
-      })}
+    <List
+      ref={listRef}
+      data-hook="bullets"
+      style={windowed ? { padding: 0 } : undefined}
+    >
+      {windowed ? (
+        <div
+          style={{
+            height: window.getTotalSize(),
+            position: "relative",
+            flexShrink: 0,
+          }}
+        >
+          {items}
+        </div>
+      ) : (
+        items
+      )}
     </List>
   )
 }

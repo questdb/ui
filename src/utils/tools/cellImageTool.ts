@@ -1,4 +1,5 @@
 import type { EChartsType } from "echarts"
+import isEqual from "lodash.isequal"
 import type { NotebookCell } from "../../store/notebook"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 import type { RenderReport } from "../../scenes/Editor/Notebook/renderReports"
@@ -73,7 +74,9 @@ export const cellImage = async (
   if (visual && HTML_VISUAL_TYPES.has(visual.type)) {
     const reportForVisual = () => {
       const current = deps.reportOf(bufferId, cellId)
-      return current?.kind === "visual" && current.drawn.type === visual.type
+      return current?.kind === "visual" &&
+        current.drawn.type === visual.type &&
+        isEqual(current.visualConfig, visual)
         ? current
         : undefined
     }

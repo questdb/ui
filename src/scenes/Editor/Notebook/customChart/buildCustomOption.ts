@@ -375,12 +375,27 @@ export type BuiltCustomOption = {
   problems: OptionProblem[]
 }
 
+export const partialDatasetWarnings = (
+  statements: (StatementRows | null)[],
+): OptionProblem[] =>
+  statements.flatMap((rows, index) =>
+    rows?.partial
+      ? [
+          {
+            path: `dataset.q${index}`,
+            severity: "warning" as const,
+            message: `Statement ${index + 1} returned only part of its rows. Chart transformations use the returned rows only.`,
+          },
+        ]
+      : [],
+  )
+
 export const buildCustomOption = (
   sanitized: Record<string, unknown>,
   statements: (StatementRows | null)[],
   live: boolean,
 ): BuiltCustomOption => {
-  const problems: OptionProblem[] = []
+  const problems = partialDatasetWarnings(statements)
   let fatal: OptionProblem | undefined
   const report: Report = (path, message, severity = "warning") => {
     if (severity === "error" && path === "")

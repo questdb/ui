@@ -13,7 +13,11 @@ import {
 import type { StatementRows } from "../visuals/statementRows"
 import { setRenderReport, type RenderProblem } from "../renderReports"
 import { sanitizeOption } from "./sanitizeOption"
-import { buildCustomOption, customSeriesCount } from "./buildCustomOption"
+import {
+  buildCustomOption,
+  customSeriesCount,
+  partialDatasetWarnings,
+} from "./buildCustomOption"
 import { drawErrorsOf, resolveChartTypes } from "./chartTypeRegistry"
 import { MAP_NAMES, ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
 import { problemsOf } from "./prepareCustomOption"
@@ -29,6 +33,13 @@ import type { DataZoomEvent } from "../CellChart/zoomWindow"
 const MAPS = new Set<string>(MAP_NAMES)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
+
+const PartialNotice = styled.div`
+  height: 2.8rem;
+  padding: 0.5rem 1rem;
+  overflow: auto;
+  color: ${({ theme }) => theme.color.contentPrimary};
+`
 
 const Waiting = styled(PaneEmptyState)`
   padding: 1.6rem;
@@ -219,17 +230,26 @@ export const CustomChart = ({
       </Waiting>
     )
 
+  const partial = partialDatasetWarnings(statements)
   return (
-    <ChartRenderer
-      option={option}
-      isFocused={isFocused}
-      animate={!live}
-      zoomWindow={NO_ZOOM_WINDOW}
-      zoomable={false}
-      fit
-      specKey={`${specKey}:${Boolean(interactions?.brush)}`}
-      events={chartEvents}
-      onInstance={handleInstance}
-    />
+    <>
+      {partial.length > 0 && (
+        <PartialNotice role="status">
+          {partial.map(({ message }) => message).join(" ")}
+        </PartialNotice>
+      )}
+      <ChartRenderer
+        option={option}
+        height={partial.length > 0 ? "calc(100% - 2.8rem)" : undefined}
+        isFocused={isFocused}
+        animate={!live}
+        zoomWindow={NO_ZOOM_WINDOW}
+        zoomable={false}
+        fit
+        specKey={`${specKey}:${Boolean(interactions?.brush)}`}
+        events={chartEvents}
+        onInstance={handleInstance}
+      />
+    </>
   )
 }

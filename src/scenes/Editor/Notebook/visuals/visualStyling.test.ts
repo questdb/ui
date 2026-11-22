@@ -227,6 +227,35 @@ describe("stateTimelineOption", () => {
   })
 })
 
+it("keeps a named liquidity bucket selection with the rendered row", () => {
+  const built = liquidityHeatmapOption({
+    visual: { type: "liquidityHeatmap" },
+    colors: lightColors,
+    formats: {},
+    clickColumn: "price",
+    statements: [
+      rows(
+        [
+          ["ts", "TIMESTAMP"],
+          ["price", "LONG"],
+          ["size", "DOUBLE"],
+        ],
+        [["2026-01-01T00:00:00Z", "9007199254740993", 10]],
+      ),
+    ],
+  })
+  expect(built.option?.series).toMatchObject([
+    {
+      data: [
+        {
+          value: [1767225600000, 9007199254740992, 10],
+          columns: { price: "9007199254740993" },
+        },
+      ],
+    },
+  ])
+})
+
 it("reports a liquidity heatmap with no drawable cells", () => {
   const result = liquidityHeatmapOption({
     visual: { type: "liquidityHeatmap" },

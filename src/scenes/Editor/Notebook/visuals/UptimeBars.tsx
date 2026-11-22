@@ -44,13 +44,13 @@ const Summary = styled.div`
   color: ${({ theme }) => theme.color.contentMuted};
 `
 
-const Overall = styled.span<{ $color: string }>`
+const Overall = styled.span<{ $color: string; $labelColor: string }>`
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
   font-size: 1.3rem;
   font-weight: 600;
-  color: ${({ $color }) => $color};
+  color: ${({ $labelColor }) => $labelColor};
 
   &::before {
     content: "";
@@ -364,7 +364,18 @@ export const UptimeBars = ({
   return (
     <Root ref={ref} data-hook="uptime-bars">
       <Summary>
-        <Overall $color={overall.color}>{overall.text}</Overall>
+        <Overall
+          $color={overall.color}
+          $labelColor={
+            counts.bad > 0
+              ? colors.dataNegative
+              : counts.warning > 0
+                ? colors.contentPrimary
+                : colors.dataPositive
+          }
+        >
+          {overall.text}
+        </Overall>
         <span>Uptime over the last {span}</span>
       </Summary>
       <Lanes

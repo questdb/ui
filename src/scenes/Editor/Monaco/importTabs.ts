@@ -485,6 +485,18 @@ export const validateBufferSchema = (data: unknown): ValidationResult => {
   return true
 }
 
+// Canonicalize JSON so reordered settings in a hand-edited export do not
+// turn an otherwise identical visual into a new copy.
+const canonicalSettings = (_key: string, value: unknown): unknown => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value
+  const record = value as Record<string, unknown>
+  return Object.fromEntries(
+    Object.keys(record)
+      .sort()
+      .map((key) => [key, record[key]]),
+  )
+}
+
 export const createBufferContentKey = (
   buffer: Pick<
     Buffer,
@@ -492,8 +504,17 @@ export const createBufferContentKey = (
   >,
 ): string => {
   if (buffer.notebookViewState) {
-    const cellValues = buffer.notebookViewState.cells?.map((c) => c.value) ?? []
-    return `${buffer.label}|${JSON.stringify(cellValues)}`
+    const cellValues =
+      buffer.notebookViewState.cells?.map((cell) => {
+        const config = cell.type === "markdown" ? undefined : cell.chartConfig
+        if (!config?.visual && !config?.custom) return cell.value
+        return {
+          value: cell.value,
+          visual: config.visual,
+          custom: config.custom,
+        }
+      }) ?? []
+    return `${buffer.label}|${JSON.stringify(cellValues, canonicalSettings)}`
   }
   if (buffer.metricsViewState) {
     return `${buffer.label}|${JSON.stringify(buffer.metricsViewState)}`

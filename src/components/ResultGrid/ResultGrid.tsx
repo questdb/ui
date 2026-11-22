@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -109,6 +110,7 @@ declare module "@tanstack/react-table" {
 const FREEZE_HANDLE_EDGE_INSET = 4
 
 type GridCellProps = {
+  gridId: string
   rowIndex: number
   colIndex: number
   rawValue: CellValue
@@ -134,6 +136,7 @@ type GridCellProps = {
 }
 
 const GridCell = React.memo(function GridCell({
+  gridId,
   rowIndex,
   colIndex,
   rawValue,
@@ -198,7 +201,8 @@ const GridCell = React.memo(function GridCell({
   )
   return (
     <Cell
-      id={`cell-${rowIndex}-${colIndex}`}
+      id={`${gridId}-cell-${rowIndex}-${colIndex}`}
+      data-grid-coordinate={`cell-${rowIndex}-${colIndex}`}
       data-hook="grid-cell"
       data-pulse={isPulsing ? "true" : undefined}
       data-frozen={frozen ? "true" : undefined}
@@ -386,6 +390,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       [columns, sampleRows, columnFormats],
     )
 
+    const gridId = useId()
     const gridRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -767,7 +772,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
             !e.repeat &&
             rowVisible &&
             colVisible &&
-            active === `cell-${focusedCell.row}-${focusedCell.col}`
+            active === `${gridId}-cell-${focusedCell.row}-${focusedCell.col}`
           )
             onCellClick(focusedCell.row, focusedCell.col)
           return
@@ -783,6 +788,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         columnOffsets,
         frozenCount,
         frozenWidth,
+        gridId,
         shuffleFocusedColumnToFront,
         onYieldFocus,
         setFocusedCell,
@@ -1062,7 +1068,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         aria-colcount={columns.length}
         aria-activedescendant={
           focusedCell && focusedCellRendered
-            ? `cell-${focusedCell.row}-${focusedCell.col}`
+            ? `${gridId}-cell-${focusedCell.row}-${focusedCell.col}`
             : undefined
         }
       >
@@ -1099,6 +1105,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 const dataIndex = dataIndexAt(colIdx)
                 return (
                   <GridCell
+                    gridId={gridId}
                     key={header.id}
                     rowIndex={virtualIndex}
                     colIndex={colIdx}

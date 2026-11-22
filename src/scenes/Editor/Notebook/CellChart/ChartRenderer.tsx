@@ -281,13 +281,18 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
             },
             { silent: true },
           )
+        } else if (zoom.bounds) {
+          // Linked bounds belong to a time axis, not a newly selected numeric
+          // or categorical coordinate space.
+          onZoomChangeRef.current?.(0, 100)
         } else if (isZoomed(zoom)) {
           const mounted = instance.getOption() as { dataZoom?: unknown }
           if (hasActiveZoomControl(mounted)) {
             instance.dispatchAction(
               {
                 type: "dataZoom",
-                ...(zoom.bounds ?? { start: zoom.start, end: zoom.end }),
+                start: zoom.start,
+                end: zoom.end,
               },
               { silent: true },
             )

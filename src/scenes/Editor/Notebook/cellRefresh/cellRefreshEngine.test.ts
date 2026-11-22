@@ -3910,6 +3910,28 @@ describe("CellRefreshEngine", () => {
       })
     })
 
+    it("replays an interrupted variable refresh after rerunning one grid statement", async () => {
+      const queries = ["select @desk as a", "select @desk as b"]
+      const grid = gridCell("g1", queries.join("; "), queries, false)
+      syncOnScreen([grid])
+      await flushAsync()
+      deps.executeSingle.mockImplementation(() => new Promise(() => undefined))
+      engine.refreshWhere(() => true)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      engine.noteRunStarted("g1", true)
+      deps.executeSingle.mockImplementation((sql) =>
+        Promise.resolve({ ...dqlResult(sql), dataset: [["Tokyo", 2]] }),
+      )
+      engine.noteRunFinished("g1", grid)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(4)
+      expect(cellResults.get("g1")?.results[1]).toMatchObject({
+        dataset: [["Tokyo", 2]],
+      })
+    })
+
     it("refreshes a byte-capped result when its statement identities still match", async () => {
       const sql = "select @desk"
       const full = gridCell("g1", sql, [sql], false)

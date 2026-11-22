@@ -196,6 +196,7 @@ export const VisualCanvas = ({
     }
     setRenderReport(bufferId, cellId, {
       kind: "visual",
+      visualConfig: visual,
       drawn: { type: visual.type, ...drawn },
       problems,
     })

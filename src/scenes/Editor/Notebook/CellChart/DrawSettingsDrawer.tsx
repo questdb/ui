@@ -195,12 +195,15 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   )
 
   // A drag sets a time window on a preset chart over time.
-  const anchorX = tabs[0]?.columns.find((c) => c.name === draft.chart.xColumn)
-  const anchorQuery = draft.chart.queries[tabs[0]?.index ?? 0]
+  const anchorTab = tabs.find(
+    (tab) => draft.chart.queries[tab.index]?.type !== "events",
+  )
+  const anchorX = anchorTab?.columns.find((c) => c.name === draft.chart.xColumn)
+  const anchorQuery = anchorTab && draft.chart.queries[anchorTab.index]
   const lying =
     draft.chart.horizontal === true &&
     chartOptionsOffered(draft.chart, tabs, {}).lieDown
-  const rangeStart = tabs[0]?.columns.find(
+  const rangeStart = anchorTab?.columns.find(
     (c) => c.name === anchorQuery?.range?.start,
   )
   // These draw on axes of their own, without a time x-axis to drag across.

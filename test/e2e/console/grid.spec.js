@@ -30,7 +30,9 @@ const expectColumnWidth = (name, width) =>
     const column = [...$headers].findIndex(
       (header) => header.textContent === name,
     )
-    const cell = $headers[0].ownerDocument.getElementById(`cell-0-${column}`)
+    const cell = $headers[0]
+      .closest('[data-hook="result-grid-tanstack"]')
+      .querySelector(`[data-grid-coordinate='cell-0-${column}']`)
     expect(cell.getBoundingClientRect().width).to.be.closeTo(width, 2)
   })
 
@@ -94,7 +96,11 @@ describe("questdb grid", () => {
       cy.getGridCellAt(row, 0)
         .should("have.text", String(row + 1))
         .click()
-      cy.getActiveCell().should("have.id", `cell-${row}-0`)
+      cy.getActiveCell().should(
+        "have.attr",
+        "data-grid-coordinate",
+        `cell-${row}-0`,
+      )
     }
     cy.getGridViewport().scrollTo(0, 2500 * rowHeight)
     cy.wait("@deepPage").its("response.statusCode").should("eq", 200)
@@ -286,23 +292,31 @@ describe("questdb grid", () => {
     // When / Then
     cy.realPress("ArrowRight")
     cy.realPress("ArrowDown")
-    cy.getActiveCell().should("have.id", "cell-1-1").and("have.text", "20")
+    cy.getActiveCell()
+      .should("have.attr", "data-grid-coordinate", "cell-1-1")
+      .and("have.text", "20")
     cy.realPress("End")
-    cy.getActiveCell().should("have.id", "cell-1-2")
+    cy.getActiveCell().should("have.attr", "data-grid-coordinate", "cell-1-2")
     cy.realPress("Home")
-    cy.getActiveCell().should("have.id", "cell-1-0")
+    cy.getActiveCell().should("have.attr", "data-grid-coordinate", "cell-1-0")
     cy.realPress(["Control", "End"])
-    cy.getActiveCell().should("have.id", "cell-199-2").and("be.visible")
+    cy.getActiveCell()
+      .should("have.attr", "data-grid-coordinate", "cell-199-2")
+      .and("be.visible")
     cy.realPress(["Control", "Home"])
-    cy.getActiveCell().should("have.id", "cell-0-0")
+    cy.getActiveCell().should("have.attr", "data-grid-coordinate", "cell-0-0")
     cy.getGridViewport().then(($viewport) => {
       const page = Math.floor(
         ($viewport[0].clientHeight - headerHeight) / rowHeight,
       )
       cy.realPress("PageDown")
-      cy.getActiveCell().should("have.id", `cell-${page}-0`)
+      cy.getActiveCell().should(
+        "have.attr",
+        "data-grid-coordinate",
+        `cell-${page}-0`,
+      )
       cy.realPress("PageUp")
-      cy.getActiveCell().should("have.id", "cell-0-0")
+      cy.getActiveCell().should("have.attr", "data-grid-coordinate", "cell-0-0")
     })
   })
 
@@ -464,7 +478,8 @@ describe("questdb grid", () => {
     const longArray = (n) =>
       `ARRAY[${Array.from({ length: n }, (_, i) => `${i + 1}.0`).join(",")}]`
     const gridArea = () => cy.get('[data-hook="result-grid-tanstack"]:visible')
-    const cellIn = (column) => gridArea().find(`#cell-0-${column}`)
+    const cellIn = (column) =>
+      gridArea().find(`[data-grid-coordinate='cell-0-${column}']`)
     let first = true
     const runQuery = (query) => {
       if (first) {
@@ -482,7 +497,9 @@ describe("questdb grid", () => {
     // widths re-measure and expand once the webfont finishes loading
     gridArea().should(($grid) => {
       const gridWidth = $grid[0].getBoundingClientRect().width
-      const cellWidth = $grid.find("#cell-0-0")[0].getBoundingClientRect().width
+      const cellWidth = $grid
+        .find("[data-grid-coordinate='cell-0-0']")[0]
+        .getBoundingClientRect().width
       expect(cellWidth).to.be.closeTo(gridWidth, 20)
     })
 
@@ -496,10 +513,10 @@ describe("questdb grid", () => {
     gridArea().should(($grid) => {
       const gridWidth = $grid[0].getBoundingClientRect().width
       const firstWidth = $grid
-        .find("#cell-0-0")[0]
+        .find("[data-grid-coordinate='cell-0-0']")[0]
         .getBoundingClientRect().width
       const secondWidth = $grid
-        .find("#cell-0-1")[0]
+        .find("[data-grid-coordinate='cell-0-1']")[0]
         .getBoundingClientRect().width
       expect(firstWidth).to.be.closeTo(secondWidth, 8)
       expect(firstWidth).to.be.closeTo(gridWidth / 2, 20)
@@ -521,7 +538,10 @@ describe("questdb grid", () => {
     gridArea().should(($grid) => {
       const gridWidth = $grid[0].getBoundingClientRect().width
       const widths = [0, 1, 2, 3].map(
-        (col) => $grid.find(`#cell-0-${col}`)[0].getBoundingClientRect().width,
+        (col) =>
+          $grid
+            .find(`[data-grid-coordinate='cell-0-${col}']`)[0]
+            .getBoundingClientRect().width,
       )
       expect(widths[1]).to.be.closeTo(widths[0], 8)
       expect(widths[2]).to.be.closeTo(widths[0], 8)
