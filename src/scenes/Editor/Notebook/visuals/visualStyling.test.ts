@@ -269,6 +269,38 @@ it("sets an unbound liquidity heatmap click to the cell's time, not epoch ms", (
   expect(set).toHaveBeenCalledWith({ t: "'2026-01-01T00:00:00.000000Z'" })
 })
 
+it("draws a liquidity heatmap's price line with a surface halo", () => {
+  // Given a liquidity heatmap with a price line, in the dark theme
+  const built = liquidityHeatmapOption({
+    visual: { type: "liquidityHeatmap" },
+    colors: darkColors,
+    formats: {},
+    statements: [
+      rows(
+        [
+          ["ts", "TIMESTAMP"],
+          ["price", "DOUBLE"],
+          ["size", "DOUBLE"],
+        ],
+        [["2026-01-01T00:00:00Z", 100, 5]],
+      ),
+      rows(
+        [
+          ["ts", "TIMESTAMP"],
+          ["mid", "DOUBLE"],
+        ],
+        [["2026-01-01T00:00:00Z", 100]],
+      ),
+    ],
+  })
+  // Then the light line keeps a dark edge over the brightest cells
+  const line = (built.option?.series as { lineStyle?: object }[])[1]
+  expect(line.lineStyle).toMatchObject({
+    color: darkColors.contentPrimary,
+    shadowColor: darkColors.surfaceInset,
+  })
+})
+
 it("keeps a named liquidity bucket selection with the rendered row", () => {
   const built = liquidityHeatmapOption({
     visual: { type: "liquidityHeatmap" },
@@ -510,6 +542,47 @@ it("scales a World map's region colours over its real values, not NULL as 0", ()
   })
   // Then the scale runs from the lowest to the highest reported value
   expect(option?.visualMap).toMatchObject({ min: 40, max: 50 })
+  // And the lowest value is not drawn like a country with no data
+  const [map] = series(option)
+  const noData = (map.itemStyle as { areaColor: string }).areaColor
+  const ramp = (option?.visualMap as { inRange: { color: string[] } }).inRange
+    .color
+  expect(ramp[0]).not.toBe(noData)
+})
+
+it("sets no variable for an unbound click on a World map point with no name", () => {
+  // Given lat/lon points with no label column
+  const { option } = mapOption({
+    visual: { type: "map" },
+    formats: {},
+    colors: lightColors,
+    statements: [
+      rows(
+        [
+          ["lat", "DOUBLE"],
+          ["lon", "DOUBLE"],
+          ["mag", "DOUBLE"],
+        ],
+        [[51.5, -0.12, 3]],
+      ),
+    ],
+  })
+  const [points] = series(option)
+  const set = vi.fn()
+
+  // When the user clicks a point, whose value starts with its longitude
+  interactionEvents({ click: { variable: "place" } }, set).click(
+    {
+      componentType: "series",
+      name: "",
+      value: [-0.12, 51.5, 3],
+      data: (points.data as unknown[])[0],
+    },
+    {} as never,
+  )
+
+  // Then the variable is not set to the longitude
+  expect(set).not.toHaveBeenCalled()
 })
 
 it("keeps a World map point with a NULL value missing, not 0", () => {

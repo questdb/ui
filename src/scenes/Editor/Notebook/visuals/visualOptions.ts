@@ -991,6 +991,11 @@ export const mapOption = ({
               v[2] === null ? 6 : 6 + 18 * Math.sqrt(Math.abs(v[2]) / max),
             data: rows.rows.map((r, i) => ({
               name: labelIdx >= 0 ? toLabel(r[labelIdx]) : "",
+              // A point without a label column has no name an unbound click
+              // could select (its value array starts with the longitude).
+              ...(labelIdx < 0 && clickColumn === undefined
+                ? { selection: undefined }
+                : {}),
               value: [toNumber(r[lonIdx]), toNumber(r[latIdx]), values[i]],
               // A point with no value is drawn hollow, unlike a real 0.
               ...(values[i] === null
@@ -1046,9 +1051,11 @@ export const mapOption = ({
         calculable: false,
         textStyle: { color: colors.contentSecondary, fontSize: 11 },
         formatter: (v: unknown) => formatValue(v, format),
+        // The lowest value is tinted: plain surface is how a country with
+        // no data (or a NULL value) is drawn.
         inRange: {
           color: [
-            colors.surfaceRaised,
+            withAlpha(colors.chartSeries1, 0.3),
             colors.chartSeries1,
             colors.contentAccent,
           ],
@@ -1182,7 +1189,13 @@ export const liquidityHeatmapOption = ({
         name: line.columns[lv].name,
         showSymbol: false,
         z: 5,
-        lineStyle: { color: colors.contentPrimary, width: 1.5 },
+        // A surface halo keeps the line readable over the brightest cells.
+        lineStyle: {
+          color: colors.contentPrimary,
+          width: 1.5,
+          shadowColor: colors.surfaceInset,
+          shadowBlur: 4,
+        },
         itemStyle: { color: colors.contentPrimary },
         data: line.rows.map((r) =>
           clickColumn === undefined

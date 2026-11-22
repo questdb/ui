@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react"
+import styled from "styled-components"
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
@@ -56,6 +57,11 @@ import {
   validateRules,
   type RuleErrors,
 } from "./ruleValidation"
+
+// Groups the section tabs for focus lookups without adding a box.
+const TabsGroup = styled.div`
+  display: contents;
+`
 
 export type GridSection = "highlights" | "formats" | "interactions"
 
@@ -295,11 +301,26 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     })
   }
 
+  // Clear rules sits in the Highlights footer: when an unfinished interaction
+  // stops it, the button goes with the tab, so focus moves to the
+  // Interactions tab that shows the problem.
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const [focusTabRequest, setFocusTabRequest] = useState(0)
+  useEffect(() => {
+    if (focusTabRequest === 0) return
+    tabsRef.current
+      ?.querySelector<HTMLElement>("[role='tab'][aria-selected='true']")
+      ?.focus()
+  }, [focusTabRequest])
+
   // Clears the rules, keeps the identity, and saves the rest of the draft.
   const clearRules = async () => {
     if (saving) return
     const interactionDraft = interactionsRef.current
-    if (!interactionsComplete(interactionDraft)) return
+    if (!interactionsComplete(interactionDraft)) {
+      setFocusTabRequest((n) => n + 1)
+      return
+    }
     if (
       newVariablesInUse(interactionDraft).length > 0 &&
       !((await serverAccepts(interactionDraft)) && acceptsSaveRef.current)
@@ -382,12 +403,14 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
         )
       }
     >
-      <SettingsTabs
-        tabs={SECTIONS}
-        active={section}
-        onChange={setSection}
-        ariaLabel="Grid settings sections"
-      />
+      <TabsGroup ref={tabsRef}>
+        <SettingsTabs
+          tabs={SECTIONS}
+          active={section}
+          onChange={setSection}
+          ariaLabel="Grid settings sections"
+        />
+      </TabsGroup>
 
       {section === "interactions" && (
         <InteractionsEditor

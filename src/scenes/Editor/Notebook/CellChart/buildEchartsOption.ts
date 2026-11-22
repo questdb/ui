@@ -167,6 +167,17 @@ const isClickPoint = (point: unknown): point is ClickPoint =>
 const pointValue = (point: unknown): unknown =>
   isClickPoint(point) ? point.value : point
 
+// An unbound click selects the clicked item's name. A NULL category has none
+// it can be drawn with (its label is empty), so its item says to select NULL
+// rather than letting the click fall back to the drawn value.
+const NULL_SELECTION = { columns: {}, selection: null }
+
+const isNullCategory = (raw: unknown, ctx: SeriesContext): boolean =>
+  ctx.xMode === "category" &&
+  ctx.clickEnabled === true &&
+  ctx.clickColumn === undefined &&
+  (raw === null || raw === undefined)
+
 const alignPointsToCategoryUnion = (
   rows: Dataset,
   xIdx: number,
@@ -508,6 +519,7 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
         : ctx.xMode === "category"
           ? y
           : [xValue(row, xIdx), y]
+      if (isNullCategory(row[xIdx], ctx)) return { value, ...NULL_SELECTION }
       return clickColumn !== undefined && clickIdx !== undefined
         ? { value, columns: { [clickColumn]: row[clickIdx] } }
         : value
@@ -632,6 +644,7 @@ const alignedRows = (
           ? toNumberOrNull(row[xIdx])
           : toCategoryLabel(row[xIdx])
     const value = [x, ...valueIdxs.map((i) => toNumberOrNull(row[i]))]
+    if (isNullCategory(row[xIdx], ctx)) return { value, ...NULL_SELECTION }
     return clickColumn !== undefined && clickIdx >= 0
       ? { value, columns: { [clickColumn]: row[clickIdx] } }
       : value
@@ -653,12 +666,18 @@ const rowItem = (
   row: Dataset[number],
   value: unknown[],
   name?: string,
+  selection?: { selection: unknown; selectionColumn?: string },
 ) => {
   const columns: Record<string, unknown> = {}
   q.columns.forEach((c, i) => {
     columns[c.name] = row[i]
   })
-  return { value, columns, ...(name !== undefined ? { name } : {}) }
+  return {
+    value,
+    columns,
+    ...(name !== undefined ? { name } : {}),
+    ...selection,
+  }
 }
 
 const roleIndexes = (
@@ -847,6 +866,7 @@ const buildCandlestickSeries = (
             ctx.xMode === "time" ? row[xIdx] : toNumberOrNull(row[xIdx]),
             ...values,
           ]
+    if (isNullCategory(row[xIdx], ctx)) return { value, ...NULL_SELECTION }
     return clickColumn !== undefined && clickIdx !== undefined
       ? { value, columns: { [clickColumn]: row[clickIdx] } }
       : value
@@ -902,6 +922,10 @@ const buildPieChartOption = (
     value: toNumberOrNull(row[yIdx]) ?? 0,
     ...(clickColumn !== undefined && clickIdx !== undefined
       ? { columns: { [clickColumn]: row[clickIdx] } }
+      : {}),
+    // A NULL slice has no name to select: an unbound click selects NULL.
+    ...(clickColumn === undefined && row[xIdx] == null
+      ? { selection: null }
       : {}),
   }))
   return {
@@ -987,6 +1011,10 @@ const buildHeatmapOption = (
         toNumberOrNull(row[valueIdx]),
       ],
       toCategoryLabel(row[xIdx]),
+      // A NULL x has no name to select: an unbound click selects NULL.
+      context.clickColumn === undefined && row[xIdx] == null
+        ? { selection: null }
+        : undefined,
     ),
   )
   const values = data
@@ -1124,11 +1152,17 @@ const buildBoxplotOption = (
               },
             }
           : {}),
+        // An x label can be shortened (times read "09:00"), so an unbound
+        // click selects the x value itself, typed by its column.
         data: q.dataset.map((row) =>
           rowItem(
             q,
             row,
             boxes.map((i) => toNumberOrNull(row[i])),
+            undefined,
+            context.clickColumn === undefined && q.xColumn != null
+              ? { selection: row[xIdx], selectionColumn: q.xColumn }
+              : undefined,
           ),
         ),
       },

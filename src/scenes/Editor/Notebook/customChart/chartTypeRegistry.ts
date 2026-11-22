@@ -18,8 +18,40 @@ type Compiled = {
 
 const compiled = new Map<string, Compiled>()
 // Errors a chart type threw while drawing, by registered name. Cleared when
-// the type draws without one.
+// a whole draw of a series runs without one.
 const drawErrors = new Map<string, string>()
+const drawErrorListeners = new Set<() => void>()
+let notifyQueued = false
+
+// Draws happen after the chart's render report was written; tell the charts
+// that read these errors, once per task.
+const noteDrawErrorsChanged = () => {
+  if (notifyQueued) return
+  notifyQueued = true
+  queueMicrotask(() => {
+    notifyQueued = false
+    drawErrorListeners.forEach((listener) => listener())
+  })
+}
+
+const setDrawError = (registeredName: string, error: string | null) => {
+  if ((drawErrors.get(registeredName) ?? null) === error) return
+  if (error === null) drawErrors.delete(registeredName)
+  else drawErrors.set(registeredName, error)
+  noteDrawErrorsChanged()
+}
+
+/** Calls `listener` after the draw errors of chart types change. */
+export const subscribeDrawErrors = (listener: () => void): (() => void) => {
+  drawErrorListeners.add(listener)
+  return () => {
+    drawErrorListeners.delete(listener)
+  }
+}
+
+// ECharts shares `params.context` across one series draw: the first item of a
+// draw clears the type's error, so a throw on any item of it stays reported.
+const PASS = Symbol("chartTypePass")
 
 const hash = (text: string): string => {
   let h = 5381
@@ -39,17 +71,24 @@ const ensureRegistered = (
   try {
     const renderItem = compile(type.renderItem)
     const guarded: CustomSeriesRenderItem = (params, api) => {
+      const pass = params.context as Record<symbol, boolean> | undefined
+      let threw: string | null = null
+      let out: ReturnType<CustomSeriesRenderItem>
       try {
-        const out = renderItem(params, api)
-        if (drawErrors.has(registeredName)) drawErrors.delete(registeredName)
-        return out
+        out = renderItem(params, api)
       } catch (e) {
-        drawErrors.set(
-          registeredName,
-          e instanceof Error ? e.message : String(e),
-        )
-        return null as unknown as ReturnType<CustomSeriesRenderItem>
+        threw = e instanceof Error ? e.message : String(e)
+        out = null as unknown as ReturnType<CustomSeriesRenderItem>
       }
+      if (threw !== null) {
+        setDrawError(registeredName, threw)
+        if (pass) pass[PASS] = true
+      } else if (!pass || !pass[PASS]) {
+        // The first item of a draw, or no draw context: a clean call.
+        if (pass) pass[PASS] = true
+        setDrawError(registeredName, null)
+      }
+      return out
     }
     echarts.registerCustomSeries(registeredName, guarded)
     entry = { registeredName, error: null }

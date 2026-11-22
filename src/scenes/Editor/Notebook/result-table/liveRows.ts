@@ -90,7 +90,11 @@ export const useLiveRows = (
       before === null || sameFrame
         ? new Set<number>()
         : new Set(keys.flatMap((key, i) => (before.has(key) ? [] : [i])))
-    state.previousKeys = new Map(keys.map((key, i) => [key, i]))
+    // A truncated result is a restored snapshot prefix: rows past it are not
+    // gone, so it must not become what the next result is compared with.
+    state.previousKeys = data.truncated
+      ? before
+      : new Map(keys.map((key, i) => [key, i]))
     state.last = { mode, identity }
     const live: LiveRows = {
       data: dataset === data.dataset ? data : { ...data, dataset },

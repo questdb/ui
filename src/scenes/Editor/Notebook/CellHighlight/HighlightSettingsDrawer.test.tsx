@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { renderComponent } from "../../../../test/component"
 import React, { useState } from "react"
-import { act, fireEvent, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { questClient } from "../../../../utils/questdb/queryClient"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
@@ -331,6 +331,10 @@ describe("highlight settings validation", () => {
     // Then nothing is saved and Interactions shows what is missing
     expect(onSave).not.toHaveBeenCalled()
     expect(screen.getByRole("alert")).toHaveTextContent("Choose a variable.")
+    // And focus, which was on the removed Clear rules button, is on that tab
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Interactions" })).toHaveFocus(),
+    )
 
     // When the user picks the variable and the column, then saves
     await userEvent.click(screen.getByRole("button", { name: /^Variable/ }))
@@ -431,5 +435,34 @@ describe("highlight settings validation", () => {
       expect(drawer).toContainElement(document.activeElement as HTMLElement),
     )
     expect(document.activeElement?.tagName).toBe("H3")
+  })
+
+  it("moves focus to the next threshold after one is removed by keyboard", async () => {
+    // Given a format coloured by three thresholds
+    renderComponent(
+      <Fixture onSave={vi.fn()} focus={{ section: "formats", column: "v" }} />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+    const drawer = await screen.findByRole("dialog", { name: "Grid settings" })
+    await userEvent.click(screen.getByRole("button", { name: /^v: colour/ }))
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: /thresholds/i }),
+    )
+    for (let i = 0; i < 2; i++)
+      await userEvent.click(
+        within(drawer).getByRole("button", { name: /Add threshold/ }),
+      )
+    expect(
+      screen.getAllByRole("button", { name: /^Remove threshold/ }),
+    ).toHaveLength(3)
+
+    // When the keyboard user removes the second one
+    screen.getByRole("button", { name: "Remove threshold 2" }).focus()
+    await userEvent.keyboard("{Enter}")
+
+    // Then focus is on the threshold that took its place
+    await waitFor(() =>
+      expect(screen.getByLabelText("v: threshold 2")).toHaveFocus(),
+    )
   })
 })

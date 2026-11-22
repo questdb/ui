@@ -125,7 +125,8 @@ export const interactionEvents = (
       if (p.componentType === "markLine" || p.componentType === "markArea")
         return
       const value = clickedValue(p, click.column, requireSourceColumn)
-      if (click.column !== undefined && value === undefined) return
+      // Nothing to select: no such column on the item, or no name.
+      if (value === undefined) return
       const column = click.column ?? selectionColumnOf(p)
       const type = column === undefined ? undefined : columnType?.(column)
       setVariables({ [click.variable]: sqlLiteral(value, type) })

@@ -181,6 +181,19 @@ export const ColumnFormatFields: React.FC<Props> = ({
   const mode = colourModeOf(format)
   const thresholds = format.thresholds ?? []
   // Rows keep their identity while values are typed, added and removed.
+  // Removing a threshold removes its focused button: focus moves to the value
+  // of the row that takes its place (or the new last row).
+  const thresholdsRef = useRef<HTMLDivElement>(null)
+  const [focusThreshold, setFocusThreshold] = useState<number | null>(null)
+  useEffect(() => {
+    if (focusThreshold === null) return
+    const label = `${column}: threshold ${focusThreshold + 1}`
+    const inputs = thresholdsRef.current?.querySelectorAll("input") ?? []
+    Array.from(inputs)
+      .find((input) => input.getAttribute("aria-label") === label)
+      ?.focus()
+    setFocusThreshold(null)
+  }, [focusThreshold, column])
   const nextId = useRef(0)
   const [rowIds, setRowIds] = useState<number[]>(() =>
     thresholds.map(() => nextId.current++),
@@ -324,7 +337,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
       </Field>
 
       {mode === "thresholds" && (
-        <FieldGroup>
+        <FieldGroup ref={thresholdsRef}>
           <Field as="div">
             <FieldLabel>Below the first threshold</FieldLabel>
             <ToneSelect
@@ -357,6 +370,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
                 aria-label={`Remove threshold ${index + 1}`}
                 disabled={thresholds.length === 1}
                 onClick={() => {
+                  setFocusThreshold(Math.min(index, thresholds.length - 2))
                   setRowIds(ids.filter((_, i) => i !== index))
                   set(
                     "thresholds",

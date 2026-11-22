@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react"
-import { act, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
 import type { EChartsType } from "echarts"
 import { afterEach, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
@@ -15,7 +15,7 @@ import { CustomChart } from "./CustomChart"
 vi.mock("./maps", async (original) => ({
   ...(await original<typeof import("./maps")>()),
   isMapLoaded: () => false,
-  ensureMaps: () => Promise.reject(new Error("chunk failed")),
+  ensureMaps: vi.fn(() => Promise.reject(new Error("chunk failed"))),
 }))
 
 const BUFFER_ID = 913
@@ -204,7 +204,7 @@ it("reports a world map that could not be loaded", async () => {
   )
 })
 
-it("opens a zoomed category chart on its own window again after a remount", async () => {
+it("keeps a zoomed category chart's window across a remount and an unchanged save", async () => {
   // Given a custom bar chart over categories whose option opens on its last
   // fifth, zoomed by the user
   sizeCharts()
@@ -223,12 +223,12 @@ it("opens a zoomed category chart on its own window again after a remount", asyn
       rows: Array.from({ length: 50 }, (_, i) => [`k${i}`, i]),
     },
   ]
-  const chart = (brush: boolean) => (
+  const chart = (brush: boolean, rawOption = option) => (
     <div data-hook="a">
       <CustomChart
         bufferId={BUFFER_ID}
         cellId="a"
-        rawOption={option}
+        rawOption={rawOption}
         statements={statements}
         chartTypes={undefined}
         live={false}
@@ -262,6 +262,152 @@ it("opens a zoomed category chart on its own window again after a remount", asyn
     expect(instance()).not.toBe(first)
   })
 
-  // Then it opens on the window its option sets, as before it was zoomed
-  await waitFor(() => expect(range()).toMatchObject({ start: 80, end: 100 }))
+  // Then it opens on the window the user chose, not the option's own
+  await waitFor(() => expect(range()).toMatchObject({ start: 10, end: 30 }))
+  const second = instance()
+
+  // When Chart settings is saved with the same option (a new, equal object)
+  rerender(chart(true, structuredClone(option)))
+  await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+
+  // Then the chart keeps that window
+  expect(instance()).toBe(second)
+  expect(range()).toMatchObject({ start: 10, end: 30 })
+})
+
+it("does not retry a failed world map on every data refresh", async () => {
+  // Given a custom map chart whose world map failed to download
+  const { ensureMaps } = await import("./maps")
+  vi.mocked(ensureMaps).mockClear()
+  const map = (rows: number) => (
+    <CustomChart
+      bufferId={BUFFER_ID}
+      cellId="a"
+      rawOption={{ series: [{ type: "map", map: "world" }] }}
+      statements={minutes(rows)}
+      chartTypes={undefined}
+      live={false}
+      isFocused={false}
+    />
+  )
+  const { rerender } = renderComponent(map(3))
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Could not load the world map",
+  )
+
+  // When its query refreshes with new rows
+  rerender(map(4))
+
+  // Then the alert stays and the map is not requested again
+  expect(screen.queryByText("Loading map…")).not.toBeInTheDocument()
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Could not load the world map",
+  )
+  expect(ensureMaps).toHaveBeenCalledTimes(1)
+})
+
+it("keeps a time chart zoomed out to its full range across a remount", async () => {
+  // Given a custom time chart that opens on the last half of its data, which
+  // the user zoomed out to the full range
+  sizeCharts()
+  const statements = minutes(200)
+  const chart = (brush: boolean) => (
+    <CustomChart
+      bufferId={BUFFER_ID}
+      cellId="a"
+      rawOption={AUTHORED}
+      statements={statements}
+      chartTypes={undefined}
+      live={false}
+      isFocused={false}
+      interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
+    />
+  )
+  const { container, rerender } = renderComponent(chart(false))
+  const instance = () => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host ? echarts.getInstanceByDom(host) : undefined
+  }
+  await waitFor(() => expect(primaryXControls(instance()!)).not.toHaveLength(0))
+  const first = instance()!
+  act(() => {
+    first.dispatchAction({
+      type: "dataZoom",
+      dataZoomIndex: primaryXControls(first)[0].componentIndex,
+      start: 0,
+      end: 100,
+    })
+  })
+
+  // When the chart is drawn on a new instance
+  rerender(chart(true))
+  await waitFor(() => {
+    expect(instance()).toBeTruthy()
+    expect(instance()).not.toBe(first)
+    expect(primaryXControls(instance()!)).not.toHaveLength(0)
+  })
+
+  // Then it still shows the full range, not the option's last half
+  await waitFor(() => expect(percent(instance()!)).toEqual([0, 100]))
+})
+
+it("reports a chart type that throws on some rows of its draw", async () => {
+  // Given an allowed chart type that cannot draw a NULL value, over rows with
+  // one NULL among them
+  sizeCharts()
+  renderComponent(
+    <CustomChart
+      bufferId={BUFFER_ID}
+      cellId="a"
+      rawOption={{
+        xAxis: { type: "value" },
+        yAxis: { type: "value" },
+        series: [
+          {
+            type: "custom",
+            renderItem: "dots",
+            datasetId: "q0",
+            encode: { x: "x", y: "y" },
+          },
+        ],
+      }}
+      statements={[
+        {
+          columns: [
+            { name: "x", type: "DOUBLE" },
+            { name: "y", type: "DOUBLE" },
+          ],
+          rows: [
+            [1, 10],
+            [2, null],
+            [3, 30],
+          ],
+        },
+      ]}
+      chartTypes={[
+        {
+          name: "dots",
+          allowed: true,
+          renderItem: `
+            const y = api.value(1)
+            if (y == null || Number.isNaN(y)) throw new Error("y is missing")
+            const p = api.coord([api.value(0), y])
+            return { type: "circle", shape: { cx: p[0], cy: p[1], r: 4 } }
+          `,
+        },
+      ]}
+      live={false}
+      isFocused={false}
+    />,
+  )
+
+  // Then, once drawn, the agent's report names the error, although the rows
+  // after the failing one drew
+  await waitFor(() =>
+    expect(getRenderReport(BUFFER_ID, "a")?.problems).toContainEqual({
+      path: "chartTypes.dots",
+      message: 'Chart type "dots" threw while drawing: y is missing',
+      severity: "error",
+    }),
+  )
 })
