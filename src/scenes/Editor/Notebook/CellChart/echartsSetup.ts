@@ -202,13 +202,59 @@ export const areaRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
     dataIndexInside: number
     dataInsideLength: number
     encode: { x: number[]; y: number[] }
-    itemPayload?: { opacity?: number }
+    itemPayload?: { opacity?: number; clickEnabled?: boolean }
   }
   const count = p.dataInsideLength
-  // dataIndexInside counts the rows a zoom leaves in view, like count.
-  if (p.dataIndexInside !== count - 1) return { type: "group", children: [] }
   const [xDim] = p.encode.x
   const [lowDim, highDim] = p.encode.y
+  const pointAt = (i: number) => {
+    if (i < 0 || i >= count) return null
+    const x = api.value(xDim, i)
+    const low = api.value(lowDim, i)
+    const high = api.value(highDim, i)
+    if (
+      typeof low !== "number" ||
+      typeof high !== "number" ||
+      !Number.isFinite(low) ||
+      !Number.isFinite(high)
+    )
+      return null
+    const bottom = api.coord([x, low])
+    const top = api.coord([x, high])
+    return [...bottom, ...top].every(Number.isFinite) ? { bottom, top } : null
+  }
+  const selectedHit = () => {
+    if (!p.itemPayload?.clickEnabled) return []
+    const i = p.dataIndexInside
+    const here = pointAt(i)
+    const previous = pointAt(i - 1)
+    const next = pointAt(i + 1)
+    if (!here || (!previous && !next)) return []
+    const midpoint = (a: number[], b: number[]) => [
+      (a[0] + b[0]) / 2,
+      (a[1] + b[1]) / 2,
+    ]
+    return [
+      {
+        type: "polygon" as const,
+        shape: {
+          points: [
+            previous ? midpoint(previous.bottom, here.bottom) : here.bottom,
+            here.bottom,
+            next ? midpoint(next.bottom, here.bottom) : here.bottom,
+            next ? midpoint(next.top, here.top) : here.top,
+            here.top,
+            previous ? midpoint(previous.top, here.top) : here.top,
+          ],
+        },
+        style: { fill: "transparent" },
+      },
+    ]
+  }
+  const hits = selectedHit()
+  // Only the last visible row draws the continuous fill. Its silent
+  // geometry cannot intercept the individual rows' selection footprints.
+  if (p.dataIndexInside !== count - 1) return { type: "group", children: hits }
   const segments: number[][][] = []
   let lows: number[][] = []
   let highs: number[][] = []
@@ -231,15 +277,18 @@ export const areaRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
   close()
   return {
     type: "group",
-    children: segments.map((points) => ({
-      type: "polygon",
-      shape: { points },
-      style: {
-        fill: api.visual("color") as string,
-        opacity: p.itemPayload?.opacity ?? 0.2,
-      },
-      silent: true,
-    })),
+    children: [
+      ...hits,
+      ...segments.map((points) => ({
+        type: "polygon" as const,
+        shape: { points },
+        style: {
+          fill: api.visual("color") as string,
+          opacity: p.itemPayload?.opacity ?? 0.2,
+        },
+        silent: true,
+      })),
+    ],
   }
 }
 

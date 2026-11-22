@@ -196,6 +196,69 @@ describe("preset options", () => {
     expect(gas.stack).toBe(wind.stack)
   })
 
+  it("aggregates duplicate timestamps before drawing percentages", () => {
+    const ts = "2026-01-01T00:00:00Z"
+    const mix = query({
+      type: "area",
+      percentStack: true,
+      xColumn: "ts",
+      yColumns: ["mw"],
+      partitionByColumn: "fuel",
+      columns: [
+        col("ts", "TIMESTAMP"),
+        col("fuel", "SYMBOL"),
+        col("mw", "DOUBLE"),
+      ],
+      dataset: [
+        [ts, "gas", 30],
+        [ts, "gas", 20],
+        [ts, "wind", 50],
+      ],
+    })
+    const [gas, wind] = seriesOf(buildEchartsOption({ xColumn: "ts" }, [mix]))
+    expect(gas.data).toEqual([[ts, 50]])
+    expect(wind.data).toEqual([[ts, 50]])
+  })
+
+  it.each([31, 15])(
+    "rejects incomplete or oversized percent stacks (%d partitions)",
+    (count) => {
+      const mix = query({
+        type: "area",
+        percentStack: true,
+        xColumn: "x",
+        yColumns: ["mw"],
+        partitionByColumn: "fuel",
+        columns: [col("x", "INT"), col("fuel", "SYMBOL"), col("mw", "DOUBLE")],
+        dataset: Array.from({ length: count === 31 ? 31 : 6000 }, (_, i) => [
+          i,
+          String(i % count),
+          1,
+        ]),
+      })
+      expect(buildEchartsOption({ xColumn: "x" }, [mix]).series).toBeUndefined()
+    },
+  )
+
+  it("enables per-row Band hit targets only for configured selections", () => {
+    const band = query({
+      type: "band",
+      xColumn: "x",
+      roles: { lower: "lo", upper: "hi" },
+      columns: [col("x", "STRING"), col("lo", "DOUBLE"), col("hi", "DOUBLE")],
+      dataset: [
+        ["a", 0, 5],
+        ["b", 1, 6],
+      ],
+    })
+    const build = (clickEnabled: boolean) =>
+      seriesOf(
+        buildEchartsOption({ xColumn: "x" }, [band], { clickEnabled }),
+      )[0]
+    expect(build(true).itemPayload).toMatchObject({ clickEnabled: true })
+    expect(build(false).itemPayload).toMatchObject({ clickEnabled: false })
+  })
+
   it("clears old units and percent bounds when updating the same chart", () => {
     // Given a mounted chart with percentage stacking and a percent format
     const chart = echarts.init(null, undefined, {

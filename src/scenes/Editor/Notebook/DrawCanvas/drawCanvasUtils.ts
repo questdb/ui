@@ -15,6 +15,7 @@ import {
 import {
   drawsAlone,
   thresholdSource,
+  percentStackProblem,
   type ChartGlobals,
   type ResolvedEvents,
   type ResolvedQuery,
@@ -457,6 +458,8 @@ export const drawProblems = (
       })
   })
   const drawnQueries = resolution.renderQueries
+  const stackProblem = percentStackProblem(drawnQueries)
+  if (stackProblem) problems.push({ message: stackProblem, severity: "error" })
   const notBars = drawnQueries.filter(
     (q) => !(["bar", "stackedBar", "rangeBar"] as string[]).includes(q.type),
   )

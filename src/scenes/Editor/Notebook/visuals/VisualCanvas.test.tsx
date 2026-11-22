@@ -62,6 +62,63 @@ describe("VisualCanvas", () => {
     }
   })
 
+  it("drops all removed Stat tiles even when their labels repeat", () => {
+    const view = (rows: (string | number)[][]) => (
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "stat" }}
+        statements={[
+          {
+            columns: [
+              { name: "desk", type: "SYMBOL" },
+              { name: "reading", type: "DOUBLE" },
+            ],
+            rows,
+          },
+        ]}
+      />
+    )
+    const { rerender } = renderComponent(
+      view([
+        ["London", 101],
+        ["London", 202],
+        ["Paris", 303],
+      ]),
+    )
+    expect(screen.getAllByText("London")).toHaveLength(2)
+    rerender(view([["Paris", 303]]))
+    expect(screen.queryByText("London")).not.toBeInTheDocument()
+    expect(screen.getByText("Paris")).toBeVisible()
+  })
+
+  it("uses a text tone for the Light Bullet badge", () => {
+    renderComponent(
+      <ThemeProvider theme={lightTheme}>
+        <VisualCanvas
+          {...defaults}
+          visual={{ type: "bullet" }}
+          formats={{
+            reading: { thresholds: [{ value: 0, tone: "positive" }] },
+          }}
+          statements={[
+            {
+              columns: [
+                { name: "desk", type: "SYMBOL" },
+                { name: "reading", type: "DOUBLE" },
+              ],
+              rows: [["East", 4]],
+            },
+          ]}
+        />
+      </ThemeProvider>,
+    )
+    const expected = document.createElement("span")
+    expected.style.color = lightTheme.color.dataPositive
+    expect(getComputedStyle(screen.getByText("OK")).color).toBe(
+      expected.style.color,
+    )
+  })
+
   it("mounts only nearby Bullet bars but still reports all rows", () => {
     const width = vi
       .spyOn(HTMLElement.prototype, "offsetWidth", "get")

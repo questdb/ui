@@ -296,8 +296,79 @@ const scatterEncoding = (q: ResolvedQuery) => {
   }
 }
 
+// Bound the dense stack before allocating ECharts' per-series slots.
+const MAX_PERCENT_STACK_SLOTS = 40_000
+
+export const percentStackProblem = (
+  queries: ResolvedQuery[],
+): string | undefined => {
+  for (const q of queries) {
+    if (!isPercentStack(q) || q.partitionByColumn == null) continue
+    const idx = buildColumnIndexMap(q.columns)
+    const partIdx = idx.get(q.partitionByColumn)
+    const xIdx = q.xColumn == null ? undefined : idx.get(q.xColumn)
+    if (partIdx === undefined || xIdx === undefined) continue
+    const partitions = new Set<string>()
+    const xs = new Set<string>()
+    for (const row of q.dataset) {
+      partitions.add(toCategoryLabel(row[partIdx]))
+      xs.add(String(row[xIdx]))
+    }
+    if (partitions.size > MAX_PARTITION_SERIES)
+      return `Q${q.index + 1}: a 100% stack supports up to ${MAX_PARTITION_SERIES} partitions. Group partitions or narrow the query so the stack can show the full total.`
+    if (partitions.size * xs.size * q.yColumns.length > MAX_PERCENT_STACK_SLOTS)
+      return `Q${q.index + 1}: too many points to align this 100% stack. Use larger buckets or narrow the query.`
+  }
+}
+
+const aggregateContinuousShares = (series: Series[], clickColumn?: string) => {
+  for (const s of series) {
+    const points = s.data as unknown[]
+    const byX = new Map<
+      unknown,
+      {
+        point: unknown
+        sum: number | null
+        selected: unknown
+        unanimous: boolean
+      }
+    >()
+    for (const point of points) {
+      const [x, y] = pointValue(point) as [unknown, unknown]
+      const v = toNumberOrNull(y)
+      const selected =
+        clickColumn !== undefined && isClickPoint(point)
+          ? point.columns[clickColumn]
+          : undefined
+      const bucket = byX.get(x)
+      if (!bucket) {
+        byX.set(x, {
+          point,
+          sum: v === null ? null : Math.abs(v),
+          selected,
+          unanimous: true,
+        })
+      } else {
+        if (v !== null) bucket.sum = (bucket.sum ?? 0) + Math.abs(v)
+        if (bucket.selected !== selected) bucket.unanimous = false
+      }
+    }
+    if (byX.size === points.length) continue
+    s.data = [...byX].map(([x, { point, sum, selected, unanimous }]) => {
+      const value = [x, sum]
+      return clickColumn !== undefined && isClickPoint(point)
+        ? {
+            ...point,
+            value,
+            columns: { [clickColumn]: unanimous ? selected : undefined },
+          }
+        : value
+    })
+  }
+}
+
 // ECharts stacks continuous axes by data index. Give each series the same
-// slots, padding missing x values with gaps and retaining duplicate rows.
+// slots, padding missing x values with gaps.
 const alignContinuousStacks = (series: Series[]) => {
   if (series.length < 2) return
   type X = string | number | null
@@ -384,8 +455,10 @@ const buildCartesianSeries = (
   if (isPercentStack(q)) {
     // Areas stack only when asked; shares of a total always stack.
     for (const s of out) s.stack = `stack-${q.index}`
-    if (ctx.xMode === "time" || ctx.xMode === "value")
+    if (ctx.xMode === "time" || ctx.xMode === "value") {
+      aggregateContinuousShares(out, ctx.clickColumn)
       alignContinuousStacks(out)
+    }
     toPercentShares(out)
   }
   return out
@@ -576,7 +649,10 @@ const buildBandSeries = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
     data: alignedRows(q, xIdx, edges, ctx),
     dimensions: [q.xColumn ?? "x", q.roles?.lower ?? "", q.roles?.upper ?? ""],
     encode: { x: 0, y: [1, 2], tooltip: [1, 2] },
-    itemPayload: { opacity: 0.22 },
+    itemPayload: {
+      opacity: 0.22,
+      clickEnabled: ctx.clickEnabled === true || ctx.clickColumn !== undefined,
+    },
     [Y_COLUMN]: q.roles?.lower,
     animation: false,
   }
@@ -1219,7 +1295,8 @@ export const buildEchartsOption = (
   }
 
   const anchor = queries[0]
-  if (!anchor) return { tooltip: { textStyle: chartText } }
+  if (!anchor || percentStackProblem(queries))
+    return { tooltip: { textStyle: chartText } }
 
   const single = queries.length === 1
   const anchorCol = anchor.columns.find((c) => c.name === anchor.xColumn)

@@ -274,6 +274,28 @@ describe("CellRefreshEngine", () => {
     expect(deps.setCellResult).toHaveBeenCalledTimes(1)
   })
 
+  it("updates a Draw snapshot's binding when the refreshed rows are equal", async () => {
+    const sql = "select abs(@x)"
+    deps.executeSingle.mockResolvedValue({
+      ...dqlResult(sql),
+      effectiveQuery: "select abs(-1)",
+    })
+    syncOnScreen([drawCell("c1", sql, false)])
+    await flushAsync()
+    expect(cellResults.get("c1")?.results[0]).toMatchObject({
+      effectiveQuery: "select abs(-1)",
+    })
+    deps.executeSingle.mockResolvedValue({
+      ...dqlResult(sql),
+      effectiveQuery: "select abs(1)",
+    })
+    engine.refreshWhere(() => true)
+    await flushAsync()
+    expect(cellResults.get("c1")?.results[0]).toMatchObject({
+      effectiveQuery: "select abs(1)",
+    })
+  })
+
   it("re-writes an identical frame after the result was released from memory", async () => {
     // Given a polling cell that settled a frame
     syncOnScreen([drawCell("c1", "select 1", "1s")])
@@ -3096,6 +3118,32 @@ describe("CellRefreshEngine", () => {
       const commits = deps.setCellResult.mock.calls.length
       await refreshWith("select abs(1)")
       expect(deps.setCellResult).toHaveBeenCalledTimes(commits)
+    })
+
+    it("keeps an in-flight variable read through an edit that leaves parsed SQL unchanged", async () => {
+      const sql = "select @station"
+      const cell = gridCell("g1", sql, [sql], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      let signal: AbortSignal | undefined
+      let finish: ((r: QueryExecResult) => void) | undefined
+      deps.executeSingle.mockImplementation((_query, s) => {
+        signal = s
+        return new Promise((resolve) => {
+          finish = resolve
+        })
+      })
+      engine.refreshWhere(() => true)
+      await flushAsync()
+      expect(signal).toBeDefined()
+      syncOnScreen([{ ...cell, value: sql + "\n" }])
+      await vi.advanceTimersByTimeAsync(350)
+      expect(signal?.aborted).toBe(false)
+      finish?.({ ...dqlResult(sql), dataset: [[21, 22]] })
+      await flushAsync()
+      expect(cellResults.get("g1")?.results[0]).toMatchObject({
+        dataset: [[21, 22]],
+      })
     })
 
     it("notifies an identical tick only for the progress its subscribers show", async () => {

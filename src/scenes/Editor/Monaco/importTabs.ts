@@ -508,25 +508,18 @@ export const createBufferContentKey = (
     const cellValues =
       cells?.map((cell) => {
         if (cell.type === "markdown") return cell.value
-        const { chartConfig: config } = cell
+        const chartConfig = sanitizeChartConfig(cell.chartConfig)
         const formats =
           cell.formats && Object.keys(cell.formats).length
             ? cell.formats
             : undefined
         const interactions = cell.interactions
         const gridMode = sanitizeGridMode(cell.gridMode)
-        if (
-          !config?.visual &&
-          !config?.custom &&
-          !formats &&
-          !interactions &&
-          !gridMode
-        )
+        if (!chartConfig && !formats && !interactions && !gridMode)
           return cell.value
         return {
           value: cell.value,
-          visual: config?.visual,
-          custom: config?.custom,
+          chartConfig,
           formats,
           interactions,
           gridMode,

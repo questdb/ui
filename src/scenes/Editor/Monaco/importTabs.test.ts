@@ -1722,6 +1722,33 @@ describe("deduplication", () => {
       expect(key("stable")).not.toEqual(key("stream"))
     })
 
+    it("distinguishes preserved preset settings in an otherwise identical notebook", () => {
+      const key = (horizontal?: boolean, percentStack?: boolean) =>
+        createBufferContentKey({
+          label: "Dashboard",
+          value: "",
+          notebookViewState: {
+            cells: [
+              {
+                id: "chart",
+                position: 0,
+                value: "select 1",
+                chartConfig: {
+                  xColumn: "venue",
+                  horizontal,
+                  queries: [
+                    { type: "stackedBar", yColumns: ["amount"], percentStack },
+                  ],
+                },
+              },
+            ],
+          },
+        })
+      expect(key(true)).not.toEqual(key())
+      expect(key(undefined, true)).not.toEqual(key())
+      expect(key(false, false)).toEqual(key())
+    })
+
     it("creates key from label and value for editor tabs", () => {
       const buffer = { label: "Tab1", value: "SELECT 1" }
       expect(createBufferContentKey(buffer)).toBe("Tab1|SELECT 1")

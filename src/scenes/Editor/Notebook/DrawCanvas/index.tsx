@@ -4,7 +4,10 @@ import type { EChartsType } from "echarts"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
-import { buildEchartsOption } from "../CellChart/buildEchartsOption"
+import {
+  buildEchartsOption,
+  percentStackProblem,
+} from "../CellChart/buildEchartsOption"
 import type { ChartRendererHandle } from "../CellChart/ChartRenderer"
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
@@ -368,6 +371,13 @@ export const DrawCanvas: React.FC<Props> = ({
     custom,
   ])
 
+  const stackProblem = useMemo(
+    () =>
+      !visual && !custom
+        ? percentStackProblem(resolution.renderQueries)
+        : undefined,
+    [visual, custom, resolution.renderQueries],
+  )
   const empty =
     classifyBlock !== null ||
     queries.length === 0 ||
@@ -427,6 +437,8 @@ export const DrawCanvas: React.FC<Props> = ({
             Retry
           </Button>
         </CancelledState>
+      ) : stackProblem ? (
+        <PaneEmptyState role="alert">{stackProblem}</PaneEmptyState>
       ) : empty ? (
         <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
       ) : (

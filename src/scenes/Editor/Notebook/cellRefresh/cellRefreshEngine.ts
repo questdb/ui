@@ -1011,6 +1011,16 @@ export class CellRefreshEngine {
   // One render for the whole pass: the statement list and the frame it
   // reconciles into land together, so no consumer sees them disagree.
   private applySql(entry: Entry, sql: string) {
+    // Whitespace at the editor boundary doesn't change the parsed SQL or
+    // revoke an active variable refresh for that same statement set.
+    if (
+      entry.kind === "grid" &&
+      entry.variableRefreshInFlight &&
+      joinQueriesKey(getQueriesFromText(sql)) === entry.state.queriesKey
+    ) {
+      entry.sql = sql
+      return
+    }
     this.applySqlState(entry, sql)
     if (entry.kind === "grid") this.reconcileGridResult(entry)
     if (entry.visible) this.ensureData(entry)
@@ -1493,7 +1503,13 @@ export class CellRefreshEngine {
         return
       if (
         current != null &&
-        resultsEquivalent(current.results.map(toExecResult), out)
+        resultsEquivalent(current.results.map(toExecResult), out) &&
+        !current.results.some(
+          (r, i) =>
+            r.type === "dql" &&
+            out[i]?.effectiveQuery !== undefined &&
+            r.effectiveQuery !== out[i].effectiveQuery,
+        )
       ) {
         this.setState(entry, {
           settledKey: queriesKey,

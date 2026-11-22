@@ -66,12 +66,12 @@ const Name = styled.span`
   white-space: nowrap;
 `
 
-const Status = styled.span<{ $color: string }>`
+const Status = styled.span<{ $color: string; $textColor: string }>`
   padding: 0.1rem 0.6rem;
   border-radius: 1rem;
   font-size: 1.05rem;
   font-weight: 600;
-  color: ${({ $color }) => $color};
+  color: ${({ $textColor }) => $textColor};
   background: ${({ $color }) => withAlpha($color, 0.12)};
 `
 
@@ -258,6 +258,12 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
     const tone = toneOf(value, format)
     const color = tone ? toneColor(tone, theme.color) : theme.color.chartSeries1
     const status = statusOf(tone)
+    const statusTextColor =
+      tone === "positive"
+        ? theme.color.dataPositive
+        : tone === "negative"
+          ? theme.color.dataNegative
+          : theme.color.contentPrimary
     const use = target && value !== null ? value / target : null
     const name = labelIdx >= 0 ? toLabel(row[labelIdx]) : valueName
     return (
@@ -278,7 +284,11 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
       >
         <Top>
           <Name>{name}</Name>
-          {status && <Status $color={color}>{status}</Status>}
+          {status && (
+            <Status $color={color} $textColor={statusTextColor}>
+              {status}
+            </Status>
+          )}
           <Figures>
             {value === null ? "No measurement" : formatValue(value, format)}
             {value !== null && target !== null && (

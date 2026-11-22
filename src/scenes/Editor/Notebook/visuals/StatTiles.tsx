@@ -311,6 +311,7 @@ export const StatTiles = ({
   const limitNotice = statTileLimitNotice(statements)
   const format = valueName ? formats[valueName] : undefined
   const changeFormat = changeName ? formats[changeName] : undefined
+  const labelOccurrences = new Map<string, number>()
   return (
     <Grid
       $count={tiles.length}
@@ -319,6 +320,8 @@ export const StatTiles = ({
     >
       {limitNotice && <LimitNotice role="status">{limitNotice}</LimitNotice>}
       {tiles.map((tile) => {
+        const occurrence = labelOccurrences.get(tile.label) ?? 0
+        labelOccurrences.set(tile.label, occurrence + 1)
         const tone = toneOf(tile.value, format)
         const changeTone =
           tile.change === null
@@ -342,7 +345,7 @@ export const StatTiles = ({
         return (
           <TileRoot
             as={activate ? "button" : "div"}
-            key={tile.label}
+            key={JSON.stringify([tile.label, occurrence])}
             $centred={tile.spark.length < 2}
             $interactive={Boolean(activate)}
             aria-pressed={selected}
