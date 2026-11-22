@@ -117,7 +117,7 @@ export const resolveToken = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const isSafeImage = (value: string): boolean =>
+export const isSafeImage = (value: string): boolean =>
   /^data:image\/(png|gif|jpeg|webp|svg\+xml);/i.test(value)
 
 export type SanitizedOption = {

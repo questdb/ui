@@ -232,6 +232,43 @@ describe("stateTimelineOption", () => {
   })
 })
 
+it("sets an unbound liquidity heatmap click to the cell's time, not epoch ms", () => {
+  // Given a liquidity heatmap whose click keeps the default (no column)
+  const statements = [
+    rows(
+      [
+        ["ts", "TIMESTAMP"],
+        ["price", "DOUBLE"],
+        ["size", "DOUBLE"],
+      ],
+      [["2026-01-01T00:00:00.000000Z", 100, 5]],
+    ),
+  ]
+  const built = liquidityHeatmapOption({
+    visual: { type: "liquidityHeatmap" },
+    colors: lightColors,
+    formats: {},
+    statements,
+  })
+  const [cells] = built.option?.series as { data: unknown[] }[]
+  const set = vi.fn()
+  const events = interactionEvents(
+    { click: { variable: "t" } },
+    set,
+    false,
+    (name) => columnTypeOf(statements, name),
+  )
+
+  // When the user clicks the cell, which ECharts gives no name
+  events.click(
+    { componentType: "series", name: "", data: cells.data[0] },
+    {} as never,
+  )
+
+  // Then the variable holds the time as a timestamp literal
+  expect(set).toHaveBeenCalledWith({ t: "'2026-01-01T00:00:00.000000Z'" })
+})
+
 it("keeps a named liquidity bucket selection with the rendered row", () => {
   const built = liquidityHeatmapOption({
     visual: { type: "liquidityHeatmap" },
@@ -450,6 +487,29 @@ it("sizes World map points by magnitude when every value is negative", () => {
     expect(size).toBeGreaterThanOrEqual(6)
     expect(size).toBeLessThanOrEqual(24)
   }
+})
+
+it("scales a World map's region colours over its real values, not NULL as 0", () => {
+  const { option } = mapOption({
+    visual: { type: "map" },
+    formats: {},
+    colors: lightColors,
+    statements: [
+      rows(
+        [
+          ["country", "SYMBOL"],
+          ["gdp", "DOUBLE"],
+        ],
+        [
+          ["France", 40],
+          ["Germany", 50],
+          ["Spain", null],
+        ],
+      ),
+    ],
+  })
+  // Then the scale runs from the lowest to the highest reported value
+  expect(option?.visualMap).toMatchObject({ min: 40, max: 50 })
 })
 
 it("keeps a World map point with a NULL value missing, not 0", () => {

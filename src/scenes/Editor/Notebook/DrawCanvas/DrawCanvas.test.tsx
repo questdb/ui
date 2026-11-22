@@ -238,6 +238,29 @@ describe("DrawCanvas render report", () => {
     expect(report?.drawn).toEqual({ series: 1, points: 5, events: 0 })
     expect(report?.problems).toEqual([])
   })
+
+  it("does not report an edited cell as empty before the engine takes up its SQL", () => {
+    // Given a chart that drew
+    const g = globalThis as unknown as { __sql: string }
+    g.__sql = SQL
+    const first = cellWith(dql(5))
+    const { rerender } = renderComponent(ui(first))
+
+    // When the agent edits its SQL, which drops the result while the engine
+    // still holds the old SQL for its debounce
+    const edited = {
+      ...first,
+      value: "SELECT ts, price FROM trades LIMIT 3",
+      result: undefined,
+    }
+    act(() => {
+      rerender(ui(edited))
+    })
+
+    // Then the cell is drawing, and the agent is not told it has no data
+    expect(screen.getAllByText("Drawing…").length).toBeGreaterThan(0)
+    expect(getCell(edited).render_report?.problems).toEqual([])
+  })
 })
 
 describe("DrawCanvas click interactions", () => {

@@ -7,9 +7,16 @@ import { renderComponent } from "../../../../test/component"
 import { echarts } from "../CellChart/echartsSetup"
 import { primaryXControls } from "../CellChart/liveZoom"
 import { joinChartSync, setChartSync } from "../interactions/chartSync"
-import { clearRenderReport } from "../renderReports"
+import { clearRenderReport, getRenderReport } from "../renderReports"
 import type { StatementRows } from "../visuals/statementRows"
 import { CustomChart } from "./CustomChart"
+
+// The world map's code cannot be downloaded (offline, a redeploy).
+vi.mock("./maps", async (original) => ({
+  ...(await original<typeof import("./maps")>()),
+  isMapLoaded: () => false,
+  ensureMaps: () => Promise.reject(new Error("chunk failed")),
+}))
 
 const BUFFER_ID = 913
 
@@ -172,3 +179,89 @@ it.each([false, true])(
     leaves.forEach((leave) => leave())
   },
 )
+
+it("reports a world map that could not be loaded", async () => {
+  // Given a custom map chart whose world map fails to download
+  renderComponent(
+    <CustomChart
+      bufferId={BUFFER_ID}
+      cellId="a"
+      rawOption={{ series: [{ type: "map", map: "world" }] }}
+      statements={[]}
+      chartTypes={undefined}
+      live={false}
+      isFocused={false}
+    />,
+  )
+
+  // Then the agent's report says so, as the pane does
+  await waitFor(() =>
+    expect(getRenderReport(BUFFER_ID, "a")?.problems).toContainEqual({
+      path: "",
+      message: "Could not load the world map. Reload the console to try again.",
+      severity: "error",
+    }),
+  )
+})
+
+it("opens a zoomed category chart on its own window again after a remount", async () => {
+  // Given a custom bar chart over categories whose option opens on its last
+  // fifth, zoomed by the user
+  sizeCharts()
+  const option = {
+    xAxis: { type: "category" },
+    yAxis: { type: "value" },
+    series: [{ type: "bar", datasetId: "q0", encode: { x: "k", y: "v" } }],
+    dataZoom: [{ type: "inside", start: 80, end: 100 }],
+  }
+  const statements: (StatementRows | null)[] = [
+    {
+      columns: [
+        { name: "k", type: "SYMBOL" },
+        { name: "v", type: "DOUBLE" },
+      ],
+      rows: Array.from({ length: 50 }, (_, i) => [`k${i}`, i]),
+    },
+  ]
+  const chart = (brush: boolean) => (
+    <div data-hook="a">
+      <CustomChart
+        bufferId={BUFFER_ID}
+        cellId="a"
+        rawOption={option}
+        statements={statements}
+        chartTypes={undefined}
+        live={false}
+        isFocused={false}
+        interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
+      />
+    </div>
+  )
+  const { container, rerender } = renderComponent(chart(false))
+  const instance = () => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host ? echarts.getInstanceByDom(host) : undefined
+  }
+  const range = () =>
+    (
+      instance()?.getOption() as
+        | { dataZoom?: { start: number; end: number }[] }
+        | undefined
+    )?.dataZoom?.[0]
+  await waitFor(() => expect(range()).toMatchObject({ start: 80, end: 100 }))
+  const first = instance()!
+  act(() => {
+    first.dispatchAction({ type: "dataZoom", start: 10, end: 30 })
+  })
+  await waitFor(() => expect(range()).toMatchObject({ start: 10, end: 30 }))
+
+  // When the chart is drawn on a new instance (a brush interaction is added)
+  rerender(chart(true))
+  await waitFor(() => {
+    expect(instance()).toBeTruthy()
+    expect(instance()).not.toBe(first)
+  })
+
+  // Then it opens on the window its option sets, as before it was zoomed
+  await waitFor(() => expect(range()).toMatchObject({ start: 80, end: 100 }))
+})

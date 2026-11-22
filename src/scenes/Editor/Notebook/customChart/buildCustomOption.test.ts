@@ -17,6 +17,41 @@ const rows = (
 })
 
 describe("buildCustomOption", () => {
+  it("applies the data:-only image rule to symbols bound from rows", () => {
+    // Given an option that binds a text column into a mark line's symbols
+    const pixel = "image://data:image/png;base64,AAAA"
+    const built = buildCustomOption(
+      {
+        series: [
+          {
+            type: "line",
+            markLine: {
+              symbol: { $rows: { shape: "column", column: "sym" } },
+            },
+          },
+        ],
+      },
+      [
+        rows(
+          [["sym", "VARCHAR"]],
+          [["image://https://example.com/leak.png?d=42"], [pixel], ["arrow"]],
+        ),
+      ],
+      false,
+    )
+
+    // Then a query value cannot make the chart fetch another URL
+    const [series] = built.option.series as {
+      markLine: { symbol: string[] }
+    }[]
+    expect(series.markLine.symbol).toEqual(["circle", pixel, "arrow"])
+    expect(built.problems).toContainEqual({
+      path: "series[0].markLine.symbol[0]",
+      message: "Only data: images are allowed; the symbol is a circle.",
+      severity: "warning",
+    })
+  })
+
   it("warns when a filter can only see a partial statement dataset", () => {
     const built = buildCustomOption(
       {

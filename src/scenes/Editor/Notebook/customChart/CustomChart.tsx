@@ -34,6 +34,9 @@ const MAPS = new Set<string>(MAP_NAMES)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
 
+const MAP_LOAD_FAILED =
+  "Could not load the world map. Reload the console to try again."
+
 const WINDOW_KEYS = ["start", "end", "startValue", "endValue"]
 
 const withoutWindow = (zoom: unknown): unknown =>
@@ -142,9 +145,11 @@ export const CustomChart = ({
   const handleInstance = useCallback(
     (instance: EChartsType | null) => {
       const previous = lastTimeZoom.current
+      let restored = false
       if (instance && previous?.option === rawOption && isTimeChart(instance)) {
         const [control] = primaryXControls(instance)
         if (control) {
+          restored = true
           const [startValue, endValue] = previous.range
           instance.dispatchAction(
             {
@@ -157,6 +162,9 @@ export const CustomChart = ({
           )
         }
       }
+      // A new instance (a theme change, a brush toggled) that gets no zoom
+      // back opens on the option's own window again.
+      if (instance && !restored) setZoomedOption(null)
       onInstance?.(instance)
     },
     [onInstance, rawOption],
@@ -228,6 +236,9 @@ export const CustomChart = ({
           message: `Chart type "${name}" threw while drawing: ${message}`,
           severity: "error" as const,
         })),
+        ...(mapStatus === "error"
+          ? [{ path: "", message: MAP_LOAD_FAILED, severity: "error" as const }]
+          : []),
       ]
       setRenderReport(bufferId, cellId, {
         kind: "custom",
@@ -240,7 +251,16 @@ export const CustomChart = ({
       })
     }, 50)
     return () => window.clearTimeout(timer)
-  }, [bufferId, cellId, rawOption, sanitized, built, resolution, statements])
+  }, [
+    bufferId,
+    cellId,
+    rawOption,
+    sanitized,
+    built,
+    resolution,
+    statements,
+    mapStatus,
+  ])
 
   const fatal = [...sanitized.problems, ...built.problems].find(
     (problem) => problem.severity === "error" && problem.path === "",
@@ -248,11 +268,7 @@ export const CustomChart = ({
   if (fatal)
     return <PaneEmptyState role="alert">{fatal.message}</PaneEmptyState>
   if (mapStatus === "error")
-    return (
-      <PaneEmptyState role="alert">
-        Could not load the world map. Reload the console to try again.
-      </PaneEmptyState>
-    )
+    return <PaneEmptyState role="alert">{MAP_LOAD_FAILED}</PaneEmptyState>
   if (mapStatus === "loading")
     return <PaneEmptyState>Loading map…</PaneEmptyState>
   // A chart type whose code is not allowed draws nothing: say why.

@@ -354,10 +354,21 @@ export const OrderBook = ({
       onSelect && level.selection !== undefined
         ? () => onSelect(level.selection, level.selectionType)
         : undefined
+    const price = formatValue(level.rawPrice, priceFormat)
+    const size = formatValue(level.rawSize, sizeFormat)
+    const total = cols === 3 ? formatValue(level.total, totalFormat) : undefined
     return (
       <Row
         as={activate ? "button" : "div"}
         type={activate ? "button" : undefined}
+        // Colour and position tell the sides apart; a button's name says it.
+        aria-label={
+          activate
+            ? `${side === "ask" ? "Ask" : "Bid"} ${price}, size ${size}${
+                total === undefined ? "" : `, total ${total}`
+              }`
+            : undefined
+        }
         key={`${side}:${level.rawPrice}`}
         $cols={cols}
         $side={side}
@@ -369,9 +380,9 @@ export const OrderBook = ({
           $side={side}
           style={{ width: `${(depthOf(level) / maxDepth) * 100}%` }}
         />
-        <span>{formatValue(level.rawPrice, priceFormat)}</span>
-        <span>{formatValue(level.rawSize, sizeFormat)}</span>
-        {cols === 3 && <span>{formatValue(level.total, totalFormat)}</span>}
+        <span>{price}</span>
+        <span>{size}</span>
+        {total !== undefined && <span>{total}</span>}
       </Row>
     )
   }

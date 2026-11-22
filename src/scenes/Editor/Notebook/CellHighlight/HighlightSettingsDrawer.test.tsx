@@ -37,11 +37,16 @@ const Fixture = ({
   saved = configuration,
   focus,
   gridMode,
+  columns = [
+    { name: "k", type: "STRING" },
+    { name: "v", type: "LONG" },
+  ],
 }: {
   onSave: (next: GridSettingsSave) => void
   saved?: HighlightConfig
   focus?: { section: string; column?: string }
   gridMode?: "stable" | "stream"
+  columns?: { name: string; type: string }[]
 }) => {
   const [overlay, setOverlay] = useState<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
@@ -63,10 +68,7 @@ const Fixture = ({
               : null
           }
           onDraftChange={() => undefined}
-          columns={[
-            { name: "k", type: "STRING" },
-            { name: "v", type: "LONG" },
-          ]}
+          columns={columns}
           columnRange={() => null}
           config={saved}
           formats={{ v: { decimals: 1 } }}
@@ -402,5 +404,32 @@ describe("highlight settings validation", () => {
     expect(shownWhenFocused).toEqual(["visible"])
     expect(opener).toHaveFocus()
     vi.unstubAllGlobals()
+  })
+
+  it("keeps focus in the drawer when the last format removed cannot be added back", async () => {
+    // Given a format left on a column that no longer holds numbers
+    renderComponent(
+      <Fixture
+        onSave={vi.fn()}
+        saved={{ identityColumns: ["k"], rules: [] }}
+        focus={{ section: "formats" }}
+        columns={[{ name: "k", type: "STRING" }]}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+    const drawer = await screen.findByRole("dialog", { name: "Grid settings" })
+    const remove = await screen.findByRole("button", {
+      name: "Remove the format of v",
+    })
+
+    // When the keyboard user removes it
+    remove.focus()
+    await userEvent.keyboard("{Enter}")
+
+    // Then focus stays in the drawer, on its title
+    await waitFor(() =>
+      expect(drawer).toContainElement(document.activeElement as HTMLElement),
+    )
+    expect(document.activeElement?.tagName).toBe("H3")
   })
 })

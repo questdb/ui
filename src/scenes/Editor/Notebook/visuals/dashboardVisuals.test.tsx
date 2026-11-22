@@ -285,6 +285,32 @@ describe("dashboard visuals", () => {
     },
   )
 
+  it("names each clickable level with its side", () => {
+    // Given a locked book: the best ask and best bid share price and size
+    const columns = [
+      { name: "price", type: "DOUBLE" },
+      { name: "size", type: "DOUBLE" },
+    ]
+    renderComponent(
+      <OrderBook
+        formats={{}}
+        onSelect={vi.fn()}
+        statements={[
+          { columns, rows: [[100, 2]] },
+          { columns, rows: [[100, 2]] },
+        ]}
+      />,
+    )
+
+    // Then a screen reader tells the two levels apart
+    expect(
+      screen.getByRole("button", { name: "Ask 100, size 2" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Bid 100, size 2" }),
+    ).toBeInTheDocument()
+  })
+
   it("keeps the ladder where it is when the ladder itself takes focus", () => {
     // Given an order book whose mid bar overlaps the ladder's own box
     const columns = [

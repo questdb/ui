@@ -154,6 +154,11 @@ const initialFetchState = (queries: string[]): CellFetchState => ({
 export const pendingCellFetchState = (sql: string): CellFetchState =>
   initialFetchState(getQueriesFromText(sql))
 
+/** Whether a fetch state's queries are the statements of `sql`. */
+export const fetchStateIsFor = (queriesKey: string, sql: string): boolean =>
+  normalizedQueriesKey(joinQueriesKey(getQueriesFromText(sql))) ===
+  normalizedQueriesKey(queriesKey)
+
 export const deriveChartLoading = (
   state: CellFetchState,
   chartResult: ChartResult,

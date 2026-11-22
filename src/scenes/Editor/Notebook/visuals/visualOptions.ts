@@ -1028,7 +1028,9 @@ export const mapOption = ({
     ...clickData(r),
   }))
   const bounds = regionBounds(new Set(data.map((d) => d.name)))
-  const values = data.map((d) => d.value ?? 0)
+  // The colour scale spans the real values: a NULL region is not a 0.
+  const known = data.flatMap((d) => (d.value === null ? [] : [d.value]))
+  const values = known.length > 0 ? known : [0]
   return {
     option: {
       tooltip: {
@@ -1133,6 +1135,7 @@ export const liquidityHeatmapOption = ({
     need(rows, valueIdx, "value", c.value)
   if (err) return missing(err)
   const clickIdx = columnIndex(rows, clickColumn)
+  const timeName = rows.columns[timeIdx].name
   const cells = rows.rows.flatMap((row) => {
     const time = toTime(row[timeIdx])
     const price = toNumber(row[priceIdx])
@@ -1157,10 +1160,14 @@ export const liquidityHeatmapOption = ({
       renderItem: HEAT_CELLS,
       itemPayload: { dt, dp },
       encode: { x: 0, y: 1 },
+      // A cell has no name: an unbound click selects its time, typed by the
+      // time column, not the epoch milliseconds it is drawn at.
       data: cells.map(({ value, row }) =>
-        clickColumn !== undefined && clickIdx >= 0
-          ? { value, columns: { [clickColumn]: row[clickIdx] } }
-          : value,
+        clickColumn === undefined
+          ? { value, selection: row[timeIdx], selectionColumn: timeName }
+          : clickIdx >= 0
+            ? { value, columns: { [clickColumn]: row[clickIdx] } }
+            : value,
       ),
       progressive: 0,
     },
@@ -1177,7 +1184,15 @@ export const liquidityHeatmapOption = ({
         z: 5,
         lineStyle: { color: colors.contentPrimary, width: 1.5 },
         itemStyle: { color: colors.contentPrimary },
-        data: line.rows.map((r) => [toTime(r[lt]), toNumber(r[lv])]),
+        data: line.rows.map((r) =>
+          clickColumn === undefined
+            ? {
+                value: [toTime(r[lt]), toNumber(r[lv])],
+                selection: r[lt],
+                selectionColumn: line.columns[lt].name,
+              }
+            : [toTime(r[lt]), toNumber(r[lv])],
+        ),
       })
     }
   }

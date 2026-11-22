@@ -59,6 +59,9 @@ const Fill = styled.div`
   min-height: 0;
 `
 
+const MAP_LOAD_FAILED =
+  "Could not load the world map. Reload the console to try again."
+
 const useWorldMap = (needed: boolean) => {
   const [status, setStatus] = React.useState<"ready" | "loading" | "error">(
     () => (!needed || isMapLoaded(MAP_NAMES[0]) ? "ready" : "loading"),
@@ -166,6 +169,8 @@ export const VisualCanvas = ({
     let problems: { message: string; severity: "error" | "warning" }[] = []
     if (primaryFailure) {
       problems = [{ message: primaryFailure, severity: "error" }]
+    } else if (mapStatus === "error") {
+      problems = [{ message: MAP_LOAD_FAILED, severity: "error" }]
     } else if (built) {
       drawn = built.drawn
       problems = built.problems
@@ -226,6 +231,7 @@ export const VisualCanvas = ({
     statements,
     statementErrors,
     primaryFailure,
+    mapStatus,
     click?.column,
   ])
 
@@ -276,11 +282,7 @@ export const VisualCanvas = ({
       break
   }
   if (mapStatus === "error")
-    return (
-      <PaneEmptyState role="alert">
-        Could not load the world map. Reload the console to try again.
-      </PaneEmptyState>
-    )
+    return <PaneEmptyState role="alert">{MAP_LOAD_FAILED}</PaneEmptyState>
   if (mapStatus === "loading")
     return <PaneEmptyState>Loading map…</PaneEmptyState>
   if (!built?.option)

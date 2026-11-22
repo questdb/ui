@@ -526,6 +526,14 @@ describe("VisualCanvas", () => {
       "Could not load the world map",
     )
     expect(screen.queryByText("Loading map…")).not.toBeInTheDocument()
+    // And the agent's report says why nothing was drawn
+    expect(getRenderReport(bufferId, cellId)?.problems).toEqual([
+      {
+        message:
+          "Could not load the world map. Reload the console to try again.",
+        severity: "error",
+      },
+    ])
   })
 
   it("keeps bids visible but distinguishes a failed ask query from an empty ask result", () => {

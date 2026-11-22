@@ -24,6 +24,7 @@ import {
   useCellFetchSelector,
 } from "../cellRefresh/CellRefreshContext"
 import {
+  fetchStateIsFor,
   pendingCellFetchState,
   type CellFetchState,
 } from "../cellRefresh/cellRefreshEngine"
@@ -408,7 +409,13 @@ export const DrawCanvas: React.FC<Props> = ({
       ? statementResults.kind !== "settled" ||
         statements.every((s) => s === null)
       : results.length === 0)
-  const settledForCurrentQueries = settledKey === queriesKey
+  // The engine takes up edited SQL after a short debounce; until then its
+  // settled answer is for the old SQL, not for what the cell holds.
+  const sqlApplied = useMemo(
+    () => fetchStateIsFor(queriesKey, cell.value),
+    [queriesKey, cell.value],
+  )
+  const settledForCurrentQueries = settledKey === queriesKey && sqlApplied
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
   if (classifyBlock?.kind === "write") {

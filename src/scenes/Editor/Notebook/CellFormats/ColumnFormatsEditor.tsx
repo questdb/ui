@@ -78,7 +78,8 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
   }, [focusLastAdded])
 
   // Removing a format removes its focused button: focus moves on to the next
-  // formatted column (or the one before), else to "Format a column".
+  // formatted column (or the one before), else to "Format a column", else
+  // (no column can take a format) to the drawer's title.
   const [focusAfterRemove, setFocusAfterRemove] = useState<{
     column: string | null
   } | null>(null)
@@ -89,7 +90,10 @@ export const ColumnFormatsEditor: React.FC<Props> = ({
         toggles.current.get(focusAfterRemove.column)) ||
       groupRef.current?.querySelector<HTMLElement>(
         `[data-hook="${ADD_FORMAT_HOOK}"]`,
-      )
+      ) ||
+      groupRef.current
+        ?.closest("[role='dialog']")
+        ?.querySelector<HTMLElement>("h3[tabindex='-1']")
     target?.focus()
     setFocusAfterRemove(null)
   }, [focusAfterRemove])

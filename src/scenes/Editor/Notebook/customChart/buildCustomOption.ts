@@ -8,7 +8,7 @@ import {
   treeFromPath,
   type StatementRows,
 } from "../visuals/statementRows"
-import type { OptionProblem } from "./sanitizeOption"
+import { isSafeImage, type OptionProblem } from "./sanitizeOption"
 import {
   MAX_SANKEY_LINKS,
   SANKEY_LINK_LIMIT_MESSAGE,
@@ -223,6 +223,33 @@ const resolveRows = (
   }
 }
 
+// Values bound from rows arrive after the option was made safe, so they get
+// its image rule again: an `image://` symbol other than a data: image would
+// make the browser fetch any URL, which a query can fill with its results.
+const withSafeImages = (
+  value: unknown,
+  path: string,
+  report: Report,
+): unknown => {
+  if (typeof value === "string") {
+    if (!value.startsWith("image://") || isSafeImage(value.slice(8)))
+      return value
+    report(path, "Only data: images are allowed; the symbol is a circle.")
+    return "circle"
+  }
+  if (Array.isArray(value))
+    return value.map((child, i) =>
+      withSafeImages(child, `${path}[${i}]`, report),
+    )
+  if (!isRecord(value)) return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      withSafeImages(child, `${path}.${key}`, report),
+    ]),
+  )
+}
+
 const fillRows = (
   node: unknown,
   statements: (StatementRows | null)[],
@@ -234,7 +261,11 @@ const fillRows = (
   if (!isRecord(node)) return node
   const keys = Object.keys(node)
   if (keys.length === 1 && keys[0] === ROWS_KEY && isRecord(node[ROWS_KEY])) {
-    return resolveRows(node[ROWS_KEY] as RowsSpec, statements, path, report)
+    return withSafeImages(
+      resolveRows(node[ROWS_KEY] as RowsSpec, statements, path, report),
+      path,
+      report,
+    )
   }
   return Object.fromEntries(
     Object.entries(node).map(([k, v]) => [
