@@ -256,6 +256,59 @@ it("keeps a named liquidity bucket selection with the rendered row", () => {
   ])
 })
 
+it("withholds a liquidity heatmap when the bucket grid is incomplete", () => {
+  const result = liquidityHeatmapOption({
+    visual: { type: "liquidityHeatmap" },
+    colors: lightColors,
+    formats: {},
+    statements: [
+      {
+        ...rows(
+          [
+            ["ts", "TIMESTAMP"],
+            ["price", "DOUBLE"],
+            ["size", "DOUBLE"],
+          ],
+          [["2026-01-01T00:00:00Z", 10, 1]],
+        ),
+        partial: true,
+      },
+    ],
+  })
+  expect(result.option).toBeNull()
+  expect(result.problems[0].message).toContain("complete set of buckets")
+})
+
+it("retains exact leaf selections but doesn't pick among conflicting rows", () => {
+  const result = treemapOption({
+    visual: { type: "treemap", columns: { path: ["symbol"], value: "size" } },
+    colors: lightColors,
+    formats: {},
+    clickColumn: "instrument",
+    statements: [
+      rows(
+        [
+          ["symbol", "SYMBOL"],
+          ["size", "INT"],
+          ["instrument", "LONG"],
+        ],
+        [
+          ["Alpha", 1, "9007199254740993"],
+          ["Beta", 2, "101"],
+          ["Beta", 3, "102"],
+        ],
+      ),
+    ],
+  })
+  const [series] = result.option?.series as { data: unknown[] }[]
+  expect(series.data[0]).toMatchObject({
+    name: "Alpha",
+    columns: { instrument: "9007199254740993" },
+  })
+  expect(series.data[1]).toMatchObject({ name: "Beta", value: 5 })
+  expect(series.data[1]).not.toHaveProperty("columns")
+})
+
 it("reports a liquidity heatmap with no drawable cells", () => {
   const result = liquidityHeatmapOption({
     visual: { type: "liquidityHeatmap" },

@@ -195,6 +195,25 @@ describe("draw settings drawer", () => {
     ).toBeEnabled()
   })
 
+  it("dismisses Chart settings from the SQL editor when no Monaco widget is open", async () => {
+    renderComponent(
+      <Fixture saved={{ chartConfig: effective }} onSave={vi.fn()}>
+        <div className="monaco-editor">
+          <textarea aria-label="Cell SQL" />
+        </div>
+      </Fixture>,
+    )
+    await openDrawer()
+    const sql = screen.getByRole("textbox", { name: "Cell SQL" })
+    sql.focus()
+    await userEvent.keyboard("{Escape}")
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Chart settings" }),
+      ).not.toBeInTheDocument(),
+    )
+  })
+
   it("keeps a dirty drawer open when Escape closes the foreground dialog", async () => {
     renderComponent(
       <Fixture saved={{ chartConfig: effective }} onSave={vi.fn()}>

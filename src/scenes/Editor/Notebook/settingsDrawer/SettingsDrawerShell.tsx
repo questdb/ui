@@ -291,9 +291,10 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
       // (suggestions, find), then leaves the editor; the next one dismisses.
       const editor =
         e.target instanceof Element ? e.target.closest(".monaco-editor") : null
-      if (editor) {
-        if (editor.querySelector(MONACO_OPEN_WIDGET)) return
-        editor.closest<HTMLElement>(CODE_EDITOR_FRAME)?.focus()
+      if (editor?.querySelector(MONACO_OPEN_WIDGET)) return
+      const frame = editor?.closest<HTMLElement>(CODE_EDITOR_FRAME)
+      if (frame && panelRef.current?.contains(frame)) {
+        frame.focus()
         e.preventDefault()
         e.stopImmediatePropagation()
         return

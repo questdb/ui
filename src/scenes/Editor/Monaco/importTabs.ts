@@ -513,12 +513,15 @@ export const createBufferContentKey = (
           cell.formats && Object.keys(cell.formats).length
             ? cell.formats
             : undefined
-        if (!config?.visual && !config?.custom && !formats) return cell.value
+        const interactions = cell.interactions
+        if (!config?.visual && !config?.custom && !formats && !interactions)
+          return cell.value
         return {
           value: cell.value,
           visual: config?.visual,
           custom: config?.custom,
           formats,
+          interactions,
         }
       }) ?? []
     // Imports intentionally reset local permission to run renderItem code.
@@ -530,9 +533,19 @@ export const createBufferContentKey = (
         description,
       }))
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-    const identity = chartTypes?.length
-      ? { cells: cellValues, chartTypes }
-      : cellValues
+    const chartSync = settings?.chartSync
+    const link =
+      chartSync && (chartSync.zoom || chartSync.crosshair !== "off")
+        ? chartSync
+        : undefined
+    const identity =
+      chartTypes?.length || link
+        ? {
+            cells: cellValues,
+            chartTypes: chartTypes?.length ? chartTypes : undefined,
+            chartSync: link,
+          }
+        : cellValues
     return `${buffer.label}|${JSON.stringify(identity, canonicalSettings)}`
   }
   if (buffer.metricsViewState) {

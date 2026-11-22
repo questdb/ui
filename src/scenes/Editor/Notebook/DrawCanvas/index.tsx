@@ -469,6 +469,7 @@ export const DrawCanvas: React.FC<Props> = ({
                 specKey={JSON.stringify([
                   preciseTimePointer,
                   resolution.chart.horizontal === true,
+                  resolution.chart.thresholds ?? null,
                   resolution.renderQueries.map(({ percentStack, scatter }) => [
                     percentStack === true,
                     scatter?.size ?? null,

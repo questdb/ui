@@ -157,6 +157,41 @@ describe("buildCustomOption", () => {
     expect(built.problems[0]?.message).toContain("Aggregate by path in SQL")
   })
 
+  it("rejects Custom Sankey edges beyond the shared layout budget", () => {
+    const built = buildCustomOption(
+      {
+        series: {
+          type: "sankey",
+          links: {
+            $rows: {
+              shape: "links",
+              from: "source",
+              to: "target",
+              value: "weight",
+            },
+          },
+        },
+      },
+      [
+        rows(
+          [
+            ["source", "SYMBOL"],
+            ["target", "SYMBOL"],
+            ["weight", "INT"],
+          ],
+          Array.from({ length: 2001 }, (_, index) => [
+            "hub",
+            `site-${index}`,
+            1,
+          ]),
+        ),
+      ],
+      true,
+    )
+    expect(built.option).toEqual({})
+    expect(built.problems[0]?.message).toContain("limited to 2,000 links")
+  })
+
   it("diagnoses a cycle after binding Sankey query rows", () => {
     const option = {
       series: [

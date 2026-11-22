@@ -105,6 +105,7 @@ export type TreeNode = {
   children?: TreeNode[]
   // The row's value of a colour column, when given.
   colorValue?: number
+  columns?: Record<string, StatementRows["rows"][number][number]>
 }
 
 /**
@@ -116,8 +117,11 @@ export const treeFromPath = (
   pathIdx: number[],
   valueIdx: number,
   colorIdx = -1,
+  clickIdx = -1,
 ): TreeNode[] => {
   const root: TreeNode = { name: "", children: [] }
+  const column = rows.columns[clickIdx]?.name
+  const ambiguous = new WeakSet<TreeNode>()
   const childrenByName = new WeakMap<TreeNode, Map<string, TreeNode>>()
   for (const row of rows.rows) {
     let node = root
@@ -136,6 +140,16 @@ export const treeFromPath = (
       }
       if (level === pathIdx.length - 1) {
         child.value = (child.value ?? 0) + (toNumber(row[valueIdx]) ?? 0)
+        if (column !== undefined && !ambiguous.has(child)) {
+          const selection = row[clickIdx]
+          if (!child.columns) child.columns = { [column]: selection }
+          else if (child.columns[column] !== selection) {
+            // This leaf aggregates different source rows. Never pick an
+            // arbitrary row for an explicitly bound selection.
+            delete child.columns
+            ambiguous.add(child)
+          }
+        }
         if (colorIdx >= 0) {
           const c = toNumber(row[colorIdx])
           if (c !== null) child.colorValue = c

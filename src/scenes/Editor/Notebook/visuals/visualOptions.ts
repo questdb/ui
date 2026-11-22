@@ -14,6 +14,10 @@ import {
 } from "../../../../utils/formats/columnFormat"
 import { SEVERITY_RANK, readStateSegments, severityOf } from "./stateSegments"
 import {
+  MAX_SANKEY_LINKS,
+  SANKEY_LINK_LIMIT_MESSAGE,
+} from "./sankeyLayoutLimit"
+import {
   columnIndex,
   firstColumnOf,
   linksFrom,
@@ -373,7 +377,13 @@ const hierarchy = (
     return `value: column ${JSON.stringify(c.value)} not found. Columns: ${columnNames(rows)}.`
   const colorIdx = c.change !== undefined ? columnIndex(rows, c.change) : -1
   return {
-    tree: treeFromPath(rows, pathIdx, valueIdx, colorIdx),
+    tree: treeFromPath(
+      rows,
+      pathIdx,
+      valueIdx,
+      colorIdx,
+      columnIndex(rows, ctx.clickColumn),
+    ),
     valueName: rows.columns[valueIdx].name,
     colorName: colorIdx >= 0 ? rows.columns[colorIdx].name : undefined,
   }
@@ -383,6 +393,7 @@ const withColorValues = (nodes: TreeNode[]): unknown[] =>
   nodes.map((n) => ({
     name: n.name,
     value: n.colorValue !== undefined ? [n.value, n.colorValue] : n.value,
+    ...(n.columns ? { columns: n.columns } : {}),
     ...(n.children ? { children: withColorValues(n.children) } : {}),
   }))
 
@@ -701,9 +712,6 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
   }
 }
 
-// ECharts' main-thread Sankey layout searches all links for each edge.
-const MAX_SANKEY_LINKS = 2_000
-
 export const sankeyOption = (ctx: VisualContext): VisualBuild => {
   if (ctx.statements[0]?.partial)
     return missing(
@@ -712,9 +720,7 @@ export const sankeyOption = (ctx: VisualContext): VisualBuild => {
   const e = edges(ctx)
   if (typeof e === "string") return missing(e)
   if (e.links.length > MAX_SANKEY_LINKS)
-    return missing(
-      `Sankey is limited to ${MAX_SANKEY_LINKS.toLocaleString("en-US")} links to keep layout responsive. Aggregate flows in SQL or choose a graph visual.`,
-    )
+    return missing(SANKEY_LINK_LIMIT_MESSAGE)
   // Labels sit right of their node, except on the last column, where they
   // would run off the chart.
   const depth = new Map<string, number>()
@@ -1071,6 +1077,10 @@ export const liquidityHeatmapOption = ({
   clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
+  if (rows?.partial)
+    return missing(
+      "Liquidity heatmap requires a complete set of buckets. Narrow the query or aggregate into larger buckets in SQL.",
+    )
   if (!rows || rows.rows.length === 0)
     return missing("The query returned no rows.")
   const c = visual.columns ?? {}

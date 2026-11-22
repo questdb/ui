@@ -803,7 +803,11 @@ export const useCellExecution = ({
           ? singleResultFromExec(launch.exec, recordedQuery)
           : cancelledResult(recordedQuery, "user")
         const cellResult: CellResult = {
-          results: [recorded],
+          results: [
+            ac.signal.aborted && recorded.type === "error"
+              ? { ...recorded, stoppedByUser: true }
+              : recorded,
+          ],
           activeResultIndex: 0,
           timestamp: Date.now(),
         }

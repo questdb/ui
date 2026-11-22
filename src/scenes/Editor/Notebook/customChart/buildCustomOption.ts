@@ -9,6 +9,10 @@ import {
   type StatementRows,
 } from "../visuals/statementRows"
 import type { OptionProblem } from "./sanitizeOption"
+import {
+  MAX_SANKEY_LINKS,
+  SANKEY_LINK_LIMIT_MESSAGE,
+} from "../visuals/sankeyLayoutLimit"
 
 // Turns a sanitized agent option into the option ECharts draws: the cell's
 // statements become datasets "q0", "q1", …, `{"$rows": …}` placeholders
@@ -316,12 +320,19 @@ const enforceRendererPolicy = (
   )
 }
 
-const containsCyclicSankey = (node: unknown): boolean => {
-  if (Array.isArray(node)) return node.some(containsCyclicSankey)
-  if (!isRecord(node)) return false
+const sankeyProblem = (node: unknown): string | undefined => {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const problem = sankeyProblem(child)
+      if (problem) return problem
+    }
+    return
+  }
+  if (!isRecord(node)) return
   if (node.type === "sankey") {
     const links = node.links ?? node.edges
     if (Array.isArray(links)) {
+      if (links.length > MAX_SANKEY_LINKS) return SANKEY_LINK_LIMIT_MESSAGE
       const outgoing = new Map<string, string[]>()
       const incoming = new Map<string, number>()
       for (const link of links) {
@@ -350,16 +361,17 @@ const containsCyclicSankey = (node: unknown): boolean => {
           if (remaining === 0) sources.push(to)
         }
       }
-      if (sources.length !== incoming.size) return true
+      if (sources.length !== incoming.size)
+        return "Sankey links contain a cycle. Remove cycles or choose a graph visual."
     }
   }
-  return [
+  return sankeyProblem([
     node.series,
     node.baseOption,
     node.options,
     node.media,
     node.option,
-  ].some(containsCyclicSankey)
+  ])
 }
 
 const baseOptionOf = (option: Record<string, unknown>) =>
@@ -405,14 +417,14 @@ export const buildCustomOption = (
   const bound = fillRows(sanitized, statements, "", report)
   if (fatal) return { option: {}, problems: [fatal] }
   const filled = enforceRendererPolicy(bound) as Record<string, unknown>
-  if (containsCyclicSankey(filled)) {
+  const invalidSankey = sankeyProblem(filled)
+  if (invalidSankey) {
     return {
       option: {},
       problems: [
         {
           path: "",
-          message:
-            "Sankey links contain a cycle. Remove cycles or choose a graph visual.",
+          message: invalidSankey,
           severity: "error",
         },
       ],

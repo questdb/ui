@@ -1666,6 +1666,50 @@ describe("deduplication", () => {
       expect(key(80)).not.toEqual(key(90))
     })
 
+    it("distinguishes saved interaction settings from the otherwise identical notebook", () => {
+      const plain = {
+        label: "Dashboard",
+        value: "",
+        notebookViewState: {
+          cells: [
+            { id: "grid", position: 0, value: "select value from signals" },
+          ],
+        },
+      }
+      const key = createBufferContentKey(plain)
+      expect(
+        createBufferContentKey({
+          ...plain,
+          notebookViewState: {
+            cells: [
+              {
+                ...plain.notebookViewState.cells[0],
+                interactions: { click: { variable: "target" } },
+              },
+            ],
+          },
+        }),
+      ).not.toEqual(key)
+      expect(
+        createBufferContentKey({
+          ...plain,
+          notebookViewState: {
+            ...plain.notebookViewState,
+            settings: { chartSync: { zoom: false, crosshair: "line" } },
+          },
+        }),
+      ).not.toEqual(key)
+      expect(
+        createBufferContentKey({
+          ...plain,
+          notebookViewState: {
+            ...plain.notebookViewState,
+            settings: { chartSync: { zoom: false, crosshair: "off" } },
+          },
+        }),
+      ).toEqual(key)
+    })
+
     it("creates key from label and value for editor tabs", () => {
       const buffer = { label: "Tab1", value: "SELECT 1" }
       expect(createBufferContentKey(buffer)).toBe("Tab1|SELECT 1")

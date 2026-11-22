@@ -205,11 +205,11 @@ const MidPrice = styled.span`
   white-space: nowrap;
 
   [data-direction="up"] {
-    color: ${({ theme }) => theme.color.chartUp};
+    color: ${({ theme }) => theme.color.dataPositive};
   }
 
   [data-direction="down"] {
-    color: ${({ theme }) => theme.color.chartDown};
+    color: ${({ theme }) => theme.color.dataNegative};
   }
 `
 
