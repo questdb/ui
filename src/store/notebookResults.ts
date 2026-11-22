@@ -31,6 +31,7 @@ export type NotebookResultSnapshot = {
   cellId: string
   results: SingleQueryResult[]
   savedAt: number
+  runToken?: CellResult["timestamp"]
   activeResultIndex?: number
   activeStatementKey?: string
   refreshErrors?: SnapshotRefreshError[]

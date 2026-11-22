@@ -286,7 +286,10 @@ export class CellResultHydrationEngine {
         activeResultIndex: reconciled.activeResultIndex,
         activeStatementKey: reconciled.activeStatementKey,
       }
-      if (!reconciled.allResultsKept) delete rewritten.script
+      if (!reconciled.allResultsKept) {
+        delete rewritten.script
+        delete rewritten.runToken
+      }
       delete rewritten.refreshErrors
       delete rewritten.slotFetchedAt
       Object.assign(rewritten, refreshState)
@@ -303,7 +306,9 @@ export class CellResultHydrationEngine {
       results: reconciled.results,
       activeResultIndex: reconciled.activeResultIndex,
       activeStatementKey: reconciled.activeStatementKey,
-      timestamp: snapshot.savedAt,
+      timestamp:
+        (reconciled.allResultsKept ? snapshot.runToken : undefined) ??
+        snapshot.savedAt,
       ...(snapshot.script && reconciled.allResultsKept
         ? { script: snapshot.script }
         : {}),

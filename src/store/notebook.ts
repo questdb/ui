@@ -149,7 +149,7 @@ export type CellResult = {
   error?: string
   // The run token: it changes when a run replaces the frame, and the grid
   // keys its viewport on it. It is not a time — each result carries its own
-  // fetchedAt — and after a reload it is the snapshot's save time.
+  // fetchedAt. Legacy snapshots use their save time as a fallback token.
   timestamp: number
   script?: {
     successCount: number

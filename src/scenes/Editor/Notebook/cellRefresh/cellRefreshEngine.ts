@@ -991,7 +991,7 @@ export class CellRefreshEngine {
       normalizedQueriesKey(entry.state.queriesKey) !==
         normalizedQueriesKey(queriesKey)
     ) {
-      resetChartZoom(entry.cellId)
+      resetChartZoom(entry.cellId, true)
     }
     // Refresh errors follow statement content: an edited statement's error
     // clears, an unchanged sibling's survives the edit.
@@ -1022,8 +1022,7 @@ export class CellRefreshEngine {
     // Whitespace at the editor boundary doesn't change the parsed SQL or
     // revoke an active variable refresh for that same statement set.
     if (
-      entry.kind === "grid" &&
-      entry.variableRefreshInFlight &&
+      (entry.kind === "chart" || entry.variableRefreshInFlight) &&
       joinQueriesKey(getQueriesFromText(sql)) === entry.state.queriesKey
     ) {
       entry.sql = sql
@@ -1967,6 +1966,7 @@ export class CellRefreshEngine {
       cellId: entry.cellId,
       results,
       savedAt: Date.now(),
+      ...(current?.results === results ? { runToken: current.timestamp } : {}),
       activeResultIndex: current?.activeResultIndex ?? 0,
       ...(current?.activeStatementKey !== undefined
         ? { activeStatementKey: current.activeStatementKey }

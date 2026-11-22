@@ -16,7 +16,7 @@ export const setChartZoom = (
   end: number,
   bounds?: ZoomWindow["bounds"],
 ) => {
-  if (start <= 0 && end >= 100) {
+  if (!bounds && start <= 0 && end >= 100) {
     clearChartZoom(cellId)
     return
   }
@@ -33,10 +33,10 @@ export const clearChartZoom = (cellId: string) => {
 }
 
 // A mounted chart holds its window in ECharts too: the event resets it there.
-export const resetChartZoom = (cellId: string) => {
+export const resetChartZoom = (cellId: string, localOnly = false) => {
   if (!zoomWindows.has(cellId)) return
   clearChartZoom(cellId)
-  eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
+  eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId, localOnly })
 }
 
 export const clearChartZooms = (cellIds: Iterable<string>) => {

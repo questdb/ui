@@ -251,18 +251,20 @@ const bucketTitle = (bucket: Bucket): string =>
     : `${MOMENT.format(bucket.from)} – ${CLOCK.format(bucket.to)}`
 
 const useWidth = () => {
-  const ref = useRef<HTMLDivElement>(null)
+  const [node, setNode] = useState<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(0)
   useEffect(() => {
-    const node = ref.current
-    if (!node) return
+    if (!node) {
+      setWidth(0)
+      return
+    }
     const observer = new ResizeObserver(([entry]) =>
       setWidth(entry.contentRect.width),
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [])
-  return [ref, width] as const
+  }, [node])
+  return [setNode, node, width] as const
 }
 
 type Props = {
@@ -279,7 +281,7 @@ export const UptimeBars = ({
   onSelect,
 }: Props) => {
   const { color: colors } = useTheme()
-  const [ref, width] = useWidth()
+  const [ref, scrollElement, width] = useWidth()
   const [hover, setHover] = useState<{ lane: string; index: number } | null>(
     null,
   )
@@ -293,7 +295,7 @@ export const UptimeBars = ({
   const virtual = useVirtualizer({
     count: laneNames.length,
     enabled: windowLanes,
-    getScrollElement: () => ref.current,
+    getScrollElement: () => scrollElement,
     getItemKey: (index) => laneNames[index],
     estimateSize: () => 95,
     scrollMargin: lanesRef.current?.offsetTop ?? 36,
@@ -349,24 +351,23 @@ export const UptimeBars = ({
   )
   if (typeof read === "string") return <PaneEmptyState>{read}</PaneEmptyState>
   if (!lanes || !uptimes || !current) return null
-  const counts = { bad: 0, warning: 0 }
-  for (const state of current.values()) {
-    const s = severityOf(state, severity)
-    if (s === "bad") counts.bad++
-    if (s === "warning") counts.warning++
-  }
-  const overall =
-    counts.bad + counts.warning === 0
-      ? { text: "All operational", color: colors.chartUp }
-      : {
-          text: [
-            counts.bad > 0 ? `${counts.bad} down` : "",
-            counts.warning > 0 ? `${counts.warning} degraded` : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          color: counts.bad > 0 ? colors.chartDown : colors.statusWarning,
-        }
+  const counts = { bad: 0, warning: 0, neutral: 0, good: 0 }
+  for (const state of current.values()) counts[severityOf(state, severity)]++
+  const overallSeverity = counts.bad
+    ? "bad"
+    : counts.warning
+      ? "warning"
+      : counts.neutral
+        ? "neutral"
+        : "good"
+  const overallText =
+    [
+      counts.bad ? `${counts.bad} down` : "",
+      counts.warning ? `${counts.warning} degraded` : "",
+      counts.neutral ? `${counts.neutral} neutral` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ") || "All operational"
   const span = spanLabel(read.to - read.from)
   const slot = barsWidth / count
   const gap = Math.max(1, Math.min(3, Math.round(slot * 0.4)))
@@ -376,13 +377,10 @@ export const UptimeBars = ({
     <Root ref={ref} data-hook="uptime-bars">
       <Summary>
         <Overall
-          $color={overall.color}
-          $labelColor={severityTextColor(
-            counts.bad > 0 ? "bad" : counts.warning > 0 ? "warning" : "good",
-            colors,
-          )}
+          $color={severityColor(overallSeverity, colors)}
+          $labelColor={severityTextColor(overallSeverity, colors)}
         >
-          {overall.text}
+          {overallText}
         </Overall>
         <span>Uptime over the last {span}</span>
       </Summary>

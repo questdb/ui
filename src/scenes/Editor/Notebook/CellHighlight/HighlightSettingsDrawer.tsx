@@ -81,6 +81,7 @@ type Props = {
   initialDraft: HighlightDraft | null
   onDraftChange: (draft: HighlightDraft) => void
   columns: ColumnDefinition[]
+  formatColumns?: ColumnDefinition[]
   columnRange: (column: string) => ColumnRange | null
   config: HighlightConfig
   formats?: ColumnFormats
@@ -131,6 +132,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   initialDraft,
   onDraftChange,
   columns,
+  formatColumns = columns,
   columnRange,
   config,
   formats: savedFormats,
@@ -410,7 +412,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
         <ColumnFormatsEditor
           formats={formats}
           onChange={(next) => updateDraft({ formats: next })}
-          columns={columns}
+          columns={formatColumns}
           samples={samples}
           cellVisuals
           focusColumn={focusColumn}

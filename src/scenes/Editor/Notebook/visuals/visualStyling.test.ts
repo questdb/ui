@@ -816,6 +816,41 @@ describe("statTiles", () => {
     ])
   })
 
+  it("groups sparkline history by the configured label, not the first category", () => {
+    const summary = rows(
+      [
+        ["region", "SYMBOL"],
+        ["value", "LONG"],
+      ],
+      [
+        ["East", 2],
+        ["West", 5],
+      ],
+    )
+    const history = rows(
+      [
+        ["replica", "SYMBOL"],
+        ["region", "SYMBOL"],
+        ["value", "LONG"],
+      ],
+      [
+        ["West", "East", 1],
+        ["West", "East", 2],
+        ["East", "West", 9],
+        ["East", "West", 5],
+      ],
+    )
+    expect(
+      statTiles({ type: "stat", columns: { label: "region" } }, [
+        summary,
+        history,
+      ]).tiles.map((tile) => tile.spark),
+    ).toEqual([
+      [1, 2],
+      [9, 5],
+    ])
+  })
+
   it("reads a caption column under each value", () => {
     // Given
     const summary = rows(

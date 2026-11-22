@@ -1343,7 +1343,7 @@ describe("CellRefreshEngine", () => {
 
       // Then the stored window clears and the mounted chart is told to reset
       expect(getChartZoom("c1")).toBeUndefined()
-      expect(resets).toEqual([{ cellId: "c1" }])
+      expect(resets).toEqual([{ cellId: "c1", localOnly: true }])
     })
 
     it("keeps the zoom when an edit only adds trailing whitespace", async () => {

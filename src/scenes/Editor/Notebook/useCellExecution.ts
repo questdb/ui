@@ -206,6 +206,7 @@ export const useCellExecution = ({
         cellId,
         results: result.results,
         savedAt: Date.now(),
+        runToken: result.timestamp,
         activeResultIndex: result.activeResultIndex,
         ...(result.activeStatementKey !== undefined
           ? { activeStatementKey: result.activeStatementKey }

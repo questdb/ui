@@ -1,6 +1,11 @@
 import type { EChartsType } from "echarts"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { joinChartSync, setChartSync } from "./chartSync"
+import {
+  clearChartZoom,
+  getChartZoom,
+  setChartZoom,
+} from "../cellVirtualization/chartZoomStore"
 import { echarts } from "../CellChart/echartsSetup"
 import { zoomWindowForEvent, type DataZoomEvent } from "../CellChart/zoomWindow"
 
@@ -64,6 +69,19 @@ const move = {
 }
 
 describe("notebook chart sync", () => {
+  it("keeps a linked interval that currently covers every peer sample", () => {
+    const cellId = "sparse-time-peer"
+    const bounds = { startValue: 40, endValue: 80 }
+    try {
+      setChartZoom(cellId, 0, 100, bounds)
+      expect(getChartZoom(cellId)).toEqual({ start: 0, end: 100, bounds })
+      setChartZoom(cellId, 0, 100)
+      expect(getChartZoom(cellId)).toBeUndefined()
+    } finally {
+      clearChartZoom(cellId)
+    }
+  })
+
   it("links generated time zoom IDs without linking generated Y zoom IDs", () => {
     const makeLiveChart = () => {
       const instance = echarts.init(null, undefined, {

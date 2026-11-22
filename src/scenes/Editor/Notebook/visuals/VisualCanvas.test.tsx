@@ -103,6 +103,8 @@ describe("VisualCanvas", () => {
       getComputedStyle(bars[9]).backgroundColor,
     )
     expect(screen.getByText("100 % uptime")).toBeVisible()
+    expect(screen.getByText("1 neutral")).toBeVisible()
+    expect(screen.queryByText("All operational")).not.toBeInTheDocument()
   })
 
   it("drops all removed Stat tiles even when their labels repeat", () => {
@@ -276,6 +278,53 @@ describe("VisualCanvas", () => {
     expect(getRenderReport(bufferId, cellId)?.problems[0]?.severity).toBe(
       "error",
     )
+  })
+
+  it("starts observing a lane strip when an empty Uptime result becomes populated", () => {
+    const observe = vi.fn()
+    const disconnect = vi.fn()
+    const Original = globalThis.ResizeObserver
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe = observe
+        unobserve = vi.fn()
+        disconnect = disconnect
+      },
+    )
+    const view = (populated: boolean) => (
+      <VisualCanvas
+        {...defaults}
+        visual={{ type: "uptime" }}
+        statements={[
+          {
+            columns: [
+              { name: "ts", type: "TIMESTAMP" },
+              { name: "lane", type: "SYMBOL" },
+              { name: "state", type: "SYMBOL" },
+            ],
+            rows: populated
+              ? [
+                  ["2026-01-01T00:00:00Z", "db", "up"],
+                  ["2026-01-01T00:01:00Z", "db", "up"],
+                ]
+              : [],
+          },
+        ]}
+      />
+    )
+    try {
+      const { container, rerender, unmount } = renderComponent(view(false))
+      expect(container.querySelector('[data-hook="uptime-bars"]')).toBeNull()
+      rerender(view(true))
+      const root = container.querySelector('[data-hook="uptime-bars"]')
+      expect(root).not.toBeNull()
+      expect(observe).toHaveBeenCalledWith(root)
+      unmount()
+      expect(disconnect).toHaveBeenCalled()
+    } finally {
+      globalThis.ResizeObserver = Original
+    }
   })
 
   it("windows large Uptime panels instead of mounting every lane", () => {

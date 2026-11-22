@@ -278,6 +278,13 @@ const ResultGridPanelInner: React.FC<Props> = ({
     [rawData],
   )
 
+  const formatColumns = useMemo(() => {
+    const activeTypes = new Map(
+      rawData.columns.map((column) => [column.name, column]),
+    )
+    return cellColumns.map((column) => activeTypes.get(column.name) ?? column)
+  }, [cellColumns, rawData.columns])
+
   const saveGridSettings = ({
     highlight,
     formats: nextFormats,
@@ -416,6 +423,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         initialDraft={highlightDrawer.initialDraft}
         onDraftChange={highlightDrawer.keepDraft}
         columns={cellColumns}
+        formatColumns={formatColumns}
         columnRange={columnRange}
         config={highlightConfig}
         formats={formats}

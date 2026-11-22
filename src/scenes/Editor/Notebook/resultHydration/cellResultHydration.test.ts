@@ -37,7 +37,10 @@ const legacyDqlResult = (query: string): SingleQueryResult => ({
 const snapshot = (
   cellId: string,
   results: SingleQueryResult[],
-  extras: Pick<NotebookResultSnapshot, "activeResultIndex" | "script"> = {},
+  extras: Pick<
+    NotebookResultSnapshot,
+    "activeResultIndex" | "script" | "runToken"
+  > = {},
 ): NotebookResultSnapshot => ({
   bufferId: 1,
   cellId,
@@ -205,13 +208,13 @@ describe("CellResultHydrationEngine", () => {
   })
 
   it("re-hydrates a released cell with the exact same result", async () => {
-    // Given a hydrated script cell
+    // The snapshot was written after the run that established stable ranks.
     seedCell({ ...ranCell("c1"), value: "select 1; select 2" })
     const results = [dqlResult("select 1"), dqlResult("select 2")]
     const script = { successCount: 2, failedCount: 0, durationMs: 12 }
     snapshots.set(
       "c1",
-      snapshot("c1", results, { activeResultIndex: 1, script }),
+      snapshot("c1", results, { activeResultIndex: 1, script, runToken: 750 }),
     )
     engine.request("c1")
     await resolveLoad("c1")
@@ -228,6 +231,7 @@ describe("CellResultHydrationEngine", () => {
     // Then the second hydration deep-equals the first
     expect(applied).toHaveLength(2)
     expect(applied[1][1]).toEqual(applied[0][1])
+    expect(applied[1][1].timestamp).toBe(750)
   })
 
   it("reconciles a snapshot against SQL edited while unmounted — survivors hydrate, the rest drop", async () => {

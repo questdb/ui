@@ -226,12 +226,15 @@ export const DrawCanvas: React.FC<Props> = ({
     [cell.id],
   )
 
-  const handleResetZoom = useCallback(() => {
-    chartRendererRef.current?.resetZoom()
-    setZoomStart(0)
-    setZoomEnd(100)
-    setChartZoom(cell.id, 0, 100)
-  }, [cell.id])
+  const handleResetZoom = useCallback(
+    (localOnly = false) => {
+      chartRendererRef.current?.resetZoom(localOnly)
+      setZoomStart(0)
+      setZoomEnd(100)
+      setChartZoom(cell.id, 0, 100)
+    },
+    [cell.id],
+  )
 
   const resolution = useMemo(
     () => resolveDraw(queries, results, cell.chartConfig),
@@ -413,8 +416,8 @@ export const DrawCanvas: React.FC<Props> = ({
   }
 
   useEffect(() => {
-    const reset = (payload?: { cellId?: string }) => {
-      if (payload?.cellId === cell.id) handleResetZoom()
+    const reset = (payload?: { cellId?: string; localOnly?: boolean }) => {
+      if (payload?.cellId === cell.id) handleResetZoom(payload.localOnly)
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
     return () => eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)

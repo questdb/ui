@@ -28,7 +28,7 @@ import {
 } from "./chartEntryAnimation"
 
 export type ChartRendererHandle = {
-  resetZoom: () => void
+  resetZoom: (localOnly?: boolean) => void
 }
 
 export type ChartEventHandler = (params: unknown, instance: EChartsType) => void
@@ -259,12 +259,13 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       )
     }, [])
 
-    const resetZoom = useCallback(() => {
-      reactEchartsRef.current?.getEchartsInstance()?.dispatchAction({
-        type: "dataZoom",
-        start: 0,
-        end: 100,
-      })
+    const resetZoom = useCallback((localOnly = false) => {
+      reactEchartsRef.current
+        ?.getEchartsInstance()
+        ?.dispatchAction(
+          { type: "dataZoom", start: 0, end: 100 },
+          { silent: localOnly },
+        )
     }, [])
 
     const handleChartReady = useCallback<
@@ -396,7 +397,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       if (zoomDensity === null || !zoomControlsHidden(zoomDensity)) return
       if (!isZoomed(zoomWindowRef.current) || zoomWindowRef.current.bounds)
         return
-      resetZoom()
+      resetZoom(true)
       onZoomChangeRef.current?.(0, 100)
     }, [zoomDensity, resetZoom, zoomable])
 

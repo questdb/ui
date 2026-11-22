@@ -262,7 +262,14 @@ export const statTiles = (
 
   const sparkRows = statements[visual.sparklineQuery ?? 1] ?? undefined
   const sparks = new Map<string, number[]>()
-  const k = sparkRows ? firstColumnOf(sparkRows, "categorical") : -1
+  const labelName = rows.columns[labelIdx]?.name
+  const namedKey = sparkRows ? columnIndex(sparkRows, labelName) : -1
+  const k =
+    namedKey >= 0
+      ? namedKey
+      : sparkRows
+        ? firstColumnOf(sparkRows, "categorical")
+        : -1
   if (sparkRows && sparkRows.rows.length > 0) {
     const t = firstColumnOf(sparkRows, "temporal")
     const v =
