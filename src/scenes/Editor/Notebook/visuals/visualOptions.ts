@@ -925,6 +925,8 @@ export const mapOption = ({
     map: "world",
     roam: true,
     zoom: 1.15,
+    // ECharts retains omitted geo fields when it merges a refreshed option.
+    boundingCoords: null,
     itemStyle: {
       areaColor: colors.surfaceRaised,
       borderColor: colors.borderDefault,
@@ -959,7 +961,9 @@ export const mapOption = ({
             return `${escapeHtml(name)}<br/>${escapeHtml(formatValue(value[2], format))}`
           },
         },
-        geo: bounds ? { ...geo, zoom: 1, boundingCoords: bounds } : geo,
+        geo: (bounds
+          ? { ...geo, zoom: 1, boundingCoords: bounds }
+          : geo) as EChartsOption["geo"],
         series: [
           {
             type: "effectScatter",

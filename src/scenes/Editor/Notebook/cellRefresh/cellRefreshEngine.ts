@@ -1639,15 +1639,19 @@ export class CellRefreshEngine {
             if (exec.type === "error") {
               this.setSlotError(entry, key, exec.error ?? "Query failed")
             } else {
-              // Changed rows are written with their fetch time. Identical
-              // rows keep the frame — a rewrite would churn renders and
-              // snapshots — and the overlay records the verifying poll so
-              // the status line stays current.
+              // Keep an equivalent frame unless it was fetched with a
+              // different variable binding. Restore uses the saved binding,
+              // not the row contents, to decide if it needs another read.
               const previous = this.currentSlotResult(entry.cellId, key)
               const unchanged =
                 previous !== undefined &&
                 resultsEquivalent([toExecResult(previous)], [exec])
-              if (!unchanged) this.commitSlotResult(entry, key, exec)
+              const bindingChanged =
+                previous?.type === "dql" &&
+                exec.effectiveQuery !== undefined &&
+                previous.effectiveQuery !== exec.effectiveQuery
+              if (!unchanged || bindingChanged)
+                this.commitSlotResult(entry, key, exec)
               this.settleSlotSuccess(entry, key)
             }
           } catch (e) {

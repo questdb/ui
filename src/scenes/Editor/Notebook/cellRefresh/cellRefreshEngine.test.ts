@@ -3075,6 +3075,29 @@ describe("CellRefreshEngine", () => {
       ).toBeGreaterThan(verifiedAfterSwap ?? 0)
     })
 
+    it("commits the new binding even when a variable refresh returns equal rows", async () => {
+      const sql = "select abs(@marker)"
+      const cell = gridCell("g1", sql, [sql], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      const refreshWith = async (effectiveQuery: string) => {
+        deps.executeSingle.mockResolvedValue({
+          ...dqlResult(sql),
+          effectiveQuery,
+        })
+        engine.refreshWhere(() => true)
+        await flushAsync()
+      }
+      await refreshWith("select abs(-1)")
+      await refreshWith("select abs(1)")
+      expect(cellResults.get("g1")?.results[0]).toMatchObject({
+        effectiveQuery: "select abs(1)",
+      })
+      const commits = deps.setCellResult.mock.calls.length
+      await refreshWith("select abs(1)")
+      expect(deps.setCellResult).toHaveBeenCalledTimes(commits)
+    })
+
     it("notifies an identical tick only for the progress its subscribers show", async () => {
       // Given a polling grid past its first tick
       const cell = gridCell("g1", "select 1", ["select 1"], "1s")

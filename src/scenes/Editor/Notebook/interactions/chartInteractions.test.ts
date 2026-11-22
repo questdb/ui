@@ -40,6 +40,25 @@ describe("clickedValue", () => {
     ).toBe("9007199254740993")
   })
 
+  it("doesn't use synthetic labels and sums as explicit row values", () => {
+    const params = {
+      name: "desk",
+      data: { name: "desk", value: 3 },
+      value: [3],
+      dimensionNames: ["value"],
+    }
+    expect(clickedValue(params, "name", true)).toBeUndefined()
+    expect(clickedValue(params, "value", true)).toBeUndefined()
+    expect(clickedValue(params, undefined, true)).toBe("desk")
+    expect(
+      clickedValue(
+        { ...params, data: { ...params.data, columns: { value: 2 } } },
+        "value",
+        true,
+      ),
+    ).toBe(2)
+  })
+
   it("reads the SQL alias length rather than the dataset row's width", () => {
     const row = [10, 42]
     expect(

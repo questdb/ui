@@ -32,6 +32,7 @@ type ClickParams = {
 export const clickedValue = (
   params: ClickParams,
   column: string | undefined,
+  requireSourceColumn = false,
 ): unknown => {
   if (column !== undefined) {
     const data = params.data
@@ -43,6 +44,8 @@ export const clickedValue = (
       Object.hasOwn(columns, column)
     )
       return (columns as Record<string, unknown>)[column]
+    // An aggregate node's name and value describe the drawing, not a row.
+    if (requireSourceColumn) return undefined
     if (
       typeof data === "object" &&
       data !== null &&
@@ -67,6 +70,7 @@ export type SetVariables = (values: Record<string, string>) => void
 export const interactionEvents = (
   interactions: CellInteractions | undefined,
   setVariables: SetVariables,
+  requireSourceColumn = false,
 ): Record<string, ChartEventHandler> => {
   const events: Record<string, ChartEventHandler> = {}
   const click = interactions?.click
@@ -76,7 +80,7 @@ export const interactionEvents = (
       // Mark lines and areas (events) are not data.
       if (p.componentType === "markLine" || p.componentType === "markArea")
         return
-      const value = clickedValue(p, click.column)
+      const value = clickedValue(p, click.column, requireSourceColumn)
       if (click.column !== undefined && value === undefined) return
       setVariables({ [click.variable]: sqlLiteral(value) })
     }

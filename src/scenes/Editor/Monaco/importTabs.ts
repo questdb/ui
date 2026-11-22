@@ -514,7 +514,14 @@ export const createBufferContentKey = (
             ? cell.formats
             : undefined
         const interactions = cell.interactions
-        if (!config?.visual && !config?.custom && !formats && !interactions)
+        const gridMode = sanitizeGridMode(cell.gridMode)
+        if (
+          !config?.visual &&
+          !config?.custom &&
+          !formats &&
+          !interactions &&
+          !gridMode
+        )
           return cell.value
         return {
           value: cell.value,
@@ -522,6 +529,7 @@ export const createBufferContentKey = (
           custom: config?.custom,
           formats,
           interactions,
+          gridMode,
         }
       }) ?? []
     // Imports intentionally reset local permission to run renderItem code.

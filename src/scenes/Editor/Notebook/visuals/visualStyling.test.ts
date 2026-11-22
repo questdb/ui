@@ -329,6 +329,36 @@ it("reports a liquidity heatmap with no drawable cells", () => {
   expect(result.problems[0]?.message).toContain("No drawable liquidity")
 })
 
+it("explicitly clears obsolete point-map bounds for a global frame", () => {
+  const build = (points: number[][]) =>
+    mapOption({
+      visual: { type: "map" },
+      formats: {},
+      colors: lightColors,
+      statements: [
+        rows(
+          [
+            ["lat", "DOUBLE"],
+            ["lon", "DOUBLE"],
+          ],
+          points,
+        ),
+      ],
+    }).option
+  expect(
+    build([
+      [37, -122],
+      [38, -120],
+    ])?.geo,
+  ).toHaveProperty("boundingCoords.0.0", -126)
+  expect(
+    build([
+      [37, -122],
+      [35, 139],
+    ])?.geo,
+  ).toMatchObject({ boundingCoords: null })
+})
+
 it("keeps the mapped point’s exact selection field separate from its coordinates", () => {
   const { option } = mapOption({
     visual: { type: "map" },

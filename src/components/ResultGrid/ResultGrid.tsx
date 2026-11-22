@@ -176,13 +176,11 @@ const GridCell = React.memo(function GridCell({
   const tone = loaded ? toneOf(rawValue, format) : undefined
   const toneCss = tone ? toneColor(tone, theme.color) : undefined
   const textTone =
-    format?.signTone && tone
-      ? tone === "positive"
-        ? theme.color.dataPositive
-        : tone === "negative"
-          ? theme.color.dataNegative
-          : toneCss
-      : toneCss
+    tone === "positive"
+      ? theme.color.dataPositive
+      : tone === "negative"
+        ? theme.color.dataNegative
+        : toneCss
   const highlightMode =
     highlight === undefined
       ? undefined

@@ -306,8 +306,13 @@ export const DrawCanvas: React.FC<Props> = ({
   }, [bufferId, settings.chartSync])
 
   const events = useMemo(
-    () => interactionEvents(cell.interactions, setVariableValues),
-    [cell.interactions, setVariableValues],
+    () =>
+      interactionEvents(
+        cell.interactions,
+        setVariableValues,
+        visual?.type === "treemap" || visual?.type === "sunburst",
+      ),
+    [cell.interactions, setVariableValues, visual?.type],
   )
   const leaveSyncRef = useRef<(() => void) | null>(null)
   const handleInstance = useCallback(

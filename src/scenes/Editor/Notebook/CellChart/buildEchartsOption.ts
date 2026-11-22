@@ -296,6 +296,52 @@ const scatterEncoding = (q: ResolvedQuery) => {
   }
 }
 
+// ECharts stacks continuous axes by data index. Give each series the same
+// slots, padding missing x values with gaps and retaining duplicate rows.
+const alignContinuousStacks = (series: Series[]) => {
+  if (series.length < 2) return
+  type X = string | number | null
+  const xOf = (point: unknown) => (pointValue(point) as [X, unknown])[0]
+  const first = series[0].data as unknown[]
+  if (
+    series.slice(1).every(({ data }) => {
+      const points = data as unknown[]
+      return (
+        points.length === first.length &&
+        points.every((point, i) => xOf(point) === xOf(first[i]))
+      )
+    })
+  )
+    return
+  const counts = new Map<X, number>()
+  const pointsBySeries = series.map((s) => {
+    const points = new Map<X, unknown[]>()
+    for (const point of s.data as unknown[]) {
+      const x = xOf(point)
+      const bucket = points.get(x) ?? []
+      bucket.push(point)
+      points.set(x, bucket)
+      counts.set(x, Math.max(counts.get(x) ?? 0, bucket.length))
+    }
+    return points
+  })
+  const axis = [...counts.keys()].sort((a, b) => {
+    if (typeof a === "number" && typeof b === "number") return a - b
+    const left = String(a)
+    const right = String(b)
+    return left < right ? -1 : left > right ? 1 : 0
+  })
+  series.forEach((s, index) => {
+    const points = pointsBySeries[index]
+    s.data = axis.flatMap((x) =>
+      Array.from(
+        { length: counts.get(x) ?? 0 },
+        (_, i) => points.get(x)?.[i] ?? [x, null],
+      ),
+    )
+  })
+}
+
 // Turns each x's stacked values into shares of their total, in place.
 const toPercentShares = (series: Series[]) => {
   const keyOf = (point: unknown, i: number) => {
@@ -338,6 +384,8 @@ const buildCartesianSeries = (
   if (isPercentStack(q)) {
     // Areas stack only when asked; shares of a total always stack.
     for (const s of out) s.stack = `stack-${q.index}`
+    if (ctx.xMode === "time" || ctx.xMode === "value")
+      alignContinuousStacks(out)
     toPercentShares(out)
   }
   return out

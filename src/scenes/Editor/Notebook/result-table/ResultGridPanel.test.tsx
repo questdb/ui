@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import React from "react"
 import { fireEvent, screen } from "@testing-library/react"
+import { ThemeProvider } from "styled-components"
+import { lightTheme } from "../../../../theme"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import type { CellValue } from "../../../../components/ResultGrid/types"
@@ -65,6 +67,25 @@ const highlightConfig: HighlightConfig = {
 }
 
 describe("dashboard grid", () => {
+  it("uses the readable light-theme text tone for positive thresholds", () => {
+    renderComponent(
+      <ThemeProvider theme={lightTheme}>
+        <ResultGrid
+          dataSource={inMemoryDataSource(columns, [["desk", 17]], -1)}
+          maxColumnWidth="auto"
+          columnFormats={{
+            price: { thresholds: [{ value: 0, tone: "positive" }] },
+          }}
+        />
+      </ThemeProvider>,
+    )
+    const expected = document.createElement("span")
+    expected.style.color = lightTheme.color.dataPositive
+    expect(getComputedStyle(screen.getByText(/^17(?:\.0+)?$/)).color).toBe(
+      expected.style.color,
+    )
+  })
+
   it("highlights a price change on the correct stable row after server rows reorder", () => {
     const store = createResultTrendStore()
     const viewportStore = createResultGridViewportStore()

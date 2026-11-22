@@ -1710,6 +1710,18 @@ describe("deduplication", () => {
       ).toEqual(key)
     })
 
+    it("distinguishes saved grid layout modes in import identity", () => {
+      const key = (gridMode: "stable" | "stream") =>
+        createBufferContentKey({
+          label: "Dashboard",
+          value: "",
+          notebookViewState: {
+            cells: [{ id: "grid", position: 0, value: "select 1", gridMode }],
+          },
+        })
+      expect(key("stable")).not.toEqual(key("stream"))
+    })
+
     it("creates key from label and value for editor tabs", () => {
       const buffer = { label: "Tab1", value: "SELECT 1" }
       expect(createBufferContentKey(buffer)).toBe("Tab1|SELECT 1")

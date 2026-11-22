@@ -157,6 +157,45 @@ describe("preset options", () => {
     expect(tooltip.valueFormatter(75)).toBe("75.0%")
   })
 
+  it("aligns sparse time buckets before stacking percent areas", () => {
+    const stamps = Array.from(
+      { length: 3 },
+      (_, i) => `2026-01-01T0${i}:00:00Z`,
+    )
+    const option = buildEchartsOption({ xColumn: "ts" }, [
+      query({
+        type: "area",
+        percentStack: true,
+        xColumn: "ts",
+        yColumns: ["mw"],
+        partitionByColumn: "fuel",
+        columns: [
+          col("ts", "TIMESTAMP"),
+          col("fuel", "SYMBOL"),
+          col("mw", "DOUBLE"),
+        ],
+        dataset: [
+          [stamps[0], "gas", 30],
+          [stamps[0], "wind", 10],
+          [stamps[1], "gas", 5],
+          [stamps[2], "wind", 15],
+        ],
+      }),
+    ])
+    const [gas, wind] = seriesOf(option)
+    expect(gas.data).toEqual([
+      [stamps[0], 75],
+      [stamps[1], 100],
+      [stamps[2], null],
+    ])
+    expect(wind.data).toEqual([
+      [stamps[0], 25],
+      [stamps[1], null],
+      [stamps[2], 100],
+    ])
+    expect(gas.stack).toBe(wind.stack)
+  })
+
   it("clears old units and percent bounds when updating the same chart", () => {
     // Given a mounted chart with percentage stacking and a percent format
     const chart = echarts.init(null, undefined, {
