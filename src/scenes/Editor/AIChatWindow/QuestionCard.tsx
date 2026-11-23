@@ -110,10 +110,17 @@ const Tab = styled(ButtonBase)`
   }
 `
 
+const SendError = styled.p`
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.5;
+  color: ${({ theme }) => theme.color.statusDanger};
+`
+
 export const AnswerSendError = () => (
-  <p role="alert">
+  <SendError role="alert">
     Could not send the answer. Check the bridge connection and try again.
-  </p>
+  </SendError>
 )
 
 export const QuestionText = styled.p`
