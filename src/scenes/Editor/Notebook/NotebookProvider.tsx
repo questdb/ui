@@ -729,8 +729,26 @@ export const NotebookProvider: React.FC<{
     if (names.length === 0) return
     pendingVariableRefreshRef.current = []
     const changedNames = affectedVariables(names, settings.variables)
+    // A cell whose every statement was read with the values it would use
+    // now (it declares the variable itself) has nothing to refresh. Without
+    // that proof (no result yet, or one still loading), it refreshes.
+    const readWithCurrentValues = (cellId: string) => {
+      const results = store.cellsRef.current.find((c) => c.id === cellId)
+        ?.result?.results
+      return (
+        results !== undefined &&
+        results.length > 0 &&
+        results.every(
+          (r) =>
+            r.type === "dql" &&
+            r.effectiveQuery !== undefined &&
+            !hasStaleBindings(r),
+        )
+      )
+    }
     cellRefreshEngine.refreshWhere(
-      (_cellId, sql) => usesVariables(sql, changedNames),
+      (cellId, sql) =>
+        usesVariables(sql, changedNames) && !readWithCurrentValues(cellId),
       store.cellsRef.current,
     )
   }, [settings.variables, cellRefreshEngine, store.cellsRef])
