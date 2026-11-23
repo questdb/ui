@@ -294,7 +294,7 @@ export const PairingConsentModal: React.FC<Props> = ({
           {!succeeded && (
             <Body>
               <Fields>
-                {agent && (
+                {agent?.cwd && (
                   <>
                     <dt>Workspace:</dt>
                     <dd data-hook="mcp-pair-consent-workspace">{agent.cwd}</dd>

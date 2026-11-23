@@ -1,7 +1,7 @@
 import { writePendingPair } from "./mcpBridgeStorage"
 import {
-  isValidAgentCwd,
-  isValidAgentLabel,
+  agentCwdForDisplay,
+  agentLabelForDisplay,
   LOCALHOST_WS_RE,
   TOKEN_RE,
 } from "./pairValidation"
@@ -42,12 +42,14 @@ export const consumePendingPairFromUrl = (
 
   const agentLabel = params.get("mcp-agent")
   const agentCwd = params.get("mcp-agent-cwd")
+  // Either parameter marks an agent bridge, so the dialog always warns that
+  // the agent runs commands, even when a value has to be cleaned or cut.
   const agent =
-    agentLabel &&
-    agentCwd &&
-    isValidAgentLabel(agentLabel) &&
-    isValidAgentCwd(agentCwd)
-      ? { label: agentLabel, cwd: agentCwd }
+    agentLabel !== null || agentCwd !== null
+      ? {
+          label: agentLabelForDisplay(agentLabel ?? ""),
+          cwd: agentCwdForDisplay(agentCwd ?? ""),
+        }
       : undefined
 
   writePendingPair({ url, token, receivedAt: Date.now(), agent })

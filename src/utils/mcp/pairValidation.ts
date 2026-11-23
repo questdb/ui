@@ -6,14 +6,29 @@ export const LOCALHOST_WS_RE =
 
 export const TOKEN_RE = /^[a-zA-Z0-9_-]{20,}$/
 
-const MAX_AGENT_LABEL_LENGTH = 64
-const MAX_AGENT_CWD_LENGTH = 512
-// No control characters: the values are shown as plain text in the dialog.
-// eslint-disable-next-line no-control-regex
-const PRINTABLE_RE = /^[^\u0000-\u001f\u007f]+$/
+// The agent's name and folder are only shown in the consent dialog, so they
+// are cleaned and cut rather than rejected: rejecting them would hide the
+// warning that the agent runs commands. The folder limit is Linux's PATH_MAX.
+const MAX_AGENT_LABEL_LENGTH = 128
+const MAX_AGENT_CWD_LENGTH = 4096
+const DEFAULT_AGENT_LABEL = "Coding agent"
+// Control and bidirectional-override characters could hide or reorder the
+// text the dialog shows.
+const UNSAFE_DISPLAY_RE =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g
 
-export const isValidAgentLabel = (label: string): boolean =>
-  label.length <= MAX_AGENT_LABEL_LENGTH && PRINTABLE_RE.test(label)
+const toDisplayText = (value: string, maxLength: number): string => {
+  const characters = Array.from(
+    value.replace(UNSAFE_DISPLAY_RE, "\uFFFD").trim(),
+  )
+  return characters.length > maxLength
+    ? `${characters.slice(0, maxLength - 1).join("")}…`
+    : characters.join("")
+}
 
-export const isValidAgentCwd = (cwd: string): boolean =>
-  cwd.length <= MAX_AGENT_CWD_LENGTH && PRINTABLE_RE.test(cwd)
+export const agentLabelForDisplay = (label: string): string =>
+  toDisplayText(label, MAX_AGENT_LABEL_LENGTH) || DEFAULT_AGENT_LABEL
+
+export const agentCwdForDisplay = (cwd: string): string =>
+  toDisplayText(cwd, MAX_AGENT_CWD_LENGTH)

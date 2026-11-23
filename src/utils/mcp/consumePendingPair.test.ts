@@ -138,18 +138,60 @@ describe("consumePendingPairFromUrl", () => {
     expect(replace).toHaveBeenCalledWith(null, "", "/")
   })
 
-  it("drops agent details that are too long or carry control characters", () => {
-    // When
+  const consumeAgent = (agent: Record<string, string>) =>
     consumePendingPairFromUrl(
       {
-        search: `?mcp-pair=1&mcp-ws=ws://127.0.0.1:9876&mcp-token=${VALID_TOKEN}&mcp-agent=${"x".repeat(65)}&mcp-agent-cwd=%2Ftmp%0Aevil`,
+        search: `?mcp-pair=1&mcp-ws=ws://127.0.0.1:9876&mcp-token=${VALID_TOKEN}&${new URLSearchParams(agent).toString()}`,
         pathname: "/",
         hash: "",
       },
       { replaceState: () => undefined },
     )
 
+  it("cuts an overlong agent name instead of dropping the agent", () => {
+    // When
+    consumeAgent({ "mcp-agent": "x".repeat(129), "mcp-agent-cwd": "/tmp" })
+
     // Then
-    expect(readPendingPair()?.agent).toBeUndefined()
+    expect(readPendingPair()?.agent).toEqual({
+      label: `${"x".repeat(127)}…`,
+      cwd: "/tmp",
+    })
+  })
+
+  it("keeps a long workspace path up to the Linux path limit", () => {
+    // Given
+    const cwd = `/${"a".repeat(4095)}`
+
+    // When
+    consumeAgent({ "mcp-agent": "Claude Code", "mcp-agent-cwd": cwd })
+
+    // Then
+    expect(readPendingPair()?.agent?.cwd).toBe(cwd)
+  })
+
+  it("marks control and direction-override characters instead of showing them", () => {
+    // When
+    consumeAgent({
+      "mcp-agent": "Claude\u202eedoC",
+      "mcp-agent-cwd": "/tmp\nevil",
+    })
+
+    // Then
+    expect(readPendingPair()?.agent).toEqual({
+      label: "Claude\uFFFDedoC",
+      cwd: "/tmp\uFFFDevil",
+    })
+  })
+
+  it("treats a link with only one agent parameter as an agent bridge", () => {
+    // When
+    consumeAgent({ "mcp-agent-cwd": "/tmp" })
+
+    // Then
+    expect(readPendingPair()?.agent).toEqual({
+      label: "Coding agent",
+      cwd: "/tmp",
+    })
   })
 })
