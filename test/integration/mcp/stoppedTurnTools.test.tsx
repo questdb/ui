@@ -271,16 +271,17 @@ it("stops the queries of a stopped local-agent turn", async () => {
     timestamp: -1,
   })
   const executedSql: string[] = []
-  vi.spyOn(questClient, "queryRaw").mockImplementation((sql) => {
+  vi.spyOn(questClient, "queryRaw").mockImplementation(((sql: string) => {
     executedSql.push(sql)
     return { promise: new Promise(() => undefined), queryId: 41 }
-  })
+  }) as unknown as typeof questClient.queryRaw)
   const abortQuery = vi.spyOn(questClient, "abort").mockImplementation(() => {})
   const socket = await connectLocalAgent()
   const stop = new AbortController()
   void getLocalAgentChannel()!.prompt({
     conversationId: "conv-1",
     text: "inspect trades",
+    notebookRead: null,
     signal: stop.signal,
     onUpdate: () => undefined,
     onToolStatus: () => undefined,
