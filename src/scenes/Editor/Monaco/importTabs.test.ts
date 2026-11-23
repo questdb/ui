@@ -1637,6 +1637,47 @@ describe("deduplication", () => {
       )
     })
 
+    it("matches a stored notebook with its exported and re-imported copy", () => {
+      // Given a stored cell whose format the editor saved in edit order, and
+      // an empty interaction
+      const stored = {
+        label: "Desk",
+        value: "",
+        notebookViewState: {
+          cells: [
+            {
+              id: "a",
+              position: 0,
+              value: "select 1 as pnl",
+              formats: {
+                pnl: {
+                  thresholds: [
+                    { value: 10, tone: "positive" as const },
+                    { value: -10, tone: "negative" as const },
+                  ],
+                  signTone: false,
+                },
+              },
+              interactions: {},
+            },
+          ],
+        },
+      }
+
+      // When the same notebook is exported and imported again
+      const imported = sanitizeBuffer(
+        JSON.parse(JSON.stringify({ ...stored, position: 0 })) as Record<
+          string,
+          unknown
+        >,
+      )
+
+      // Then both have the same content key, so the import is a duplicate
+      expect(createBufferContentKey(imported)).toEqual(
+        createBufferContentKey(stored as never),
+      )
+    })
+
     it("distinguishes a gauge whose column threshold changed", () => {
       const key = (threshold: number) =>
         createBufferContentKey({

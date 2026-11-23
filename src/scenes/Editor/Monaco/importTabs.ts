@@ -509,11 +509,10 @@ export const createBufferContentKey = (
       cells?.map((cell) => {
         if (cell.type === "markdown") return cell.value
         const chartConfig = sanitizeChartConfig(cell.chartConfig)
-        const formats =
-          cell.formats && Object.keys(cell.formats).length
-            ? cell.formats
-            : undefined
-        const interactions = cell.interactions
+        // Both sides of the comparison go through the import sanitizers:
+        // imported rows are sanitized before keying, stored rows are not.
+        const formats = sanitizeColumnFormats(cell.formats)
+        const interactions = sanitizeInteractions(cell.interactions)
         const gridMode = sanitizeGridMode(cell.gridMode)
         if (!chartConfig && !formats && !interactions && !gridMode)
           return cell.value
