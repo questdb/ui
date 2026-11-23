@@ -625,7 +625,10 @@ it("stopping another chat does not cancel a queue waiting on a completed answer"
     expect(server.requests[1].request.signal.aborted).toBe(true)
     expect(server.requests[0].request.signal.aborted).toBe(false)
     await openHistoryChat("Original sample chat")
-    expect(getByHook("chat-input-textarea")).toHaveValue("")
+    // The chat's messages load from storage before the composer shows.
+    await waitFor(() =>
+      expect(getByHook("chat-input-textarea")).toHaveValue(""),
+    )
     vi.setSystemTime(Date.now() + 3000)
     await snapshot.release()
     await screen.findByText("Queued answer.")
