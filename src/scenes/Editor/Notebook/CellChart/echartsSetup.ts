@@ -294,6 +294,116 @@ export const areaRangeRenderItem: CustomSeriesRenderItem = (params, api) => {
 
 echarts.registerCustomSeries("areaRange", areaRangeRenderItem)
 
+// Order-flow footprint: one cell per (bar, price level) with the volume sold
+// and bought there, written "sell × buy". A level where one side outweighs
+// the other `ratio` times (3 by default) is filled with `color` (buyers) or
+// `color0` (sellers); the bar's point of control (`poc` is 1) is outlined in
+// `borderColor`. x is the bar: a category, or a time with `dt` the bar's
+// length in ms; y is the level's lower price and `step` its height. `buy`,
+// `sell` and `poc` name (or index) the dimensions to read.
+type FootprintPayload = {
+  step?: number
+  dt?: number
+  buy?: string | number
+  sell?: string | number
+  poc?: string | number
+  ratio?: number
+  // The share of the bar kept free on its left, for a candle beside it.
+  inset?: number
+  color?: string
+  color0?: string
+  borderColor?: string
+  label?: { color?: string }
+}
+
+const volumeText = (v: number): string => {
+  const a = Math.abs(v)
+  if (a === 0) return "0"
+  if (a >= 1e6) return `${(v / 1e6).toFixed(1)}M`
+  if (a >= 1e4) return `${(v / 1e3).toFixed(1)}K`
+  if (a >= 100) return v.toFixed(0)
+  if (a >= 10) return v.toFixed(1)
+  return v.toFixed(2)
+}
+
+const finiteOr0 = (v: unknown): number => {
+  const n = typeof v === "number" ? v : Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+export const footprintRenderItem: CustomSeriesRenderItem = (params, api) => {
+  const payload =
+    (params as unknown as { itemPayload?: FootprintPayload }).itemPayload ?? {}
+  const encode = (params as unknown as { encode: { x: number[]; y: number[] } })
+    .encode
+  const x = api.value(encode.x[0]) as number
+  const level = api.value(encode.y[0]) as number
+  const step = payload.step && payload.step > 0 ? payload.step : 1
+  const buy = finiteOr0(api.value(payload.buy ?? "buy"))
+  const sell = finiteOr0(api.value(payload.sell ?? "sell"))
+  const poc =
+    payload.poc !== undefined && finiteOr0(api.value(payload.poc)) === 1
+  let left: number
+  let right: number
+  if (payload.dt && payload.dt > 0) {
+    left = api.coord([x, level])[0]
+    right = api.coord([x + payload.dt, level])[0]
+  } else {
+    const band = (api.size?.([1, 0]) as number[])[0]
+    const center = api.coord([x, level])[0]
+    left = center - band / 2
+    right = center + band / 2
+  }
+  const width = right - left
+  const cellLeft = left + width * (payload.inset ?? 0.04)
+  const cellRight = right - width * 0.04
+  const top = api.coord([x, level + step])[1]
+  const bottom = api.coord([x, level])[1]
+  const height = bottom - top
+  const ratio = payload.ratio ?? 3
+  const fill =
+    buy > 0 && buy >= ratio * sell && payload.color
+      ? payload.color
+      : sell > 0 && sell >= ratio * buy && payload.color0
+        ? payload.color0
+        : (api.visual("color") as string)
+  const text = `${volumeText(sell)} × ${volumeText(buy)}`
+  const cellWidth = Math.max(cellRight - cellLeft, 1)
+  const fontSize = Math.min(11, Math.max(8, height * 0.7))
+  // Text that does not fit is left out; the tooltip has the values.
+  const fits = height >= 10 && text.length * fontSize * 0.6 <= cellWidth - 4
+  return {
+    type: "rect",
+    shape: {
+      x: cellLeft,
+      y: top + 0.5,
+      width: cellWidth,
+      height: Math.max(height - 1, 1),
+      r: 1,
+    },
+    style: {
+      fill,
+      ...(poc
+        ? {
+            stroke: payload.borderColor ?? payload.label?.color,
+            lineWidth: 1.5,
+          }
+        : {}),
+    },
+    textContent: {
+      type: "text",
+      style: {
+        text: fits ? text : "",
+        fontSize,
+        ...(payload.label?.color ? { fill: payload.label.color } : {}),
+      },
+    },
+    textConfig: { position: "inside" },
+  }
+}
+
+echarts.registerCustomSeries("footprint", footprintRenderItem)
+
 // Pair with `echarts-for-react/lib/core` — importing the default wrapper
 // instead would pull the full echarts catalog and undo the tree-shaking.
 export { echarts }

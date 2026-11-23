@@ -1435,3 +1435,248 @@ export const volumeProfileOption = ({
     problems: [],
   }
 }
+
+// ── Footprint ─────────────────────────────────────────────────────────────
+
+// A bar's candle, drawn on the left of its footprint levels: wick from low
+// to high, body from open to close.
+const FOOTPRINT_CANDLE = "qdbFootprintCandle"
+
+const footprintCandleRenderItem: CustomSeriesRenderItem = (params, api) => {
+  const payload =
+    (
+      params as unknown as {
+        itemPayload?: { dt?: number; up?: string; down?: string }
+      }
+    ).itemPayload ?? {}
+  const t = api.value(0) as number
+  const open = api.value(1) as number
+  const high = api.value(2) as number
+  const low = api.value(3) as number
+  const close = api.value(4) as number
+  const left = api.coord([t, open])[0]
+  const width = api.coord([t + (payload.dt ?? 0), open])[0] - left
+  const x = left + width * 0.13
+  const body = Math.max(2, Math.min(width * 0.12, 10))
+  const yOpen = api.coord([t, open])[1]
+  const yClose = api.coord([t, close])[1]
+  const color = (close >= open ? payload.up : payload.down) ?? "currentColor"
+  return {
+    type: "group",
+    children: [
+      {
+        type: "line",
+        shape: {
+          x1: x,
+          y1: api.coord([t, high])[1],
+          x2: x,
+          y2: api.coord([t, low])[1],
+        },
+        style: { stroke: color, lineWidth: 1 },
+      },
+      {
+        type: "rect",
+        shape: {
+          x: x - body / 2,
+          y: Math.min(yOpen, yClose),
+          width: body,
+          height: Math.max(Math.abs(yOpen - yClose), 1),
+        },
+        style: { fill: color },
+      },
+    ],
+  }
+}
+
+echarts.registerCustomSeries(FOOTPRINT_CANDLE, footprintCandleRenderItem)
+
+// The bar a footprint level belongs to, as text for its tooltip.
+const timeText = (value: unknown): string =>
+  typeof value === "string"
+    ? value.replace("T", " ").replace(/(:\d{2})(\.\d+)?Z$/, "$1")
+    : toLabel(value)
+
+export const footprintOption = ({
+  visual,
+  statements,
+  colors,
+  formats,
+  clickColumn,
+}: VisualContext): VisualBuild => {
+  const rows = statements[0]
+  if (rows?.partial)
+    return missing(
+      "Footprint requires every price level of every bar to find each bar's point of control. Narrow the time range or use larger price levels in SQL.",
+    )
+  if (!rows || rows.rows.length === 0)
+    return missing("The query returned no rows.")
+  const c = visual.columns ?? {}
+  const timeIdx =
+    c.time !== undefined
+      ? columnIndex(rows, c.time)
+      : firstColumnOf(rows, "temporal")
+  const priceIdx =
+    c.price !== undefined
+      ? columnIndex(rows, c.price)
+      : firstColumnOf(rows, "numeric")
+  const buyIdx =
+    c.buy !== undefined
+      ? columnIndex(rows, c.buy)
+      : firstColumnOf(rows, "numeric", [priceIdx])
+  const sellIdx =
+    c.sell !== undefined
+      ? columnIndex(rows, c.sell)
+      : firstColumnOf(rows, "numeric", [priceIdx, buyIdx])
+  const err =
+    need(rows, timeIdx, "time", c.time) ??
+    need(rows, priceIdx, "price", c.price) ??
+    need(rows, buyIdx, "buy", c.buy) ??
+    need(rows, sellIdx, "sell", c.sell)
+  if (err) return missing(err)
+
+  const levels = rows.rows.flatMap((row) => {
+    const time = toTime(row[timeIdx])
+    const price = toNumber(row[priceIdx])
+    const buy = toNumber(row[buyIdx])
+    const sell = toNumber(row[sellIdx])
+    if (time === null || price === null || (buy === null && sell === null))
+      return []
+    return [{ time, price, buy: buy ?? 0, sell: sell ?? 0, row }]
+  })
+  if (levels.length === 0)
+    return missing("No drawable footprint levels were returned.")
+
+  // A bar's point of control: its level with the most volume.
+  const pocOf = new Map<number, number>()
+  levels.forEach((level, i) => {
+    const best = pocOf.get(level.time)
+    const total = level.buy + level.sell
+    if (best === undefined || total > levels[best].buy + levels[best].sell)
+      pocOf.set(level.time, i)
+  })
+  const pocs = new Set(pocOf.values())
+  const times = [...pocOf.keys()]
+  const prices = levels.map((l) => l.price)
+  // One bar or one level has no spacing to read: a minute, a price unit.
+  const dt = times.length > 1 ? smallestStep(times) : 60_000
+  const step = new Set(prices).size > 1 ? smallestStep(prices) : 1
+
+  const candleRows = statements[1]
+  const ct = candleRows ? firstColumnOf(candleRows, "temporal") : -1
+  const ohlc: number[] = []
+  if (candleRows && ct >= 0)
+    for (const skip of [0, 1, 2, 3]) {
+      const i = firstColumnOf(candleRows, "numeric", ohlc)
+      if (i < 0 || skip !== ohlc.length) break
+      ohlc.push(i)
+    }
+  const candles =
+    candleRows && ohlc.length === 4
+      ? candleRows.rows.flatMap((r) => {
+          const t = toTime(r[ct])
+          const v = ohlc.map((i) => toNumber(r[i]))
+          return t === null || v.some((n) => n === null)
+            ? []
+            : [[t, ...(v as number[])]]
+        })
+      : []
+
+  const priceName = rows.columns[priceIdx].name
+  const priceFormat = formats[priceName] ?? { kind: "number" as const }
+  const buyFormat = formats[rows.columns[buyIdx].name]
+  const sellFormat = formats[rows.columns[sellIdx].name]
+  const clickIdx = columnIndex(rows, clickColumn)
+  const tip = (level: (typeof levels)[number]) =>
+    [
+      timeText(level.row[timeIdx]),
+      `${formatValue(level.price, priceFormat)} – ${formatValue(level.price + step, priceFormat)}`,
+      `${rows.columns[sellIdx].name} ${formatValue(level.row[sellIdx], sellFormat)} · ${rows.columns[buyIdx].name} ${formatValue(level.row[buyIdx], buyFormat)}`,
+    ]
+      .map(escapeHtml)
+      .join("<br/>")
+
+  const cells = {
+    type: "custom",
+    name: "footprint",
+    renderItem: "footprint",
+    encode: { x: 0, y: 1 },
+    itemStyle: { color: withAlpha(colors.contentMuted, 0.18) },
+    itemPayload: {
+      dt,
+      step,
+      sell: 2,
+      buy: 3,
+      poc: 4,
+      inset: candles.length > 0 ? 0.26 : 0.04,
+      color: withAlpha(colors.chartUp, 0.45),
+      color0: withAlpha(colors.chartDown, 0.45),
+      borderColor: colors.statusWarning,
+      label: { color: colors.contentPrimary },
+    },
+    // A level has no name: an unbound click selects its price, typed by the
+    // price column.
+    data: levels.map((level, i) => ({
+      value: [
+        level.time,
+        level.price,
+        level.sell,
+        level.buy,
+        pocs.has(i) ? 1 : 0,
+      ],
+      tip: tip(level),
+      ...(clickColumn === undefined
+        ? { selection: level.row[priceIdx], selectionColumn: priceName }
+        : clickIdx >= 0
+          ? { columns: { [clickColumn]: level.row[clickIdx] } }
+          : {}),
+    })),
+    progressive: 0,
+  }
+  const lows = [Math.min(...prices), ...candles.map((candle) => candle[3])]
+  const highs = [
+    Math.max(...prices) + step,
+    ...candles.map((candle) => candle[2]),
+  ]
+  const series: unknown[] = [cells]
+  if (candles.length > 0)
+    series.push({
+      type: "custom",
+      name: "candle",
+      renderItem: FOOTPRINT_CANDLE,
+      encode: { x: 0, y: [1, 2, 3, 4] },
+      itemPayload: { dt, up: colors.chartUp, down: colors.chartDown },
+      silent: true,
+      tooltip: { show: false },
+      data: candles,
+    })
+  return {
+    option: {
+      useUTC: true,
+      tooltip: {
+        trigger: "item",
+        formatter: (p: unknown) =>
+          (p as { data?: { tip?: string } }).data?.tip ?? "",
+      },
+      grid: { left: 12, right: 16, top: 12, bottom: 28, containLabel: true },
+      xAxis: {
+        type: "time",
+        min: Math.min(...times),
+        max: Math.max(...times) + dt,
+      },
+      yAxis: {
+        type: "value",
+        min: Math.min(...lows),
+        max: Math.max(...highs),
+        axisLabel: { formatter: (v: number) => formatValue(v, priceFormat) },
+      },
+      series: series as EChartsOption["series"],
+    },
+    drawn: {
+      bars: times.length,
+      levels: levels.length,
+      priceStep: step,
+      candles: candles.length,
+    },
+    problems: [],
+  }
+}

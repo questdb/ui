@@ -10,6 +10,7 @@ import {
 import {
   areaRangeRenderItem,
   barRangeRenderItem,
+  footprintRenderItem,
   echarts,
 } from "./echartsSetup"
 import { chartZoomDensity } from "./chartDensity"
@@ -726,6 +727,55 @@ describe("role chart types", () => {
 
     // Then each bar takes half of its 100 px share
     expect(drawn.shape.width).toBe(50)
+  })
+
+  it("tints a footprint level by its imbalance and outlines the point of control", () => {
+    // Given footprint levels on a time axis: 10 px per ms, 2 px per price unit
+    const draw = (sell: number, buy: number, poc: number) =>
+      (
+        footprintRenderItem as unknown as (
+          p: unknown,
+          a: unknown,
+        ) => {
+          shape: { x: number; width: number; height: number }
+          style: { fill: string; stroke?: string }
+          textContent: { style: { text: string } }
+        }
+      )(
+        {
+          encode: { x: [0], y: [1] },
+          itemPayload: {
+            dt: 10,
+            step: 25,
+            sell: 2,
+            buy: 3,
+            poc: 4,
+            color: "green",
+            color0: "red",
+            borderColor: "gold",
+          },
+        },
+        {
+          value: (dim: number) => [0, 100, sell, buy, poc][dim],
+          coord: ([x, y]: number[]) => [x * 10, 1000 - y * 2],
+          size: () => [0, 0],
+          visual: () => "grey",
+        },
+      )
+
+    // When / Then a 3:1 buy side is green, a 3:1 sell side red, else grey
+    expect(draw(1, 3, 0).style.fill).toBe("green")
+    expect(draw(4, 1, 0).style.fill).toBe("red")
+    expect(draw(2, 3, 0).style.fill).toBe("grey")
+    // And the point of control is outlined, the others are not
+    expect(draw(2, 3, 1).style.stroke).toBe("gold")
+    expect(draw(2, 3, 0).style.stroke).toBeUndefined()
+    // And the cell fills the bar's 100 px less its margins, 50 px tall,
+    // reading "sell × buy"
+    const cell = draw(2, 3, 0)
+    expect(cell.shape.width).toBeCloseTo(92)
+    expect(cell.shape.height).toBe(49)
+    expect(cell.textContent.style.text).toBe("2.00 × 3.00")
   })
 
   it("reports statements a chart that draws alone leaves out", () => {

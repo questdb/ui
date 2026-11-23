@@ -19,6 +19,7 @@ import {
   chordOption,
   gaugeOption,
   graphOption,
+  footprintOption,
   liquidityHeatmapOption,
   mapOption,
   sankeyOption,
@@ -50,6 +51,7 @@ const ECHARTS_VISUALS: Partial<
   map: mapOption,
   liquidityHeatmap: liquidityHeatmapOption,
   volumeProfile: volumeProfileOption,
+  footprint: footprintOption,
 }
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }

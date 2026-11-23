@@ -10,6 +10,7 @@ export const BUILTIN_CUSTOM_SERIES = [
   "violin",
   "contour",
   "segmentedDoughnut",
+  "footprint",
 ] as const
 
 /** The names a custom series' `renderItem` may use. */

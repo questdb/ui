@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { darkColors, lightColors } from "../../../../theme"
 import {
   chordOption,
+  footprintOption,
   gaugeOption,
   graphOption,
   liquidityHeatmapOption,
@@ -1437,5 +1438,145 @@ describe("unbound clicks on flow visuals", () => {
     // Then only the bound click writes, and never the link's label
     expect(unbound).not.toHaveBeenCalled()
     expect(bound).toHaveBeenCalledWith({ pick: "'transatlantic'" })
+  })
+})
+
+describe("footprintOption", () => {
+  const levels = rows(
+    [
+      ["ts", "TIMESTAMP"],
+      ["lvl", "DOUBLE"],
+      ["buy", "DOUBLE"],
+      ["sell", "DOUBLE"],
+    ],
+    [
+      ["2026-01-01T10:00:00.000000Z", 100, 1, 4],
+      ["2026-01-01T10:00:00.000000Z", 125, 9, 2],
+      ["2026-01-01T10:15:00.000000Z", 125, 3, 3],
+      ["2026-01-01T10:15:00.000000Z", 150, 2, 1],
+    ],
+  )
+  type Cells = {
+    renderItem: string
+    itemPayload: Record<string, unknown>
+    data: { value: number[]; tip: string }[]
+  }
+
+  it("outlines each bar's busiest level and spans the last bar", () => {
+    // Given two 15-minute bars of $25 levels
+    // When
+    const result = footprintOption({
+      visual: { type: "footprint" },
+      statements: [levels],
+      colors: lightColors,
+      formats: {},
+    })
+
+    // Then each level is a cell [time, price, sell, buy, poc] of the built-in
+    // footprint series, and the bar's point of control is flagged
+    const [cells] = result.option?.series as Cells[]
+    expect(cells.renderItem).toBe("footprint")
+    expect(cells.itemPayload).toMatchObject({
+      dt: 15 * 60_000,
+      step: 25,
+      sell: 2,
+      buy: 3,
+      poc: 4,
+    })
+    expect(cells.data.map((d) => d.value.slice(1))).toEqual([
+      [100, 4, 1, 0],
+      [125, 2, 9, 1],
+      [125, 3, 3, 1],
+      [150, 1, 2, 0],
+    ])
+    // And the axes end past the last bar and the top level
+    const t0 = Date.parse("2026-01-01T10:00:00Z")
+    expect(result.option?.xAxis).toMatchObject({
+      min: t0,
+      max: t0 + 30 * 60_000,
+    })
+    expect(result.option?.yAxis).toMatchObject({ min: 100, max: 175 })
+    expect(cells.data[1].tip).toContain("2026-01-01 10:00")
+  })
+
+  it("draws each bar's candle beside its levels from statement 1", () => {
+    // Given the bars' open, high, low and close as a second statement
+    const candles = rows(
+      [
+        ["ts", "TIMESTAMP"],
+        ["open", "DOUBLE"],
+        ["high", "DOUBLE"],
+        ["low", "DOUBLE"],
+        ["close", "DOUBLE"],
+      ],
+      [
+        ["2026-01-01T10:00:00.000000Z", 110, 160, 90, 140],
+        ["2026-01-01T10:15:00.000000Z", 140, 155, 120, 130],
+      ],
+    )
+
+    // When
+    const result = footprintOption({
+      visual: { type: "footprint" },
+      statements: [levels, candles],
+      colors: lightColors,
+      formats: {},
+    })
+
+    // Then a candle series follows the cells, which leave room for it, and
+    // the price axis holds the candles' highs and lows
+    const [cells, candle] = result.option?.series as (Cells & {
+      data: number[][]
+    })[]
+    expect(cells.itemPayload.inset).toBeGreaterThan(0.2)
+    expect(candle.data).toHaveLength(2)
+    expect(result.option?.yAxis).toMatchObject({ min: 90, max: 175 })
+  })
+
+  it("selects the clicked level's price", () => {
+    // Given a footprint drawn from the levels
+    const result = footprintOption({
+      visual: { type: "footprint" },
+      statements: [levels],
+      colors: lightColors,
+      formats: {},
+    })
+    const [cells] = result.option?.series as Cells[]
+    const set = vi.fn()
+    const events = interactionEvents(
+      { click: { variable: "level" } },
+      set,
+      false,
+      (name) => columnTypeOf([levels], name),
+    )
+
+    // When the user clicks a cell, which ECharts gives no name
+    events.click(
+      { componentType: "series", name: "", data: cells.data[1] },
+      {} as never,
+    )
+
+    // Then the variable holds the level's price
+    expect(set).toHaveBeenCalledWith({ level: "125" })
+  })
+
+  it("refuses a capped result and names a missing column", () => {
+    // Given / When / Then
+    expect(
+      footprintOption({
+        visual: { type: "footprint" },
+        statements: [{ ...levels, partial: true }],
+        colors: lightColors,
+        formats: {},
+      }).problems[0]?.message,
+    ).toContain("requires every price level")
+    expect(
+      footprintOption({
+        visual: { type: "footprint", columns: { sell: "asks" } },
+        statements: [levels],
+        colors: lightColors,
+        formats: {},
+      }).problems[0]?.message,
+    ).toContain('sell: column "asks" not found')
   })
 })

@@ -326,6 +326,40 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     partialResult: "refuse",
   },
   {
+    type: "footprint",
+    label: "Footprint",
+    shape:
+      "Volume per bar and price level, split into buy and sell. A second statement of time, open, high, low and close draws each bar's candle.",
+    roles: [
+      {
+        role: "time",
+        label: "Bar time",
+        accepts: "temporal",
+        fallback: "First timestamp column",
+      },
+      {
+        role: "price",
+        label: "Price level",
+        accepts: "numeric",
+        fallback: "First numeric column",
+      },
+      {
+        role: "buy",
+        label: "Buy",
+        accepts: "numeric",
+        fallback: "Second numeric column",
+      },
+      {
+        role: "sell",
+        label: "Sell",
+        accepts: "numeric",
+        fallback: "Third numeric column",
+      },
+    ],
+    options: [],
+    partialResult: "refuse",
+  },
+  {
     type: "planTree",
     label: "Query plan",
     shape:

@@ -152,6 +152,7 @@ export const VISUAL_TYPES = [
   "map",
   "liquidityHeatmap",
   "volumeProfile",
+  "footprint",
   "planTree",
 ] as const
 
