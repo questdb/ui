@@ -27,7 +27,10 @@ import {
   type NotebookController,
 } from "../../../src/utils/notebooks/notebookController"
 import type { ViewParts } from "../../../src/utils/notebooks/notebookDexieView"
-import { getBufferActionSeq } from "../../../src/utils/notebooks/notebookAIBridge"
+import {
+  emitUserAction,
+  getBufferActionSeq,
+} from "../../../src/utils/notebooks/notebookAIBridge"
 import { questClient } from "../../../src/utils/questdb/queryClient"
 
 const sockets: MemorySocket[] = []
@@ -310,4 +313,58 @@ it("stops the queries of a stopped local-agent turn", async () => {
   // Then the running query is cancelled and the late ones never run
   expect(abortQuery).toHaveBeenCalledWith(41)
   expect(executedSql).toEqual(["SELECT * FROM trades"])
+})
+
+it("keeps the user's actions for the next result when a stopped call drops its own", async () => {
+  // Given the user added a cell while a local-agent turn runs
+  vi.spyOn(questClient, "validateQuery").mockResolvedValue({
+    query: "",
+    columns: [],
+    timestamp: -1,
+  })
+  vi.spyOn(questClient, "queryRaw").mockImplementation((() => ({
+    promise: Promise.resolve({
+      type: "dql",
+      columns: [],
+      dataset: [],
+      count: 0,
+    }),
+    queryId: 42,
+  })) as unknown as typeof questClient.queryRaw)
+  const socket = await connectLocalAgent()
+  const stop = new AbortController()
+  void getLocalAgentChannel()!.prompt({
+    conversationId: "conv-1",
+    text: "inspect trades",
+    notebookRead: null,
+    signal: stop.signal,
+    onUpdate: () => undefined,
+    onToolStatus: () => undefined,
+  })
+  emitUserAction({ kind: "user_added_cell", bufferId: BUFFER, cellId: "c2" })
+
+  // When the stopped turn's call is dropped, and the agent then asks again
+  act(() => stop.abort())
+  act(() => {
+    socket.receive(runQueryCall("dropped", "SELECT 1"))
+  })
+  await act(flush)
+  const prompt = socket.frames.find((f) => f.type === "agent_prompt")
+  act(() => {
+    socket.receive({
+      v,
+      type: "agent_turn_end",
+      conversationId: "conv-1",
+      turnId: prompt?.turnId,
+      result: { outcome: "completed", stopReason: "cancelled", usage: null },
+    })
+    socket.receive(runQueryCall("delivered", "SELECT 2"))
+  })
+  await act(flush)
+
+  // Then the delivered result still tells the agent about the new cell
+  expect(resultOf(socket, "dropped")).toBeUndefined()
+  expect(resultOf(socket, "delivered")?.content[0].text).toContain(
+    "added: [c2]",
+  )
 })

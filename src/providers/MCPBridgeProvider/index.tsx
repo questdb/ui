@@ -46,10 +46,9 @@ import { useLocalStorage } from "../LocalStorageProvider"
 import { on as onUserAction } from "../../utils/notebooks/notebookAIBridge"
 import type { ToolDefinition } from "../../utils/ai/types"
 import {
-  applyUserActionToDigest,
-  createEmptyDigest,
+  createUserActionDigestState,
+  type UserActionDigestCapture,
 } from "../AIConversationProvider/userActionDigest"
-import type { UserActionDigest } from "../AIConversationProvider/types"
 import { useBridgeToolRunner } from "./useBridgeToolRunner"
 import { PairingConsentModal } from "./PairingConsentModal"
 import { useLocalAgentConnection } from "./useLocalAgentConnection"
@@ -151,20 +150,12 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     aiAssistantSettings,
   })
 
-  const digestRef = useRef<UserActionDigest>(createEmptyDigest())
-  const getDigest = useCallback(() => digestRef.current, [])
-  // Snapshot-and-reset so the same user actions aren't re-emitted across
-  // successive tool results.
-  const consumeDigest = useCallback(() => {
-    const snapshot = digestRef.current
-    digestRef.current = createEmptyDigest()
-    return snapshot
-  }, [])
+  // User actions reach the agent with tool results. They count as told only
+  // once a result carrying them is sent, not when a stopped call drops it.
+  const digestRef = useRef(createUserActionDigestState())
+  const getDigest = useCallback(() => digestRef.current.peek(), [])
 
-  const { modelToolsClient, metaToolContext } = useBridgeToolRunner(
-    getDigest,
-    consumeDigest,
-  )
+  const { modelToolsClient, metaToolContext } = useBridgeToolRunner(getDigest)
 
   const validateSql = useCallback(
     (sql: string) => quest.validateQuery(sql),
@@ -212,7 +203,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     const cleanupUserActionListener = onUserAction("user-action", (evt) => {
-      digestRef.current = applyUserActionToDigest(digestRef.current, evt)
+      digestRef.current.apply(evt)
     })
     return () => {
       cleanupUserActionListener()
@@ -221,7 +212,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     if (!url || !token) return
-    digestRef.current = createEmptyDigest()
+    digestRef.current = createUserActionDigestState()
     freshnessRef.current.reset()
     const client = new MCPBridgeClient({
       url,
@@ -289,10 +280,19 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       const abortWithTurn = () => aborter.abort(turnSignal?.reason)
       if (turnSignal?.aborted) abortWithTurn()
       else turnSignal?.addEventListener("abort", abortWithTurn, { once: true })
+      let digestCapture: UserActionDigestCapture | undefined
+      const consumeDigest = () => {
+        digestCapture = digestRef.current.capture()
+        return digestCapture?.digest ?? null
+      }
       void (async () => {
         try {
           const result = await dispatchMCPTool(call, {
             ...dispatchCtxRef.current,
+            metaToolContext: {
+              ...dispatchCtxRef.current.metaToolContext,
+              consumeDigest,
+            },
             ...(conversationId !== undefined && {
               freshness: agentFreshnessFor(conversationId),
               setStatus: ownedTool?.setStatus,
@@ -324,6 +324,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             content: result.content,
             isError: result.isError ?? false,
           })
+          digestCapture?.finish(true)
         } catch (err) {
           if (sendRevokedErrorIfNeeded()) {
             if (toolEvent) {
@@ -350,6 +351,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             isError: true,
           })
         } finally {
+          digestCapture?.finish(false)
           turnSignal?.removeEventListener("abort", abortWithTurn)
           if (deadlineTimer !== null) window.clearTimeout(deadlineTimer)
           inflightAbortersRef.current.delete(call.requestId)
@@ -443,7 +445,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setLastError(null)
     setRetryAttempt(0)
     setVersionMismatch(null)
-    digestRef.current = createEmptyDigest()
+    digestRef.current = createUserActionDigestState()
     freshnessRef.current.reset()
   }, [])
 

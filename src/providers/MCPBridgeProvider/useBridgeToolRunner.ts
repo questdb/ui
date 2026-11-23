@@ -10,7 +10,6 @@ import type { UserActionDigest } from "../AIConversationProvider/types"
 
 export const useBridgeToolRunner = (
   getDigest: () => UserActionDigest | null,
-  consumeDigest: () => UserActionDigest | null,
 ) => {
   const { quest } = useContext(QuestContext)
   const tables = useSelector(selectors.query.getTables)
@@ -66,9 +65,8 @@ export const useBridgeToolRunner = (
       getActiveBufferId: () => activeNotebookBufferId,
       getWorkspace: () => workspace,
       getDigest,
-      consumeDigest,
     }),
-    [activeNotebookBufferId, workspace, getDigest, consumeDigest],
+    [activeNotebookBufferId, workspace, getDigest],
   )
 
   return { modelToolsClient, metaToolContext }

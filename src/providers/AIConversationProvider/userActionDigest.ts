@@ -81,6 +81,7 @@ export const createUserActionDigestState = () => {
   let sinceCapture: UserActionDigest | undefined
 
   return {
+    peek: (): UserActionDigest => pending,
     apply(event: UserActionEvent) {
       applyUserActionToDigest(pending, event)
       if (sinceCapture) applyUserActionToDigest(sinceCapture, event)
