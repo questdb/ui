@@ -466,6 +466,28 @@ describe("highlight settings validation", () => {
     )
   })
 
+  it("moves focus to Add rule after the last rule is removed from its menu", async () => {
+    // Given the drawer with one rule
+    renderComponent(<Fixture onSave={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+    const drawer = await screen.findByRole("dialog")
+
+    // When the user removes the rule from its actions menu
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: "Rule 1 actions" }),
+    )
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Remove rule" }),
+    )
+
+    // Then focus stays in the drawer, on Add rule
+    await waitFor(() =>
+      expect(
+        within(drawer).getByRole("button", { name: "+ Add rule" }),
+      ).toHaveFocus(),
+    )
+  })
+
   it("moves focus to Interactions when the database rejects a new variable on Clear rules", async () => {
     // Given a click interaction creating a variable the database rejects
     const validate = vi

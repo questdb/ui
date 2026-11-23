@@ -132,6 +132,8 @@ const sectionOf = (focus: Props["focus"]): GridSection =>
 // Stays mounted across open/close so the shell can play its exit. The parent
 // remounts it with a fresh key on each open, so the draft starts from the
 // saved config.
+const ADD_RULE_HOOK = "highlight-add-rule"
+
 export const HighlightSettingsDrawer: React.FC<Props> = ({
   open,
   appearInPlace,
@@ -233,6 +235,35 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
 
   const setRules = (rules: DraftRule[], expanded = expandedRuleId) =>
     updateDraft({ config: { ...draft, rules }, expandedRuleId: expanded })
+
+  // Removing a rule from its menu removes the menu's trigger too, so the
+  // menu's focus handback has nowhere to go. Once it has closed, focus the
+  // rule that takes its place (or the one before), else "Add rule", else the
+  // drawer's title.
+  const ruleListRef = useRef<HTMLUListElement>(null)
+  const [focusAfterRuleRemove, setFocusAfterRuleRemove] = useState<
+    number | null
+  >(null)
+  useEffect(() => {
+    if (focusAfterRuleRemove === null) return
+    const frame = requestAnimationFrame(() => {
+      const list = ruleListRef.current
+      const rule = list?.querySelectorAll('[data-hook="highlight-rule"]')[
+        focusAfterRuleRemove
+      ]
+      const target =
+        rule?.querySelector<HTMLElement>("button[aria-controls]") ??
+        list?.parentElement?.querySelector<HTMLElement>(
+          `[data-hook="${ADD_RULE_HOOK}"]`,
+        ) ??
+        list
+          ?.closest("[role='dialog']")
+          ?.querySelector<HTMLElement>("h3[tabindex='-1']")
+      target?.focus()
+      setFocusAfterRuleRemove(null)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [focusAfterRuleRemove])
 
   const addRule = () => {
     const rule = createUnsetRule(createRuleId())
@@ -479,6 +510,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
               <SectionHint>First matching rule sets the cell color</SectionHint>
             </SectionHeader>
             <ExpandableSettingsList
+              ref={ruleListRef}
               data-hook="highlight-rule-list"
               aria-label="Highlight rules"
             >
@@ -501,12 +533,15 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
                   onMove={(move) =>
                     setRules(moveRule(draft.rules, index, move))
                   }
-                  onRemove={() =>
+                  onRemove={() => {
                     setRules(
                       draft.rules.filter((r) => r.id !== rule.id),
                       expandedRuleId === rule.id ? null : expandedRuleId,
                     )
-                  }
+                    setFocusAfterRuleRemove(
+                      Math.min(index, draft.rules.length - 2),
+                    )
+                  }}
                 />
               ))}
             </ExpandableSettingsList>
@@ -516,6 +551,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
                 variant="secondary"
                 size="sm"
                 onClick={addRule}
+                dataHook={ADD_RULE_HOOK}
               >
                 + Add rule
               </Button>
