@@ -4,7 +4,7 @@ import {
   Button,
   Checkbox,
   CopyButton,
-  MultiSelect,
+  SearchableSelect,
   SelectMenuControl,
   Text,
 } from "../../../../components"
@@ -98,6 +98,28 @@ export type QueryControlsProps = {
   onUpdateQuery: (patch: Partial<QueryChart>) => void
   onSetQuery: (next: QueryChart) => void
   telemetry?: ChartSettingsTelemetry
+}
+
+type ColumnOption = { label: string; value: string }
+
+const summarizeSeries = (value: string[], options: ColumnOption[]): string => {
+  if (value.length === 0) return "None selected"
+  if (value.length === options.length && options.length > 0)
+    return `All (${options.length})`
+  if (value.length <= 2) return value.join(", ")
+  return `${value.length} of ${options.length}`
+}
+
+// Toggles a series and keeps the columns' query order, so persisted
+// selections stay stable across toggles.
+const toggleSeries = (
+  value: string[],
+  name: string,
+  options: ColumnOption[],
+): string[] => {
+  if (value.includes(name)) return value.filter((v) => v !== name)
+  const next = new Set([...value, name])
+  return options.filter((o) => next.has(o.value)).map((o) => o.value)
 }
 
 export const QueryControls: React.FC<QueryControlsProps> = ({
@@ -255,12 +277,23 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         query.type === "scatter") && (
         <Field>
           <FieldLabel>Series</FieldLabel>
-          <MultiSelect
-            name="Series"
-            value={query.yColumns}
-            onChange={(next) => onUpdateQuery({ yColumns: next })}
+          <SearchableSelect
+            ariaLabel="Series"
             options={numericOptions}
+            value={summarizeSeries(query.yColumns, numericOptions)}
+            selectedValues={query.yColumns}
+            allowCreate={false}
+            onSelect={(name) =>
+              onUpdateQuery({
+                yColumns: toggleSeries(query.yColumns, name, numericOptions),
+              })
+            }
+            onReset={() => onUpdateQuery({ yColumns: [] })}
             placeholder="None selected"
+            searchPlaceholder="Column name"
+            emptyLabel="No numeric columns"
+            noMatchLabel="No columns matched"
+            dataHookBase="chart-series"
           />
         </Field>
       )}
