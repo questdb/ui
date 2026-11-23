@@ -179,6 +179,9 @@ export type DrawResolution = {
   tabs: QueryTab[] // one per successful query — for the drawer tab strip
 }
 
+export const HEATMAP_CONFLICT_MESSAGE =
+  "Heatmaps need a chart of their own. Include only one query or choose a different chart type."
+
 export const HEATMAP_INCOMPLETE_MESSAGE =
   "This heatmap needs an X-axis, a separate row column, and a numeric value column. Update Chart settings."
 
@@ -198,13 +201,26 @@ export const isNumericHeatmapValue = (
   return column != null && classifyColumn(column) === "numeric"
 }
 
+// A heatmap needs an X-axis and a separate row column that the query
+// returns, and a numeric value.
+const heatmapMappingGap = (
+  columns: ColumnDefinition[],
+  x: string | null | undefined,
+  rows: string | undefined,
+  value: string | undefined,
+) =>
+  !x ||
+  !rows ||
+  rows === x ||
+  !columns.some((c) => c.name === x) ||
+  !columns.some((c) => c.name === rows) ||
+  !isNumericHeatmapValue(columns, value)
+
 export const incompleteHeatmap = (q: ResolvedQuery) =>
-  !q.xColumn ||
-  !q.partitionByColumn ||
-  q.partitionByColumn === q.xColumn ||
-  !isNumericHeatmapValue(q.columns, q.yColumns[0])
+  heatmapMappingGap(q.columns, q.xColumn, q.partitionByColumn, q.yColumns[0])
 
 // Empty DQL retains enough metadata to check the mapping without plotting it.
+// Without metadata, only the saved mapping itself can be checked.
 export const heatmapMappingIncomplete = (
   q: QueryChart,
   savedX: string | null,
@@ -212,17 +228,12 @@ export const heatmapMappingIncomplete = (
   value = q.yColumns[0],
 ): boolean => {
   const rows = q.partitionByColumn
-  if (!rows || !value) return true
-  if (!metadata) return savedX === rows
-
-  const { columns } = metadata
-  const x = savedX ?? metadata.inferredXColumn
-  return (
-    !x ||
-    rows === x ||
-    !columns.some((c) => c.name === x) ||
-    !columns.some((c) => c.name === rows) ||
-    !isNumericHeatmapValue(columns, value)
+  if (!metadata) return !rows || !value || savedX === rows
+  return heatmapMappingGap(
+    metadata.columns,
+    savedX ?? metadata.inferredXColumn,
+    rows,
+    value,
   )
 }
 
@@ -237,16 +248,14 @@ export const validateHeatmapConfig = (
   const enabledHeatmaps = enabled.filter((q) => q?.type === "heatmap")
   if (!enabledHeatmaps.length) return null
 
-  const conflict =
-    "Heatmaps need a chart of their own. Include only one query or choose a different chart type."
   const explicitCollision =
     config.xColumn != null &&
     enabledHeatmaps.some((q) => q?.partitionByColumn === config.xColumn)
   const frame = toChartResult(result, statements)
   if (frame.kind !== "settled") {
-    if (enabledHeatmaps.length > 1) return conflict
+    if (enabledHeatmaps.length > 1) return HEATMAP_CONFLICT_MESSAGE
     if (explicitCollision) return HEATMAP_INCOMPLETE_MESSAGE
-    return enabled.length > 1 ? conflict : null
+    return enabled.length > 1 ? HEATMAP_CONFLICT_MESSAGE : null
   }
 
   const { renderQueries, tabs } = resolveDraw(
@@ -259,7 +268,7 @@ export const validateHeatmapConfig = (
     renderQueries.length > 1 &&
     renderQueries.some(({ type }) => type === "heatmap")
   )
-    return conflict
+    return HEATMAP_CONFLICT_MESSAGE
   if (explicitCollision) return HEATMAP_INCOMPLETE_MESSAGE
   if (
     config.queries.some((q, index) => {

@@ -20,6 +20,7 @@ import { groupColumns } from "./inferChartConfig"
 import {
   chartXAxisOf,
   heatmapMappingIncomplete,
+  HEATMAP_CONFLICT_MESSAGE,
   HEATMAP_INCOMPLETE_MESSAGE,
   missingHeatmapX,
   missingHeatmapXMessage,
@@ -307,10 +308,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
     >
       {heatmapConflict && (
         <div role="alert">
-          <Text color="statusWarning">
-            Heatmaps need a chart of their own. Include only one query or choose
-            a different chart type.
-          </Text>
+          <Text color="statusWarning">{HEATMAP_CONFLICT_MESSAGE}</Text>
         </div>
       )}
       {heatmapIdx >= 0 && !tabs.some((tab) => tab.index === heatmapIdx) && (
