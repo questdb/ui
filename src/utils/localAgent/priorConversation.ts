@@ -30,6 +30,9 @@ const visibleText = (message: ConversationMessage): string | null => {
     const text =
       message.displayUserMessage ??
       (typeof message.content === "string" ? message.content : "")
+    // Another agent's command means nothing to this one; say what it was.
+    if (message.agentCommand)
+      return `(ran the previous agent's command ${text})`
     const sql = message.sql?.trim()
     return sql ? withAttachedSql(text, sql) : text
   }

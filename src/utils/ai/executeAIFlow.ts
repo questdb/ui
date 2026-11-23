@@ -306,8 +306,14 @@ function cleanupOrphanedToolCallsForTurn(params: {
   }
 }
 
+// A message the user typed as one of the local agent's own commands.
+const isAgentCommandFlow = (
+  config: AIFlowConfig,
+): config is ChatFlowConfig & { agentCommand: true } =>
+  config.type === "chat" && config.agentCommand === true
+
 export function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
-  if (config.type === "chat" && config.agentCommand) {
+  if (isAgentCommandFlow(config)) {
     return {
       content: config.userMessage,
       displayUserMessage: config.userMessage,
@@ -557,7 +563,7 @@ export async function executeAIFlow(
   const localAgentChannel = usesLocalAgent
     ? (config.localAgentChannel ?? null)
     : null
-  if (config.type === "chat" && config.agentCommand && !usesLocalAgent) {
+  if (isAgentCommandFlow(config) && !usesLocalAgent) {
     return { success: false, error: "Agent commands require a local agent." }
   }
   const dispatchError = () => {
@@ -568,7 +574,7 @@ export async function executeAIFlow(
   const initialError = dispatchError()
   if (initialError) return { success: false, error: initialError }
 
-  const isAgentCommand = config.type === "chat" && config.agentCommand === true
+  const isAgentCommand = isAgentCommandFlow(config)
   const capturedDigest = isAgentCommand
     ? undefined
     : callbacks.captureUserActionDigest?.(conversationId)
@@ -619,8 +625,7 @@ export async function executeAIFlow(
     timestamp: Date.now(),
     ...(config.type === "chat" &&
       config.images?.length && { images: config.images }),
-    ...(config.type === "chat" &&
-      config.agentCommand && { agentCommand: true }),
+    ...(isAgentCommand && { agentCommand: true }),
     ...(userMsg.displayType && { displayType: userMsg.displayType }),
     ...(userMsg.sql && { sql: userMsg.sql }),
     ...(userMsg.displayUserMessage !== undefined && {

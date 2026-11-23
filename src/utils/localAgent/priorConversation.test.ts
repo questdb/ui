@@ -35,6 +35,22 @@ describe("priorConversationFor", () => {
     expect(prior).not.toContain("old verbatim turn")
   })
 
+  it("hands over an earlier agent's command as history, not as a command", () => {
+    // Given
+    const history = [
+      message({ role: "user", content: "/compact", agentCommand: true }),
+      message({ role: "assistant", content: "Compacted the session." }),
+    ]
+
+    // When
+    const prior = priorConversationFor(history, "claude")
+
+    // Then
+    expect(prior).toContain(
+      "User: (ran the previous agent's command /compact)\nAssistant: Compacted the session.",
+    )
+  })
+
   it("hands the agent what the user saw of an earlier model's turns", () => {
     // Given
     const history = [
