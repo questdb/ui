@@ -33,19 +33,13 @@ import {
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
 import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
 import { sqlHash } from "../../../utils/sqlHash"
-import {
-  type ChartConfig,
-  type QueryChart,
-  missingQueryFields,
-} from "./CellChart/chartTypes"
-import { validateHeatmapConfig } from "./DrawCanvas/drawCanvasUtils"
+import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 export type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText } from "../Monaco/utils"
 import type { RunCancellation } from "./runCancellation"
 import {
   derivePositionalFrame,
   deriveStatementFrame,
-  reconcileCellResultForStatements,
   reconcileCellResultForValue,
 } from "./statementIdentity"
 import { carriedRunError, carriedRunStatus } from "./runHistory"
@@ -835,8 +829,6 @@ const normalizeQueryChart = (q: QueryChart): QueryChart => {
   if (q.axis) next.axis = q.axis
   if (q.enabled === false) next.enabled = false
   if (q.name) next.name = q.name
-  // Like the tool wire, keep a row scale only where it applies.
-  if (q.type === "heatmap" && q.colorScale === "row") next.colorScale = "row"
   return next
 }
 
@@ -1037,12 +1029,13 @@ export const buildAppliedCells = (
         )
       }
     }
-    const incomplete = chartConfig?.queries.find(
-      (q) => q != null && missingQueryFields(q) !== null,
-    )
-    if (incomplete) {
+    if (
+      chartConfig?.queries.some(
+        (q) => q != null && q.type === "candlestick" && !q.ohlc,
+      )
+    ) {
       throw new ApplyNotebookStateError(
-        `Cell at index ${index} has a ${incomplete.type} query with no ${missingQueryFields(incomplete)?.replace(/^an? /, "")}.`,
+        `Cell at index ${index} has a candlestick query with no ohlc mapping.`,
         "cells",
       )
     }
@@ -1112,33 +1105,19 @@ export const buildAppliedCells = (
       }
     }
 
-    // Results carry over by statement content: validate edits against the same
-    // frame the updated cell would keep. Do not load snapshots or execute queries.
-    const result = valueChanged
-      ? statements && existing.result != null
-        ? reconcileCellResultForStatements(existing.result, statements)
-        : reconcileCellResultForValue(existing.result, value)
-      : existing?.result
-    // A schema change or a newly populated sibling can invalidate the saved
-    // plot without changing the chart. Do not block unrelated snapshot edits.
-    if (chartConfig && statements && !chartUnchanged) {
-      const invalid = validateHeatmapConfig(chartConfig, statements, result)
-      if (invalid) {
-        throw new ApplyNotebookStateError(
-          `Cell at index ${index}: ${invalid}`,
-          "cells",
-        )
-      }
-    }
-
     if (existing) {
       updated.push(existing.id)
+      // Results carry over by statement content: unchanged statements keep
+      // theirs, zero survivors collapse the frame. A released cell (result on
+      // disk only) keeps its snapshot — hydration reconciles it on load.
       let next: NotebookCell = {
         ...existing,
         id: existing.id,
         position: index,
         value,
-        result,
+        result: valueChanged
+          ? reconcileCellResultForValue(existing.result, value)
+          : existing.result,
       }
       const resultDropped =
         valueChanged && existing.result != null && next.result === null

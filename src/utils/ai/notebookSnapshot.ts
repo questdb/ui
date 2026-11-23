@@ -37,7 +37,6 @@ type ChartQueryWire = {
   axis?: "left" | "right"
   enabled?: boolean
   name?: string
-  color_scale?: "row"
 }
 import {
   toHighlightConfigWire,
@@ -137,7 +136,6 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.axis ? { axis: q.axis } : {}),
           ...(q.enabled === false ? { enabled: false } : {}),
           ...(q.name != null ? { name: q.name } : {}),
-          ...(q.colorScale === "row" ? { color_scale: "row" as const } : {}),
         },
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),

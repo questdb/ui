@@ -27,10 +27,7 @@ import {
   MAX_BUFFER_NAME_LENGTH,
   exceedsBufferNameLimit,
 } from "../../store/buffers"
-import {
-  type ChartConfig,
-  missingQueryFields,
-} from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   classifyAndCheckSqlForRunQuery,
   denyReasonUnresolvedSql,
@@ -52,8 +49,6 @@ import {
   isUnverifiableExecError,
   UNVERIFIED_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
-import { validateHeatmapConfig } from "../../scenes/Editor/Notebook/DrawCanvas/drawCanvasUtils"
-import { mergeCellChartConfig } from "../../scenes/Editor/Notebook/cellSizing"
 import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
 import { eventBus } from "../../modules/EventBus"
@@ -175,6 +170,14 @@ const readCells = (
     (view) => Promise.resolve(view.cells),
     signal,
   )
+
+const cellValueOf = async (
+  bufferId: number,
+  cellId: string,
+  signal?: AbortSignal,
+): Promise<string | null> =>
+  (await readCells(bufferId, signal)).find((c) => c.id === cellId)?.value ??
+  null
 
 const runCellBound = (
   bufferId: number,
@@ -1045,31 +1048,26 @@ const runTool = async (
           patch.rightAxis = mapRightAxis(right_axis)
         if (reference_lines !== undefined && reference_lines !== null)
           patch.referenceLines = mapReferenceLines(reference_lines)
-        const incomplete = patch.queries?.find(
-          (q) => q != null && missingQueryFields(q) !== null,
-        )
-        if (incomplete) {
+        if (
+          patch.queries?.some(
+            (q) => q != null && q.type === "candlestick" && !q.ohlc,
+          )
+        ) {
           return {
             content: JSON.stringify({
               error_code: "validation",
-              message: `VALIDATION_ERROR: a ${incomplete.type} query requires ${missingQueryFields(incomplete)}.`,
+              message:
+                "VALIDATION_ERROR: a candlestick query requires an ohlc mapping (open/high/low/close). Provide ohlc, or use a non-candlestick type.",
             }),
             is_error: true,
           }
         }
-        if (patch.xColumn !== undefined || patch.queries?.length) {
-          const cell = (await readCells(buffer_id, signal)).find(
-            (c) => c.id === cell_id,
-          )
-          if (cell) {
-            const statements = getQueriesFromText(cell.value)
-            const statementCount = statements.length
-            // A non-empty queries array replaces every per-query config.
-            if (
-              patch.queries?.length &&
-              statementCount > 0 &&
-              patch.queries.length !== statementCount
-            ) {
+        // A non-null queries array REPLACES every per-query config
+        if (patch.queries && patch.queries.length > 0) {
+          const cellSql = await cellValueOf(buffer_id, cell_id, signal)
+          if (cellSql !== null) {
+            const statementCount = getQueriesFromText(cellSql).length
+            if (statementCount > 0 && patch.queries.length !== statementCount) {
               return {
                 content: JSON.stringify({
                   error_code: "validation",
@@ -1078,20 +1076,6 @@ const runTool = async (
                   } but the cell has ${statementCount} \`;\`-split statement${
                     statementCount === 1 ? "" : "s"
                   }. A non-null queries array replaces all per-query configs, so send exactly one entry per statement (index-aligned). Use queries:[] to reset to inference, or omit queries to preserve the existing config.`,
-                }),
-                is_error: true,
-              }
-            }
-            const invalid = validateHeatmapConfig(
-              mergeCellChartConfig(cell, patch),
-              statements,
-              cell.result,
-            )
-            if (invalid) {
-              return {
-                content: JSON.stringify({
-                  error_code: "validation",
-                  message: `VALIDATION_ERROR: ${invalid}`,
                 }),
                 is_error: true,
               }

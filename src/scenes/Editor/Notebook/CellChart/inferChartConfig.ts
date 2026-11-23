@@ -22,23 +22,11 @@ const PIE_THRESHOLD = 12
 export const MAX_AUTO_PARTITION_CARDINALITY = 20
 export const MAX_PARTITION_SERIES = 30
 
-export const isDecimalColumn = (col: ColumnDefinition): boolean => {
-  const type = col.type?.toUpperCase()
-  return type === "DECIMAL" || type?.startsWith("DECIMAL(") === true
-}
-
-export const classifyColumn = (
-  col: ColumnDefinition,
-  includeParameterizedDecimals = true,
-): ColumnRole => {
+export const classifyColumn = (col: ColumnDefinition): ColumnRole => {
   const t = col.type?.toUpperCase()
   if (!t) return "other"
   if (TEMPORAL.has(t)) return "temporal"
-  if (
-    NUMERIC.has(t) ||
-    (includeParameterizedDecimals && t.startsWith("DECIMAL("))
-  )
-    return "numeric"
+  if (NUMERIC.has(t)) return "numeric"
   if (CATEGORICAL.has(t)) return "categorical"
   return "other"
 }
@@ -50,10 +38,7 @@ export type ColumnGroups = {
   other: ColumnDefinition[]
 }
 
-export const groupColumns = (
-  columns: ColumnDefinition[],
-  includeParameterizedDecimals = true,
-): ColumnGroups => {
+export const groupColumns = (columns: ColumnDefinition[]): ColumnGroups => {
   const groups: ColumnGroups = {
     temporal: [],
     numeric: [],
@@ -61,7 +46,7 @@ export const groupColumns = (
     other: [],
   }
   for (const col of columns) {
-    groups[classifyColumn(col, includeParameterizedDecimals)].push(col)
+    groups[classifyColumn(col)].push(col)
   }
   return groups
 }
@@ -125,9 +110,7 @@ export const inferChartConfig = (
   dataset: (boolean | string | number | null)[][],
   query: string,
 ): InferredChart => {
-  // Parameterized DECIMAL is available in settings, but should not change
-  // how existing non-heatmap queries pick their axes and series by default.
-  const groups = groupColumns(columns, false)
+  const groups = groupColumns(columns)
   const hints = parseQueryHints(query)
 
   const capSeries = (cols: ColumnDefinition[]): string[] =>
@@ -220,7 +203,6 @@ export const inferChartConfig = (
 export const availableChartTypes = (
   groups: ColumnGroups,
   hasOhlc: boolean,
-  xColumn?: string | null,
 ): ChartType[] => {
   const types: ChartType[] = []
   const hasNumeric = groups.numeric.length > 0
@@ -237,15 +219,6 @@ export const availableChartTypes = (
   )
     types.push("scatter")
   if (hasNumeric && hasCategorical) types.push("pie")
-  // A heatmap can also use numeric X with a separate numeric Value.
-  const hasNumericXAndValue =
-    groups.numeric.length >= 2 && groups.numeric.some((c) => c.name === xColumn)
-  if (
-    hasNumeric &&
-    hasCategorical &&
-    (hasTemporal || groups.categorical.length >= 2 || hasNumericXAndValue)
-  )
-    types.push("heatmap")
   if (hasTemporal && (hasOhlc || groups.numeric.length >= 4))
     types.push("candlestick")
   return types.length ? types : ["bar"]

@@ -1,35 +1,13 @@
-import type { CustomSeriesRenderItem, EChartsOption } from "echarts"
-import {
-  asNumeric,
-  compareValues,
-  differenceOf,
-  ratioOf,
-  type Numeric,
-} from "../../../../components/ResultGrid/highlight/comparable"
-import {
-  GRID_BOTTOM_NO_ZOOM,
-  GRID_BOTTOM_WITH_ZOOM,
-  HEATMAP_ROW_FILL,
-  HEATMAP_ROW_SLIDER_GRID_RIGHT,
-  X_SLIDER_ZOOM_ID,
-  X_WHEEL_ZOOM_ID,
-  Y_SLIDER_ZOOM_ID,
-  type ChartZoomDensity,
-} from "./chartDensity"
-import { escapeHtml } from "../../../../utils/escapeHtml"
+import type { EChartsOption } from "echarts"
+import type { ChartZoomDensity } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type {
   ChartConfig,
   ChartType,
-  HeatmapColorScale,
   ReferenceLine,
   SeriesAxis,
 } from "./chartTypes"
-import {
-  MAX_PARTITION_SERIES,
-  classifyColumn,
-  isDecimalColumn,
-} from "./inferChartConfig"
+import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
 
 type Dataset = (boolean | string | number | null)[][]
 
@@ -44,7 +22,6 @@ export type ResolvedQuery = {
   partitionByColumn?: string
   axis: SeriesAxis
   name?: string
-  colorScale?: HeatmapColorScale
 }
 
 export type ChartGlobals = {
@@ -67,6 +44,8 @@ type SeriesContext = {
 const LEGEND_BOTTOM = 3
 const SLIDER_HEIGHT = 18
 const SLIDER_BOTTOM = 40
+const GRID_BOTTOM_NO_ZOOM = 56
+const GRID_BOTTOM_WITH_ZOOM = 86
 const CHART_FONT_SIZE = 12
 const BAR_OVERLAY_OPACITY = 0.45
 const X_AXIS_NAME_GAP = 26
@@ -338,371 +317,6 @@ const buildPieChartOption = (
   }
 }
 
-// "2026-11-18T12:00:00.000000Z" → "2026-11-18 12:00", and a midnight to
-// its date alone: a heatmap's time slots are labels, not a time axis.
-const compactTimestamp = (label: string): string => {
-  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(:\d{2})?(\.\d+)?Z?$/.exec(label)
-  if (!m) return label
-  const [, date, hhmm, seconds] = m
-  if (seconds && seconds !== ":00") return `${date} ${hhmm}${seconds}`
-  return hhmm === "00:00" ? date : `${date} ${hhmm}`
-}
-
-type HeatmapReading = { y: number; reading: Dataset[number][number] }
-
-const longReading = (value: unknown): bigint | null => {
-  if (typeof value === "bigint") return value
-  if (typeof value === "string" && /^[+-]?\d+$/.test(value))
-    return BigInt(value)
-  if (typeof value === "number" && Number.isInteger(value)) return BigInt(value)
-  return null
-}
-
-const exactNumericReader = (column: ColumnDefinition) =>
-  column.type?.toUpperCase() === "LONG"
-    ? longReading
-    : isDecimalColumn(column)
-      ? asNumeric
-      : null
-
-const exactHeatmapScale = (
-  cells: HeatmapReading[],
-  perRow: boolean,
-  parse: (reading: HeatmapReading["reading"]) => Numeric | null,
-) => {
-  const values = cells.map(({ reading }) => parse(reading))
-  type Endpoint = { value: Numeric; index: number }
-  const extents = new Map<number, { min: Endpoint; max: Endpoint }>()
-  cells.forEach(({ y }, i) => {
-    const value = values[i]
-    if (value === null) return
-    const key = perRow ? y : 0
-    const extent = extents.get(key)
-    if (!extent) {
-      const endpoint = { value, index: i }
-      extents.set(key, { min: endpoint, max: endpoint })
-    } else {
-      if (compareValues(value, extent.min.value) < 0)
-        extent.min = { value, index: i }
-      if (compareValues(value, extent.max.value) > 0)
-        extent.max = { value, index: i }
-    }
-  })
-  const ranges = new Map(
-    [...extents].map(([key, { min, max }]) => [
-      key,
-      { min: min.value, span: differenceOf(max.value, min.value) },
-    ]),
-  )
-  const shades = cells.map(({ y }, i) => {
-    const value = values[i]
-    const range = ranges.get(perRow ? y : 0)
-    if (value === null || !range) return "-"
-    if (range.span.unscaled === BigInt(0)) return perRow ? 1 : 0.5
-    // Subtract before converting: adjacent exact values can have the same double.
-    return ratioOf(differenceOf(value, range.min), range.span)
-  })
-  const extent = extents.get(0)
-  return {
-    shades,
-    min: 0,
-    max: 1,
-    labels: extent
-      ? [
-          String(cells[extent.max.index].reading),
-          String(cells[extent.min.index].reading),
-        ]
-      : ["1", "0"],
-  }
-}
-
-const normalizeHeatmapReading = (value: number, min: number, max: number) => {
-  const span = max - min
-  // The difference of two opposite-sign finite endpoints can overflow.
-  return Number.isFinite(span)
-    ? (value - min) / span
-    : (value / 2 - min / 2) / (max / 2 - min / 2)
-}
-
-const finiteHeatmapReading = (reading: unknown) => {
-  const value = toNumberOrNull(reading)
-  return value !== null && Number.isFinite(value) ? value : null
-}
-
-const numericHeatmapScale = (
-  cells: HeatmapReading[],
-  perRow: boolean,
-  rowCount: number,
-) => {
-  const values = cells.map(({ reading }) => finiteHeatmapReading(reading))
-  const emptyExtent = () => ({ min: Infinity, max: -Infinity })
-  const globalExtent = emptyExtent()
-  const rowExtents = perRow ? Array.from({ length: rowCount }, emptyExtent) : []
-  cells.forEach(({ y }, i) => {
-    const value = values[i]
-    if (value === null) return
-    const extent = perRow ? rowExtents[y] : globalExtent
-    extent.min = Math.min(extent.min, value)
-    extent.max = Math.max(extent.max, value)
-  })
-  const { min, max } =
-    globalExtent.min === Infinity ? { min: 0, max: 1 } : globalExtent
-  // In chart mode ECharts also divides by the span, so provide normalized
-  // input when the raw range would overflow, but keep the real legend labels.
-  const normalizeChart = !perRow && !Number.isFinite(max - min)
-  const shades = cells.map(({ y }, i) => {
-    const value = values[i]
-    if (value === null) return "-"
-    if (!perRow)
-      return normalizeChart ? normalizeHeatmapReading(value, min, max) : value
-    const extent = rowExtents[y]
-    return extent.max === extent.min
-      ? 1
-      : normalizeHeatmapReading(value, extent.min, extent.max)
-  })
-  return {
-    shades,
-    min: perRow || normalizeChart ? 0 : min,
-    max: perRow || normalizeChart ? 1 : max,
-    labels: [String(max), String(min)],
-  }
-}
-
-type HeatmapCategory = string | null
-
-const heatmapCategory = (value: unknown): HeatmapCategory =>
-  value == null ? null : toCategoryLabel(value)
-
-// Match the builder's slot keys and measurement parsing. Null/unparseable
-// values do not paint a cell and cannot obscure another reading.
-export const hasDuplicateHeatmapReadings = (q: ResolvedQuery): boolean => {
-  const idx = buildColumnIndexMap(q.columns)
-  const x = idx.get(q.xColumn ?? "")
-  const y = idx.get(q.partitionByColumn ?? "")
-  const value = idx.get(q.yColumns[0])
-  if (x === undefined || y === undefined || value === undefined) return false
-  const read = exactNumericReader(q.columns[value]) ?? finiteHeatmapReading
-  const coordinates = new Map<HeatmapCategory, Set<HeatmapCategory>>()
-  for (const row of q.dataset) {
-    if (read(row[value]) === null) continue
-    const xKey = heatmapCategory(row[x])
-    const yKey = heatmapCategory(row[y])
-    const rows = coordinates.get(xKey)
-    if (!rows) coordinates.set(xKey, new Set([yKey]))
-    else if (rows.has(yKey)) return true
-    else rows.add(yKey)
-  }
-  return false
-}
-
-const heatmapLabels = (keys: HeatmapCategory[]): string[] => {
-  const used = new Set(keys)
-  const unusedLabel = (base: string) => {
-    let label = base
-    for (let n = 2; used.has(label); n++) label = `${base} (${n})`
-    return label
-  }
-  return keys.map((key) => {
-    if (key === null) return unusedLabel("[NULL]")
-    if (key === "") return unusedLabel("[empty]")
-    return key
-  })
-}
-
-// A grid of cells: x along the bottom, one row per value of the partition
-// column, and each cell colored by its value.
-const buildHeatmapOption = (
-  q: ResolvedQuery,
-  chartText: { fontSize: number },
-  axisLabel: { fontSize: number },
-  axisName: { fontSize: number },
-  xRole: string,
-): EChartsOption => {
-  const idx = buildColumnIndexMap(q.columns)
-  const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
-  const rowIdx =
-    q.partitionByColumn != null ? idx.get(q.partitionByColumn) : undefined
-  const valueIdx = q.yColumns[0] != null ? idx.get(q.yColumns[0]) : undefined
-  if (xIdx === undefined || rowIdx === undefined || valueIdx === undefined)
-    return { tooltip: { trigger: "item", textStyle: chartText } }
-
-  // Time and numbers run in order along x, whatever the query's ORDER BY: a
-  // query sorted by row first lists each row's times in turn. Categories
-  // keep the order they came in.
-  const xValues = new Map<HeatmapCategory, HeatmapReading["reading"]>()
-  const rowSet = new Set<HeatmapCategory>()
-  for (const row of q.dataset) {
-    const x = heatmapCategory(row[xIdx])
-    if (!xValues.has(x)) xValues.set(x, row[xIdx])
-    rowSet.add(heatmapCategory(row[rowIdx]))
-  }
-  const xKeys = [...xValues.keys()]
-  if (xRole === "temporal") {
-    // Parse each key once, not on every comparison.
-    const times = new Map(
-      xKeys.map((key) => {
-        const ms = Date.parse(key ?? "")
-        return [key, Number.isNaN(ms) ? Number(xValues.get(key)) : ms]
-      }),
-    )
-    const time = (key: HeatmapCategory) => times.get(key) ?? Number.NaN
-    xKeys.sort((a, b) => time(a) - time(b) || (a ?? "").localeCompare(b ?? ""))
-  } else if (xRole === "numeric") {
-    const read = exactNumericReader(q.columns[xIdx])
-    if (read) {
-      const values = new Map(
-        xKeys.map((key) => [key, read(xValues.get(key) ?? null)]),
-      )
-      xKeys.sort((a, b) => {
-        const aValue = values.get(a) ?? null
-        const bValue = values.get(b) ?? null
-        if (aValue === null) return bValue === null ? 0 : -1
-        if (bValue === null) return 1
-        return compareValues(aValue, bValue)
-      })
-    } else {
-      xKeys.sort((a, b) => Number(xValues.get(a)) - Number(xValues.get(b)))
-    }
-  }
-  const xSlot = new Map(xKeys.map((key, i) => [key, i]))
-  const xLabels = heatmapLabels(xKeys)
-  const rowKeys = [...rowSet].sort()
-  const rowLabels = heatmapLabels(rowKeys)
-  // Slots of a single day show their time alone.
-  const timeOf = (label: string) => {
-    const match = /T(\d{2}:\d{2})(:\d{2})?/.exec(label)
-    if (!match) return label
-    const [, time, seconds = ""] = match
-    return seconds === ":00" ? time : `${time}${seconds}`
-  }
-  const sameDay =
-    xRole === "temporal" &&
-    new Set(xLabels.map((label) => label.slice(0, 10))).size === 1 &&
-    xLabels.every((label) => label.includes("T"))
-  const formatX =
-    xRole !== "temporal"
-      ? (label: string) => label
-      : sameDay
-        ? timeOf
-        : compactTimestamp
-  const rowSlot = new Map(rowKeys.map((key, i) => [key, i]))
-
-  // Each cell: x slot, row, the value it is colored by, and its own value.
-  // On a scale per row, a cell is colored by where it falls in its row.
-  const cells = q.dataset.map((row) => ({
-    x: xSlot.get(heatmapCategory(row[xIdx])) ?? 0,
-    y: rowSlot.get(heatmapCategory(row[rowIdx])) ?? 0,
-    reading: row[valueIdx],
-  }))
-  const perRow = q.colorScale === "row"
-  const readExact = exactNumericReader(q.columns[valueIdx])
-  const { shades, min, max, labels } = readExact
-    ? exactHeatmapScale(cells, perRow, readExact)
-    : numericHeatmapScale(cells, perRow, rowLabels.length)
-  const data = cells.map(({ x, y, reading }, i) => [
-    x,
-    y,
-    shades[i],
-    typeof reading === "bigint" ? String(reading) : (reading ?? "-"),
-  ])
-
-  const scaleTooltip = perRow
-    ? ""
-    : `<br/>Scale: ${escapeHtml(labels[1])} to ${escapeHtml(labels[0])}`
-  return {
-    useUTC: true,
-    tooltip: {
-      trigger: "item",
-      textStyle: chartText,
-      formatter: (params: unknown) => {
-        const [x, y, , value] = (
-          params as { value: [number, number, unknown, unknown] }
-        ).value
-        return `${escapeHtml(xLabels[x] ?? "")}<br/>${escapeHtml(
-          rowLabels[y] ?? "",
-        )}: <b>${escapeHtml(String(value))}</b>${scaleTooltip}`
-      },
-    },
-    grid: {
-      left: 24,
-      right: 24,
-      top: 24,
-      bottom: GRID_BOTTOM_NO_ZOOM,
-      containLabel: true,
-    },
-    xAxis: {
-      type: "category",
-      data: xLabels,
-      name: q.xColumn ?? "",
-      nameLocation: "middle",
-      nameGap: X_AXIS_NAME_GAP,
-      nameTextStyle: axisName,
-      axisLabel: { ...axisLabel, formatter: formatX },
-      splitArea: { show: false },
-    },
-    // Rows read top-down, in order, like a table.
-    yAxis: {
-      type: "category",
-      data: rowLabels,
-      inverse: true,
-      axisLabel: { ...axisLabel, fontFamily: "sans-serif", margin: 8 },
-      nameTextStyle: axisName,
-      splitArea: { show: false },
-    },
-    visualMap: {
-      type: "continuous",
-      min,
-      max,
-      dimension: 2,
-      calculable: false,
-      orient: "horizontal",
-      left: "center",
-      bottom: LEGEND_BOTTOM,
-      itemWidth: 10,
-      itemHeight: 140,
-      text: perRow ? ["Row high", "Row low"] : labels,
-      textGap: 8,
-      padding: 5,
-      textStyle: { ...chartText, fontFamily: "Helvetica, Arial, sans-serif" },
-      // Exact and per-row readings use internal shades, not measurement units.
-      // Let the cell tooltip show the actual reading instead of those numbers.
-      hoverLink: false,
-    },
-    // Drawn cell by cell, like Grafana's state timeline: a row's cells run
-    // into each other, and rows keep a gap between them.
-    series: [
-      {
-        name: q.yColumns[0],
-        type: "custom",
-        renderItem: renderHeatmapCell,
-        clip: true,
-        encode: { x: 0, y: 1, tooltip: 3 },
-        data,
-      },
-    ],
-  }
-}
-
-// A cell spans its whole slot along x, half a pixel more on each side so
-// neighbors leave no seam, and HEATMAP_ROW_FILL of its row. A cell without a
-// value is left empty.
-const renderHeatmapCell: CustomSeriesRenderItem = (_params, api) => {
-  if (!Number.isFinite(api.value(2))) return null
-  const [cx, cy] = api.coord([api.value(0), api.value(1)])
-  const [width, height] = api.size?.([1, 1]) as number[]
-  const rowHeight = height * HEATMAP_ROW_FILL
-  return {
-    type: "rect",
-    shape: {
-      x: cx - width / 2 - 0.5,
-      y: cy - rowHeight / 2,
-      width: width + 1,
-      height: rowHeight,
-    },
-    style: { fill: api.visual("color") as string },
-  }
-}
-
 // Reference lines belong to the axes, not a selectable legend entry.
 const referenceLineSeries = (
   series: Series[],
@@ -852,19 +466,7 @@ export const buildEchartsOption = (
 
   if (single && anchor.type === "pie")
     return buildPieChartOption(anchor, chartText, baseLegend)
-  if (single && anchor.type === "heatmap")
-    return buildHeatmapOption(
-      anchor,
-      chartText,
-      axisLabel,
-      axisName,
-      anchorRole,
-    )
-  // ECharts value axes coerce their positions to doubles. Keep exact DECIMAL
-  // labels and positions on a category axis instead.
-  const numericXAxis =
-    anchorRole === "numeric" && anchorCol != null && !isDecimalColumn(anchorCol)
-  if (single && anchor.type === "scatter" && numericXAxis)
+  if (single && anchor.type === "scatter" && anchorRole === "numeric")
     return buildScatterChartOption(
       anchor,
       chart.referenceLines ?? [],
@@ -875,7 +477,11 @@ export const buildEchartsOption = (
     )
 
   const xMode: XMode =
-    anchorRole === "temporal" ? "time" : numericXAxis ? "value" : "category"
+    anchorRole === "temporal"
+      ? "time"
+      : anchorRole === "numeric"
+        ? "value"
+        : "category"
 
   // A single, non-partitioned query renders positionally: one axis slot and one
   // value per row, so duplicate categorical x values are preserved. The deduped
@@ -917,8 +523,8 @@ export const buildEchartsOption = (
   const series: Series[] = []
   for (const q of queries) {
     if (q.type === "candlestick") series.push(...buildCandlestickSeries(q, ctx))
-    else if (q.type === "pie" || q.type === "heatmap")
-      continue // pie and heatmap can't share an axis
+    else if (q.type === "pie")
+      continue // pie can't share an axis
     else series.push(...buildCartesianSeries(q, ctx)) // line/area/bar/stackedBar/scatter
   }
 
@@ -1047,59 +653,32 @@ export const buildEchartsOption = (
   }
 }
 
-// All cartesian charts embed both X controls. Heatmaps also get a separate
-// Y slider, so the wheel retains its horizontal behavior. Density toggles
-// visibility without changing which controls can hold a zoom window.
+// Every cartesian chart embeds both zoom components, and density only toggles
+// their visibility — never the option's structure, which would remount the
+// chart through its structural key. Wheel zoom arms while marks are merely
+// tight (it costs no plot space); the slider costs plot height, so it waits
+// until marks fall under the readable floor. The renderer measures the density
+// from its own width.
 export const withZoomDensity = (
   option: EChartsOption,
   density: ChartZoomDensity,
 ): EChartsOption => {
   if (option.xAxis == null) return option
-  const hasRowAxis =
-    !Array.isArray(option.yAxis) && option.yAxis?.type === "category"
-  const rowSlider = hasRowAxis && density.rowSlider
-  const bottom = density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM
   return {
     ...option,
     grid: {
       ...(option.grid as object),
-      bottom,
-      ...(rowSlider && { right: HEATMAP_ROW_SLIDER_GRID_RIGHT }),
+      bottom: density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
     },
     dataZoom: [
+      { type: "inside", disabled: !density.wheel },
       {
-        id: X_WHEEL_ZOOM_ID,
-        type: "inside",
-        xAxisIndex: 0,
-        disabled: !density.wheel,
-      },
-      {
-        id: X_SLIDER_ZOOM_ID,
         type: "slider",
-        xAxisIndex: 0,
         show: density.slider,
         height: SLIDER_HEIGHT,
         bottom: SLIDER_BOTTOM,
         textStyle: { fontSize: CHART_FONT_SIZE },
       },
-      ...(hasRowAxis
-        ? [
-            {
-              id: Y_SLIDER_ZOOM_ID,
-              type: "slider" as const,
-              yAxisIndex: 0,
-              orient: "vertical" as const,
-              show: rowSlider,
-              right: 12,
-              top: 36,
-              bottom,
-              width: SLIDER_HEIGHT,
-              showDetail: false,
-              showDataShadow: false as const,
-              ...(!rowSlider && { start: 0, end: 100 }),
-            },
-          ]
-        : []),
     ],
   }
 }

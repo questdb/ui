@@ -1,21 +1,5 @@
 import type { ColorShape } from "../../../../types"
 
-// `share` of `to` over `from`, as an opaque color: the scale bar draws its
-// ends without the background behind the cells.
-const mixHex = (from: string, to: string, share: number): string => {
-  const channels = (hex: string) =>
-    [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
-  const [a, b] = [channels(from), channels(to)]
-  if ([...a, ...b].some(Number.isNaN)) return to
-  return `#${a
-    .map((c, i) =>
-      Math.round(c + (b[i] - c) * share)
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")}`
-}
-
 export const createQuestdbTheme = (colors: ColorShape) => {
   const seriesPalette = [
     colors.chartSeries1,
@@ -119,16 +103,6 @@ export const createQuestdbTheme = (colors: ColorShape) => {
     markLine: {
       lineStyle: { color: colors.contentMuted },
       label: { color: colors.contentSecondary, fontSize: 12 },
-    },
-    // A heatmap's cells, from barely there to the first series color.
-    visualMap: {
-      inRange: {
-        color: [
-          mixHex(colors.surfaceInset, colors.chartSeries1, 0.12),
-          colors.chartSeries1,
-        ],
-      },
-      textStyle: { color: colors.contentSecondary, fontSize: 12 },
     },
     toolbox: {
       iconStyle: { borderColor: colors.contentSecondary },

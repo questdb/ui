@@ -1289,7 +1289,7 @@ describe("CellRefreshEngine", () => {
     const zoomedDrawCell = async () => {
       syncOnScreen([drawCell("c1", "select 1", false)])
       await flushAsync()
-      setChartZoom("c1", "x", 20, 60)
+      setChartZoom("c1", 20, 60)
     }
 
     const editSql = async (value: string) => {
@@ -1331,7 +1331,7 @@ describe("CellRefreshEngine", () => {
       await editSql("select 1;\n")
 
       // Then the window survives
-      expect(getChartZoom("c1")).toEqual({ x: { start: 20, end: 60 } })
+      expect(getChartZoom("c1")).toEqual({ start: 20, end: 60 })
       expect(resets).toEqual([])
     })
   })
@@ -1820,7 +1820,7 @@ describe("CellRefreshEngine", () => {
     const overMissing = deriveChartLoading(state, { kind: "missing" }, false)
     const overEmpty = deriveChartLoading(
       state,
-      { kind: "settled", results: [], emptyDqlResults: [], hadError: false },
+      { kind: "settled", results: [], hadError: false },
       false,
     )
 

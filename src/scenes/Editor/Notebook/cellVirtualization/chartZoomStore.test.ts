@@ -14,11 +14,11 @@ describe("chartZoomStore", () => {
 
   it("preserves a zoom window and clears it on a full-range zoom", () => {
     // Given a zoomed chart written through
-    setChartZoom("c1", "x", 20, 60)
-    expect(getChartZoom("c1")).toEqual({ x: { start: 20, end: 60 } })
+    setChartZoom("c1", 20, 60)
+    expect(getChartZoom("c1")).toEqual({ start: 20, end: 60 })
 
     // When the zoom resets to the full range
-    setChartZoom("c1", "x", 0, 100)
+    setChartZoom("c1", 0, 100)
 
     // Then the stored window is gone
     expect(getChartZoom("c1")).toBeUndefined()
@@ -32,7 +32,7 @@ describe("chartZoomStore", () => {
     subscribeChartZoom("c2", forC2)()
 
     // When one cell zooms and then clears
-    setChartZoom("c1", "x", 20, 60)
+    setChartZoom("c1", 20, 60)
     clearChartZoom("c1")
 
     // Then only its own live subscriber was notified, once per change
@@ -41,7 +41,7 @@ describe("chartZoomStore", () => {
 
     // And no notification lands after unsubscribing
     offC1()
-    setChartZoom("c1", "x", 10, 40)
+    setChartZoom("c1", 10, 40)
     expect(forC1).toHaveBeenCalledTimes(2)
   })
 })

@@ -5,7 +5,6 @@ import {
   PieChart,
   ScatterChart,
   CandlestickChart,
-  CustomChart,
 } from "echarts/charts"
 import {
   GridComponent,
@@ -15,7 +14,6 @@ import {
   ToolboxComponent,
   TitleComponent,
   MarkLineComponent,
-  VisualMapContinuousComponent,
 } from "echarts/components"
 import { CanvasRenderer } from "echarts/renderers"
 
@@ -25,7 +23,6 @@ echarts.use([
   PieChart,
   ScatterChart,
   CandlestickChart,
-  CustomChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -33,7 +30,6 @@ echarts.use([
   ToolboxComponent,
   TitleComponent,
   MarkLineComponent,
-  VisualMapContinuousComponent,
   CanvasRenderer,
 ])
 

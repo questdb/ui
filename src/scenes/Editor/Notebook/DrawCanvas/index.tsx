@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
-import type { ChartConfig, ChartZoomAxis } from "../CellChart/chartTypes"
+import type { ChartConfig } from "../CellChart/chartTypes"
+import { buildEchartsOption } from "../CellChart/buildEchartsOption"
 import {
   ChartRenderer,
   type ChartRendererHandle,
@@ -10,7 +11,6 @@ import {
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
-import { resolveChartPlot } from "../CellChart/resolveChartPlot"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
 import { resolveDraw, toChartResult } from "./drawCanvasUtils"
 import { Button } from "../../../../components/Button"
@@ -27,7 +27,6 @@ import {
 } from "../cellRefresh/cellRefreshEngine"
 import { useChartLoading } from "../cells/useChartLoading"
 import {
-  clearChartZoom,
   getChartZoom,
   setChartZoom,
 } from "../cellVirtualization/chartZoomStore"
@@ -102,12 +101,6 @@ const Canvas = styled.div`
   background: ${({ theme }) => theme.color.surfaceInset};
 `
 
-const ChartWarning = styled.div`
-  flex-shrink: 0;
-  padding: 0.6rem 1.2rem;
-  color: ${({ theme }) => theme.color.statusWarning};
-`
-
 const CancelledState = styled(PaneEmptyState)`
   flex-direction: column;
   gap: 1rem;
@@ -159,7 +152,12 @@ export const DrawCanvas: React.FC<Props> = ({
   const drawState = useCellFetchSelector(cell.id, selectDrawState, shallowEqual)
   const { loading } = useChartLoading(cell)
 
-  const [zoomWindows, setZoomWindows] = useState(() => getChartZoom(cell.id))
+  const [zoomStart, setZoomStart] = useState(
+    () => getChartZoom(cell.id)?.start ?? 0,
+  )
+  const [zoomEnd, setZoomEnd] = useState(
+    () => getChartZoom(cell.id)?.end ?? 100,
+  )
 
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
@@ -177,30 +175,24 @@ export const DrawCanvas: React.FC<Props> = ({
   const hadError = chartResult.kind === "settled" && chartResult.hadError
 
   const handleZoomChange = useCallback(
-    (axis: ChartZoomAxis, start: number, end: number) => {
-      setChartZoom(cell.id, axis, start, end)
-      setZoomWindows(getChartZoom(cell.id))
+    (start: number, end: number) => {
+      setZoomStart(start)
+      setZoomEnd(end)
+      setChartZoom(cell.id, start, end)
     },
     [cell.id],
   )
 
   const handleResetZoom = useCallback(() => {
     chartRendererRef.current?.resetZoom()
-    clearChartZoom(cell.id)
-    setZoomWindows(undefined)
+    setZoomStart(0)
+    setZoomEnd(100)
+    setChartZoom(cell.id, 0, 100)
   }, [cell.id])
 
   const resolution = useMemo(
-    () =>
-      resolveDraw(
-        queries,
-        results,
-        cell.chartConfig,
-        chartResult.kind === "settled"
-          ? chartResult.emptyDqlResults
-          : undefined,
-      ),
-    [queries, results, cell.chartConfig, chartResult],
+    () => resolveDraw(queries, results, cell.chartConfig),
+    [queries, results, cell.chartConfig],
   )
 
   // The refresh replaces the cancelled state, and Retry with it; a focused
@@ -212,12 +204,13 @@ export const DrawCanvas: React.FC<Props> = ({
     eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
   }
 
-  const { option, message } = useMemo(
-    () => resolveChartPlot(resolution),
+  const option = useMemo(
+    () => buildEchartsOption(resolution.chart, resolution.renderQueries),
     [resolution],
   )
+
   const empty =
-    classifyBlock !== null || queries.length === 0 || option === null
+    classifyBlock !== null || queries.length === 0 || results.length === 0
   const settledForCurrentQueries = settledKey === queriesKey
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
@@ -229,8 +222,6 @@ export const DrawCanvas: React.FC<Props> = ({
     emptyMessage = "Type a query to draw."
   } else if (!settledForCurrentQueries) {
     emptyMessage = "Drawing…"
-  } else if (message) {
-    emptyMessage = message
   } else if (hadError) {
     emptyMessage = "Query failed: check the SQL editor for the error."
   } else {
@@ -254,7 +245,7 @@ export const DrawCanvas: React.FC<Props> = ({
             ? "Chart loading was cancelled"
             : empty
               ? emptyMessage
-              : (message ?? "")}
+              : ""}
       </VisuallyHiddenStatus>
       {loading ? (
         <PaneEmptyState aria-hidden="true">
@@ -272,22 +263,19 @@ export const DrawCanvas: React.FC<Props> = ({
             Retry
           </Button>
         </CancelledState>
-      ) : empty || !option ? (
+      ) : empty ? (
         <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
       ) : (
-        <>
-          {message && <ChartWarning aria-hidden="true">{message}</ChartWarning>}
-          <Canvas data-hook="draw-canvas">
-            <ChartRenderer
-              ref={chartRendererRef}
-              option={option}
-              onZoomChange={handleZoomChange}
-              isFocused={isFocused}
-              animate={animatesAt(refreshIntervalMs)}
-              zoomWindows={zoomWindows}
-            />
-          </Canvas>
-        </>
+        <Canvas data-hook="draw-canvas">
+          <ChartRenderer
+            ref={chartRendererRef}
+            option={option}
+            onZoomChange={handleZoomChange}
+            isFocused={isFocused}
+            animate={animatesAt(refreshIntervalMs)}
+            zoomWindow={{ start: zoomStart, end: zoomEnd }}
+          />
+        </Canvas>
       )}
       <ChartSettingsDrawer
         open={settingsDrawer.open}

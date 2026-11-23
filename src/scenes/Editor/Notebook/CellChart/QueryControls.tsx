@@ -31,7 +31,6 @@ const TYPE_LABELS: Record<ChartType, string> = {
   scatter: "Scatter",
   pie: "Pie",
   candlestick: "Candlestick",
-  heatmap: "Heatmap",
 }
 
 const PARTITION_TYPES: ChartType[] = [
@@ -95,12 +94,8 @@ export type QueryControlsProps = {
   xColumn: string | null
   anchorLabel: string
   compatible: boolean
-  canToggleIncluded: boolean
   isAnchorTab: boolean
   ohlcError: boolean
-  heatmapError: boolean
-  heatmapValue: string | undefined
-  onHeatmapValueChange: (value: string) => void
   onUpdateQuery: (patch: Partial<QueryChart>) => void
   onSetQuery: (next: QueryChart) => void
   telemetry?: ChartSettingsTelemetry
@@ -112,19 +107,15 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
   xColumn,
   anchorLabel,
   compatible,
-  canToggleIncluded,
   isAnchorTab,
   ohlcError,
-  heatmapError,
-  heatmapValue,
-  onHeatmapValueChange,
   onUpdateQuery,
   onSetQuery,
   telemetry,
 }) => {
   const groups = groupColumns(activeTab.columns)
   const hasOhlc = !!findOhlc(groups.numeric)
-  const baseTypes = availableChartTypes(groups, hasOhlc, xColumn)
+  const baseTypes = availableChartTypes(groups, hasOhlc)
   const types = baseTypes.includes(query.type)
     ? baseTypes
     : [query.type, ...baseTypes]
@@ -133,11 +124,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
     value: c.name,
   }))
   const partitionCandidates = groups.categorical.filter(
-    (c) =>
-      c.name !== xColumn ||
-      (query.type === "heatmap" &&
-        query.enabled === false &&
-        c.name === query.partitionByColumn),
+    (c) => c.name !== xColumn,
   )
   const idx = activeTab.index
 
@@ -149,11 +136,6 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           <CopyButton type="button" text={activeTab.query} size="sm" iconOnly />
         </QueryLabelRow>
         <SqlPre code={activeTab.query} />
-        {activeTab.empty && (
-          <Text color="contentSecondary" size="xs">
-            This query returned no rows. You can still edit its column mapping.
-          </Text>
-        )}
       </FieldGroup>
 
       {!compatible && (
@@ -165,7 +147,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </IncompatibleNote>
       )}
 
-      {canToggleIncluded && (
+      {!isAnchorTab && (
         <CheckboxRow>
           <Checkbox
             checked={query.enabled !== false}
@@ -192,13 +174,6 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
             if (type === "candlestick" && !query.ohlc) {
               const oh = findOhlc(groups.numeric)
               if (oh) patch.ohlc = oh
-            }
-            if (
-              type === "heatmap" &&
-              !query.partitionByColumn &&
-              partitionCandidates[0]
-            ) {
-              patch.partitionByColumn = partitionCandidates[0].name
             }
             onUpdateQuery(patch)
           }}
@@ -256,76 +231,18 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         </FieldGroup>
       )}
 
-      {query.type === "heatmap" && (
-        <FieldGroup>
-          <Field>
-            <FieldLabel>Rows</FieldLabel>
-            <SelectMenuControl
-              name={`rows-${idx}`}
-              ariaLabel="Rows column"
-              value={query.partitionByColumn ?? ""}
-              onValueChange={(value) =>
-                onUpdateQuery({ partitionByColumn: value || undefined })
-              }
-              options={[
-                { label: "Select column", value: "" },
-                ...partitionCandidates.map((c) => ({
-                  label: c.name,
-                  value: c.name,
-                })),
-              ]}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Color scale</FieldLabel>
-            <SelectMenuControl
-              name={`color-scale-${idx}`}
-              ariaLabel="Color scale"
-              value={query.colorScale ?? "chart"}
-              onValueChange={(value) =>
-                onUpdateQuery({
-                  colorScale: value === "row" ? "row" : undefined,
-                })
-              }
-              options={[
-                {
-                  label: "Whole chart",
-                  value: "chart",
-                  description: "One scale for every cell",
-                },
-                {
-                  label: "Each row",
-                  value: "row",
-                  description: "Rows of any size show their contrast",
-                },
-              ]}
-            />
-          </Field>
-          {heatmapError && (
-            <IncompatibleNote>
-              <IncompatibleIcon size={14} weight="fill" />
-              <Text color="statusWarning" size="xs" lineHeight="1.2">
-                Pick a separate rows column and a numeric value column
-              </Text>
-            </IncompatibleNote>
-          )}
-        </FieldGroup>
-      )}
-
-      {(query.type === "pie" || query.type === "heatmap") && (
+      {query.type === "pie" && (
         <Field>
           <FieldLabel>Value</FieldLabel>
           <SelectMenuControl
             name={`value-${idx}`}
             ariaLabel="Value column"
-            value={
-              (query.type === "heatmap" ? heatmapValue : query.yColumns[0]) ??
-              ""
+            value={query.yColumns[0] ?? ""}
+            onValueChange={(value) =>
+              onUpdateQuery({
+                yColumns: value ? [value] : [],
+              })
             }
-            onValueChange={(value) => {
-              if (query.type === "heatmap") onHeatmapValueChange(value)
-              else onUpdateQuery({ yColumns: value ? [value] : [] })
-            }}
             options={[{ label: "Select column", value: "" }, ...numericOptions]}
           />
         </Field>

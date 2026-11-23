@@ -1,32 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import {
-  Input,
-  SelectMenuControl,
-  TabButton,
-  Text,
-} from "../../../../components"
-import {
-  type ChartConfig,
-  type ChartSettingsDraft,
-  type QueryChart,
-} from "./chartTypes"
+import { Input, SelectMenuControl, TabButton } from "../../../../components"
+import type { ChartConfig, QueryChart } from "./chartTypes"
 import {
   ReferenceLinesEditor,
   savedReferenceLines,
 } from "./ReferenceLinesEditor"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
-import {
-  chartXAxisOf,
-  heatmapMappingIncomplete,
-  HEATMAP_CONFLICT_MESSAGE,
-  HEATMAP_INCOMPLETE_MESSAGE,
-  missingHeatmapX,
-  missingHeatmapXMessage,
-  resolveQueryAxes,
-  type QueryTab,
-} from "../DrawCanvas/drawCanvasUtils"
+import { resolveQueryAxes, type QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
   Field,
   FieldGroup,
@@ -94,8 +76,8 @@ type SettingsProps = SharedProps & {
   onClose?: () => void
   // Drawer only: a draft carried across a cell remount, where edits go, and
   // whether this mount is that remount.
-  initialDraft?: ChartSettingsDraft | null
-  onDraftChange?: (draft: ChartSettingsDraft) => void
+  initialDraft?: ChartConfig | null
+  onDraftChange?: (draft: ChartConfig) => void
   appearInPlace?: boolean
 }
 
@@ -111,7 +93,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
   onDraftChange,
   appearInPlace,
 }) => {
-  const [draft, setDraft] = useState<ChartSettingsDraft>(initialDraft ?? config)
+  const [draft, setDraft] = useState<ChartConfig>(initialDraft ?? config)
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
   // Mounting already open means a remount mid-session: keep the draft.
@@ -120,7 +102,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
   // Every edit lands in the session store as well, so a cell remount
   // mid-session restores it.
   const updateDraft = useCallback(
-    (next: ChartSettingsDraft) => {
+    (next: ChartConfig) => {
       setDraft(next)
       onDraftChange?.(next)
     },
@@ -162,50 +144,23 @@ const ChartSettings: React.FC<SettingsProps> = ({
     [telemetry, onClose],
   )
 
-  const { anchor, xColumn, placements, allowAnchorExclusion } =
-    resolveQueryAxes(tabs, draft)
+  const { anchor, xColumn, placements } = resolveQueryAxes(tabs, draft)
   const active =
     placements.find(({ item }) => item.index === activeIndex) ?? placements[0]
   const activeTab = active?.item
-  // Use an empty heatmap's own metadata when repairing it, without making
-  // it an anchor for the queries that have data.
-  const xTab = activeTab?.empty ? activeTab : (anchor ?? activeTab)
-  const isHeatmapX =
-    xTab != null && draft.queries[xTab.index]?.type === "heatmap"
-  const selectedX =
-    !xTab || xTab === anchor
-      ? xColumn
-      : chartXAxisOf(xTab, draft.xColumn, isHeatmapX)
-  const missingX =
-    isHeatmapX &&
-    xTab &&
-    selectedX != null &&
-    missingHeatmapX(xTab.columns, selectedX)
-      ? selectedX
-      : null
-  const xGroups = xTab ? groupColumns(xTab.columns) : null
+  const xGroups = anchor ? groupColumns(anchor.columns) : null
   const xCandidates = xGroups
     ? [...xGroups.temporal, ...xGroups.categorical, ...xGroups.numeric]
     : []
   const isAnchorTab = activeTab != null && activeTab === anchor
   const query = activeTab != null ? draft.queries[activeTab.index] : null
 
-  const includedTabs = placements.filter(({ included }) => included)
-  const heatmapConflict =
-    includedTabs.length > 1 &&
-    includedTabs.some(
-      ({ item }) => draft.queries[item.index]?.type === "heatmap",
-    )
   const hasRight = draft.queries.some((q) => q?.axis === "right")
   const primary = anchor
     ? (draft.queries[anchor.index] ?? anchor.inferredChart)
     : null
-  // Pie and heatmap charts have no value axis to draw a line on.
-  const hasValueAxis =
-    primary != null &&
-    primary.type !== "pie" &&
-    primary.type !== "heatmap" &&
-    !heatmapConflict
+  // A pie chart has no value axis to draw a line on.
+  const hasValueAxis = primary != null && primary.type !== "pie"
 
   const updateQuery = (index: number, patch: Partial<QueryChart>) =>
     updateDraft({
@@ -220,55 +175,24 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ...draft,
       xColumn,
       queries: draft.queries.map((q, i) =>
-        i === xTab?.index &&
-        q?.partitionByColumn === xColumn &&
-        !(q.type === "heatmap" && q.enabled === false)
+        i === anchor?.index && q?.partitionByColumn === xColumn
           ? { ...q, partitionByColumn: undefined }
           : q,
       ),
     })
 
-  const setHeatmapValue = (index: number, value: string | undefined) =>
-    updateDraft({
-      ...draft,
-      heatmapValues: { ...draft.heatmapValues, [index]: value },
-    })
-  const heatmapValueAt = (index: number) =>
-    draft.heatmapValues?.[index] ?? draft.queries[index]?.yColumns[0]
-  const heatmapIncomplete = (q: QueryChart | null, index: number) =>
-    q?.type === "heatmap" &&
-    q.enabled !== false &&
-    heatmapMappingIncomplete(
-      q,
-      draft.xColumn,
-      tabs.find((tab) => tab.index === index),
-      heatmapValueAt(index),
-    )
-  const heatmapIdx = saveAttempted
-    ? draft.queries.findIndex(heatmapIncomplete)
-    : -1
-
   const setQuery = (index: number, next: QueryChart) =>
     updateDraft({
       ...draft,
       queries: draft.queries.map((q, i) => (i === index ? next : q)),
-      heatmapValues: { ...draft.heatmapValues, [index]: undefined },
     })
 
   const commit = () => {
-    if (heatmapConflict) return
     const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
     if (badIdx >= 0) {
       telemetry?.onSaveBlocked?.("ohlc_incomplete")
       setSaveAttempted(true)
       setActiveIndex(badIdx)
-      return
-    }
-    const heatmapIdx = draft.queries.findIndex(heatmapIncomplete)
-    if (heatmapIdx >= 0) {
-      telemetry?.onSaveBlocked?.("heatmap_incomplete")
-      setSaveAttempted(true)
-      setActiveIndex(heatmapIdx)
       return
     }
     telemetry?.onSave?.({
@@ -278,19 +202,9 @@ const ChartSettings: React.FC<SettingsProps> = ({
       hasRightAxis: hasRight,
       partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
     })
-    const { referenceLines: _lines, heatmapValues, ...rest } = draft
-    const queries = rest.queries.map((q, i) => {
-      const value = heatmapValues?.[i]
-      return q?.type === "heatmap" && value !== undefined
-        ? { ...q, yColumns: value ? [value] : [] }
-        : q
-    })
+    const { referenceLines: _lines, ...rest } = draft
     const referenceLines = savedReferenceLines(draft.referenceLines)
-    onSave({
-      ...rest,
-      queries,
-      ...(referenceLines && { referenceLines }),
-    })
+    onSave({ ...rest, ...(referenceLines && { referenceLines }) })
     if (presentation === "drawer") onClose?.()
   }
 
@@ -306,39 +220,19 @@ const ChartSettings: React.FC<SettingsProps> = ({
       onDismiss={dismiss}
       onCommit={commit}
     >
-      {heatmapConflict && (
-        <div role="alert">
-          <Text color="statusWarning">{HEATMAP_CONFLICT_MESSAGE}</Text>
-        </div>
-      )}
-      {heatmapIdx >= 0 && !tabs.some((tab) => tab.index === heatmapIdx) && (
-        <div role="alert">
-          <Text color="statusWarning">{HEATMAP_INCOMPLETE_MESSAGE}</Text>
-        </div>
-      )}
       <Field>
         <FieldLabel>X-axis</FieldLabel>
         <SelectMenuControl
           name="x-axis"
           ariaLabel="X-axis"
-          value={selectedX ?? ""}
-          placeholder={
-            missingX != null ? `${missingX} (missing)` : "Select column"
-          }
-          ariaInvalid={missingX != null || undefined}
+          value={xColumn ?? ""}
+          placeholder="Select column"
           onValueChange={(value) => changeXColumn(value || null)}
           options={xCandidates.map((c) => ({
             label: c.name,
             value: c.name,
           }))}
         />
-        {missingX != null && (
-          <div role="alert">
-            <Text color="statusWarning">
-              {missingHeatmapXMessage(missingX)}
-            </Text>
-          </div>
-        )}
       </Field>
 
       {hasRight && (
@@ -431,19 +325,11 @@ const ChartSettings: React.FC<SettingsProps> = ({
         <QueryControls
           activeTab={active.item}
           query={query}
-          xColumn={active.item === xTab ? selectedX : active.ownX}
+          xColumn={active.ownX}
           compatible={active.compatible}
-          canToggleIncluded={!isAnchorTab || allowAnchorExclusion}
           anchorLabel={anchor?.label ?? "Q1"}
           isAnchorTab={isAnchorTab}
           ohlcError={saveAttempted && candlestickMissingOhlc(query)}
-          heatmapError={
-            saveAttempted && heatmapIncomplete(query, active.item.index)
-          }
-          heatmapValue={heatmapValueAt(active.item.index)}
-          onHeatmapValueChange={(value) =>
-            setHeatmapValue(active.item.index, value)
-          }
           onUpdateQuery={(patch) => updateQuery(active.item.index, patch)}
           onSetQuery={(next) => setQuery(active.item.index, next)}
           telemetry={telemetry}
@@ -457,8 +343,8 @@ export const ChartSettingsDrawer: React.FC<
   SharedProps & {
     open: boolean
     onClose: () => void
-    initialDraft: ChartSettingsDraft | null
-    onDraftChange: (draft: ChartSettingsDraft) => void
+    initialDraft: ChartConfig | null
+    onDraftChange: (draft: ChartConfig) => void
     appearInPlace: boolean
   }
 > = (props) => <ChartSettings {...props} presentation="drawer" />

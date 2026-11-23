@@ -1,34 +1,25 @@
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 
-import {
-  withChartZoom,
-  type ChartZoomAxis,
-  type ChartZoomWindows,
-} from "../CellChart/chartTypes"
-
-const zoomWindows = new Map<string, ChartZoomWindows>()
+const zoomWindows = new Map<string, { start: number; end: number }>()
 const listeners = new Map<string, Set<() => void>>()
 
 const notify = (cellId: string) => {
   listeners.get(cellId)?.forEach((listener) => listener())
 }
 
-export const setChartZoom = (
-  cellId: string,
-  axis: ChartZoomAxis,
-  start: number,
-  end: number,
-) => {
-  const previous = zoomWindows.get(cellId)
-  const next = withChartZoom(previous, axis, start, end)
-  if (previous === next) return
-  if (next) zoomWindows.set(cellId, next)
-  else zoomWindows.delete(cellId)
+export const setChartZoom = (cellId: string, start: number, end: number) => {
+  if (start <= 0 && end >= 100) {
+    clearChartZoom(cellId)
+    return
+  }
+  zoomWindows.set(cellId, { start, end })
   notify(cellId)
 }
 
-export const getChartZoom = (cellId: string) => zoomWindows.get(cellId)
+export const getChartZoom = (
+  cellId: string,
+): { start: number; end: number } | undefined => zoomWindows.get(cellId)
 
 export const clearChartZoom = (cellId: string) => {
   if (!zoomWindows.delete(cellId)) return

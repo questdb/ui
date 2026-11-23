@@ -15,7 +15,6 @@ export type ToolQueryChart = {
   axis?: "left" | "right" | null
   enabled?: boolean | null
   name?: string | null
-  color_scale?: "chart" | "row" | null
 }
 
 export type ToolRightAxis = {
@@ -48,7 +47,6 @@ export const mapQueryChart = (q: ToolQueryChart): QueryChart => {
   if (q.axis) out.axis = q.axis
   if (q.enabled === false) out.enabled = false
   if (q.name) out.name = q.name
-  if (q.type === "heatmap" && q.color_scale === "row") out.colorScale = "row"
   return out
 }
 

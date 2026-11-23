@@ -11,7 +11,7 @@ import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig } from "../CellChart/chartTypes"
-import { resolveChartPlot } from "../CellChart/resolveChartPlot"
+import { buildEchartsOption } from "../CellChart/buildEchartsOption"
 
 const dql = (
   columns: ColumnDefinition[],
@@ -339,54 +339,11 @@ describe("resolveDraw — unresolved statements use a null slot, not an inert co
       config,
     )
     expect(resolution.chart.leftAxisConfigured).toBe(true)
-    const series = resolveChartPlot(resolution).option?.series as {
-      id?: string
-    }[]
+    const series = buildEchartsOption(
+      resolution.chart,
+      resolution.renderQueries,
+    ).series as { id?: string }[]
     expect(series.map(({ id }) => id)).not.toContain("reference-lines-1")
-  })
-
-  it("keeps a missing authored heatmap X instead of plotting the inferred column", () => {
-    const config: ChartConfig = {
-      xColumn: "bucket",
-      queries: [
-        { type: "heatmap", partitionByColumn: "site", yColumns: ["reading"] },
-      ],
-    }
-    const query = dql(
-      [
-        { name: "alt_bucket", type: "SYMBOL" },
-        { name: "site", type: "SYMBOL" },
-        { name: "reading", type: "DOUBLE" },
-      ],
-      [["alt", "west", 2]],
-    )
-    const stale = resolveDraw([query.query], [query], config)
-    expect(stale.renderQueries[0].xColumn).toBe("bucket")
-    const stalePlot = resolveChartPlot(stale)
-    expect(stalePlot.option).toBeNull()
-    expect(stalePlot.message).toMatch(
-      /no longer returns “bucket”\. Select a new X-axis/,
-    )
-    const inferred = resolveDraw([query.query], [query], {
-      ...config,
-      xColumn: null,
-    })
-    expect(inferred.renderQueries[0].xColumn).toBe("alt_bucket")
-    expect(resolveChartPlot(inferred).option).not.toBeNull()
-  })
-
-  it("does not plot a disabled heatmap when it is the only query with rows", () => {
-    const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
-    const saved: ChartConfig = {
-      xColumn: "ts",
-      queries: [null, { type: "heatmap", yColumns: [], enabled: false }],
-    }
-    const { renderQueries } = resolveDraw(
-      statements,
-      [tsPrice(statements[1])],
-      saved,
-    )
-    expect(renderQueries).toEqual([])
   })
 
   it("still plots the first legacy result when its saved line is disabled", () => {
@@ -412,48 +369,6 @@ describe("resolveDraw — unresolved statements use a null slot, not an inert co
       expect(effectiveConfig.queries[0]?.enabled).toBe(false)
     }
   })
-
-  it.each(["line", "heatmap"] as const)(
-    "does not re-anchor a heatmap when a disabled %s query gains rows",
-    (type) => {
-      const statements = [
-        "SELECT bucket, price FROM a",
-        "SELECT ts, price FROM b",
-      ]
-      const first = dql(
-        [
-          { name: "bucket", type: "SYMBOL" },
-          { name: "price", type: "DOUBLE" },
-        ],
-        [["A", 1]],
-        statements[0],
-      )
-      const second = dql(
-        [
-          { name: "ts", type: "TIMESTAMP" },
-          { name: "sample_time", type: "TIMESTAMP" },
-          { name: "site", type: "SYMBOL" },
-          { name: "price", type: "DOUBLE" },
-        ],
-        [[1000, 1100, "west", 5]],
-        statements[1],
-      )
-      const saved: ChartConfig = {
-        xColumn: "sample_time",
-        queries: [
-          { type, yColumns: ["price"], enabled: false },
-          { type: "heatmap", yColumns: ["price"], partitionByColumn: "site" },
-        ],
-      }
-      for (const results of [[second], [first, second]]) {
-        const { chart, renderQueries } = resolveDraw(statements, results, saved)
-        expect(chart.xColumn).toBe("sample_time")
-        expect(renderQueries.map((q) => [q.index, q.xColumn])).toEqual([
-          [1, "sample_time"],
-        ])
-      }
-    },
-  )
 
   it("a saved null does not suppress inference once the statement resolves", () => {
     const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
@@ -599,16 +514,15 @@ describe("toChartResult", () => {
     const resolved = resolveDraw(statements, frame.results, {
       xColumn: "ts",
       queries: [
-        { type: "line", yColumns: ["price"], enabled: false },
-        { type: "heatmap", yColumns: ["price"], partitionByColumn: "site" },
+        { type: "line", yColumns: ["price"] },
+        { type: "bar", yColumns: ["price"] },
       ],
     })
     expect(resolved.tabs.map((tab) => tab.label)).toEqual(["Q2"])
     expect(resolved.renderQueries).toEqual([
       expect.objectContaining({
         index: 1,
-        type: "heatmap",
-        partitionByColumn: "site",
+        type: "bar",
         dataset: [[1000, "west", 21]],
       }),
     ])

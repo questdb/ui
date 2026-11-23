@@ -8,19 +8,14 @@ import { Reset } from "../../../components/icons"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
+import { buildEchartsOption } from "../../Editor/Notebook/CellChart/buildEchartsOption"
 import {
   ChartRenderer,
   type ChartRendererHandle,
 } from "../../Editor/Notebook/CellChart/ChartRenderer"
-import { resolveChartPlot } from "../../Editor/Notebook/CellChart/resolveChartPlot"
 import { ChartSettingsPanel } from "../../Editor/Notebook/CellChart/ChartSettingsDrawer"
 import type { ChartSettingsTelemetry } from "../../Editor/Notebook/CellChart/chartSettingsTelemetry"
-import {
-  withChartZoom,
-  type ChartConfig,
-  type ChartZoomAxis,
-  type ChartZoomWindows,
-} from "../../Editor/Notebook/CellChart/chartTypes"
+import type { ChartConfig } from "../../Editor/Notebook/CellChart/chartTypes"
 import { resolveDraw } from "../../Editor/Notebook/DrawCanvas/drawCanvasUtils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import type { QueryRawResult } from "../../../utils/questdb"
@@ -156,7 +151,8 @@ export const ResultChart: React.FC<Props> = ({
 }) => {
   const chartQuery = useChartQuery({ seed: result, enabled: visible })
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null)
-  const [zoomWindows, setZoomWindows] = useState<ChartZoomWindows>()
+  const [zoomStart, setZoomStart] = useState(0)
+  const [zoomEnd, setZoomEnd] = useState(100)
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
   const trackedChartResultRef = useRef<QueryExecResult | null>(null)
 
@@ -178,12 +174,13 @@ export const ResultChart: React.FC<Props> = ({
     [chartResult, config],
   )
 
-  const plot = useMemo(
-    () => (resolution ? resolveChartPlot(resolution) : null),
+  const option = useMemo(
+    () =>
+      resolution
+        ? buildEchartsOption(resolution.chart, resolution.renderQueries)
+        : null,
     [resolution],
   )
-  const option = plot?.option ?? null
-  const message = plot?.message
 
   const hasChartableColumns =
     resolution?.renderQueries.some(
@@ -193,22 +190,20 @@ export const ResultChart: React.FC<Props> = ({
   const shownRowCount = chartResult?.dataset.length ?? 0
   const totalRowCount = chartResult?.count ?? 0
   const isTruncated = totalRowCount > shownRowCount
-  const isZoomed = zoomWindows != null
+  const isZoomed = zoomStart > 0 || zoomEnd < 100
 
   useEffect(() => {
-    setZoomWindows(undefined)
+    setZoomStart(0)
+    setZoomEnd(100)
     chartRendererRef.current?.resetZoom()
   }, [queryKey])
 
-  const handleZoomChange = useCallback(
-    (axis: ChartZoomAxis, start: number, end: number) => {
-      setZoomWindows((previous) => withChartZoom(previous, axis, start, end))
-    },
-    [],
-  )
+  const handleZoomChange = useCallback((start: number, end: number) => {
+    setZoomStart(start)
+    setZoomEnd(end)
+  }, [])
 
   const handleResetZoom = (e: React.MouseEvent) => {
-    setZoomWindows(undefined)
     chartRendererRef.current?.resetZoom()
     if (e.detail === 0) onResetZoomFocus()
   }
@@ -216,8 +211,6 @@ export const ResultChart: React.FC<Props> = ({
   let emptyMessage = "Run a query to draw a chart."
   if (chartResult && chartResult.dataset.length === 0) {
     emptyMessage = "This result has no rows to plot."
-  } else if (message) {
-    emptyMessage = message
   } else if (chartResult && !hasChartableColumns) {
     emptyMessage = "This result has no chartable columns."
   }
@@ -318,7 +311,7 @@ export const ResultChart: React.FC<Props> = ({
             option={option}
             onZoomChange={handleZoomChange}
             animateEntry={false}
-            zoomWindows={zoomWindows}
+            zoomWindow={{ start: zoomStart, end: zoomEnd }}
           />
         </ChartArea>
       </Canvas>
@@ -327,7 +320,7 @@ export const ResultChart: React.FC<Props> = ({
     body = (
       <EmptyState>
         <ChartLineIcon size={32} weight="regular" aria-hidden />
-        <span role={message ? "status" : undefined}>{emptyMessage}</span>
+        <span>{emptyMessage}</span>
       </EmptyState>
     )
   }
