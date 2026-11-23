@@ -38,6 +38,7 @@ import {
 } from "../Monaco/utils"
 import type { ExecutionRefs } from "../index"
 import { trimSemicolonForDisplay } from "../../../providers/AIConversationProvider/utils"
+import { captureChatDispatch } from "../../../providers/AIConversationProvider/chatDispatch"
 import {
   isBlockingAIStatus,
   useAIStatus,
@@ -49,8 +50,8 @@ import { ChatMessages } from "./ChatMessages"
 import type { QuestionDrafts } from "./QuestionCard"
 import {
   ChatInput,
-  agentDestination,
   matchesQueuedDestination,
+  sendDestination,
   wasQueueCancelled,
   queuedAgentModel,
   type QueuedEntry,
@@ -573,28 +574,27 @@ const AIChatWindow: React.FC = () => {
     }
   }
 
-  const canDispatchQueued = (id: string, entry: QueuedEntry) => {
-    const agent = localAgentChannel?.getSnapshot() ?? null
-    return (
-      canUse &&
-      !isLoadingMessages &&
-      deleteTargetRef.current !== id &&
-      deletingConversationRef.current !== id &&
-      !isOperationBlocking() &&
-      !getOperationSignal().aborted &&
-      !entry.heldByStop &&
-      !wasQueueCancelled(entry) &&
-      (currentModel !== LOCAL_AGENT_MODEL ||
-        hasReadyLocalAgent(localAgentChannel)) &&
-      matchesQueuedDestination(
-        entry,
+  const canDispatchQueued = (id: string, entry: QueuedEntry) =>
+    canUse &&
+    !isLoadingMessages &&
+    deleteTargetRef.current !== id &&
+    deletingConversationRef.current !== id &&
+    !isOperationBlocking() &&
+    !getOperationSignal().aborted &&
+    !entry.heldByStop &&
+    !wasQueueCancelled(entry) &&
+    (currentModel !== LOCAL_AGENT_MODEL ||
+      hasReadyLocalAgent(localAgentChannel)) &&
+    matchesQueuedDestination(
+      entry,
+      sendDestination(
         currentModel,
         localAgentChannel,
-        currentModel === LOCAL_AGENT_MODEL && agent?.acceptsImages === true,
-        agentDestination(agent, aiAssistantSettings),
-      )
+        localAgentChannel?.getSnapshot() ?? null,
+        aiAssistantSettings,
+      ),
     )
-  }
+
   const dispatchQueuedRef = useRef<
     | ((
         id: string,
@@ -972,14 +972,13 @@ const AIChatWindow: React.FC = () => {
     const attempt = Symbol()
     latestRetry.current = attempt
     const abortSignal = getOperationSignal()
+    const ownsChat = captureChatDispatch(getChatDispatchState, conversationId)
     const stillOwnsRetry = () => {
-      const chat = getChatDispatchState(conversationId)
       const selection = retrySelection.current
       const currentAgent = channel?.getSnapshot() ?? null
       return (
         latestRetry.current === attempt &&
-        chat?.owner === active.owner &&
-        chat.messages === messages &&
+        ownsChat() &&
         !isOperationBlocking() &&
         !abortSignal.aborted &&
         abortSignal === getOperationSignal() &&

@@ -3,6 +3,7 @@ import { useSelector } from "react-redux"
 import { toast } from "../components"
 import { QuestContext } from "../providers"
 import { useAIConversationActions } from "../providers/AIConversationProvider"
+import { captureChatDispatch } from "../providers/AIConversationProvider/chatDispatch"
 import { useLocalAgentChannel } from "../utils/localAgent/LocalAgentContext"
 import { useAIStatus } from "../providers/AIStatusProvider"
 import {
@@ -92,16 +93,8 @@ export const useAIQuickActions = () => {
   }
 
   const captureDispatch = (id: string, abortSignal: AbortSignal) => {
-    const active = getChatDispatchState(id)
-    return () => {
-      const current = getChatDispatchState(id)
-      return (
-        active !== null &&
-        current?.owner === active.owner &&
-        current.messages === active.messages &&
-        canContinue(abortSignal)
-      )
-    }
+    const ownsChat = captureChatDispatch(getChatDispatchState, id)
+    return () => ownsChat() && canContinue(abortSignal)
   }
 
   const getTableSchema = async (

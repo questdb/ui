@@ -186,26 +186,39 @@ export const queuedAgentModel = (
   settings: AiAssistantSettings,
 ) => agentDestination(agent, settings).agentModel
 
-export const matchesQueuedDestination = (
-  entry: QueuedEntry,
+// Where a message sent now goes. The composer and the queue dispatch must
+// derive it the same way, or a queued message goes where it was not meant to.
+export const sendDestination = (
   model: string | null,
   channel: QueuedEntry["channel"],
-  acceptsImages: boolean,
-  {
-    agentModel,
-    agentModelPreference,
-    initialAgentModel,
-  }: ReturnType<typeof agentDestination>,
+  agent: ReturnType<typeof useLocalAgent>,
+  settings: AiAssistantSettings,
+) => {
+  const agentChannel = model === LOCAL_AGENT_MODEL ? channel : null
+  const agentSnapshot = agentChannel ? agent : null
+  return {
+    model,
+    channel: agentChannel,
+    acceptsImages: agentSnapshot?.acceptsImages === true,
+    ...agentDestination(agentSnapshot, settings),
+  }
+}
+
+type SendDestination = ReturnType<typeof sendDestination>
+
+export const matchesQueuedDestination = (
+  entry: QueuedEntry,
+  destination: SendDestination,
 ) =>
-  entry.model === model &&
-  (model !== LOCAL_AGENT_MODEL ||
-    (channel !== null &&
-      entry.channel === channel &&
-      entry.agentModelPreference === agentModelPreference &&
+  entry.model === destination.model &&
+  (destination.model !== LOCAL_AGENT_MODEL ||
+    (destination.channel !== null &&
+      entry.channel === destination.channel &&
+      entry.agentModelPreference === destination.agentModelPreference &&
       (entry.awaitingInitialAgentModel
-        ? initialAgentModel
-        : entry.agentModel) === agentModel)) &&
-  (entry.images.length === 0 || acceptsImages)
+        ? destination.initialAgentModel
+        : entry.agentModel) === destination.agentModel)) &&
+  (entry.images.length === 0 || destination.acceptsImages)
 
 export const wasQueueCancelled = (entry: QueuedEntry) =>
   entry.waitingFor?.aborted === true &&
@@ -376,14 +389,13 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const localAgent = useLocalAgent()
     const localAgentChannel = useLocalAgentChannel()
     const composerModel = useComposerModel()
-    const destinationChannel =
-      currentModel === LOCAL_AGENT_MODEL ? localAgentChannel : null
-    const destination = agentDestination(
-      destinationChannel ? localAgent : null,
+    const destination = sendDestination(
+      currentModel,
+      localAgentChannel,
+      localAgent,
       aiAssistantSettings,
     )
-    const acceptsImages =
-      composerModel.usesAgent && localAgent?.acceptsImages === true
+    const { acceptsImages } = destination
 
     const unqueue = useCallback(
       (id: string, entry: QueuedEntry) =>
@@ -396,13 +408,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     )
 
     const matchesDestination = (entry: QueuedEntry) =>
-      matchesQueuedDestination(
-        entry,
-        currentModel,
-        destinationChannel,
-        acceptsImages,
-        destination,
-      )
+      matchesQueuedDestination(entry, destination)
     const queueMismatch = queued !== undefined && !matchesDestination(queued)
     const waitingForBridge =
       currentModel === LOCAL_AGENT_MODEL && !localAgentTransportReady
@@ -613,8 +619,8 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 text,
                 images,
                 agentCommand,
-                model: currentModel,
-                channel: destinationChannel,
+                model: destination.model,
+                channel: destination.channel,
                 agentModel: destination.agentModel,
                 agentModelPreference: destination.agentModelPreference,
                 awaitingInitialAgentModel:
@@ -805,7 +811,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         !readingAttachment.current &&
         (!queued || (!queued.heldByStop && !wasQueueCancelled(queued))) &&
         (currentModel !== LOCAL_AGENT_MODEL ||
-          destinationChannel?.isTransportReady())
+          destination.channel?.isTransportReady())
       )
         steerOperation()
     }
