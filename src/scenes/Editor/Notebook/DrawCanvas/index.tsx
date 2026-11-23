@@ -60,6 +60,9 @@ import { joinChartSync, setChartSync } from "../interactions/chartSync"
 import { setRenderReport } from "../renderReports"
 import { registerCellChart } from "../cellChartImages"
 import { PaneEmptyState } from "../PaneEmptyState"
+import { PartialRowsBadge, partialRowsLines } from "./PartialRowsBadge"
+import { visualSpecOf } from "../visuals/visualCatalog"
+import { partialRowsWarnings } from "../visuals/statementRows"
 import { withNewVariables } from "../interactions/InteractionsEditor"
 import { normalizeVariables } from "../declareUtils"
 import type { NotebookVariable } from "../../../../store/notebook"
@@ -308,6 +311,14 @@ export const DrawCanvas: React.FC<Props> = ({
   )
   const statements =
     statementResults.kind === "settled" ? statementResults.statements : []
+  // A component that refuses a row-capped result says so in its pane.
+  const partialLines = useMemo(
+    () =>
+      visual && visualSpecOf(visual.type).partialResult === "refuse"
+        ? []
+        : partialRowsLines(cell.result),
+    [cell.result, visual],
+  )
   const statementErrors = useMemo(
     () =>
       statementResults.kind === "settled"
@@ -369,7 +380,10 @@ export const DrawCanvas: React.FC<Props> = ({
       name?: string
       data?: unknown[]
     }[]
-    const problems = drawProblems(resolution, cell.chartConfig, formats)
+    const problems = [
+      ...drawProblems(resolution, cell.chartConfig, formats),
+      ...partialRowsWarnings(statements),
+    ]
     setRenderReport(bufferId, cell.id, {
       kind: "chart",
       drawn: {
@@ -393,6 +407,7 @@ export const DrawCanvas: React.FC<Props> = ({
     presetDrawn,
     resolution,
     results,
+    statements,
   ])
 
   const stackProblem = useMemo(
@@ -507,6 +522,7 @@ export const DrawCanvas: React.FC<Props> = ({
         <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
       ) : (
         <Canvas data-hook="draw-canvas">
+          {partialLines.length > 0 && <PartialRowsBadge lines={partialLines} />}
           <ChartSuspense>
             {visual ? (
               <LazyVisualCanvas

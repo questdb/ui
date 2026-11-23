@@ -14,7 +14,8 @@ import {
   sqlLiteral,
   type SetVariables,
 } from "../interactions/chartInteractions"
-import type { StatementRows } from "./statementRows"
+import { partialRowsWarnings, type StatementRows } from "./statementRows"
+import { visualSpecOf } from "./visualCatalog"
 import {
   chordOption,
   gaugeOption,
@@ -217,6 +218,10 @@ export const VisualCanvas = ({
           },
         ]
     }
+    // A component that draws from part of the rows says so; one that
+    // refuses them already reports why.
+    if (visualSpecOf(visual.type).partialResult === "draw")
+      problems = [...problems, ...partialRowsWarnings(statements)]
     setRenderReport(bufferId, cellId, {
       kind: "visual",
       visualConfig: visual,

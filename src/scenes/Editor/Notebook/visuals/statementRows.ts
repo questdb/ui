@@ -18,6 +18,21 @@ export type StatementRows = {
   partial?: true
 }
 
+/** For the agent: statements drawn from part of their rows. */
+export const partialRowsWarnings = (
+  statements: (StatementRows | null)[],
+): { message: string; severity: "warning" }[] =>
+  statements.flatMap((rows, index) =>
+    rows?.partial
+      ? [
+          {
+            message: `Statement ${index + 1} returned only part of its rows; it is drawn from the rows returned.`,
+            severity: "warning" as const,
+          },
+        ]
+      : [],
+  )
+
 export type StatementResults =
   | { kind: "waiting" }
   | { kind: "settled"; statements: (StatementRows | null)[]; error?: string }

@@ -98,11 +98,14 @@ const readSide = (
   }
 }
 
-const Root = styled.div`
+// A row-capped book shows the pane's warning badge top-right: the header's
+// last column moves aside for it.
+const Root = styled.div<{ $partial: boolean }>`
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  padding-right: ${({ $partial }) => ($partial ? "1.2rem" : 0)};
   font-family: ${({ theme }) => theme.font};
   font-size: 1.25rem;
   font-variant-numeric: tabular-nums;
@@ -388,7 +391,10 @@ export const OrderBook = ({
   }
 
   return (
-    <Root data-hook="order-book">
+    <Root
+      data-hook="order-book"
+      $partial={statements.some((rows) => rows?.partial === true)}
+    >
       <Head $cols={cols}>
         <span>Price</span>
         <span>Size</span>

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from "react"
-import { act, screen } from "@testing-library/react"
+import { act, screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import type { CellResult, NotebookCell } from "../../../../store/notebook"
@@ -261,6 +262,72 @@ describe("DrawCanvas render report", () => {
     expect(screen.getAllByText("Drawing…").length).toBeGreaterThan(0)
     expect(getCell(edited).render_report?.problems).toEqual([])
   })
+})
+
+describe("DrawCanvas row-capped results", () => {
+  const capped = (cell: NotebookCell): NotebookCell => {
+    const result = cell.result!
+    const [first] = result.results as Extract<
+      CellResult["results"][number],
+      { type: "dql" }
+    >[]
+    return {
+      ...cell,
+      result: { ...result, results: [{ ...first, count: 12000 }] },
+    }
+  }
+
+  it("marks a chart drawn from part of its rows, and says how much", async () => {
+    // Given a chart whose query returned 5 of 12,000 rows
+    ;(globalThis as unknown as { __sql: string }).__sql = SQL
+    const cell = capped(cellWith(dql(5)))
+    renderComponent(ui(cell))
+
+    // When the user hovers the warning in the chart's corner
+    const badge = screen.getByRole("button", {
+      name: /Drawn from part of the result/,
+    })
+    await userEvent.hover(badge)
+
+    // Then it says which rows were drawn, and so does the agent's report
+    const tooltip = await screen.findByRole("tooltip")
+    expect(within(tooltip).getByText("First 5 of 12,000 rows.")).toBeVisible()
+    expect(getCell(cell).render_report?.problems).toContainEqual({
+      message:
+        "Statement 1 returned only part of its rows; it is drawn from the rows returned.",
+      severity: "warning",
+    })
+  })
+
+  it("shows no mark on a complete result", () => {
+    ;(globalThis as unknown as { __sql: string }).__sql = SQL
+    renderComponent(ui(cellWith(dql(5))))
+    expect(
+      screen.queryByRole("button", { name: /Drawn from part of the result/ }),
+    ).toBeNull()
+  })
+
+  it.each([
+    ["stat", true],
+    ["treemap", false],
+  ] as const)(
+    "marks a capped %s only when it draws part of the rows (%s)",
+    (type, marked) => {
+      // Given a component over a capped result
+      ;(globalThis as unknown as { __sql: string }).__sql = SQL
+      const cell = capped({
+        ...cellWith(dql(5)),
+        chartConfig: { xColumn: null, queries: [], visual: { type } },
+      })
+      renderComponent(ui(cell))
+
+      // Then only a component that draws the rows it has carries the mark;
+      // one that refuses them explains why in its pane
+      expect(
+        screen.queryByRole("button", { name: /Drawn from part of the result/ }),
+      ).toEqual(marked ? expect.anything() : null)
+    },
+  )
 })
 
 describe("DrawCanvas click interactions", () => {

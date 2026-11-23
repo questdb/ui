@@ -20,11 +20,7 @@ import {
 import type { StatementRows } from "../visuals/statementRows"
 import { setRenderReport, type RenderProblem } from "../renderReports"
 import { sanitizeOption } from "./sanitizeOption"
-import {
-  buildCustomOption,
-  customSeriesCount,
-  partialDatasetWarnings,
-} from "./buildCustomOption"
+import { buildCustomOption, customSeriesCount } from "./buildCustomOption"
 import {
   drawErrorsOf,
   resolveChartTypes,
@@ -127,13 +123,6 @@ const withoutZoomWindows = (
     ? { ...strip(option), baseOption: strip(base as Record<string, unknown>) }
     : strip(option)
 }
-
-const PartialNotice = styled.div`
-  height: 2.8rem;
-  padding: 0.5rem 1rem;
-  overflow: auto;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
 
 const Waiting = styled(PaneEmptyState)`
   padding: 1.6rem;
@@ -383,17 +372,10 @@ export const CustomChart = ({
       </Waiting>
     )
 
-  const partial = partialDatasetWarnings(statements)
   return (
     <>
-      {partial.length > 0 && (
-        <PartialNotice role="status">
-          {partial.map(({ message }) => message).join(" ")}
-        </PartialNotice>
-      )}
       <ChartRenderer
         option={option}
-        height={partial.length > 0 ? "calc(100% - 2.8rem)" : undefined}
         isFocused={isFocused}
         animate={!live}
         zoomWindow={NO_ZOOM_WINDOW}
