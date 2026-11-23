@@ -265,6 +265,11 @@ export type AIFlowResult = {
   sql?: string
 }
 
+// What a model reads for a tool call its answer made before the user
+// stopped it: every call needs a result before the next message goes out.
+export const INTERRUPTED_TOOL_RESULT =
+  "The user stopped this answer before the tool returned."
+
 function cleanupOrphanedToolCallsForTurn(params: {
   conversationId: ConversationId
   callbacks: Pick<AIFlowCallbacks, "updateMessage" | "removeMessages">
@@ -843,6 +848,7 @@ export async function executeAIFlow(
       callbacks.updateMessage(conversationId, anchorMessageId, { contextUsage })
     },
     onBeforeStream: () => {
+      if (!ownsLiveFlow()) return
       // A retry starts over from the steps shown before the first attempt, so
       // the failed attempt's steps and text are not shown twice.
       if (stepsBeforeFirstAttempt === null) {
@@ -952,11 +958,13 @@ export async function executeAIFlow(
       }
     },
     onToolCallStart: (name) => {
+      if (!ownsLiveFlow()) return
       const status = toolStatusOf(name)
       // Replaced by the tool's own status once it runs.
       if (status) setStatusWithHistoryAndResetFlags(status, { transient: true })
     },
     onToolCall: (call) => {
+      if (!ownsLiveFlow()) return
       const toolCall: ToolCall = {
         id: call.id,
         name: call.name,
@@ -979,6 +987,7 @@ export async function executeAIFlow(
       scheduleUpdate()
     },
     onToolResult: (result) => {
+      if (!ownsLiveFlow()) return
       resolvedToolCallIds.add(result.tool_call_id)
       const toolResultMessageId = crypto.randomUUID()
       toolResultMessages.push({
@@ -1009,6 +1018,7 @@ export async function executeAIFlow(
       })
     },
     onResponseStart: () => {
+      if (!ownsLiveFlow()) return
       // Flush pending updates for current assistant before creating new one
       if (hasPendingStreamingUpdate) {
         if (rafId) {
@@ -1063,12 +1073,38 @@ export async function executeAIFlow(
     return callbacks.persistMessages(conversationId)
   }
 
+  // A model reads its own earlier tool calls, so a call left without a
+  // result would make the provider reject the next message. A local agent
+  // keeps its own history and ends the stopped turn itself.
+  const closeOpenToolCalls = () => {
+    if (usesLocalAgent) return
+    for (const calls of emittedToolCallsByMessage.values()) {
+      for (const call of calls.values()) {
+        if (resolvedToolCallIds.has(call.id)) continue
+        resolvedToolCallIds.add(call.id)
+        const messageId = crypto.randomUUID()
+        toolResultMessages.push({ messageId, toolCallId: call.id })
+        callbacks.addMessage({
+          id: messageId,
+          role: "tool",
+          tool_call_id: call.id,
+          name: call.name,
+          content: INTERRUPTED_TOOL_RESULT,
+          timestamp: Date.now(),
+          hideFromUI: true,
+        })
+      }
+    }
+  }
+
   let stoppedTranscript: Promise<void> | undefined
   let cancellationResult: AIFlowResult | undefined
-  const stopLocalTranscript = () => {
+  // Stop settles and saves the transcript at once, while this chat still owns
+  // it: the next message can go out, or another chat open, while the stopped
+  // provider call or bridge turn still winds down. Whatever that call still
+  // reports is dropped (see ownsLiveFlow above).
+  const stopTranscript = () => {
     capturedDigest?.finish(false)
-    // Stop releases the UI immediately, but the bridge may not settle until
-    // after another chat opens (or this one is deleted). Save while we own it.
     cancellationResult = processResult({
       type: config.type,
       response: { type: "aborted", message: "" },
@@ -1078,6 +1114,7 @@ export async function executeAIFlow(
       callbacks,
       steered: abortSignal?.reason === STEERED_ABORT_REASON,
     })
+    closeOpenToolCalls()
     stoppedTranscript = finishTranscript()
     if (flow === latestFlow) callbacks.setIsStreaming(false)
   }
@@ -1085,15 +1122,9 @@ export async function executeAIFlow(
   setStatusWithHistory(AIOperationStatus.Processing)
 
   try {
-    if (usesLocalAgent) {
-      if (abortSignal?.aborted) stopLocalTranscript()
-      else
-        abortSignal?.addEventListener("abort", stopLocalTranscript, {
-          once: true,
-        })
-    } else {
-      capturedDigest?.finish(true)
-    }
+    if (abortSignal?.aborted) stopTranscript()
+    else abortSignal?.addEventListener("abort", stopTranscript, { once: true })
+    if (!usesLocalAgent) capturedDigest?.finish(true)
     const conversationHistory =
       config.type === "chat" ? config.conversationHistory : []
 
@@ -1186,7 +1217,7 @@ export async function executeAIFlow(
 
     return flowResult
   } finally {
-    abortSignal?.removeEventListener("abort", stopLocalTranscript)
+    abortSignal?.removeEventListener("abort", stopTranscript)
     capturedDigest?.finish(false)
     try {
       if (stoppedTranscript !== undefined) await stoppedTranscript
