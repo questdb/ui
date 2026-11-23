@@ -1813,14 +1813,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   it("sets reference lines, keeps them on null, and clears them on []", async () => {
     // Given
     const { state } = mountLive(1, [cell("c", "SELECT 1")])
-    const send = (reference_lines: unknown) =>
+    const send = (reference_lines: unknown, queries: unknown = null) =>
       dispatchTool(
         "set_cell_chart_config",
         {
           buffer_id: 1,
           cell_id: "c",
           x_column: null,
-          queries: null,
+          queries,
           right_axis: null,
           reference_lines,
         },
@@ -1831,10 +1831,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       )
 
     // When
-    await send([
-      { value: 30, axis: "right", label: "Oversold" },
-      { value: 70, axis: null, label: null },
-    ])
+    await send(
+      [
+        { value: 30, axis: "right", label: "Oversold" },
+        { value: 70, axis: null, label: null },
+      ],
+      [{ type: "line", axis: "right" }],
+    )
 
     // Then
     expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual([
@@ -1866,7 +1869,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         ALL_GRANTED,
         dqlValidator,
       )
-    const referenceLines = [{ value: 30, axis: "right", label: "Threshold" }]
+    const referenceLines = [{ value: 30, label: "Threshold" }]
     expect(
       (
         await tool("set_cell_chart_config", {
@@ -1933,6 +1936,52 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       name: "Renamed after clear",
       chartConfig: { xColumn: null, queries: [] },
     })
+  })
+
+  it("refuses a right-axis reference line on a chart with no right-axis query", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    const tool = (name: string, input: object) =>
+      dispatchTool(
+        name,
+        { buffer_id: 1, ...input },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+    const rightLine = [{ value: 30, axis: "right", label: null }]
+
+    // When
+    const patched = await tool("set_cell_chart_config", {
+      cell_id: "c",
+      reference_lines: rightLine,
+    })
+    const applied = await tool("apply_notebook_state", {
+      cells: [
+        {
+          id: "c",
+          preserve_value: true,
+          chart_config: {
+            x_column: null,
+            queries: [{ type: "line", axis: "left" }],
+            reference_lines: rightLine,
+          },
+        },
+      ],
+    })
+
+    // Then
+    for (const res of [patched, applied]) {
+      expect(res.is_error).toBe(true)
+      const parsed = JSON.parse(res.content) as {
+        error_code: string
+        message: string
+      }
+      expect(parsed.error_code).toBe("validation")
+      expect(parsed.message).toContain("no enabled query is on the right axis")
+    }
+    expect(cellById(state, "c")?.chartConfig?.referenceLines).toBeUndefined()
   })
 
   it("treats null fields on set_cell_chart_config as 'omit' (not overwrite)", async () => {

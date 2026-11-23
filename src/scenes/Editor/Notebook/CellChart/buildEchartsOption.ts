@@ -415,7 +415,13 @@ const buildScatterChartOption = (
       }
     })
     .filter((s): s is NonNullable<typeof s> => s !== null)
-  const markers = referenceLineSeries(series, referenceLines)
+  // A scatter has one value axis, in the units of its query's axis: lines on
+  // that axis are drawn on it, and the other axis' lines stay hidden.
+  const queryAxis = q.axis === "right" ? 1 : 0
+  const markers = referenceLineSeries(
+    series.map((s) => ({ ...s, yAxisIndex: queryAxis })),
+    referenceLines,
+  ).map((marker) => ({ ...marker, yAxisIndex: 0 }))
   return {
     tooltip: { trigger: "item", textStyle: chartText },
     legend: { ...legend, data: [...new Set(series.map((s) => s.name))] },

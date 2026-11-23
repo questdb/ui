@@ -597,6 +597,49 @@ describe("buildEchartsOption — reference lines", () => {
     expect(axis.max({ min: 100, max: 130 })).toBeNull()
   })
 
+  it.each([
+    ["right", [1000, 5]],
+    ["left", [5]],
+  ] as const)(
+    "draws a numeric scatter's lines in the units of its %s-axis query",
+    (axis, drawn) => {
+      // Given
+      const scatter = resolved({
+        columns: [col("size", "DOUBLE"), col("price", "DOUBLE")],
+        dataset: [
+          [1, 101],
+          [2, 102],
+        ],
+        xColumn: "size",
+        type: "scatter",
+        yColumns: ["price"],
+        axis,
+      })
+
+      // When
+      const opt = buildEchartsOption(
+        {
+          xColumn: "size",
+          referenceLines: [{ value: 1000, axis: "right" }, { value: 5 }],
+        },
+        [scatter],
+      )
+
+      // Then
+      const markers = seriesList(opt.series).filter(
+        (s) => typeof s.id === "string" && s.id.startsWith("reference-lines"),
+      )
+      expect(markers.every((s) => (s.yAxisIndex ?? 0) === 0)).toBe(true)
+      expect(
+        markers.flatMap((s) =>
+          (s.markLine as { data: { yAxis: number }[] }).data.map(
+            (d) => d.yAxis,
+          ),
+        ),
+      ).toEqual(drawn)
+    },
+  )
+
   it("keeps a numeric scatter's scale free of a right line it cannot draw", () => {
     // Given a scatter, which has no right axis
     const scatter = resolved({

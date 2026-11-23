@@ -36,9 +36,11 @@ import {
 } from "../../scenes/Editor/Notebook/declareUtils"
 import type { ToolExecutionContext } from "../ai/shared"
 import {
+  hasRightAxisLineWithoutQuery,
   mapQueryChart,
   mapReferenceLines,
   mapRightAxis,
+  RIGHT_AXIS_LINE_WITHOUT_QUERY,
   type ToolQueryChart,
   type ToolReferenceLine,
   type ToolRightAxis,
@@ -326,6 +328,19 @@ export const dispatchApplyNotebookState = async (
         }),
         is_error: true,
       }
+    }
+    if (
+      c.chart_config &&
+      hasRightAxisLineWithoutQuery({
+        queries: (c.chart_config.queries ?? []).map((q) =>
+          q ? mapQueryChart(q) : null,
+        ),
+        referenceLines: mapReferenceLines(c.chart_config.reference_lines ?? []),
+      })
+    ) {
+      return validationError(
+        `cells[${idx}].chart_config: ${RIGHT_AXIS_LINE_WITHOUT_QUERY}`,
+      )
     }
     if (preserves && !(typeof c.id === "string" && c.id.length > 0)) {
       return {
