@@ -364,6 +364,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const fileInputRef = useRef<HTMLInputElement>(null)
     const readingAttachment = useRef(false)
     const [isReadingAttachment, setIsReadingAttachment] = useState(false)
+    const [isComposerFocused, setIsComposerFocused] = useState(false)
     const mounted = useRef(false)
     useLayoutEffect(() => {
       mounted.current = true
@@ -862,6 +863,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
             agentLabel={localAgent.info.label}
             question={question}
             drafts={questionDrafts}
+            interruptsTyping={isComposerFocused}
             onAnswer={handleQuestionAnswer}
             onStop={handleQuestionStop}
           />
@@ -977,6 +979,8 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   value={input}
                   onChange={(e) => changeInput(e.target.value)}
                   onKeyDown={handleKeyDown}
+                  onFocus={() => setIsComposerFocused(true)}
+                  onBlur={() => setIsComposerFocused(false)}
                   onPaste={(event) => {
                     const files = imageFilesOf(event.clipboardData.items)
                     if (files.length === 0) return

@@ -372,7 +372,7 @@ const renderQuestions = (...ids: string[]) => {
   configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL, {
     abortOperation: () => stopTurn(),
   })
-  const questions: AgentQuestionMessage[] = ids.map((requestId) => ({
+  const questionFor = (requestId: string): AgentQuestionMessage => ({
     v: "0.6.0",
     type: "agent_question",
     requestId,
@@ -390,10 +390,10 @@ const renderQuestions = (...ids: string[]) => {
         otherFieldId: null,
       },
     ],
-  }))
+  })
   let snapshot: LocalAgentSnapshot = {
     ...fakeChannel("agent").getSnapshot(),
-    questions,
+    questions: ids.map(questionFor),
   }
   let listener: (() => void) | undefined
   const answerQuestion = vi.fn<
@@ -425,13 +425,18 @@ const renderQuestions = (...ids: string[]) => {
     listener?.()
   }
   renderInput(channel)
-  return answerQuestion
+  const ask = (requestId: string) =>
+    act(() => {
+      snapshot = { ...snapshot, questions: [questionFor(requestId)] }
+      listener?.()
+    })
+  return { answer: answerQuestion, ask }
 }
 
 it.each(["answer", "skip"])(
   "focuses the next question, then the composer after keyboard %s",
   async (action) => {
-    const answer = renderQuestions("first", "last")
+    const { answer } = renderQuestions("first", "last")
     const user = userEvent.setup()
     getHook("chat-question-option").focus()
     await user.keyboard("{Enter}")
@@ -452,6 +457,21 @@ it.each(["answer", "skip"])(
     expect(input).toHaveValue("Follow-up")
   },
 )
+
+it("does not answer a question with a number typed into the composer", async () => {
+  // Given the user types a follow-up while the agent works
+  const { answer, ask } = renderQuestions()
+  const user = userEvent.setup()
+  await user.type(getHook("chat-input-textarea"), "Show the top ")
+
+  // When a question replaces the composer and the user types on
+  ask("only")
+  await user.keyboard("1")
+
+  // Then the question stays open
+  expect(answer).not.toHaveBeenCalled()
+  expect(getHook("chat-question-option")).toBeInTheDocument()
+})
 
 it("does not steal focus from outside the chat when the last question is dismissed", () => {
   renderQuestions("last")

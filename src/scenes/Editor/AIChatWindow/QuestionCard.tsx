@@ -265,6 +265,8 @@ type QuestionCardProps = {
   agentLabel: string
   question: AgentQuestionMessage
   drafts?: QuestionDrafts
+  // The card replaced the message box while the user typed in it.
+  interruptsTyping: boolean
   onAnswer: (answers: Answers | null) => boolean
   onStop: () => void
 }
@@ -278,6 +280,7 @@ export const QuestionCard = ({
   agentLabel,
   question,
   drafts,
+  interruptsTyping,
   onAnswer,
   onStop,
 }: QuestionCardProps) => {
@@ -300,6 +303,7 @@ export const QuestionCard = ({
   }, [drafts, question, tab, answers, editing, customDrafts])
   const [answered, setAnswered] = useState(false)
   const [sendFailed, setSendFailed] = useState(false)
+  const [ignoresDigitsOnHeading] = useState(interruptsTyping)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const questionTextRef = useRef<HTMLParagraphElement>(null)
   const textAnswerRef = useRef<HTMLInputElement>(null)
@@ -436,6 +440,7 @@ export const QuestionCard = ({
       goTo(tab + 1, true)
       return
     }
+    if (ignoresDigitsOnHeading && event.target === headingRef.current) return
     if (!field || field.kind !== "choice" || !/^[1-9]$/.test(event.key)) return
     const index = Number.parseInt(event.key, 10) - 1
     if (index < field.options.length) {
@@ -650,7 +655,6 @@ export const QuestionCard = ({
               ) : (
                 <Input
                   ref={textAnswerRef}
-                  autoFocus
                   value={valuesOf(answers[field.id])[0] ?? ""}
                   onChange={(event) =>
                     setAnswer(field.id, event.target.value || null)

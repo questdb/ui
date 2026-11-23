@@ -47,13 +47,25 @@ const question = (fields: AgentQuestionField[]): AgentQuestionMessage => ({
   fields,
 })
 
-const renderCard = (message: AgentQuestionMessage) => {
+const label: AgentQuestionField = {
+  id: "label",
+  kind: "text",
+  title: null,
+  prompt: "Label?",
+  required: true,
+}
+
+const renderCard = (
+  message: AgentQuestionMessage,
+  interruptsTyping = false,
+) => {
   const onAnswer = vi.fn(() => true)
   const onStop = vi.fn()
   renderComponent(
     <QuestionCard
       agentLabel="Claude Code"
       question={message}
+      interruptsTyping={interruptsTyping}
       onAnswer={onAnswer}
       onStop={onStop}
     />,
@@ -74,21 +86,42 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith({ question_0: "QuestDB" })
   })
 
-  it("does not take focus or keystrokes from an editor outside the chat", async () => {
-    // Given the user is typing SQL outside the chat
-    renderComponent(<textarea aria-label="SQL editor" />)
-    const editor = screen.getByRole("textbox", { name: "SQL editor" })
-    editor.focus()
-    await userEvent.keyboard("LIMIT ")
+  it.each([
+    ["choice", database],
+    ["text", label],
+  ])(
+    "does not take focus or keystrokes from an editor outside the chat for a %s question",
+    async (_, field) => {
+      // Given the user is typing SQL outside the chat
+      renderComponent(<textarea aria-label="SQL editor" />)
+      const editor = screen.getByRole("textbox", { name: "SQL editor" })
+      editor.focus()
+      await userEvent.keyboard("LIMIT ")
 
-    // When a question arrives
-    const { onAnswer } = renderCard(question([database]))
-    await userEvent.keyboard("1")
+      // When a question arrives
+      const { onAnswer } = renderCard(question([field]))
+      await userEvent.keyboard("1")
 
-    // Then
-    expect(editor).toHaveFocus()
-    expect(editor).toHaveValue("LIMIT 1")
+      // Then
+      expect(editor).toHaveFocus()
+      expect(editor).toHaveValue("LIMIT 1")
+      expect(onAnswer).not.toHaveBeenCalled()
+    },
+  )
+
+  it("does not answer with a number typed into the message box it replaced", async () => {
+    // Given a question replaces the message box while the user types in it
+    const { onAnswer } = renderCard(question([database]), true)
+    expect(screen.getByRole("heading", { name: /Claude Code/ })).toHaveFocus()
+
+    // When the user types on
+    await userEvent.keyboard("top 2")
+
+    // Then no option is picked until the user moves into the card
     expect(onAnswer).not.toHaveBeenCalled()
+    await userEvent.tab()
+    await userEvent.keyboard("2")
+    expect(onAnswer).toHaveBeenCalledWith({ question_0: "Postgres" })
   })
 
   it("focuses its heading when nothing else holds focus", () => {
@@ -265,19 +298,7 @@ describe("QuestionCard", () => {
     "ignores WebKit's IME Enter in a %s answer",
     async (kind) => {
       const { onAnswer } = renderCard(
-        question(
-          kind === "custom"
-            ? [database]
-            : [
-                {
-                  id: "label",
-                  kind: "text",
-                  title: null,
-                  prompt: "Label?",
-                  required: true,
-                },
-              ],
-        ),
+        question(kind === "custom" ? [database] : [label]),
       )
       if (kind === "custom")
         await userEvent.click(
