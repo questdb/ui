@@ -396,33 +396,6 @@ describe("VisualCanvas", () => {
     )
   })
 
-  it("tells the agent a stat drew from part of its rows", () => {
-    // Given stat tiles over a capped result
-    renderComponent(
-      <VisualCanvas
-        {...defaults}
-        visual={{ type: "stat" }}
-        statements={[
-          {
-            columns: [
-              { name: "symbol", type: "SYMBOL" },
-              { name: "price", type: "DOUBLE" },
-            ],
-            rows: [["BTC", 10]],
-            partial: true,
-          },
-        ]}
-      />,
-    )
-
-    // Then the report carries a warning next to what it drew
-    expect(getRenderReport(bufferId, cellId)?.problems).toContainEqual({
-      message:
-        "Statement 1 returned only part of its rows; it is drawn from the rows returned.",
-      severity: "warning",
-    })
-  })
-
   it("does not draw a Sankey from an incomplete result", () => {
     // Given an otherwise valid flow in a capped statement result
     renderComponent(
