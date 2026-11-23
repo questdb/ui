@@ -55,11 +55,6 @@ export const mapsUsedBy = (option: Record<string, unknown>): string[] => {
     const scope = node as Record<string, unknown>
     collect(scope.geo)
     collect(scope.series)
-    visit(scope.baseOption)
-    if (Array.isArray(scope.options)) scope.options.forEach(visit)
-    if (Array.isArray(scope.media))
-      for (const entry of scope.media as unknown[])
-        visit((entry as { option?: unknown } | null)?.option)
   }
   visit(option)
   return [...names]

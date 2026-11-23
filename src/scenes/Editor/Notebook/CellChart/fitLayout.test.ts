@@ -42,26 +42,25 @@ describe("fitLayout", () => {
     )
     expect(option.dataZoom).toEqual([slider])
   })
-  it("reserves distinct bands inside the effective base option", () => {
+  it("reserves distinct bands for several legends and sliders", () => {
     const option = fitLayout(
       {
-        baseOption: {
-          legend: [{ data: ["north"] }, { data: ["south"] }],
-          dataZoom: [
-            { type: "slider", xAxisIndex: 0 },
-            { type: "slider", xAxisIndex: 1 },
-          ],
-          grid: {},
-        },
+        legend: [{ data: ["north"] }, { data: ["south"] }],
+        dataZoom: [
+          { type: "slider", xAxisIndex: 0 },
+          { type: "slider", xAxisIndex: 1 },
+        ],
+        grid: {},
       },
       { width: 720, height: 480 },
     )
-    const legends = option.baseOption.legend as { bottom?: number }[]
-    const sliders = option.baseOption.dataZoom as { bottom?: number }[]
+    const legends = option.legend as { bottom?: number }[]
+    const sliders = option.dataZoom as { bottom?: number }[]
     expect(legends.map(({ bottom }) => bottom)).toEqual([3, 31])
     expect(typeof sliders[0].bottom).toBe("number")
     expect(sliders[1].bottom).toBeGreaterThan(sliders[0].bottom ?? 0)
   })
+
   it("fits a grid to the panel and keeps its labels inside, whatever paddings it had", () => {
     // Given an option with paddings that would clip or waste space
     const option = {

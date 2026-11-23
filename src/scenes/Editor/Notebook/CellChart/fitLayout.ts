@@ -579,10 +579,6 @@ type Transform = (x: number, y: number) => [number, number]
 export const fitLayout = <T extends object>(input: T, size: Size): T => {
   if (size.width < 40 || size.height < 40) return input
   const option = { ...(input as Box) }
-  if (isRecord(option.baseOption)) {
-    option.baseOption = fitLayout(option.baseOption, size)
-    return option as T
-  }
   for (const key of [
     "series",
     "grid",

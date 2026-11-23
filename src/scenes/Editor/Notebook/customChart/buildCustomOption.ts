@@ -344,8 +344,7 @@ const checkEncodes = (
   })
 }
 
-// Enforce console-owned rendering policies after row binding, including
-// nested scopes such as timeline and media options that ECharts merges later.
+// Enforce console-owned rendering policies after row binding.
 const TITLE_NAVIGATION = new Set(["link", "sublink", "target", "subtarget"])
 
 const enforceRendererPolicy = (
@@ -438,20 +437,11 @@ const sankeyProblem = (node: unknown): string | undefined => {
         return "Sankey links contain a cycle. Remove cycles or choose a graph visual."
     }
   }
-  return sankeyProblem([
-    node.series,
-    node.baseOption,
-    node.options,
-    node.media,
-    node.option,
-  ])
+  return sankeyProblem(node.series)
 }
 
-const baseOptionOf = (option: Record<string, unknown>) =>
-  isRecord(option.baseOption) ? option.baseOption : option
-
 export const customSeriesCount = (option: Record<string, unknown>): number => {
-  const series = baseOptionOf(option).series
+  const series = option.series
   return Array.isArray(series) ? series.length : isRecord(series) ? 1 : 0
 }
 
@@ -503,7 +493,7 @@ export const buildCustomOption = (
       ],
     }
   }
-  const base = baseOptionOf(filled)
+  const base = filled
   const ours = datasetsOf(statements)
   const theirs: unknown = base.dataset
   const theirList: unknown[] = Array.isArray(theirs)
@@ -528,23 +518,19 @@ export const buildCustomOption = (
   const datasetIds = datasets.map((d, i) =>
     isRecord(d) && typeof d.id === "string" ? d.id : String(i),
   )
-  const reportInBase = (path: string, message: string) =>
-    report(base === filled ? path : `baseOption.${path}`, message)
-  checkEncodes(base, statements, datasetIds, reportInBase)
+  checkEncodes(base, statements, datasetIds, report)
 
   const tooltip = isRecord(base.tooltip)
     ? base.tooltip
     : base.tooltip === false
       ? { show: false }
       : {}
-  const effectiveBase = {
+  const option = {
     useUTC: true,
     ...base,
     dataset: datasets,
     tooltip: { ...tooltip, confine: true, renderMode: "richText" },
     ...(live ? { animation: false } : {}),
   }
-  const option =
-    base === filled ? effectiveBase : { ...filled, baseOption: effectiveBase }
   return { option, problems }
 }

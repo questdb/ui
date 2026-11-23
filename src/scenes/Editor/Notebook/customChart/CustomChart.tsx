@@ -59,10 +59,7 @@ const withoutZoomWindows = (
             ? part.dataZoom.map(withoutWindow)
             : withoutWindow(part.dataZoom),
         }
-  const base = option.baseOption
-  return base && typeof base === "object" && !Array.isArray(base)
-    ? { ...strip(option), baseOption: strip(base as Record<string, unknown>) }
-    : strip(option)
+  return strip(option)
 }
 
 const PartialNotice = styled.div`
@@ -196,17 +193,6 @@ export const CustomChart = ({
   const zoomed = zoomedKey === optionKey
   const option = useMemo(() => {
     const raw = zoomed ? withoutZoomWindows(built.option) : built.option
-    if (
-      raw.baseOption &&
-      typeof raw.baseOption === "object" &&
-      !Array.isArray(raw.baseOption)
-    ) {
-      const baseOption = withBrush(
-        raw.baseOption as EChartsOption,
-        interactions,
-      )
-      return { ...raw, baseOption } as EChartsOption
-    }
     return withBrush(raw as EChartsOption, interactions)
   }, [built, interactions, zoomed])
   // Keyed by the map names, so a data refresh does not reload (or retry a

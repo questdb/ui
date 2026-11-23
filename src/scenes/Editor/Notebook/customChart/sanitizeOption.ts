@@ -85,9 +85,10 @@ const DROPPED_TOOLTIP_KEYS = [
 
 const DROPPED_TITLE_KEYS = ["link", "sublink", "target", "subtarget"]
 
-// Paths of a whole option: the root, its base option, timeline options and
-// media options.
-const OPTION_SCOPE = /^(|baseOption|options\[\d+\]|media\[\d+\]\.option)$/
+// Timeline and media options (a base option with per-frame or per-size
+// options merged over it) are not supported: an option is one scope, and the
+// notebook's variables switch what it shows.
+const MULTI_OPTION_KEYS = ["baseOption", "options", "media", "timeline"]
 
 const MAX_STRING = 2_000
 
@@ -192,10 +193,7 @@ export const sanitizeOption = (
       }
       // Titles read a link from the option itself too (ECharts falls back to
       // the global option), so the option's own scopes drop them as well.
-      if (
-        (inside.title || OPTION_SCOPE.test(path)) &&
-        DROPPED_TITLE_KEYS.includes(key)
-      ) {
+      if ((inside.title || path === "") && DROPPED_TITLE_KEYS.includes(key)) {
         report(at, "Links in titles are not allowed.", "error")
         continue
       }
@@ -308,45 +306,23 @@ const validateOptionScopes = (
     message: string,
     severity?: OptionProblem["severity"],
   ) => void,
-  path = "",
 ): void => {
-  const qualify = (part: string) => (path ? `${path}.${part}` : part)
-  const reportHere: typeof report = (part, message, severity) =>
-    report(qualify(part), message, severity)
+  const multi = MULTI_OPTION_KEYS.filter((key) => key in option)
+  if (multi.length > 0) {
+    for (const key of multi) delete option[key]
+    report(
+      "",
+      `Timeline and media options are not supported (${multi.join(", ")}): write one option, and use notebook variables to switch what it shows.`,
+      "error",
+    )
+  }
   delete option.backgroundColor
   if ("toolbox" in option) {
     delete option.toolbox
-    reportHere("toolbox", "The console provides its own chart toolbar.")
+    report("toolbox", "The console provides its own chart toolbar.")
   }
-  validateSeries(option, context, reportHere)
-  validateMaps(option, context, reportHere)
-  if (isRecord(option.baseOption))
-    validateOptionScopes(
-      option.baseOption,
-      context,
-      report,
-      qualify("baseOption"),
-    )
-  if (Array.isArray(option.options))
-    option.options.forEach((entry, index) => {
-      if (isRecord(entry))
-        validateOptionScopes(
-          entry,
-          context,
-          report,
-          qualify(`options[${index}]`),
-        )
-    })
-  if (Array.isArray(option.media))
-    option.media.forEach((entry, index) => {
-      if (isRecord(entry) && isRecord(entry.option))
-        validateOptionScopes(
-          entry.option,
-          context,
-          report,
-          qualify(`media[${index}].option`),
-        )
-    })
+  validateSeries(option, context, report)
+  validateMaps(option, context, report)
 }
 
 const validateSeries = (

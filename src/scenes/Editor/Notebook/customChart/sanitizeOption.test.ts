@@ -9,54 +9,44 @@ const context = {
 }
 
 describe("sanitizeOption", () => {
-  it("reserves chart toolbars in all option scopes", () => {
-    // Given a user toolbar preference in every chart scope
-    const scope = { toolbox: { show: true } }
+  it("reserves the chart toolbar", () => {
+    // Given a user toolbar preference
+    const { option, problems } = sanitizeOption(
+      { toolbox: { show: true }, series: [{ type: "bar" }] },
+      context,
+    )
+
+    // Then only the console's toolbar can reach the renderer
+    expect(option).not.toHaveProperty("toolbox")
+    expect(problems.map(({ path }) => path)).toEqual(["toolbox"])
+  })
+
+  it("rejects timeline and media options", () => {
+    // Given an option with a base option, timeline frames and media rules
+    const scope = { series: [{ type: "bar" }] }
     const { option, problems } = sanitizeOption(
       {
-        ...scope,
         baseOption: scope,
+        timeline: { data: ["2024"] },
         options: [scope],
         media: [{ option: scope }],
       },
       context,
     )
 
-    // Then only console-owned toolbar configuration can reach the renderer
-    expect(option).toEqual({
-      baseOption: {},
-      options: [{}],
-      media: [{ option: {} }],
-    })
-    expect(problems.map(({ path }) => path)).toEqual([
-      "toolbox",
-      "baseOption.toolbox",
-      "options[0].toolbox",
-      "media[0].option.toolbox",
+    // Then none of them reach the chart, and the option is refused
+    expect(option).toEqual({})
+    expect(problems).toEqual([
+      expect.objectContaining({
+        path: "",
+        severity: "error",
+        message: expect.stringContaining(
+          "Timeline and media options",
+        ) as string,
+      }),
     ])
   })
 
-  it("checks custom renderer authorization in nested option scopes", () => {
-    const series = [{ type: "custom", renderItem: "unregistered" }]
-    const { option, problems } = sanitizeOption(
-      {
-        baseOption: { series },
-        options: [{ series }],
-        media: [{ option: { series } }],
-      },
-      context,
-    )
-    expect(option).toEqual({
-      baseOption: { series: [] },
-      options: [{ series: [] }],
-      media: [{ option: { series: [] } }],
-    })
-    expect(problems.map(({ path }) => path)).toEqual([
-      "baseOption.series[0].renderItem",
-      "options[0].series[0].renderItem",
-      "media[0].option.series[0].renderItem",
-    ])
-  })
   it("keeps the colour column of a tree bound from rows", () => {
     // Given a treemap whose nodes take a colour value from a column
     const raw = {
@@ -123,7 +113,6 @@ describe("sanitizeOption", () => {
       link: "https://example.invalid/phish",
       target: "self",
       title: { text: "Click me" },
-      baseOption: { sublink: "https://example.invalid/sub" },
       series: [{ type: "bar" }],
     }
 
@@ -133,9 +122,8 @@ describe("sanitizeOption", () => {
     // Then no title can open them
     expect(option).not.toHaveProperty("link")
     expect(option).not.toHaveProperty("target")
-    expect(option.baseOption).not.toHaveProperty("sublink")
     expect(problems.map(({ path }) => path)).toEqual(
-      expect.arrayContaining(["link", "target", "baseOption.sublink"]),
+      expect.arrayContaining(["link", "target"]),
     )
   })
 
