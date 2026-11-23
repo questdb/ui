@@ -184,13 +184,17 @@ const setup = async (bufferId: number, revealDependent = true) => {
       name: revealDependent ? "Reveal cells" : "Reveal chart",
     }),
   )
-  const chart = await waitFor(() => {
-    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
-    expect(host).not.toBeNull()
-    const chart = echarts.getInstanceByDom(host!)!
-    expect(chart?.getOption()).toHaveProperty("series.0.data", [4, 9, 6])
-    return chart
-  })
+  const chart = await waitFor(
+    () => {
+      const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+      expect(host).not.toBeNull()
+      const chart = echarts.getInstanceByDom(host!)!
+      expect(chart?.getOption()).toHaveProperty("series.0.data", [4, 9, 6])
+      return chart
+      // The chart code loads lazily: the first test in a busy run waits longer.
+    },
+    { timeout: 10_000 },
+  )
   if (revealDependent)
     expect(await screen.findByRole("gridcell")).toHaveTextContent(/^east$/)
   const dependentCalls = () =>
