@@ -397,7 +397,7 @@ describe("dashboard grid", () => {
     )
   })
 
-  it("keeps a single sample visible and draws a line when there are two samples", () => {
+  it("keeps a single sample visible and draws a line when there are two samples, however wide their range", () => {
     renderComponent(
       <ResultGrid
         dataSource={inMemoryDataSource(
@@ -420,7 +420,10 @@ describe("dashboard grid", () => {
     expect(single.querySelector("polyline")).toBeNull()
     expect(multiple.querySelector("polyline")).not.toBeNull()
     expect(multiple).toHaveAccessibleName(/8.*9/)
-    expect(extreme.querySelector("polyline")).toBeNull()
-    expect(extreme).toHaveTextContent(/1e\+308/)
+    // A range too wide for a double still draws, scaled down
+    expect(extreme.querySelector("polyline")).toHaveAttribute(
+      "points",
+      "0,19 100,1",
+    )
   })
 })

@@ -5,6 +5,7 @@ import { PaneEmptyState } from "../PaneEmptyState"
 import { Check } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../components/Button"
 import { columnTypeOf, sqlLiteral } from "../interactions/chartInteractions"
+import { sparklineSample } from "../../../../utils/sparklineSample"
 import {
   formatValue,
   toneColor,
@@ -140,35 +141,14 @@ const Spark = styled.svg`
   pointer-events: none;
 `
 
-const SPARKLINE_BUCKETS = 100
 const sparklineGeometryCache = new WeakMap<number[], string>()
 
 export const sparklineGeometry = (values: number[]): string => {
   const cached = sparklineGeometryCache.get(values)
   if (cached !== undefined) return cached
-  if (values.length < 2) return ""
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  // Keep each bucket's extrema in time order, plus the endpoints.
-  const indexes: number[] = [0]
-  const step = Math.ceil((values.length - 2) / SPARKLINE_BUCKETS) || 1
-  for (let start = 1; start < values.length - 1; start += step) {
-    let low = start
-    let high = start
-    for (
-      let i = start + 1;
-      i < Math.min(start + step, values.length - 1);
-      i++
-    ) {
-      if (values[i] < values[low]) low = i
-      if (values[i] > values[high]) high = i
-    }
-    indexes.push(Math.min(low, high))
-    if (low !== high) indexes.push(Math.max(low, high))
-  }
-  indexes.push(values.length - 1)
-  const scale = Number.isFinite(max - min) ? 1 : 2
-  const span = max / scale - min / scale || 1
+  const sample = sparklineSample(values)
+  if (!sample) return ""
+  const { indexes, scale, min, span } = sample
   const points = indexes
     .map(
       (i) =>
