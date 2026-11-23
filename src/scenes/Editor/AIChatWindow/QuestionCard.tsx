@@ -19,7 +19,7 @@ import {
   questionViews,
 } from "../../../utils/localAgent/questionDisplay"
 import { isImeKeyEvent } from "../../../utils/isImeKeyEvent"
-import { focusCardHeading } from "./focusCardHeading"
+import { focusWithinChat } from "./focusWithinChat"
 
 type Answers = Record<string, string | string[]>
 
@@ -329,18 +329,18 @@ export const QuestionCard = ({
   )
 
   useEffect(() => {
-    focusCardHeading(headingRef.current)
+    focusWithinChat(headingRef.current)
   }, [question.requestId])
 
   useLayoutEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = 0
     if (!focusAfterAdvance.current) return
     focusAfterAdvance.current = false
-    const target =
+    focusWithinChat(
       tab === reviewTab
         ? reviewTabRef.current
-        : (textAnswerRef.current ?? questionTextRef.current)
-    target?.focus()
+        : (textAnswerRef.current ?? questionTextRef.current),
+    )
   }, [tab, reviewTab])
 
   const finish = (result: Answers | null) => {

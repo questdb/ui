@@ -3,7 +3,7 @@ import styled from "styled-components"
 import { ArrowSquareOutIcon } from "@phosphor-icons/react"
 import { Button, CopyButton } from "../../../components"
 import { AIStopButton } from "../../../components/AIStopButton"
-import { focusCardHeading } from "./focusCardHeading"
+import { focusWithinChat } from "./focusWithinChat"
 import type { AgentQuestionMessage } from "../../../utils/localAgent/protocol"
 import {
   AnswerSendError,
@@ -84,7 +84,7 @@ export const LinkRequestCard = ({
   const address = webAddress(requestedUrl)
 
   useEffect(() => {
-    focusCardHeading(headingRef.current)
+    focusWithinChat(headingRef.current)
   }, [question.requestId])
 
   const finish = (opened: boolean) => {
