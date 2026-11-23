@@ -13,6 +13,7 @@ import type { ColorShape } from "../../../../types/styled"
 import type { VisualConfig } from "../CellChart/chartTypes"
 import { withAlpha } from "../../../../theme"
 import type { StatementRows } from "./statementRows"
+import { pickOf, type Pick } from "../interactions/selection"
 import {
   SEVERITY_RANK,
   bucketLanes,
@@ -331,14 +332,15 @@ const LaneBars = memo(function LaneBars({
 type Props = {
   visual: VisualConfig
   statements: (StatementRows | null)[]
-  clickColumn?: string
-  onSelect?: (value: unknown) => void
+  // What a click on a lane writes (undefined: nothing), and the click.
+  pickLiteral?: (pick: Pick) => string | undefined
+  onSelect?: (pick: Pick) => void
 }
 
 export const UptimeBars = ({
   visual,
   statements,
-  clickColumn,
+  pickLiteral,
   onSelect,
 }: Props) => {
   const { color: colors } = useTheme()
@@ -356,8 +358,8 @@ export const UptimeBars = ({
     [],
   )
   const read = useMemo(
-    () => readStateSegments(visual, statements[0], clickColumn),
-    [visual, statements, clickColumn],
+    () => readStateSegments(visual, statements[0]),
+    [visual, statements],
   )
   const lanesRef = useRef<HTMLDivElement>(null)
   const laneNames = typeof read === "string" ? [] : read.lanes
@@ -419,6 +421,17 @@ export const UptimeBars = ({
     () => (typeof read === "string" ? null : latestStateByLane(read.segments)),
     [read],
   )
+  // A lane is drawn from all of its rows, by its lane column; a click on it
+  // selects only when they agree, so it is a button only then.
+  const clickableLanes = useMemo(() => {
+    const out = new Map<string, Pick>()
+    if (typeof read === "string" || !pickLiteral) return out
+    for (const [lane, rows] of read.laneRows) {
+      const pick = pickOf(0, rows, read.laneColumn)
+      if (pickLiteral(pick) !== undefined) out.set(lane, pick)
+    }
+    return out
+  }, [read, pickLiteral])
   if (typeof read === "string") return <PaneEmptyState>{read}</PaneEmptyState>
   if (!lanes || !uptimes || !current) return null
   const counts = { bad: 0, warning: 0, neutral: 0, good: 0 }
@@ -471,17 +484,8 @@ export const UptimeBars = ({
                   Math.max(barsWidth - 260, 0),
                 )
               : 0
-          // An unbound click selects the lane's name: NULL for a NULL lane.
-          const selection =
-            clickColumn === undefined
-              ? read.nullLanes?.has(lane)
-                ? null
-                : lane
-              : read.selectionByLane?.get(lane)
-          const activate =
-            onSelect && selection !== undefined
-              ? () => onSelect(selection)
-              : undefined
+          const pick = clickableLanes.get(lane)
+          const activate = onSelect && pick ? () => onSelect(pick) : undefined
           return (
             <Lane
               key={lane}

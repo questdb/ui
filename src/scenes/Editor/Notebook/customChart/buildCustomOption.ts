@@ -1,14 +1,19 @@
 import { classifyColumn } from "../CellChart/inferChartConfig"
 import {
   columnIndex,
-  emptyNodeIsNull,
   linksFrom,
-  nodesOf,
+  nodesFrom,
   toLabel,
   toNumber,
   treeFromPath,
   type StatementRows,
 } from "../visuals/statementRows"
+import {
+  PICK_KEY,
+  ROW_DIMENSION,
+  STATEMENT_DIMENSION,
+  pickOf,
+} from "../interactions/selection"
 import { isSafeImage, type OptionProblem } from "./sanitizeOption"
 import {
   MAX_SANKEY_LINKS,
@@ -19,6 +24,11 @@ import {
 // statements become datasets "q0", "q1", …, `{"$rows": …}` placeholders
 // become data in the shape a series needs, and the console sets the options
 // it always owns.
+//
+// When clicks set a variable, every bound item carries the statement rows it
+// is drawn from (a `pick`, see selection.ts), and every dataset row carries
+// its statement and row in two hidden dimensions, which survive dataset
+// transforms.
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -35,7 +45,12 @@ export const datasetId = (index: number) => `q${index}`
 // Plot coordinates must not be rounded for display before reaching ECharts.
 export const chartNumber = (value: unknown): number | null => toNumber(value)
 
-const datasetsOf = (statements: (StatementRows | null)[]) =>
+const HIDDEN_DIMENSIONS = [
+  { name: STATEMENT_DIMENSION, type: "int" },
+  { name: ROW_DIMENSION, type: "int" },
+]
+
+const datasetsOf = (statements: (StatementRows | null)[], hidden: boolean) =>
   statements.map((s, i) => {
     const columns = s?.columns ?? []
     const numeric = columns.flatMap((c, k) =>
@@ -43,17 +58,20 @@ const datasetsOf = (statements: (StatementRows | null)[]) =>
     )
     return {
       id: datasetId(i),
-      dimensions: columns.map((c) => ({
-        name: c.name,
-        type: dimensionType(c.type),
-      })),
+      dimensions: [
+        ...columns.map((c) => ({
+          name: c.name,
+          type: dimensionType(c.type),
+        })),
+        ...(hidden ? HIDDEN_DIMENSIONS : []),
+      ],
       // QuestDB provides schema separately; the first array is always data.
       sourceHeader: false,
       source:
-        numeric.length === 0
+        numeric.length === 0 && !hidden
           ? (s?.rows ?? [])
-          : (s?.rows ?? []).map((row) => {
-              const copy = row.slice()
+          : (s?.rows ?? []).map((row, r) => {
+              const copy: unknown[] = row.slice()
               for (const k of numeric) {
                 const raw = row[k]
                 const number = chartNumber(raw)
@@ -62,6 +80,7 @@ const datasetsOf = (statements: (StatementRows | null)[]) =>
                 copy[k] =
                   typeof raw === "string" && number !== null ? raw : number
               }
+              if (hidden) copy.push(i, r)
               return copy
             }),
     }
@@ -88,15 +107,44 @@ type Report = (
   severity?: OptionProblem["severity"],
 ) => void
 
+// Where bound rows go (and the type of the series they go in), and whether
+// their items carry picks.
+type Binding = { path: string; pickable: boolean; seriesType?: string }
+
+const SERIES_PATH = /^series(\[\d+\])?$/
+
+// Series whose data may be `{ value }` items instead of plain values (a
+// theme river reads its tuples as they are).
+const VALUE_ITEM_SERIES = new Set([
+  "line",
+  "bar",
+  "pie",
+  "scatter",
+  "effectScatter",
+  "candlestick",
+  "boxplot",
+  "heatmap",
+  "funnel",
+  "pictorialBar",
+  "custom",
+])
+
+// Plain values (tuples, a column) become items only as such a series' data.
+const isValueItems = ({ path, seriesType }: Binding) =>
+  /^series(\[\d+\])?\.data$/.test(path) &&
+  seriesType !== undefined &&
+  VALUE_ITEM_SERIES.has(seriesType)
+
 // A placeholder that does not bind (a wrong field type in an agent's or an
 // imported option) reports a problem and binds nothing: it must not take the
 // console down with it.
 const resolveRows = (
   spec: RowsSpec,
   statements: (StatementRows | null)[],
-  path: string,
+  binding: Binding,
   report: Report,
 ): unknown => {
+  const { path } = binding
   for (const key of ["columns", "path"] as const)
     if (spec[key] !== undefined && !Array.isArray(spec[key])) {
       report(
@@ -107,7 +155,7 @@ const resolveRows = (
       return []
     }
   try {
-    return bindRows(spec, statements, path, report)
+    return bindRows(spec, statements, binding, report)
   } catch (error) {
     report(
       path,
@@ -121,10 +169,22 @@ const resolveRows = (
 const bindRows = (
   spec: RowsSpec,
   statements: (StatementRows | null)[],
-  path: string,
+  binding: Binding,
   report: Report,
 ): unknown => {
+  const { path, pickable } = binding
   const query = spec.query ?? 0
+  // An item drawn from rows of the statement, by `column` when it has one.
+  const picked = <T extends object>(
+    item: T,
+    rows: number[],
+    column?: number,
+  ) => (pickable ? { ...item, [PICK_KEY]: pickOf(query, rows, column) } : item)
+  // A plain value becomes an item, drawn from its row, as a series' data.
+  const pickedValue = (value: unknown, row: number, column?: number) =>
+    pickable && isValueItems(binding)
+      ? { value, [PICK_KEY]: pickOf(query, [row], column) }
+      : value
   const rows = statements[query]
   if (!rows) {
     report(path, `Statement ${query} has no rows (or does not exist).`)
@@ -152,11 +212,19 @@ const bindRows = (
       const idx = (spec.columns ?? rows.columns.map((c) => c.name)).map((n) =>
         col(n, "column"),
       )
-      return rows.rows.map((row) => idx.map((i) => cell(row, i)))
+      // A tuple is drawn from its row's first column, its x.
+      return rows.rows.map((row, r) =>
+        pickedValue(
+          idx.map((i) => cell(row, i)),
+          r,
+          idx[0],
+        ),
+      )
     }
     case "column": {
+      // A column's value names nothing: it is drawn from no column.
       const i = col(spec.column, "column", 0)
-      return rows.rows.map((row) => cell(row, i))
+      return rows.rows.map((row, r) => pickedValue(cell(row, i), r))
     }
     case "value": {
       const i = col(spec.column, "column", 0)
@@ -168,18 +236,20 @@ const bindRows = (
       const nameIdx = col(spec.name, "name", 0)
       const values = Array.isArray(spec.value) ? spec.value : [spec.value]
       const valueIdx = values.map((v, k) => col(v, "value", k + 1))
-      return rows.rows.map((row) => ({
-        name: nameIdx < 0 ? "" : toLabel(row[nameIdx]),
-        // A NULL name: an unbound click selects NULL, not the item's value.
-        ...(nameIdx >= 0 &&
-        (row[nameIdx] === null || row[nameIdx] === undefined)
-          ? { selection: null }
-          : {}),
-        value:
-          valueIdx.length === 1
-            ? chartNumber(row[valueIdx[0]])
-            : valueIdx.map((i) => chartNumber(row[i])),
-      }))
+      // An item is drawn from its row's name.
+      return rows.rows.map((row, r) =>
+        picked(
+          {
+            name: nameIdx < 0 ? "" : toLabel(row[nameIdx]),
+            value:
+              valueIdx.length === 1
+                ? chartNumber(row[valueIdx[0]])
+                : valueIdx.map((i) => chartNumber(row[i])),
+          },
+          [r],
+          nameIdx,
+        ),
+      )
     }
     case "tree": {
       if (rows.partial) {
@@ -197,14 +267,21 @@ const bindRows = (
       const colorIdx = spec.color !== undefined ? col(spec.color, "color") : -1
       if (pathIdx.some((i) => i < 0) || valueIdx < 0) return []
       const tree = treeFromPath(rows, pathIdx, valueIdx, colorIdx)
-      // `colorValue` becomes the second value so a visualMap can colour by it.
+      // `colorValue` becomes the second value so a visualMap can colour by
+      // it. A node is drawn from the rows under it, by its level's column.
       const withColor = (nodes: typeof tree): unknown[] =>
-        nodes.map((n) => ({
-          name: n.name,
-          value: n.colorValue !== undefined ? [n.value, n.colorValue] : n.value,
-          ...(n.isNull ? { selection: null } : {}),
-          ...(n.children ? { children: withColor(n.children) } : {}),
-        }))
+        nodes.map((n) =>
+          picked(
+            {
+              name: n.name,
+              value:
+                n.colorValue !== undefined ? [n.value, n.colorValue] : n.value,
+              ...(n.children ? { children: withColor(n.children) } : {}),
+            },
+            n.rows,
+            n.column,
+          ),
+        )
       return withColor(tree)
     }
     case "lines": {
@@ -222,14 +299,21 @@ const bindRows = (
       const valueIdx =
         typeof spec.value === "string" ? col(spec.value, "value") : -1
       const [a, b, c, d] = idx
-      return rows.rows.map((row) => ({
-        ...(nameIdx >= 0 ? { name: toLabel(row[nameIdx]) } : {}),
-        coords: [
-          [toNumber(row[a]), toNumber(row[b])],
-          [toNumber(row[c]), toNumber(row[d])],
-        ],
-        ...(valueIdx >= 0 ? { value: toNumber(row[valueIdx]) } : {}),
-      }))
+      // A route is drawn from its row, named by its name column.
+      return rows.rows.map((row, r) =>
+        picked(
+          {
+            ...(nameIdx >= 0 ? { name: toLabel(row[nameIdx]) } : {}),
+            coords: [
+              [toNumber(row[a]), toNumber(row[b])],
+              [toNumber(row[c]), toNumber(row[d])],
+            ],
+            ...(valueIdx >= 0 ? { value: toNumber(row[valueIdx]) } : {}),
+          },
+          [r],
+          nameIdx,
+        ),
+      )
     }
     case "links":
     case "nodes": {
@@ -248,10 +332,15 @@ const bindRows = (
           ? col(spec.value as string, "value")
           : columnIndex(rows, undefined, 2)
       if (fromIdx < 0 || toIdx < 0) return []
-      const links = linksFrom(rows, fromIdx, toIdx, valueIdx)
+      // A link is drawn from its row but no column; a node from the rows it
+      // is the source (else the target) of, by that column.
       return spec.shape === "links"
-        ? links
-        : nodesOf(links, emptyNodeIsNull(rows, fromIdx, toIdx))
+        ? linksFrom(rows, fromIdx, toIdx, valueIdx).map((link, r) =>
+            picked(link, [r]),
+          )
+        : nodesFrom(rows, query, fromIdx, toIdx).map(({ name, pick }) =>
+            picked({ name }, pick.rows, pick.column),
+          )
     }
     default:
       report(
@@ -292,25 +381,40 @@ const withSafeImages = (
 const fillRows = (
   node: unknown,
   statements: (StatementRows | null)[],
-  path: string,
+  binding: Binding,
   report: Report,
 ): unknown => {
+  const { path } = binding
   if (Array.isArray(node))
-    return node.map((n, i) => fillRows(n, statements, `${path}[${i}]`, report))
+    return node.map((n, i) =>
+      fillRows(n, statements, { ...binding, path: `${path}[${i}]` }, report),
+    )
   if (!isRecord(node)) return node
   const keys = Object.keys(node)
   if (keys.length === 1 && keys[0] === ROWS_KEY && isRecord(node[ROWS_KEY])) {
     return withSafeImages(
-      resolveRows(node[ROWS_KEY] as RowsSpec, statements, path, report),
+      resolveRows(node[ROWS_KEY] as RowsSpec, statements, binding, report),
       path,
       report,
     )
   }
+  const seriesType =
+    SERIES_PATH.test(path) && typeof node.type === "string"
+      ? node.type
+      : binding.seriesType
   return Object.fromEntries(
-    Object.entries(node).map(([k, v]) => [
-      k,
-      fillRows(v, statements, path ? `${path}.${k}` : k, report),
-    ]),
+    Object.entries(node)
+      // Only bound rows say what a click selects.
+      .filter(([k]) => k !== PICK_KEY)
+      .map(([k, v]) => [
+        k,
+        fillRows(
+          v,
+          statements,
+          { ...binding, path: path ? `${path}.${k}` : k, seriesType },
+          report,
+        ),
+      ]),
   )
 }
 
@@ -465,10 +569,238 @@ export const partialDatasetWarnings = (
       : [],
   )
 
+const asList = (value: unknown): unknown[] =>
+  Array.isArray(value) ? value : value === undefined ? [] : [value]
+
+// Series types that draw a dataset's rows when they have no data of their
+// own.
+const DATASET_SERIES = new Set([
+  "line",
+  "bar",
+  "pie",
+  "scatter",
+  "effectScatter",
+  "candlestick",
+  "boxplot",
+  "heatmap",
+  "funnel",
+  "parallel",
+  "pictorialBar",
+  "custom",
+])
+
+// Series types whose coordinates are only a cartesian x and y.
+const XY_SERIES = new Set([
+  "line",
+  "bar",
+  "scatter",
+  "effectScatter",
+  "pictorialBar",
+  "custom",
+])
+
+// Encode keys that map no coordinate.
+const NON_COORD_ENCODES = new Set([
+  "tooltip",
+  "label",
+  "itemName",
+  "itemId",
+  "itemGroupId",
+  "itemChildGroupId",
+  "seriesName",
+])
+
+/**
+ * The statement whose rows a dataset-bound series draws: its dataset is the
+ * statement's, or derives from it through transforms.
+ */
+const seriesStatement = (
+  series: unknown,
+  datasets: unknown[],
+  datasetIds: string[],
+  statementCount: number,
+): number | undefined => {
+  if (!isRecord(series) || series.data !== undefined) return undefined
+  if (typeof series.type !== "string" || !DATASET_SERIES.has(series.type))
+    return undefined
+  let index =
+    typeof series.datasetId === "string"
+      ? datasetIds.indexOf(series.datasetId)
+      : typeof series.datasetIndex === "number"
+        ? series.datasetIndex
+        : 0
+  const seen = new Set<number>()
+  while (index >= 0 && index < datasets.length && !seen.has(index)) {
+    if (index < statementCount) return index
+    seen.add(index)
+    const dataset = datasets[index]
+    if (!isRecord(dataset) || dataset.source !== undefined) return undefined
+    index =
+      typeof dataset.fromDatasetId === "string"
+        ? datasetIds.indexOf(dataset.fromDatasetId)
+        : typeof dataset.fromDatasetIndex === "number"
+          ? dataset.fromDatasetIndex
+          : dataset.transform !== undefined
+            ? 0
+            : -1
+  }
+  return undefined
+}
+
+/**
+ * The option's series and visual maps with the hidden dimensions appended to
+ * the statements' datasets, drawn as they are without them; null when they
+ * cannot be (a series laid out by row, a visual map over series with
+ * different dimensions), and the datasets stay as they are.
+ */
+const withHiddenDimensions = (
+  option: Record<string, unknown>,
+  statements: (StatementRows | null)[],
+  datasets: unknown[],
+  datasetIds: string[],
+): Record<string, unknown> | null => {
+  const series = asList(option.series)
+  const statementOf = (s: unknown) =>
+    seriesStatement(s, datasets, datasetIds, statements.length)
+  // A series laid out by row would take the hidden values as categories.
+  if (
+    series.some(
+      (s) =>
+        isRecord(s) &&
+        s.seriesLayoutBy === "row" &&
+        statementOf(s) !== undefined,
+    )
+  )
+    return null
+  // A visual map without a dimension maps a series' last one: keep it on the
+  // last column, not on the hidden row number.
+  const visualMaps: unknown[] = []
+  for (const visualMap of asList(option.visualMap)) {
+    if (!isRecord(visualMap) || visualMap.dimension !== undefined) {
+      visualMaps.push(visualMap)
+      continue
+    }
+    const targets =
+      visualMap.seriesIndex === undefined
+        ? series.map((_, i) => i)
+        : asList(visualMap.seriesIndex).filter(
+            (i): i is number => typeof i === "number",
+          )
+    const last = new Set<number>()
+    let unbound = false
+    for (const target of targets) {
+      if (target >= series.length) continue
+      const statement = statementOf(series[target])
+      if (statement === undefined) unbound = true
+      else last.add((statements[statement]?.columns.length ?? 0) - 1)
+    }
+    if (last.size > 1 || (last.size === 1 && unbound)) return null
+    visualMaps.push(
+      last.size === 1 ? { ...visualMap, dimension: [...last][0] } : visualMap,
+    )
+  }
+  // A cartesian series whose x and y are both times or categories shows
+  // every dimension in its tooltip: keep that to the statement's columns.
+  const fitted = series.map((s) => {
+    const statement = statementOf(s)
+    if (statement === undefined || !isRecord(s) || !isRecord(s.encode)) return s
+    const encode = s.encode
+    if (
+      typeof s.type !== "string" ||
+      !XY_SERIES.has(s.type) ||
+      (s.coordinateSystem !== undefined &&
+        s.coordinateSystem !== "cartesian2d") ||
+      encode.tooltip !== undefined ||
+      !("x" in encode && "y" in encode)
+    )
+      return s
+    const columns = statements[statement]?.columns ?? []
+    const coords = Object.entries(encode)
+      .filter(([key]) => !NON_COORD_ENCODES.has(key))
+      .flatMap(([, value]) => asList(value))
+      .map((dim) =>
+        typeof dim === "number"
+          ? columns[dim]
+          : columns.find((c) => c.name === dim),
+      )
+    if (coords.some((c) => !c || classifyColumn(c) === "numeric")) return s
+    return { ...s, encode: { ...encode, tooltip: columns.map((c) => c.name) } }
+  })
+  return {
+    ...(option.series === undefined
+      ? {}
+      : { series: Array.isArray(option.series) ? fitted : fitted[0] }),
+    ...(option.visualMap === undefined
+      ? {}
+      : {
+          visualMap: Array.isArray(option.visualMap)
+            ? visualMaps
+            : visualMaps[0],
+        }),
+  }
+}
+
+/**
+ * Where a dataset-bound series' marks come from: the statement its rows are
+ * of, and the column it draws them from, by name: its `encode.itemName`,
+ * else its dimension on a category axis. An unbound click on its marks
+ * selects that column.
+ */
+export const datasetSource = (
+  option: Record<string, unknown>,
+  statements: (StatementRows | null)[],
+  seriesIndex: number,
+): { datasetStatement: number; drawnColumn?: string } | undefined => {
+  const series = asList(option.series)[seriesIndex]
+  const datasets = asList(option.dataset)
+  const datasetIds = datasets.map((d, i) =>
+    isRecord(d) && typeof d.id === "string" ? d.id : String(i),
+  )
+  const statement = seriesStatement(
+    series,
+    datasets,
+    datasetIds,
+    statements.length,
+  )
+  if (statement === undefined || !isRecord(series)) return undefined
+  const source = (drawnColumn: string | undefined) => ({
+    datasetStatement: statement,
+    ...(drawnColumn === undefined ? {} : { drawnColumn }),
+  })
+  const columns = statements[statement]?.columns ?? []
+  const encode = isRecord(series.encode) ? series.encode : {}
+  const nameOf = (value: unknown) => {
+    const dim = asList(value)[0]
+    if (typeof dim === "number") return columns[dim]?.name
+    return columns.some((c) => c.name === dim) ? (dim as string) : undefined
+  }
+  if (encode.itemName !== undefined) return source(nameOf(encode.itemName))
+  const axisType = (key: "xAxis" | "yAxis", index: unknown) => {
+    const axis = asList(option[key])[typeof index === "number" ? index : 0]
+    const type = isRecord(axis) ? axis.type : undefined
+    // ECharts' own defaults: x a category axis, y a value axis.
+    return type ?? (key === "xAxis" ? "category" : "value")
+  }
+  if (
+    encode.x !== undefined &&
+    axisType("xAxis", series.xAxisIndex) === "category"
+  )
+    return source(nameOf(encode.x))
+  if (
+    encode.y !== undefined &&
+    axisType("yAxis", series.yAxisIndex) === "category"
+  )
+    return source(nameOf(encode.y))
+  return source(undefined)
+}
+
 export const buildCustomOption = (
   sanitized: Record<string, unknown>,
   statements: (StatementRows | null)[],
   live: boolean,
+  // Clicks set a variable: bound items and dataset rows say what they are
+  // drawn from.
+  pickable = false,
 ): BuiltCustomOption => {
   const problems = partialDatasetWarnings(statements)
   let fatal: OptionProblem | undefined
@@ -477,7 +809,7 @@ export const buildCustomOption = (
       fatal ??= { path, message, severity }
     else if (problems.length < 50) problems.push({ path, message, severity })
   }
-  const bound = fillRows(sanitized, statements, "", report)
+  const bound = fillRows(sanitized, statements, { path: "", pickable }, report)
   if (fatal) return { option: {}, problems: [fatal] }
   const filled = enforceRendererPolicy(bound) as Record<string, unknown>
   const invalidSankey = sankeyProblem(filled)
@@ -494,14 +826,13 @@ export const buildCustomOption = (
     }
   }
   const base = filled
-  const ours = datasetsOf(statements)
   const theirs: unknown = base.dataset
   const theirList: unknown[] = Array.isArray(theirs)
     ? (theirs as unknown[])
     : theirs
       ? [theirs]
       : []
-  const reserved = new Set(ours.map((d) => d.id))
+  const reserved = new Set(statements.map((_, i) => datasetId(i)))
   for (const d of theirList) {
     if (isRecord(d) && typeof d.id === "string" && reserved.has(d.id))
       report(
@@ -509,16 +840,26 @@ export const buildCustomOption = (
         `Dataset id ${JSON.stringify(d.id)} is reserved for the cell's statements; use another id.`,
       )
   }
-  const datasets = [
-    ...ours,
-    ...theirList.filter(
-      (d) => !(isRecord(d) && typeof d.id === "string" && reserved.has(d.id)),
-    ),
-  ]
-  const datasetIds = datasets.map((d, i) =>
-    isRecord(d) && typeof d.id === "string" ? d.id : String(i),
+  const kept = theirList.filter(
+    (d) => !(isRecord(d) && typeof d.id === "string" && reserved.has(d.id)),
+  )
+  const datasetIds = [...reserved, ...kept].map((d, i) =>
+    typeof d === "string"
+      ? d
+      : isRecord(d) && typeof d.id === "string"
+        ? d.id
+        : String(i),
   )
   checkEncodes(base, statements, datasetIds, report)
+  const hidden = pickable
+    ? withHiddenDimensions(
+        base,
+        statements,
+        [...statements.map(() => null), ...kept],
+        datasetIds,
+      )
+    : null
+  const datasets = [...datasetsOf(statements, hidden !== null), ...kept]
 
   const tooltip = isRecord(base.tooltip)
     ? base.tooltip
@@ -528,6 +869,7 @@ export const buildCustomOption = (
   const option = {
     useUTC: true,
     ...base,
+    ...hidden,
     dataset: datasets,
     tooltip: { ...tooltip, confine: true, renderMode: "richText" },
     ...(live ? { animation: false } : {}),

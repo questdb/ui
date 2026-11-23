@@ -49,7 +49,7 @@ import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import type { CellInteractions, GridMode } from "../../../../store/notebook"
 import type { ResultGridRow } from "../../../../components/ResultGrid"
 import type { CellHighlight } from "../../../../components/ResultGrid/highlight/types"
-import { sqlLiteral } from "../interactions/chartInteractions"
+import { pickLiteral, pickOf } from "../interactions/selection"
 import { useLiveRows } from "./liveRows"
 import { withNewVariables } from "../interactions/InteractionsEditor"
 import { normalizeVariables } from "../declareUtils"
@@ -196,19 +196,28 @@ const ResultGridPanelInner: React.FC<Props> = ({
     () => inMemoryDataSource(data.columns, data.dataset, data.timestamp ?? -1),
     [data.columns, data.dataset, data.timestamp],
   )
+  // The grid's statement, as a click reads it.
+  const statements = useMemo(
+    () => [{ columns: data.columns, rows: data.dataset }],
+    [data.columns, data.dataset],
+  )
+  // A cell activation picks its row of the statement, drawn from the
+  // clicked column.
   const onCellActivate = useMemo(() => {
     const click = interactions?.click
     if (!click) return undefined
     return (row: ResultGridRow, column: number) => {
-      const index = click.column
-        ? data.columns.findIndex((c) => c.name === click.column)
-        : column
+      const index = statements[0].rows.indexOf(row)
       if (index < 0) return
-      setVariableValues({
-        [click.variable]: sqlLiteral(row[index], data.columns[index]?.type),
-      })
+      const literal = pickLiteral(
+        pickOf(0, [index], column),
+        click.column,
+        statements,
+      )
+      if (literal !== undefined)
+        setVariableValues({ [click.variable]: literal })
     }
-  }, [interactions, data.columns, setVariableValues])
+  }, [interactions, statements, setVariableValues])
   const saveViewport = useCallback(
     (nextViewport: ResultGridViewport) =>
       viewportStore.save(statementKey, runToken, nextViewport),
@@ -246,19 +255,20 @@ const ResultGridPanelInner: React.FC<Props> = ({
     ? settings.variables?.find((v) => v.name === interactions.click?.variable)
         ?.value
     : undefined
+  // Only a bound click names the column its value comes from.
   const selectedColumn = interactions?.click?.column
-    ? data.columns.findIndex((c) => c.name === interactions.click?.column)
-    : -1
   const isSelected = useMemo(() => {
-    if (selectedValue === undefined || selectedColumn < 0) return null
-    const type = data.columns[selectedColumn]?.type
+    if (selectedValue === undefined || selectedColumn === undefined) return null
     const rows = new Set(
-      data.dataset.flatMap((row, i) =>
-        sqlLiteral(row[selectedColumn], type) === selectedValue ? [i] : [],
+      statements[0].rows.flatMap((_, i) =>
+        pickLiteral(pickOf(0, [i]), selectedColumn, statements) ===
+        selectedValue
+          ? [i]
+          : [],
       ),
     )
     return rows.size > 0 ? (row: number) => rows.has(row) : null
-  }, [data.columns, data.dataset, selectedColumn, selectedValue])
+  }, [statements, selectedColumn, selectedValue])
   const highlights = useMemo(
     () =>
       isNew || isSelected

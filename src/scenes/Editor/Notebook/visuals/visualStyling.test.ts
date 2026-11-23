@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { darkColors, lightColors } from "../../../../theme"
 import {
   chordOption,
@@ -15,11 +15,7 @@ import {
 } from "./visualOptions"
 import { sparklineGeometry, statTiles } from "./StatTiles"
 import { bulletRows } from "./Bullets"
-import {
-  clickedValue,
-  columnTypeOf,
-  interactionEvents,
-} from "../interactions/chartInteractions"
+import { interactionEvents } from "../interactions/chartInteractions"
 import type { StatementRows } from "./statementRows"
 
 const rows = (
@@ -33,25 +29,42 @@ const rows = (
 const series = (option: unknown) =>
   (option as { series: Record<string, unknown>[] }).series
 
+// What a click on a data item writes, bound to `column`: that column (else
+// the item's drawn column) of the rows the item was drawn from.
+const clickWrites = (
+  statements: StatementRows[],
+  column: string | undefined,
+  data: unknown,
+  params: Record<string, unknown> = {},
+): string | undefined => {
+  const written: Record<string, string>[] = []
+  interactionEvents(
+    { click: { variable: "v", column } },
+    (values) => written.push(values),
+    () => statements,
+  ).click({ componentType: "series", ...params, data }, {} as never)
+  return written[0]?.v
+}
+
 it("reads the bound gauge click value from its first row, not its reading or label", () => {
   // Given a gauge with a clamped reading and a separate selection column
+  const statements = [
+    rows(
+      [
+        ["load", "DOUBLE"],
+        ["station", "SYMBOL"],
+      ],
+      [
+        [65, "east"],
+        [2, "west"],
+      ],
+    ),
+  ]
   const { option } = gaugeOption({
     visual: { type: "gauge", max: 50 },
     colors: lightColors,
     formats: {},
-    clickColumn: "station",
-    statements: [
-      rows(
-        [
-          ["load", "DOUBLE"],
-          ["station", "SYMBOL"],
-        ],
-        [
-          [65, "east"],
-          [2, "west"],
-        ],
-      ),
-    ],
+    statements,
   })
 
   // When the non-silent progress series is clicked
@@ -61,30 +74,33 @@ it("reads the bound gauge click value from its first row, not its reading or lab
   // Then the interaction uses the raw bound column
   expect(silent).toBe(true)
   expect(datum.value).toBe(50)
-  expect(clickedValue({ data: datum }, "station")).toBe("east")
+  expect(clickWrites(statements, "station", datum)).toBe("'east'")
+  // And with no label column an unbound click names nothing to write
+  expect(clickWrites(statements, undefined, datum)).toBeUndefined()
 })
 
 it("retains a graph edge's query column for selection", () => {
+  const statements = [
+    rows(
+      [
+        ["from", "SYMBOL"],
+        ["to", "SYMBOL"],
+        ["weight", "INT"],
+        ["route", "SYMBOL"],
+      ],
+      [["east", "west", 1, "r1"]],
+    ),
+  ]
   const { option } = graphOption({
     visual: { type: "graph" },
     colors: lightColors,
     formats: {},
-    clickColumn: "route",
-    statements: [
-      rows(
-        [
-          ["from", "SYMBOL"],
-          ["to", "SYMBOL"],
-          ["weight", "INT"],
-          ["route", "SYMBOL"],
-        ],
-        [["east", "west", 1, "r1"]],
-      ),
-    ],
+    statements,
   })
   const [graph] = series(option)
-  expect(clickedValue({ data: (graph.links as unknown[])[0] }, "route")).toBe(
-    "r1",
+  const edge = (graph.links as unknown[])[0]
+  expect(clickWrites(statements, "route", edge, { dataType: "edge" })).toBe(
+    "'r1'",
   )
 })
 
@@ -120,34 +136,38 @@ it("keeps all links in a large graph without scheduling force layout", () => {
 describe("stateTimelineOption", () => {
   it("carries each segment's bound source value through time sorting", () => {
     // Given two readings for the same lane with different selection values
+    const statements = [
+      rows(
+        [
+          ["ts", "TIMESTAMP"],
+          ["lane", "SYMBOL"],
+          ["state", "SYMBOL"],
+          ["cluster_code", "SYMBOL"],
+        ],
+        [
+          ["2026-01-01T00:01:00Z", "host", "up", "west"],
+          ["2026-01-01T00:00:00Z", "host", "up", "east"],
+        ],
+      ),
+    ]
     const { option } = stateTimelineOption({
       visual: { type: "stateTimeline" },
       formats: {},
       colors: lightColors,
-      clickColumn: "cluster_code",
-      statements: [
-        rows(
-          [
-            ["ts", "TIMESTAMP"],
-            ["lane", "SYMBOL"],
-            ["state", "SYMBOL"],
-            ["cluster_code", "SYMBOL"],
-          ],
-          [
-            ["2026-01-01T00:01:00Z", "host", "up", "west"],
-            ["2026-01-01T00:00:00Z", "host", "up", "east"],
-          ],
-        ),
-      ],
+      statements,
     })
 
     // When each segment is clicked, then it uses the value from its own row
     const [state] = series(option)
     expect(
       (state.data as unknown[]).map((data) =>
-        clickedValue({ data }, "cluster_code"),
+        clickWrites(statements, "cluster_code", data),
       ),
-    ).toEqual(["east", "west"])
+    ).toEqual(["'east'", "'west'"])
+    // And an unbound click selects the segment's lane
+    expect(
+      clickWrites(statements, undefined, (state.data as unknown[])[0]),
+    ).toBe("'host'")
   })
   const states = rows(
     [
@@ -216,7 +236,11 @@ describe("stateTimelineOption", () => {
       "charging",
       "error",
     ])
-    expect(stateSeries.map((s) => (s.data as number[][])[0].slice(2))).toEqual([
+    expect(
+      stateSeries.map((s) =>
+        (s.data as { value: number[] }[])[0].value.slice(2),
+      ),
+    ).toEqual([
       [0, 0],
       [0, 1],
       [1, 2],
@@ -253,22 +277,14 @@ it("sets an unbound liquidity heatmap click to the cell's time, not epoch ms", (
     statements,
   })
   const [cells] = built.option?.series as { data: unknown[] }[]
-  const set = vi.fn()
-  const events = interactionEvents(
-    { click: { variable: "t" } },
-    set,
-    false,
-    (name) => columnTypeOf(statements, name),
-  )
 
   // When the user clicks the cell, which ECharts gives no name
-  events.click(
-    { componentType: "series", name: "", data: cells.data[0] },
-    {} as never,
-  )
+  const written = clickWrites(statements, undefined, cells.data[0], {
+    name: "",
+  })
 
   // Then the variable holds the time as a timestamp literal
-  expect(set).toHaveBeenCalledWith({ t: "'2026-01-01T00:00:00.000000Z'" })
+  expect(written).toBe("'2026-01-01T00:00:00.000000Z'")
 })
 
 it("draws a liquidity heatmap's price line with a surface halo", () => {
@@ -304,32 +320,32 @@ it("draws a liquidity heatmap's price line with a surface halo", () => {
 })
 
 it("keeps a named liquidity bucket selection with the rendered row", () => {
+  const statements = [
+    rows(
+      [
+        ["ts", "TIMESTAMP"],
+        ["price", "LONG"],
+        ["size", "DOUBLE"],
+      ],
+      [["2026-01-01T00:00:00Z", "9007199254740993", 10]],
+    ),
+  ]
   const built = liquidityHeatmapOption({
     visual: { type: "liquidityHeatmap" },
     colors: lightColors,
     formats: {},
-    clickColumn: "price",
-    statements: [
-      rows(
-        [
-          ["ts", "TIMESTAMP"],
-          ["price", "LONG"],
-          ["size", "DOUBLE"],
-        ],
-        [["2026-01-01T00:00:00Z", "9007199254740993", 10]],
-      ),
-    ],
+    statements,
   })
-  expect(built.option?.series).toMatchObject([
+  const [cells] = built.option?.series as { data: unknown[] }[]
+  expect(cells.data).toEqual([
     {
-      data: [
-        {
-          value: [1767225600000, 9007199254740992, 10],
-          columns: { price: "9007199254740993" },
-        },
-      ],
+      value: [1767225600000, 9007199254740992, 10],
+      pick: { statement: 0, rows: [0], column: 0 },
     },
   ])
+  expect(clickWrites(statements, "price", cells.data[0])).toBe(
+    "9007199254740993",
+  )
 })
 
 it("withholds a liquidity heatmap when the bucket grid is incomplete", () => {
@@ -356,33 +372,34 @@ it("withholds a liquidity heatmap when the bucket grid is incomplete", () => {
 })
 
 it("retains exact leaf selections but doesn't pick among conflicting rows", () => {
+  const statements = [
+    rows(
+      [
+        ["symbol", "SYMBOL"],
+        ["size", "INT"],
+        ["instrument", "LONG"],
+      ],
+      [
+        ["Alpha", 1, "9007199254740993"],
+        ["Beta", 2, "101"],
+        ["Beta", 3, "102"],
+      ],
+    ),
+  ]
   const result = treemapOption({
     visual: { type: "treemap", columns: { path: ["symbol"], value: "size" } },
     colors: lightColors,
     formats: {},
-    clickColumn: "instrument",
-    statements: [
-      rows(
-        [
-          ["symbol", "SYMBOL"],
-          ["size", "INT"],
-          ["instrument", "LONG"],
-        ],
-        [
-          ["Alpha", 1, "9007199254740993"],
-          ["Beta", 2, "101"],
-          ["Beta", 3, "102"],
-        ],
-      ),
-    ],
+    statements,
   })
   const [series] = result.option?.series as { data: unknown[] }[]
-  expect(series.data[0]).toMatchObject({
-    name: "Alpha",
-    columns: { instrument: "9007199254740993" },
-  })
+  expect(series.data[0]).toMatchObject({ name: "Alpha" })
+  expect(clickWrites(statements, "instrument", series.data[0])).toBe(
+    "9007199254740993",
+  )
   expect(series.data[1]).toMatchObject({ name: "Beta", value: 5 })
-  expect(series.data[1]).not.toHaveProperty("columns")
+  expect(clickWrites(statements, "instrument", series.data[1])).toBeUndefined()
+  expect(clickWrites(statements, undefined, series.data[1])).toBe("'Beta'")
 })
 
 it("reports a liquidity heatmap with no drawable cells", () => {
@@ -554,72 +571,66 @@ it("scales a World map's region colours over its real values, not NULL as 0", ()
 
 it("sets no variable for an unbound click on a World map point with no name", () => {
   // Given lat/lon points with no label column
+  const statements = [
+    rows(
+      [
+        ["lat", "DOUBLE"],
+        ["lon", "DOUBLE"],
+        ["mag", "DOUBLE"],
+      ],
+      [[51.5, -0.12, 3]],
+    ),
+  ]
   const { option } = mapOption({
     visual: { type: "map" },
     formats: {},
     colors: lightColors,
-    statements: [
-      rows(
-        [
-          ["lat", "DOUBLE"],
-          ["lon", "DOUBLE"],
-          ["mag", "DOUBLE"],
-        ],
-        [[51.5, -0.12, 3]],
-      ),
-    ],
+    statements,
   })
   const [points] = series(option)
-  const set = vi.fn()
 
   // When the user clicks a point, whose value starts with its longitude
-  interactionEvents({ click: { variable: "place" } }, set).click(
-    {
-      componentType: "series",
-      name: "",
-      value: [-0.12, 51.5, 3],
-      data: (points.data as unknown[])[0],
-    },
-    {} as never,
+  const written = clickWrites(
+    statements,
+    undefined,
+    (points.data as unknown[])[0],
+    { name: "", value: [-0.12, 51.5, 3] },
   )
 
   // Then the variable is not set to the longitude
-  expect(set).not.toHaveBeenCalled()
+  expect(written).toBeUndefined()
 })
 
 it("selects NULL for an unbound click on a World map point with a NULL label", () => {
   // Given lat/lon points labelled by city, one with no city
+  const statements = [
+    rows(
+      [
+        ["city", "SYMBOL"],
+        ["lat", "DOUBLE"],
+        ["lon", "DOUBLE"],
+      ],
+      [[null, 51.5, -0.12]],
+    ),
+  ]
   const { option } = mapOption({
     visual: { type: "map" },
     formats: {},
     colors: lightColors,
-    statements: [
-      rows(
-        [
-          ["city", "SYMBOL"],
-          ["lat", "DOUBLE"],
-          ["lon", "DOUBLE"],
-        ],
-        [[null, 51.5, -0.12]],
-      ),
-    ],
+    statements,
   })
   const [points] = series(option)
-  const set = vi.fn()
 
   // When the user clicks that point
-  interactionEvents({ click: { variable: "place" } }, set).click(
-    {
-      componentType: "series",
-      name: "",
-      value: [-0.12, 51.5, 1],
-      data: (points.data as unknown[])[0],
-    },
-    {} as never,
+  const written = clickWrites(
+    statements,
+    undefined,
+    (points.data as unknown[])[0],
+    { name: "", value: [-0.12, 51.5, 1] },
   )
 
   // Then the variable is NULL, not the longitude
-  expect(set).toHaveBeenCalledWith({ place: "null" })
+  expect(written).toBe("null")
 })
 
 it.each(["treemap", "sunburst"] as const)(
@@ -627,77 +638,70 @@ it.each(["treemap", "sunburst"] as const)(
   (type) => {
     // Given sectors, one of them NULL
     const build = type === "treemap" ? treemapOption : sunburstOption
+    const statements = [
+      rows(
+        [
+          ["sector", "SYMBOL"],
+          ["volume", "DOUBLE"],
+        ],
+        [
+          [null, 7],
+          ["tech", 3],
+        ],
+      ),
+    ]
     const { option } = build({
       visual: { type, columns: { path: ["sector"], value: "volume" } },
       formats: {},
       colors: lightColors,
-      statements: [
-        rows(
-          [
-            ["sector", "SYMBOL"],
-            ["volume", "DOUBLE"],
-          ],
-          [
-            [null, 7],
-            ["tech", 3],
-          ],
-        ),
-      ],
+      statements,
     })
     const [tree] = series(option)
     const nodes = tree.data as { name: string }[]
-    const set = vi.fn()
-    const events = interactionEvents({ click: { variable: "pick" } }, set, true)
 
     // When the user clicks the NULL node, named "" and sized 7
-    events.click(
-      {
-        componentType: "series",
-        name: "",
-        value: 7,
-        data: nodes.find((node) => node.name === ""),
-      },
-      {} as never,
+    const written = clickWrites(
+      statements,
+      undefined,
+      nodes.find((node) => node.name === ""),
+      { name: "", value: 7 },
     )
 
     // Then the variable is NULL, not the size
-    expect(set).toHaveBeenCalledWith({ pick: "null" })
+    expect(written).toBe("null")
   },
 )
 
 it("selects NULL for an unbound click on a state timeline segment of a NULL lane", () => {
   // Given a lane with no name
+  const statements = [
+    rows(
+      [
+        ["ts", "TIMESTAMP"],
+        ["host", "SYMBOL"],
+        ["state", "SYMBOL"],
+      ],
+      [["2026-01-01T00:00:00Z", null, "up"]],
+    ),
+  ]
   const { option } = stateTimelineOption({
     visual: { type: "stateTimeline" },
     formats: {},
     colors: lightColors,
-    statements: [
-      rows(
-        [
-          ["ts", "TIMESTAMP"],
-          ["host", "SYMBOL"],
-          ["state", "SYMBOL"],
-        ],
-        [["2026-01-01T00:00:00Z", null, "up"]],
-      ),
-    ],
+    statements,
   })
   const [segments] = series(option)
-  const set = vi.fn()
 
   // When the user clicks its segment, which ECharts names ""
-  interactionEvents({ click: { variable: "host" } }, set).click(
-    {
-      componentType: "series",
-      name: "",
-      value: (segments.data as { value: number[] }[])[0].value,
-      data: (segments.data as unknown[])[0],
-    },
-    {} as never,
+  const written = clickWrites(
+    statements,
+    undefined,
+    (segments.data as unknown[])[0],
+    { name: "", value: (segments.data as { value: number[] }[])[0].value },
   )
 
   // Then the variable is NULL, not the segment's start time
-  expect(set).toHaveBeenCalledWith({ host: "null" })
+  expect(written).toBe("null")
 })
 
 it("keeps a World map point with a NULL value missing, not 0", () => {
@@ -761,26 +765,26 @@ it("does not start World map ripples on a settled coordinate frame", () => {
 })
 
 it("keeps the mapped point’s exact selection field separate from its coordinates", () => {
+  const statements = [
+    rows(
+      [
+        ["lat", "DOUBLE"],
+        ["lon", "DOUBLE"],
+        ["value", "INT"],
+        ["site", "SYMBOL"],
+      ],
+      [[12, 34, 5, "west"]],
+    ),
+  ]
   const { option } = mapOption({
     visual: { type: "map" },
     formats: {},
     colors: lightColors,
-    clickColumn: "site",
-    statements: [
-      rows(
-        [
-          ["lat", "DOUBLE"],
-          ["lon", "DOUBLE"],
-          ["value", "INT"],
-          ["site", "SYMBOL"],
-        ],
-        [[12, 34, 5, "west"]],
-      ),
-    ],
+    statements,
   })
   const [points] = series(option)
-  expect(clickedValue({ data: (points.data as unknown[])[0] }, "site")).toBe(
-    "west",
+  expect(clickWrites(statements, "site", (points.data as unknown[])[0])).toBe(
+    "'west'",
   )
 })
 
@@ -806,7 +810,7 @@ describe("volumeProfileOption", () => {
     expect(result.option).toBeNull()
     expect(result.problems[0]?.message).toContain("requires a complete result")
   })
-  const common = { colors: lightColors, formats: {}, clickColumn: "price" }
+  const common = { colors: lightColors, formats: {} }
   it("anchors POC to the winning bar, not a rounded display label", () => {
     const result = volumeProfileOption({
       ...common,
@@ -920,20 +924,27 @@ describe("volumeProfileOption", () => {
       statements,
     })
     expect(split.drawn.pointOfControl).toBe("10")
+    // Bars run from the highest price, each drawn from its own row
+    const atPrice = (row: number) => ({
+      pick: { statement: 0, rows: [row], column: 0 },
+    })
     expect(split.option?.series).toMatchObject([
       {
         data: [
-          { value: 5, columns: { price: 11 } },
-          { value: 4, columns: { price: 10 } },
+          { value: 5, ...atPrice(1) },
+          { value: 4, ...atPrice(0) },
         ],
       },
       {
         data: [
-          { value: 0, columns: { price: 11 } },
-          { value: 20, columns: { price: 10 } },
+          { value: 0, ...atPrice(1) },
+          { value: 20, ...atPrice(0) },
         ],
       },
     ])
+    const [buys] = split.option?.series as { data: unknown[] }[]
+    expect(clickWrites(statements, "price", buys.data[0])).toBe("11")
+    expect(clickWrites(statements, "sell", buys.data[0])).toBe("0")
     const single = volumeProfileOption({
       ...common,
       visual: { type: "volumeProfile", columns: { value: "buy" } },
@@ -942,8 +953,8 @@ describe("volumeProfileOption", () => {
     expect(single.option?.series).toMatchObject([
       {
         data: [
-          { value: 5, columns: { price: 11 } },
-          { value: 4, columns: { price: 10 } },
+          { value: 5, ...atPrice(1) },
+          { value: 4, ...atPrice(0) },
         ],
       },
     ])
@@ -971,22 +982,14 @@ describe("volumeProfileOption", () => {
         statements,
       })
       const [bars] = built.option?.series as { data: unknown[] }[]
-      const set = vi.fn()
-      const events = interactionEvents(
-        { click: { variable: "p" } },
-        set,
-        false,
-        (name) => columnTypeOf(statements, name),
-      )
 
       // When the user clicks the bar, named by its formatted price label
-      events.click(
-        { componentType: "series", name: "$63,000.50", data: bars.data[0] },
-        {} as never,
-      )
+      const written = clickWrites(statements, undefined, bars.data[0], {
+        name: "$63,000.50",
+      })
 
       // Then the variable holds the price as a number of its type
-      expect(set).toHaveBeenCalledWith({ p: literal })
+      expect(written).toBe(literal)
     },
   )
 })
@@ -1363,81 +1366,77 @@ describe("unbound clicks on flow visuals", () => {
     "selects NULL, not the total flow, on a %s node of NULL endpoints",
     (type) => {
       // Given flows from a NULL source, total flow 7
+      const statements = [flows(null)]
       const { option } = build[type]({
         visual: { type },
         colors: lightColors,
         formats: {},
-        statements: [flows(null)],
+        statements,
       })
       const nodes = series(option)[0].data as { name: string }[]
-      const set = vi.fn()
-      const events = interactionEvents({ click: { variable: "pick" } }, set)
 
       // When the user clicks the unlabelled node
-      events.click(
-        {
-          componentType: "series",
-          dataType: "node",
-          name: "",
-          value: 7,
-          data: nodes.find((node) => node.name === ""),
-        },
-        {} as never,
+      const written = clickWrites(
+        statements,
+        undefined,
+        nodes.find((node) => node.name === ""),
+        { dataType: "node", name: "", value: 7 },
       )
 
       // Then the variable is NULL
-      expect(set).toHaveBeenCalledWith({ pick: "null" })
+      expect(written).toBe("null")
     },
   )
 
   it("does not claim NULL for a node that also stands for empty text", () => {
     // Given NULL and '' endpoints, which share one unlabelled node
+    const statements = [flows("")]
     const { option } = sankeyOption({
       visual: { type: "sankey" },
       colors: lightColors,
       formats: {},
-      statements: [flows("")],
+      statements,
     })
 
-    // Then that node does not select NULL
+    // Then that node, whose rows disagree, selects nothing
     const nodes = series(option)[0].data as Record<string, unknown>[]
-    expect(nodes.find((node) => node.name === "")).not.toHaveProperty(
-      "selection",
-    )
+    const empty = nodes.find((node) => node.name === "")
+    expect(clickWrites(statements, undefined, empty)).toBeUndefined()
+    // And a node that is a source selects its source column
+    const a = nodes.find((node) => node.name === "a")
+    expect(clickWrites(statements, undefined, a)).toBe("'a'")
+    expect(clickWrites(statements, "amount", a)).toBe("5")
   })
 
   it("sets nothing for an unbound click on a link, but the bound column for a bound one", () => {
     // Given a link between two exchanges
-    const link = { source: "NYSE", target: "LSE", value: 4 }
-    const unbound = vi.fn()
-    const bound = vi.fn()
+    const statements = [
+      rows(
+        [
+          ["src", "SYMBOL"],
+          ["dst", "SYMBOL"],
+          ["amount", "DOUBLE"],
+          ["route", "SYMBOL"],
+        ],
+        [["NYSE", "LSE", 4, "transatlantic"]],
+      ),
+    ]
+    const { option } = sankeyOption({
+      visual: { type: "sankey" },
+      colors: lightColors,
+      formats: {},
+      statements,
+    })
+    const [link] = series(option)[0].links as unknown[]
+    const edge = { dataType: "edge", name: "NYSE > LSE" }
 
     // When the user clicks the link with and without a bound column
-    interactionEvents({ click: { variable: "pick" } }, unbound).click(
-      {
-        componentType: "series",
-        dataType: "edge",
-        name: "NYSE > LSE",
-        data: link,
-      },
-      {} as never,
-    )
-    interactionEvents(
-      { click: { variable: "pick", column: "route" } },
-      bound,
-    ).click(
-      {
-        componentType: "series",
-        dataType: "edge",
-        name: "NYSE > LSE",
-        data: { ...link, columns: { route: "transatlantic" } },
-      },
-      {} as never,
-    )
+    const unbound = clickWrites(statements, undefined, link, edge)
+    const bound = clickWrites(statements, "route", link, edge)
 
     // Then only the bound click writes, and never the link's label
-    expect(unbound).not.toHaveBeenCalled()
-    expect(bound).toHaveBeenCalledWith({ pick: "'transatlantic'" })
+    expect(unbound).toBeUndefined()
+    expect(bound).toBe("'transatlantic'")
   })
 })
 
@@ -1542,22 +1541,14 @@ describe("footprintOption", () => {
       formats: {},
     })
     const [cells] = result.option?.series as Cells[]
-    const set = vi.fn()
-    const events = interactionEvents(
-      { click: { variable: "level" } },
-      set,
-      false,
-      (name) => columnTypeOf([levels], name),
-    )
 
     // When the user clicks a cell, which ECharts gives no name
-    events.click(
-      { componentType: "series", name: "", data: cells.data[1] },
-      {} as never,
-    )
+    const written = clickWrites([levels], undefined, cells.data[1], {
+      name: "",
+    })
 
     // Then the variable holds the level's price
-    expect(set).toHaveBeenCalledWith({ level: "125" })
+    expect(written).toBe("125")
   })
 
   it("refuses a capped result and names a missing column", () => {

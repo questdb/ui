@@ -4,13 +4,10 @@ import { buildEchartsOption, type ResolvedQuery } from "./buildEchartsOption"
 import { echarts } from "./echartsSetup"
 import type { ChartConfig } from "./chartTypes"
 import { resolveDraw } from "../DrawCanvas/drawCanvasUtils"
-import {
-  columnTypeOf,
-  interactionEvents,
-} from "../interactions/chartInteractions"
+import { interactionEvents } from "../interactions/chartInteractions"
 
-// An unbound click ("The clicked item's name") on preset charts, with the
-// click params ECharts builds for the clicked item.
+// An unbound click on preset charts selects the column the clicked mark is
+// drawn from, with the click params ECharts builds for the clicked item.
 
 const charts: EChartsType[] = []
 afterEach(() => {
@@ -27,6 +24,7 @@ const clickItem = (
   option: ReturnType<typeof buildEchartsOption>,
   statements: Result[],
   dataIndex: number,
+  column?: string,
 ) => {
   const chart = echarts.init(null, undefined, {
     renderer: "svg",
@@ -49,8 +47,8 @@ const clickItem = (
     .getSeriesByIndex(0)
     .getDataParams(dataIndex)
   const setVariables = vi.fn()
-  interactionEvents({ click: { variable: "pick" } }, setVariables, false, (n) =>
-    columnTypeOf(statements, n),
+  interactionEvents({ click: { variable: "pick", column } }, setVariables, () =>
+    statements.map((s) => ({ columns: s.columns, rows: s.dataset })),
   ).click({ ...params, componentType: "series" }, chart)
   return setVariables
 }
@@ -151,6 +149,14 @@ describe("unbound chart clicks", () => {
 
     // Then the variable is NULL, not the bar's share
     expect(set).toHaveBeenCalledWith({ pick: "null" })
+
+    // And a bound click writes what both of its rows agree on, else nothing
+    expect(clickItem(option, [sides], nullIndex, "side")).toHaveBeenCalledWith({
+      pick: "'buy'",
+    })
+    expect(
+      clickItem(option, [sides], nullIndex, "volume"),
+    ).not.toHaveBeenCalled()
   })
 
   it("selects the x of a time line point and of a scatter point", () => {

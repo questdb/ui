@@ -13,6 +13,7 @@ import { sanitizeOption } from "./sanitizeOption"
 import {
   buildCustomOption,
   customSeriesCount,
+  datasetSource,
   partialDatasetWarnings,
 } from "./buildCustomOption"
 import { BUILTIN_RENDER_ITEMS } from "../CellChart/customSeriesNames"
@@ -109,9 +110,29 @@ export const CustomChart = ({
   // The option whose drawn chart was zoomed: its authored window applies when
   // it is first drawn, not on later refreshes.
   const [zoomedKey, setZoomedKey] = useState<string | null>(null)
+  // The option drawn, for the click: a dataset-bound series' marks are rows
+  // of a statement, drawn from the column its encoding names.
+  const drawnRef = useRef<{
+    option: Record<string, unknown>
+    statements: (StatementRows | null)[]
+  } | null>(null)
   const chartEvents = useMemo(
     () => ({
       ...events,
+      ...(events?.click
+        ? {
+            click: (payload: unknown, instance: EChartsType) => {
+              const drawn = drawnRef.current
+              const seriesIndex = (payload as { seriesIndex?: unknown })
+                .seriesIndex
+              const source =
+                drawn && typeof seriesIndex === "number"
+                  ? datasetSource(drawn.option, drawn.statements, seriesIndex)
+                  : undefined
+              events.click?.({ ...(payload as object), ...source }, instance)
+            },
+          }
+        : {}),
       datazoom: (payload: unknown, instance: EChartsType) => {
         events?.datazoom?.(payload, instance)
         setZoomedKey(optionKey)
@@ -184,10 +205,14 @@ export const CustomChart = ({
       }),
     [rawOption, theme.color],
   )
+  const clickable = interactions?.click !== undefined
   const built = useMemo(
-    () => buildCustomOption(sanitized.option, statements, live),
-    [sanitized, statements, live],
+    () => buildCustomOption(sanitized.option, statements, live, clickable),
+    [sanitized, statements, live, clickable],
   )
+  useEffect(() => {
+    drawnRef.current = { option: built.option, statements }
+  }, [built, statements])
   const specKey = useMemo(() => JSON.stringify(sanitized.option), [sanitized])
 
   const zoomed = zoomedKey === optionKey

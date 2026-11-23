@@ -7,6 +7,7 @@ import { renderComponent } from "../../../../test/component"
 import { echarts } from "../CellChart/echartsSetup"
 import { primaryXControls } from "../CellChart/liveZoom"
 import { joinChartSync, setChartSync } from "../interactions/chartSync"
+import { interactionEvents } from "../interactions/chartInteractions"
 import { clearRenderReport, getRenderReport } from "../renderReports"
 import type { StatementRows } from "../visuals/statementRows"
 import { CustomChart } from "./CustomChart"
@@ -449,4 +450,101 @@ it("records a zoom on a control that does not move the x axis", async () => {
     expect(instance()).not.toBe(first)
   })
   await waitFor(() => expect(range()).toMatchObject({ start: 20, end: 60 }))
+})
+
+it("writes the clicked dataset row's column after a filter transform", async () => {
+  // Given desks, filtered to the open ones, drawn as bars whose click sets
+  // the desk
+  sizeCharts()
+  const statements: StatementRows[] = [
+    {
+      columns: [
+        { name: "desk", type: "SYMBOL" },
+        { name: "open", type: "BOOLEAN" },
+        { name: "id", type: "LONG" },
+        { name: "pnl", type: "DOUBLE" },
+      ],
+      rows: [
+        ["east", false, "9007199254740993", 1],
+        ["west", true, "9007199254740995", 2],
+        [null, true, "9007199254740997", 3],
+      ],
+    },
+  ]
+  const writes: Record<string, string>[] = []
+  const chart = (column?: string) => {
+    const interactions = { click: { variable: "desk", column } }
+    return (
+      <CustomChart
+        bufferId={BUFFER_ID}
+        cellId="a"
+        rawOption={{
+          dataset: [
+            {
+              id: "open",
+              fromDatasetId: "q0",
+              transform: {
+                type: "filter",
+                config: { dimension: "open", "=": true },
+              },
+            },
+          ],
+          xAxis: { type: "category" },
+          yAxis: { type: "value" },
+          series: [
+            { type: "bar", datasetId: "open", encode: { x: "desk", y: "pnl" } },
+          ],
+        }}
+        statements={statements}
+        live={false}
+        isFocused={false}
+        interactions={interactions}
+        events={interactionEvents(
+          interactions,
+          (values) => writes.push(values),
+          () => statements,
+        )}
+      />
+    )
+  }
+  const { container, rerender } = renderComponent(chart())
+  const instance = () => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host ? echarts.getInstanceByDom(host) : undefined
+  }
+  await waitFor(() => expect(instance()?.getOption().series).toBeDefined())
+  const click = (dataIndex: number) => {
+    const chart = instance()!
+    const params = (
+      chart as unknown as {
+        getModel(): {
+          getSeriesByIndex(i: number): {
+            getDataParams(i: number): Record<string, unknown>
+          }
+        }
+      }
+    )
+      .getModel()
+      .getSeriesByIndex(0)
+      .getDataParams(dataIndex)
+    act(() => {
+      ;(
+        chart as unknown as { trigger(name: string, event: unknown): void }
+      ).trigger("click", { ...params, componentType: "series" })
+    })
+  }
+
+  // When the user clicks both bars, unbound and then bound to the id
+  click(0)
+  click(1)
+  rerender(chart("id"))
+  click(1)
+
+  // Then each writes its own row's desk (NULL for the unnamed one), then its
+  // exact id
+  expect(writes).toEqual([
+    { desk: "'west'" },
+    { desk: "null" },
+    { desk: "9007199254740997" },
+  ])
 })

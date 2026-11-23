@@ -1,138 +1,49 @@
 import type { EChartsOption, EChartsType } from "echarts"
 import type { CellInteractions } from "../../../../store/notebook"
 import type { ChartEventHandler } from "../CellChart/ChartRenderer"
+import { pickLiteral, pickOfParams, type PickSources } from "./selection"
+
+export { sqlLiteral } from "./selection"
 
 // Clicking and dragging on a chart sets notebook variables: a click sets the
-// clicked item's value, a drag across a time chart sets a time window. Values
-// become SQL literals, since a variable holds an expression.
-
-const INTEGER_TYPES = new Set(["BYTE", "SHORT", "INT", "LONG"])
-
-/**
- * A value as a SQL literal: numbers as they are, text quoted. LONG and
- * DECIMAL values arrive as decimal text, so the column's SQL type, when
- * known, keeps them numbers: `42`, and `1.50m` for a DECIMAL.
- */
-export const sqlLiteral = (value: unknown, type?: string): string => {
-  if (value === null || value === undefined) return "null"
-  if (typeof value === "number")
-    return Number.isFinite(value) ? String(value) : "null"
-  if (typeof value === "boolean") return value ? "true" : "false"
-  if (typeof value === "string" && type !== undefined) {
-    if (INTEGER_TYPES.has(type) && /^-?\d+$/.test(value)) return value
-    if (type.startsWith("DECIMAL") && /^-?\d+(\.\d+)?$/.test(value))
-      return `${value}m`
-  }
-  const text = typeof value === "string" ? value : JSON.stringify(value)
-  return `'${text.replace(/'/g, "''")}'`
-}
-
-/** The SQL type of the first statement column with this name. */
-export const columnTypeOf = (
-  statements: readonly unknown[] | undefined,
-  name: string | undefined,
-): string | undefined => {
-  if (name === undefined) return undefined
-  for (const statement of statements ?? []) {
-    const columns = (statement as { columns?: unknown } | null)?.columns
-    if (!Array.isArray(columns)) continue
-    const column = (columns as { name?: unknown; type?: unknown }[]).find(
-      (c) => c.name === name,
-    )
-    if (typeof column?.type === "string") return column.type
-  }
-  return undefined
-}
+// value the clicked mark selects (see selection.ts), a drag across a time
+// chart sets a time window. Values become SQL literals, since a variable
+// holds an expression.
 
 /** A time as a quoted ISO timestamp QuestDB compares with timestamps. */
 export const timeLiteral = (ms: number): string =>
   `'${new Date(ms).toISOString()}'`
 
-type ClickParams = {
-  name?: unknown
-  value?: unknown
-  data?: unknown
-  dimensionNames?: string[]
-  componentType?: string
-  dataType?: string
-}
-
-/** The value a click sets: `column` of the clicked row, else its name. */
-export const clickedValue = (
-  params: ClickParams,
-  column: string | undefined,
-  requireSourceColumn = false,
-): unknown => {
-  if (column !== undefined) {
-    const data = params.data
-    // Items built from rows carry them by column name (heatmap, boxplot).
-    const columns = (data as { columns?: unknown } | null)?.columns
-    if (
-      typeof columns === "object" &&
-      columns !== null &&
-      Object.hasOwn(columns, column)
-    )
-      return (columns as Record<string, unknown>)[column]
-    // An aggregate node's name and value describe the drawing, not a row.
-    if (requireSourceColumn) return undefined
-    if (
-      typeof data === "object" &&
-      data !== null &&
-      !Array.isArray(data) &&
-      Object.hasOwn(data, column)
-    )
-      return (data as Record<string, unknown>)[column]
-    const dims = params.dimensionNames
-    if (Array.isArray(params.value) && Array.isArray(dims)) {
-      const i = dims.indexOf(column)
-      if (i >= 0) return (params.value as unknown[])[i]
-    }
-    return undefined
-  }
-  // An item whose name is a display label carries the value it selects.
-  const data = params.data
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    Object.hasOwn(data, "selection")
-  )
-    return (data as { selection: unknown }).selection
-  // A link joins two nodes; its "source > target" name is not a value.
-  if (params.dataType === "edge") return undefined
-  if (params.name !== undefined && params.name !== "") return params.name
-  return Array.isArray(params.value) ? params.value[0] : params.value
-}
-
-/** The column an item's own `selection` comes from, for its SQL type. */
-const selectionColumnOf = (params: ClickParams): string | undefined => {
-  const column = (params.data as { selectionColumn?: unknown } | null)
-    ?.selectionColumn
-  return typeof column === "string" ? column : undefined
-}
-
 export type SetVariables = (values: Record<string, string>) => void
 
-/** ECharts event handlers for a cell's interactions. */
+/**
+ * ECharts event handlers for a cell's interactions. A click reads the cell's
+ * statements when it happens, so the handlers stay the same across refreshes.
+ */
 export const interactionEvents = (
   interactions: CellInteractions | undefined,
   setVariables: SetVariables,
-  requireSourceColumn = false,
-  columnType?: (name: string) => string | undefined,
+  statements: () => PickSources,
 ): Record<string, ChartEventHandler> => {
   const events: Record<string, ChartEventHandler> = {}
   const click = interactions?.click
   if (click) {
     events.click = (params) => {
-      const p = params as ClickParams
+      const p = params as Parameters<typeof pickOfParams>[0] & {
+        componentType?: string
+      }
       // Mark lines and areas (events) are not data.
       if (p.componentType === "markLine" || p.componentType === "markArea")
         return
-      const value = clickedValue(p, click.column, requireSourceColumn)
-      // Nothing to select: no such column on the item, or no name.
-      if (value === undefined) return
-      const column = click.column ?? selectionColumnOf(p)
-      const type = column === undefined ? undefined : columnType?.(column)
-      setVariables({ [click.variable]: sqlLiteral(value, type) })
+      const current = statements()
+      const literal = pickLiteral(
+        pickOfParams(p, current),
+        click.column,
+        current,
+      )
+      // Nothing to select: the mark has no such column, or its rows disagree.
+      if (literal === undefined) return
+      setVariables({ [click.variable]: literal })
     }
   }
   const brush = interactions?.brush

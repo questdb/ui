@@ -24,10 +24,7 @@ import {
   resolveDraw,
   resolveRoles,
 } from "../DrawCanvas/drawCanvasUtils"
-import {
-  clickedValue,
-  interactionEvents,
-} from "../interactions/chartInteractions"
+import { interactionEvents } from "../interactions/chartInteractions"
 
 const col = (name: string, type: string): ColumnDefinition => ({ name, type })
 
@@ -45,29 +42,45 @@ const query = (over: Partial<ResolvedQuery>): ResolvedQuery => ({
 const seriesOf = (option: unknown) =>
   (option as { series: Record<string, unknown>[] }).series
 
+// What a click on a data item of the query's chart writes, bound to `column`.
+const clickWrites = (
+  q: ResolvedQuery,
+  column: string | undefined,
+  data: unknown,
+) => {
+  const written: Record<string, string>[] = []
+  interactionEvents(
+    { click: { variable: "v", column } },
+    (values) => written.push(values),
+    () => [{ columns: q.columns, rows: q.dataset }],
+  ).click({ componentType: "series", data }, {} as never)
+  return written[0]?.v
+}
+
 describe("preset chart interactions", () => {
   it("keeps the unplotted bound field on each numeric range bar", () => {
-    const option = buildEchartsOption(
-      { xColumn: "market" },
-      [
-        query({
-          type: "rangeBar",
-          xColumn: "market",
-          roles: { start: "low", end: "high" },
-          columns: [
-            col("market", "SYMBOL"),
-            col("low", "INT"),
-            col("high", "INT"),
-            col("code", "SYMBOL"),
-          ],
-          dataset: [["London", 5, 10, "LON"]],
-        }),
+    const bars = query({
+      type: "rangeBar",
+      xColumn: "market",
+      roles: { start: "low", end: "high" },
+      columns: [
+        col("market", "SYMBOL"),
+        col("low", "INT"),
+        col("high", "INT"),
+        col("code", "SYMBOL"),
       ],
-      { clickColumn: "code" },
-    )
+      dataset: [["London", 5, 10, "LON"]],
+    })
+    const option = buildEchartsOption({ xColumn: "market" }, [bars], {
+      clickEnabled: true,
+    })
     const data = (seriesOf(option)[0].data as unknown[])[0]
-    expect(data).toEqual({ value: ["London", 5, 10], columns: { code: "LON" } })
-    expect(clickedValue({ data }, "code")).toBe("LON")
+    expect(data).toEqual({
+      value: ["London", 5, 10],
+      pick: { statement: 0, rows: [0], column: 0 },
+    })
+    expect(clickWrites(bars, "code", data)).toBe("'LON'")
+    expect(clickWrites(bars, undefined, data)).toBe("'London'")
   })
   it("retains the raw bound field without changing a candle's OHLC tuple", () => {
     const ts = "2026-01-01T12:00:00.000000Z"
@@ -90,10 +103,13 @@ describe("preset chart interactions", () => {
           ohlc: { open: "o", close: "c", low: "l", high: "h" },
         }),
       ],
-      { clickColumn: "venue" },
+      { clickEnabled: true },
     )
     expect(seriesOf(option)[0].data).toEqual([
-      { value: [ts, 10, 12, 9, 13], columns: { venue: "London" } },
+      {
+        value: [ts, 10, 12, 9, 13],
+        pick: { statement: 0, rows: [0], column: 0 },
+      },
     ])
   })
 
@@ -123,7 +139,7 @@ describe("preset chart interactions", () => {
       try {
         chart.setOption(
           buildEchartsOption({ xColumn: "desk" }, [bars], {
-            clickColumn: "code",
+            clickEnabled: true,
           }),
         )
         const model = (
@@ -140,6 +156,7 @@ describe("preset chart interactions", () => {
         interactionEvents(
           { click: { variable: "selection", column: "code" } },
           setVariables,
+          () => [{ columns: bars.columns, rows: bars.dataset }],
         ).click(params, chart)
         expect(setVariables).toHaveBeenCalledWith({ selection: "'TYO'" })
       } finally {
@@ -409,23 +426,20 @@ describe("role chart types", () => {
 
   it("draws a heatmap of x by y in the result's order for text", () => {
     // Given
-    const option = buildEchartsOption({ xColumn: "hour" }, [
-      query({
-        type: "heatmap",
-        columns: [
-          col("hour", "INT"),
-          col("bucket", "SYMBOL"),
-          col("n", "LONG"),
-        ],
-        dataset: [
-          [0, "b10", 1],
-          [0, "b2", 2],
-          [1, "b10", 3],
-        ],
-        xColumn: "hour",
-        roles: { y: "bucket", value: "n" },
-      }),
-    ])
+    const cells = query({
+      type: "heatmap",
+      columns: [col("hour", "INT"), col("bucket", "SYMBOL"), col("n", "LONG")],
+      dataset: [
+        [0, "b10", 1],
+        [0, "b2", 2],
+        [1, "b10", 3],
+      ],
+      xColumn: "hour",
+      roles: { y: "bucket", value: "n" },
+    })
+    const option = buildEchartsOption({ xColumn: "hour" }, [cells], {
+      clickEnabled: true,
+    })
 
     // Then
     const axis = option.yAxis as {
@@ -443,33 +457,39 @@ describe("role chart types", () => {
       [1, 0, 3],
     ])
     // A click can set a variable from any of the row's columns.
-    expect(
-      clickedValue(
-        { data: (heatmap.data as unknown[])[1], name: "0" },
-        "bucket",
-      ),
-    ).toBe("b2")
+    const cell = (heatmap.data as unknown[])[1]
+    expect(clickWrites(cells, "bucket", cell)).toBe("'b2'")
+    expect(clickWrites(cells, undefined, cell)).toBe("0")
   })
 
   it("draws a boxplot from the five columns", () => {
     // Given
-    const option = buildEchartsOption({ xColumn: "venue" }, [
-      query({
-        type: "boxplot",
-        columns: [
-          col("venue", "SYMBOL"),
-          ...["a", "b", "c", "d", "e"].map((n) => col(n, "DOUBLE")),
-        ],
-        dataset: [["EBS", 1, 2, 3, 4, 5]],
-        xColumn: "venue",
-        roles: { min: "a", q1: "b", median: "c", q3: "d", max: "e" },
-      }),
-    ])
+    const option = buildEchartsOption(
+      { xColumn: "venue" },
+      [
+        query({
+          type: "boxplot",
+          columns: [
+            col("venue", "SYMBOL"),
+            ...["a", "b", "c", "d", "e"].map((n) => col(n, "DOUBLE")),
+          ],
+          dataset: [["EBS", 1, 2, 3, 4, 5]],
+          xColumn: "venue",
+          roles: { min: "a", q1: "b", median: "c", q3: "d", max: "e" },
+        }),
+      ],
+      { clickEnabled: true },
+    )
 
     // Then
     expect(seriesOf(option)[0]).toMatchObject({
       type: "boxplot",
-      data: [{ value: [1, 2, 3, 4, 5], columns: { venue: "EBS" } }],
+      data: [
+        {
+          value: [1, 2, 3, 4, 5],
+          pick: { statement: 0, rows: [0], column: 0 },
+        },
+      ],
     })
   })
 

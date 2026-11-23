@@ -788,6 +788,37 @@ describe("VisualCanvas", () => {
     },
   )
 
+  it.each(["stat", "treemap", "uptime"] as const)(
+    "reports a %s click bound to a column no statement returns",
+    (type) => {
+      // Given a click bound to a column the query does not return
+      renderComponent(
+        <VisualCanvas
+          {...defaults}
+          visual={{ type }}
+          interactions={{ click: { variable: "pick", column: "desk_id" } }}
+          statements={[
+            {
+              columns: [
+                { name: "ts", type: "TIMESTAMP" },
+                { name: "desk", type: "SYMBOL" },
+                { name: "state", type: "SYMBOL" },
+                { name: "volume", type: "DOUBLE" },
+              ],
+              rows: [["2026-01-01T00:00:00Z", "London", "up", 5]],
+            },
+          ]}
+        />,
+      )
+
+      // Then the agent is told the click can write nothing
+      expect(getRenderReport(bufferId, cellId)?.problems).toContainEqual({
+        message: 'Click column "desk_id" not found.',
+        severity: "error",
+      })
+    },
+  )
+
   it("writes a bound LONG click as a number and shows that tile selected", async () => {
     // Given stat tiles whose click sets a LONG id, sent as text
     const setVariables = vi.fn()

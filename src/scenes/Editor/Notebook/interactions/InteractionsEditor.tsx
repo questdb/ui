@@ -400,7 +400,7 @@ export const InteractionsEditor: React.FC<Props> = ({
                     label:
                       clickTarget === "cell"
                         ? "The clicked cell's value"
-                        : "The clicked item's name (bar, slice, node, tile)",
+                        : "The clicked item's own value (bar, slice, node, tile)",
                     value: "",
                   },
                   ...columns.map((c) => ({

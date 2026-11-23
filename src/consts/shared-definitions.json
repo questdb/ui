@@ -1475,7 +1475,7 @@
             },
             "column": {
               "type": ["string", "null"],
-              "description": "Column whose value the click sets. Null = the clicked item's name (category, slice, node, tile label) or, in a grid, the clicked cell."
+              "description": "Column whose value the click sets, read from the row(s) the clicked item was drawn from. Null = the column the item is drawn from (a bar's or slice's category, a lane, a node, a tile's label, a price level) or, in a grid, the clicked cell's column. An item drawn from several rows sets the value only when they all agree; a link sets nothing."
             }
           },
           "required": ["variable", "column"],
@@ -2518,7 +2518,7 @@
                       },
                       "column": {
                         "type": ["string", "null"],
-                        "description": "Column whose value the click sets. Null = the clicked item's name (category, slice, node, tile label) or, in a grid, the clicked cell."
+                        "description": "Column whose value the click sets, read from the row(s) the clicked item was drawn from. Null = the column the item is drawn from (a bar's or slice's category, a lane, a node, a tile's label, a price level) or, in a grid, the clicked cell's column. An item drawn from several rows sets the value only when they all agree; a link sets nothing."
                       }
                     },
                     "required": ["variable", "column"],

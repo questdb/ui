@@ -172,7 +172,8 @@ export type GridMode = "stable" | "stream"
 
 export type CellInteractions = {
   // A click on a bar, slice, point, node or grid row sets `variable` to the
-  // clicked value: the `column` value of that row, else the item's name.
+  // `column` value of the rows the item was drawn from, else to the value of
+  // the column it is drawn from (see interactions/selection.ts).
   click?: { variable: string; column?: string }
   // Dragging across a time chart sets `from` and `to` to the window's bounds.
   brush?: { from: string; to: string }

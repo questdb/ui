@@ -17,6 +17,7 @@ import { withAlpha } from "../../../../theme"
 import { columnIndex, toNumber, type StatementRows } from "./statementRows"
 import type { VisualColumns } from "../CellChart/chartTypes"
 import { RollingNumber } from "./RollingNumber"
+import { pickOf, type Pick } from "../interactions/selection"
 
 // An order book ladder: asks above, bids below, the mid price between them.
 // The query does the work: statement 1 returns the asks and statement 2 the
@@ -30,9 +31,8 @@ type Level = {
   size: number
   rawSize: string | number
   total: number | string | null
-  selection: unknown
-  /** The SQL type of an unbound click's selection, the price. */
-  selectionType?: string
+  // A level is drawn from its row of its side's statement, by its price.
+  pick: Pick
 }
 
 type Side = { levels: Level[]; totalName?: string; problem?: string }
@@ -50,8 +50,8 @@ const levelLimitNotice = (side: Side, name: "asks" | "bids") =>
 
 const readSide = (
   rows: StatementRows | null,
+  statement: number,
   columns: VisualColumns | undefined,
-  clickColumn?: string,
 ): Side => {
   if (!rows) return { levels: [] }
   const priceIdx = columnIndex(rows, columns?.price, 0)
@@ -65,9 +65,7 @@ const readSide = (
       .join(" and ")
     return { levels: [], problem: `missing ${roles} column binding.` }
   }
-  const clickIdx = columnIndex(rows, clickColumn)
-  const priceType = rows.columns[priceIdx].type
-  const levels = rows.rows.flatMap((row) => {
+  const levels = rows.rows.flatMap((row, index) => {
     const rawPrice = row[priceIdx]
     if (typeof rawPrice !== "string" && typeof rawPrice !== "number") return []
     const price = asNumeric(rawPrice)
@@ -82,8 +80,7 @@ const readSide = (
         rawPrice,
         size,
         rawSize,
-        selection: clickColumn === undefined ? rawPrice : row[clickIdx],
-        selectionType: clickColumn === undefined ? priceType : undefined,
+        pick: pickOf(statement, [index], priceIdx),
         total:
           typeof total === "number" || typeof total === "string" ? total : null,
       },
@@ -254,9 +251,10 @@ type Props = {
   formats: ColumnFormats
   animateDigits?: boolean
   queriesKey?: string
-  // Unbound clicks report price; a bound click reads from its own side.
-  clickColumn?: string
-  onSelect?: (value: unknown, type?: string) => void
+  // What a click on a level writes (undefined: nothing), and the click. An
+  // unbound click selects the price; a bound one reads from its own side.
+  pickLiteral?: (pick: Pick) => string | undefined
+  onSelect?: (pick: Pick) => void
 }
 
 export const OrderBook = ({
@@ -266,16 +264,16 @@ export const OrderBook = ({
   formats,
   animateDigits = false,
   queriesKey,
-  clickColumn,
+  pickLiteral,
   onSelect,
 }: Props) => {
   const asks = useMemo(
-    () => readSide(statements[0], columns, clickColumn),
-    [statements, columns, clickColumn],
+    () => readSide(statements[0], 0, columns),
+    [statements, columns],
   )
   const bids = useMemo(
-    () => readSide(statements[1], columns, clickColumn),
-    [statements, columns, clickColumn],
+    () => readSide(statements[1], 1, columns),
+    [statements, columns],
   )
   const ladderRef = useRef<HTMLDivElement | null>(null)
   const midRef = useRef<HTMLDivElement | null>(null)
@@ -357,8 +355,8 @@ export const OrderBook = ({
     const occurrence = occurrences.get(priceKey) ?? 0
     occurrences.set(priceKey, occurrence + 1)
     const activate =
-      onSelect && level.selection !== undefined
-        ? () => onSelect(level.selection, level.selectionType)
+      onSelect && pickLiteral?.(level.pick) !== undefined
+        ? () => onSelect(level.pick)
         : undefined
     const price = formatValue(level.rawPrice, priceFormat)
     const size = formatValue(level.rawSize, sizeFormat)
@@ -453,8 +451,8 @@ export const orderBookDrawn = (
   columns?: VisualColumns,
   statementErrors?: (string | null)[],
 ) => {
-  const asks = readSide(statements[0], columns)
-  const bids = readSide(statements[1], columns)
+  const asks = readSide(statements[0], 0, columns)
+  const bids = readSide(statements[1], 1, columns)
   return {
     drawn: {
       asks: shownLevels(asks).length,

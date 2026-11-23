@@ -91,15 +91,21 @@ describe("statement results for dashboard visuals", () => {
       {
         name: "east",
         value: 11,
+        rows: [0, 2, 3],
+        column: 0,
         children: [
-          { name: "node", value: 10, colorValue: 0 },
-          { name: "backup", value: 1, colorValue: 3 },
+          { name: "node", value: 10, colorValue: 0, rows: [0, 2], column: 1 },
+          { name: "backup", value: 1, colorValue: 3, rows: [3], column: 1 },
         ],
       },
       {
         name: "west",
         value: 2,
-        children: [{ name: "node", value: 2, colorValue: -1 }],
+        rows: [1],
+        column: 0,
+        children: [
+          { name: "node", value: 2, colorValue: -1, rows: [1], column: 1 },
+        ],
       },
     ])
   })

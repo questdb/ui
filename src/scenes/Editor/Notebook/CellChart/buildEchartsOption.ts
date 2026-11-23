@@ -22,6 +22,13 @@ import {
   type ColumnFormats,
   type Tone,
 } from "../../../../utils/formats/columnFormat"
+import {
+  mergePicks,
+  pickOf,
+  pickOfItem,
+  withPick,
+  type Pick as MarkPick,
+} from "../interactions/selection"
 
 type Dataset = (boolean | string | number | null)[][]
 
@@ -64,7 +71,8 @@ export type ChartGlobals = {
 export type ChartContext = {
   colors?: ColorShape
   formats?: ColumnFormats
-  clickColumn?: string
+  // Clicks set a variable: clickable marks carry the rows they were drawn
+  // from (see selection.ts).
   clickEnabled?: boolean
   preciseTimePointer?: boolean
   sharedTimePointer?: boolean
@@ -79,7 +87,6 @@ type XMode = "time" | "value" | "category"
 
 type SeriesContext = {
   xMode: XMode
-  clickColumn?: string
   clickEnabled?: boolean
   categoryUnion: string[] | null // set only when overlaying series onto a shared category axis; null for a single positional query
 }
@@ -156,43 +163,46 @@ const resolveSeriesRenderSpec = (type: ChartType, clickEnabled: boolean) => {
   return { seriesType, lineExtras, perfExtras, isStacked }
 }
 
-type ClickPoint = { value: unknown; columns: Record<string, unknown> }
+// A clickable point: its value and the rows it was drawn from.
+type PickedPoint = { value: unknown; pick: MarkPick }
 
-const isClickPoint = (point: unknown): point is ClickPoint =>
+const isPickedPoint = (point: unknown): point is PickedPoint =>
   point !== null &&
   typeof point === "object" &&
-  "columns" in point &&
+  !Array.isArray(point) &&
+  "pick" in point &&
   "value" in point
 
 const pointValue = (point: unknown): unknown =>
-  isClickPoint(point) ? point.value : point
+  isPickedPoint(point) ? point.value : point
 
-// An unbound click selects the clicked item's name. A NULL category has none
-// it can be drawn with (its label is empty), so its item says to select NULL
-// rather than letting the click fall back to the drawn value.
-const NULL_SELECTION = { columns: {}, selection: null }
+const pickedPoint = (value: unknown, pick: MarkPick | undefined): unknown =>
+  pick ? { value, pick } : value
 
-const isNullSelection = (point: unknown): boolean =>
-  isClickPoint(point) &&
-  Object.hasOwn(point, "selection") &&
-  (point as unknown as { selection: unknown }).selection === null
+// The pick of a query's row, drawn from `column`, when clicks are enabled.
+const rowPick = (
+  q: Pick<ResolvedQuery, "index">,
+  ctx: { clickEnabled?: boolean },
+  row: number,
+  column: number,
+): MarkPick | undefined =>
+  ctx.clickEnabled === true && q.index >= 0
+    ? pickOf(q.index, [row], column)
+    : undefined
 
-const isNullCategory = (raw: unknown, ctx: SeriesContext): boolean =>
-  ctx.xMode === "category" &&
-  ctx.clickEnabled === true &&
-  ctx.clickColumn === undefined &&
-  (raw === null || raw === undefined)
-
+// Rows (by index) whose x labels repeat take one slot: the last one's point,
+// or the points combined.
 const alignPointsToCategoryUnion = (
-  rows: Dataset,
+  q: ResolvedQuery,
+  rows: number[],
   xIdx: number,
   union: string[],
-  toPoint: (row: Dataset[number]) => unknown,
+  toPoint: (row: number) => unknown,
   combine?: (a: unknown, b: unknown) => unknown,
 ): unknown[] => {
   const byCategory = new Map<string, unknown>()
   for (const row of rows) {
-    const key = toCategoryLabel(row[xIdx])
+    const key = toCategoryLabel(q.dataset[row][xIdx])
     const point = toPoint(row)
     byCategory.set(
       key,
@@ -353,49 +363,28 @@ export const percentStackProblem = (
   }
 }
 
-const aggregateContinuousShares = (series: Series[], clickColumn?: string) => {
+// Points at the same x add up to one share, drawn from all of their rows.
+const aggregateContinuousShares = (series: Series[]) => {
   for (const s of series) {
     const points = s.data as unknown[]
     const byX = new Map<
       unknown,
-      {
-        point: unknown
-        sum: number | null
-        selected: unknown
-        unanimous: boolean
-      }
+      { sum: number | null; pick: MarkPick | undefined }
     >()
     for (const point of points) {
       const [x, y] = pointValue(point) as [unknown, unknown]
       const v = toNumberOrNull(y)
-      const selected =
-        clickColumn !== undefined && isClickPoint(point)
-          ? point.columns[clickColumn]
-          : undefined
+      const pick = pickOfItem(point)
       const bucket = byX.get(x)
       if (!bucket) {
-        byX.set(x, {
-          point,
-          sum: v === null ? null : Math.abs(v),
-          selected,
-          unanimous: true,
-        })
+        byX.set(x, { sum: v === null ? null : Math.abs(v), pick })
       } else {
         if (v !== null) bucket.sum = (bucket.sum ?? 0) + Math.abs(v)
-        if (bucket.selected !== selected) bucket.unanimous = false
+        bucket.pick = mergePicks(bucket.pick, pick)
       }
     }
     if (byX.size === points.length) continue
-    s.data = [...byX].map(([x, { point, sum, selected, unanimous }]) => {
-      const value = [x, sum]
-      return clickColumn !== undefined && isClickPoint(point)
-        ? {
-            ...point,
-            value,
-            columns: { [clickColumn]: unanimous ? selected : undefined },
-          }
-        : value
-    })
+    s.data = [...byX].map(([x, { sum, pick }]) => pickedPoint([x, sum], pick))
   }
 }
 
@@ -473,7 +462,7 @@ const toPercentShares = (series: Series[]) => {
         v === null || total === 0 ? null : (Math.abs(v) / total) * 100
       const value = pointValue(point)
       const shareValue = Array.isArray(value) ? [value[0], share] : share
-      return isClickPoint(point) ? { ...point, value: shareValue } : shareValue
+      return isPickedPoint(point) ? { ...point, value: shareValue } : shareValue
     })
     s[PERCENT] = true
   }
@@ -488,7 +477,7 @@ const buildCartesianSeries = (
     // Areas stack only when asked; shares of a total always stack.
     for (const s of out) s.stack = `stack-${q.index}`
     if (ctx.xMode === "time" || ctx.xMode === "value") {
-      aggregateContinuousShares(out, ctx.clickColumn)
+      aggregateContinuousShares(out)
       alignContinuousStacks(out)
     }
     toPercentShares(out)
@@ -498,10 +487,7 @@ const buildCartesianSeries = (
 
 const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
   const { seriesType, lineExtras, perfExtras, isStacked } =
-    resolveSeriesRenderSpec(
-      q.type,
-      ctx.clickEnabled === true || ctx.clickColumn !== undefined,
-    )
+    resolveSeriesRenderSpec(q.type, ctx.clickEnabled === true)
   const scatter = scatterEncoding(q)
   // A sized or coloured point carries its x in every mode.
   const xValue = (row: Dataset[number], xIdx: number) =>
@@ -514,21 +500,19 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
   const idx = buildColumnIndexMap(q.columns)
   const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
   if (xIdx === undefined) return []
-  const clickColumn = ctx.clickColumn
-  const clickIdx = clickColumn === undefined ? undefined : idx.get(clickColumn)
-  const pointsFor = (rows: Dataset, yIdx: number): unknown[] => {
-    const toPoint = (row: Dataset[number]) => {
+  // A point is drawn from its row's x.
+  const pointsFor = (rows: number[], yIdx: number): unknown[] => {
+    const toPoint = (i: number) => {
+      const row = q.dataset[i]
       const y = toNumberOrNull(row[yIdx])
       const value = scatter
         ? scatter.tuple(xValue(row, xIdx), row, yIdx)
         : ctx.xMode === "category"
           ? y
           : [xValue(row, xIdx), y]
-      if (isNullCategory(row[xIdx], ctx)) return { value, ...NULL_SELECTION }
-      return clickColumn !== undefined && clickIdx !== undefined
-        ? { value, columns: { [clickColumn]: row[clickIdx] } }
-        : value
+      return pickedPoint(value, rowPick(q, ctx, i, xIdx))
     }
+    // Shares of one category add up, drawn from the rows of both.
     const combineShare = (a: unknown, b: unknown) => {
       const left = toNumberOrNull(pointValue(a))
       const right = toNumberOrNull(pointValue(b))
@@ -536,24 +520,11 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
         left === null && right === null
           ? null
           : Math.abs(left ?? 0) + Math.abs(right ?? 0)
-      // Two unbound NULL categories still select NULL, not the share.
-      if (clickColumn === undefined)
-        return isNullSelection(a) || isNullSelection(b)
-          ? { value, ...NULL_SELECTION }
-          : value
-      if (!isClickPoint(a) || !isClickPoint(b)) return value
-      return {
-        value,
-        columns: {
-          [clickColumn]:
-            a.columns[clickColumn] === b.columns[clickColumn]
-              ? a.columns[clickColumn]
-              : undefined,
-        },
-      }
+      return pickedPoint(value, mergePicks(pickOfItem(a), pickOfItem(b)))
     }
     return !scatter && ctx.xMode === "category" && ctx.categoryUnion
       ? alignPointsToCategoryUnion(
+          q,
           rows,
           xIdx,
           ctx.categoryUnion,
@@ -570,8 +541,8 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
 
   if (partIdx !== undefined) {
     // Long → wide pivot: each distinct partition value → its own series.
-    const groups = new Map<string, Map<string, Dataset>>()
-    for (const row of q.dataset) {
+    const groups = new Map<string, Map<string, number[]>>()
+    q.dataset.forEach((row, rowIndex) => {
       const partVal = toCategoryLabel(row[partIdx])
       let metricMap = groups.get(partVal)
       if (!metricMap) {
@@ -586,9 +557,9 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
           rows = []
           metricMap.set(yName, rows)
         }
-        rows.push(row)
+        rows.push(rowIndex)
       }
-    }
+    })
     const sortedKeys = [...groups.keys()].sort().slice(0, MAX_PARTITION_SERIES)
     for (const partVal of sortedKeys) {
       const metricMap = groups.get(partVal)
@@ -616,7 +587,10 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
   for (const name of q.yColumns) {
     const yIdx = idx.get(name)
     if (yIdx === undefined) continue
-    const data = pointsFor(q.dataset, yIdx)
+    const data = pointsFor(
+      q.dataset.map((_, i) => i),
+      yIdx,
+    )
     out.push({
       name,
       [Y_COLUMN]: name,
@@ -640,12 +614,8 @@ const alignedRows = (
   valueIdxs: number[],
   ctx: SeriesContext,
 ): unknown[] => {
-  const clickColumn = ctx.clickColumn
-  const clickIdx =
-    clickColumn === undefined
-      ? -1
-      : q.columns.findIndex(({ name }) => name === clickColumn)
-  const toPoint = (row: Dataset[number]) => {
+  const toPoint = (i: number) => {
+    const row = q.dataset[i]
     const x =
       ctx.xMode === "time"
         ? row[xIdx]
@@ -653,41 +623,33 @@ const alignedRows = (
           ? toNumberOrNull(row[xIdx])
           : toCategoryLabel(row[xIdx])
     const value = [x, ...valueIdxs.map((i) => toNumberOrNull(row[i]))]
-    if (isNullCategory(row[xIdx], ctx)) return { value, ...NULL_SELECTION }
-    return clickColumn !== undefined && clickIdx >= 0
-      ? { value, columns: { [clickColumn]: row[clickIdx] } }
-      : value
+    return pickedPoint(value, rowPick(q, ctx, i, xIdx))
   }
+  const rows = q.dataset.map((_, i) => i)
   if (ctx.xMode === "category" && ctx.categoryUnion)
     return alignPointsToCategoryUnion(
-      q.dataset,
+      q,
+      rows,
       xIdx,
       ctx.categoryUnion,
       toPoint,
     ).filter((value) => value !== null)
-  return q.dataset.map(toPoint)
+  return rows.map(toPoint)
 }
 
-// A data item that carries its row by column name, so a click can set a
-// variable from any column (see clickedValue).
+// A data item of one row, drawn from `column` of it.
 const rowItem = (
   q: ResolvedQuery,
-  row: Dataset[number],
+  context: ChartContext,
+  row: number,
+  column: number,
   value: unknown[],
   name?: string,
-  selection?: { selection: unknown; selectionColumn?: string },
-) => {
-  const columns: Record<string, unknown> = {}
-  q.columns.forEach((c, i) => {
-    columns[c.name] = row[i]
-  })
-  return {
-    value,
-    columns,
-    ...(name !== undefined ? { name } : {}),
-    ...selection,
-  }
-}
+) =>
+  withPick(
+    { value, ...(name !== undefined ? { name } : {}) },
+    rowPick(q, context, row, column),
+  )
 
 const roleIndexes = (
   q: ResolvedQuery,
@@ -720,7 +682,7 @@ const buildBandSeries = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
     encode: { x: 0, y: [1, 2], tooltip: [1, 2] },
     itemPayload: {
       opacity: 0.22,
-      clickEnabled: ctx.clickEnabled === true || ctx.clickColumn !== undefined,
+      clickEnabled: ctx.clickEnabled === true,
     },
     [Y_COLUMN]: q.roles?.lower,
     animation: false,
@@ -864,9 +826,8 @@ const buildCandlestickSeries = (
       return EMPTY_CANDLE
     return [o, c, l, h]
   }
-  const clickColumn = ctx.clickColumn
-  const clickIdx = clickColumn === undefined ? undefined : idx.get(clickColumn)
-  const point = (row: Dataset[number]) => {
+  const point = (i: number) => {
+    const row = q.dataset[i]
     const values = candle(row)
     const value =
       ctx.xMode === "category"
@@ -875,20 +836,15 @@ const buildCandlestickSeries = (
             ctx.xMode === "time" ? row[xIdx] : toNumberOrNull(row[xIdx]),
             ...values,
           ]
-    if (isNullCategory(row[xIdx], ctx)) return { value, ...NULL_SELECTION }
-    return clickColumn !== undefined && clickIdx !== undefined
-      ? { value, columns: { [clickColumn]: row[clickIdx] } }
-      : value
+    return pickedPoint(value, rowPick(q, ctx, i, xIdx))
   }
+  const rows = q.dataset.map((_, i) => i)
   const data =
     ctx.xMode === "category" && ctx.categoryUnion
-      ? alignPointsToCategoryUnion(
-          q.dataset,
-          xIdx,
-          ctx.categoryUnion,
-          point,
-        ).map((value) => value ?? EMPTY_CANDLE)
-      : q.dataset.map(point)
+      ? alignPointsToCategoryUnion(q, rows, xIdx, ctx.categoryUnion, point).map(
+          (value) => value ?? EMPTY_CANDLE,
+        )
+      : rows.map(point)
   return [
     {
       name: q.name ?? "OHLC",
@@ -924,19 +880,16 @@ const buildPieChartOption = (
   const yIdx = q.yColumns[0] != null ? idx.get(q.yColumns[0]) : undefined
   if (xIdx === undefined || yIdx === undefined)
     return { tooltip: { trigger: "item", textStyle: chartText } }
-  const clickColumn = context.clickColumn
-  const clickIdx = clickColumn === undefined ? undefined : idx.get(clickColumn)
-  const data = q.dataset.map((row) => ({
-    name: toCategoryLabel(row[xIdx]),
-    value: toNumberOrNull(row[yIdx]) ?? 0,
-    ...(clickColumn !== undefined && clickIdx !== undefined
-      ? { columns: { [clickColumn]: row[clickIdx] } }
-      : {}),
-    // A NULL slice has no name to select: an unbound click selects NULL.
-    ...(clickColumn === undefined && row[xIdx] == null
-      ? { selection: null }
-      : {}),
-  }))
+  // A slice is drawn from its row's category.
+  const data = q.dataset.map((row, i) =>
+    withPick(
+      {
+        name: toCategoryLabel(row[xIdx]),
+        value: toNumberOrNull(row[yIdx]) ?? 0,
+      },
+      rowPick(q, context, i, xIdx),
+    ),
+  )
   return {
     tooltip: {
       trigger: "item",
@@ -1010,20 +963,19 @@ const buildHeatmapOption = (
   const [yIdx, valueIdx] = roles
   const x = heatmapAxis(q, xIdx)
   const y = heatmapAxis(q, yIdx)
-  const data = q.dataset.map((row) =>
+  // A cell is drawn from its row's x.
+  const data = q.dataset.map((row, i) =>
     rowItem(
       q,
-      row,
+      context,
+      i,
+      xIdx,
       [
         x.positions.get(row[xIdx]),
         y.positions.get(row[yIdx]),
         toNumberOrNull(row[valueIdx]),
       ],
       toCategoryLabel(row[xIdx]),
-      // A NULL x has no name to select: an unbound click selects NULL.
-      context.clickColumn === undefined && row[xIdx] == null
-        ? { selection: null }
-        : undefined,
     ),
   )
   const values = data
@@ -1161,17 +1113,14 @@ const buildBoxplotOption = (
               },
             }
           : {}),
-        // An x label can be shortened (times read "09:00"), so an unbound
-        // click selects the x value itself, typed by its column.
-        data: q.dataset.map((row) =>
+        // A box is drawn from its row's x, not its (maybe shortened) label.
+        data: q.dataset.map((row, r) =>
           rowItem(
             q,
-            row,
+            context,
+            r,
+            xIdx,
             boxes.map((i) => toNumberOrNull(row[i])),
-            undefined,
-            context.clickColumn === undefined && q.xColumn != null
-              ? { selection: row[xIdx], selectionColumn: q.xColumn }
-              : undefined,
           ),
         ),
       },
@@ -1237,8 +1186,9 @@ const buildGanttOption = (
         renderItem: "barRange",
         // Bars partly outside a zoomed window are cut at the plot's edge.
         clip: true,
-        data: q.dataset.map((row) =>
-          rowItem(q, row, [
+        // A bar is drawn from its row's lane.
+        data: q.dataset.map((row, i) =>
+          rowItem(q, context, i, xIdx, [
             toCategoryLabel(row[xIdx]),
             row[ends[0]],
             row[ends[1]],
@@ -1443,7 +1393,6 @@ export const buildEchartsOption = (
   const ctx: SeriesContext = {
     xMode,
     categoryUnion,
-    clickColumn: context.clickColumn,
     clickEnabled: context.clickEnabled,
   }
   const hasCandle = queries.some((q) => q.type === "candlestick")

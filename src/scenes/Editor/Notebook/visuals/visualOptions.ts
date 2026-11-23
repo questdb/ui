@@ -17,12 +17,12 @@ import {
   MAX_SANKEY_LINKS,
   SANKEY_LINK_LIMIT_MESSAGE,
 } from "./sankeyLayoutLimit"
+import { pickOf, type Pick as MarkPick } from "../interactions/selection"
 import {
   columnIndex,
   firstColumnOf,
-  emptyNodeIsNull,
   linksFrom,
-  nodesOf,
+  nodesFrom,
   toLabel,
   toNumber,
   toTime,
@@ -35,6 +35,8 @@ import {
 // in the console's style, and reports what it drew or what it could not find.
 // Columns map by role; every role falls back to a column by position or kind,
 // so a query that returns the documented column order needs no mapping.
+// Clickable items carry the statement rows they are drawn from (a `pick`,
+// see selection.ts).
 
 export type VisualProblem = { message: string; severity: "error" | "warning" }
 
@@ -49,7 +51,6 @@ export type VisualContext = {
   statements: (StatementRows | null)[]
   colors: ColorShape
   formats: ColumnFormats
-  clickColumn?: string
 }
 
 const missing = (message: string): VisualBuild => ({
@@ -89,7 +90,6 @@ export const gaugeOption = ({
   statements,
   colors,
   formats,
-  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
@@ -129,14 +129,8 @@ export const gaugeOption = ({
         ])
       : [[1, colors.dataGrid]]
   const label = labelIdx >= 0 ? toLabel(rows.rows[0][labelIdx]) : valueName
-  const clickIdx = columnIndex(rows, clickColumn)
-  const datum = {
-    value: clamped,
-    name: label,
-    ...(clickColumn !== undefined && clickIdx >= 0
-      ? { columns: { [clickColumn]: rows.rows[0][clickIdx] } }
-      : {}),
-  }
+  // The reading is drawn from the first row: named by its label column.
+  const datum = { value: clamped, name: label, pick: pickOf(0, [0], labelIdx) }
   const plain = format ? { ...format, prefix: "", suffix: "" } : undefined
   const common = {
     type: "gauge" as const,
@@ -262,9 +256,8 @@ export const stateTimelineOption = ({
   visual,
   statements,
   colors,
-  clickColumn,
 }: VisualContext): VisualBuild => {
-  const read = readStateSegments(visual, statements[0], clickColumn)
+  const read = readStateSegments(visual, statements[0])
   if (typeof read === "string") return missing(read)
   const { lanes, segments: segs } = read
   const severity = (state: string) =>
@@ -298,24 +291,17 @@ export const stateTimelineOption = ({
   )
   const laneIndex = new Map(lanes.map((lane, index) => [lane, index]))
   const stateIndex = new Map(states.map((state, index) => [state, index]))
-  type Item =
-    | number[]
-    | { value: number[]; columns: Record<string, unknown> }
-    | { value: number[]; selection: null }
+  type Item = { value: number[]; pick: MarkPick }
   const seriesData = states.map((): Item[] => [])
   for (const segment of segs) {
     const lane = laneIndex.get(segment.lane)
     const state = stateIndex.get(segment.state)
     if (lane === undefined || state === undefined) continue
-    const value = [segment.start, segment.end, lane, state]
-    seriesData[state].push(
-      clickColumn !== undefined && segment.selection !== undefined
-        ? { value, columns: { [clickColumn]: segment.selection } }
-        : // A NULL lane's name is empty: an unbound click selects NULL.
-          clickColumn === undefined && read.nullLanes?.has(segment.lane)
-          ? { value, selection: null }
-          : value,
-    )
+    // A segment is drawn from its row, in its lane.
+    seriesData[state].push({
+      value: [segment.start, segment.end, lane, state],
+      pick: pickOf(0, [segment.row], read.laneColumn),
+    })
   }
   const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16)
   return {
@@ -384,24 +370,18 @@ const hierarchy = (
     return `value: column ${JSON.stringify(c.value)} not found. Columns: ${columnNames(rows)}.`
   const colorIdx = c.change !== undefined ? columnIndex(rows, c.change) : -1
   return {
-    tree: treeFromPath(
-      rows,
-      pathIdx,
-      valueIdx,
-      colorIdx,
-      columnIndex(rows, ctx.clickColumn),
-    ),
+    tree: treeFromPath(rows, pathIdx, valueIdx, colorIdx),
     valueName: rows.columns[valueIdx].name,
     colorName: colorIdx >= 0 ? rows.columns[colorIdx].name : undefined,
   }
 }
 
+// A node is drawn from the rows under it, by its level's path column.
 const withColorValues = (nodes: TreeNode[]): unknown[] =>
   nodes.map((n) => ({
     name: n.name,
     value: n.colorValue !== undefined ? [n.value, n.colorValue] : n.value,
-    ...(n.columns ? { columns: n.columns } : {}),
-    ...(n.isNull ? { selection: null } : {}),
+    pick: pickOf(0, n.rows, n.column),
     ...(n.children ? { children: withColorValues(n.children) } : {}),
   }))
 
@@ -639,15 +619,17 @@ const edges = (ctx: VisualContext) => {
     need(rows, toIdx, "to", c.to) ??
     (c.value === undefined ? null : need(rows, valueIdx, "value", c.value))
   if (err) return err
-  const clickIdx = columnIndex(rows, ctx.clickColumn)
-  const links = linksFrom(rows, fromIdx, toIdx, valueIdx).map((link, index) =>
-    ctx.clickColumn !== undefined && clickIdx >= 0
-      ? { ...link, columns: { [ctx.clickColumn]: rows.rows[index][clickIdx] } }
-      : link,
+  // A link is drawn from its row, but from no column: an unbound click on it
+  // selects nothing.
+  const links = linksFrom(rows, fromIdx, toIdx, valueIdx).map(
+    (link, index) => ({
+      ...link,
+      pick: pickOf(0, [index]),
+    }),
   )
   return {
     links,
-    nodes: nodesOf(links, emptyNodeIsNull(rows, fromIdx, toIdx)),
+    nodes: nodesFrom(rows, 0, fromIdx, toIdx),
     valueName: valueIdx >= 0 ? rows.columns[valueIdx].name : undefined,
   }
 }
@@ -910,7 +892,6 @@ export const mapOption = ({
   statements,
   colors,
   formats,
-  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
@@ -934,11 +915,6 @@ export const mapOption = ({
       : firstColumnOf(rows, "categorical")
   const format =
     valueIdx >= 0 ? formats[rows.columns[valueIdx].name] : undefined
-  const clickIdx = columnIndex(rows, clickColumn)
-  const clickData = (row: StatementRows["rows"][number]) =>
-    clickColumn !== undefined && clickIdx >= 0
-      ? { columns: { [clickColumn]: row[clickIdx] } }
-      : {}
   const geo = {
     map: "world",
     roam: true,
@@ -999,16 +975,9 @@ export const mapOption = ({
               v[2] === null ? 6 : 6 + 18 * Math.sqrt(Math.abs(v[2]) / max),
             data: rows.rows.map((r, i) => ({
               name: labelIdx >= 0 ? toLabel(r[labelIdx]) : "",
-              // A point without a label column has no name an unbound click
-              // could select (its value array starts with the longitude); a
-              // NULL label selects NULL.
-              ...(clickColumn === undefined
-                ? labelIdx < 0
-                  ? { selection: undefined }
-                  : r[labelIdx] === null || r[labelIdx] === undefined
-                    ? { selection: null }
-                    : {}
-                : {}),
+              // A point is drawn from its row, named by its label column;
+              // without one an unbound click selects nothing.
+              pick: pickOf(0, [i], labelIdx),
               value: [toNumber(r[lonIdx]), toNumber(r[latIdx]), values[i]],
               // A point with no value is drawn hollow, unlike a real 0.
               ...(values[i] === null
@@ -1020,7 +989,6 @@ export const mapOption = ({
                     },
                   }
                 : {}),
-              ...clickData(r),
             })),
           },
         ],
@@ -1040,10 +1008,11 @@ export const mapOption = ({
     return missing(
       `${err} A map needs region and value columns, or lat and lon columns.`,
     )
-  const data = rows.rows.map((r) => ({
+  // A region is drawn from its row's region.
+  const data = rows.rows.map((r, i) => ({
     name: toLabel(r[regionIdx]),
     value: toNumber(r[valueIdx]),
-    ...clickData(r),
+    pick: pickOf(0, [i], regionIdx),
   }))
   const bounds = regionBounds(new Set(data.map((d) => d.name)))
   // The colour scale spans the real values: a NULL region is not a 0.
@@ -1127,7 +1096,6 @@ export const liquidityHeatmapOption = ({
   statements,
   colors,
   formats,
-  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (rows?.partial)
@@ -1154,15 +1122,13 @@ export const liquidityHeatmapOption = ({
     need(rows, priceIdx, "price", c.price) ??
     need(rows, valueIdx, "value", c.value)
   if (err) return missing(err)
-  const clickIdx = columnIndex(rows, clickColumn)
-  const timeName = rows.columns[timeIdx].name
-  const cells = rows.rows.flatMap((row) => {
+  const cells = rows.rows.flatMap((row, index) => {
     const time = toTime(row[timeIdx])
     const price = toNumber(row[priceIdx])
     const size = toNumber(row[valueIdx])
     if (time === null || price === null || size === null) return []
     const value: [number, number, number] = [time, price, size]
-    return [{ value, row }]
+    return [{ value, index }]
   })
   if (cells.length === 0)
     return missing("No drawable liquidity measurements were returned.")
@@ -1180,15 +1146,12 @@ export const liquidityHeatmapOption = ({
       renderItem: HEAT_CELLS,
       itemPayload: { dt, dp },
       encode: { x: 0, y: 1 },
-      // A cell has no name: an unbound click selects its time, typed by the
-      // time column, not the epoch milliseconds it is drawn at.
-      data: cells.map(({ value, row }) =>
-        clickColumn === undefined
-          ? { value, selection: row[timeIdx], selectionColumn: timeName }
-          : clickIdx >= 0
-            ? { value, columns: { [clickColumn]: row[clickIdx] } }
-            : value,
-      ),
+      // A cell is drawn from its row's time, not the epoch milliseconds it
+      // is drawn at.
+      data: cells.map(({ value, index }) => ({
+        value,
+        pick: pickOf(0, [index], timeIdx),
+      })),
       progressive: 0,
     },
   ]
@@ -1210,15 +1173,11 @@ export const liquidityHeatmapOption = ({
           shadowBlur: 4,
         },
         itemStyle: { color: colors.contentPrimary },
-        data: line.rows.map((r) =>
-          clickColumn === undefined
-            ? {
-                value: [toTime(r[lt]), toNumber(r[lv])],
-                selection: r[lt],
-                selectionColumn: line.columns[lt].name,
-              }
-            : [toTime(r[lt]), toNumber(r[lv])],
-        ),
+        // A point of the line is drawn from its row's time.
+        data: line.rows.map((r, i) => ({
+          value: [toTime(r[lt]), toNumber(r[lv])],
+          pick: pickOf(1, [i], lt),
+        })),
       })
     }
   }
@@ -1273,7 +1232,6 @@ export const volumeProfileOption = ({
   statements,
   colors,
   formats,
-  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (rows?.partial)
@@ -1304,9 +1262,15 @@ export const volumeProfileOption = ({
       : (need(rows, buyIdx, "buy", c.buy) ??
         (c.sell === undefined ? null : need(rows, sellIdx, "sell", c.sell))))
   if (err) return missing(err)
-  const sorted = [...rows.rows].sort(
-    (a, b) => (toNumber(b[priceIdx]) ?? 0) - (toNumber(a[priceIdx]) ?? 0),
-  )
+  // The rows' indexes, highest price first.
+  const order = rows.rows
+    .map((_, i) => i)
+    .sort(
+      (a, b) =>
+        (toNumber(rows.rows[b][priceIdx]) ?? 0) -
+        (toNumber(rows.rows[a][priceIdx]) ?? 0),
+    )
+  const sorted = order.map((i) => rows.rows[i])
   const priceName = rows.columns[priceIdx].name
   const priceFormat = formats[priceName] ?? {
     kind: "number" as const,
@@ -1348,22 +1312,18 @@ export const volumeProfileOption = ({
     highest = rank
     poc = index
   })
-  const clickIdx = columnIndex(rows, clickColumn)
-  // The price labels are formatted, so an unbound click selects the price
-  // itself, typed by its column, not the label.
-  const item = (value: number | null, row: StatementRows["rows"][number]) =>
-    clickColumn !== undefined
-      ? clickIdx >= 0
-        ? { value, columns: { [clickColumn]: row[clickIdx] } }
-        : value
-      : { value, selection: row[priceIdx], selectionColumn: priceName }
+  // A bar is drawn from its row's price, not its formatted label.
+  const item = (value: number | null, index: number) => ({
+    value,
+    pick: pickOf(0, [order[index]], priceIdx),
+  })
   const series =
     valueIdx >= 0
       ? [
           {
             type: "bar",
             name: rows.columns[valueIdx].name,
-            data: total.map((value, index) => item(value, sorted[index])),
+            data: total.map((value, index) => item(value, index)),
             itemStyle: { color: colors.chartSeries1 },
             barCategoryGap: "12%",
           },
@@ -1373,7 +1333,7 @@ export const volumeProfileOption = ({
             type: "bar",
             name: rows.columns[buyIdx].name,
             stack: "v",
-            data: sorted.map((r) => item(toNumber(r[buyIdx]), r)),
+            data: sorted.map((r, i) => item(toNumber(r[buyIdx]), i)),
             itemStyle: { color: colors.dataPositive, opacity: 0.85 },
             barCategoryGap: "12%",
           },
@@ -1383,7 +1343,7 @@ export const volumeProfileOption = ({
                   type: "bar",
                   name: rows.columns[sellIdx].name,
                   stack: "v",
-                  data: sorted.map((r) => item(toNumber(r[sellIdx]), r)),
+                  data: sorted.map((r, i) => item(toNumber(r[sellIdx]), i)),
                   itemStyle: { color: colors.dataNegative, opacity: 0.85 },
                 },
               ]
@@ -1501,7 +1461,6 @@ export const footprintOption = ({
   statements,
   colors,
   formats,
-  clickColumn,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
   if (rows?.partial)
@@ -1534,14 +1493,14 @@ export const footprintOption = ({
     need(rows, sellIdx, "sell", c.sell)
   if (err) return missing(err)
 
-  const levels = rows.rows.flatMap((row) => {
+  const levels = rows.rows.flatMap((row, index) => {
     const time = toTime(row[timeIdx])
     const price = toNumber(row[priceIdx])
     const buy = toNumber(row[buyIdx])
     const sell = toNumber(row[sellIdx])
     if (time === null || price === null || (buy === null && sell === null))
       return []
-    return [{ time, price, buy: buy ?? 0, sell: sell ?? 0, row }]
+    return [{ time, price, buy: buy ?? 0, sell: sell ?? 0, row, index }]
   })
   if (levels.length === 0)
     return missing("No drawable footprint levels were returned.")
@@ -1585,7 +1544,6 @@ export const footprintOption = ({
   const priceFormat = formats[priceName] ?? { kind: "number" as const }
   const buyFormat = formats[rows.columns[buyIdx].name]
   const sellFormat = formats[rows.columns[sellIdx].name]
-  const clickIdx = columnIndex(rows, clickColumn)
   const tip = (level: (typeof levels)[number]) =>
     [
       timeText(level.row[timeIdx]),
@@ -1613,8 +1571,7 @@ export const footprintOption = ({
       borderColor: colors.statusWarning,
       label: { color: colors.contentPrimary },
     },
-    // A level has no name: an unbound click selects its price, typed by the
-    // price column.
+    // A level is drawn from its row's price.
     data: levels.map((level, i) => ({
       value: [
         level.time,
@@ -1624,11 +1581,7 @@ export const footprintOption = ({
         pocs.has(i) ? 1 : 0,
       ],
       tip: tip(level),
-      ...(clickColumn === undefined
-        ? { selection: level.row[priceIdx], selectionColumn: priceName }
-        : clickIdx >= 0
-          ? { columns: { [clickColumn]: level.row[clickIdx] } }
-          : {}),
+      pick: pickOf(0, [level.index], priceIdx),
     })),
     progressive: 0,
   }

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { buildCustomOption, chartNumber } from "./buildCustomOption"
+import { interactionEvents } from "../interactions/chartInteractions"
 import type { StatementRows } from "../visuals/statementRows"
 import { echarts } from "../CellChart/echartsSetup"
 
@@ -31,6 +32,19 @@ describe("buildCustomOption", () => {
   )
 
   it("selects NULL for an unbound click on an item with a NULL name", () => {
+    // Given items named by a desk, one of them NULL
+    const statements = [
+      rows(
+        [
+          ["desk", "SYMBOL"],
+          ["v", "DOUBLE"],
+        ],
+        [
+          ["a", 1],
+          [null as unknown as string, 2],
+        ],
+      ),
+    ]
     const built = buildCustomOption(
       {
         series: [
@@ -40,23 +54,81 @@ describe("buildCustomOption", () => {
           },
         ],
       },
-      [
-        rows(
-          [
-            ["desk", "SYMBOL"],
-            ["v", "DOUBLE"],
-          ],
-          [
-            ["a", 1],
-            [null as unknown as string, 2],
-          ],
-        ),
-      ],
+      statements,
       false,
+      true,
     )
     const [pie] = built.option.series as { data: object[] }[]
-    expect(pie.data[0]).not.toHaveProperty("selection")
-    expect(pie.data[1]).toMatchObject({ name: "", selection: null })
+
+    // When the user clicks each slice, then it selects its desk: NULL for
+    // the unnamed one, not its value
+    const set = vi.fn()
+    const events = interactionEvents(
+      { click: { variable: "desk" } },
+      set,
+      () => statements,
+    )
+    events.click({ data: pie.data[0] }, {} as never)
+    events.click({ data: pie.data[1], name: "", value: 2 }, {} as never)
+    expect(set.mock.calls).toEqual([[{ desk: "'a'" }], [{ desk: "null" }]])
+  })
+
+  it("keeps tuples plain where a series reads them as they are", () => {
+    // Given clickable tuples for a theme river, which reads each tuple's
+    // fields, and for a scatter
+    const statements = [
+      rows(
+        [
+          ["day", "VARCHAR"],
+          ["v", "DOUBLE"],
+          ["kind", "SYMBOL"],
+        ],
+        [["2026-01-01", 1, "a"]],
+      ),
+    ]
+    const tuples = { $rows: { shape: "tuples" } }
+    const built = buildCustomOption(
+      {
+        series: [
+          { type: "themeRiver", data: tuples },
+          { type: "scatter", data: tuples },
+        ],
+      },
+      statements,
+      false,
+      true,
+    )
+
+    // Then only the scatter's points become items that carry their row
+    const [river, points] = built.option.series as { data: unknown[] }[]
+    expect(river.data).toEqual([["2026-01-01", 1, "a"]])
+    expect(points.data).toEqual([
+      {
+        value: ["2026-01-01", 1, "a"],
+        pick: { statement: 0, rows: [0], column: 0 },
+      },
+    ])
+  })
+
+  it("drops a pick an option writes itself", () => {
+    // Given an option whose own data claims to be drawn from a row
+    const built = buildCustomOption(
+      {
+        series: [
+          {
+            type: "bar",
+            data: [{ value: 1, pick: { statement: 0, rows: [0], column: 0 } }],
+          },
+        ],
+      },
+      [rows([["v", "DOUBLE"]], [[1]])],
+      false,
+      true,
+    )
+
+    // Then only bound rows say what a click selects
+    const [bar] = built.option.series as { data: object[] }[]
+    expect(bar.data[0]).toEqual({ value: 1 })
   })
 
   it("applies the data:-only image rule to symbols bound from rows", () => {
@@ -620,5 +692,197 @@ describe("buildCustomOption", () => {
     // Then
     const [q0] = option.dataset as { source: unknown[][] }[]
     expect(q0.source).toEqual(measured)
+  })
+
+  describe("the hidden source of clickable dataset rows", () => {
+    const desks = rows(
+      [
+        ["ts", "TIMESTAMP"],
+        ["desk", "SYMBOL"],
+        ["pnl", "DOUBLE"],
+        ["id", "LONG"],
+      ],
+      [
+        ["2026-01-01T00:00:00.000000Z", "a", 1, "9007199254740993"],
+        ["2026-01-02T00:00:00.000000Z", "b", 2, "5"],
+        ["2026-01-03T00:00:00.000000Z", "a", 3, "6"],
+      ],
+    )
+    // What ECharts draws for the first series' items: tooltip markup, labels
+    // and colours.
+    const drawn = (raw: Record<string, unknown>, pickable: boolean) => {
+      const { option, problems } = buildCustomOption(
+        raw,
+        [desks],
+        false,
+        pickable,
+      )
+      const chart = echarts.init(null, undefined, {
+        renderer: "svg",
+        ssr: true,
+        width: 640,
+        height: 360,
+      })
+      try {
+        chart.setOption(option)
+        const series = (
+          chart as unknown as {
+            getModel(): {
+              getSeriesByIndex(i: number): {
+                formatTooltip(i: number, multiple: boolean): unknown
+                getData(): {
+                  count(): number
+                  mapDimensionsAll(key: string): string[]
+                  getItemVisual(i: number, key: string): { fill?: string }
+                }
+              }
+            }
+          }
+        )
+          .getModel()
+          .getSeriesByIndex(0)
+        const data = series.getData()
+        return {
+          problems,
+          labels: data.mapDimensionsAll("defaultedLabel"),
+          items: Array.from({ length: data.count() }, (_, i) => ({
+            tooltip: JSON.stringify(series.formatTooltip(i, false)),
+            fill: data.getItemVisual(i, "style")?.fill,
+          })),
+        }
+      } finally {
+        chart.dispose()
+      }
+    }
+
+    it.each([
+      [
+        "points over time, with an axis tooltip",
+        {
+          xAxis: { type: "time" },
+          yAxis: {},
+          tooltip: { trigger: "axis" },
+          series: [
+            { type: "scatter", datasetId: "q0", encode: { x: "ts", y: "pnl" } },
+          ],
+        },
+      ],
+      [
+        "bars behind a filter",
+        {
+          dataset: [
+            {
+              id: "a",
+              fromDatasetId: "q0",
+              transform: {
+                type: "filter",
+                config: { dimension: "desk", "=": "a" },
+              },
+            },
+          ],
+          xAxis: { type: "category" },
+          yAxis: {},
+          series: [
+            { type: "bar", datasetId: "a", encode: { x: "desk", y: "pnl" } },
+          ],
+        },
+      ],
+      [
+        "ranges of times by category, which tooltip every column",
+        {
+          xAxis: { type: "time" },
+          yAxis: { type: "category" },
+          series: [
+            {
+              type: "custom",
+              renderItem: "barRange",
+              datasetId: "q0",
+              encode: { x: ["ts", "ts"], y: "desk" },
+            },
+          ],
+        },
+      ],
+      [
+        "a heatmap coloured by its last column",
+        {
+          xAxis: { type: "category" },
+          yAxis: { type: "category" },
+          visualMap: { min: 0, max: 10 },
+          series: [
+            {
+              type: "heatmap",
+              datasetId: "q0",
+              encode: { x: "ts", y: "desk" },
+            },
+          ],
+        },
+      ],
+      [
+        "bars without an encoding",
+        {
+          xAxis: { type: "category" },
+          yAxis: {},
+          series: [{ type: "bar", datasetId: "q0" }],
+        },
+      ],
+      [
+        "a pie",
+        {
+          series: [
+            {
+              type: "pie",
+              datasetId: "q0",
+              encode: { itemName: "desk", value: "pnl" },
+              label: { formatter: "{@desk}: {@pnl}" },
+            },
+          ],
+        },
+      ],
+    ])("draws %s as it does without them", (_name, raw) => {
+      // Given / When / Then
+      expect(drawn(raw, true)).toEqual(drawn(raw, false))
+    })
+
+    it("appends them to each statement's rows, after its columns", () => {
+      // Given / When
+      const { option } = buildCustomOption({}, [desks], false, true)
+
+      // Then
+      const [q0] = option.dataset as {
+        dimensions: { name: string }[]
+        source: unknown[][]
+      }[]
+      expect(q0.dimensions.map((d) => d.name)).toEqual([
+        "ts",
+        "desk",
+        "pnl",
+        "id",
+        "__statement",
+        "__row",
+      ])
+      expect(q0.source.map((row) => row.slice(4))).toEqual([
+        [0, 0],
+        [0, 1],
+        [0, 2],
+      ])
+    })
+
+    it("leaves rows a series lays out as series without them", () => {
+      // Given a series that reads each row as a series of its own
+      const { option } = buildCustomOption(
+        {
+          xAxis: { type: "category" },
+          yAxis: {},
+          series: [{ type: "bar", datasetId: "q0", seriesLayoutBy: "row" }],
+        },
+        [desks],
+        false,
+        true,
+      )
+
+      // Then the rows keep only their columns
+      const [q0] = option.dataset as { source: unknown[][] }[]
+      expect(q0.source[0]).toHaveLength(4)
+    })
   })
 })

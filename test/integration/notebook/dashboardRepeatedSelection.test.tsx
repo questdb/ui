@@ -23,6 +23,14 @@ import { persistCellSnapshot } from "../../../src/scenes/Editor/Notebook/persist
 import { expandGlobals } from "../../../src/scenes/Editor/Notebook/declareUtils"
 import { echarts } from "../../../src/scenes/Editor/Notebook/CellChart/echartsSetup"
 
+// The values the chart's first series draws; each point also carries the
+// rows it was drawn from, for clicks.
+const drawnValues = (chart: { getOption(): unknown }) =>
+  (
+    (chart.getOption() as { series: { data: { value: unknown }[] }[] })
+      .series[0]?.data ?? []
+  ).map((point) => point.value)
+
 vi.mock("../../../src/providers/EditorProvider", () => ({
   useEditor: () => ({ updateBuffer: () => Promise.resolve() }),
 }))
@@ -203,7 +211,7 @@ const setup = async (bufferId: number, hold?: (q: string) => boolean) => {
     const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
     expect(host).not.toBeNull()
     const chart = echarts.getInstanceByDom(host!)!
-    expect(chart?.getOption()).toHaveProperty("series.0.data", [4, 9, 6])
+    expect(drawnValues(chart)).toEqual([4, 9, 6])
     return chart
   })
   expect(await screen.findByRole("gridcell")).toHaveTextContent(/^east$/)

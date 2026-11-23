@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react"
+import React, { useCallback, useEffect, useMemo } from "react"
 import styled, { useTheme } from "styled-components"
 import type { VisualConfig } from "../CellChart/chartTypes"
 import type { CellInteractions } from "../../../../store/notebook"
@@ -9,11 +9,12 @@ import {
 } from "../CellChart/ChartRenderer"
 import { setRenderReport } from "../renderReports"
 import { PaneEmptyState } from "../PaneEmptyState"
+import type { SetVariables } from "../interactions/chartInteractions"
 import {
-  columnTypeOf,
-  sqlLiteral,
-  type SetVariables,
-} from "../interactions/chartInteractions"
+  boundColumnProblem,
+  pickLiteral,
+  type Pick,
+} from "../interactions/selection"
 import type { StatementRows } from "./statementRows"
 import {
   chordOption,
@@ -53,6 +54,22 @@ const ECHARTS_VISUALS: Partial<
   volumeProfile: volumeProfileOption,
   footprint: footprintOption,
 }
+
+// Visuals a click on which sets nothing.
+const UNCLICKABLE_VISUALS: ReadonlySet<VisualConfig["type"]> = new Set([
+  "bullet",
+  "planTree",
+])
+
+// The statements a visual's clickable items are drawn from: the first, and
+// the bids of an order book or the price line of a liquidity heatmap.
+const clickedStatements = (
+  type: VisualConfig["type"],
+  statements: (StatementRows | null)[],
+) =>
+  type === "orderBook" || type === "liquidityHeatmap"
+    ? statements.slice(0, 2)
+    : statements.slice(0, 1)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
 
@@ -133,30 +150,23 @@ export const VisualCanvas = ({
             statements,
             colors: theme.color,
             formats,
-            clickColumn: click?.column,
           })
         : null,
-    [
-      builder,
-      visual,
-      statements,
-      theme.color,
-      formats,
-      mapStatus,
-      click?.column,
-    ],
+    [builder, visual, statements, theme.color, formats, mapStatus],
   )
-  const clickType = columnTypeOf(statements, click?.column)
-  // A visual passes the SQL type of a value an unbound click selects.
+  // What a click on an item of an HTML visual writes, and the click.
+  const clickColumn = click?.column
+  const literalOf = useCallback(
+    (pick: Pick) => pickLiteral(pick, clickColumn, statements),
+    [clickColumn, statements],
+  )
   const select = click
-    ? (value: unknown, type?: string) =>
-        setVariables({
-          [click.variable]: sqlLiteral(
-            value,
-            click.column === undefined ? type : clickType,
-          ),
-        })
+    ? (pick: Pick) => {
+        const literal = literalOf(pick)
+        if (literal !== undefined) setVariables({ [click.variable]: literal })
+      }
     : undefined
+  const pickable = click ? literalOf : undefined
 
   // Every visual but the order book (which reports each side) draws from the
   // first statement, so its failure is the visual's failure, not "no rows".
@@ -183,7 +193,7 @@ export const VisualCanvas = ({
         statementErrors,
       ))
     } else if (visual.type === "stat") {
-      const read = statTiles(visual, statements, click?.column)
+      const read = statTiles(visual, statements)
       drawn = { tiles: read.tiles.length }
       problems = read.problems.map((message) => ({
         message,
@@ -219,6 +229,15 @@ export const VisualCanvas = ({
           },
         ]
     }
+    // A click bound to a column no statement returns writes nothing.
+    const clickProblem = UNCLICKABLE_VISUALS.has(visual.type)
+      ? undefined
+      : boundColumnProblem(
+          clickColumn,
+          clickedStatements(visual.type, statements),
+        )
+    if (clickProblem && !primaryFailure)
+      problems = [...problems, { message: clickProblem, severity: "error" }]
     setRenderReport(bufferId, cellId, {
       kind: "visual",
       visualConfig: visual,
@@ -234,7 +253,7 @@ export const VisualCanvas = ({
     statementErrors,
     primaryFailure,
     mapStatus,
-    click?.column,
+    clickColumn,
   ])
 
   if (primaryFailure)
@@ -248,7 +267,7 @@ export const VisualCanvas = ({
           formats={formats}
           queriesKey={queriesKey}
           selectedValue={click ? clickVariableValue : undefined}
-          clickColumn={click?.column}
+          pickLiteral={pickable}
           onSelect={select}
         />
       )
@@ -261,7 +280,7 @@ export const VisualCanvas = ({
           formats={formats}
           animateDigits={visual.animateDigits}
           queriesKey={queriesKey}
-          clickColumn={click?.column}
+          pickLiteral={pickable}
           onSelect={select}
         />
       )
@@ -276,7 +295,7 @@ export const VisualCanvas = ({
         <UptimeBars
           visual={visual}
           statements={statements}
-          clickColumn={click?.column}
+          pickLiteral={pickable}
           onSelect={select}
         />
       )

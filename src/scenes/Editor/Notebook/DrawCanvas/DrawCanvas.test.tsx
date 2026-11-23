@@ -295,14 +295,17 @@ describe("DrawCanvas click interactions", () => {
     } as NotebookCell
     renderComponent(ui(cell))
 
-    // When the user clicks the drawn item, which carries its row's id
+    // When the user clicks the drawn item, which was drawn from the first row
     const events = (
       globalThis as unknown as {
         __visualEvents?: Record<string, (p: unknown, i: unknown) => void>
       }
     ).__visualEvents
     events?.click(
-      { componentType: "series", data: { value: 75, columns: { id: "42" } } },
+      {
+        componentType: "series",
+        data: { value: 75, pick: { statement: 0, rows: [0] } },
+      },
       {},
     )
 

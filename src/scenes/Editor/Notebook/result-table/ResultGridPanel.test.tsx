@@ -320,6 +320,59 @@ describe("dashboard grid", () => {
     }
   })
 
+  it("writes the clicked cell's own column when the click is unbound", () => {
+    // Given a grid whose click sets a variable from the clicked cell
+    const setVariableValues = vi.fn()
+    notebook.actions = { setVariableValues }
+    const ids = [
+      { name: "id", type: "LONG" },
+      { name: "desk", type: "SYMBOL" },
+    ]
+    try {
+      renderComponent(
+        <ResultTrendProvider value={createResultTrendStore()}>
+          <ResultGridPanel
+            data={{
+              type: "dql",
+              query: "select id, desk from desks",
+              columns: ids,
+              dataset: [
+                ["9007199254740993", "east"],
+                ["42", "west"],
+              ],
+              count: 2,
+            }}
+            statementKey="desks"
+            runToken={1}
+            cellId="desks"
+            bufferId={1}
+            isFocused={false}
+            isRunning={false}
+            onReRun={vi.fn()}
+            onYieldFocus={vi.fn()}
+            cellColumns={ids}
+            viewportStore={createResultGridViewportStore()}
+            highlightConfig={{ identityColumns: [], rules: [] }}
+            interactions={{ click: { variable: "sel" } }}
+            refreshIntervalMs={undefined}
+          />
+        </ResultTrendProvider>,
+      )
+
+      // When the user clicks a desk, then an exact LONG id
+      fireEvent.click(screen.getByText("east"))
+      fireEvent.click(screen.getByText("9007199254740993"))
+
+      // Then each writes its own column's value, typed by that column
+      expect(setVariableValues.mock.calls).toEqual([
+        [{ sel: "'east'" }],
+        [{ sel: "9007199254740993" }],
+      ])
+    } finally {
+      notebook.actions = {}
+    }
+  })
+
   it.each(["Enter", " "])(
     "activates the focused row with %s when clicks are bound",
     (key) => {

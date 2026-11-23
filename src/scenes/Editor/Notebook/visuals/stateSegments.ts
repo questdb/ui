@@ -13,21 +13,26 @@ import {
 
 export type Severity = "good" | "neutral" | "warning" | "bad"
 
-export type Segment = {
+// A lane's state from start to end.
+export type Span = {
   lane: string
   state: string
   start: number
   end: number
-  selection?: unknown
+}
+
+export type Segment = Span & {
+  // The row the segment was read from.
+  row: number
 }
 
 export type StateSegments = {
   lanes: string[]
   states: string[]
   segments: Segment[]
-  selectionByLane?: ReadonlyMap<string, unknown>
-  // Lanes whose value is NULL (they read as an empty label).
-  nullLanes?: ReadonlySet<string>
+  // The lane column, and the rows each lane was read from.
+  laneColumn: number
+  laneRows: ReadonlyMap<string, number[]>
   from: number
   to: number
 }
@@ -65,7 +70,6 @@ export const naturalOrder = (a: string, b: string) =>
 export const readStateSegments = (
   visual: VisualConfig,
   rows: StatementRows | null,
-  clickColumn?: string,
 ): StateSegments | string => {
   if (!rows || rows.rows.length === 0) return "The query returned no rows."
   // A prefix of the rows would end each lane's last state at the cut and
@@ -99,29 +103,23 @@ export const readStateSegments = (
       return `${role}: column ${JSON.stringify(set ?? `(default ${role})`)} not found. Columns: ${names()}.`
   }
 
-  const clickIdx = columnIndex(rows, clickColumn)
-  const selectionByLane = new Map<string, unknown>()
-  const nullLanes = new Set<string>()
+  const laneRows = new Map<string, number[]>()
   const open: (Omit<Segment, "end"> & { end: number | null })[] = []
-  for (const row of rows.rows) {
+  rows.rows.forEach((row, index) => {
     const start = toTime(row[timeIdx])
-    if (start === null) continue
+    if (start === null) return
     const lane = toLabel(row[laneIdx])
-    if (row[laneIdx] === null || row[laneIdx] === undefined) nullLanes.add(lane)
-    const selection: unknown = row[clickIdx]
-    if (clickIdx >= 0) {
-      if (!selectionByLane.has(lane)) selectionByLane.set(lane, selection)
-      else if (!Object.is(selectionByLane.get(lane), selection))
-        selectionByLane.set(lane, undefined)
-    }
+    const read = laneRows.get(lane)
+    if (read) read.push(index)
+    else laneRows.set(lane, [index])
     open.push({
       lane,
       state: toLabel(row[stateIdx]),
       start,
       end: endIdx >= 0 ? toTime(row[endIdx]) : null,
-      ...(clickIdx >= 0 ? { selection } : {}),
+      row: index,
     })
-  }
+  })
   if (open.length === 0) return "No row has a valid time."
   const to = Math.max(...open.map((s) => s.end ?? s.start))
   const from = Math.min(...open.map((s) => s.start))
@@ -142,15 +140,15 @@ export const readStateSegments = (
     lanes: [...byLane.keys()].sort(naturalOrder),
     states: [...new Set(segments.map((s) => s.state))],
     segments,
-    ...(clickColumn === undefined ? {} : { selectionByLane }),
-    nullLanes,
+    laneColumn: laneIdx,
+    laneRows,
     from,
     to,
   }
 }
 
-export const latestStateByLane = (segments: Segment[]): Map<string, string> => {
-  const latest = new Map<string, Segment>()
+export const latestStateByLane = (segments: Span[]): Map<string, string> => {
+  const latest = new Map<string, Span>()
   for (const segment of segments) {
     const previous = latest.get(segment.lane)
     if (!previous || segment.start >= previous.start)
@@ -168,7 +166,9 @@ export type Bucket = {
 
 /** Splits [from, to) into equal buckets and adds up each lane's state time. */
 export const bucketLanes = (
-  read: StateSegments,
+  read: Pick<StateSegments, "lanes" | "states" | "from" | "to"> & {
+    segments: Span[]
+  },
   count: number,
 ): Map<string, Bucket[]> => {
   const n = Math.max(1, Math.floor(count))
@@ -220,7 +220,7 @@ export const bucketSeverity = (
 
 /** Share of distinct covered time with no bad state, by lane. */
 export const uptimeByLane = (
-  segments: Segment[],
+  segments: Span[],
   overrides?: Record<string, Severity>,
 ): Map<string, number> => {
   const totals = new Map<

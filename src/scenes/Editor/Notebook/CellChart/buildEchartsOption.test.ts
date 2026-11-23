@@ -42,17 +42,13 @@ it.each(["area", "stepArea"] as const)(
         yColumns: ["price"],
       }),
     ]
-    const bound = buildEchartsOption(chart, queries, { clickColumn: "symbol" })
-    expect(seriesList(bound.series)[0]).toMatchObject({
-      symbol: "circle",
-      showSymbol: false,
-      data: [{ value: 16, columns: { symbol: "ETH" } }],
+    const clickable = buildEchartsOption(chart, queries, {
+      clickEnabled: true,
     })
-    const byName = buildEchartsOption(chart, queries, { clickEnabled: true })
-    expect(seriesList(byName.series)[0]).toMatchObject({
+    expect(seriesList(clickable.series)[0]).toMatchObject({
       symbol: "circle",
       showSymbol: false,
-      data: [16],
+      data: [{ value: 16, pick: { statement: 0, rows: [0], column: 0 } }],
     })
     const plain = buildEchartsOption(chart, queries)
     expect(seriesList(plain.series)[0]).toMatchObject({

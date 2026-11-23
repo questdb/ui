@@ -1,12 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import type { EChartsType } from "echarts"
-import {
-  clickedValue,
-  columnTypeOf,
-  interactionEvents,
-  sqlLiteral,
-  withBrush,
-} from "./chartInteractions"
+import { interactionEvents, sqlLiteral, withBrush } from "./chartInteractions"
 
 it("keeps a Custom chart's single zoom slider while adding a brush", () => {
   const slider = { type: "slider" as const, start: 15, end: 75 }
@@ -41,76 +35,36 @@ describe("sqlLiteral", () => {
   })
 })
 
-describe("clickedValue", () => {
-  it("prefers the exact source value to a rounded plotted dimension", () => {
-    expect(
-      clickedValue(
-        {
-          value: [9007199254740992],
-          dimensionNames: ["id"],
-          data: { columns: { id: "9007199254740993" } },
-        },
-        "id",
-      ),
-    ).toBe("9007199254740993")
-  })
-
-  it("doesn't use synthetic labels and sums as explicit row values", () => {
-    const params = {
-      name: "desk",
-      data: { name: "desk", value: 3 },
-      value: [3],
-      dimensionNames: ["value"],
-    }
-    expect(clickedValue(params, "name", true)).toBeUndefined()
-    expect(clickedValue(params, "value", true)).toBeUndefined()
-    expect(clickedValue(params, undefined, true)).toBe("desk")
-    expect(
-      clickedValue(
-        { ...params, data: { ...params.data, columns: { value: 2 } } },
-        "value",
-        true,
-      ),
-    ).toBe(2)
-  })
-
-  it("reads the SQL alias length rather than the dataset row's width", () => {
-    const row = [10, 42]
-    expect(
-      clickedValue(
-        { data: row, value: row, dimensionNames: ["x", "length"] },
-        "length",
-      ),
-    ).toBe(42)
-    expect(clickedValue({ data: row, value: row }, "length")).toBeUndefined()
-  })
-
-  it("reads the named column from a dataset row, else the item name", () => {
-    // Given
-    const params = {
-      name: "BTC",
-      value: ["BTC", 63000],
-      dimensionNames: ["sym", "price"],
-    }
-
-    // When / Then
-    expect(clickedValue(params, "price")).toBe(63000)
-    expect(clickedValue(params, undefined)).toBe("BTC")
-  })
-})
-
 describe("interactionEvents", () => {
+  const instance = {} as EChartsType
+
   it("leaves the variable unchanged when the bound column is unavailable", () => {
+    // Given a click bound to a column only one statement has
     const setVariables = vi.fn()
-    const instance = {} as EChartsType
+    const statements = [
+      { columns: [{ name: "desk", type: "SYMBOL" }], rows: [["Tokyo"]] },
+      { columns: [{ name: "code", type: "SYMBOL" }], rows: [[null]] },
+    ]
     const events = interactionEvents(
       { click: { variable: "desk", column: "code" } },
       setVariables,
+      () => statements,
     )
+
+    // When the user clicks an item with no pick, then one of the statement
+    // without the column, by its name and value
     events.click({ name: "Tokyo", value: 9 }, instance)
+    events.click(
+      { name: "Tokyo", data: { pick: { statement: 0, rows: [0] } } },
+      instance,
+    )
+    // Then nothing is set
     expect(setVariables).not.toHaveBeenCalled()
 
-    events.click({ name: "Tokyo", data: { columns: { code: null } } }, instance)
+    // When the user clicks a row of the statement with the column
+    events.click({ data: { pick: { statement: 1, rows: [0] } } }, instance)
+
+    // Then its NULL is set
     expect(setVariables).toHaveBeenCalledWith({ desk: "null" })
   })
 
@@ -118,21 +72,60 @@ describe("interactionEvents", () => {
     // Given a click bound to a LONG id column of the cell's statements
     const setVariables = vi.fn()
     const statements = [
-      { columns: [{ name: "id", type: "LONG" }] },
-      { columns: [{ name: "label", type: "VARCHAR" }] },
+      { columns: [{ name: "id", type: "LONG" }], rows: [["42"]] },
+      { columns: [{ name: "label", type: "VARCHAR" }], rows: [["a"]] },
     ]
     const events = interactionEvents(
       { click: { variable: "sel", column: "id" } },
       setVariables,
-      false,
-      (name) => columnTypeOf(statements, name),
+      () => statements,
     )
 
-    // When the clicked item carries the id as the console's decimal text
-    events.click({ data: { columns: { id: "42" } } }, {} as EChartsType)
+    // When the clicked item was drawn from the row with the id "42"
+    events.click({ data: { pick: { statement: 0, rows: [0] } } }, instance)
 
     // Then the variable holds the number, as the interaction contract says
     expect(setVariables).toHaveBeenCalledWith({ sel: "42" })
+  })
+
+  it("reads the statements when the click happens, not when bound", () => {
+    // Given handlers made before a refresh
+    const setVariables = vi.fn()
+    let statements = [{ columns: [{ name: "v", type: "INT" }], rows: [[1]] }]
+    const events = interactionEvents(
+      { click: { variable: "v" } },
+      setVariables,
+      () => statements,
+    )
+
+    // When the rows change and the user clicks the first one
+    statements = [{ columns: [{ name: "v", type: "INT" }], rows: [[2]] }]
+    events.click(
+      { data: { pick: { statement: 0, rows: [0], column: 0 } } },
+      instance,
+    )
+
+    // Then the variable holds the current row's value
+    expect(setVariables).toHaveBeenCalledWith({ v: "2" })
+  })
+
+  it("ignores clicks on event mark lines and areas", () => {
+    // Given
+    const setVariables = vi.fn()
+    const statements = [{ columns: [{ name: "v", type: "INT" }], rows: [[1]] }]
+    const events = interactionEvents(
+      { click: { variable: "v" } },
+      setVariables,
+      () => statements,
+    )
+    const data = { pick: { statement: 0, rows: [0], column: 0 } }
+
+    // When
+    events.click({ componentType: "markLine", data }, instance)
+    events.click({ componentType: "markArea", data }, instance)
+
+    // Then
+    expect(setVariables).not.toHaveBeenCalled()
   })
 
   it("sets the time window variables from a drag and clears the brush", () => {
@@ -142,6 +135,7 @@ describe("interactionEvents", () => {
     const events = interactionEvents(
       { brush: { from: "t0", to: "t1" } },
       setVariables,
+      () => [],
     )
 
     // When

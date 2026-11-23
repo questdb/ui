@@ -4,7 +4,7 @@ import { RollingNumber } from "./RollingNumber"
 import { PaneEmptyState } from "../PaneEmptyState"
 import { Check } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../components/Button"
-import { columnTypeOf, sqlLiteral } from "../interactions/chartInteractions"
+import { pickOf, type Pick } from "../interactions/selection"
 import { sparklineSample } from "../../../../utils/sparklineSample"
 import {
   formatValue,
@@ -31,7 +31,8 @@ import type { VisualConfig } from "../CellChart/chartTypes"
 
 type Tile = {
   label: string
-  selection: unknown
+  // A tile is drawn from its row, named by its label column.
+  pick: Pick
   caption: string | null
   value: unknown
   change: number | null
@@ -211,7 +212,6 @@ const LimitNotice = styled.span`
 export const statTiles = (
   visual: VisualConfig,
   statements: (StatementRows | null)[],
-  clickColumn?: string,
 ): {
   tiles: Tile[]
   valueName: string | null
@@ -286,20 +286,12 @@ export const statTiles = (
     }
   }
 
-  const clickIdx = columnIndex(rows, clickColumn)
-  if (clickColumn !== undefined && clickIdx < 0)
-    problems.push(`Click column ${JSON.stringify(clickColumn)} not found.`)
-  const tiles = rows.rows.slice(0, MAX_STAT_TILES).map((row) => {
+  const tiles = rows.rows.slice(0, MAX_STAT_TILES).map((row, index) => {
     const label =
       labelIdx >= 0 ? toLabel(row[labelIdx]) : rows.columns[valueIdx].name
-    // An unbound click selects the tile's name: NULL for a NULL label.
-    const unbound =
-      labelIdx >= 0 && (row[labelIdx] === null || row[labelIdx] === undefined)
-        ? null
-        : label
     return {
       label,
-      selection: clickColumn === undefined ? unbound : row[clickIdx],
+      pick: pickOf(0, [index], labelIdx),
       caption: captionIdx >= 0 ? toLabel(row[captionIdx]) : null,
       value: row[valueIdx],
       change: changeIdx >= 0 ? toNumber(row[changeIdx]) : null,
@@ -320,8 +312,9 @@ type Props = {
   formats: ColumnFormats
   queriesKey?: string
   selectedValue?: string
-  clickColumn?: string
-  onSelect?: (value: unknown) => void
+  // What a click on a tile writes (undefined: nothing), and the click.
+  pickLiteral?: (pick: Pick) => string | undefined
+  onSelect?: (pick: Pick) => void
 }
 
 export const StatTiles = ({
@@ -330,18 +323,16 @@ export const StatTiles = ({
   formats,
   queriesKey,
   selectedValue,
-  clickColumn,
+  pickLiteral,
   onSelect,
 }: Props) => {
   const theme = useTheme()
   const { tiles, valueName, changeName, problems } = useMemo(
-    () => statTiles(visual, statements, clickColumn),
-    [visual, statements, clickColumn],
+    () => statTiles(visual, statements),
+    [visual, statements],
   )
   if (tiles.length === 0)
     return <PaneEmptyState>{problems[0] ?? "No data to plot."}</PaneEmptyState>
-  // Tiles select from the first statement's rows.
-  const clickType = columnTypeOf(statements.slice(0, 1), clickColumn)
   const limitNotice = statTileLimitNotice(statements)
   const format = valueName ? formats[valueName] : undefined
   const changeFormat = changeName ? formats[changeName] : undefined
@@ -371,12 +362,12 @@ export const StatTiles = ({
               ? toneColor(changeTone, theme.color)
               : theme.color.chartSeries1
           const text = formatValue(tile.value, format ?? { kind: "number" })
+          const literal = pickLiteral?.(tile.pick)
           const activate =
-            onSelect && tile.selection !== undefined
-              ? () => onSelect(tile.selection)
+            onSelect && literal !== undefined
+              ? () => onSelect(tile.pick)
               : undefined
-          const selected =
-            activate && sqlLiteral(tile.selection, clickType) === selectedValue
+          const selected = activate !== undefined && literal === selectedValue
           return (
             <TileRoot
               as={activate ? "button" : "div"}

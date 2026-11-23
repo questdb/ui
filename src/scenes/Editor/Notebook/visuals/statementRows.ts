@@ -6,6 +6,7 @@ import {
 } from "../DrawCanvas/drawCanvasUtils"
 import { hasPendingResult } from "../statementIdentity"
 import { classifyColumn } from "../CellChart/inferChartConfig"
+import { pickOf, type Pick } from "../interactions/selection"
 
 // Statement results for visuals and custom charts: one entry per statement,
 // in statement order, including statements that returned no rows (an empty
@@ -105,9 +106,10 @@ export type TreeNode = {
   children?: TreeNode[]
   // The row's value of a colour column, when given.
   colorValue?: number
-  columns?: Record<string, StatementRows["rows"][number][number]>
-  // The node stands for a NULL path value.
-  isNull?: boolean
+  // The rows under the node, and its level's path column: what it is drawn
+  // from.
+  rows: number[]
+  column: number
 }
 
 /**
@@ -119,13 +121,10 @@ export const treeFromPath = (
   pathIdx: number[],
   valueIdx: number,
   colorIdx = -1,
-  clickIdx = -1,
 ): TreeNode[] => {
-  const root: TreeNode = { name: "", children: [] }
-  const column = rows.columns[clickIdx]?.name
-  const ambiguous = new WeakSet<TreeNode>()
+  const root: TreeNode = { name: "", children: [], rows: [], column: -1 }
   const childrenByName = new WeakMap<TreeNode, Map<string, TreeNode>>()
-  for (const row of rows.rows) {
+  rows.rows.forEach((row, rowIndex) => {
     let node = root
     pathIdx.forEach((p, level) => {
       const name = toLabel(row[p])
@@ -136,25 +135,13 @@ export const treeFromPath = (
       }
       let child = children.get(name)
       if (!child) {
-        child = { name }
+        child = { name, rows: [], column: p }
         children.set(name, child)
         ;(node.children ??= []).push(child)
       }
-      // A NULL path value reads as an empty name; an unbound click on it
-      // selects NULL.
-      if (row[p] === null || row[p] === undefined) child.isNull = true
+      child.rows.push(rowIndex)
       if (level === pathIdx.length - 1) {
         child.value = (child.value ?? 0) + (toNumber(row[valueIdx]) ?? 0)
-        if (column !== undefined && !ambiguous.has(child)) {
-          const selection = row[clickIdx]
-          if (!child.columns) child.columns = { [column]: selection }
-          else if (child.columns[column] !== selection) {
-            // This leaf aggregates different source rows. Never pick an
-            // arbitrary row for an explicitly bound selection.
-            delete child.columns
-            ambiguous.add(child)
-          }
-        }
         if (colorIdx >= 0) {
           const c = toNumber(row[colorIdx])
           if (c !== null) child.colorValue = c
@@ -162,7 +149,7 @@ export const treeFromPath = (
       }
       node = child
     })
-  }
+  })
   const sum = (node: TreeNode): number => {
     if (!node.children || node.children.length === 0) return node.value ?? 0
     node.value = node.children.reduce((total, c) => total + sum(c), 0)
@@ -186,33 +173,40 @@ export const linksFrom = (
     value: valueIdx >= 0 ? (toNumber(row[valueIdx]) ?? 0) : 1,
   }))
 
-// NULL and '' endpoints share the unlabelled node. When every one of them is
-// NULL, a click on that node selects NULL, not its name or total flow.
-export const emptyNodeIsNull = (
+/**
+ * The nodes of the links between rows' `from` and `to` values, in order of
+ * appearance. A node is drawn from the rows it is the source of, or, when it
+ * never is one, from the rows it is the target of.
+ */
+export const nodesFrom = (
   rows: StatementRows,
+  statement: number,
   fromIdx: number,
   toIdx: number,
-): boolean => {
-  let empty = false
-  for (const row of rows.rows)
-    for (const v of [row[fromIdx], row[toIdx]]) {
-      if (toLabel(v) !== "") continue
-      if (v !== null && v !== undefined) return false
-      empty = true
-    }
-  return empty
-}
-
-export const nodesOf = (
-  links: Link[],
-  emptyIsNull = false,
-): { name: string; selection?: null }[] => {
-  const names = new Set<string>()
-  for (const link of links) {
-    names.add(link.source)
-    names.add(link.target)
+): { name: string; pick: Pick }[] => {
+  const sources = new Map<string, number[]>()
+  const targets = new Map<string, number[]>()
+  const add = (into: Map<string, number[]>, name: string, row: number) => {
+    const list = into.get(name)
+    if (list) list.push(row)
+    else into.set(name, [row])
   }
-  return [...names].map((name) =>
-    emptyIsNull && name === "" ? { name, selection: null } : { name },
-  )
+  const names = new Set<string>()
+  rows.rows.forEach((row, i) => {
+    const source = toLabel(row[fromIdx])
+    const target = toLabel(row[toIdx])
+    names.add(source)
+    names.add(target)
+    add(sources, source, i)
+    add(targets, target, i)
+  })
+  return [...names].map((name) => {
+    const from = sources.get(name)
+    return {
+      name,
+      pick: from
+        ? pickOf(statement, from, fromIdx)
+        : pickOf(statement, targets.get(name) ?? [], toIdx),
+    }
+  })
 }

@@ -7,6 +7,12 @@ import { describe, expect, it, vi } from "vitest"
 import { MAX_ORDER_BOOK_LEVELS, OrderBook, orderBookDrawn } from "./OrderBook"
 import { StatTiles } from "./StatTiles"
 import type { StatementRows } from "./statementRows"
+import { pickLiteral, type Pick } from "../interactions/selection"
+
+// What a click on an item writes, as the visual canvas resolves it.
+const literalOf =
+  (statements: StatementRows[], column?: string) => (pick: Pick) =>
+    pickLiteral(pick, column, statements)
 
 describe("dashboard visuals", () => {
   it("shows the current notebook selection and supports keyboard selection", async () => {
@@ -29,6 +35,7 @@ describe("dashboard visuals", () => {
         visual={{ type: "stat" }}
         formats={{}}
         statements={statements}
+        pickLiteral={literalOf(statements)}
         onSelect={onSelect}
         selectedValue={selectedValue}
       />
@@ -43,7 +50,11 @@ describe("dashboard visuals", () => {
     rerender(tiles("'ETH'"))
 
     // Then the selected state follows the variable and focus stays on the tile
-    expect(onSelect).toHaveBeenCalledWith("ETH")
+    expect(onSelect).toHaveBeenCalledWith({
+      statement: 0,
+      rows: [1],
+      column: 0,
+    })
     expect(btc).toHaveAttribute("aria-pressed", "false")
     expect(eth).toHaveAttribute("aria-pressed", "true")
     expect(eth).toHaveFocus()
@@ -51,24 +62,25 @@ describe("dashboard visuals", () => {
 
   it("marks the tile of a LONG id the variable holds as a number", () => {
     // Given tiles that select their LONG id, which arrives as text
+    const statements = [
+      {
+        columns: [
+          { name: "desk", type: "SYMBOL" },
+          { name: "pnl", type: "DOUBLE" },
+          { name: "id", type: "LONG" },
+        ],
+        rows: [
+          ["east", 1, "41"],
+          ["west", 2, "42"],
+        ],
+      },
+    ]
     renderComponent(
       <StatTiles
         visual={{ type: "stat" }}
         formats={{}}
-        clickColumn="id"
-        statements={[
-          {
-            columns: [
-              { name: "desk", type: "SYMBOL" },
-              { name: "pnl", type: "DOUBLE" },
-              { name: "id", type: "LONG" },
-            ],
-            rows: [
-              ["east", 1, "41"],
-              ["west", 2, "42"],
-            ],
-          },
-        ]}
+        statements={statements}
+        pickLiteral={literalOf(statements, "id")}
         onSelect={vi.fn()}
         selectedValue="42"
       />,
@@ -91,14 +103,16 @@ describe("dashboard visuals", () => {
       { name: "size", type: "INT" },
     ]
     const onSelect = vi.fn()
+    const statements = [
+      { columns, rows: [["9007199254740993", 2]] },
+      { columns, rows: [["9007199254740992", 10]] },
+    ]
     const { container } = renderComponent(
       <OrderBook
         formats={{}}
+        pickLiteral={literalOf(statements)}
         onSelect={onSelect}
-        statements={[
-          { columns, rows: [["9007199254740993", 2]] },
-          { columns, rows: [["9007199254740992", 10]] },
-        ]}
+        statements={statements}
       />,
     )
     const ask = screen.getByRole("button", { name: /9,007,199,254,740,993/ })
@@ -114,7 +128,9 @@ describe("dashboard visuals", () => {
 
     // When selecting the ask, it selects its exact price, typed by its column
     await userEvent.click(ask)
-    expect(onSelect).toHaveBeenCalledWith("9007199254740993", "LONG")
+    const [pick] = onSelect.mock.calls[0] as [Pick]
+    expect(pick).toEqual({ statement: 0, rows: [0], column: 0 })
+    expect(literalOf(statements)(pick)).toBe("9007199254740993")
   })
 
   it("renders the exact size of a LONG without compact formatting", () => {
@@ -294,14 +310,16 @@ describe("dashboard visuals", () => {
         { name: "price", type: "DOUBLE" },
         { name: "size", type: "DOUBLE" },
       ]
+      const statements = [
+        { columns, rows: [[101, 1]] },
+        { columns, rows: [[99, 1]] },
+      ]
       const { container } = renderComponent(
         <OrderBook
           formats={{}}
+          pickLiteral={literalOf(statements)}
           onSelect={vi.fn()}
-          statements={[
-            { columns, rows: [[101, 1]] },
-            { columns, rows: [[99, 1]] },
-          ]}
+          statements={statements}
         />,
       )
       const level = container.querySelector<HTMLElement>(
@@ -343,14 +361,16 @@ describe("dashboard visuals", () => {
       { name: "price", type: "DOUBLE" },
       { name: "size", type: "DOUBLE" },
     ]
+    const statements = [
+      { columns, rows: [[100, 2]] },
+      { columns, rows: [[100, 2]] },
+    ]
     renderComponent(
       <OrderBook
         formats={{}}
+        pickLiteral={literalOf(statements)}
         onSelect={vi.fn()}
-        statements={[
-          { columns, rows: [[100, 2]] },
-          { columns, rows: [[100, 2]] },
-        ]}
+        statements={statements}
       />,
     )
 

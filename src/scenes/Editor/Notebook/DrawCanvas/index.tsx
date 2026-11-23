@@ -52,7 +52,6 @@ import {
 } from "../CellChart/lazyCharts"
 import {
   armBrush,
-  columnTypeOf,
   interactionEvents,
   withBrush,
 } from "../interactions/chartInteractions"
@@ -264,7 +263,6 @@ export const DrawCanvas: React.FC<Props> = ({
         buildEchartsOption(resolution.chart, resolution.renderQueries, {
           colors: theme.color,
           formats,
-          clickColumn: cell.interactions?.click?.column,
           clickEnabled: cell.interactions?.click !== undefined,
           preciseTimePointer,
           sharedTimePointer,
@@ -323,21 +321,22 @@ export const DrawCanvas: React.FC<Props> = ({
     setChartSync(bufferId, settings.chartSync)
   }, [bufferId, settings.chartSync])
 
-  // Clicks read the column types of the latest result; the handlers stay the
-  // same across refreshes, so the chart does not rebind them on every result.
-  const resultRef = useRef(cell.result)
+  // Clicks read the rows of the latest settled statements, the ones the chart
+  // shows; the handlers stay the same across refreshes, so the chart does not
+  // rebind them on every result.
+  const statementsRef = useRef(statements)
   useEffect(() => {
-    resultRef.current = cell.result
-  }, [cell.result])
+    if (statementResults.kind === "settled")
+      statementsRef.current = statementResults.statements
+  }, [statementResults])
   const events = useMemo(
     () =>
       interactionEvents(
         cell.interactions,
         setVariableValues,
-        visual?.type === "treemap" || visual?.type === "sunburst",
-        (name) => columnTypeOf(resultRef.current?.results, name),
+        () => statementsRef.current,
       ),
-    [cell.interactions, setVariableValues, visual?.type],
+    [cell.interactions, setVariableValues],
   )
   const leaveSyncRef = useRef<(() => void) | null>(null)
   const handleInstance = useCallback(
