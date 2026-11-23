@@ -28,6 +28,7 @@ import {
 } from "../../../src/utils/notebooks/notebookController"
 import type { ViewParts } from "../../../src/utils/notebooks/notebookDexieView"
 import { getBufferActionSeq } from "../../../src/utils/notebooks/notebookAIBridge"
+import { questClient } from "../../../src/utils/questdb/queryClient"
 
 const sockets: MemorySocket[] = []
 class MemorySocket extends EventTarget {
@@ -109,6 +110,16 @@ const toolCall = (requestId: string, value: string) => ({
   conversationId: "conv-1",
 })
 
+const runQueryCall = (requestId: string, sql: string) => ({
+  v,
+  type: "tool_call",
+  requestId,
+  name: "run_query",
+  arguments: { sql, limit: null },
+  deadlineMs: null,
+  conversationId: "conv-1",
+})
+
 const resultOf = (socket: MemorySocket, requestId: string) =>
   socket.frames.find(
     (f) => f.type === "tool_result" && f.requestId === requestId,
@@ -118,7 +129,7 @@ const flush = async () => {
   for (let i = 0; i < 50; i++) await Promise.resolve()
 }
 
-it("keeps notebook tool calls of a stopped local-agent turn from changing the notebook", async () => {
+const connectLocalAgent = async () => {
   sockets.length = 0
   vi.stubGlobal("WebSocket", MemorySocket)
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
@@ -178,6 +189,11 @@ it("keeps notebook tool calls of a stopped local-agent turn from changing the no
       error: null,
     })
   })
+  return socket
+}
+
+it("keeps notebook tool calls of a stopped local-agent turn from changing the notebook", async () => {
+  const socket = await connectLocalAgent()
   const channel = getLocalAgentChannel()
   expect(channel).not.toBeNull()
   const live = mountLive()
@@ -245,4 +261,44 @@ it("keeps notebook tool calls of a stopped local-agent turn from changing the no
     vi.useRealTimers()
     live.release()
   }
+})
+
+it("stops the queries of a stopped local-agent turn", async () => {
+  // Given a local-agent turn whose first query is still running
+  vi.spyOn(questClient, "validateQuery").mockResolvedValue({
+    query: "",
+    columns: [],
+    timestamp: -1,
+  })
+  const executedSql: string[] = []
+  vi.spyOn(questClient, "queryRaw").mockImplementation((sql) => {
+    executedSql.push(sql)
+    return { promise: new Promise(() => undefined), queryId: 41 }
+  })
+  const abortQuery = vi.spyOn(questClient, "abort").mockImplementation(() => {})
+  const socket = await connectLocalAgent()
+  const stop = new AbortController()
+  void getLocalAgentChannel()!.prompt({
+    conversationId: "conv-1",
+    text: "inspect trades",
+    signal: stop.signal,
+    onUpdate: () => undefined,
+    onToolStatus: () => undefined,
+  })
+  act(() => {
+    socket.receive(runQueryCall("running", "SELECT * FROM trades"))
+  })
+  await act(flush)
+  expect(executedSql).toEqual(["SELECT * FROM trades"])
+
+  // When the user stops the turn, and the agent sends one more query
+  act(() => stop.abort())
+  act(() => {
+    socket.receive(runQueryCall("late", "SELECT count() FROM trades"))
+  })
+  await act(flush)
+
+  // Then the running query is cancelled and the late one never runs
+  expect(abortQuery).toHaveBeenCalledWith(41)
+  expect(executedSql).toEqual(["SELECT * FROM trades"])
 })

@@ -11,11 +11,7 @@ import { MCPBridgeClient } from "../../utils/mcp/MCPBridgeClient"
 import type { MCPBridgeClientStatus } from "../../utils/mcp/MCPBridgeClient"
 import { dispatchMCPTool } from "../../utils/mcp/dispatchMCPTool"
 import { createNotebookFreshness } from "../../utils/notebooks/notebookFreshness"
-import {
-  declaresBufferId,
-  mcpTools,
-  mutatesNotebook,
-} from "../../utils/tools/tools"
+import { mcpTools } from "../../utils/tools/tools"
 import {
   EXPECTED_MCP_VERSION,
   type BridgeVersionMismatch,
@@ -289,10 +285,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         conversationId === undefined
           ? undefined
           : getLocalAgentChannel()?.captureToolRequest(client, conversationId)
-      const turnSignal =
-        mutatesNotebook(call.name) || declaresBufferId(call.name)
-          ? ownedTool?.signal
-          : undefined
+      const turnSignal = ownedTool?.signal
       const abortWithTurn = () => aborter.abort(turnSignal?.reason)
       if (turnSignal?.aborted) abortWithTurn()
       else turnSignal?.addEventListener("abort", abortWithTurn, { once: true })
