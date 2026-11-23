@@ -84,6 +84,7 @@ const createUpdateHandler = (
   setStatus: StatusCallback,
   streaming: StreamingCallback,
   abortSignal: AbortSignal | undefined,
+  sessionId: string,
 ) => {
   let reply = ""
   const questionRecords: string[] = []
@@ -238,7 +239,7 @@ const createUpdateHandler = (
         handlePlan(update.entries)
         return
       case "usage":
-        contextUsage = { used: update.used, size: update.size }
+        contextUsage = { used: update.used, size: update.size, sessionId }
         streaming.onContextUsage?.(contextUsage)
         return
       case "notice": {
@@ -287,7 +288,7 @@ export const runLocalAgentTurn = async ({
 
   const startedAt = Date.now()
   const { handleUpdate, handleStatus, reply, contextUsage } =
-    createUpdateHandler(setStatus, streaming, abortSignal)
+    createUpdateHandler(setStatus, streaming, abortSignal, channel.sessionId)
   const result = await channel.prompt({
     conversationId,
     text: userMessage,

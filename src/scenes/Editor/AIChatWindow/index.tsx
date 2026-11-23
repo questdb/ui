@@ -329,7 +329,10 @@ const AIChatWindow: React.FC = () => {
   }, [conversation?.queryKey])
 
   const messages = activeConversationMessages
-  const contextUsage = useMemo(() => latestContextUsage(messages), [messages])
+  const contextUsage = useMemo(
+    () => latestContextUsage(messages, localAgentChannel?.sessionId),
+    [messages, localAgentChannel],
+  )
   const chatTokens = useMemo(() => totalTokenUsage(messages), [messages])
 
   const hasUnactionedDiff = useMemo(() => {

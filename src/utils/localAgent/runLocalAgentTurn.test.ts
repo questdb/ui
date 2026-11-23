@@ -371,7 +371,11 @@ describe("runLocalAgentTurn", () => {
     // Then
     expect(onContextUsage).toHaveBeenCalledTimes(2)
     expect(result).toMatchObject({
-      contextUsage: { used: 9_000, size: 10_000 },
+      contextUsage: {
+        used: 9_000,
+        size: 10_000,
+        sessionId: activeChannel.sessionId,
+      },
     })
   })
 

@@ -32,7 +32,11 @@ const Root = styled.span`
 // How full an agent's context is, as a ring: grey, then the warning color
 // once it is nearly full, when the agent will soon compact it. The tooltip
 // has the numbers.
-export const ContextUsage = ({ usage }: { usage: Usage }) => {
+export const ContextUsage = ({
+  usage,
+}: {
+  usage: Pick<Usage, "used" | "size">
+}) => {
   const theme = useTheme()
   const share = Math.min(1, Math.max(0, usage.used / usage.size))
   const nearlyFull = share >= CONTEXT_WARNING_SHARE

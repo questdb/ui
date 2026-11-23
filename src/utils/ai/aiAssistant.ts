@@ -56,6 +56,8 @@ export interface TokenUsage {
 export type ContextUsage = {
   used: number
   size: number
+  // The agent session the counts belong to.
+  sessionId: string
 }
 
 export interface GeneratedSQL {

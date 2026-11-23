@@ -56,14 +56,17 @@ const isContextUsage = (value: unknown): value is ContextUsage => {
   )
 }
 
-// How full the model's context was after the conversation's latest answer
-// that reported it.
+// How full the session's context was after the conversation's latest answer
+// that reported it; null until a new session reports its own.
 export const latestContextUsage = (
   messages: ConversationMessage[],
+  sessionId: string | undefined,
 ): ContextUsage | null => {
   for (let index = messages.length - 1; index >= 0; index--) {
     const usage = messages[index].contextUsage
-    if (isContextUsage(usage)) return usage
+    if (isContextUsage(usage)) {
+      return usage.sessionId === sessionId ? usage : null
+    }
   }
   return null
 }

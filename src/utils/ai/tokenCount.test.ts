@@ -43,29 +43,35 @@ describe("latestTokenUsage", () => {
 })
 
 describe("latestContextUsage", () => {
+  const answer = (id: string, used: number, sessionId: string) =>
+    ({
+      id,
+      role: "assistant",
+      content: id,
+      timestamp: 1,
+      contextUsage: { used, size: 100, sessionId },
+    }) as ConversationMessage
+
   it("takes the latest answer that reported how full the context was", () => {
     // Given
     const messages = [
-      {
-        id: "1",
-        role: "assistant",
-        content: "a",
-        timestamp: 1,
-        contextUsage: { used: 10, size: 100 },
-      },
-      {
-        id: "2",
-        role: "assistant",
-        content: "b",
-        timestamp: 2,
-        contextUsage: { used: 30, size: 100 },
-      },
+      answer("1", 10, "session"),
+      answer("2", 30, "session"),
       { id: "3", role: "user", content: "c", timestamp: 3 },
     ] as ConversationMessage[]
 
     // Then
-    expect(latestContextUsage(messages)).toEqual({ used: 30, size: 100 })
-    expect(latestContextUsage([])).toBeNull()
+    expect(latestContextUsage(messages, "session")).toMatchObject({ used: 30 })
+    expect(latestContextUsage([], "session")).toBeNull()
+  })
+
+  it("shows nothing until a new agent session reports its own usage", () => {
+    // Given the chat's latest usage came from an earlier session
+    const messages = [answer("1", 90, "earlier")]
+
+    // Then
+    expect(latestContextUsage(messages, "current")).toBeNull()
+    expect(latestContextUsage(messages, undefined)).toBeNull()
   })
 })
 
