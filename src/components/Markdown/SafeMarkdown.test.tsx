@@ -142,10 +142,20 @@ describe("SafeMarkdown", () => {
     expect(html).not.toContain('target="_blank"')
   })
 
-  it("neutralizes javascript: link hrefs (react-markdown default)", () => {
-    const html = render("[x](javascript:alert(1))")
-    expect(html).not.toContain("javascript:alert")
-  })
+  it.each([
+    ["javascript:alert(1)", false],
+    ["vbscript:msgbox", true],
+    ["tel:+15551234", "inline"],
+  ] as const)(
+    "shows a %s link as plain text (allowImages: %s)",
+    (url, allowImages) => {
+      // When
+      const html = render(`[call me](${url})`, allowImages)
+
+      // Then an empty href would reload the console when clicked
+      expect(html).toBe("<p>call me</p>")
+    },
+  )
 
   it("renders GFM tables by default", () => {
     const html = render("| a | b |\n| - | - |\n| 1 | 2 |")

@@ -85,17 +85,23 @@ const isDataImage = (value: string) => /^data:image\//i.test(value)
 const isSafeImageSrc = (value?: string): value is string =>
   isHttpUrl(value) || (typeof value === "string" && isDataImage(value))
 
-const SafeLink = ({ children, href, ...props }: React.ComponentProps<"a">) => (
-  <a
-    href={href}
-    {...(isHttpUrl(href)
-      ? { target: "_blank", rel: "noopener noreferrer" }
-      : {})}
-    {...props}
-  >
-    {children}
-  </a>
-)
+// urlTransform empties the URL of a link it does not allow (javascript:,
+// tel: and the like). Such a link is shown as text: an empty href would
+// reload the console when clicked.
+const SafeLink = ({ children, href, ...props }: React.ComponentProps<"a">) =>
+  href ? (
+    <a
+      href={href}
+      {...(isHttpUrl(href)
+        ? { target: "_blank", rel: "noopener noreferrer" }
+        : {})}
+      {...props}
+    >
+      {children}
+    </a>
+  ) : (
+    <>{children}</>
+  )
 
 const SafeImage = ({
   src: rawSrc,
