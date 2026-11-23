@@ -5,6 +5,8 @@ import { Button, Checkbox, Input, Text } from "../../../../components"
 import {
   CELL_VISUALS,
   FORMAT_KINDS,
+  MAX_FORMAT_AFFIX,
+  MAX_FORMAT_DECIMALS,
   TONES,
   formatValue,
   toneColor,
@@ -83,8 +85,6 @@ const COLOUR_LABELS: Record<ColourMode, string> = {
   sign: "Green when positive, red when negative",
   thresholds: "By thresholds",
 }
-
-const MAX_AFFIX = 16
 
 const parseNumber = (text: string): number | undefined => {
   const n = Number(text)
@@ -274,7 +274,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
                 name={id("decimals")}
                 type="number"
                 min={0}
-                max={12}
+                max={MAX_FORMAT_DECIMALS}
                 placeholder="Auto"
                 value={format.decimals ?? ""}
                 onChange={(e) => {
@@ -283,7 +283,10 @@ export const ColumnFormatFields: React.FC<Props> = ({
                     "decimals",
                     n === undefined
                       ? undefined
-                      : Math.min(12, Math.max(0, Math.round(n))),
+                      : Math.min(
+                          MAX_FORMAT_DECIMALS,
+                          Math.max(0, Math.round(n)),
+                        ),
                   )
                 }}
               />
@@ -302,7 +305,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
               <Input
                 name={id("prefix")}
                 placeholder="e.g. $"
-                maxLength={MAX_AFFIX}
+                maxLength={MAX_FORMAT_AFFIX}
                 value={format.prefix ?? ""}
                 onChange={(e) => set("prefix", e.target.value)}
               />
@@ -312,7 +315,7 @@ export const ColumnFormatFields: React.FC<Props> = ({
               <Input
                 name={id("suffix")}
                 placeholder="e.g. ms"
-                maxLength={MAX_AFFIX}
+                maxLength={MAX_FORMAT_AFFIX}
                 value={format.suffix ?? ""}
                 onChange={(e) => set("suffix", e.target.value)}
               />

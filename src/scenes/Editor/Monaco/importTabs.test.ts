@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from "vitest"
-import { MAX_NOTEBOOK_CELLS } from "../../../store/notebook"
+import {
+  MAX_CELL_NAME_LENGTH,
+  MAX_NOTEBOOK_CELLS,
+} from "../../../store/notebook"
+import {
+  MAX_FORMAT_AFFIX,
+  MAX_FORMAT_DECIMALS,
+} from "../../../utils/formats/columnFormat"
 import {
   MetricType,
   MetricViewMode,
@@ -1796,21 +1803,161 @@ describe("deduplication", () => {
       expect(createBufferContentKey(buffer)).toBe("Tab|SELECT * FROM t")
     })
 
-    it("creates key from cell values for notebook tabs", () => {
-      const buffer = {
-        label: "Notebook",
-        value: "",
-        notebookViewState: {
-          cells: [
-            { id: "a", type: "sql", position: 0, value: "SELECT 1" },
-            { id: "b", type: "markdown", position: 1, value: "# title" },
-          ],
+    it("keeps every setting the editor and the agent tools can save", () => {
+      // Given a notebook with each content field at the limits the format
+      // editor and the agent tools accept
+      const thresholds = Array.from({ length: 60 }, (_, i) => ({
+        value: i,
+        tone: i % 2 === 0 ? ("positive" as const) : ("negative" as const),
+      }))
+      const formats = Object.fromEntries(
+        Array.from({ length: 250 }, (_, i) => [
+          `c${i}`,
+          {
+            kind: "price" as const,
+            decimals: MAX_FORMAT_DECIMALS,
+            prefix: "p".repeat(MAX_FORMAT_AFFIX),
+            suffix: "s".repeat(MAX_FORMAT_AFFIX),
+            thresholds,
+          },
+        ]),
+      )
+      const alias = "a".repeat(250)
+      const cells = [
+        {
+          id: "grid",
+          position: 0,
+          value: "SELECT 1 x",
+          name: "n".repeat(MAX_CELL_NAME_LENGTH),
+          autoRefresh: "5s",
+          highlightConfig: {
+            identityColumns: ["x"],
+            rules: [
+              {
+                id: "r1",
+                kind: "previous",
+                enabled: true,
+                target: { kind: "column", name: "x" },
+                display: "temporary",
+                appliesTo: "cell",
+                condition: { op: "gt" },
+                color: "dataPositive",
+              },
+            ],
+          },
+          formats,
+          interactions: { click: { variable: "sym", column: alias } },
+          gridMode: "stable",
         },
-      } as unknown as Parameters<typeof createBufferContentKey>[0]
-      expect(createBufferContentKey(buffer)).toBe(
-        `Notebook|${JSON.stringify(["SELECT 1", "# title"])}`,
+        {
+          id: "draw",
+          position: 1,
+          value: "SELECT 1 x",
+          mode: "draw",
+          chartConfig: {
+            xColumn: null,
+            queries: [],
+            visual: {
+              type: "footprint",
+              columns: { time: "ts", price: "lvl", buy: "b", sell: "s" },
+            },
+          },
+          interactions: { brush: { from: "lo", to: "hi" } },
+        },
+      ]
+      const settings = {
+        variables: [{ name: "sym", value: "'BTC'" }],
+        autoRefreshDefault: "10s",
+        chartSync: { crosshair: "tooltip", zoom: true },
+      }
+      const input = {
+        label: "Desk",
+        value: "",
+        position: 0,
+        notebookViewState: { cells, settings },
+      }
+
+      // When it is exported and imported
+      const view = sanitizeBuffer(
+        JSON.parse(JSON.stringify(input)) as Record<string, unknown>,
+      ).notebookViewState!
+
+      // Then every saved setting comes back as it was
+      expect(view.cells).toMatchObject(cells)
+      expect(view.settings).toMatchObject(settings)
+    })
+
+    it("ignores pane sizes, ids, results, layout and focus", () => {
+      // Given two copies of a notebook that differ only in display state
+      const notebook = (display: Record<string, unknown>, layout: unknown[]) =>
+        ({
+          label: "Notebook",
+          value: "",
+          notebookViewState: {
+            focusedCellId: display.id,
+            cells: [
+              { id: display.id, position: 0, value: "SELECT 1", ...display },
+              { id: "b", type: "markdown", position: 1, value: "# title" },
+            ],
+            settings: { layoutMode: "grid", layout },
+          },
+        }) as unknown as Parameters<typeof createBufferContentKey>[0]
+
+      // When / Then they key the same
+      expect(
+        createBufferContentKey(
+          notebook({ id: "a", topHeight: 120, paneView: "editor" }, []),
+        ),
+      ).toBe(
+        createBufferContentKey(
+          notebook(
+            {
+              id: "z",
+              topHeight: 300,
+              bottomHeight: 400,
+              paneView: "result",
+              lastRunStatus: "success",
+            },
+            [{ i: "z", x: 0, y: 0, w: 12, h: 8 }],
+          ),
+        ),
       )
     })
+
+    it.each([
+      ["a name", { name: "Prices" }, {}],
+      ["draw mode", { mode: "draw" }, {}],
+      [
+        "highlight rules",
+        { highlightConfig: { identityColumns: ["symbol"], rules: [] } },
+        {},
+      ],
+      ["auto refresh", { autoRefresh: "5s" }, {}],
+      ["variables", {}, { variables: [{ name: "s", value: "'a'" }] }],
+      ["a refresh default", {}, { autoRefreshDefault: true }],
+    ])(
+      "tells apart notebooks that differ only in %s",
+      (_, cellFields, settings) => {
+        // Given a notebook and a copy with one more saved setting
+        const notebook = (
+          cell: Record<string, unknown>,
+          extra: Record<string, unknown>,
+        ) =>
+          ({
+            label: "Notebook",
+            value: "",
+            notebookViewState: {
+              cells: [{ id: "a", position: 0, value: "SELECT 1", ...cell }],
+              settings: extra,
+            },
+          }) as unknown as Parameters<typeof createBufferContentKey>[0]
+
+        // When / Then they key differently
+        expect(createBufferContentKey(notebook(cellFields, settings))).not.toBe(
+          createBufferContentKey(notebook({}, {})),
+        )
+      },
+    )
 
     it("notebook branch is guarded against missing cells array", () => {
       const buffer = {
@@ -1818,7 +1965,13 @@ describe("deduplication", () => {
         value: "",
         notebookViewState: {},
       } as unknown as Parameters<typeof createBufferContentKey>[0]
-      expect(createBufferContentKey(buffer)).toBe("Notebook|[]")
+      expect(createBufferContentKey(buffer)).toBe(
+        createBufferContentKey({
+          label: "Notebook",
+          value: "",
+          notebookViewState: { cells: [] },
+        }),
+      )
     })
 
     it("notebook branch takes precedence over metricsViewState", () => {
@@ -1828,7 +1981,13 @@ describe("deduplication", () => {
         metricsViewState: { viewMode: MetricViewMode.LIST },
         notebookViewState: { cells: [] },
       } as unknown as Parameters<typeof createBufferContentKey>[0]
-      expect(createBufferContentKey(buffer)).toBe("Hybrid|[]")
+      expect(createBufferContentKey(buffer)).toBe(
+        createBufferContentKey({
+          label: "Hybrid",
+          value: "",
+          notebookViewState: { cells: [] },
+        }),
+      )
     })
   })
 })

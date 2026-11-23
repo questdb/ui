@@ -334,7 +334,10 @@ export const thresholdBands = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const MAX_AFFIX = 16
+// Limits shared by the format editor, the agent tools and the importer, so
+// what one accepts the others keep.
+export const MAX_FORMAT_AFFIX = 16
+export const MAX_FORMAT_DECIMALS = 12
 
 /** A format read from untrusted input (imports), or undefined when unusable. */
 export const sanitizeColumnFormat = (
@@ -348,14 +351,14 @@ export const sanitizeColumnFormat = (
     typeof value.decimals === "number" &&
     Number.isInteger(value.decimals) &&
     value.decimals >= 0 &&
-    value.decimals <= 12
+    value.decimals <= MAX_FORMAT_DECIMALS
   )
     format.decimals = value.decimals
   if (value.compact === true) format.compact = true
   if (typeof value.prefix === "string")
-    format.prefix = value.prefix.slice(0, MAX_AFFIX)
+    format.prefix = value.prefix.slice(0, MAX_FORMAT_AFFIX)
   if (typeof value.suffix === "string")
-    format.suffix = value.suffix.slice(0, MAX_AFFIX)
+    format.suffix = value.suffix.slice(0, MAX_FORMAT_AFFIX)
   if (Array.isArray(value.thresholds)) {
     const thresholds = value.thresholds
       .filter(

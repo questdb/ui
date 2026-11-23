@@ -494,6 +494,82 @@ const canonicalSettings = (_key: string, value: unknown): unknown => {
   )
 }
 
+// What makes two notebooks the same for import's duplicate check: their
+// content, not where panes sit, which cell has focus or what last ran. Every
+// field is listed, so a field added to the notebook model has to be placed on
+// one side or the other before this compiles.
+const CELL_IDENTITY: Record<keyof NotebookCell, boolean> = {
+  id: false,
+  position: false,
+  value: true,
+  name: true,
+  type: true,
+  editorViewState: false,
+  result: false,
+  topHeight: false,
+  bottomHeight: false,
+  topResized: false,
+  bottomResized: false,
+  spotlightEditorRatio: false,
+  mode: true,
+  chartConfig: true,
+  highlightConfig: true,
+  autoRefresh: true,
+  formats: true,
+  interactions: true,
+  gridMode: true,
+  paneView: false,
+  lastRunStatus: false,
+  lastRunError: false,
+}
+
+const SETTINGS_IDENTITY: Record<keyof NotebookSettings, boolean> = {
+  layoutMode: false,
+  layout: false,
+  variables: true,
+  autoRefreshDefault: true,
+  chartSync: true,
+}
+
+const VIEW_IDENTITY: Record<keyof NotebookViewState, boolean> = {
+  formatVersion: false,
+  cells: true,
+  focusedCellId: false,
+  maximizedCellId: false,
+  settings: true,
+}
+
+const pick = <T extends object>(
+  value: T,
+  policy: Record<keyof T, boolean>,
+): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(value).filter(
+      ([key, field]) => policy[key as keyof T] === true && field !== undefined,
+    ),
+  )
+
+// Both sides of the comparison go through the import sanitizer: an imported
+// row is sanitized before keying, a stored one here.
+const notebookIdentity = (state: NotebookViewState): unknown => {
+  let sanitized = state
+  try {
+    sanitized = sanitizeNotebookViewState(
+      state as unknown as Record<string, unknown>,
+    )
+  } catch {
+    // A stored row the importer would reject keys as it is.
+  }
+  const settings = sanitized.settings
+    ? pick(sanitized.settings, SETTINGS_IDENTITY)
+    : {}
+  return {
+    ...pick(sanitized, VIEW_IDENTITY),
+    cells: (sanitized.cells ?? []).map((cell) => pick(cell, CELL_IDENTITY)),
+    settings: Object.keys(settings).length > 0 ? settings : undefined,
+  }
+}
+
 export const createBufferContentKey = (
   buffer: Pick<
     Buffer,
@@ -501,33 +577,10 @@ export const createBufferContentKey = (
   >,
 ): string => {
   if (buffer.notebookViewState) {
-    const { cells, settings } = buffer.notebookViewState
-    const cellValues =
-      cells?.map((cell) => {
-        if (cell.type === "markdown") return cell.value
-        const chartConfig = sanitizeChartConfig(cell.chartConfig)
-        // Both sides of the comparison go through the import sanitizers:
-        // imported rows are sanitized before keying, stored rows are not.
-        const formats = sanitizeColumnFormats(cell.formats)
-        const interactions = sanitizeInteractions(cell.interactions)
-        const gridMode = sanitizeGridMode(cell.gridMode)
-        if (!chartConfig && !formats && !interactions && !gridMode)
-          return cell.value
-        return {
-          value: cell.value,
-          chartConfig,
-          formats,
-          interactions,
-          gridMode,
-        }
-      }) ?? []
-    const chartSync = settings?.chartSync
-    const link =
-      chartSync && (chartSync.zoom || chartSync.crosshair !== "off")
-        ? chartSync
-        : undefined
-    const identity = link ? { cells: cellValues, chartSync: link } : cellValues
-    return `${buffer.label}|${JSON.stringify(identity, canonicalSettings)}`
+    return `${buffer.label}|${JSON.stringify(
+      notebookIdentity(buffer.notebookViewState),
+      canonicalSettings,
+    )}`
   }
   if (buffer.metricsViewState) {
     return `${buffer.label}|${JSON.stringify(buffer.metricsViewState)}`

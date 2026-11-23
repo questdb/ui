@@ -1,6 +1,8 @@
 import {
   CELL_VISUALS,
   FORMAT_KINDS,
+  MAX_FORMAT_AFFIX,
+  MAX_FORMAT_DECIMALS,
   TONES,
   isTone,
   type ColumnFormat,
@@ -174,13 +176,19 @@ export const parseFormats = (wire: FormatWire[], at: string): ColumnFormats => {
       format.kind = f.kind as ColumnFormat["kind"]
     }
     if (f.decimals != null) {
-      if (!Number.isInteger(f.decimals) || f.decimals < 0 || f.decimals > 12)
-        fail(`${here}.decimals must be an integer from 0 to 12.`)
+      if (
+        !Number.isInteger(f.decimals) ||
+        f.decimals < 0 ||
+        f.decimals > MAX_FORMAT_DECIMALS
+      )
+        fail(
+          `${here}.decimals must be an integer from 0 to ${MAX_FORMAT_DECIMALS}.`,
+        )
       format.decimals = f.decimals
     }
     if (f.compact) format.compact = true
-    if (f.prefix) format.prefix = f.prefix.slice(0, 16)
-    if (f.suffix) format.suffix = f.suffix.slice(0, 16)
+    if (f.prefix) format.prefix = f.prefix.slice(0, MAX_FORMAT_AFFIX)
+    if (f.suffix) format.suffix = f.suffix.slice(0, MAX_FORMAT_AFFIX)
     if (f.thresholds && f.thresholds.length > 0) {
       for (const t of f.thresholds) {
         if (typeof t.value !== "number" || !isTone(t.tone))
