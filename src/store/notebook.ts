@@ -178,18 +178,6 @@ export type CellInteractions = {
   brush?: { from: string; to: string }
 }
 
-// A chart type the notebook defines: an ECharts custom series `renderItem`,
-// written as JavaScript. Options reference it by name.
-export type NotebookChartType = {
-  name: string
-  renderItem: string
-  description?: string
-  // Whether its code may run. A chart type is JavaScript that runs in the
-  // console with the user's rights, so a chart type from an import or an
-  // agent waits for the user to allow it in the Chart types dialog.
-  allowed?: boolean
-}
-
 export type ChartSync = {
   // Moving over one time chart shows the same time on the others: as a line,
   // or as a line with each chart's tooltip.
@@ -208,7 +196,6 @@ export type NotebookSettings = {
   layout?: CellLayoutItem[]
   variables?: NotebookVariable[]
   autoRefreshDefault?: AutoRefresh
-  chartTypes?: NotebookChartType[]
   chartSync?: ChartSync
 }
 

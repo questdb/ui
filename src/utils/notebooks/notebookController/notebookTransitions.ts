@@ -5,7 +5,6 @@ import {
   type CellPaneView,
   type CellType,
   type NotebookCell,
-  type NotebookChartType,
   type NotebookSettings,
 } from "../../../store/notebook"
 import { NotebookToolError } from "../notebookToolError"
@@ -49,7 +48,6 @@ import {
   type CellResultStatusReader,
 } from "../../../scenes/Editor/Notebook/cellSizing"
 import { type RunCancelReason } from "../../../scenes/Editor/Notebook/runCancellation"
-import { renameChartTypesIn } from "../../../scenes/Editor/Notebook/customChart/chartTypeUsage"
 import { reconcileCellResultForValue } from "../../../scenes/Editor/Notebook/statementIdentity"
 
 // The single home for every notebook mutation's behavior. Each transition is a
@@ -647,36 +645,10 @@ export const setCellDashboardTransition = (
   }
 }
 
-/**
- * Replaces the notebook's chart types, renaming their uses in custom chart
- * options in the same step: `renames` maps an old name to its new one.
- */
-export const setChartTypesTransition = (
-  parts: ViewParts,
-  types: NotebookChartType[],
-  renames: Record<string, string>,
-): NotebookTransitionResult => {
-  const settings: NotebookSettings = { ...parts.settings }
-  if (types.length > 0) settings.chartTypes = types
-  else delete settings.chartTypes
-  const cells = parts.cells.map((cell) => {
-    const custom = cell.chartConfig?.custom
-    if (!custom) return cell
-    const option = renameChartTypesIn(custom.option, renames)
-    return option === custom.option
-      ? cell
-      : {
-          ...cell,
-          chartConfig: { ...cell.chartConfig!, custom: { option } },
-        }
-  })
-  return { parts: { ...parts, settings, cells }, result: undefined }
-}
-
-/** Replaces notebook settings: chart types or chart sync. */
+/** Replaces notebook settings: chart sync. */
 export const setNotebookSettingsTransition = (
   parts: ViewParts,
-  patch: Partial<Pick<NotebookSettings, "chartTypes" | "chartSync">>,
+  patch: Partial<Pick<NotebookSettings, "chartSync">>,
 ): NotebookTransitionResult => {
   const settings: NotebookSettings = { ...parts.settings }
   for (const key of Object.keys(patch) as (keyof typeof patch)[]) {

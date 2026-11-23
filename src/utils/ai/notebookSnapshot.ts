@@ -115,13 +115,6 @@ export type NotebookContextSnapshot =
       auto_refresh_default?: AutoRefresh
       maximized_cell_id: string | null
       variables?: Array<{ name: string; value: string }>
-      // Chart types the notebook defines (names and descriptions; read the
-      // source with get_chart_type).
-      chart_types?: Array<{
-        name: string
-        description?: string
-        allowed: boolean
-      }>
       chart_sync?: { crosshair: "off" | "line" | "tooltip"; zoom: boolean }
       cells: NotebookContextCell[]
     }
@@ -330,14 +323,6 @@ export const buildSnapshot = async (
   if (variables.length > 0) {
     out.variables = variables
   }
-  if (settings.chartTypes && settings.chartTypes.length > 0) {
-    out.chart_types = settings.chartTypes.map((t) => ({
-      name: t.name,
-      ...(t.description ? { description: t.description } : {}),
-      // False: its code does not run until the user allows it.
-      allowed: t.allowed === true,
-    }))
-  }
   if (settings.chartSync) out.chart_sync = settings.chartSync
   return out
 }
@@ -386,8 +371,6 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
     }`,
   )
-  if (snap.chart_types && snap.chart_types.length > 0)
-    lines.push(`  chart_types: ${stringifyForPromptContext(snap.chart_types)}`)
   if (snap.chart_sync)
     lines.push(`  chart_sync: ${stringifyForPromptContext(snap.chart_sync)}`)
   if (snap.variables && snap.variables.length > 0) {

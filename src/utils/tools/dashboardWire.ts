@@ -19,13 +19,8 @@ import type {
   ChartSync,
   GridMode,
   NotebookCell,
-  NotebookChartType,
 } from "../../store/notebook"
-import {
-  copyPlainOption,
-  isChartTypeName,
-  isVariableName,
-} from "../../store/notebookFormat"
+import { copyPlainOption, isVariableName } from "../../store/notebookFormat"
 
 // Snake-case shapes of the dashboard features on the agent tools, and their
 // mapping to and from the notebook's camelCase model. Shared by the per-cell
@@ -296,34 +291,7 @@ export const parseEvents = (wire: EventsWire): EventColumns => {
   return out
 }
 
-// ── Notebook chart types and chart sync ───────────────────────────────────
-
-export type ChartTypeWire = {
-  name: string
-  render_item: string
-  description?: string | null
-}
-
-export const parseChartType = (
-  wire: ChartTypeWire,
-  at: string,
-): NotebookChartType => {
-  if (!isChartTypeName(wire.name))
-    fail(
-      `${at}.name must start with a letter and use letters, digits or _ (at most 64).`,
-    )
-  if (typeof wire.render_item !== "string" || wire.render_item.trim() === "")
-    fail(`${at}.render_item is required.`)
-  if (wire.render_item.length > 20_000)
-    fail(`${at}.render_item is over 20,000 characters.`)
-  const type: NotebookChartType = {
-    name: wire.name,
-    renderItem: wire.render_item,
-  }
-  const description = wire.description?.trim()
-  if (description) type.description = description.slice(0, 500)
-  return type
-}
+// ── Chart sync ─────────────────────────────────────────────────────────────
 
 export const parseChartSync = (wire: {
   crosshair?: string | null

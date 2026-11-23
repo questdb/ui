@@ -1,11 +1,9 @@
 import { NOTEBOOK_FORMAT_VERSION } from "../../../store/notebookFormat"
-import { keepAllowed } from "./customChart/chartTypeUsage"
 import type { ColumnFormats } from "../../../utils/formats/columnFormat"
 import type {
   CellInteractions,
   ChartSync,
   GridMode,
-  NotebookChartType,
 } from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
@@ -739,7 +737,6 @@ type ApplyRequest = {
   autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
-  chartTypes?: NotebookChartType[] | null
   chartSync?: ChartSync | null
   cells: ApplyCellRequest[]
 }
@@ -1328,12 +1325,6 @@ export const buildAppliedNotebookState = (
   }
   if (request.variables !== undefined) {
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }
-  }
-  if (request.chartTypes !== undefined && request.chartTypes !== null) {
-    nextSettings = {
-      ...nextSettings,
-      chartTypes: keepAllowed(request.chartTypes, current.settings.chartTypes),
-    }
   }
   if (request.chartSync !== undefined && request.chartSync !== null) {
     nextSettings = { ...nextSettings, chartSync: request.chartSync }

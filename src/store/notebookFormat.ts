@@ -3,7 +3,6 @@ import type {
   ChartSync,
   CellInteractions,
   GridMode,
-  NotebookChartType,
   NotebookViewState,
 } from "./notebook"
 import {
@@ -23,7 +22,7 @@ import {
 // Version history:
 //   1  (no `formatVersion`) everything before dashboards.
 //   2  cell formats, interactions and grid modes; chart visuals, custom
-//      ECharts options and event queries; notebook chart types and chart sync.
+//      ECharts options and event queries; chart sync.
 
 export const NOTEBOOK_FORMAT_VERSION = 2
 
@@ -35,6 +34,16 @@ type Migration = {
 // Each step takes a state at `to - 1` to `to`. Version 2 only adds optional
 // fields, so a version 1 state is already valid.
 const MIGRATIONS: Migration[] = [{ to: 2, migrate: (state) => state }]
+
+// Development builds of version 2 stored notebook chart types (JavaScript
+// renderItems) in the settings. The feature was removed before release: a
+// state that still carries them loses them on load and on import.
+const dropChartTypes = (state: NotebookViewState): NotebookViewState => {
+  if (!state.settings || !("chartTypes" in state.settings)) return state
+  const settings: Record<string, unknown> = { ...state.settings }
+  delete settings.chartTypes
+  return { ...state, settings: settings as NotebookViewState["settings"] }
+}
 
 export type FormatMigration = {
   state: NotebookViewState
@@ -50,7 +59,7 @@ export const migrateNotebookFormat = (
       ? Math.floor(state.formatVersion)
       : 1
   if (from > NOTEBOOK_FORMAT_VERSION) return { state, newer: true }
-  let next = state
+  let next = dropChartTypes(state)
   for (const step of MIGRATIONS) {
     if (step.to > from) next = step.migrate(next)
   }
@@ -232,37 +241,6 @@ export const sanitizeInteractions = (
 
 export const sanitizeGridMode = (value: unknown): GridMode | undefined =>
   value === "stable" || value === "stream" ? value : undefined
-
-const CHART_TYPE_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/
-const MAX_RENDER_ITEM = 20_000
-const MAX_CHART_TYPES = 32
-
-export const isChartTypeName = (value: unknown): value is string =>
-  typeof value === "string" && CHART_TYPE_NAME.test(value)
-
-export const sanitizeChartTypes = (
-  value: unknown,
-): NotebookChartType[] | undefined => {
-  if (!Array.isArray(value)) return undefined
-  const seen = new Set<string>()
-  const out: NotebookChartType[] = []
-  for (const item of value) {
-    if (!isRecord(item) || !isChartTypeName(item.name)) continue
-    if (typeof item.renderItem !== "string") continue
-    if (item.renderItem.length > MAX_RENDER_ITEM) continue
-    if (seen.has(item.name)) continue
-    seen.add(item.name)
-    const type: NotebookChartType = {
-      name: item.name,
-      renderItem: item.renderItem,
-    }
-    if (typeof item.description === "string" && item.description.trim())
-      type.description = item.description.trim().slice(0, 500)
-    out.push(type)
-    if (out.length >= MAX_CHART_TYPES) break
-  }
-  return out.length > 0 ? out : undefined
-}
 
 export const sanitizeChartSync = (value: unknown): ChartSync | undefined => {
   if (!isRecord(value)) return undefined

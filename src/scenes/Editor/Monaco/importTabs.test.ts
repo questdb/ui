@@ -1617,26 +1617,6 @@ describe("deduplication", () => {
         key({ columns: { value: "total" }, type: "stat" }),
       )
     })
-    it("distinguishes saved renderItem source but not local approval", () => {
-      const key = (renderItem: string, allowed: boolean) =>
-        createBufferContentKey({
-          label: "Notebook",
-          value: "",
-          notebookViewState: {
-            cells: [],
-            settings: {
-              chartTypes: [{ name: "glyph", renderItem, allowed }],
-            },
-          },
-        })
-      expect(key("function draw() { return null }", true)).toEqual(
-        key("function draw() { return null }", false),
-      )
-      expect(key("function draw() { return null }", true)).not.toEqual(
-        key("function draw() { return undefined }", false),
-      )
-    })
-
     it("matches a stored notebook with its exported and re-imported copy", () => {
       // Given a stored cell whose format the editor saved in edit order, and
       // an empty interaction

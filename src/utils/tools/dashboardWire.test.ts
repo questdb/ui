@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
   WireError,
-  parseChartType,
   parseFormats,
   parseInteractions,
   parseVisual,
@@ -101,12 +100,5 @@ describe("dashboard wire", () => {
         "interactions",
       ),
     ).toEqual({ click: { variable: "sym" } })
-  })
-
-  it("requires chart type names that are identifiers", () => {
-    // Given / When / Then
-    expect(() =>
-      parseChartType({ name: "1 bad", render_item: "return null" }, "t"),
-    ).toThrow(WireError)
   })
 })

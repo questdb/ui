@@ -14,7 +14,6 @@ import type {
   CellPaneView,
   CellResult,
   NotebookCell,
-  NotebookChartType,
   NotebookVariable,
   NotebookViewState,
   NotebookSettings,
@@ -36,7 +35,6 @@ import {
   moveCellUpTransition,
   registerController,
   setCellMaximizedTransition,
-  setChartTypesTransition,
   setCellModeTransition,
   setCellPaneViewTransition,
   unregisterController,
@@ -155,12 +153,6 @@ export type NotebookActions = {
   // Sets the given fields and removes those passed as undefined, in one
   // update: a settings drawer's save.
   setCellSettings: (cellId: string, patch: CellSettingsPatch) => void
-  // Replaces the chart types, renaming their uses in custom options (old
-  // name → new) in the same update.
-  saveChartTypes: (
-    types: NotebookChartType[],
-    renames: Record<string, string>,
-  ) => void
   setCellHighlightConfig: (
     cellId: string,
     config: HighlightConfig | null,
@@ -199,7 +191,6 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellMode: () => undefined,
   clearCellResult: () => undefined,
   setCellSettings: () => undefined,
-  saveChartTypes: () => undefined,
   setCellHighlightConfig: () => undefined,
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
@@ -624,16 +615,6 @@ export const NotebookProvider: React.FC<{
     [commitTransition],
   )
 
-  const saveChartTypes = useCallback(
-    (types: NotebookChartType[], renames: Record<string, string>) =>
-      silently(() =>
-        applyTransition((parts) =>
-          setChartTypesTransition(parts, types, renames),
-        ),
-      ),
-    [applyTransition],
-  )
-
   const setMaximizedCellId = useCallback(
     (cellId: string | null) =>
       silently(() =>
@@ -1029,7 +1010,6 @@ export const NotebookProvider: React.FC<{
     setCellMode,
     clearCellResult,
     setCellSettings: store.setCellSettings,
-    saveChartTypes,
     setCellHighlightConfig: store.setCellHighlightConfig,
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,

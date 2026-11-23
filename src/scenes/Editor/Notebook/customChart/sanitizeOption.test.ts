@@ -4,10 +4,7 @@ import { resolveToken, sanitizeOption } from "./sanitizeOption"
 
 const context = {
   colors: lightColors,
-  renderItems: new Map([
-    ["barRange", "barRange"],
-    ["lanes", "nb1_lanes_x"],
-  ]),
+  renderItems: new Set(["barRange", "violin"]),
   maps: new Set(["world"]),
 }
 
@@ -240,11 +237,11 @@ describe("sanitizeOption", () => {
     expect(resolveToken("$nope", lightColors)).toBeNull()
   })
 
-  it("maps custom series to registered names and rejects unknown ones", () => {
+  it("keeps built-in custom series and rejects unknown ones", () => {
     // Given
     const raw = {
       series: [
-        { type: "custom", renderItem: "lanes" },
+        { type: "custom", renderItem: "violin" },
         { type: "custom", renderItem: "unknown" },
         { type: "sparkle" },
       ],
@@ -254,9 +251,7 @@ describe("sanitizeOption", () => {
     const { option, problems } = sanitizeOption(raw, context)
 
     // Then
-    expect(option.series).toEqual([
-      { type: "custom", renderItem: "nb1_lanes_x" },
-    ])
+    expect(option.series).toEqual([{ type: "custom", renderItem: "violin" }])
     expect(problems.filter((p) => p.severity === "error")).toHaveLength(2)
   })
 

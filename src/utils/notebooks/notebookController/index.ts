@@ -125,7 +125,6 @@ export {
   setCellDashboardTransition,
   setCellHighlightConfigTransition,
   setNotebookSettingsTransition,
-  setChartTypesTransition,
   setCellDimensionsTransition,
   setCellLayoutTransition,
   setCellMaximizedTransition,

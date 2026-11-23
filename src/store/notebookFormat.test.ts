@@ -4,7 +4,6 @@ import {
   copyPlainOption,
   migrateNotebookFormat,
   sanitizeChartSync,
-  sanitizeChartTypes,
   sanitizeInteractions,
   sanitizeVisualConfig,
 } from "./notebookFormat"
@@ -40,6 +39,26 @@ describe("migrateNotebookFormat", () => {
 
     // When / Then
     expect(migrateNotebookFormat(state).state).toBe(state)
+  })
+
+  it("drops the notebook chart types of a development build", () => {
+    // Given a stored state with the removed JavaScript chart types
+    const state = {
+      formatVersion: NOTEBOOK_FORMAT_VERSION,
+      cells: [],
+      settings: {
+        chartSync: { crosshair: "line" as const, zoom: true },
+        chartTypes: [{ name: "lanes", renderItem: "return null" }],
+      },
+    }
+
+    // When
+    const migrated = migrateNotebookFormat(state)
+
+    // Then the chart types are gone and the other settings stay
+    expect(migrated.state.settings).toEqual({
+      chartSync: { crosshair: "line", zoom: true },
+    })
   })
 })
 
@@ -115,18 +134,6 @@ describe("sanitizers", () => {
     expect(sanitizeInteractions({ click: { variable: "1; DROP" } })).toBe(
       undefined,
     )
-  })
-
-  it("dedupes chart types by name and drops invalid ones", () => {
-    // Given / When: an imported type that claims to be allowed
-    const types = sanitizeChartTypes([
-      { name: "lanes", renderItem: "return null", allowed: true },
-      { name: "lanes", renderItem: "return 1" },
-      { name: "bad name", renderItem: "" },
-    ])
-
-    // Then it arrives not allowed: imported code waits for the user
-    expect(types).toEqual([{ name: "lanes", renderItem: "return null" }])
   })
 
   it("drops a chart sync that does nothing", () => {

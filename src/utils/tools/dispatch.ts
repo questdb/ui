@@ -2,10 +2,6 @@ import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
 import { loadRe2 } from "../../components/ResultGrid/highlight"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import {
-  cellsUsingChartType,
-  keepAllowed,
-} from "../../scenes/Editor/Notebook/customChart/chartTypeUsage"
-import {
   backgroundOf,
   bringCellIntoView,
   cellChartInstance,
@@ -90,21 +86,18 @@ import { loadCellSnapshot } from "../../store/notebookResults"
 import {
   WireError,
   parseChartSync,
-  parseChartType,
   parseCustomOption,
   parseFormats,
   parseGridMode,
   parseInteractions,
   parseVisual,
-  type ChartTypeWire,
   type FormatWire,
   type InteractionsWire,
   type VisualWire,
 } from "./dashboardWire"
 import { lightColors } from "../../theme"
 import { sanitizeOption } from "../../scenes/Editor/Notebook/customChart/sanitizeOption"
-import { BUILTIN_CUSTOM_SERIES } from "../../scenes/Editor/Notebook/CellChart/customSeriesNames"
-import { compileError } from "../../scenes/Editor/Notebook/customChart/chartTypeCompile"
+import { BUILTIN_RENDER_ITEMS } from "../../scenes/Editor/Notebook/CellChart/customSeriesNames"
 import { MAP_NAMES } from "../../scenes/Editor/Notebook/customChart/mapNames"
 import {
   invalidBufferIdResult,
@@ -1210,18 +1203,10 @@ export const dispatchTool = async (
           throw e
         }
         return routeNotebookTool(async () => {
-          const settings = await readSettings(buffer_id, signal)
-          const renderItems = new Map<string, string>([
-            ...BUILTIN_CUSTOM_SERIES.map((n): [string, string] => [n, n]),
-            ...(settings.chartTypes ?? []).map((t): [string, string] => [
-              t.name,
-              t.name,
-            ]),
-          ])
           const problems = option
             ? sanitizeOption(option, {
                 colors: lightColors,
-                renderItems,
+                renderItems: BUILTIN_RENDER_ITEMS,
                 maps: new Set<string>(MAP_NAMES),
               }).problems
             : []
@@ -1327,120 +1312,6 @@ export const dispatchTool = async (
                   note: `Variables ${missing.map((m) => `@${m}`).join(", ")} do not exist yet; a click or drag creates them. Declare them with apply_notebook_state variables to give cells a starting value.`,
                 }
               : {}),
-          }
-        }, toolContext)
-      }
-      case "define_chart_type": {
-        const { buffer_id, name, render_item, description } =
-          (input as { buffer_id: number } & ChartTypeWire) || {}
-        setStatus(AIOperationStatus.ConfiguringChart)
-        const baseline = getBufferActionSeq(buffer_id)
-        let type: ReturnType<typeof parseChartType>
-        try {
-          type = parseChartType(
-            { name, render_item, description },
-            "chart type",
-          )
-        } catch (e) {
-          if (e instanceof WireError) return validationResult(e.message)
-          throw e
-        }
-        const error = compileError(type.renderItem)
-        if (error)
-          return validationResult(
-            `render_item does not compile: ${error}. Send a function expression such as "function (params, api) { ... }" or a function body that uses params and api.`,
-          )
-        // SQL permissions do not grant browser-side code execution.
-        type.allowed = false
-
-        return routeNotebookTool(async () => {
-          let savedType = type
-          await runTransition(
-            buffer_id,
-            (parts) => {
-              const { chartTypes } = parts.settings
-              const others = (chartTypes ?? []).filter(
-                (t) => t.name !== type.name,
-              )
-              if (others.length >= 32)
-                throw new NotebookToolError(
-                  "validation",
-                  "A notebook holds at most 32 chart types; delete one first.",
-                )
-              savedType = keepAllowed([type], chartTypes)[0]
-              return setNotebookSettingsTransition(parts, {
-                chartTypes: [...others, savedType],
-              })
-            },
-            signal,
-            baseline,
-          )
-          return {
-            ok: true,
-            usage: `Use it in a custom chart option: {"series":[{"type":"custom","renderItem":"${type.name}","datasetId":"q0","encode":{...}}]}.`,
-            ...(savedType.allowed
-              ? {}
-              : {
-                  note: "The code does not run until the user allows it in the notebook's Chart types dialog; until then charts using it report that in render_report.",
-                }),
-          }
-        }, toolContext)
-      }
-      case "delete_chart_type": {
-        const { buffer_id, name } =
-          (input as { buffer_id: number; name: string }) || {}
-        setStatus(AIOperationStatus.ConfiguringChart)
-        const baseline = getBufferActionSeq(buffer_id)
-        return routeNotebookTool(async () => {
-          let users: string[] = []
-          await runTransition(
-            buffer_id,
-            (parts) => {
-              const types = parts.settings.chartTypes ?? []
-              const rest = types.filter((t) => t.name !== name)
-              if (rest.length === types.length)
-                throw new NotebookToolError(
-                  "validation",
-                  `No chart type "${name}". Defined: ${types.map((t) => t.name).join(", ") || "none"}.`,
-                )
-              users = cellsUsingChartType(parts.cells, name).map((c) => c.id)
-              return setNotebookSettingsTransition(parts, {
-                chartTypes: rest.length > 0 ? rest : undefined,
-              })
-            },
-            signal,
-            baseline,
-          )
-          return {
-            ok: true,
-            ...(users.length > 0
-              ? {
-                  note: `Cells ${users.join(", ")} still draw with "${name}" and now show an error: change their custom option.`,
-                }
-              : {}),
-          }
-        }, toolContext)
-      }
-      case "get_chart_type": {
-        const { buffer_id, name } =
-          (input as { buffer_id: number; name: string }) || {}
-        return routeNotebookTool(async () => {
-          const settings = await readSettings(buffer_id, signal)
-          const type = (settings.chartTypes ?? []).find((t) => t.name === name)
-          if (!type)
-            throw new NotebookToolError(
-              "validation",
-              `No chart type "${name}". Defined: ${(settings.chartTypes ?? []).map((t) => t.name).join(", ") || "none"}.`,
-            )
-          return {
-            name: type.name,
-            render_item: type.renderItem,
-            description: type.description ?? null,
-            allowed: type.allowed === true,
-            used_by: cellsUsingChartType(
-              await readCells(buffer_id, signal),
-              name,
-            ).map((c) => c.id),
           }
         }, toolContext)
       }

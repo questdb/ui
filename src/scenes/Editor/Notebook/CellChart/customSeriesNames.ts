@@ -11,3 +11,8 @@ export const BUILTIN_CUSTOM_SERIES = [
   "contour",
   "segmentedDoughnut",
 ] as const
+
+/** The names a custom series' `renderItem` may use. */
+export const BUILTIN_RENDER_ITEMS: ReadonlySet<string> = new Set(
+  BUILTIN_CUSTOM_SERIES,
+)

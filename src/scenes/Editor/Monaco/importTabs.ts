@@ -43,7 +43,6 @@ import {
 import {
   migrateNotebookFormat,
   sanitizeChartSync,
-  sanitizeChartTypes,
   sanitizeCustomChart,
   sanitizeEventColumns,
   sanitizeGridMode,
@@ -411,8 +410,6 @@ const sanitizeNotebookSettings = (
   }
   if (isAutoRefresh(item.autoRefreshDefault))
     settings.autoRefreshDefault = item.autoRefreshDefault
-  const chartTypes = sanitizeChartTypes(item.chartTypes)
-  if (chartTypes) settings.chartTypes = chartTypes
   const chartSync = sanitizeChartSync(item.chartSync)
   if (chartSync) settings.chartSync = chartSync
   return settings
@@ -524,28 +521,12 @@ export const createBufferContentKey = (
           gridMode,
         }
       }) ?? []
-    // Imports intentionally reset local permission to run renderItem code.
-    // That approval is not part of the saved notebook's content.
-    const chartTypes = settings?.chartTypes
-      ?.map(({ name, renderItem, description }) => ({
-        name,
-        renderItem,
-        description,
-      }))
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
     const chartSync = settings?.chartSync
     const link =
       chartSync && (chartSync.zoom || chartSync.crosshair !== "off")
         ? chartSync
         : undefined
-    const identity =
-      chartTypes?.length || link
-        ? {
-            cells: cellValues,
-            chartTypes: chartTypes?.length ? chartTypes : undefined,
-            chartSync: link,
-          }
-        : cellValues
+    const identity = link ? { cells: cellValues, chartSync: link } : cellValues
     return `${buffer.label}|${JSON.stringify(identity, canonicalSettings)}`
   }
   if (buffer.metricsViewState) {

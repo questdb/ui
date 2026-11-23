@@ -97,14 +97,13 @@ describe("formatSnapshot", () => {
 
   it("shows the dashboard fields apply_notebook_state would replace", () => {
     // Given a cell with formats, interactions, a live mode and a long custom
-    // option, in a notebook with a chart type and linked charts
+    // option, in a notebook with linked charts
     const snap: NotebookContextSnapshot = {
       status: "ok",
       buffer_id: 1,
       label: "x",
       layout_mode: "list",
       maximized_cell_id: null,
-      chart_types: [{ name: "glyph", allowed: false }],
       chart_sync: { crosshair: "line", zoom: true },
       cells: [
         {
@@ -130,7 +129,6 @@ describe("formatSnapshot", () => {
     const out = formatSnapshot(snap)
 
     // Then
-    expect(out).toContain('chart_types: [{"name":"glyph","allowed":false}]')
     expect(out).toContain("chart_sync:")
     expect(out).toContain('formats: {"price":{"decimals":2}}')
     expect(out).toContain('interactions: {"click":{"variable":"symbol"}}')

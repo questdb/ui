@@ -23,8 +23,8 @@ export type OptionProblem = {
 
 export type SanitizeContext = {
   colors: ColorShape
-  /** Names a `renderItem` string may use: built-in and notebook chart types. */
-  renderItems: ReadonlyMap<string, string>
+  /** Names a custom series' `renderItem` may use: the built-in ones. */
+  renderItems: ReadonlySet<string>
   /** Map names registered with ECharts. */
   maps: ReadonlySet<string>
 }
@@ -379,19 +379,18 @@ const validateSeries = (
     }
     if (type === "custom") {
       const renderItem = series.renderItem
-      const registered =
-        typeof renderItem === "string"
-          ? context.renderItems.get(renderItem)
-          : undefined
-      if (!registered) {
+      if (
+        typeof renderItem !== "string" ||
+        !context.renderItems.has(renderItem)
+      ) {
         report(
           `${at}.renderItem`,
-          `A custom series names a chart type: one of ${[...context.renderItems.keys()].join(", ") || "(none defined)"}. Define your own with define_chart_type.`,
+          `A custom series names a built-in renderItem: one of ${[...context.renderItems].join(", ")}.`,
           "error",
         )
         return
       }
-      kept.push({ ...series, renderItem: registered })
+      kept.push(series)
       return
     }
     kept.push(series)

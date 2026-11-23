@@ -2,7 +2,7 @@
 import React from "react"
 import { act, screen, waitFor } from "@testing-library/react"
 import type { EChartsType } from "echarts"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import { echarts } from "../CellChart/echartsSetup"
 import { primaryXControls } from "../CellChart/liveZoom"
@@ -91,7 +91,6 @@ const Charts = ({
   const statements = React.useMemo(() => minutes(rows), [rows])
   const props = {
     bufferId: BUFFER_ID,
-    chartTypes: undefined,
     live: false,
     isFocused: false,
     onInstance,
@@ -188,7 +187,6 @@ it("reports a world map that could not be loaded", async () => {
       cellId="a"
       rawOption={{ series: [{ type: "map", map: "world" }] }}
       statements={[]}
-      chartTypes={undefined}
       live={false}
       isFocused={false}
     />,
@@ -230,7 +228,6 @@ it("keeps a zoomed category chart's window across a remount and an unchanged sav
         cellId="a"
         rawOption={rawOption}
         statements={statements}
-        chartTypes={undefined}
         live={false}
         isFocused={false}
         interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
@@ -285,7 +282,6 @@ it("does not retry a failed world map on every data refresh", async () => {
       cellId="a"
       rawOption={{ series: [{ type: "map", map: "world" }] }}
       statements={minutes(rows)}
-      chartTypes={undefined}
       live={false}
       isFocused={false}
     />
@@ -317,7 +313,6 @@ it("keeps a time chart zoomed out to its full range across a remount", async () 
       cellId="a"
       rawOption={AUTHORED}
       statements={statements}
-      chartTypes={undefined}
       live={false}
       isFocused={false}
       interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
@@ -351,67 +346,6 @@ it("keeps a time chart zoomed out to its full range across a remount", async () 
   await waitFor(() => expect(percent(instance()!)).toEqual([0, 100]))
 })
 
-it("reports a chart type that throws on some rows of its draw", async () => {
-  // Given an allowed chart type that cannot draw a NULL value, over rows with
-  // one NULL among them
-  sizeCharts()
-  renderComponent(
-    <CustomChart
-      bufferId={BUFFER_ID}
-      cellId="a"
-      rawOption={{
-        xAxis: { type: "value" },
-        yAxis: { type: "value" },
-        series: [
-          {
-            type: "custom",
-            renderItem: "dots",
-            datasetId: "q0",
-            encode: { x: "x", y: "y" },
-          },
-        ],
-      }}
-      statements={[
-        {
-          columns: [
-            { name: "x", type: "DOUBLE" },
-            { name: "y", type: "DOUBLE" },
-          ],
-          rows: [
-            [1, 10],
-            [2, null],
-            [3, 30],
-          ],
-        },
-      ]}
-      chartTypes={[
-        {
-          name: "dots",
-          allowed: true,
-          renderItem: `
-            const y = api.value(1)
-            if (y == null || Number.isNaN(y)) throw new Error("y is missing")
-            const p = api.coord([api.value(0), y])
-            return { type: "circle", shape: { cx: p[0], cy: p[1], r: 4 } }
-          `,
-        },
-      ]}
-      live={false}
-      isFocused={false}
-    />,
-  )
-
-  // Then, once drawn, the agent's report names the error, although the rows
-  // after the failing one drew
-  await waitFor(() =>
-    expect(getRenderReport(BUFFER_ID, "a")?.problems).toContainEqual({
-      path: "chartTypes.dots",
-      message: 'Chart type "dots" threw while drawing: y is missing',
-      severity: "error",
-    }),
-  )
-})
-
 it("restores a time chart's share of its refreshed data after a remount", async () => {
   // Given an unlinked custom time chart zoomed to 10-30% of its data
   sizeCharts()
@@ -421,7 +355,6 @@ it("restores a time chart's share of its refreshed data after a remount", async 
       cellId="a"
       rawOption={PEER}
       statements={minutes(rows)}
-      chartTypes={undefined}
       live={false}
       isFocused={false}
       interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
@@ -480,7 +413,6 @@ it("records a zoom on a control that does not move the x axis", async () => {
           rows: Array.from({ length: 20 }, (_, i) => [`k${i}`, i]),
         },
       ]}
-      chartTypes={undefined}
       live={false}
       isFocused={false}
       interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
@@ -517,222 +449,4 @@ it("records a zoom on a control that does not move the x axis", async () => {
     expect(instance()).not.toBe(first)
   })
   await waitFor(() => expect(range()).toMatchObject({ start: 20, end: 60 }))
-})
-
-describe("chart type draw errors", () => {
-  const dots = {
-    name: "dots",
-    allowed: true,
-    renderItem: `
-      const y = api.value(1)
-      if (y == null || Number.isNaN(y)) throw new Error("y is missing")
-      const p = api.coord([api.value(0), y])
-      return { type: "circle", shape: { cx: p[0], cy: p[1], r: 4 } }
-    `,
-  }
-  const xy = (rows: (number | null)[][]): StatementRows => ({
-    columns: [
-      { name: "x", type: "DOUBLE" },
-      { name: "y", type: "DOUBLE" },
-    ],
-    rows,
-  })
-  const seriesOn = (datasetId: string) => ({
-    type: "custom",
-    renderItem: "dots",
-    datasetId,
-    encode: { x: "x", y: "y" },
-  })
-  const chartIn = (
-    cellId: string,
-    series: object[],
-    statements: (StatementRows | null)[],
-  ) => (
-    <CustomChart
-      bufferId={BUFFER_ID}
-      cellId={cellId}
-      rawOption={{
-        xAxis: { type: "value" },
-        yAxis: { type: "value" },
-        series,
-      }}
-      statements={statements}
-      chartTypes={[dots]}
-      live={false}
-      isFocused={false}
-    />
-  )
-  const threw = (cellId: string) =>
-    (getRenderReport(BUFFER_ID, cellId)?.problems ?? []).filter(
-      (problem) => problem.path === "chartTypes.dots",
-    )
-
-  it("keeps a failing series reported when a later series of the type draws", async () => {
-    // Given one chart whose first series of a type has a NULL and whose
-    // second series of the same type draws cleanly
-    sizeCharts()
-    renderComponent(
-      chartIn(
-        "a",
-        [seriesOn("q0"), seriesOn("q1")],
-        [
-          xy([
-            [1, 10],
-            [2, null],
-          ]),
-          xy([
-            [1, 20],
-            [2, 30],
-          ]),
-        ],
-      ),
-    )
-
-    // Then the report still names the first series' error
-    await waitFor(() => expect(threw("a")).toHaveLength(1))
-  })
-
-  it("keeps an error of an early chunk of a large series reported", async () => {
-    // Given a series of 3,500 rows, drawn in chunks, NULL in the first chunk
-    sizeCharts()
-    renderComponent(
-      chartIn(
-        "a",
-        [seriesOn("q0")],
-        [xy(Array.from({ length: 3500 }, (_, i) => [i, i === 1 ? null : i]))],
-      ),
-    )
-
-    // Then, after the later chunks draw, the report still names the error
-    await waitFor(() => expect(threw("a")).toHaveLength(1), { timeout: 3000 })
-    await act(() => new Promise((resolve) => setTimeout(resolve, 300)))
-    expect(threw("a")).toHaveLength(1)
-  })
-
-  it.each([
-    ["the failing series is removed", [seriesOn("q0")], null],
-    ["the failing series' statement returns no rows", undefined, []],
-  ] as const)(
-    "drops a draw error once %s",
-    async (_label, nextSeries, nextRows) => {
-      // Given a clean series and a failing series of the same chart type
-      sizeCharts()
-      const clean = xy([
-        [1, 10],
-        [2, 20],
-      ])
-      const failing = xy([
-        [1, 10],
-        [2, null],
-      ])
-      const both = [seriesOn("q0"), seriesOn("q1")]
-      const { rerender } = renderComponent(chartIn("a", both, [clean, failing]))
-      await waitFor(() => expect(threw("a")).toHaveLength(1))
-
-      // When the failing series stops drawing with the type
-      rerender(
-        chartIn("a", nextSeries ? [...nextSeries] : both, [
-          clean,
-          nextRows === null ? failing : xy([...nextRows]),
-        ]),
-      )
-      await act(() => new Promise((resolve) => setTimeout(resolve, 150)))
-
-      // Then the report no longer names its error
-      expect(threw("a")).toHaveLength(0)
-    },
-  )
-
-  it("drops a draw error once the default dataset's statement has no rows", async () => {
-    // Given a series reading the first statement without naming it
-    sizeCharts()
-    const series = [
-      { type: "custom", renderItem: "dots", encode: { x: "x", y: "y" } },
-    ]
-    const { rerender } = renderComponent(
-      chartIn("a", series, [
-        xy([
-          [1, 10],
-          [2, null],
-        ]),
-      ]),
-    )
-    await waitFor(() => expect(threw("a")).toHaveLength(1))
-
-    // When the statement returns no rows
-    rerender(chartIn("a", series, [xy([])]))
-    await act(() => new Promise((resolve) => setTimeout(resolve, 150)))
-
-    // Then the report no longer names the error
-    expect(threw("a")).toHaveLength(0)
-  })
-
-  it("reports a draw error of a series set only in a timeline option", async () => {
-    // Given a timeline whose option draws with the failing type
-    sizeCharts()
-    renderComponent(
-      <CustomChart
-        bufferId={BUFFER_ID}
-        cellId="a"
-        rawOption={{
-          baseOption: {
-            timeline: { data: ["a"] },
-            xAxis: { type: "value" },
-            yAxis: { type: "value" },
-          },
-          options: [{ series: [seriesOn("q0")] }],
-        }}
-        statements={[
-          xy([
-            [1, 10],
-            [2, null],
-          ]),
-        ]}
-        chartTypes={[dots]}
-        live={false}
-        isFocused={false}
-      />,
-    )
-
-    // Then the report names the error
-    await waitFor(() => expect(threw("a")).toHaveLength(1))
-  })
-
-  it("keeps each cell's draw errors its own", async () => {
-    // Given two cells drawing the same chart type, only the first failing
-    sizeCharts()
-    renderComponent(
-      <>
-        {chartIn(
-          "a",
-          [seriesOn("q0")],
-          [
-            xy([
-              [1, 10],
-              [2, null],
-            ]),
-          ],
-        )}
-        {chartIn(
-          "b",
-          [seriesOn("q0")],
-          [
-            xy([
-              [1, 10],
-              [2, 20],
-            ]),
-          ],
-        )}
-      </>,
-    )
-
-    // Then the failing cell reports its error and the other cell does not
-    await waitFor(() => {
-      expect(threw("a")).toHaveLength(1)
-      expect(getRenderReport(BUFFER_ID, "b")).toBeDefined()
-    })
-    await act(() => new Promise((resolve) => setTimeout(resolve, 150)))
-    expect(threw("a")).toHaveLength(1)
-    expect(threw("b")).toHaveLength(0)
-  })
 })

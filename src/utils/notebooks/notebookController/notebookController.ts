@@ -3,7 +3,6 @@ import type {
   CellInteractions,
   ChartSync,
   GridMode,
-  NotebookChartType,
 } from "../../../store/notebook"
 import type {
   AgentCellView,
@@ -183,7 +182,6 @@ export type ApplyNotebookStateRequest = {
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
   // Null or omitted keeps the notebook's current value.
-  chartTypes?: NotebookChartType[] | null
   chartSync?: ChartSync | null
   cells: ApplyNotebookStateCellRequest[]
 }

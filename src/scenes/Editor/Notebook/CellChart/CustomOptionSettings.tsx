@@ -11,7 +11,6 @@ import {
   prepareCustomOption,
   problemsOf,
 } from "../customChart/prepareCustomOption"
-import { useNotebookBufferId, useNotebookSettings } from "../NotebookProvider"
 import type { RenderProblem } from "../renderReports"
 
 const Help = styled.span`
@@ -131,23 +130,19 @@ export const CustomOptionSettings: React.FC<Props> = ({
   onStartFromChart,
 }) => {
   const theme = useTheme()
-  const bufferId = useNotebookBufferId()
-  const settings = useNotebookSettings()
   const parsed = useMemo(() => parseCustomJson(json), [json])
   const problems: RenderProblem[] = useMemo(
     () =>
       parsed.ok
         ? problemsOf(
             prepareCustomOption(parsed.option, {
-              bufferId,
               colors: theme.color,
-              chartTypes: settings.chartTypes,
               statements,
               live: false,
             }),
           )
         : [],
-    [parsed, bufferId, theme.color, settings.chartTypes, statements],
+    [parsed, theme.color, statements],
   )
 
   return (

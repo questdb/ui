@@ -1,17 +1,7 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { EChartsOption, EChartsType } from "echarts"
 import styled, { useTheme } from "styled-components"
-import type {
-  CellInteractions,
-  NotebookChartType,
-} from "../../../../store/notebook"
+import type { CellInteractions } from "../../../../store/notebook"
 import { withBrush } from "../interactions/chartInteractions"
 import {
   ChartRenderer,
@@ -25,15 +15,10 @@ import {
   customSeriesCount,
   partialDatasetWarnings,
 } from "./buildCustomOption"
-import {
-  drawErrorsOf,
-  resolveChartTypes,
-  subscribeDrawErrors,
-} from "./chartTypeRegistry"
+import { BUILTIN_RENDER_ITEMS } from "../CellChart/customSeriesNames"
 import { MAP_NAMES, ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
 import { problemsOf } from "./prepareCustomOption"
 import { PaneEmptyState } from "../PaneEmptyState"
-import { chartTypesUsedBy } from "./chartTypeUsage"
 import {
   isTimeChart,
   primaryXControls,
@@ -45,54 +30,6 @@ import type { DataZoomEvent } from "../CellChart/zoomWindow"
 const MAPS = new Set<string>(MAP_NAMES)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
-
-// Whether series `index` of a drawn option draws items with the registered
-// chart type: a custom series of that type (in the base option, or in a
-// timeline option merged over it) with data, or reading a statement that
-// has rows. Datasets of the option's own count as drawing.
-const drawsWith = (
-  option: Record<string, unknown>,
-  statements: (StatementRows | null)[],
-  registered: string,
-  index: number,
-): boolean => {
-  const seriesAt = (scope: unknown): Record<string, unknown>[] => {
-    if (typeof scope !== "object" || scope === null) return []
-    const series = (scope as { series?: unknown }).series
-    const list = Array.isArray(series) ? series : [series]
-    const at: unknown = list[index]
-    return typeof at === "object" && at !== null
-      ? [at as Record<string, unknown>]
-      : []
-  }
-  const base =
-    typeof option.baseOption === "object" && option.baseOption !== null
-      ? option.baseOption
-      : option
-  const timeline: unknown[] = Array.isArray(option.options)
-    ? option.options
-    : []
-  const scopes = [base as unknown, ...timeline].flatMap(seriesAt)
-  return scopes.some((series) => {
-    // Timeline options are merged over the base series at the same index.
-    const merged = { ...scopes[0], ...series }
-    if (merged.type !== "custom" || merged.renderItem !== registered)
-      return false
-    if (Array.isArray(merged.data)) return merged.data.length > 0
-    const statement =
-      typeof merged.datasetId === "string"
-        ? /^q(\d+)$/.exec(merged.datasetId)?.[1]
-        : merged.datasetId === undefined
-          ? String(
-              typeof merged.datasetIndex === "number" ? merged.datasetIndex : 0,
-            )
-          : undefined
-    // Our datasets come first: q<n> is dataset n.
-    if (statement === undefined || Number(statement) >= statements.length)
-      return true
-    return (statements[Number(statement)]?.rows.length ?? 0) > 0
-  })
-}
 
 const MAP_LOAD_FAILED =
   "Could not load the world map. Reload the console to try again."
@@ -135,18 +72,11 @@ const PartialNotice = styled.div`
   color: ${({ theme }) => theme.color.contentPrimary};
 `
 
-const Waiting = styled(PaneEmptyState)`
-  padding: 1.6rem;
-  text-align: center;
-  line-height: 1.5;
-`
-
 type Props = {
   bufferId: number
   cellId: string
   rawOption: Record<string, unknown>
   statements: (StatementRows | null)[]
-  chartTypes: NotebookChartType[] | undefined
   live: boolean
   isFocused: boolean
   interactions?: CellInteractions
@@ -160,7 +90,6 @@ export const CustomChart = ({
   cellId,
   rawOption,
   statements,
-  chartTypes,
   live,
   isFocused,
   interactions,
@@ -249,18 +178,14 @@ export const CustomChart = ({
     },
     [onInstance, optionKey],
   )
-  const resolution = useMemo(
-    () => resolveChartTypes(bufferId, chartTypes, cellId),
-    [bufferId, chartTypes, cellId],
-  )
   const sanitized = useMemo(
     () =>
       sanitizeOption(rawOption, {
         colors: theme.color,
-        renderItems: resolution.renderItems,
+        renderItems: BUILTIN_RENDER_ITEMS,
         maps: MAPS,
       }),
-    [rawOption, theme.color, resolution],
+    [rawOption, theme.color],
   )
   const built = useMemo(
     () => buildCustomOption(sanitized.option, statements, live),
@@ -313,53 +238,23 @@ export const CustomChart = ({
     }
   }, [neededMaps])
 
-  // A chart type throws while ECharts draws, which can be after the report
-  // below was written: write it again when draw errors change.
-  const [drawErrorsSeen, noteDrawErrors] = useReducer((n: number) => n + 1, 0)
-  useEffect(() => subscribeDrawErrors(noteDrawErrors), [])
-
   useEffect(() => {
-    const used = chartTypesUsedBy(rawOption)
-    // Chart types throw while drawing, after this render; read them once the
-    // frame is out.
-    const timer = window.setTimeout(() => {
-      const problems: RenderProblem[] = [
-        ...problemsOf({ resolution, sanitized, built }),
-        ...[
-          ...drawErrorsOf(resolution, used, (registered, index) =>
-            drawsWith(built.option, statements, registered, index),
-          ),
-        ].map(([name, message]) => ({
-          path: `chartTypes.${name}`,
-          message: `Chart type "${name}" threw while drawing: ${message}`,
-          severity: "error" as const,
-        })),
-        ...(mapStatus === "error"
-          ? [{ path: "", message: MAP_LOAD_FAILED, severity: "error" as const }]
-          : []),
-      ]
-      setRenderReport(bufferId, cellId, {
-        kind: "custom",
-        drawn: {
-          series: customSeriesCount(built.option),
-          datasets: statements.length,
-          rows: statements.reduce((n, s) => n + (s?.rows.length ?? 0), 0),
-        },
-        problems,
-      })
-    }, 50)
-    return () => window.clearTimeout(timer)
-  }, [
-    bufferId,
-    cellId,
-    rawOption,
-    sanitized,
-    built,
-    resolution,
-    statements,
-    mapStatus,
-    drawErrorsSeen,
-  ])
+    const problems: RenderProblem[] = [
+      ...problemsOf({ sanitized, built }),
+      ...(mapStatus === "error"
+        ? [{ path: "", message: MAP_LOAD_FAILED, severity: "error" as const }]
+        : []),
+    ]
+    setRenderReport(bufferId, cellId, {
+      kind: "custom",
+      drawn: {
+        series: customSeriesCount(built.option),
+        datasets: statements.length,
+        rows: statements.reduce((n, s) => n + (s?.rows.length ?? 0), 0),
+      },
+      problems,
+    })
+  }, [bufferId, cellId, sanitized, built, statements, mapStatus])
 
   const fatal = [...sanitized.problems, ...built.problems].find(
     (problem) => problem.severity === "error" && problem.path === "",
@@ -370,19 +265,6 @@ export const CustomChart = ({
     return <PaneEmptyState role="alert">{MAP_LOAD_FAILED}</PaneEmptyState>
   if (mapStatus === "loading")
     return <PaneEmptyState>Loading map…</PaneEmptyState>
-  // A chart type whose code is not allowed draws nothing: say why.
-  const waiting = chartTypesUsedBy(rawOption).filter(
-    (name) =>
-      !resolution.renderItems.has(name) &&
-      (chartTypes?.some((t) => t.name === name && t.allowed !== true) ?? false),
-  )
-  if (waiting.length > 0)
-    return (
-      <Waiting role="status">
-        {`This chart uses ${waiting.map((n) => `"${n}"`).join(", ")}, JavaScript that does not run until you allow it: notebook toolbar → Chart types.`}
-      </Waiting>
-    )
-
   const partial = partialDatasetWarnings(statements)
   return (
     <>
