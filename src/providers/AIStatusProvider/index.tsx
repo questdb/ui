@@ -244,19 +244,20 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     aiAssistantSettings.selectedModel === LOCAL_AGENT_MODEL
   const hasSelectedLocalAgent = isLocalAgentSelected && localAgent !== null
 
+  // While the selected local agent is offline, the configured API model
+  // answers instead; the agent takes over again once it reconnects. The
+  // bottom bar shows whether it is connected.
   const currentModel = useMemo(
     () =>
-      isLocalAgentSelected
-        ? hasSelectedLocalAgent
-          ? LOCAL_AGENT_MODEL
-          : null
+      hasSelectedLocalAgent
+        ? LOCAL_AGENT_MODEL
         : getSelectedModel(aiAssistantSettings),
-    [isLocalAgentSelected, hasSelectedLocalAgent, aiAssistantSettings],
+    [hasSelectedLocalAgent, aiAssistantSettings],
   )
 
   // A local agent reaches the schema through the bridge, so the bridge's
   // permission decides, not the API provider's.
-  const hasSchemaAccessValue = isLocalAgentSelected
+  const hasSchemaAccessValue = hasSelectedLocalAgent
     ? localAgentSchemaAccess
     : hasSchemaAccess(aiAssistantSettings)
 

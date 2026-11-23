@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
-import React from "react"
+import React, { useState } from "react"
 import { act } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { LocalAgentChannel } from "../../utils/localAgent/localAgentChannel"
+import { LocalAgentContext } from "../../utils/localAgent/LocalAgentContext"
 import type { MCPBridgeClient } from "../../utils/mcp/MCPBridgeClient"
 import {
   configuredOpenAI,
   renderAISettings,
 } from "../../components/SetupAIAssistant/test/setupHarness"
 import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
-import { AIOperationStatus, useAIStatus } from "."
+import { AIOperationStatus, AIStatusProvider, useAIStatus } from "."
 
 type Status = ReturnType<typeof useAIStatus>
 
@@ -36,19 +37,59 @@ describe("AIStatusProvider", () => {
     expect(status().canUse).toBe(false)
   })
 
-  it("does not fall back to a cloud model while a disconnected local agent is selected", () => {
-    const status = renderStatus({
+  it("answers on the API model while the selected local agent is offline, and on the agent once it is back", () => {
+    // Given the local agent is selected but not connected
+    let connect: (channel: LocalAgentChannel) => void = () => undefined
+    const probe: { current: Status | null } = { current: null }
+    const Probe = () => {
+      probe.current = useAIStatus()
+      return null
+    }
+    const Bridge = () => {
+      const [channel, setChannel] = useState<LocalAgentChannel | null>(null)
+      connect = setChannel
+      return (
+        <LocalAgentContext.Provider value={channel}>
+          <AIStatusProvider>
+            <Probe />
+          </AIStatusProvider>
+        </LocalAgentContext.Provider>
+      )
+    }
+    renderAISettings(<Bridge />, {
       ...configuredOpenAI,
       selectedModel: LOCAL_AGENT_MODEL,
     })
-    expect(status()).toMatchObject({
-      isConfigured: true,
-      canUse: false,
-      unavailableReason: "The local agent is not connected",
-      currentModel: null,
-      apiKey: null,
+
+    // Then the configured API model answers, with its own schema access
+    expect(probe.current).toMatchObject({
+      canUse: true,
+      currentModel: "openai:gpt-5.4",
+      apiKey: "test-openai-key",
+      hasSchemaAccess: false,
     })
-    expect(status().models.length).toBeGreaterThan(0)
+
+    // When the agent connects
+    act(() =>
+      connect(
+        new LocalAgentChannel(
+          {
+            on: () => () => undefined,
+            sendAgentMessage: () => true,
+          } as unknown as MCPBridgeClient,
+          {
+            info: { id: "claude", label: "Claude Code", cwd: "/tmp" },
+            onNotebookRead: () => undefined,
+          },
+        ),
+      ),
+    )
+
+    // Then the agent answers again, without the user picking it
+    expect(probe.current).toMatchObject({
+      canUse: true,
+      currentModel: LOCAL_AGENT_MODEL,
+    })
   })
 
   it("exposes model and key as strings when the configured assistant is usable", () => {

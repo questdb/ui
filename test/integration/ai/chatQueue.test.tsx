@@ -22,6 +22,7 @@ import * as notebookSnapshot from "../../../src/utils/ai/notebookSnapshot"
 import { aiConversationStore } from "../../../src/store/aiConversations"
 import { useAIConversationActions } from "../../../src/providers/AIConversationProvider"
 import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
+import { getAllEnabledModels } from "../../../src/utils/ai/settings"
 
 // A chat whose first answer waits until the test releases it.
 const slowFirstAnswer = () => {
@@ -480,8 +481,11 @@ it("stops an answer while keeping an unsubmitted follow-up in the composer", asy
   expect(queryByHook("chat-queued-message")).not.toBeInTheDocument()
 })
 
-it("reopens with an unavailable local selection and requires an explicit API pick", async () => {
-  const server = chatServer("openai", [])
+it("answers on the API model while the selected local agent is unavailable", async () => {
+  // Given the local agent is selected but no bridge is connected
+  const server = chatServer("openai", [
+    fixtures.createFinalResponse("openai", "The API model answered."),
+  ])
   const settings = JSON.parse(
     fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
   ) as import("../../../src/providers/LocalStorageProvider/types").AiAssistantSettings
@@ -496,15 +500,18 @@ it("reopens with an unavailable local selection and requires an explicit API pic
     selectedModel: LOCAL_AGENT_MODEL,
   })
   await openChat()
-  expect(getByHook("chat-input-textarea")).toBeDisabled()
-  expect(selectedModel()).toBe(LOCAL_AGENT_MODEL)
-  await userEvent.click(getByHook("chat-model-picker"))
-  await userEvent.click(
-    await screen.findByRole("option", { name: "GPT 5 Mini" }),
+
+  // When
+  await sendMessage("Show the latest trades.")
+
+  // Then the configured API model answers, and the agent stays selected for
+  // when it is back
+  await waitFor(() => expect(server.requests).toHaveLength(1))
+  expect(server.requests[0].body.model).toBe(
+    getAllEnabledModels(settings)[0].replace(/^openai:/, ""),
   )
-  expect(getByHook("chat-input-textarea")).toBeEnabled()
-  expect(selectedModel()).toBe("openai:gpt-5-mini")
-  expect(server.requests).toHaveLength(0)
+  expect(await screen.findByText("The API model answered.")).toBeVisible()
+  expect(selectedModel()).toBe(LOCAL_AGENT_MODEL)
 })
 
 it("does not interrupt an answer when the queued destination changes in Settings", async () => {
