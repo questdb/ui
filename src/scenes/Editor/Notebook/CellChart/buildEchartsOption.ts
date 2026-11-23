@@ -748,6 +748,16 @@ const referenceLineSeries = (
   return [...markers.values()]
 }
 
+// The values of the reference lines drawn on the axis.
+const referenceValuesOn = (markers: Series[], axisIndex: number) =>
+  markers
+    .filter((s) => (s.yAxisIndex ?? 0) === axisIndex)
+    .flatMap(
+      (s) =>
+        (s.markLine as { data: { yAxis: number }[] } | undefined)?.data ?? [],
+    )
+    .map((d) => d.yAxis)
+
 // An axis that scales to its data keeps its reference lines in view. A bound
 // of null leaves the axis to scale itself; ECharts' types do not admit it.
 type AxisBound = (extent: { min: number; max: number }) => number
@@ -814,9 +824,7 @@ const buildScatterChartOption = (
       scale: true,
       axisLabel,
       nameTextStyle: axisName,
-      ...axisBoundsWith(
-        series.length ? referenceLines.map((line) => line.value) : [],
-      ),
+      ...axisBoundsWith(referenceValuesOn(markers, 0)),
     },
     series: [...series, ...markers] as EChartsOption["series"],
   }
@@ -937,15 +945,6 @@ export const buildEchartsOption = (
     referenceLines,
     chart.leftAxisConfigured,
   )
-  // Where each line landed: on the right axis only when a right series took it.
-  const linesOn = (axisIndex: number) =>
-    markers
-      .filter((s) => (s.yAxisIndex ?? 0) === axisIndex)
-      .flatMap(
-        (s) =>
-          (s.markLine as { data: { yAxis: number }[] } | undefined)?.data ?? [],
-      )
-      .map((d) => d.yAxis)
   const rightQueries = queries.filter((q) => q.axis === "right")
   const rightTitle =
     chart.rightAxis?.name ??
@@ -968,9 +967,9 @@ export const buildEchartsOption = (
     scale: true,
     axisLabel,
     nameTextStyle: axisName,
-    ...axisBoundsWith(linesOn(0)),
+    ...axisBoundsWith(referenceValuesOn(markers, 0)),
   }
-  const rightBounds = axisBoundsWith(linesOn(1))
+  const rightBounds = axisBoundsWith(referenceValuesOn(markers, 1))
   // Grid lines follow the left axis, so the two axes' lines do not clash.
   // With every series on the right, the left axis is empty and the right one
   // draws them; otherwise the chart would have none.

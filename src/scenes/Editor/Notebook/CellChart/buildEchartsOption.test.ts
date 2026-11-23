@@ -596,6 +596,33 @@ describe("buildEchartsOption — reference lines", () => {
     expect(axis.min({ min: 100, max: 104 })).toBe(90)
     expect(axis.max({ min: 100, max: 130 })).toBeNull()
   })
+
+  it("keeps a numeric scatter's scale free of a right line it cannot draw", () => {
+    // Given a scatter, which has no right axis
+    const scatter = resolved({
+      columns: [col("size", "DOUBLE"), col("price", "DOUBLE")],
+      dataset: [
+        [1, 101],
+        [2, 102],
+      ],
+      xColumn: "size",
+      type: "scatter",
+      yColumns: ["price"],
+    })
+
+    // When
+    const opt = buildEchartsOption(
+      { xColumn: "size", referenceLines: [{ value: 1000, axis: "right" }] },
+      [scatter],
+    )
+
+    // Then
+    expect(seriesList(opt.series)).toHaveLength(1)
+    expect(firstAxis(opt.yAxis)).toMatchObject({
+      min: undefined,
+      max: undefined,
+    })
+  })
 })
 
 describe("buildEchartsOption — heatmap", () => {
