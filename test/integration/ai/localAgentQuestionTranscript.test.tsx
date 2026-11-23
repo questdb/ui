@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import React from "react"
 import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, it, vi } from "vitest"
@@ -12,6 +13,7 @@ import {
 } from "./support/chatHarness"
 import type { AiAssistantSettings } from "../../../src/providers/LocalStorageProvider/types"
 import { aiConversationStore } from "../../../src/store/aiConversations"
+import { AIStatusIndicator } from "../../../src/components/AIStatusIndicator"
 import {
   LocalAgentChannel,
   registerLocalAgentChannel,
@@ -296,3 +298,47 @@ it("restores only the active question draft after the drawer temporarily closes"
     dispose()
   }
 })
+
+it.each(["question", "link"])(
+  "tells the user a pending %s waits for them while the chat is closed",
+  async (kind) => {
+    const { sent, deliver, dispose } = mockAgent()
+    try {
+      renderChat("openai", <AIStatusIndicator />, localAgentSettings)
+      await openChat()
+      await sendMessage("Show a sample query")
+      const prompt = sent.find((m) => m.type === "agent_prompt")
+      if (!prompt) throw new Error("Expected a local agent prompt")
+      const { v, conversationId } = prompt
+
+      // The user closes the drawer while the turn runs.
+      await userEvent.click(getByHook("chat-window-close"))
+      await waitFor(() =>
+        expect(getByHook("ai-status-text")).toHaveTextContent("Working..."),
+      )
+
+      const link = kind === "link"
+      const url = "https://example.invalid/setup"
+      act(() => {
+        deliver({
+          v,
+          conversationId,
+          type: "agent_question",
+          requestId: "req-1",
+          message: link ? `Open the setup page at ${url}` : "Please answer.",
+          ...(link && { url }),
+          fields: link ? [] : [choice],
+        } as AgentOutboundMessage)
+      })
+      expect(getByHook("ai-status-text")).toHaveTextContent(
+        "Waiting for your answer",
+      )
+
+      await userEvent.click(getByHook("ai-status-view-chat"))
+      const cardHook = link ? "chat-link-request" : "chat-question-card"
+      await waitFor(() => expect(queryByHook(cardHook)).toBeVisible())
+    } finally {
+      dispose()
+    }
+  },
+)

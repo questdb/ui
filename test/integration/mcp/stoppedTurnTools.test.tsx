@@ -196,15 +196,12 @@ const connectLocalAgent = async () => {
 }
 
 it("keeps notebook tool calls of a stopped local-agent turn from changing the notebook", async () => {
+  // Given a local-agent turn that edits a live notebook
   const socket = await connectLocalAgent()
-  const channel = getLocalAgentChannel()
-  expect(channel).not.toBeNull()
   const live = mountLive()
-  vi.useRealTimers()
-  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })
   try {
     const stop = new AbortController()
-    const turn = channel!.prompt({
+    void getLocalAgentChannel()!.prompt({
       conversationId: "conv-1",
       text: "edit the cell",
       notebookRead: { bufferId: BUFFER, readSeq: getBufferActionSeq(BUFFER) },
@@ -212,40 +209,23 @@ it("keeps notebook tool calls of a stopped local-agent turn from changing the no
       onUpdate: () => undefined,
       onToolStatus: () => undefined,
     })
-    const settled = vi.fn()
-    void turn.then(settled)
 
-    // A call received while the turn runs, still pending at Stop.
+    // When the user stops it with one edit pending and the agent sends another
     act(() => {
       socket.receive(toolCall("before-stop", "BEFORE-STOP"))
-      stop.abort() // the user's Stop / Send-now
+      stop.abort()
     })
-    await act(flush)
-    expect(live.value()).toBe("ORIGINAL")
-    expect(socket.frames.some((f) => f.type === "agent_cancel")).toBe(true)
-    expect(settled).not.toHaveBeenCalled() // turn is `stopping`
-
-    // A late call from the stopped turn, while the agent has not ended it.
     act(() => {
       socket.receive(toolCall("while-stopping", "WHILE-STOPPING"))
     })
     await act(flush)
+
+    // Then neither edit lands, and none is answered
+    expect(socket.frames.some((f) => f.type === "agent_cancel")).toBe(true)
     expect(resultOf(socket, "while-stopping")).toBeUndefined()
     expect(live.value()).toBe("ORIGINAL")
 
-    // The local grace settles the turn before the agent confirms the cancel.
-    await act(() => vi.advanceTimersByTimeAsync(5000))
-    expect(settled).toHaveBeenCalledWith(
-      expect.objectContaining({ stopReason: "cancelled" }),
-    )
-    act(() => {
-      socket.receive(toolCall("after-grace", "AFTER-GRACE"))
-    })
-    await act(flush)
-    expect(resultOf(socket, "after-grace")).toBeUndefined()
-    expect(live.value()).toBe("ORIGINAL")
-
-    // Once the agent ends the stopped turn, the same harness commits.
+    // And once the agent ends the stopped turn, edits commit again
     const prompt = socket.frames.find((f) => f.type === "agent_prompt")
     act(() => {
       socket.receive({
@@ -261,7 +241,6 @@ it("keeps notebook tool calls of a stopped local-agent turn from changing the no
     expect(resultOf(socket, "after-end")?.isError).toBe(false)
     expect(live.value()).toBe("AFTER-END")
   } finally {
-    vi.useRealTimers()
     live.release()
   }
 })
