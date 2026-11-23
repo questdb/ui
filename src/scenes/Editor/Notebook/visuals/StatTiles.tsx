@@ -47,6 +47,15 @@ const Grid = styled.div<{ $count: number; $compact: boolean }>`
   grid-auto-rows: ${({ $compact }) =>
     $compact ? "minmax(9rem, auto)" : "minmax(9rem, 1fr)"};
   align-content: ${({ $compact }) => ($compact ? "center" : "stretch")};
+  flex: 1 0 auto;
+`
+
+// Tiles centre in the pane while they fit; once they overflow, the grid
+// grows past the pane and scrolls from its first row instead of losing it
+// above the top edge.
+const Scroller = styled.div`
+  display: flex;
+  flex-direction: column;
   height: 100%;
   overflow: auto;
 `
@@ -190,12 +199,12 @@ export const statTileLimitNotice = (
 ): string | undefined => {
   const count = statements[0]?.rows.length ?? 0
   return count > MAX_STAT_TILES
-    ? `Showing ${MAX_STAT_TILES} of ${count} tiles.`
+    ? `Showing ${MAX_STAT_TILES} of ${count.toLocaleString("en-US")} tiles.`
     : undefined
 }
 
 const LimitNotice = styled.span`
-  grid-column: 1 / -1;
+  padding: 0.4rem 1.6rem;
   color: ${({ theme }) => theme.color.contentSecondary};
 `
 
@@ -338,80 +347,82 @@ export const StatTiles = ({
   const changeFormat = changeName ? formats[changeName] : undefined
   const labelOccurrences = new Map<string, number>()
   return (
-    <Grid
-      $count={tiles.length}
-      $compact={tiles.every((t) => t.spark.length < 2)}
-      data-hook="stat-tiles"
-    >
+    <Scroller>
       {limitNotice && <LimitNotice role="status">{limitNotice}</LimitNotice>}
-      {tiles.map((tile) => {
-        const occurrence = labelOccurrences.get(tile.label) ?? 0
-        labelOccurrences.set(tile.label, occurrence + 1)
-        const tone = toneOf(tile.value, format)
-        const changeTone =
-          tile.change === null
-            ? undefined
-            : tile.change > 0
-              ? "positive"
-              : tile.change < 0
-                ? "negative"
-                : "muted"
-        const sparkColor =
-          changeTone && changeTone !== "muted"
-            ? toneColor(changeTone, theme.color)
-            : theme.color.chartSeries1
-        const text = formatValue(tile.value, format ?? { kind: "number" })
-        const activate =
-          onSelect && tile.selection !== undefined
-            ? () => onSelect(tile.selection)
-            : undefined
-        const selected =
-          activate && sqlLiteral(tile.selection, clickType) === selectedValue
-        return (
-          <TileRoot
-            as={activate ? "button" : "div"}
-            key={JSON.stringify([tile.label, occurrence])}
-            $centred={tile.spark.length < 2}
-            $interactive={Boolean(activate)}
-            aria-pressed={selected}
-            onClick={activate}
-            data-hook="stat-tile"
-          >
-            <Sparkline values={tile.spark} color={sparkColor} />
-            <Label title={tile.label}>
-              <span>{tile.label}</span>
-              {selected && <Check size={12} weight="bold" aria-hidden />}
-            </Label>
-            <Value $color={tone ? toneColor(tone, theme.color) : undefined}>
-              {visual.animateDigits ? (
-                <RollingNumber
-                  key={queriesKey}
-                  enabled
-                  value={toNumber(tile.value)}
-                  text={text}
-                />
-              ) : (
-                text
-              )}
-            </Value>
-            {tile.caption && <Caption>{tile.caption}</Caption>}
-            {tile.change !== null && changeTone && (
-              <Change
-                $color={
-                  toneTextColor(changeTone, theme.color) ??
-                  theme.color.contentMuted
-                }
-              >
-                {tile.change > 0 ? "▲ " : tile.change < 0 ? "▼ " : ""}
-                {formatValue(
-                  Math.abs(tile.change),
-                  changeFormat ?? { kind: "percent" },
+      <Grid
+        $count={tiles.length}
+        $compact={tiles.every((t) => t.spark.length < 2)}
+        data-hook="stat-tiles"
+      >
+        {tiles.map((tile) => {
+          const occurrence = labelOccurrences.get(tile.label) ?? 0
+          labelOccurrences.set(tile.label, occurrence + 1)
+          const tone = toneOf(tile.value, format)
+          const changeTone =
+            tile.change === null
+              ? undefined
+              : tile.change > 0
+                ? "positive"
+                : tile.change < 0
+                  ? "negative"
+                  : "muted"
+          const sparkColor =
+            changeTone && changeTone !== "muted"
+              ? toneColor(changeTone, theme.color)
+              : theme.color.chartSeries1
+          const text = formatValue(tile.value, format ?? { kind: "number" })
+          const activate =
+            onSelect && tile.selection !== undefined
+              ? () => onSelect(tile.selection)
+              : undefined
+          const selected =
+            activate && sqlLiteral(tile.selection, clickType) === selectedValue
+          return (
+            <TileRoot
+              as={activate ? "button" : "div"}
+              key={JSON.stringify([tile.label, occurrence])}
+              $centred={tile.spark.length < 2}
+              $interactive={Boolean(activate)}
+              aria-pressed={selected}
+              onClick={activate}
+              data-hook="stat-tile"
+            >
+              <Sparkline values={tile.spark} color={sparkColor} />
+              <Label title={tile.label}>
+                <span>{tile.label}</span>
+                {selected && <Check size={12} weight="bold" aria-hidden />}
+              </Label>
+              <Value $color={tone ? toneColor(tone, theme.color) : undefined}>
+                {visual.animateDigits ? (
+                  <RollingNumber
+                    key={queriesKey}
+                    enabled
+                    value={toNumber(tile.value)}
+                    text={text}
+                  />
+                ) : (
+                  text
                 )}
-              </Change>
-            )}
-          </TileRoot>
-        )
-      })}
-    </Grid>
+              </Value>
+              {tile.caption && <Caption>{tile.caption}</Caption>}
+              {tile.change !== null && changeTone && (
+                <Change
+                  $color={
+                    toneTextColor(changeTone, theme.color) ??
+                    theme.color.contentMuted
+                  }
+                >
+                  {tile.change > 0 ? "▲ " : tile.change < 0 ? "▼ " : ""}
+                  {formatValue(
+                    Math.abs(tile.change),
+                    changeFormat ?? { kind: "percent" },
+                  )}
+                </Change>
+              )}
+            </TileRoot>
+          )
+        })}
+      </Grid>
+    </Scroller>
   )
 }

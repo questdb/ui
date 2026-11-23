@@ -352,7 +352,13 @@ export const OrderBook = ({
       : shown.bottom - bar.top
   }
 
+  // A price repeated in an unaggregated book is a separate row: key it by
+  // occurrence, so React keeps every one.
+  const occurrences = new Map<string, number>()
   const row = (level: Level, side: "ask" | "bid") => {
+    const priceKey = `${side}:${String(level.rawPrice)}`
+    const occurrence = occurrences.get(priceKey) ?? 0
+    occurrences.set(priceKey, occurrence + 1)
     const activate =
       onSelect && level.selection !== undefined
         ? () => onSelect(level.selection, level.selectionType)
@@ -372,7 +378,7 @@ export const OrderBook = ({
               }`
             : undefined
         }
-        key={`${side}:${level.rawPrice}`}
+        key={occurrence === 0 ? priceKey : `${priceKey}:${occurrence}`}
         $cols={cols}
         $side={side}
         $clickable={activate !== undefined}

@@ -204,6 +204,58 @@ describe("dashboard visuals", () => {
     expect(digit()).toBeNull()
   })
 
+  it("shows every row of a price repeated in an unaggregated book", () => {
+    // Given asks that repeat a price, as a query without GROUP BY returns
+    const columns = [
+      { name: "price", type: "DOUBLE" },
+      { name: "size", type: "DOUBLE" },
+    ]
+    const book = (asks: [number, number][]) => (
+      <OrderBook
+        formats={{}}
+        statements={[
+          { columns, rows: asks },
+          { columns, rows: [[99, 10]] },
+        ]}
+      />
+    )
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+    const { container, rerender } = renderComponent(
+      book([
+        [101, 2],
+        [101, 3],
+        [102, 1],
+      ]),
+    )
+
+    // When a refresh changes how often the price repeats
+    rerender(
+      book([
+        [101, 4],
+        [102, 1],
+      ]),
+    )
+    rerender(
+      book([
+        [101, 5],
+        [101, 6],
+        [101, 7],
+        [102, 1],
+      ]),
+    )
+
+    // Then each ask row of the latest result is drawn, once
+    const sizes = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-hook="order-book-ask"]'),
+      (row) => row.querySelectorAll("span")[1]?.textContent,
+    )
+    expect(sizes.sort()).toEqual(["1", "5", "6", "7"])
+    // without React losing track of rows that share a key
+    expect(
+      errors.mock.calls.some((args) => String(args[0]).includes("same key")),
+    ).toBe(false)
+  })
+
   it("keeps a price level mounted while its depth changes", () => {
     // Given an order book with a smaller ask than bid
     const columns = [
