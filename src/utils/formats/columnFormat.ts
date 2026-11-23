@@ -288,6 +288,21 @@ export const toneColor = (tone: Tone, colors: ColorShape): string =>
   colors[TONE_TOKENS[tone]]
 
 /**
+ * The colour of text drawn in a tone, where it differs from the tone's mark
+ * colour: positive and negative marks are too light for text. Undefined for
+ * other tones, so each caller keeps its own text default.
+ */
+export const toneTextColor = (
+  tone: Tone | undefined,
+  colors: ColorShape,
+): string | undefined =>
+  tone === "positive"
+    ? colors.dataPositive
+    : tone === "negative"
+      ? colors.dataNegative
+      : undefined
+
+/**
  * Colour bands for a range from `min` to `max`, from the thresholds: each band
  * runs from its threshold to the next. Gauges and bullets draw these.
  */

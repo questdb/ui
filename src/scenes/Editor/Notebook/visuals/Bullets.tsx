@@ -4,6 +4,7 @@ import styled, { keyframes, useTheme } from "styled-components"
 import {
   formatValue,
   toneColor,
+  toneTextColor,
   toneOf,
   type ColumnFormats,
   type Tone,
@@ -298,11 +299,7 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
     const color = tone ? toneColor(tone, theme.color) : theme.color.chartSeries1
     const status = statusOf(tone)
     const statusTextColor =
-      tone === "positive"
-        ? theme.color.dataPositive
-        : tone === "negative"
-          ? theme.color.dataNegative
-          : theme.color.contentPrimary
+      toneTextColor(tone, theme.color) ?? theme.color.contentPrimary
     const use = target && value !== null ? value / target : null
     const name = labelIdx >= 0 ? toLabel(row[labelIdx]) : valueName
     const details = (

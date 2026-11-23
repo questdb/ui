@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event"
 import { describe, expect, it } from "vitest"
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import { ColumnFormatsEditor } from "./ColumnFormatsEditor"
+import { darkTheme } from "../../../../theme"
 
 const columns = [
   { name: "symbol", type: "SYMBOL" },
@@ -85,6 +86,20 @@ describe("column formats editor", () => {
       { value: 0, tone: "positive" },
       { value: 0.05, tone: "negative" },
     ])
+  })
+
+  it("previews a signed value in the text colour the grid uses", () => {
+    // Given a change format coloured by sign, and a negative sample
+    renderComponent(
+      <Editor initial={{ change: { kind: "percent", signTone: true } }} />,
+    )
+
+    // When the preview shows the sample
+    const preview = screen.getByText("Preview").parentElement!
+    const value = within(preview).getByText("-1.23%")
+
+    // Then it uses the negative text colour, not the chart mark colour
+    expect(value).toHaveStyle({ color: darkTheme.color.dataNegative })
   })
 
   it("opens the column the grid header asked for, adding it", () => {

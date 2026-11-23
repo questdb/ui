@@ -8,6 +8,7 @@ import { columnTypeOf, sqlLiteral } from "../interactions/chartInteractions"
 import {
   formatValue,
   toneColor,
+  toneTextColor,
   toneOf,
   type ColumnFormats,
 } from "../../../../utils/formats/columnFormat"
@@ -417,11 +418,8 @@ export const StatTiles = ({
             {tile.change !== null && changeTone && (
               <Change
                 $color={
-                  changeTone === "positive"
-                    ? theme.color.dataPositive
-                    : changeTone === "negative"
-                      ? theme.color.dataNegative
-                      : theme.color.contentMuted
+                  toneTextColor(changeTone, theme.color) ??
+                  theme.color.contentMuted
                 }
               >
                 {tile.change > 0 ? "▲ " : tile.change < 0 ? "▼ " : ""}

@@ -8,6 +8,7 @@ import {
   TONES,
   formatValue,
   toneColor,
+  toneTextColor,
   toneOf,
   type CellVisual,
   type ColumnFormat,
@@ -432,7 +433,15 @@ export const ColumnFormatFields: React.FC<Props> = ({
           <span>Run the cell to preview a value.</span>
         ) : (
           <strong
-            style={tone ? { color: toneColor(tone, theme.color) } : undefined}
+            style={
+              tone
+                ? {
+                    color:
+                      toneTextColor(tone, theme.color) ??
+                      toneColor(tone, theme.color),
+                  }
+                : undefined
+            }
           >
             {formatValue(sample, format)}
           </strong>

@@ -89,6 +89,7 @@ import {
   formatsNumbers,
   formatValue,
   toneColor,
+  toneTextColor,
   toneOf,
   type ColumnFormat,
   type ColumnFormats,
@@ -183,12 +184,7 @@ const GridCell = React.memo(function GridCell({
         : toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
   const tone = loaded ? toneOf(rawValue, format) : undefined
   const toneCss = tone ? toneColor(tone, theme.color) : undefined
-  const textTone =
-    tone === "positive"
-      ? theme.color.dataPositive
-      : tone === "negative"
-        ? theme.color.dataNegative
-        : toneCss
+  const textTone = toneTextColor(tone, theme.color) ?? toneCss
   const highlightMode =
     highlight === undefined
       ? undefined
