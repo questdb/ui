@@ -221,7 +221,7 @@ describe("ai provider setup flows", () => {
         ),
       )
     })
-    cy.getByDataHook("ai-chat-button").click()
+    cy.openChat()
     cy.getByDataHook("chat-input-textarea").type("hello")
     cy.getByDataHook("chat-send-button").click()
 

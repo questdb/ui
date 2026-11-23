@@ -1701,7 +1701,7 @@ describe("custom providers", () => {
     })
 
     // When
-    cy.getByDataHook("ai-chat-button").click()
+    cy.openChat()
     cy.getByDataHook("chat-input-textarea").type("Use the replacement provider")
     cy.getByDataHook("chat-send-button").click()
     cy.wait("@survivingProviderChat")

@@ -136,13 +136,19 @@ Cypress.Commands.add("clearSimulatedWarnings", () => {
   cy.execAdminQuery("select simulate_warnings('', '');")
 })
 
-// The model picker lives in the chat composer, so the chat opens first.
-Cypress.Commands.add("openModelPicker", () => {
+// The chat button toggles the chat, so it is clicked only while closed.
+Cypress.Commands.add("openChat", () => {
   cy.get("body").then(($body) => {
-    if ($body.find('[data-hook="chat-model-picker"]').length === 0) {
+    if ($body.find('[data-hook="ai-chat-window"]').length === 0) {
       cy.getByDataHook("ai-chat-button").click()
     }
   })
+  cy.getByDataHook("ai-chat-window").should("be.visible")
+})
+
+// The model picker lives in the chat composer, so the chat opens first.
+Cypress.Commands.add("openModelPicker", () => {
+  cy.openChat()
   cy.getByDataHook("chat-model-picker").click()
   // The picker opens only the selected model's provider; specs list them all.
   cy.get("body").then(($body) => {
