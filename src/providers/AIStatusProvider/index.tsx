@@ -203,12 +203,14 @@ export type AIStatusContextType =
   | (BaseAIStatusContextType & {
       isConfigured: true
       canUse: true
+      unavailableReason: null
       currentModel: string
       apiKey: string
     })
   | (BaseAIStatusContextType & {
       isConfigured: boolean
       canUse: false
+      unavailableReason: string
       currentModel: string | null
       apiKey: string | null
     })
@@ -455,11 +457,15 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           apiKey,
           isConfigured: true,
           canUse: true,
+          unavailableReason: null,
         }
       : {
           ...baseContext,
           isConfigured: isConfigured || hasSelectedLocalAgent,
           canUse: false,
+          unavailableReason: isLocalAgentSelected
+            ? "The local agent is not connected"
+            : "AI Assistant is not configured",
         }
 
   return (

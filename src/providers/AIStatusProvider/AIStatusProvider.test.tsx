@@ -44,6 +44,7 @@ describe("AIStatusProvider", () => {
     expect(status()).toMatchObject({
       isConfigured: true,
       canUse: false,
+      unavailableReason: "The local agent is not connected",
       currentModel: null,
       apiKey: null,
     })

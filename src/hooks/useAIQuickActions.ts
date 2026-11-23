@@ -51,6 +51,7 @@ export const useAIQuickActions = () => {
     setStatus,
     getOperationSignal,
     canUse,
+    unavailableReason,
     hasSchemaAccess,
     currentModel,
     apiKey,
@@ -132,9 +133,7 @@ export const useAIQuickActions = () => {
       return
     }
     if (!canUse) {
-      toast.error(
-        "AI Assistant is not enabled. Please configure your API key in settings.",
-      )
+      toast.error(unavailableReason)
       return
     }
     if (!hasSchemaAccess) {
@@ -245,9 +244,7 @@ export const useAIQuickActions = () => {
       return
     }
     if (!canUse) {
-      toast.error(
-        "AI Assistant is not enabled. Please configure your API key in settings.",
-      )
+      toast.error(unavailableReason)
       return
     }
     if (!hasSchemaAccess) {

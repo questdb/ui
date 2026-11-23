@@ -141,7 +141,7 @@ export const NotebookToolbar: React.FC = () => {
   const { updateSettings } = useNotebookActions()
   const { activeBuffer, buffers, duplicateNotebook, updateBuffer } = useEditor()
   const { openNotebookChat } = useAIConversationActions()
-  const { canUse, status: aiStatus } = useAIStatus()
+  const { canUse, unavailableReason, status: aiStatus } = useAIStatus()
   const isOperationInProgress = isBlockingAIStatus(aiStatus)
   const mode: NotebookLayoutMode = settings.layoutMode ?? "list"
   const hasBuffer = typeof activeBuffer.id === "number"
@@ -155,7 +155,7 @@ export const NotebookToolbar: React.FC = () => {
     buffers.find((b) => b.id === activeBuffer.id)?.archived ??
     !!activeBuffer.archived
   const aiTooltip = !canUse
-    ? "AI Assistant is not configured"
+    ? unavailableReason
     : isOperationInProgress
       ? "An operation is in progress"
       : "Build with AI"
