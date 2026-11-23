@@ -37,12 +37,6 @@ const CANCELLED: AgentTurnResult = {
 
 const ignoreStatus: StatusCallback = () => undefined
 
-const stoppedTurnSignal = () => {
-  const aborter = new AbortController()
-  aborter.abort()
-  return aborter.signal
-}
-
 export type NotebookRead = {
   bufferId: number
   readSeq: number
@@ -88,6 +82,12 @@ export type LocalAgentChannelOptions = {
   onNotebookRead: (conversationId: string, read: NotebookRead) => void
 }
 
+type StoppedTurn = {
+  turnId: string
+  // Already aborted: whatever the stopped turn still asks for is cancelled.
+  toolSignal: AbortSignal
+}
+
 type PendingTurn = {
   turnId: string
   onUpdate: LocalAgentPrompt["onUpdate"]
@@ -106,7 +106,7 @@ export class LocalAgentChannel {
   readonly sessionId = crypto.randomUUID()
   private turns = new Map<string, PendingTurn>()
   // The local Stop grace can expire before the bridge sees the cancel.
-  private pendingCancels = new Map<string, string>()
+  private pendingCancels = new Map<string, StoppedTurn>()
   private disposed = false
   private preferences: LocalAgentPreferencesWire | null = null
   private snapshot: LocalAgentSnapshot
@@ -209,7 +209,10 @@ export class LocalAgentChannel {
           stopped = resolve
         })
         toolAborter.abort(signal?.reason)
-        this.pendingCancels.set(conversationId, turnId)
+        this.pendingCancels.set(conversationId, {
+          turnId,
+          toolSignal: toolAborter.signal,
+        })
         this.clearQuestions(conversationId)
         this.sendCancel(conversationId, turnId)
       }
@@ -244,18 +247,15 @@ export class LocalAgentChannel {
   // progress. Ownership is for status and cancellation, not authorization.
   captureToolRequest(client: MCPBridgeClient, conversationId: string) {
     if (this.disposed || client !== this.client) return undefined
-    const turn = this.turns.get(conversationId)
     // A request that arrives after Stop still belongs to the stopped turn,
     // also once the local grace ended before the agent confirmed the cancel.
-    if (turn?.stopping)
-      return { setStatus: ignoreStatus, signal: turn.toolSignal }
-    if (!turn && this.pendingCancels.has(conversationId)) {
-      return { setStatus: ignoreStatus, signal: stoppedTurnSignal() }
-    }
+    const stopped = this.pendingCancels.get(conversationId)
+    if (stopped) return { setStatus: ignoreStatus, signal: stopped.toolSignal }
+    const turn = this.liveTurnOf(conversationId)
     if (!turn) return undefined
     let queryId: string | undefined
     const setStatus: StatusCallback = (status, args) => {
-      if (this.turns.get(conversationId) !== turn || turn.stopping) return
+      if (this.liveTurnOf(conversationId) !== turn) return
       // Equal SQL may be run more than once in the same turn. Key each
       // console query's progress and outcome without retaining the wire ID.
       if (status === AIOperationStatus.RunningQuery) {
@@ -270,7 +270,7 @@ export class LocalAgentChannel {
   resume(): void {
     if (this.disposed) return
     if (this.preferences) this.sendPreferences(this.preferences)
-    for (const [conversationId, turnId] of this.pendingCancels) {
+    for (const [conversationId, { turnId }] of this.pendingCancels) {
       this.sendCancel(conversationId, turnId)
     }
   }
@@ -376,15 +376,16 @@ export class LocalAgentChannel {
         this.turnOf(msg.conversationId, msg.turnId)?.onUpdate(msg.update)
         return
       case "agent_turn_end":
-        if (this.pendingCancels.get(msg.conversationId) === msg.turnId) {
+        if (
+          this.pendingCancels.get(msg.conversationId)?.turnId === msg.turnId
+        ) {
           this.pendingCancels.delete(msg.conversationId)
         }
         this.settleTurn(msg.conversationId, msg.turnId, msg.result)
         return
       case "agent_question": {
         // Questions have no wire turn ID. A stopping turn can no longer ask.
-        const turn = this.turns.get(msg.conversationId)
-        if (!turn || turn.stopping) return
+        if (!this.liveTurnOf(msg.conversationId)) return
         this.update({
           questions: [
             ...this.snapshot.questions.filter(
@@ -399,6 +400,12 @@ export class LocalAgentChannel {
         this.removeQuestion(msg.requestId)
         return
     }
+  }
+
+  // The conversation's running turn, unless the user stopped it.
+  private liveTurnOf(conversationId: string) {
+    const turn = this.turns.get(conversationId)
+    return turn?.stopping ? undefined : turn
   }
 
   private turnOf(conversationId: string, turnId: string) {

@@ -277,6 +277,7 @@ it("stops the queries of a stopped local-agent turn", async () => {
   }) as unknown as typeof questClient.queryRaw)
   const abortQuery = vi.spyOn(questClient, "abort").mockImplementation(() => {})
   const socket = await connectLocalAgent()
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
   const stop = new AbortController()
   void getLocalAgentChannel()!.prompt({
     conversationId: "conv-1",
@@ -292,14 +293,21 @@ it("stops the queries of a stopped local-agent turn", async () => {
   await act(flush)
   expect(executedSql).toEqual(["SELECT * FROM trades"])
 
-  // When the user stops the turn, and the agent sends one more query
+  // When the user stops the turn, and the agent sends more queries, also
+  // after the local grace ended without the agent confirming the cancel
   act(() => stop.abort())
   act(() => {
     socket.receive(runQueryCall("late", "SELECT count() FROM trades"))
   })
   await act(flush)
+  await act(() => vi.advanceTimersByTimeAsync(5000))
+  act(() => {
+    socket.receive(runQueryCall("after-grace", "SELECT max(price) FROM trades"))
+  })
+  await act(flush)
+  vi.useRealTimers()
 
-  // Then the running query is cancelled and the late one never runs
+  // Then the running query is cancelled and the late ones never run
   expect(abortQuery).toHaveBeenCalledWith(41)
   expect(executedSql).toEqual(["SELECT * FROM trades"])
 })
