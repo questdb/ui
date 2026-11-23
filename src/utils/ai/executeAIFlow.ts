@@ -1,6 +1,6 @@
 import type { UserActionDigestCapture } from "../../providers/AIConversationProvider/userActionDigest"
 import type { AgentPromptImage } from "../localAgent/protocol"
-import { withoutInlineImages } from "./inlineImages"
+import { hasInlineImages, withoutInlineImages } from "./inlineImages"
 import type { Client } from "../questdb/client"
 import type { Table } from "../questdb/types"
 import type {
@@ -1108,7 +1108,7 @@ export async function executeAIFlow(
               .map((m) =>
                 m.role === "assistant" &&
                 typeof m.content === "string" &&
-                m.content.includes("](data:image/")
+                hasInlineImages(m.content)
                   ? { ...m, content: withoutInlineImages(m.content) }
                   : m,
               ),

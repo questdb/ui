@@ -80,9 +80,10 @@ const withInlineImagesKeyed = (markdown: string) => {
 const isHttpUrl = (value?: string): value is string =>
   typeof value === "string" && /^https?:\/\//i.test(value)
 
+const isDataImage = (value: string) => /^data:image\//i.test(value)
+
 const isSafeImageSrc = (value?: string): value is string =>
-  typeof value === "string" &&
-  (/^https?:\/\//i.test(value) || /^data:image\//i.test(value))
+  isHttpUrl(value) || (typeof value === "string" && isDataImage(value))
 
 const SafeLink = ({ children, href, ...props }: React.ComponentProps<"a">) => (
   <a
@@ -131,9 +132,8 @@ const InlineImage = ({
 }: React.ComponentProps<"img">) => {
   const src = rawSrc
   if (typeof src !== "string" || !src.trim()) return null
-  if (/^data:image\//i.test(src))
-    return <img src={src} alt={alt ?? ""} {...props} />
-  if (/^https?:\/\//i.test(src)) {
+  if (isDataImage(src)) return <img src={src} alt={alt ?? ""} {...props} />
+  if (isHttpUrl(src)) {
     let host: string
     try {
       host = new URL(src).host
@@ -169,7 +169,7 @@ const fileNameOf = (src: string): string => {
 }
 
 const urlTransform: UrlTransform = (url, key) =>
-  key === "src" && /^(data:image\/|file:)/i.test(url)
+  key === "src" && (isDataImage(url) || /^file:/i.test(url))
     ? url
     : defaultUrlTransform(url)
 
