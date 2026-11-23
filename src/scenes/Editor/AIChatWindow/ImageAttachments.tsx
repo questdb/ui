@@ -17,6 +17,8 @@ export const IMAGE_TYPES = [
   "image/webp",
 ]
 export const MAX_IMAGES = 4
+
+export const exceedsImageLimit = (count: number) => count > MAX_IMAGES
 // Base64 grows a file by a third; the bridge takes up to 7 MB of it.
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 

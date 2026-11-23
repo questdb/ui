@@ -39,6 +39,7 @@ import {
   IMAGE_TYPES,
   ImageAttachments,
   MAX_IMAGES,
+  exceedsImageLimit,
   readImages,
 } from "./ImageAttachments"
 import type { AgentPromptImage } from "../../../utils/localAgent/protocol"
@@ -422,7 +423,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         ? "Wait for the draft images to finish loading before choosing Edit."
         : queued.agentCommand && draftOccupiesComposer
           ? "Clear the draft text and remove any draft images, then choose Edit again to restore the queued command."
-          : queued.images.length + attachments.length > MAX_IMAGES
+          : exceedsImageLimit(queued.images.length + attachments.length)
             ? `Remove draft images before editing; a message can contain up to ${MAX_IMAGES} images.`
             : undefined
 
@@ -603,7 +604,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
               : "Agent commands must send separately. Wait for the queued message to send, or edit it first."
           return current
         }
-        if ((previous?.images.length ?? 0) + images.length > MAX_IMAGES) {
+        if (exceedsImageLimit((previous?.images.length ?? 0) + images.length)) {
           error = `A message takes up to ${MAX_IMAGES} images. Remove an image or wait for the queued message to send.`
           return current
         }
@@ -639,6 +640,10 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setAttachments([])
       return true
     }
+
+    const hasImageRoom = attachments.length < MAX_IMAGES
+    const takesImagesNow = () =>
+      acceptsImages && hasImageRoom && !readingAttachment.current
 
     // An agent that reads images takes them pasted, dropped or picked.
     const attach = async (files: File[]) => {
@@ -990,10 +995,9 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   onPaste={(event) => {
                     const files = imageFilesOf(event.clipboardData.items)
                     if (files.length === 0) return
+                    // Text pastes as usual when its images cannot be taken.
                     if (
-                      (!acceptsImages ||
-                        attachments.length >= MAX_IMAGES ||
-                        readingAttachment.current) &&
+                      !takesImagesNow() &&
                       event.clipboardData.getData("text/plain")
                     )
                       return
@@ -1030,9 +1034,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                       onClick={() => fileInputRef.current?.click()}
                       $alongsideStop={showBoth}
                       disabled={
-                        disabled ||
-                        isReadingAttachment ||
-                        attachments.length >= MAX_IMAGES
+                        disabled || isReadingAttachment || !hasImageRoom
                       }
                       data-hook="chat-attach-image"
                     >
