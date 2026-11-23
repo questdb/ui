@@ -54,6 +54,7 @@ type ClickParams = {
   data?: unknown
   dimensionNames?: string[]
   componentType?: string
+  dataType?: string
 }
 
 /** The value a click sets: `column` of the clicked row, else its name. */
@@ -96,6 +97,8 @@ export const clickedValue = (
     Object.hasOwn(data, "selection")
   )
     return (data as { selection: unknown }).selection
+  // A link joins two nodes; its "source > target" name is not a value.
+  if (params.dataType === "edge") return undefined
   if (params.name !== undefined && params.name !== "") return params.name
   return Array.isArray(params.value) ? params.value[0] : params.value
 }

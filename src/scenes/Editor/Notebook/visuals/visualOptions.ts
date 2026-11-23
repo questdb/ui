@@ -20,6 +20,7 @@ import {
 import {
   columnIndex,
   firstColumnOf,
+  emptyNodeIsNull,
   linksFrom,
   nodesOf,
   toLabel,
@@ -646,7 +647,7 @@ const edges = (ctx: VisualContext) => {
   )
   return {
     links,
-    nodes: nodesOf(links),
+    nodes: nodesOf(links, emptyNodeIsNull(rows, fromIdx, toIdx)),
     valueName: valueIdx >= 0 ? rows.columns[valueIdx].name : undefined,
   }
 }
@@ -712,7 +713,7 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
           edgeSymbol: ["none", "arrow"],
           edgeSymbolSize: 6,
           data: e.nodes.map((n, i) => ({
-            name: n.name,
+            ...n,
             symbolSize:
               10 + 26 * Math.sqrt((weight.get(n.name) ?? 0) / maxWeight),
             itemStyle: { color: palette(colors)[i % 8] },

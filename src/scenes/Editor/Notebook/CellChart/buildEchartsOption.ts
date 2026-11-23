@@ -172,6 +172,11 @@ const pointValue = (point: unknown): unknown =>
 // rather than letting the click fall back to the drawn value.
 const NULL_SELECTION = { columns: {}, selection: null }
 
+const isNullSelection = (point: unknown): boolean =>
+  isClickPoint(point) &&
+  Object.hasOwn(point, "selection") &&
+  (point as unknown as { selection: unknown }).selection === null
+
 const isNullCategory = (raw: unknown, ctx: SeriesContext): boolean =>
   ctx.xMode === "category" &&
   ctx.clickEnabled === true &&
@@ -531,8 +536,12 @@ const cartesianSeriesOf = (q: ResolvedQuery, ctx: SeriesContext): Series[] => {
         left === null && right === null
           ? null
           : Math.abs(left ?? 0) + Math.abs(right ?? 0)
-      if (clickColumn === undefined || !isClickPoint(a) || !isClickPoint(b))
-        return value
+      // Two unbound NULL categories still select NULL, not the share.
+      if (clickColumn === undefined)
+        return isNullSelection(a) || isNullSelection(b)
+          ? { value, ...NULL_SELECTION }
+          : value
+      if (!isClickPoint(a) || !isClickPoint(b)) return value
       return {
         value,
         columns: {

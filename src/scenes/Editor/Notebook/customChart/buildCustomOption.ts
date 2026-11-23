@@ -1,6 +1,7 @@
 import { classifyColumn } from "../CellChart/inferChartConfig"
 import {
   columnIndex,
+  emptyNodeIsNull,
   linksFrom,
   nodesOf,
   toLabel,
@@ -248,7 +249,9 @@ const bindRows = (
           : columnIndex(rows, undefined, 2)
       if (fromIdx < 0 || toIdx < 0) return []
       const links = linksFrom(rows, fromIdx, toIdx, valueIdx)
-      return spec.shape === "links" ? links : nodesOf(links)
+      return spec.shape === "links"
+        ? links
+        : nodesOf(links, emptyNodeIsNull(rows, fromIdx, toIdx))
     }
     default:
       report(

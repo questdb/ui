@@ -186,11 +186,33 @@ export const linksFrom = (
     value: valueIdx >= 0 ? (toNumber(row[valueIdx]) ?? 0) : 1,
   }))
 
-export const nodesOf = (links: Link[]): { name: string }[] => {
+// NULL and '' endpoints share the unlabelled node. When every one of them is
+// NULL, a click on that node selects NULL, not its name or total flow.
+export const emptyNodeIsNull = (
+  rows: StatementRows,
+  fromIdx: number,
+  toIdx: number,
+): boolean => {
+  let empty = false
+  for (const row of rows.rows)
+    for (const v of [row[fromIdx], row[toIdx]]) {
+      if (toLabel(v) !== "") continue
+      if (v !== null && v !== undefined) return false
+      empty = true
+    }
+  return empty
+}
+
+export const nodesOf = (
+  links: Link[],
+  emptyIsNull = false,
+): { name: string; selection?: null }[] => {
   const names = new Set<string>()
   for (const link of links) {
     names.add(link.source)
     names.add(link.target)
   }
-  return [...names].map((name) => ({ name }))
+  return [...names].map((name) =>
+    emptyIsNull && name === "" ? { name, selection: null } : { name },
+  )
 }

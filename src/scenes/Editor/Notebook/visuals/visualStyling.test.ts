@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { darkColors, lightColors } from "../../../../theme"
 import {
+  chordOption,
   gaugeOption,
   graphOption,
   liquidityHeatmapOption,
@@ -1338,5 +1339,103 @@ describe("visual tooltips", () => {
     expect(treeHtml).not.toContain("<img")
     expect(treeHtml).toContain("&lt;img src=x")
     expect(edgeHtml).not.toContain("<b>2")
+  })
+})
+
+describe("unbound clicks on flow visuals", () => {
+  const flows = (source: string | null) =>
+    rows(
+      [
+        ["src", "SYMBOL"],
+        ["dst", "SYMBOL"],
+        ["amount", "DOUBLE"],
+      ],
+      [
+        [source, "b", 4],
+        [null, "c", 3],
+        ["a", "b", 5],
+      ],
+    )
+  const build = { graph: graphOption, sankey: sankeyOption, chord: chordOption }
+
+  it.each(["graph", "sankey", "chord"] as const)(
+    "selects NULL, not the total flow, on a %s node of NULL endpoints",
+    (type) => {
+      // Given flows from a NULL source, total flow 7
+      const { option } = build[type]({
+        visual: { type },
+        colors: lightColors,
+        formats: {},
+        statements: [flows(null)],
+      })
+      const nodes = series(option)[0].data as { name: string }[]
+      const set = vi.fn()
+      const events = interactionEvents({ click: { variable: "pick" } }, set)
+
+      // When the user clicks the unlabelled node
+      events.click(
+        {
+          componentType: "series",
+          dataType: "node",
+          name: "",
+          value: 7,
+          data: nodes.find((node) => node.name === ""),
+        },
+        {} as never,
+      )
+
+      // Then the variable is NULL
+      expect(set).toHaveBeenCalledWith({ pick: "null" })
+    },
+  )
+
+  it("does not claim NULL for a node that also stands for empty text", () => {
+    // Given NULL and '' endpoints, which share one unlabelled node
+    const { option } = sankeyOption({
+      visual: { type: "sankey" },
+      colors: lightColors,
+      formats: {},
+      statements: [flows("")],
+    })
+
+    // Then that node does not select NULL
+    const nodes = series(option)[0].data as Record<string, unknown>[]
+    expect(nodes.find((node) => node.name === "")).not.toHaveProperty(
+      "selection",
+    )
+  })
+
+  it("sets nothing for an unbound click on a link, but the bound column for a bound one", () => {
+    // Given a link between two exchanges
+    const link = { source: "NYSE", target: "LSE", value: 4 }
+    const unbound = vi.fn()
+    const bound = vi.fn()
+
+    // When the user clicks the link with and without a bound column
+    interactionEvents({ click: { variable: "pick" } }, unbound).click(
+      {
+        componentType: "series",
+        dataType: "edge",
+        name: "NYSE > LSE",
+        data: link,
+      },
+      {} as never,
+    )
+    interactionEvents(
+      { click: { variable: "pick", column: "route" } },
+      bound,
+    ).click(
+      {
+        componentType: "series",
+        dataType: "edge",
+        name: "NYSE > LSE",
+        data: { ...link, columns: { route: "transatlantic" } },
+      },
+      {} as never,
+    )
+
+    // Then only the bound click writes, and never the link's label
+    expect(unbound).not.toHaveBeenCalled()
+    expect(bound).toHaveBeenCalledWith({ pick: "'transatlantic'" })
   })
 })
