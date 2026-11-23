@@ -80,6 +80,9 @@ it("does not calculate uptime for a server-capped result", () => {
   expect(readStateSegments({ type: "uptime" }, result)).toContain(
     "requires a complete result",
   )
+  expect(readStateSegments({ type: "stateTimeline" }, result)).toContain(
+    "requires a complete result",
+  )
 })
 
 const states = (data: [number, string, string][]): StatementRows => ({

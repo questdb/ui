@@ -33,6 +33,10 @@ export type VisualSpec = {
   // Text columns from outer to inner level (treemap, sunburst).
   path?: boolean
   options: VisualOption[]
+  // A row-capped result: "refuse" when a prefix of the rows would draw a
+  // wrong total, duration or flow (the builder shows why instead), "draw"
+  // when what a prefix shows is still correct.
+  partialResult: "refuse" | "draw"
 }
 
 const value = (fallback = "First numeric column"): RoleSpec => ({
@@ -108,6 +112,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       },
     ],
     options: ["sparkline", "animateDigits"],
+    partialResult: "draw",
   },
   {
     type: "gauge",
@@ -116,6 +121,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       "The first row's value on a scale. Colour bands come from the value column's format thresholds.",
     roles: [value(), { ...label("None"), optional: true }],
     options: ["range"],
+    partialResult: "draw",
   },
   {
     type: "bullet",
@@ -134,6 +140,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       },
     ],
     options: ["range"],
+    partialResult: "draw",
   },
   {
     type: "orderBook",
@@ -150,6 +157,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       { role: "size", label: "Size", accepts: "numeric", fallback: "Column 2" },
     ],
     options: ["animateDigits"],
+    partialResult: "draw",
   },
   {
     type: "uptime",
@@ -158,6 +166,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       "Rows of time, lane and state. Each lane shows its current state, bars coloured by the worst state in each slice of time, and its uptime.",
     roles: stateRoles,
     options: ["buckets", "severity"],
+    partialResult: "refuse",
   },
   {
     type: "stateTimeline",
@@ -165,6 +174,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     shape: "Rows of time, lane and state, drawn as coloured bands per lane.",
     roles: stateRoles,
     options: ["severity"],
+    partialResult: "refuse",
   },
   {
     type: "treemap",
@@ -183,6 +193,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     ],
     path: true,
     options: [],
+    partialResult: "refuse",
   },
   {
     type: "sunburst",
@@ -201,6 +212,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     ],
     path: true,
     options: [],
+    partialResult: "refuse",
   },
   {
     type: "sankey",
@@ -208,6 +220,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     shape: "One row per flow: from, to and how much.",
     roles: flowRoles,
     options: [],
+    partialResult: "refuse",
   },
   {
     type: "graph",
@@ -216,6 +229,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       "One row per link: from, to and its weight. Nodes are sized by their total flow.",
     roles: flowRoles,
     options: [],
+    partialResult: "refuse",
   },
   {
     type: "chord",
@@ -223,6 +237,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     shape: "One row per flow: from, to and how much, drawn around a circle.",
     roles: flowRoles,
     options: [],
+    partialResult: "refuse",
   },
   {
     type: "map",
@@ -260,6 +275,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       },
     ],
     options: [],
+    partialResult: "draw",
   },
   {
     type: "liquidityHeatmap",
@@ -282,6 +298,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       value("Second numeric column"),
     ],
     options: [],
+    partialResult: "refuse",
   },
   {
     type: "volumeProfile",
@@ -306,6 +323,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       },
     ],
     options: [],
+    partialResult: "refuse",
   },
   {
     type: "planTree",
@@ -321,6 +339,7 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       },
     ],
     options: [],
+    partialResult: "draw",
   },
 ]
 

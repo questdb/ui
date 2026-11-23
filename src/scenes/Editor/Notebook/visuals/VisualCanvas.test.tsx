@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import { clearRenderReport, getRenderReport } from "../renderReports"
 import { VisualCanvas } from "./VisualCanvas"
+import { VISUAL_CATALOG } from "./visualCatalog"
 import { ThemeProvider } from "styled-components"
 import { lightTheme } from "../../../../theme"
 
@@ -362,6 +363,38 @@ describe("VisualCanvas", () => {
       )
     },
   )
+
+  it.each(
+    VISUAL_CATALOG.filter((spec) => spec.partialResult === "refuse").map(
+      (spec) => spec.type,
+    ),
+  )("refuses a row-capped result for %s, as its catalog entry says", (type) => {
+    // Given a capped result that would otherwise draw
+    renderComponent(
+      <VisualCanvas
+        {...defaults}
+        visual={{ type }}
+        statements={[
+          {
+            columns: [
+              { name: "ts", type: "TIMESTAMP" },
+              { name: "source", type: "SYMBOL" },
+              { name: "target", type: "SYMBOL" },
+              { name: "amount", type: "DOUBLE" },
+              { name: "other", type: "DOUBLE" },
+            ],
+            rows: [["2026-01-01T00:00:00.000000Z", "east", "west", 10, 2]],
+            partial: true,
+          },
+        ]}
+      />,
+    )
+
+    // Then the agent report says why nothing was drawn
+    expect(getRenderReport(bufferId, cellId)?.problems[0]?.severity).toBe(
+      "error",
+    )
+  })
 
   it("does not draw a Sankey from an incomplete result", () => {
     // Given an otherwise valid flow in a capped statement result
