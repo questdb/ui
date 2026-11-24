@@ -3,7 +3,11 @@ import { act, renderHook } from "@testing-library/react"
 import { expect, it, vi } from "vitest"
 import type { MCPBridgeClient } from "../../utils/mcp/MCPBridgeClient"
 import type { HelloAckMessage } from "../../utils/mcp/types"
-import type { AgentInboundMessage } from "../../utils/localAgent/protocol"
+import type {
+  AgentInboundMessage,
+  AgentOutboundMessage,
+} from "../../utils/localAgent/protocol"
+import { EXPECTED_MCP_VERSION } from "../../utils/mcp/protocolVersion"
 import { withLocalAgentPreferences } from "../../utils/localAgent/localAgentSettings"
 import { DEFAULT_AI_ASSISTANT_SETTINGS } from "../LocalStorageProvider"
 import { useLocalAgentConnection } from "./useLocalAgentConnection"
@@ -25,10 +29,10 @@ const attachBridge = () => {
     { initialProps: initial },
   )
   const sent: AgentInboundMessage[] = []
-  const listeners = new Map<string, (ack: Partial<HelloAckMessage>) => void>()
+  const listeners = new Map<string, (payload: unknown) => void>()
   let online = false
   const client = {
-    on(event: string, handler: (ack: Partial<HelloAckMessage>) => void) {
+    on(event: string, handler: (payload: unknown) => void) {
       listeners.set(event, handler)
       return () => listeners.delete(event)
     },
@@ -42,9 +46,10 @@ const attachBridge = () => {
   const reconnect = () =>
     act(() => {
       online = true
-      listeners.get("helloAck")?.({
+      const ack: Partial<HelloAckMessage> = {
         agent: { id: "agent", label: "Local agent", cwd: "/tmp/workspace" },
-      })
+      }
+      listeners.get("helloAck")?.(ack)
     })
   reconnect()
   return {
@@ -56,6 +61,16 @@ const attachBridge = () => {
     pause: () => {
       online = false
     },
+    giveUp: () =>
+      act(() => {
+        online = false
+        listeners.get("status")?.("disconnected")
+      }),
+    receive: (frame: AgentOutboundMessage) =>
+      act(() => {
+        listeners.get("agentMessage")?.(frame)
+      }),
+    client,
   }
 }
 
@@ -102,6 +117,44 @@ it("delivers Stop after a brief bridge interruption", () => {
     expect(
       bridge.sent.filter((frame) => frame.type === "agent_cancel"),
     ).toEqual([expect.objectContaining({ conversationId: "c1" })])
+  } finally {
+    bridge.detach()
+  }
+})
+
+it("stops the turn a channel left running when its bridge comes back after the console gave up", () => {
+  const bridge = attachBridge()
+  try {
+    // Given a running turn
+    void bridge.result.current.channel?.prompt({
+      conversationId: "c1",
+      text: "Summarize a sample",
+      notebookRead: null,
+      onUpdate: vi.fn(),
+      onToolStatus: vi.fn(),
+    })
+    const prompt = bridge.sent.find((frame) => frame.type === "agent_prompt")
+
+    // When the console gives up on the bridge, then the bridge comes back
+    bridge.giveUp()
+    bridge.reconnect()
+
+    // Then the new channel stops the turn, and aborts the tools it calls
+    const channel = bridge.result.current.channel
+    expect(
+      bridge.sent.filter((frame) => frame.type === "agent_cancel"),
+    ).toEqual([expect.objectContaining({ conversationId: "c1" })])
+    expect(
+      channel?.captureToolRequest(bridge.client, "c1")?.signal.aborted,
+    ).toBe(true)
+    bridge.receive({
+      v: EXPECTED_MCP_VERSION,
+      type: "agent_turn_end",
+      conversationId: "c1",
+      turnId: prompt?.type === "agent_prompt" ? prompt.turnId : "",
+      result: { outcome: "completed", stopReason: "cancelled", usage: null },
+    })
+    expect(channel?.captureToolRequest(bridge.client, "c1")).toBeUndefined()
   } finally {
     bridge.detach()
   }

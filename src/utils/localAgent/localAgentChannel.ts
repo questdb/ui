@@ -323,6 +323,29 @@ export class LocalAgentChannel {
     return true
   }
 
+  unfinishedTurns(): Map<string, string> {
+    const unfinished = new Map<string, string>()
+    for (const [conversationId, { turnId }] of this.pendingCancels) {
+      unfinished.set(conversationId, turnId)
+    }
+    for (const [conversationId, { turnId }] of this.turns) {
+      unfinished.set(conversationId, turnId)
+    }
+    return unfinished
+  }
+
+  // A channel replacing a disposed one on the same bridge stops the turns it
+  // left: nothing shows them anymore, and the bridge still runs them.
+  stopTurnsLeftBy(previous: Map<string, string>): void {
+    for (const [conversationId, turnId] of previous) {
+      this.pendingCancels.set(conversationId, {
+        turnId,
+        toolSignal: AbortSignal.abort(),
+      })
+      this.sendCancel(conversationId, turnId)
+    }
+  }
+
   dispose(): void {
     this.disposed = true
     this.unsubscribe()

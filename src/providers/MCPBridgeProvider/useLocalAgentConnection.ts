@@ -42,9 +42,11 @@ export const useLocalAgentConnection = ({
   const attachClient = useCallback(
     (client: MCPBridgeClient) => {
       let current: LocalAgentChannel | null = null
+      let left: { agentId: string; turns: Map<string, string> } | null = null
 
       const release = () => {
         if (!current) return
+        left = { agentId: current.info.id, turns: current.unfinishedTurns() }
         unregisterLocalAgentChannel(current)
         current.dispose()
         current = null
@@ -69,6 +71,8 @@ export const useLocalAgentConnection = ({
               read.readSeq,
             ),
         })
+        if (left?.agentId === ack.agent.id) current.stopTurnsLeftBy(left.turns)
+        left = null
         registerLocalAgentChannel(current)
         setChannel(current)
         void trackEvent(ConsoleEvent.LOCAL_AGENT_CONNECTED, {
