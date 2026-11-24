@@ -796,6 +796,10 @@ describe("role chart types", () => {
     expect(cell.shape.width).toBeCloseTo(92)
     expect(cell.shape.height).toBe(49)
     expect(cell.textContent.style.text).toBe("2.00 × 3.00")
+    // And a side with no volume is shown as unknown and tints nothing
+    const missing = draw(NaN, 9, 0)
+    expect(missing.style.fill).toBe("grey")
+    expect(missing.textContent.style.text).toBe("– × 9.00")
   })
 
   it("reports statements a chart that draws alone leaves out", () => {

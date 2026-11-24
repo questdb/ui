@@ -1507,6 +1507,40 @@ describe("footprintOption", () => {
     expect(written).toBe("125")
   })
 
+  it("keeps a side with no volume unknown, and finds the busiest level exactly", () => {
+    // Given LONG volumes past 2^53, and a level whose sell side is NULL
+    const exact = rows(
+      [
+        ["ts", "TIMESTAMP"],
+        ["lvl", "DOUBLE"],
+        ["buy", "LONG"],
+        ["sell", "LONG"],
+      ],
+      [
+        ["2026-01-01T10:00:00.000000Z", 100, "9007199254740992", "0"],
+        ["2026-01-01T10:00:00.000000Z", 125, "9007199254740993", "0"],
+        ["2026-01-01T10:00:00.000000Z", 150, "5", null],
+      ],
+    )
+
+    // When
+    const result = footprintOption({
+      visual: { type: "footprint" },
+      statements: [exact],
+      colors: lightColors,
+      formats: {},
+    })
+
+    // Then the 125 level wins though both totals round to the same double,
+    // and the NULL side stays unknown
+    const [cells] = result.option?.series as Cells[]
+    expect(cells.data.map((d) => d.value.slice(1))).toEqual([
+      [100, 0, 9007199254740992, 0],
+      [125, 0, 9007199254740992, 1],
+      [150, null, 5, 0],
+    ])
+  })
+
   it("names a missing column", () => {
     // Given / When / Then
     expect(

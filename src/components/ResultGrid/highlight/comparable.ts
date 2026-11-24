@@ -107,6 +107,16 @@ export const differenceOf = (a: Numeric, b: Numeric): Decimal => {
   return { unscaled: left - right, scale }
 }
 
+/** The exact sum of the values, as a decimal. */
+export const sumOf = (values: Numeric[]): Decimal =>
+  values.reduce<Decimal>(
+    (sum, value) => {
+      const [left, right, scale] = alignedUnscaled(sum, toDecimal(value))
+      return { unscaled: left + right, scale }
+    },
+    { unscaled: BigInt(0), scale: 0 },
+  )
+
 export const midpointOf = (a: Numeric, b: Numeric): Decimal => {
   const [left, right, scale] = alignedUnscaled(toDecimal(a), toDecimal(b))
   const sum = left + right

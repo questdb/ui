@@ -324,9 +324,10 @@ const volumeText = (v: number): string => {
   return v.toFixed(2)
 }
 
-const finiteOr0 = (v: unknown): number => {
-  const n = typeof v === "number" ? v : Number(v)
-  return Number.isFinite(n) ? n : 0
+// A volume, or null when the side reported none (NULL).
+const volumeOf = (v: unknown): number | null => {
+  const n = typeof v === "number" ? v : v == null ? NaN : Number(v)
+  return Number.isFinite(n) ? n : null
 }
 
 export const footprintRenderItem: CustomSeriesRenderItem = (params, api) => {
@@ -337,10 +338,10 @@ export const footprintRenderItem: CustomSeriesRenderItem = (params, api) => {
   const x = api.value(encode.x[0]) as number
   const level = api.value(encode.y[0]) as number
   const step = payload.step && payload.step > 0 ? payload.step : 1
-  const buy = finiteOr0(api.value(payload.buy ?? "buy"))
-  const sell = finiteOr0(api.value(payload.sell ?? "sell"))
+  const buy = volumeOf(api.value(payload.buy ?? "buy"))
+  const sell = volumeOf(api.value(payload.sell ?? "sell"))
   const poc =
-    payload.poc !== undefined && finiteOr0(api.value(payload.poc)) === 1
+    payload.poc !== undefined && volumeOf(api.value(payload.poc)) === 1
   let left: number
   let right: number
   if (payload.dt && payload.dt > 0) {
@@ -359,13 +360,23 @@ export const footprintRenderItem: CustomSeriesRenderItem = (params, api) => {
   const bottom = api.coord([x, level])[1]
   const height = bottom - top
   const ratio = payload.ratio ?? 3
+  // An imbalance needs both sides: a level missing one is not one-sided.
   const fill =
-    buy > 0 && buy >= ratio * sell && payload.color
+    buy !== null &&
+    sell !== null &&
+    buy > 0 &&
+    buy >= ratio * sell &&
+    payload.color
       ? payload.color
-      : sell > 0 && sell >= ratio * buy && payload.color0
+      : buy !== null &&
+          sell !== null &&
+          sell > 0 &&
+          sell >= ratio * buy &&
+          payload.color0
         ? payload.color0
         : (api.visual("color") as string)
-  const text = `${volumeText(sell)} × ${volumeText(buy)}`
+  const side = (v: number | null) => (v === null ? "–" : volumeText(v))
+  const text = `${side(sell)} × ${side(buy)}`
   const cellWidth = Math.max(cellRight - cellLeft, 1)
   const fontSize = Math.min(11, Math.max(8, height * 0.7))
   // Text that does not fit is left out; the tooltip has the values.

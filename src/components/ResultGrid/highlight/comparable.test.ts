@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   asNumeric,
   canonicalInstant,
+  comparableText,
   compareValues,
   differenceOf,
   ratioOf,
+  sumOf,
 } from "./comparable"
 
 const originalTz = process.env.TZ
@@ -191,5 +193,22 @@ describe("ratioOf", () => {
 
     // Then the ratio is exact
     expect(ratio).toBe(0.25)
+  })
+})
+
+describe("sumOf", () => {
+  it("adds doubles, LONG text and DECIMAL text exactly", () => {
+    // Given / When / Then
+    expect(
+      comparableText(
+        sumOf([
+          0.1,
+          0.2,
+          BigInt("9007199254740993"),
+          { unscaled: BigInt(150), scale: 2 },
+        ]),
+      ),
+    ).toBe("9007199254740994.80")
+    expect(comparableText(sumOf([]))).toBe("0")
   })
 })

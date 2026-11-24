@@ -19,6 +19,13 @@ import {
 } from "./sankeyLayoutLimit"
 import { pickOf, type Pick as MarkPick } from "../interactions/selection"
 import {
+  asNumeric,
+  compareValues,
+  sumOf,
+  type Decimal,
+} from "../../../../components/ResultGrid/highlight/comparable"
+import type { CellValue } from "../../../../components/ResultGrid/types"
+import {
   columnIndex,
   firstColumnOf,
   linksFrom,
@@ -1075,6 +1082,29 @@ const heatCellsRenderItem: CustomSeriesRenderItem = (params, api) => {
 
 echarts.registerCustomSeries(HEAT_CELLS, heatCellsRenderItem)
 
+// The exact sum of a row's volume columns; null when none is reported.
+const exactTotalOf = (
+  row: StatementRows["rows"][number],
+  indices: number[],
+): Decimal | null => {
+  const values = indices.flatMap((i) => {
+    const value = i >= 0 ? asNumeric(row[i] as CellValue) : null
+    return value === null ? [] : [value]
+  })
+  return values.length === 0 ? null : sumOf(values)
+}
+
+// The index of the largest total (the first of equals), -1 with none.
+const busiestIndex = (totals: (Decimal | null)[]): number => {
+  let best = -1
+  totals.forEach((total, i) => {
+    if (total === null) return
+    const current = best < 0 ? null : totals[best]
+    if (current === null || compareValues(total, current) > 0) best = i
+  })
+  return best
+}
+
 const smallestStep = (values: number[]): number => {
   const sorted = [...new Set(values)].sort((a, b) => a - b)
   let step = Infinity
@@ -1266,36 +1296,12 @@ export const volumeProfileOption = ({
     const sell = sellIdx >= 0 ? toNumber(r[sellIdx]) : null
     return buy === null && sell === null ? null : (buy ?? 0) + (sell ?? 0)
   })
-  // Keep exact integer weights for picking the winner even though ECharts
-  // needs floating-point values to lay out the bars.
+  // Pick the winner on exact totals (LONG and DECIMAL volumes arrive as
+  // text) even though ECharts needs floating-point values to lay out bars.
   const indices = (valueIdx >= 0 ? [valueIdx] : [buyIdx, sellIdx]).filter(
     (i) => i >= 0,
   )
-  const integerVolumes = indices.every((i) =>
-    /^(BYTE|SHORT|INT|LONG)$/.test(rows.columns[i].type.toUpperCase()),
-  )
-  const exactTotal = (row: StatementRows["rows"][number]): bigint | null => {
-    let sum = BigInt(0)
-    for (const i of indices) {
-      const raw = row[i]
-      if (raw == null) continue
-      if (typeof raw === "number" && Number.isSafeInteger(raw))
-        sum += BigInt(raw)
-      else if (typeof raw === "string" && /^-?\d{1,19}$/.test(raw))
-        sum += BigInt(raw)
-      else return null
-    }
-    return sum
-  }
-  let poc = -1
-  let highest: number | bigint = -Infinity
-  total.forEach((value, index) => {
-    if (value === null) return
-    const rank = integerVolumes ? (exactTotal(sorted[index]) ?? value) : value
-    if (rank <= highest) return
-    highest = rank
-    poc = index
-  })
+  const poc = busiestIndex(sorted.map((row) => exactTotalOf(row, indices)))
   // A bar is drawn from its row's price, not its formatted label.
   const item = (value: number | null, index: number) => ({
     value,
@@ -1480,21 +1486,29 @@ export const footprintOption = ({
     const sell = toNumber(row[sellIdx])
     if (time === null || price === null || (buy === null && sell === null))
       return []
-    return [{ time, price, buy: buy ?? 0, sell: sell ?? 0, row, index }]
+    // A side with no volume reported stays unknown (not 0): its level is
+    // neither imbalanced nor counted as one-sided.
+    return [{ time, price, buy, sell, row, index }]
   })
   if (levels.length === 0)
     return missing("No drawable footprint levels were returned.")
 
-  // A bar's point of control: its level with the most volume.
-  const pocOf = new Map<number, number>()
+  // A bar's point of control: its level with the most volume, on exact
+  // totals.
+  const levelsOf = new Map<number, number[]>()
   levels.forEach((level, i) => {
-    const best = pocOf.get(level.time)
-    const total = level.buy + level.sell
-    if (best === undefined || total > levels[best].buy + levels[best].sell)
-      pocOf.set(level.time, i)
+    const bar = levelsOf.get(level.time)
+    if (bar) bar.push(i)
+    else levelsOf.set(level.time, [i])
   })
-  const pocs = new Set(pocOf.values())
-  const times = [...pocOf.keys()]
+  const pocs = new Set<number>()
+  for (const bar of levelsOf.values()) {
+    const best = busiestIndex(
+      bar.map((i) => exactTotalOf(levels[i].row, [buyIdx, sellIdx])),
+    )
+    if (best >= 0) pocs.add(bar[best])
+  }
+  const times = [...levelsOf.keys()]
   const prices = levels.map((l) => l.price)
   // One bar or one level has no spacing to read: a minute, a price unit.
   const dt = times.length > 1 ? smallestStep(times) : 60_000

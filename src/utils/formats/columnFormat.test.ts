@@ -205,3 +205,38 @@ describe("number text a format leaves alone", () => {
     expect(formatValue("1234.50", {})).toBe("1,234.50")
   })
 })
+
+describe("formatValue with Auto decimals, over many values", () => {
+  // A small deterministic generator: the same values on every run.
+  const random = (() => {
+    let seed = 42
+    return () => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648
+      return seed / 2_147_483_648
+    }
+  })()
+
+  it("never shows a non-zero value as 0", () => {
+    for (let i = 0; i < 2_000; i++) {
+      const magnitude = 10 ** Math.floor(random() * 24 - 12)
+      const value = (random() - 0.5) * magnitude
+      if (value === 0) continue
+      expect(formatValue(value, {}), String(value)).not.toMatch(/^-?0$/)
+    }
+  })
+
+  it("keeps a DECIMAL's scale and a LONG's digits", () => {
+    for (let i = 0; i < 500; i++) {
+      const scale = Math.floor(random() * 6)
+      const whole = Math.floor(random() * 1_000_000)
+      const fraction = String(Math.floor(random() * 10 ** scale)).padStart(
+        scale,
+        "0",
+      )
+      const text = scale === 0 ? `${whole}.0` : `${whole}.${fraction}`
+      const shown = formatValue(text, {}).replace(/,/g, "")
+      expect(shown, text).toBe(text)
+    }
+    expect(formatValue("9007199254740993", {})).toBe("9,007,199,254,740,993")
+  })
+})
