@@ -40,7 +40,7 @@ type LocalAgentTurnParams = {
 const NOT_CONNECTED: AiAssistantAPIError = {
   type: "network",
   message:
-    "The local agent is not connected. Start the QuestDB MCP server with the `serve` command and pair this console.",
+    "The local agent is not connected. Run `npx @questdb/mcp-server-questdb connect` with this console's address, then pair this console.",
 }
 
 const ABORTED: AiAssistantAPIError = {
