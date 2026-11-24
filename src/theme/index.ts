@@ -207,6 +207,10 @@ export const darkColors: ColorShape = {
   chartSeries8: "#ff5555",
   dataPositive: "#2ca875",
   dataNegative: "#d94d58",
+  // Dashboard up/down: bright enough for prices, order books and heat
+  // scales, on the dark surfaces.
+  chartUp: "#2ebd85",
+  chartDown: "#f6465d",
 
   // Authentication
   authBackdrop: "#1D070E",
@@ -367,6 +371,8 @@ export const lightColors: ColorShape = {
   chartSeries8: "#e42525",
   dataPositive: "#05603e",
   dataNegative: "#a81f2e",
+  chartUp: "#0f9f7a",
+  chartDown: "#e0364a",
 
   // Authentication
   authBackdrop: "#c7cbd2",

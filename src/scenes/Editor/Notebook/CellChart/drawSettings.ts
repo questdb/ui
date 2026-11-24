@@ -1,0 +1,294 @@
+import isEqual from "lodash.isequal"
+import type {
+  CellInteractions,
+  NotebookCell,
+  NotebookVariable,
+} from "../../../../store/notebook"
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
+import type { ColumnDefinition } from "../../../../utils/questdb/types"
+import type { ChartConfig, QueryChart, VisualConfig } from "./chartTypes"
+import { classifyColumn } from "./inferChartConfig"
+import {
+  MAX_OPTION_DEPTH,
+  MAX_OPTION_NODES,
+  copyPlainOption,
+} from "../../../../store/notebookFormat"
+import { formatsToSave } from "../CellFormats/formatSummary"
+import type { VariableSlot } from "../interactions/InteractionsEditor"
+import { interactionsToSave } from "../interactions/interactionsToSave"
+import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
+import { withoutUnofferedOptions } from "./chartOptions"
+
+// What the chart settings drawer edits: everything a draw cell shows, saved in
+// one update. A draw cell is drawn as one of three kinds: a preset chart, a
+// component (a visual), or a custom ECharts option. The preset settings stay
+// in the config whichever kind is drawn, so switching back restores them.
+
+export type DrawKind = "chart" | "component" | "custom"
+
+export const DRAW_KINDS: { kind: DrawKind; label: string }[] = [
+  { kind: "chart", label: "Chart" },
+  { kind: "component", label: "Component" },
+  { kind: "custom", label: "Custom" },
+]
+
+/** The saved settings of a draw cell. */
+export type DrawSettings = {
+  chartConfig: ChartConfig
+  formats?: ColumnFormats
+  interactions?: CellInteractions
+}
+
+/** The drawer's working copy: every kind's settings, until save. */
+export type DrawDraft = {
+  kind: DrawKind
+  // The preset chart, without `visual` or `custom`: what the cell resolves
+  // to, with inferred defaults filled in.
+  chart: ChartConfig
+  // Whether the user changed the preset chart. A component or custom cell
+  // whose preset was not touched keeps its saved preset (often none), so
+  // inferred defaults are not frozen into it.
+  chartEdited: boolean
+  savedChart: ChartConfig
+  visual: VisualConfig | null
+  // The custom option as the user types it, so it can be invalid JSON while
+  // they edit.
+  customJson: string
+  formats?: ColumnFormats
+  interactions?: CellInteractions
+  // Variables the Interactions section creates, by the slot using them.
+  created: Partial<Record<VariableSlot, NotebookVariable>>
+}
+
+const NO_CHART: ChartConfig = { xColumn: null, queries: [] }
+
+/** A cell's draw settings, as the drawer edits them. */
+export const drawSettingsOf = (
+  cell: Pick<NotebookCell, "chartConfig" | "formats" | "interactions">,
+): DrawSettings => ({
+  chartConfig: cell.chartConfig ?? NO_CHART,
+  ...(cell.formats ? { formats: cell.formats } : {}),
+  ...(cell.interactions ? { interactions: cell.interactions } : {}),
+})
+
+/** The same saved settings: each field the same object as before. */
+export const sameDrawSettings = (
+  a: DrawSettings | undefined,
+  b: DrawSettings | undefined,
+): boolean =>
+  a === b ||
+  (a !== undefined &&
+    b !== undefined &&
+    a.chartConfig === b.chartConfig &&
+    a.formats === b.formats &&
+    a.interactions === b.interactions)
+
+export const kindOf = (config: ChartConfig | undefined): DrawKind =>
+  config?.visual ? "component" : config?.custom ? "custom" : "chart"
+
+const presetOnly = (config: ChartConfig): ChartConfig => {
+  const chart = { ...config }
+  delete chart.visual
+  delete chart.custom
+  return chart
+}
+
+/**
+ * The draft for a cell. `effective` is the preset chart the cell resolves to
+ * (with inferred defaults filled in); `saved` carries the visual and custom
+ * option.
+ */
+export const draftOf = (
+  saved: DrawSettings,
+  effective: ChartConfig,
+): DrawDraft => {
+  const custom = saved.chartConfig.custom
+  return {
+    kind: kindOf(saved.chartConfig),
+    chart: presetOnly(effective),
+    chartEdited: false,
+    savedChart: presetOnly(saved.chartConfig),
+    visual: saved.chartConfig.visual ?? null,
+    customJson: custom ? JSON.stringify(custom.option, null, 2) : "",
+    formats: saved.formats,
+    interactions: saved.interactions,
+    created: {},
+  }
+}
+
+export type CustomParse =
+  | { ok: true; option: Record<string, unknown> }
+  | { ok: false; error: string }
+
+export const parseCustomJson = (text: string): CustomParse => {
+  if (text.trim() === "")
+    return { ok: false, error: "Write an ECharts option as a JSON object." }
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "This is not valid JSON.",
+    }
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return { ok: false, error: "The option must be a JSON object: { … }." }
+  // The limits every other way in (agent tools, import) applies.
+  const plain = copyPlainOption(value)
+  if (!plain)
+    return {
+      ok: false,
+      error: `The option is too large or too deeply nested (at most ${MAX_OPTION_NODES.toLocaleString("en-US")} values, ${MAX_OPTION_DEPTH} levels).`,
+    }
+  return { ok: true, option: plain }
+}
+
+export type SaveResult =
+  | { ok: true; settings: DrawSettings }
+  | { ok: false; error: string }
+
+/** Components that take no clicks or drags. */
+export const supportsInteractions = (
+  draft: Pick<DrawDraft, "kind" | "visual">,
+): boolean =>
+  draft.kind !== "component" ||
+  (draft.visual?.type !== "bullet" && draft.visual?.type !== "planTree")
+
+const customJsonOf = (config: ChartConfig): string =>
+  config.custom ? JSON.stringify(config.custom.option, null, 2) : ""
+
+/**
+ * The settings a save stores. Each section is the saved one, the same object,
+ * unless the user changed it in the drawer; an edited section is rebuilt as
+ * the drawer shows it and tidied. So a save never rewrites what the user left
+ * alone from the current result, which may have no rows, or lack a column.
+ *
+ * The chart section saves the chosen kind only, with the preset kept for
+ * switching back. Options the preset no longer offers after an edit (bars
+ * lying down after a switch to lines, thresholds on a pie) are not saved;
+ * `tabs` are the current result's statements, which tell.
+ */
+export const settingsOf = (
+  draft: DrawDraft,
+  saved: DrawSettings,
+  tabs: QueryTab[] = [],
+): SaveResult => {
+  const savedConfig = saved.chartConfig
+  let custom: Record<string, unknown> | undefined
+  if (draft.kind === "component") {
+    if (!draft.visual)
+      return { ok: false, error: "Choose a component to draw." }
+    const { min, max } = draft.visual
+    if (min !== undefined && max !== undefined && min >= max)
+      return { ok: false, error: "The minimum must be below the maximum." }
+  } else if (draft.kind === "custom") {
+    const parsed = parseCustomJson(draft.customJson)
+    if (!parsed.ok) return parsed
+    custom = parsed.option
+  }
+  const chartEdited =
+    draft.kind !== kindOf(savedConfig) ||
+    draft.chartEdited ||
+    (draft.kind === "component" &&
+      !isEqual(draft.visual, savedConfig.visual)) ||
+    (draft.kind === "custom" &&
+      draft.customJson !== customJsonOf(savedConfig) &&
+      !isEqual(custom, savedConfig.custom?.option))
+  let chartConfig = savedConfig
+  if (chartEdited) {
+    chartConfig = presetOnly(
+      draft.chartEdited
+        ? withoutUnofferedOptions(draft.chart, tabs)
+        : draft.kind === "chart"
+          ? draft.chart
+          : draft.savedChart,
+    )
+    if (draft.kind === "component" && draft.visual)
+      chartConfig.visual = draft.visual
+    else if (custom) chartConfig.custom = { option: custom }
+  }
+  const formats = formatsToSave(saved.formats, draft.formats)
+  // A switch to a component without clicks or drags drops them; one saved
+  // that way keeps them until its chart changes.
+  const interactions = supportsInteractions(draft)
+    ? interactionsToSave(saved.interactions, draft)
+    : chartEdited
+      ? undefined
+      : saved.interactions
+  return {
+    ok: true,
+    settings: {
+      chartConfig,
+      ...(formats ? { formats } : {}),
+      ...(interactions ? { interactions } : {}),
+    },
+  }
+}
+
+type ColumnsOf = { index: number; columns: ColumnDefinition[] }
+
+const yColumnsOf = (query: QueryChart | null | undefined): string[] =>
+  query?.yColumns ?? []
+
+/**
+ * A custom option that draws what the preset chart draws now, as a place to
+ * start: the first statement's series over its x column.
+ */
+export const starterCustomOption = (
+  chart: ChartConfig,
+  statements: ColumnsOf[],
+): Record<string, unknown> => {
+  const first = statements[0]
+  const query = first ? chart.queries[first.index] : undefined
+  const x = chart.xColumn ?? first?.columns[0]?.name
+  const xColumn = first?.columns.find((c) => c.name === x)
+  const xRole = xColumn ? classifyColumn(xColumn) : "other"
+  const numeric = (first?.columns ?? []).filter(
+    (c) => classifyColumn(c) === "numeric" && c.name !== x,
+  )
+  const ys =
+    yColumnsOf(query).length > 0
+      ? yColumnsOf(query)
+      : numeric.slice(0, 1).map((c) => c.name)
+  const dataset = `q${first?.index ?? 0}`
+  // A pie names its slices by x and sizes them by the first value.
+  if (query?.type === "pie")
+    return {
+      tooltip: { trigger: "item" },
+      series: [
+        {
+          type: "pie",
+          radius: ["35%", "70%"],
+          datasetId: dataset,
+          encode: { itemName: x, value: ys[0] },
+        },
+      ],
+    }
+  const isBar = query?.type === "bar" || query?.type === "stackedBar"
+  const isArea = query?.type === "area" || query?.type === "stepArea"
+  return {
+    tooltip: { trigger: query?.type === "scatter" ? "item" : "axis" },
+    xAxis: {
+      type:
+        xRole === "temporal"
+          ? "time"
+          : xRole === "numeric"
+            ? "value"
+            : "category",
+    },
+    yAxis: { type: "value" },
+    series: ys.map((y) => ({
+      type: isBar ? "bar" : query?.type === "scatter" ? "scatter" : "line",
+      name: y,
+      datasetId: dataset,
+      encode: { x, y },
+      ...(isBar || query?.type === "scatter" ? {} : { showSymbol: false }),
+      ...(query?.type === "stackedBar" || isArea ? { stack: "total" } : {}),
+      ...(isArea ? { areaStyle: {} } : {}),
+      ...(query?.type === "stepLine" || query?.type === "stepArea"
+        ? { step: "end" }
+        : {}),
+    })),
+  }
+}

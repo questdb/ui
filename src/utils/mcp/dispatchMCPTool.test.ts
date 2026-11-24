@@ -1,4 +1,5 @@
 import "../../test/stubBrowserGlobals"
+import { textOf } from "./types"
 import type { Permissions } from "../tools/permissions"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -149,8 +150,31 @@ describe("dispatchMCPTool — envelope shape", () => {
     expect(out.content).toHaveLength(1)
     expect(out.content[0].type).toBe("text")
     // Tool body always comes first; the since_last_check suffix is appended.
-    expect(out.content[0].text).toMatch(/^\{"x":1\}/)
+    expect(textOf(out.content[0])).toMatch(/^\{"x":1\}/)
     expect(out.isError).toBe(false)
+  })
+
+  it("carries a picture after the text, and the since_last_check block after both", async () => {
+    // Given a tool that returns a picture (get_cell_image)
+    vi.mocked(mockedDispatchTool).mockResolvedValueOnce({
+      content: '{"picture":true}',
+      images: [{ data: "iVBORw0KGgo=", mimeType: "image/png" }],
+    })
+
+    // When
+    const out = await dispatchMCPTool(
+      makeCall("get_cell_image", { buffer_id: 1, cell_id: "c" }),
+      ctx("fresh"),
+    )
+
+    // Then the text comes first, then the picture
+    expect(textOf(out.content[0])).toMatch(/^\{"picture":true\}/)
+    expect(out.content[1]).toEqual({
+      type: "image",
+      data: "iVBORw0KGgo=",
+      mimeType: "image/png",
+    })
+    expect(out.content.slice(2).every((c) => c.type === "text")).toBe(true)
   })
 
   it("propagates is_error=true from dispatchTool", async () => {
@@ -161,6 +185,6 @@ describe("dispatchMCPTool — envelope shape", () => {
     const out = await dispatchMCPTool(makeCall("list_cells"), ctx("fresh"))
     expect(out.isError).toBe(true)
     // Tool body still leads the payload; the suffix follows.
-    expect(out.content[0].text).toMatch(/^boom/)
+    expect(textOf(out.content[0])).toMatch(/^boom/)
   })
 })

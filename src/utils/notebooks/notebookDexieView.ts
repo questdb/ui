@@ -15,6 +15,7 @@ import type {
   NotebookViewState,
 } from "../../store/notebook"
 import { isCellPaneView } from "../../store/notebook"
+import { migrateNotebookFormat } from "../../store/notebookFormat"
 import { NotebookToolError } from "./notebookToolError"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 import { foldLegacyMaximizedHeights } from "../../scenes/Editor/Notebook/cellSizing"
@@ -72,7 +73,8 @@ export const migratePersistedNotebookView = (view: NotebookViewState) => {
   const migrated = dropMalformedHighlightConfigs(
     dropLegacyChartConfigs(migrateLegacyCellNames(view)),
   )
-  return { ...migrated, cells: migrated.cells.map(migrateCellPaneView) }
+  const { state } = migrateNotebookFormat(migrated)
+  return { ...state, cells: state.cells.map(migrateCellPaneView) }
 }
 
 export const readNotebookBufferMeta = async (

@@ -210,6 +210,20 @@ describe("classifyStatements", () => {
     ])
   })
 
+  it("classifies EXPLAIN as DQL: it reads and writes nothing", async () => {
+    // Given the server's validation of an EXPLAIN, which has no columns
+    const validate = vi.fn().mockResolvedValue({ queryType: "EXPLAIN" })
+
+    // When / Then it runs wherever a SELECT may, but an INSERT still does not
+    expect(await classifyStatements("EXPLAIN SELECT 1", validate)).toEqual([
+      { sql: "EXPLAIN SELECT 1", klass: "DQL" },
+    ])
+    validate.mockResolvedValue(dmlValidate)
+    expect(
+      (await classifyStatements("INSERT INTO t VALUES (1)", validate))[0].klass,
+    ).toBe("DDL_DML")
+  })
+
   it("classifies syntax errors as ERROR and retains the server message", async () => {
     const validate = vi.fn().mockResolvedValue(errorValidate)
     const out = await classifyStatements("BAD", validate)

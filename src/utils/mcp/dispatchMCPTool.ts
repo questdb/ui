@@ -1,5 +1,5 @@
 import type { ModelToolsClient } from "../ai/aiAssistant"
-import { dispatchTool } from "../tools/dispatch"
+import { dispatchTool, type DispatchOutput } from "../tools/dispatch"
 import {
   INVALID_BUFFER_ID_MESSAGE,
   STATE_NOT_FETCHED_MESSAGE,
@@ -62,11 +62,15 @@ const errorPayload = (text: string): ToolResultPayload => ({
   isError: true,
 })
 
-const wrapDispatchToolOutput = (out: {
-  content: string
-  is_error?: boolean
-}): ToolResultPayload => ({
-  content: [{ type: "text", text: out.content }],
+const wrapDispatchToolOutput = (out: DispatchOutput): ToolResultPayload => ({
+  content: [
+    { type: "text", text: out.content },
+    ...(out.images ?? []).map((image) => ({
+      type: "image" as const,
+      data: image.data,
+      mimeType: image.mimeType,
+    })),
+  ],
   isError: out.is_error === true ? true : false,
 })
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useEffect, useId, useMemo, useRef, useState } from "react"
 import { ChartLineIcon, WarningIcon } from "@phosphor-icons/react"
 import styled from "styled-components"
 import { AIStopButton } from "../../../components/AIStopButton"
@@ -8,15 +8,24 @@ import { Reset } from "../../../components/icons"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
-import { buildEchartsOption } from "../../Editor/Notebook/CellChart/buildEchartsOption"
 import {
-  ChartRenderer,
-  type ChartRendererHandle,
-} from "../../Editor/Notebook/CellChart/ChartRenderer"
+  buildEchartsOption,
+  sharesProblem,
+} from "../../Editor/Notebook/CellChart/buildEchartsOption"
+import {
+  ChartSuspense,
+  LazyChartRenderer,
+  preloadChartCode,
+} from "../../Editor/Notebook/CellChart/lazyCharts"
 import { ChartSettingsPanel } from "../../Editor/Notebook/CellChart/ChartSettingsDrawer"
 import type { ChartSettingsTelemetry } from "../../Editor/Notebook/CellChart/chartSettingsTelemetry"
 import type { ChartConfig } from "../../Editor/Notebook/CellChart/chartTypes"
 import { resolveDraw } from "../../Editor/Notebook/DrawCanvas/drawCanvasUtils"
+import {
+  clearChartZoom,
+  resetChartZoom,
+} from "../../Editor/Notebook/cellVirtualization/chartZoomStore"
+import { useChartZoomed } from "../../Editor/Notebook/cells/useChartZoomed"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import type { QueryRawResult } from "../../../utils/questdb"
 import { Type } from "../../../utils/questdb"
@@ -24,6 +33,9 @@ import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { useChartQuery } from "./useChartQuery"
 
 type ResultChartData = Extract<QueryRawResult, { type: Type.DQL }>
+
+// Result charts keep their zoom in the chart zoom store, outside any notebook.
+const RESULT_CHARTS = -1
 
 type Props = {
   result: ResultChartData | null
@@ -150,10 +162,17 @@ export const ResultChart: React.FC<Props> = ({
   onResetZoomFocus,
 }) => {
   const chartQuery = useChartQuery({ seed: result, enabled: visible })
+  // The chart code loads while the chart's query runs, not after it.
+  useEffect(() => {
+    if (visible) preloadChartCode()
+  }, [visible])
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null)
-  const [zoomStart, setZoomStart] = useState(0)
-  const [zoomEnd, setZoomEnd] = useState(100)
-  const chartRendererRef = useRef<ChartRendererHandle | null>(null)
+  const chartId = useId()
+  const zoomScope = useMemo(
+    () => ({ bufferId: RESULT_CHARTS, cellId: chartId }),
+    [chartId],
+  )
+  useEffect(() => () => clearChartZoom(zoomScope), [zoomScope])
   const trackedChartResultRef = useRef<QueryExecResult | null>(null)
 
   const queryKey = result ? normalizeQueryText(result.query) : ""
@@ -182,29 +201,29 @@ export const ResultChart: React.FC<Props> = ({
     [resolution],
   )
 
+  const stackProblem = useMemo(
+    () => (resolution ? sharesProblem(resolution.renderQueries) : undefined),
+    [resolution],
+  )
+
   const hasChartableColumns =
     resolution?.renderQueries.some(
-      (query) => query.yColumns.length > 0 || query.ohlc != null,
+      (query) =>
+        query.yColumns.length > 0 || query.ohlc != null || query.roles != null,
     ) ?? false
 
   const shownRowCount = chartResult?.dataset.length ?? 0
   const totalRowCount = chartResult?.count ?? 0
   const isTruncated = totalRowCount > shownRowCount
-  const isZoomed = zoomStart > 0 || zoomEnd < 100
+  const isZoomed = useChartZoomed(zoomScope.bufferId, zoomScope.cellId)
 
+  // Another query starts on its own window.
   useEffect(() => {
-    setZoomStart(0)
-    setZoomEnd(100)
-    chartRendererRef.current?.resetZoom()
-  }, [queryKey])
-
-  const handleZoomChange = useCallback((start: number, end: number) => {
-    setZoomStart(start)
-    setZoomEnd(end)
-  }, [])
+    resetChartZoom(zoomScope, { localOnly: true })
+  }, [queryKey, zoomScope])
 
   const handleResetZoom = (e: React.MouseEvent) => {
-    chartRendererRef.current?.resetZoom()
+    resetChartZoom(zoomScope)
     if (e.detail === 0) onResetZoomFocus()
   }
 
@@ -216,6 +235,7 @@ export const ResultChart: React.FC<Props> = ({
   }
 
   const canDraw =
+    stackProblem === undefined &&
     option !== null &&
     chartResult !== null &&
     chartResult.dataset.length > 0 &&
@@ -279,6 +299,17 @@ export const ResultChart: React.FC<Props> = ({
         <span>{chartQuery.message}</span>
       </EmptyState>
     )
+  } else if (stackProblem) {
+    body = (
+      <EmptyState
+        $tone="danger"
+        role="alert"
+        data-hook="result-chart-stack-error"
+      >
+        <WarningIcon size={32} weight="fill" aria-hidden />
+        <span>{stackProblem}</span>
+      </EmptyState>
+    )
   } else if (canDraw) {
     body = (
       <Canvas>
@@ -306,13 +337,13 @@ export const ResultChart: React.FC<Props> = ({
               </IconButton>
             </ChartActions>
           )}
-          <ChartRenderer
-            ref={chartRendererRef}
-            option={option}
-            onZoomChange={handleZoomChange}
-            animateEntry={false}
-            zoomWindow={{ start: zoomStart, end: zoomEnd }}
-          />
+          <ChartSuspense>
+            <LazyChartRenderer
+              option={option}
+              zoomScope={zoomScope}
+              animateEntry={false}
+            />
+          </ChartSuspense>
         </ChartArea>
       </Canvas>
     )

@@ -11,7 +11,13 @@ const Y_AXIS_LABEL_WIDTH_PX = 48
 // body is half its band.
 const CANDLE_FILL_RATIO = 0.5
 
-type SeriesSpec = { type?: string; stack?: string; data?: unknown[] }
+type SeriesSpec = {
+  type?: string
+  stack?: string
+  data?: unknown[]
+  renderItem?: unknown
+  encode?: { x?: unknown }
+}
 
 const seriesOf = (option: EChartsOption): SeriesSpec[] => {
   const raw = option.series
@@ -59,23 +65,46 @@ export type ChartZoomDensity = {
   wheel: boolean
 }
 
+// Rows down the side: grid top plus the room under the plot.
+const LYING_CHROME_PX = 40 + 56
+
 export const chartZoomDensity = (
   option: EChartsOption,
   containerWidthPx: number,
+  containerHeightPx = 0,
 ): ChartZoomDensity => {
-  const plotWidth = plotWidthOf(option, containerWidthPx)
-  if (plotWidth <= 0) return { slider: false, wheel: false }
+  // A chart that brings its own inside zoom (the timeline) always zooms.
+  const ownZoom = (Array.isArray(option.dataZoom) ? option.dataZoom : []).some(
+    (z) => (z as { type?: string }).type === "inside",
+  )
+  // Bars lying down share the plot's height, so crowding is measured there.
+  const lying =
+    (firstOf(option.xAxis) as { type?: string } | undefined)?.type ===
+      "value" &&
+    (firstOf(option.yAxis) as { type?: string } | undefined)?.type !== "value"
+  const plotWidth = lying
+    ? containerHeightPx - LYING_CHROME_PX
+    : plotWidthOf(option, containerWidthPx)
+  if (plotWidth <= 0) return { slider: false, wheel: ownZoom }
 
   const series = seriesOf(option)
-  const bars = series.filter((s) => s.type === "bar")
+  // Range bars are a custom series drawn like bars; on a timeline (which
+  // zooms on its own) their count says nothing about crowding.
+  const bars = series.filter(
+    (s) =>
+      s.type === "bar" ||
+      (s.type === "custom" && s.renderItem === "barRange" && !ownZoom),
+  )
   const candles = series.filter((s) => s.type === "candlestick")
   const points = series.filter((s) => s.type === "line" || s.type === "scatter")
-  const xAxis = firstOf(option.xAxis) as { data?: unknown[] } | undefined
-  const categorySlots = Array.isArray(xAxis?.data) ? xAxis.data.length : 0
+  const sideAxis = firstOf(lying ? option.yAxis : option.xAxis) as
+    | { data?: unknown[] }
+    | undefined
+  const categorySlots = Array.isArray(sideAxis?.data) ? sideAxis.data.length : 0
   const bandSlots = (list: SeriesSpec[]) =>
     Math.max(categorySlots, maxDataLength(list))
 
-  const density = { slider: false, wheel: false }
+  const density = { slider: false, wheel: ownZoom }
   const include = (slots: number, fillRatio: number, minPx: number) => {
     if (slots <= 0) return
     const markPx = (plotWidth / slots) * fillRatio

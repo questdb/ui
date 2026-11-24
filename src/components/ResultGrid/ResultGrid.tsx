@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -34,6 +35,7 @@ import {
   sampleColumnWidths,
   isLeftAligned,
   formatCellValue,
+  formatCellValueForCopy,
   formatColumnType,
   toSingleLineDisplay,
 } from "./inlineGridUtils"
@@ -46,6 +48,7 @@ import {
   DEFAULT_FLASH_DURATION_MS,
   GridContainer,
   HeaderCell,
+  HeaderFormatButton,
   HeaderName,
   HeaderNameRow,
   HeaderRow,
@@ -79,6 +82,24 @@ import {
   type HighlightLookup,
 } from "./highlight/types"
 import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
+import { useTheme } from "styled-components"
+import { SlidersHorizontalIcon } from "@phosphor-icons/react"
+import {
+  formatTargetOf,
+  formatsNumbers,
+  formatValue,
+  toneColor,
+  toneTextColor,
+  toneOf,
+  type ColumnFormat,
+  type ColumnFormats,
+} from "../../utils/formats/columnFormat"
+import {
+  CellVisualLayer,
+  sparklinePointsOf,
+  columnScalesOf,
+  type ColumnScale,
+} from "./cellVisuals"
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -90,6 +111,7 @@ declare module "@tanstack/react-table" {
 const FREEZE_HANDLE_EDGE_INSET = 4
 
 type GridCellProps = {
+  gridId: string
   rowIndex: number
   colIndex: number
   rawValue: CellValue
@@ -109,9 +131,13 @@ type GridCellProps = {
   flashStartedAt: number
   flashDurationMs: number
   onCellClick: (row: number, col: number) => void
+  // The column's format and the scale its in-cell visual draws against.
+  format?: ColumnFormat
+  scale?: ColumnScale
 }
 
 const GridCell = React.memo(function GridCell({
+  gridId,
   rowIndex,
   colIndex,
   rawValue,
@@ -131,12 +157,34 @@ const GridCell = React.memo(function GridCell({
   flashStartedAt,
   flashDurationMs,
   onCellClick,
+  format: savedFormat,
+  scale,
 }: GridCellProps) {
+  const theme = useTheme()
   const colType = col?.type ?? ""
+  // Formats are saved by name, but a sibling statement can use that name
+  // for a different SQL type.
+  const format = formatTargetOf(colType) === null ? undefined : savedFormat
   const align = isLeftAligned(colType) ? "left" : "right"
-  const displayValue = loaded
-    ? toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
-    : ""
+  const sparklinePoints =
+    loaded && format?.visual === "sparkline"
+      ? sparklinePointsOf(rawValue)
+      : undefined
+  const formattedNumber =
+    loaded &&
+    sparklinePoints === undefined &&
+    formatsNumbers(format) &&
+    !Array.isArray(rawValue)
+  const displayValue = !loaded
+    ? ""
+    : sparklinePoints !== undefined
+      ? ""
+      : formattedNumber
+        ? toSingleLineDisplay(formatValue(rawValue, format))
+        : toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
+  const tone = loaded ? toneOf(rawValue, format) : undefined
+  const toneCss = tone ? toneColor(tone, theme.color) : undefined
+  const textTone = toneTextColor(tone, theme.color) ?? toneCss
   const highlightMode =
     highlight === undefined
       ? undefined
@@ -155,7 +203,8 @@ const GridCell = React.memo(function GridCell({
   )
   return (
     <Cell
-      id={`cell-${rowIndex}-${colIndex}`}
+      id={`${gridId}-cell-${rowIndex}-${colIndex}`}
+      data-grid-coordinate={`cell-${rowIndex}-${colIndex}`}
       data-hook="grid-cell"
       data-pulse={isPulsing ? "true" : undefined}
       data-frozen={frozen ? "true" : undefined}
@@ -186,10 +235,34 @@ const GridCell = React.memo(function GridCell({
       $flashParity={flashParity}
       onClick={() => onCellClick(rowIndex, colIndex)}
       role="gridcell"
+      aria-label={
+        sparklinePoints === undefined
+          ? undefined
+          : formatCellValueForCopy(rawValue, col)
+      }
       aria-colindex={colIndex + 1}
       aria-selected={isActive}
     >
-      <CellText style={{ textAlign: align }}>{displayValue}</CellText>
+      {loaded && format?.visual && (
+        <CellVisualLayer
+          visual={format.visual}
+          value={rawValue}
+          scale={scale}
+          color={toneCss ?? theme.color.chartSeries1}
+          sparklinePoints={sparklinePoints}
+        />
+      )}
+      <CellText
+        data-hook="grid-cell-text"
+        data-formatted={formattedNumber ? "true" : undefined}
+        style={{
+          textAlign: align,
+          ...(textTone ? { color: textTone } : {}),
+          ...(format?.visual ? { position: "relative", zIndex: 1 } : {}),
+        }}
+      >
+        {displayValue}
+      </CellText>
       {hasDirectionSlot && (
         <CellDirectionGlyph $direction={direction} aria-hidden>
           {direction === "up" ? "▲" : direction === "down" ? "▼" : null}
@@ -202,6 +275,12 @@ const GridCell = React.memo(function GridCell({
 type Props = {
   dataSource: ResultGridDataSource
   maxColumnWidth: MaxColumnWidth
+  // Formats by column name: text, colour thresholds and in-cell visuals.
+  columnFormats?: ColumnFormats
+  // A click on a cell, with the row's values, after the grid's own handling.
+  onCellActivate?: (row: ResultGridRow, column: number) => void
+  // Shows a "Format column" button in each header (notebooks).
+  onFormatColumn?: (column: string) => void
   runToken?: number // changes per run to reset focus/selection on the grid
   cellHighlights?: HighlightLookup
   // Flips on every highlighted result so a repeated flash restarts.
@@ -274,6 +353,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     {
       dataSource,
       maxColumnWidth,
+      columnFormats,
+      onCellActivate,
+      onFormatColumn,
       runToken,
       cellHighlights = EMPTY_HIGHLIGHT_LOOKUP,
       flashParity = 0,
@@ -305,6 +387,13 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onVisibleRowsChange,
     } = dataSource
 
+    // In-cell bars and meters scale against the loaded rows.
+    const columnScales = useMemo(
+      () => columnScalesOf(columns, sampleRows, columnFormats),
+      [columns, sampleRows, columnFormats],
+    )
+
+    const gridId = useId()
     const gridRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -547,7 +636,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       focusedCell,
       setFocusedCell,
       copyPulse,
-      onCellClick,
+      onCellClick: onGridCellClick,
       onKeyDown,
       onBlur,
     } = useGridKeyboardNav(
@@ -557,6 +646,18 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       getColumn,
       scrollContextRef,
       onCellCopy,
+    )
+    const onCellActivateRef = useRef(onCellActivate)
+    onCellActivateRef.current = onCellActivate
+    const onCellClick = useCallback(
+      (row: number, col: number) => {
+        onGridCellClick(row, col)
+        const activate = onCellActivateRef.current
+        if (!activate) return
+        const data = getRow(toAbsoluteIndex(row, rowCount))
+        if (data) activate(data, dataIndexAt(col))
+      },
+      [onGridCellClick, getRow, rowCount, dataIndexAt],
     )
 
     const {
@@ -615,11 +716,82 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           resetLayout()
           return
         }
+        if (
+          e.key === "ArrowDown" &&
+          e.target === e.currentTarget &&
+          !focusedCell &&
+          onCellActivateRef.current &&
+          rowCount > 0 &&
+          columns.length > 0
+        ) {
+          e.preventDefault()
+          e.stopPropagation()
+          const viewport = scrollRef.current
+          const firstVisibleRow = Math.min(
+            rowCount - 1,
+            Math.max(0, Math.floor((viewport?.scrollTop ?? 0) / ROW_HEIGHT)),
+          )
+          const firstVisibleColumn =
+            frozenCount > 0
+              ? 0
+              : columnOffsets.findIndex(
+                  (_, index) =>
+                    columnOffsets[index + 1] > (viewport?.scrollLeft ?? 0),
+                )
+          setFocusedCell({
+            row: firstVisibleRow,
+            col: Math.max(firstVisibleColumn, 0),
+          })
+          return
+        }
+        if (
+          (e.key === "Enter" || e.key === " ") &&
+          e.target === e.currentTarget &&
+          !e.altKey &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !e.shiftKey &&
+          !e.nativeEvent.isComposing &&
+          focusedCell &&
+          onCellActivateRef.current
+        ) {
+          e.preventDefault()
+          e.stopPropagation()
+          const active = e.currentTarget.getAttribute("aria-activedescendant")
+          const viewport = scrollRef.current
+          const rowVisible =
+            !viewport ||
+            ((focusedCell.row + 1) * ROW_HEIGHT > viewport.scrollTop &&
+              focusedCell.row * ROW_HEIGHT + HEADER_HEIGHT <
+                viewport.scrollTop + (viewport.clientHeight || Infinity))
+          const colVisible =
+            !viewport ||
+            focusedCell.col < frozenCount ||
+            (columnOffsets[focusedCell.col + 1] >
+              viewport.scrollLeft + frozenWidth &&
+              columnOffsets[focusedCell.col] <
+                viewport.scrollLeft + (viewport.clientWidth || Infinity))
+          if (
+            !e.repeat &&
+            rowVisible &&
+            colVisible &&
+            active === `${gridId}-cell-${focusedCell.row}-${focusedCell.col}`
+          )
+            onCellClick(focusedCell.row, focusedCell.col)
+          return
+        }
         onKeyDown(e)
       },
       [
         onKeyDown,
         focusedCell,
+        onCellClick,
+        rowCount,
+        columns.length,
+        columnOffsets,
+        frozenCount,
+        frozenWidth,
+        gridId,
         shuffleFocusedColumnToFront,
         onYieldFocus,
         setFocusedCell,
@@ -795,6 +967,34 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               />
             </HeaderNameRow>
             <HeaderType title={formattedType}>{formattedType}</HeaderType>
+            {onFormatColumn &&
+              col &&
+              // Formats change how numbers and arrays read: those columns,
+              // or one that already has a format.
+              (formatTargetOf(col.type) !== null ||
+                columnFormats?.[col.name] !== undefined) && (
+                <HeaderFormatButton
+                  className="header-format-btn"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  $align={align}
+                  $formatted={columnFormats?.[col.name] !== undefined}
+                  aria-label={`Format column ${col.name}`}
+                  title={
+                    columnFormats?.[col.name]
+                      ? `${col.name} has a format: edit it`
+                      : `Format ${col.name}`
+                  }
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onFormatColumn(col.name)
+                  }}
+                >
+                  <SlidersHorizontalIcon size={12} />
+                </HeaderFormatButton>
+              )}
             {!pos.frozen && renderResizer(header)}
           </HeaderCell>
         )
@@ -824,6 +1024,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       frozenCount,
       headers,
       onColumnCopy,
+      onFormatColumn,
+      columnFormats,
       renderResizer,
     ])
 
@@ -869,7 +1071,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         aria-colcount={columns.length}
         aria-activedescendant={
           focusedCell && focusedCellRendered
-            ? `cell-${focusedCell.row}-${focusedCell.col}`
+            ? `${gridId}-cell-${focusedCell.row}-${focusedCell.col}`
             : undefined
         }
       >
@@ -906,6 +1108,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 const dataIndex = dataIndexAt(colIdx)
                 return (
                   <GridCell
+                    gridId={gridId}
                     key={header.id}
                     rowIndex={virtualIndex}
                     colIndex={colIdx}
@@ -932,6 +1135,12 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                     isPulsing={isCellPulsing(virtualIndex, colIdx)}
                     isDesignatedTimestamp={dataIndex === designatedTimestamp}
                     onCellClick={onCellClick}
+                    format={
+                      columnFormats?.[
+                        header.column.columnDef.meta?.col?.name ?? ""
+                      ]
+                    }
+                    scale={columnScales[dataIndex]}
                   />
                 )
               }

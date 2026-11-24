@@ -18,6 +18,7 @@ import {
   isExpectingResult,
   releaseCellResultPatch,
   MIN_MARKDOWN_HEIGHT_PX,
+  MIN_BOTTOM_HEIGHT_PX,
   cellModeChangePatch,
   partitionCellHeights,
   topHeightForSql,
@@ -36,6 +37,48 @@ const cell = (
   position: 0,
   value,
   result,
+})
+
+describe("draw pane minimums", () => {
+  const base: NotebookCell = {
+    ...cell("a", "select 1"),
+    mode: "draw",
+    paneView: "result",
+  }
+  const preset = { queries: [], xColumn: null }
+  const component = { ...preset, visual: { type: "stat" as const } }
+  const custom = { ...preset, custom: { option: {} } }
+
+  it.each([
+    ["default chart", undefined, 296, 12],
+    ["preset chart", preset, 296, 12],
+    ["component", component, MIN_BOTTOM_HEIGHT_PX, 6],
+    ["custom option", custom, MIN_BOTTOM_HEIGHT_PX, 6],
+  ] as const)(
+    "clamps a %s to its own minimum",
+    (_name, chartConfig, height, rows) => {
+      // Given a draw cell with a stored size below its minimum
+      const draw = {
+        ...base,
+        chartConfig,
+        bottomHeight: 80,
+        bottomResized: true,
+      }
+
+      // When the pane, grid bounds and agent dimensions are resolved
+      const { bottomHeight } = computeCellHeights(draw)
+      const bounds = computeCellGridBounds(draw, 10, 20, true)
+      const agent = agentCellPaneDimensions(draw)
+
+      // Then they agree on the minimum and the unpinned default is unchanged
+      expect(bottomHeight).toBe(height)
+      expect(bounds).toMatchObject({ h: rows, minH: rows })
+      expect(agent.resultHeight).toBe(height)
+      expect(computeCellHeights({ ...base, chartConfig }).bottomHeight).toBe(
+        DEFAULT_CHART_BOTTOM_HEIGHT,
+      )
+    },
+  )
 })
 
 describe("discardCellResult", () => {

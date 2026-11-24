@@ -12,7 +12,7 @@ const RISING_VALUE_QUERY = "select 'A' as k, cast(now() as long) as v"
 
 const openHighlightDrawer = () => {
   cy.get("[data-notebook-cell] button[aria-label='More actions']").click()
-  cy.contains("[role='menuitem']", "Highlight rules").click()
+  cy.contains("[role='menuitem']", "Grid settings").click()
   cy.getByDataHook("highlight-settings-drawer").should("be.visible")
 }
 
@@ -92,7 +92,7 @@ describe("notebook highlight rules", () => {
     loadNotebookCell(RISING_VALUE_QUERY)
     runCell()
     let previousValue
-    cy.get("[data-notebook-cell] #cell-0-1")
+    cy.get("[data-notebook-cell] [data-grid-coordinate='cell-0-1']")
       .invoke("text")
       .then((value) => {
         previousValue = Number(value)
@@ -168,7 +168,7 @@ describe("notebook highlight rules", () => {
       .should("have.attr", "data-highlight-color", "dataNegative")
       .and("contain.text", "▼")
     assertFlash("down")
-    cy.get("[data-notebook-cell] #cell-0-0").should(
+    cy.get("[data-notebook-cell] [data-grid-coordinate='cell-0-0']").should(
       "not.have.attr",
       "data-highlight",
     )
@@ -217,8 +217,14 @@ describe("notebook highlight rules", () => {
     cy.getByDataHook("grid-viewport").should("exist")
 
     // Then the drawer stays closed
-    cy.get("[data-notebook-cell] #cell-0-0").should("have.text", "A")
-    cy.get("[data-notebook-cell] #cell-0-1").should("have.text", "5")
+    cy.get("[data-notebook-cell] [data-grid-coordinate='cell-0-0']").should(
+      "have.text",
+      "A",
+    )
+    cy.get("[data-notebook-cell] [data-grid-coordinate='cell-0-1']").should(
+      "have.text",
+      "5",
+    )
     cy.getByDataHook("highlight-settings-drawer").should("not.exist")
     openHighlightDrawer()
     cy.getByDataHook("highlight-rule").should("not.exist")
@@ -235,7 +241,7 @@ describe("notebook highlight rules", () => {
     cy.get("[data-hook='grid-cell'][data-highlight]").should("not.exist")
 
     let previousValue
-    cy.get("[data-notebook-cell] #cell-0-1")
+    cy.get("[data-notebook-cell] [data-grid-coordinate='cell-0-1']")
       .invoke("text")
       .then((value) => {
         previousValue = Number(value)
@@ -303,7 +309,7 @@ describe("notebook highlight rules", () => {
     // When
     watchDrawerExit().then((exit) => {
       cy.wrap(exit.drawer)
-        .contains("button", "Clear all")
+        .contains("button", "Clear rules")
         .then(($clearAll) => {
           cy.contains("button", "Save").then(($save) => {
             const rect = $save[0].getBoundingClientRect()
@@ -374,7 +380,7 @@ describe("notebook highlight rules", () => {
     cy.getByDataHook("highlight-settings-drawer").should("not.exist")
     cy.get("[data-hook=grid-cell][data-highlight]")
       .should("have.length", 1)
-      .and("have.id", "cell-0-1")
+      .and("have.attr", "data-grid-coordinate", "cell-0-1")
       .and("have.attr", "data-highlight-color", "dataSeries2")
     openHighlightDrawer()
     cy.getByDataHook("highlight-rule")
@@ -388,11 +394,14 @@ describe("notebook highlight rules", () => {
     cy.get("[data-hook=grid-cell][data-highlight]")
       .should("have.length", 2)
       .each(($cell) => {
-        expect($cell.attr("id")).to.be.oneOf(["cell-0-0", "cell-0-1"])
+        expect($cell.attr("data-grid-coordinate")).to.be.oneOf([
+          "cell-0-0",
+          "cell-0-1",
+        ])
         expect($cell.attr("data-highlight-color")).to.equal("dataSeries2")
       })
     openHighlightDrawer()
-    cy.contains("button", "Clear all").click()
+    cy.contains("button", "Clear rules").click()
     cy.get("[data-hook=grid-cell][data-highlight]").should("not.exist")
     openHighlightDrawer()
     cy.getByDataHook("highlight-rule").should("not.exist")

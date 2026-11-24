@@ -17,7 +17,13 @@ import type {
   NotebookVariable,
   NotebookViewState,
 } from "../../../store/notebook"
-import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
+import {
+  CHART_TYPES,
+  PIE_SHAPES,
+  THRESHOLD_MARKS,
+  type ChartConfig,
+  type QueryChart,
+} from "../Notebook/CellChart/chartTypes"
 import { isAutoRefresh } from "../Notebook/notebookUtils"
 import {
   clampPaneHeight,
@@ -34,6 +40,16 @@ import {
   exceedsCellLineLimit,
   sanitizeHighlightConfig,
 } from "../../../store/notebook"
+import {
+  migrateNotebookFormat,
+  sanitizeChartSync,
+  sanitizeCustomChart,
+  sanitizeEventColumns,
+  sanitizeGridMode,
+  sanitizeInteractions,
+  sanitizeVisualConfig,
+} from "../../../store/notebookFormat"
+import { sanitizeColumnFormats } from "../../../utils/formats/columnFormat"
 import {
   DEFAULT_METRIC_COLOR_TOKEN,
   toMetricColorToken,
@@ -232,6 +248,17 @@ const sanitizeMetricsViewState = (
   return state
 }
 
+const sanitizeScatterColumns = (
+  value: unknown,
+): QueryChart["scatter"] | undefined => {
+  if (typeof value !== "object" || value === null) return undefined
+  const { size, color } = value as Record<string, unknown>
+  const out: NonNullable<QueryChart["scatter"]> = {}
+  if (typeof size === "string" && size) out.size = size
+  if (typeof color === "string" && color) out.color = color
+  return out.size || out.color ? out : undefined
+}
+
 const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
   if (typeof item !== "object" || item === null) return undefined
   const obj = item as Record<string, unknown>
@@ -240,12 +267,31 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
 
   const config: ChartConfig = {
     xColumn: typeof obj.xColumn === "string" ? obj.xColumn : null,
-    queries: obj.queries.map((q) =>
-      typeof q === "object" && q !== null ? (q as QueryChart) : null,
-    ),
+    queries: obj.queries.map((q) => {
+      if (typeof q !== "object" || q === null) return null
+      const query = q as QueryChart
+      // An unknown type would reach code that looks it up by name.
+      if (!(CHART_TYPES as readonly unknown[]).includes(query.type)) return null
+      const events = sanitizeEventColumns(query.events)
+      const { events: _raw, percentStack, pieShape, scatter, ...rest } = query
+      const next: QueryChart = events ? { ...rest, events } : rest
+      if (percentStack === true) next.percentStack = true
+      if ((PIE_SHAPES as readonly unknown[]).includes(pieShape))
+        next.pieShape = pieShape
+      const points = sanitizeScatterColumns(scatter)
+      if (points) next.scatter = points
+      return next
+    }),
   }
   if (typeof obj.rightAxis === "object" && obj.rightAxis !== null)
     config.rightAxis = obj.rightAxis as ChartConfig["rightAxis"]
+  if (obj.horizontal === true) config.horizontal = true
+  if ((THRESHOLD_MARKS as readonly unknown[]).includes(obj.thresholds))
+    config.thresholds = obj.thresholds as ChartConfig["thresholds"]
+  const visual = sanitizeVisualConfig(obj.visual)
+  if (visual) config.visual = visual
+  const custom = sanitizeCustomChart(obj.custom)
+  if (custom) config.custom = custom
   return config
 }
 
@@ -305,6 +351,12 @@ const sanitizeNotebookCell = (
     const highlightConfig = sanitizeHighlightConfig(item.highlightConfig)
     if (highlightConfig) cell.highlightConfig = highlightConfig
     if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+    const formats = sanitizeColumnFormats(item.formats)
+    if (formats) cell.formats = formats
+    const interactions = sanitizeInteractions(item.interactions)
+    if (interactions) cell.interactions = interactions
+    const gridMode = sanitizeGridMode(item.gridMode)
+    if (gridMode) cell.gridMode = gridMode
     cell.paneView = isCellPaneView(item.paneView)
       ? item.paneView
       : inferredMaximized
@@ -358,6 +410,8 @@ const sanitizeNotebookSettings = (
   }
   if (isAutoRefresh(item.autoRefreshDefault))
     settings.autoRefreshDefault = item.autoRefreshDefault
+  const chartSync = sanitizeChartSync(item.chartSync)
+  if (chartSync) settings.chartSync = chartSync
   return settings
 }
 
@@ -377,7 +431,9 @@ const sanitizeNotebookViewState = (
     state.settings = sanitizeNotebookSettings(
       item.settings as Record<string, unknown>,
     )
-  return state
+  if (typeof item.formatVersion === "number")
+    state.formatVersion = item.formatVersion
+  return migrateNotebookFormat(state).state
 }
 
 export const sanitizeBuffer = (
@@ -426,6 +482,94 @@ export const validateBufferSchema = (data: unknown): ValidationResult => {
   return true
 }
 
+// Canonicalize JSON so reordered settings in a hand-edited export do not
+// turn an otherwise identical visual into a new copy.
+const canonicalSettings = (_key: string, value: unknown): unknown => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value
+  const record = value as Record<string, unknown>
+  return Object.fromEntries(
+    Object.keys(record)
+      .sort()
+      .map((key) => [key, record[key]]),
+  )
+}
+
+// What makes two notebooks the same for import's duplicate check: their
+// content, not where panes sit, which cell has focus or what last ran. Every
+// field is listed, so a field added to the notebook model has to be placed on
+// one side or the other before this compiles.
+const CELL_IDENTITY: Record<keyof NotebookCell, boolean> = {
+  id: false,
+  position: false,
+  value: true,
+  name: true,
+  type: true,
+  editorViewState: false,
+  result: false,
+  topHeight: false,
+  bottomHeight: false,
+  topResized: false,
+  bottomResized: false,
+  spotlightEditorRatio: false,
+  mode: true,
+  chartConfig: true,
+  highlightConfig: true,
+  autoRefresh: true,
+  formats: true,
+  interactions: true,
+  gridMode: true,
+  paneView: false,
+  lastRunStatus: false,
+  lastRunError: false,
+}
+
+const SETTINGS_IDENTITY: Record<keyof NotebookSettings, boolean> = {
+  layoutMode: false,
+  layout: false,
+  variables: true,
+  autoRefreshDefault: true,
+  chartSync: true,
+}
+
+const VIEW_IDENTITY: Record<keyof NotebookViewState, boolean> = {
+  formatVersion: false,
+  cells: true,
+  focusedCellId: false,
+  maximizedCellId: false,
+  settings: true,
+}
+
+const pick = <T extends object>(
+  value: T,
+  policy: Record<keyof T, boolean>,
+): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(value).filter(
+      ([key, field]) => policy[key as keyof T] === true && field !== undefined,
+    ),
+  )
+
+// Both sides of the comparison go through the import sanitizer: an imported
+// row is sanitized before keying, a stored one here.
+const notebookIdentity = (state: NotebookViewState): unknown => {
+  let sanitized = state
+  try {
+    sanitized = sanitizeNotebookViewState(
+      state as unknown as Record<string, unknown>,
+    )
+  } catch {
+    // A stored row the importer would reject keys as it is.
+  }
+  const settings = sanitized.settings
+    ? pick(sanitized.settings, SETTINGS_IDENTITY)
+    : {}
+  return {
+    ...pick(sanitized, VIEW_IDENTITY),
+    cells: (sanitized.cells ?? []).map((cell) => pick(cell, CELL_IDENTITY)),
+    settings: Object.keys(settings).length > 0 ? settings : undefined,
+  }
+}
+
 export const createBufferContentKey = (
   buffer: Pick<
     Buffer,
@@ -433,8 +577,10 @@ export const createBufferContentKey = (
   >,
 ): string => {
   if (buffer.notebookViewState) {
-    const cellValues = buffer.notebookViewState.cells?.map((c) => c.value) ?? []
-    return `${buffer.label}|${JSON.stringify(cellValues)}`
+    return `${buffer.label}|${JSON.stringify(
+      notebookIdentity(buffer.notebookViewState),
+      canonicalSettings,
+    )}`
   }
   if (buffer.metricsViewState) {
     return `${buffer.label}|${JSON.stringify(buffer.metricsViewState)}`

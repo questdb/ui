@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from "react"
 import type { NotebookCell } from "../../../../store/notebook"
-import type { ChartConfig } from "../CellChart/chartTypes"
+import type { DrawSettings } from "../CellChart/drawSettings"
 import type { CellContentMode } from "../cellVirtualization/cellVirtualizationEngine"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import {
@@ -20,6 +20,7 @@ import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
+import { useRowHistories } from "../result-table/LiveRowsHistoryContext"
 import { cellColumnsOf } from "../result-table/highlightConfig"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
@@ -46,7 +47,7 @@ type Props = {
   isFocused: boolean
   isRunning: boolean
   refreshIntervalMs: number | undefined
-  onConfigChange: (config: ChartConfig) => void
+  onSettingsChange: (patch: Partial<DrawSettings>) => void
   onRetryUnmountWhileFocused: () => void
   onYieldFocus: () => void
 }
@@ -58,7 +59,7 @@ export const CellBottomContent: React.FC<Props> = ({
   isFocused,
   isRunning,
   refreshIntervalMs,
-  onConfigChange,
+  onSettingsChange,
   onRetryUnmountWhileFocused,
   onYieldFocus,
 }) => {
@@ -72,7 +73,14 @@ export const CellBottomContent: React.FC<Props> = ({
     shallowEqual,
   )
   const resultStatus = useCellResultStatus(cell.id)
-  const viewportStore = useMemo(() => createResultGridViewportStore(), [])
+  const rowHistories = useRowHistories()
+  const viewportStore = useMemo(
+    () =>
+      createResultGridViewportStore(
+        cell.gridMode === "stable" ? rowHistories?.forCell(cell.id) : undefined,
+      ),
+    [cell.id, cell.gridMode, rowHistories],
+  )
 
   // Tabs follow the editor's statements; results attach to them by content.
   // A statement with no result renders the neutral "Not run" slot. A frame no
@@ -127,7 +135,7 @@ export const CellBottomContent: React.FC<Props> = ({
         cell={cell}
         isFocused={isFocused}
         refreshIntervalMs={refreshIntervalMs}
-        onConfigChange={onConfigChange}
+        onSettingsChange={onSettingsChange}
         onRetryUnmountWhileFocused={onRetryUnmountWhileFocused}
       />
     ) : (
@@ -161,6 +169,9 @@ export const CellBottomContent: React.FC<Props> = ({
         highlightConfig={cell.highlightConfig}
         cellColumns={cellColumns}
         refreshIntervalMs={refreshIntervalMs}
+        formats={cell.formats}
+        gridMode={cell.gridMode}
+        interactions={cell.interactions}
       />
     ) : (
       <GridShimmer

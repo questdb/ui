@@ -1,22 +1,28 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
-import { Input, SelectMenuControl, TabButton } from "../../../../components"
-import type { ChartConfig, QueryChart } from "./chartTypes"
+import { Checkbox, Input, Text } from "../../../../components"
+import {
+  THRESHOLD_MARKS,
+  type ChartConfig,
+  type QueryChart,
+  type ThresholdMarks,
+} from "./chartTypes"
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
+import { chartOptionsOffered, withoutUnofferedOptions } from "./chartOptions"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
+  CheckboxRow,
   Field,
   FieldGroup,
   FieldLabel,
   IncompatibleIcon,
+  SettingsSelect,
 } from "./chartSettingsStyles"
 import { QueryControls } from "./QueryControls"
-import {
-  SettingsDrawerShell,
-  type SettingsDismissMethod,
-  type SettingsPresentation,
-} from "../settingsDrawer/SettingsDrawerShell"
+import { SettingsDrawerShell } from "../settingsDrawer/SettingsDrawerShell"
+import { SettingsTab, SettingsTabStrip } from "../settingsDrawer/SettingsTabs"
 
 const Row = styled.div`
   display: flex;
@@ -31,116 +37,51 @@ const Divider = styled.div`
   border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
-const TabStrip = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.interactionNeutral};
-`
-
-const Tab = styled(TabButton)`
-  && {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    padding: 0.8rem 1.4rem;
-    margin-bottom: -1px;
-  }
-`
-
 const parseBound = (v: string): number | undefined => {
   const n = Number(v)
   return v === "" || !Number.isFinite(n) ? undefined : n
 }
 
-const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
+export const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
   if (!q || q.type !== "candlestick" || q.enabled === false) return false
   const o = q.ohlc
   if (!o || !o.open || !o.high || !o.low || !o.close) return true
   return new Set([o.open, o.high, o.low, o.close]).size !== 4
 }
 
-type SharedProps = {
+type PresetFieldsProps = {
   tabs: QueryTab[]
-  config: ChartConfig
-  onSave: (next: ChartConfig) => void
+  draft: ChartConfig
+  onChange: (next: ChartConfig) => void
+  activeIndex: number
+  onActiveIndexChange: (index: number) => void
+  saveAttempted: boolean
   telemetry?: ChartSettingsTelemetry
+  offerEvents?: boolean
+  // The cell's column formats; thresholds are offered only with them.
+  formats?: ColumnFormats
 }
 
-type SettingsProps = SharedProps & {
-  presentation: SettingsPresentation
-  open: boolean
-  onClose?: () => void
-  // Drawer only: a draft carried across a cell remount, where edits go, and
-  // whether this mount is that remount.
-  initialDraft?: ChartConfig | null
-  onDraftChange?: (draft: ChartConfig) => void
-  appearInPlace?: boolean
+const THRESHOLD_LABELS: Record<ThresholdMarks, string> = {
+  lines: "Lines",
+  bands: "Shaded bands",
 }
 
-const ChartSettings: React.FC<SettingsProps> = ({
-  presentation,
-  open,
-  onClose,
+/** The preset chart's settings: x-axis, right axis and each query's series. */
+export const PresetChartFields: React.FC<PresetFieldsProps> = ({
   tabs,
-  config,
-  onSave,
+  draft,
+  onChange: updateDraft,
+  activeIndex,
+  onActiveIndexChange: setActiveIndex,
+  saveAttempted,
   telemetry,
-  initialDraft,
-  onDraftChange,
-  appearInPlace,
+  offerEvents,
+  formats,
 }) => {
-  const [draft, setDraft] = useState<ChartConfig>(initialDraft ?? config)
-  const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
-  const [saveAttempted, setSaveAttempted] = useState(false)
-  // Mounting already open means a remount mid-session: keep the draft.
-  const drawerWasOpenRef = useRef(open)
-
-  // Every edit lands in the session store as well, so a cell remount
-  // mid-session restores it.
-  const updateDraft = useCallback(
-    (next: ChartConfig) => {
-      setDraft(next)
-      onDraftChange?.(next)
-    },
-    [onDraftChange],
+  const anchorTab = tabs.find(
+    (tab) => draft.queries[tab.index]?.type !== "events",
   )
-
-  const resetDraft = useCallback(() => {
-    updateDraft(config)
-    setActiveIndex(tabs[0]?.index ?? 0)
-    setSaveAttempted(false)
-  }, [config, tabs, updateDraft])
-
-  useEffect(() => {
-    const drawerIsOpen = presentation === "drawer" && open
-    const drawerJustOpened = drawerIsOpen && !drawerWasOpenRef.current
-    drawerWasOpenRef.current = drawerIsOpen
-
-    if (drawerJustOpened) {
-      resetDraft()
-      return
-    }
-
-    if (presentation === "panel") {
-      updateDraft(config)
-      setActiveIndex((current) =>
-        tabs.some((tab) => tab.index === current)
-          ? current
-          : (tabs[0]?.index ?? 0),
-      )
-      setSaveAttempted(false)
-    }
-  }, [config, open, presentation, resetDraft, tabs, updateDraft])
-
-  const dismiss = useCallback(
-    (method: SettingsDismissMethod) => {
-      telemetry?.onCancel?.(method)
-      onClose?.()
-    },
-    [telemetry, onClose],
-  )
-
-  const anchorTab = tabs[0]
   const anchorGroups = anchorTab
     ? groupColumns(anchorTab.columns)
     : { temporal: [], numeric: [], categorical: [], other: [] }
@@ -150,7 +91,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
     ...anchorGroups.numeric,
   ]
 
-  const activeTab = tabs.find((t) => t.index === activeIndex) ?? anchorTab
+  const activeTab = tabs.find((t) => t.index === activeIndex) ?? tabs[0]
   const isAnchorTab = activeTab != null && activeTab.index === anchorTab?.index
   const query: QueryChart | undefined =
     activeTab != null
@@ -178,47 +119,20 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ),
     })
 
+  const offered = chartOptionsOffered(draft, tabs, formats ?? {})
+  const thresholdColumn = offered.thresholdColumn
+
   const setQuery = (index: number, next: QueryChart) =>
     updateDraft({
       ...draft,
       queries: draft.queries.map((q, i) => (i === index ? next : q)),
     })
 
-  const commit = () => {
-    const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
-    if (badIdx >= 0) {
-      telemetry?.onSaveBlocked?.("ohlc_incomplete")
-      setSaveAttempted(true)
-      setActiveIndex(badIdx)
-      return
-    }
-    const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
-    telemetry?.onSave?.({
-      chartType: primary?.type,
-      seriesCount: primary?.yColumns.length ?? 0,
-      queryCount: draft.queries.filter((q) => q != null).length,
-      hasRightAxis: hasRight,
-      partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
-    })
-    onSave(draft)
-    if (presentation === "drawer") onClose?.()
-  }
-
   return (
-    <SettingsDrawerShell
-      {...(presentation === "panel"
-        ? { presentation, onReset: resetDraft }
-        : { presentation })}
-      open={open}
-      appearInPlace={appearInPlace}
-      title="Chart settings"
-      dataHookBase="chart-settings"
-      onDismiss={dismiss}
-      onCommit={commit}
-    >
+    <>
       <Field>
         <FieldLabel>X-axis</FieldLabel>
-        <SelectMenuControl
+        <SettingsSelect
           name="x-axis"
           ariaLabel="X-axis"
           value={draft.xColumn ?? ""}
@@ -230,6 +144,54 @@ const ChartSettings: React.FC<SettingsProps> = ({
           }))}
         />
       </Field>
+
+      {offered.lieDown && (
+        <CheckboxRow>
+          <Checkbox
+            checked={draft.horizontal === true}
+            onChange={(e) =>
+              updateDraft({
+                ...draft,
+                horizontal: e.target.checked || undefined,
+              })
+            }
+          />
+          Horizontal bars ({draft.xColumn ?? "x"} down the side)
+        </CheckboxRow>
+      )}
+
+      {formats && offered.thresholds && (
+        <FieldGroup>
+          <Field>
+            <FieldLabel>Thresholds</FieldLabel>
+            <SettingsSelect
+              name="thresholds"
+              ariaLabel="Thresholds"
+              value={draft.thresholds ?? ""}
+              onValueChange={(value) =>
+                updateDraft({
+                  ...draft,
+                  thresholds: (value || undefined) as
+                    | ThresholdMarks
+                    | undefined,
+                })
+              }
+              options={[
+                { label: "Off", value: "" },
+                ...THRESHOLD_MARKS.map((mark) => ({
+                  label: THRESHOLD_LABELS[mark],
+                  value: mark,
+                })),
+              ]}
+            />
+          </Field>
+          <Text color="contentSecondary" size="xs" lineHeight="1.3">
+            {thresholdColumn
+              ? `From the thresholds in ${thresholdColumn}'s format.`
+              : "Drawn from the format thresholds of a column on the left axis; add them under Formats."}
+          </Text>
+        </FieldGroup>
+      )}
 
       {hasRight && (
         <FieldGroup>
@@ -284,9 +246,9 @@ const ChartSettings: React.FC<SettingsProps> = ({
         <>
           <Divider />
           <FieldLabel>Queries</FieldLabel>
-          <TabStrip role="tablist" aria-label="Chart queries">
+          <SettingsTabStrip role="tablist" aria-label="Chart queries">
             {tabs.map((t) => (
-              <Tab
+              <SettingsTab
                 key={t.index}
                 type="button"
                 $active={t.index === activeIndex}
@@ -300,9 +262,9 @@ const ChartSettings: React.FC<SettingsProps> = ({
               >
                 {t.label}
                 {!t.compatible && <IncompatibleIcon size={14} weight="fill" />}
-              </Tab>
+              </SettingsTab>
             ))}
-          </TabStrip>
+          </SettingsTabStrip>
         </>
       )}
 
@@ -317,22 +279,94 @@ const ChartSettings: React.FC<SettingsProps> = ({
           onUpdateQuery={(patch) => updateQuery(activeTab.index, patch)}
           onSetQuery={(next) => setQuery(activeTab.index, next)}
           telemetry={telemetry}
+          // Markers need a time axis to sit on.
+          offerEvents={
+            offerEvents &&
+            anchorGroups.temporal.some((c) => c.name === draft.xColumn)
+          }
         />
       )}
+    </>
+  )
+}
+
+type PanelProps = {
+  tabs: QueryTab[]
+  config: ChartConfig
+  onSave: (next: ChartConfig) => void
+  telemetry?: ChartSettingsTelemetry
+}
+
+/** The preset chart's settings beside a result chart (the Result view). */
+export const ChartSettingsPanel: React.FC<PanelProps> = ({
+  tabs,
+  config,
+  onSave,
+  telemetry,
+}) => {
+  const [draft, setDraft] = useState<ChartConfig>(config)
+  const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
+  const [saveAttempted, setSaveAttempted] = useState(false)
+
+  const resetDraft = useCallback(() => {
+    setDraft(config)
+    setActiveIndex(tabs[0]?.index ?? 0)
+    setSaveAttempted(false)
+  }, [config, tabs])
+
+  useEffect(() => {
+    setDraft(config)
+    setActiveIndex((current) =>
+      tabs.some((tab) => tab.index === current)
+        ? current
+        : (tabs[0]?.index ?? 0),
+    )
+    setSaveAttempted(false)
+  }, [config, tabs])
+
+  const commit = () => {
+    const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
+    if (badIdx >= 0) {
+      telemetry?.onSaveBlocked?.("ohlc_incomplete")
+      setSaveAttempted(true)
+      setActiveIndex(badIdx)
+      return
+    }
+    telemetry?.onSave?.(savePayloadOf(draft, tabs))
+    onSave(withoutUnofferedOptions(draft, tabs))
+  }
+
+  return (
+    <SettingsDrawerShell
+      presentation="panel"
+      onReset={resetDraft}
+      open
+      title="Chart settings"
+      dataHookBase="chart-settings"
+      onDismiss={(method) => telemetry?.onCancel?.(method)}
+      onCommit={commit}
+    >
+      <PresetChartFields
+        tabs={tabs}
+        draft={draft}
+        onChange={setDraft}
+        activeIndex={activeIndex}
+        onActiveIndexChange={setActiveIndex}
+        saveAttempted={saveAttempted}
+        telemetry={telemetry}
+      />
     </SettingsDrawerShell>
   )
 }
 
-export const ChartSettingsDrawer: React.FC<
-  SharedProps & {
-    open: boolean
-    onClose: () => void
-    initialDraft: ChartConfig | null
-    onDraftChange: (draft: ChartConfig) => void
-    appearInPlace: boolean
+export const savePayloadOf = (draft: ChartConfig, tabs: QueryTab[]) => {
+  const anchorTab = tabs[0]
+  const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
+  return {
+    chartType: primary?.type,
+    seriesCount: primary?.yColumns.length ?? 0,
+    queryCount: draft.queries.filter((q) => q != null).length,
+    hasRightAxis: draft.queries.some((q) => q?.axis === "right"),
+    partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
   }
-> = (props) => <ChartSettings {...props} presentation="drawer" />
-
-export const ChartSettingsPanel: React.FC<SharedProps> = (props) => (
-  <ChartSettings {...props} presentation="panel" open />
-)
+}

@@ -114,6 +114,9 @@ export type CellRefreshDeps = {
   ) => Promise<ValidateQueryResult>
   setCellResult: (cellId: string, result: CellResult | undefined) => void
   getCellResult: (cellId: string) => CellResult | null | undefined
+  // The variable values a statement reads now, and a result was read with.
+  statementBinding?: (sql: string) => string | undefined
+  resultBinding?: (result: SingleQueryResult) => string | undefined
   isDrawCell: (cellId: string) => boolean
   isCellRunning: (cellId: string) => boolean
   resultLoadStatus: (cellId: string) => CellResultStatus
@@ -153,6 +156,11 @@ const initialFetchState = (queries: string[]): CellFetchState => ({
 export const pendingCellFetchState = (sql: string): CellFetchState =>
   initialFetchState(getQueriesFromText(sql))
 
+/** Whether a fetch state's queries are the statements of `sql`. */
+export const fetchStateIsFor = (queriesKey: string, sql: string): boolean =>
+  normalizedQueriesKey(joinQueriesKey(getQueriesFromText(sql))) ===
+  normalizedQueriesKey(queriesKey)
+
 export const deriveChartLoading = (
   state: CellFetchState,
   chartResult: ChartResult,
@@ -172,23 +180,18 @@ export const deriveChartLoading = (
   )
 }
 
-type FetchReason = "settle" | "poll" | "manual"
+// "reconcile" re-reads the slots whose rows are not current.
+type FetchReason = "settle" | "poll" | "manual" | "reconcile"
 
 const isChartableResult = (result: SingleQueryResult): boolean =>
   result.type === "dql" && !result.truncated && result.dataset.length > 0
 
-// An edit-triggered settle keeps every unchanged statement's chartable rows
-// and executes only the statements without any. Poll ticks and manual
-// refreshes exist for freshness, so they execute every statement.
-const chartableResultsByKey = (
-  frame: CellResult,
+const resultsByKey = (
+  frame: CellResult | null | undefined,
 ): Map<StatementKey, SingleQueryResult> => {
-  const byKey = new Map<StatementKey, SingleQueryResult>()
-  const keys = statementKeysFor(frame.results.map((r) => r.query))
-  frame.results.forEach((result, index) => {
-    if (isChartableResult(result)) byKey.set(keys[index], result)
-  })
-  return byKey
+  const results = frame?.results ?? []
+  const keys = statementKeysFor(results.map((r) => r.query))
+  return new Map(keys.map((key, index) => [key, results[index]]))
 }
 
 // An executed slot whose rows came back unchanged keeps the result it has and
@@ -237,6 +240,17 @@ export type CellRefreshEngineOptions = {
 // Editor-only cells are never entries: charts are entries by mode, grids only
 // while they show (or expect) a result frame. The grid engine never
 // bootstraps — the first frame always comes from the run path.
+const coversEditorStatements = (
+  result: CellResult | null | undefined,
+  queries: string[],
+): result is CellResult =>
+  result != null &&
+  result.results.length === queries.length &&
+  result.results.every(
+    (entry, i) =>
+      normalizeQueryText(entry.query) === normalizeQueryText(queries[i]),
+  )
+
 const entryKindFor = (cell: NotebookCell): CellEntryKind | null => {
   if (cell.type === "markdown") return null
   if (cell.mode === "draw") return "chart"
@@ -301,6 +315,19 @@ const sameStateValue = (a: unknown, b: unknown): boolean => {
   return false
 }
 
+// A statement slot's rows are current when read with the variable values the
+// statement reads now (`desired`). A slot holds a target the user stopped it
+// at (Stop, or Apply in the Variables popover) or a read for it failed at:
+// neither is read again until the target moves or the user asks.
+type SlotTarget = {
+  desired?: string
+  stoppedAt?: string
+  failedAt?: string
+}
+
+const holdsTarget = (slot: SlotTarget): boolean =>
+  slot.stoppedAt === slot.desired || slot.failedAt === slot.desired
+
 type Entry = {
   kind: CellEntryKind
   cellId: string
@@ -309,6 +336,10 @@ type Entry = {
   visible: boolean
   pendingManualRefresh: boolean
   manualRefreshInFlight: boolean
+  // The target each slot of the in-flight round reads.
+  roundTargets: Map<StatementKey, string>
+  // A grid round swapped rows in that are not on disk yet.
+  unsavedCommit: boolean
   // A zero-survivor collapse dropped the display but kept the disk snapshot;
   // the next settle with no result asks hydration for a non-destructive
   // revive, so undo gets its rows back.
@@ -351,6 +382,11 @@ export class CellRefreshEngine {
   // replacement still runs. Keyed outside the entries so a run on a cell whose
   // entry appears mid-run (first run of an editor-only cell) is still covered.
   private pendingRunCounts = new Map<string, number>()
+  // Per cell, so a Stop outlives an entry that appears or changes kind.
+  private targets = new Map<string, Map<StatementKey, SlotTarget>>()
+  // Rows that do not say what they were read with (an error, an old result)
+  // count as read with their slot's target when the engine first saw them.
+  private assumedBindings = new WeakMap<SingleQueryResult, string | undefined>()
   private stopOnSessionEnd: (() => void) | null = null
 
   private refreshHandler = (payload?: { cellId?: string }) => {
@@ -415,6 +451,7 @@ export class CellRefreshEngine {
     this.visibilityByCell.clear()
     this.pendingRefreshSeeds.clear()
     this.pendingRunCounts.clear()
+    this.targets.clear()
     this.lastSyncedEntryCells = null
   }
 
@@ -471,6 +508,9 @@ export class CellRefreshEngine {
     for (const cellId of [...this.pendingRunCounts.keys()]) {
       if (!cellIds.has(cellId)) this.pendingRunCounts.delete(cellId)
     }
+    for (const cellId of [...this.targets.keys()]) {
+      if (!cellIds.has(cellId)) this.targets.delete(cellId)
+    }
   }
 
   // The cell's refresh button: a deliberate user action, so a pending edit is
@@ -496,6 +536,7 @@ export class CellRefreshEngine {
   cancelChartFetch(cellId: string) {
     const entry = this.entries.get(cellId)
     if (!entry || entry.kind !== "chart" || !entry.inFlight) return
+    this.holdStopped(entry, [...entry.roundTargets.keys()])
     this.abortRound(entry)
     entry.manualRefreshInFlight = false
     entry.lastFetchedAt = Date.now()
@@ -505,12 +546,9 @@ export class CellRefreshEngine {
   cancelSlot(cellId: string, statementKey: StatementKey) {
     const entry = this.entries.get(cellId)
     if (!entry || entry.kind !== "grid") return
-    const slotAbort = entry.slotAborts.get(statementKey)
-    if (slotAbort) {
-      slotAbort.abort()
-      return
-    }
     if (!entry.inFlight) return
+    entry.slotAborts.get(statementKey)?.abort()
+    this.holdStopped(entry, [statementKey])
     const cancelledSlots = new Set(entry.state.cancelledSlots)
     cancelledSlots.add(statementKey)
     this.setState(entry, { cancelledSlots })
@@ -538,6 +576,148 @@ export class CellRefreshEngine {
       this.forceRefresh(entry)
     }
     return { refreshed, skippedWrites }
+  }
+
+  // The variables changed: visible cells re-read the rows read with other
+  // values; with `hold` (Apply in the Variables popover) rows on screen stay.
+  variablesChanged(hold = false) {
+    for (const entry of this.entries.values()) {
+      const frame = this.getDeps().getCellResult(entry.cellId)
+      const held = hold && frame != null
+      this.noteTargets(entry.cellId, entry.state.queries, frame, held)
+      this.reconcile(entry)
+    }
+  }
+
+  // A selection repeated the current value: the matching cells drop their
+  // holds and re-read rows read with other values.
+  refreshStale(match: (cellId: string, sql: string) => boolean) {
+    for (const entry of this.entries.values()) {
+      if (!match(entry.cellId, entry.pendingSql ?? entry.sql)) continue
+      this.releaseHolds(entry.cellId)
+      this.reconcile(entry)
+    }
+  }
+
+  /** The user stopped the cell's run: its rows stay for the current values. */
+  noteCellStopped(cellId: string, cell?: NotebookCell) {
+    const queries =
+      this.entries.get(cellId)?.state.queries ??
+      getQueriesFromText(cell?.value ?? "")
+    this.noteTargets(cellId, queries, this.getDeps().getCellResult(cellId))
+    for (const slot of this.targets.get(cellId)?.values() ?? [])
+      slot.stoppedAt = slot.desired
+  }
+
+  private holdStopped(entry: Entry, keys: StatementKey[]) {
+    for (const key of keys) {
+      const target = entry.roundTargets.get(key)
+      if (!entry.roundTargets.delete(key)) continue
+      const slot = this.slotTarget(entry.cellId, key)
+      slot.stoppedAt = slot.desired ?? target
+    }
+  }
+
+  private releaseHolds(cellId: string) {
+    for (const slot of this.targets.get(cellId)?.values() ?? [])
+      slot.stoppedAt = slot.failedAt = undefined
+  }
+
+  private slotTarget(cellId: string, key: StatementKey): SlotTarget {
+    const slots =
+      this.targets.get(cellId) ?? new Map<StatementKey, SlotTarget>()
+    this.targets.set(cellId, slots)
+    const slot = slots.get(key) ?? {}
+    slots.set(key, slot)
+    return slot
+  }
+
+  // What a slot's rows were read with; a stopped statement has none.
+  private observedBinding(
+    result: SingleQueryResult | undefined,
+    slot: SlotTarget,
+    desired = slot.desired,
+  ): string | undefined {
+    if (result?.type !== "dql" && result?.type !== "error") return undefined
+    if (result.type === "error" && result.stoppedByUser) return undefined
+    const read = this.getDeps().resultBinding?.(result)
+    if (read !== undefined) return read
+    if (this.assumedBindings.get(result) === undefined)
+      this.assumedBindings.set(result, slot.desired ?? desired)
+    return this.assumedBindings.get(result)
+  }
+
+  // Moves each slot to the current target, releasing (or, with `hold`,
+  // renewing) the holds of a slot whose target moved.
+  private noteTargets(
+    cellId: string,
+    queries: string[],
+    frame: CellResult | null | undefined,
+    hold = false,
+  ) {
+    const results = resultsByKey(frame)
+    statementKeysFor(queries).forEach((key, index) => {
+      const desired = this.getDeps().statementBinding?.(queries[index])
+      const slot = this.slotTarget(cellId, key)
+      this.observedBinding(results.get(key), slot, desired)
+      const moved = slot.desired !== undefined && slot.desired !== desired
+      slot.desired = desired
+      if (!moved) return
+      slot.stoppedAt = hold ? desired : undefined
+      slot.failedAt = undefined
+    })
+  }
+
+  // After any event, a visible cell the foreground does not own re-reads each
+  // slot whose rows are not current and that does not hold its target — only
+  // when its frame covers the editor's statements (the SQL last Run). A round
+  // reading an older target is superseded; one reading current targets ends
+  // first, and its end reconciles again.
+  private reconcile(entry: Entry) {
+    const { cellId } = entry
+    const { queries, queriesKey, classifyBlock } = entry.state
+    const frame = this.getDeps().getCellResult(cellId)
+    this.noteTargets(cellId, queries, frame)
+    if (
+      !entry.visible ||
+      this.documentHidden ||
+      (entry.pendingSql !== null &&
+        joinQueriesKey(getQueriesFromText(entry.pendingSql)) !== queriesKey) ||
+      (entry.kind === "grid" &&
+        (this.isRunPending(cellId) ||
+          this.getDeps().isCellRunning(cellId) ||
+          classifyBlock?.kind === "write"))
+    )
+      return
+    const keys = statementKeysFor(queries)
+    const slots = keys.map((key) => this.slotTarget(cellId, key))
+    if (!coversEditorStatements(frame, queries)) {
+      // A chart stopped before it drew anything draws for new values.
+      const moved = slots.some((slot) => !holdsTarget(slot))
+      if (entry.state.fetchCancelled && !entry.inFlight && moved)
+        void this.fetchOnce(entry, "settle")
+      return
+    }
+    const reading = (index: number) => entry.roundTargets.get(keys[index])
+    const outdated = slots.some(
+      (slot, i) =>
+        !holdsTarget(slot) && (reading(i) ?? slot.desired) !== slot.desired,
+    )
+    if (outdated) {
+      this.abortRound(entry)
+      entry.manualRefreshInFlight = false
+    }
+    const stale = new Set<StatementKey>()
+    slots.forEach((slot, i) => {
+      if (slot.desired === undefined || holdsTarget(slot)) return
+      if (reading(i) === slot.desired) return
+      const read = this.observedBinding(frame.results[i], slot)
+      if (read !== undefined && read !== slot.desired) stale.add(keys[i])
+    })
+    if (stale.size === 0 || entry.inFlight || entry.manualRefreshInFlight)
+      return
+    entry.manualRefreshInFlight = true
+    void this.fetchOnce(entry, "reconcile", stale)
   }
 
   private forceRefresh(entry: Entry) {
@@ -703,11 +883,13 @@ export class CellRefreshEngine {
   // A run start always wins over a refresh: the in-flight round is cancelled,
   // and the pending-run count keeps new rounds out for the run's WHOLE span —
   // the classification barrier included, where isCellRunning is still false.
-  noteRunStarted(cellId: string) {
+  // A whole-cell Run is an explicit request: it drops the cell's Stops.
+  noteRunStarted(cellId: string, singleStatement = false) {
     this.pendingRunCounts.set(
       cellId,
       (this.pendingRunCounts.get(cellId) ?? 0) + 1,
     )
+    if (!singleStatement) this.releaseHolds(cellId)
     const entry = this.entries.get(cellId)
     if (!entry) return
     this.abortRound(entry)
@@ -717,10 +899,20 @@ export class CellRefreshEngine {
   // Balances noteRunStarted on EVERY outcome — denied, skipped, superseded,
   // thrown included. A leaked count would not corrupt data; it would silently
   // disable refresh for the cell, so the caller wires this in a finally.
-  noteRunFinished(cellId: string) {
+  // Once the last run ends, the cell reconciles against the live editor.
+  noteRunFinished(cellId: string, currentCell?: NotebookCell) {
     const count = this.pendingRunCounts.get(cellId) ?? 0
-    if (count <= 1) this.pendingRunCounts.delete(cellId)
-    else this.pendingRunCounts.set(cellId, count - 1)
+    if (count > 1) {
+      this.pendingRunCounts.set(cellId, count - 1)
+      return
+    }
+    this.pendingRunCounts.delete(cellId)
+    // A first Run's entry appears with the next sync, which reconciles it.
+    const entry = this.entries.get(cellId)
+    if (!entry) return
+    // The editor can be ahead of the last sync.
+    if (currentCell) this.updateEntry(entry, currentCell)
+    this.reconcile(entry)
   }
 
   private isRunPending(cellId: string): boolean {
@@ -753,6 +945,8 @@ export class CellRefreshEngine {
       visible: this.visibilityByCell.get(cell.id) ?? false,
       pendingManualRefresh: false,
       manualRefreshInFlight: false,
+      roundTargets: new Map(),
+      unsavedCommit: false,
       snapshotRetained: false,
       ensureAttempted: false,
       lastFetchedAt: 0,
@@ -818,6 +1012,7 @@ export class CellRefreshEngine {
       this.queueSnapshot(entry, pending.results, pending.durationMs)
     }
     this.stopResultLoadWait(entry)
+    if (reason !== "teardown") entry.unsavedCommit = false
     this.abortRound(entry)
     entry.classifyAbort?.abort()
     entry.classifyAbort = null
@@ -835,6 +1030,9 @@ export class CellRefreshEngine {
   private abortRound(entry: Entry) {
     entry.inFlight?.abort()
     entry.inFlight = null
+    entry.roundTargets.clear()
+    // The disk copy follows the rows the aborted round already swapped in.
+    if (entry.unsavedCommit) this.persistGridFrame(entry, true)
     for (const abort of entry.slotAborts.values()) abort.abort()
     entry.slotAborts.clear()
     if (entry.state.fetching || entry.state.slotFetching.size > 0) {
@@ -863,7 +1061,10 @@ export class CellRefreshEngine {
       normalizedQueriesKey(entry.state.queriesKey) !==
         normalizedQueriesKey(queriesKey)
     ) {
-      resetChartZoom(entry.cellId)
+      resetChartZoom(
+        { bufferId: this.bufferId, cellId: entry.cellId },
+        { localOnly: true },
+      )
     }
     // Refresh errors follow statement content: an edited statement's error
     // clears, an unchanged sibling's survives the edit.
@@ -874,6 +1075,9 @@ export class CellRefreshEngine {
     const slotVerifiedAt = new Map(
       [...entry.state.slotVerifiedAt].filter(([key]) => slotKeySet.has(key)),
     )
+    const targets = this.targets.get(entry.cellId)
+    for (const key of [...(targets?.keys() ?? [])])
+      if (!slotKeySet.has(key)) targets?.delete(key)
     this.setState(entry, {
       queries,
       queriesKey,
@@ -891,6 +1095,13 @@ export class CellRefreshEngine {
   // One render for the whole pass: the statement list and the frame it
   // reconciles into land together, so no consumer sees them disagree.
   private applySql(entry: Entry, sql: string) {
+    // Whitespace at the editor boundary doesn't change the parsed SQL or
+    // revoke a running read of that same statement set.
+    if (joinQueriesKey(getQueriesFromText(sql)) === entry.state.queriesKey) {
+      entry.sql = sql
+      this.reconcile(entry)
+      return
+    }
     this.applySqlState(entry, sql)
     if (entry.kind === "grid") this.reconcileGridResult(entry)
     if (entry.visible) this.ensureData(entry)
@@ -976,6 +1187,7 @@ export class CellRefreshEngine {
         frameFetchedAt(current?.results ?? []),
       )
       this.updatePoll(entry)
+      this.reconcile(entry)
       return
     }
     if (this.waitForResultLoad(entry)) return
@@ -991,7 +1203,9 @@ export class CellRefreshEngine {
       this.updatePoll(entry)
       return
     }
-    if (entry.visible && !this.documentHidden && !entry.state.fetchCancelled)
+    // A round in flight already reads these statements.
+    const idle = !entry.state.fetchCancelled && !entry.inFlight
+    if (entry.visible && !this.documentHidden && idle)
       void this.fetchOnce(entry, "settle")
     this.updatePoll(entry)
   }
@@ -1006,6 +1220,7 @@ export class CellRefreshEngine {
         frameFetchedAt(result.results),
       )
       this.updatePoll(entry)
+      this.reconcile(entry)
       return
     }
     if (this.waitForResultLoad(entry)) return
@@ -1124,8 +1339,9 @@ export class CellRefreshEngine {
   private async fetchOnce(
     entry: Entry,
     reason: FetchReason,
+    only?: ReadonlySet<StatementKey>,
   ): Promise<number | void> {
-    const manual = reason === "manual"
+    const manual = reason === "manual" || reason === "reconcile"
     // A poll tick must not abort the round a refresh click started — skip it;
     // the loop resumes on its own schedule once the manual round settles.
     if (!manual && entry.inFlight && entry.manualRefreshInFlight) return
@@ -1166,22 +1382,23 @@ export class CellRefreshEngine {
       entry.kind === "grid" &&
       this.getDeps().getCellResult(entry.cellId) == null
     ) {
-      // A refresh click can land before a released snapshot hydrates — hand
-      // the intent back to pending and redeem it when the load settles.
-      if (
-        (manual || entry.manualRefreshInFlight) &&
-        this.waitForResultLoad(entry)
-      ) {
-        entry.manualRefreshInFlight = false
-        entry.pendingManualRefresh = true
+      // A snapshot still loading reconciles, and redeems a click, once loaded.
+      const userAsked = manual || entry.manualRefreshInFlight
+      entry.manualRefreshInFlight = false
+      if (this.waitForResultLoad(entry)) {
+        if (userAsked) entry.pendingManualRefresh = true
         return
       }
-      entry.manualRefreshInFlight = false
       this.setState(entry, { settledKey: queriesKey })
       return
     }
     const ac = new AbortController()
     entry.inFlight = ac
+    statementKeysFor(queries).forEach((key, index) => {
+      const desired = this.getDeps().statementBinding?.(queries[index])
+      if (desired !== undefined && (!only || only.has(key)))
+        entry.roundTargets.set(key, desired)
+    })
     this.setState(entry, {
       fetching: true,
       cancelledSlots: new Set(),
@@ -1191,8 +1408,9 @@ export class CellRefreshEngine {
     // A refresh-all click on a polling cell redeems itself through the poll
     // loop's first tick, so the manual intent rides on the entry, not the call.
     const userAsked = manual || entry.manualRefreshInFlight
-    if (entry.kind === "grid") await this.runGridRound(entry, ac, userAsked)
-    else await this.runChartFetch(entry, ac, reason)
+    if (entry.kind === "grid")
+      await this.runGridRound(entry, ac, userAsked, only)
+    else await this.runChartFetch(entry, ac, reason, only)
     return performance.now() - start
   }
 
@@ -1216,6 +1434,7 @@ export class CellRefreshEngine {
     entry: Entry,
     ac: AbortController,
     reason: FetchReason,
+    only?: ReadonlySet<StatementKey>,
   ) {
     const deps = this.getDeps()
     const { queries, queriesKey } = entry.state
@@ -1253,16 +1472,24 @@ export class CellRefreshEngine {
         return
       }
       this.setState(entry, { classifyBlock: null, classifiedKey: queriesKey })
-      const previousFrame =
-        reason === "settle"
-          ? this.getDeps().getCellResult(entry.cellId)
+      // A settle keeps the current chartable rows of unchanged statements, a
+      // reconcile every statement it does not re-read; others read them all.
+      const carried =
+        reason === "settle" || reason === "reconcile"
+          ? resultsByKey(this.getDeps().getCellResult(entry.cellId))
+          : new Map<StatementKey, SingleQueryResult>()
+      const carriedResults = statementKeysFor(queries).map((key, index) => {
+        const previous = carried.get(key)
+        if (!previous) return undefined
+        if (reason === "reconcile") return only?.has(key) ? undefined : previous
+        // A SQL edit can supersede a variable refresh before its frame lands.
+        const desired = deps.statementBinding?.(queries[index])
+        const read = deps.resultBinding?.(previous)
+        return isChartableResult(previous) &&
+          (desired === undefined || read === undefined || read === desired)
+          ? previous
           : undefined
-      const carried = previousFrame
-        ? chartableResultsByKey(previousFrame)
-        : new Map<StatementKey, SingleQueryResult>()
-      const carriedResults = statementKeysFor(queries).map((key) =>
-        carried.get(key),
-      )
+      })
       const fetchStartedAt = Date.now()
       const out = await Promise.all(
         queries.map((q, index) => {
@@ -1301,7 +1528,13 @@ export class CellRefreshEngine {
         return
       if (
         current != null &&
-        resultsEquivalent(current.results.map(toExecResult), out)
+        resultsEquivalent(current.results.map(toExecResult), out) &&
+        !current.results.some(
+          (r, i) =>
+            r.type === "dql" &&
+            out[i]?.effectiveQuery !== undefined &&
+            r.effectiveQuery !== out[i].effectiveQuery,
+        )
       ) {
         this.setState(entry, {
           settledKey: queriesKey,
@@ -1360,6 +1593,7 @@ export class CellRefreshEngine {
     entry: Entry,
     round: AbortController,
     manual: boolean,
+    only?: ReadonlySet<StatementKey>,
   ) {
     const deps = this.getDeps()
     const { queries, queriesKey } = entry.state
@@ -1395,6 +1629,7 @@ export class CellRefreshEngine {
       const invalidSlots: Array<{ key: StatementKey; message: string }> = []
       const launchSlots: Array<{ key: StatementKey; index: number }> = []
       slotKeys.forEach((key, index) => {
+        if (only && !only.has(key)) return
         if (entry.state.cancelledSlots.has(key)) return
         const stmt = classified[index]
         if (stmt?.klass === "ERROR") {
@@ -1447,15 +1682,19 @@ export class CellRefreshEngine {
             if (exec.type === "error") {
               this.setSlotError(entry, key, exec.error ?? "Query failed")
             } else {
-              // Changed rows are written with their fetch time. Identical
-              // rows keep the frame — a rewrite would churn renders and
-              // snapshots — and the overlay records the verifying poll so
-              // the status line stays current.
+              // Keep an equivalent frame unless it was fetched with a
+              // different variable binding. Restore uses the saved binding,
+              // not the row contents, to decide if it needs another read.
               const previous = this.currentSlotResult(entry.cellId, key)
               const unchanged =
                 previous !== undefined &&
                 resultsEquivalent([toExecResult(previous)], [exec])
-              if (!unchanged) this.commitSlotResult(entry, key, exec)
+              const bindingChanged =
+                previous?.type === "dql" &&
+                exec.effectiveQuery !== undefined &&
+                previous.effectiveQuery !== exec.effectiveQuery
+              if (!unchanged || bindingChanged)
+                this.commitSlotResult(entry, key, exec)
               this.settleSlotSuccess(entry, key)
             }
           } catch (e) {
@@ -1468,6 +1707,8 @@ export class CellRefreshEngine {
               entry.slotAborts.delete(key)
               if (entry.state.slotFetching.has(key))
                 this.setSlotFetching(entry, key, false)
+              if (!slotAbort.signal.aborted && !round.signal.aborted)
+                this.settleTarget(entry, key)
             }
           }
         }),
@@ -1481,15 +1722,30 @@ export class CellRefreshEngine {
     }
   }
 
+  // A round that ends holds each target it did not land, so a failed read is
+  // not retried for the same values; then a slot that waited reads.
   private finishRound(entry: Entry, ac: AbortController) {
     // Only clear when still the active round — a superseded (aborted) one
     // must not flip `fetching` off while its replacement is in flight.
-    if (entry.inFlight === ac) {
-      entry.inFlight = null
-      entry.manualRefreshInFlight = false
-      entry.lastFetchedAt = Date.now()
-      this.setState(entry, { fetching: false, slotFetching: new Set() })
-    }
+    if (entry.inFlight !== ac) return
+    entry.inFlight = null
+    entry.manualRefreshInFlight = false
+    entry.lastFetchedAt = Date.now()
+    this.setState(entry, { fetching: false, slotFetching: new Set() })
+    for (const key of [...entry.roundTargets.keys()])
+      this.settleTarget(entry, key)
+    this.reconcile(entry)
+  }
+
+  // A slot's read ended: a target it did not land is held as failed.
+  private settleTarget(entry: Entry, key: StatementKey) {
+    const target = entry.roundTargets.get(key)
+    if (target === undefined) return
+    entry.roundTargets.delete(key)
+    const slot = this.slotTarget(entry.cellId, key)
+    const result = this.currentSlotResult(entry.cellId, key)
+    if (this.observedBinding(result, slot, target) !== target)
+      slot.failedAt = target
   }
 
   private currentSlotResult(
@@ -1535,6 +1791,7 @@ export class CellRefreshEngine {
     // The frame timestamp is the grid's viewport token for every tab:
     // bumping it per slot settle would reset scroll and focus. A settled
     // slot's freshness advances through slotVerifiedAt instead.
+    entry.unsavedCommit = true
     deps.setCellResult(entry.cellId, {
       ...current,
       results: nextResults,
@@ -1555,6 +1812,7 @@ export class CellRefreshEngine {
   // best-effort backstop, not a guarantee: an IndexedDB write started during
   // teardown is routinely dropped, so nothing durable may depend on it.
   private persistGridFrame(entry: Entry, manual: boolean) {
+    entry.unsavedCommit = false
     const current = this.getDeps().getCellResult(entry.cellId)
     if (!current || current.results.length === 0) return
     const errorsSig = slotErrorsSignature(entry.state.slotErrors)
@@ -1737,6 +1995,7 @@ export class CellRefreshEngine {
       cellId: entry.cellId,
       results,
       savedAt: Date.now(),
+      ...(current?.results === results ? { runToken: current.timestamp } : {}),
       activeResultIndex: current?.activeResultIndex ?? 0,
       ...(current?.activeStatementKey !== undefined
         ? { activeStatementKey: current.activeStatementKey }

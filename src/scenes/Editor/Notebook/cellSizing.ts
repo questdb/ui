@@ -77,9 +77,9 @@ export const DEFAULT_CHART_BOTTOM_HEIGHT = 350
 
 export const MIN_BOTTOM_HEIGHT_PX = 100
 // ECharts reserves roughly 96-126 px for axes, labels, and the zoom control.
-// A 100 px chart pane is structurally valid but leaves no useful plot. Keep
-// table results at the historical minimum while giving charts a visual floor.
-const MIN_CHART_HEIGHT_PX = 296
+// Keep a visual floor for presets. Components and custom options can use
+// the ordinary pane minimum because their layouts vary.
+const MIN_PRESET_CHART_HEIGHT_PX = 296
 // One ceiling for every pane: it only stops nonsense such as multi-million
 // pixel agent writes or an editor auto-grown to a hundred thousand lines.
 export const MAX_PANE_HEIGHT_PX = 2400
@@ -88,7 +88,9 @@ export const clampPaneHeight = (minimum: number, px: number): number =>
   Math.min(MAX_PANE_HEIGHT_PX, Math.max(minimum, px))
 
 export const minBottomHeightFor = (cell: NotebookCell): number =>
-  cell.mode === "draw" ? MIN_CHART_HEIGHT_PX : MIN_BOTTOM_HEIGHT_PX
+  cell.mode === "draw" && !cell.chartConfig?.visual && !cell.chartConfig?.custom
+    ? MIN_PRESET_CHART_HEIGHT_PX
+    : MIN_BOTTOM_HEIGHT_PX
 
 // Before pane views, a maximized cell showed its result pane at editor +
 // result height. Runs once, when a read infers the pane view from the legacy
@@ -476,7 +478,19 @@ export const mergeCellChartConfig = (
   patch: Partial<ChartConfig>,
 ): ChartConfig => {
   const base: ChartConfig = cell.chartConfig ?? { xColumn: null, queries: [] }
-  return { ...base, ...patch }
+  const merged = { ...base, ...patch }
+  const clearedVisual =
+    (base.visual !== undefined && Object.hasOwn(patch, "visual")) ||
+    (base.custom !== undefined && Object.hasOwn(patch, "custom"))
+  if (
+    clearedVisual &&
+    !merged.visual &&
+    !merged.custom &&
+    merged.queries.length === 0
+  ) {
+    merged.queries = getQueriesFromText(cell.value).map(() => null)
+  }
+  return merged
 }
 
 export const patchCellRunResult = (
@@ -566,8 +580,8 @@ export const computeCellHeights = (
         cell.bottomHeight ??
         RESERVED_RESULT_BOTTOM_HEIGHT)
       : 0
-  // A visible bottom slot never renders below its pane floor (296 chart /
-  // 100 result): a bare notification sits in a 100px pane rather than a
+  // A visible bottom slot never renders below its pane floor: a bare
+  // notification sits in a 100px pane rather than a
   // 44px sliver, so the rendered height, the resize bounds, and the save
   // path all share one minimum.
   const bottomHeight =

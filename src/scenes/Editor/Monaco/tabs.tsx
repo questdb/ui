@@ -40,6 +40,7 @@ import {
 } from "../../../store/buffers"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import { maxOf } from "../../../utils/values"
 
 type Tab = {
   id: string
@@ -237,7 +238,7 @@ export const Tabs = () => {
           ]),
         )
         const maxPosition = Math.max(
-          ...existingBuffers.map((b) => b.position),
+          maxOf(existingBuffers.map((b) => b.position)),
           0,
         )
 

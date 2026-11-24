@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react"
 import styled, { css, keyframes, useTheme } from "styled-components"
+import { maxOf } from "../../utils/values"
 
 const MAX_SPEECH_MS = 2500
 const CALL_STEP_MS = 500
@@ -192,9 +193,7 @@ const LINES: TranscriptLine[] = [
 // to the same duration as a 280-char one.
 const MS_PER_CHAR =
   MAX_SPEECH_MS /
-  Math.max(
-    ...LINES.map((line) => (line.kind === "speech" ? line.text.length : 0)),
-  )
+  maxOf(LINES.map((line) => (line.kind === "speech" ? line.text.length : 0)))
 
 const callText = (calls: number) =>
   calls <= 1

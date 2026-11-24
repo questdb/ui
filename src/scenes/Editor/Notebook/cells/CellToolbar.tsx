@@ -260,9 +260,9 @@ export const CellToolbar: React.FC<Props> = ({
       $forceVisible={menuOpen}
     >
       {isMaximized && (isChartView || hasResultGrid) && (
-        <Tooltip content={isChartView ? "Chart settings" : "Highlight rules"}>
+        <Tooltip content={isChartView ? "Chart settings" : "Grid settings"}>
           <CellIconButton
-            label={isChartView ? "Chart settings" : "Highlight rules"}
+            label={isChartView ? "Chart settings" : "Grid settings"}
             variant="ghost"
             onClick={() =>
               isChartView
@@ -399,7 +399,7 @@ export const CellToolbar: React.FC<Props> = ({
                   onSelect={() => handleHighlightSettings("open")}
                   icon={<GearIcon size={16} />}
                 >
-                  Highlight rules
+                  Grid settings
                 </DropdownMenu.Item>
               )}
 

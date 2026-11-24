@@ -35,7 +35,7 @@ export const IdentitySection: React.FC<Props> = ({
     <FieldGroup>
       <SectionHeader>
         <SectionTitle>Match rows using</SectionTitle>
-        <SectionHint>needed for comparison rules</SectionHint>
+        <SectionHint>needed for comparison rules and live updates</SectionHint>
       </SectionHeader>
       <ColumnPicker
         options={options}

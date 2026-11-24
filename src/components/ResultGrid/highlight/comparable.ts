@@ -46,8 +46,9 @@ export const asNumeric = (value: CellValue): Numeric | null => {
 const isDecimal = (value: Comparable): value is Decimal =>
   typeof value === "object"
 
-const textOf = (value: Comparable): string => {
+export const comparableText = (value: Comparable): string => {
   if (!isDecimal(value)) return String(value)
+  if (value.scale === 0) return String(value.unscaled)
   const negative = value.unscaled < BigInt(0)
   const digits = (negative ? -value.unscaled : value.unscaled)
     .toString()
@@ -104,6 +105,24 @@ export const productOf = (a: Decimal, b: Decimal): Decimal => ({
 export const differenceOf = (a: Numeric, b: Numeric): Decimal => {
   const [left, right, scale] = alignedUnscaled(toDecimal(a), toDecimal(b))
   return { unscaled: left - right, scale }
+}
+
+/** The exact sum of the values, as a decimal. */
+export const sumOf = (values: Numeric[]): Decimal =>
+  values.reduce<Decimal>(
+    (sum, value) => {
+      const [left, right, scale] = alignedUnscaled(sum, toDecimal(value))
+      return { unscaled: left + right, scale }
+    },
+    { unscaled: BigInt(0), scale: 0 },
+  )
+
+export const midpointOf = (a: Numeric, b: Numeric): Decimal => {
+  const [left, right, scale] = alignedUnscaled(toDecimal(a), toDecimal(b))
+  const sum = left + right
+  return sum % BigInt(2) === BigInt(0)
+    ? { unscaled: sum / BigInt(2), scale }
+    : { unscaled: sum * BigInt(5), scale: scale + 1 }
 }
 
 export const ratioOf = (numerator: Decimal, denominator: Decimal): number => {
@@ -166,8 +185,8 @@ export const asComparable = (
 
 export const compareValues = (a: Comparable, b: Comparable): number => {
   if (typeof a === "string" || typeof b === "string") {
-    const left = textOf(a)
-    const right = textOf(b)
+    const left = comparableText(a)
+    const right = comparableText(b)
     return left === right ? 0 : left < right ? -1 : 1
   }
   if (isDecimal(a) || isDecimal(b)) {

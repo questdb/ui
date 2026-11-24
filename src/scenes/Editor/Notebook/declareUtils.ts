@@ -4,9 +4,9 @@ import type { NotebookVariable } from "../../../store/notebook"
 import type { Client } from "../../../utils/questdb/client"
 import { maskParserBlockComments } from "../../../utils/parserSql"
 
-const NAME_RE = /^[a-zA-Z\u0080-\uFFFF_][a-zA-Z0-9\u0080-\uFFFF_]*$/
+import { isValidVariableName } from "./variableName"
 
-export const isValidVariableName = (name: string): boolean => NAME_RE.test(name)
+export { isValidVariableName }
 
 const isVariableLike = (value: unknown): value is NotebookVariable => {
   if (!value || typeof value !== "object") return false
@@ -39,6 +39,39 @@ export const expandGlobals = (sql: string, globals: unknown): string => {
 
 export const stripLeadingAt = (raw: string): string =>
   raw.startsWith("@") ? raw.slice(1) : raw
+
+const sqlVariableNames = (sql: string): string[] =>
+  tokenize(maskParserBlockComments(sql)).tokens.flatMap((token) =>
+    token.tokenType.name === "VariableReference"
+      ? [stripLeadingAt(token.image).toLowerCase()]
+      : [],
+  )
+
+/** Matches complete SQL variable tokens, not prefixes, comments or literals. */
+export const usesVariables = (
+  sql: string,
+  names: ReadonlySet<string>,
+): boolean => sqlVariableNames(sql).some((name) => names.has(name))
+
+/** Includes values derived (transitively) from the changed variables. */
+export const affectedVariables = (
+  changed: readonly string[],
+  variables: readonly NotebookVariable[] | undefined,
+): ReadonlySet<string> => {
+  const dependents = new Map<string, string[]>()
+  for (const variable of variables ?? []) {
+    for (const dependency of sqlVariableNames(variable.value)) {
+      const names = dependents.get(dependency) ?? []
+      names.push(variable.name.toLowerCase())
+      dependents.set(dependency, names)
+    }
+  }
+  const affected = new Set(changed.map((name) => name.toLowerCase()))
+  // Set iteration visits names added along the way and terminates on cycles.
+  for (const name of affected)
+    for (const dependent of dependents.get(name) ?? []) affected.add(dependent)
+  return affected
+}
 
 export const renderDeclareBlock = (variables: NotebookVariable[]): string => {
   const valid = variables.filter(({ name }) => isValidVariableName(name))
@@ -158,6 +191,70 @@ export const parseDeclareBlock = (text: string): NotebookVariable[] => {
     out.push({ name: a.name, value: a.originalText.slice(eqIdx + 2).trim() })
   }
   return out
+}
+
+/**
+ * The variable values a statement reads when it runs as `effectiveSql` (the
+ * statement with the notebook's DECLARE block): every variable it uses,
+ * directly or through the values of others, with its declared value. Equal
+ * keys mean equal inputs; statement-local declarations and unrelated
+ * variables are accounted for.
+ */
+export const bindingKey = (sql: string, effectiveSql: string): string => {
+  const declared = new Map(
+    parseDeclareBlock(effectiveSql).map(({ name, value }) => [
+      name.toLowerCase(),
+      value,
+    ]),
+  )
+  const used = new Set(sqlVariableNames(sql))
+  // Set iteration visits names added along the way and terminates on cycles.
+  for (const name of used)
+    for (const dependency of sqlVariableNames(declared.get(name) ?? ""))
+      used.add(dependency)
+  return JSON.stringify(
+    [...used].sort().map((name) => [name, declared.get(name) ?? null]),
+  )
+}
+
+const BINDING_CACHE_MAX = 2000
+
+/**
+ * Cached binding keys: the values a statement reads with the given
+ * variables, and the values a result was read with.
+ */
+export const createBindingKeys = () => {
+  const read = new Map<string, string>()
+  const current = new Map<string, string>()
+  let currentFor: readonly NotebookVariable[] | undefined
+  const of = (sql: string, effectiveSql: string): string => {
+    const cacheKey = `${sql}\u0000${effectiveSql}`
+    let key = read.get(cacheKey)
+    if (key === undefined) {
+      if (read.size >= BINDING_CACHE_MAX) read.clear()
+      key = bindingKey(sql, effectiveSql)
+      read.set(cacheKey, key)
+    }
+    return key
+  }
+  return {
+    of,
+    current: (
+      sql: string,
+      variables: readonly NotebookVariable[] | undefined,
+    ): string => {
+      if (variables !== currentFor) {
+        current.clear()
+        currentFor = variables
+      }
+      let key = current.get(sql)
+      if (key === undefined) {
+        key = of(sql, expandGlobals(sql, variables))
+        current.set(sql, key)
+      }
+      return key
+    },
+  }
 }
 
 export type VariableShapeError =

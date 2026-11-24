@@ -1,7 +1,16 @@
 import { parseToAst } from "@questdb/sql-parser"
 import { maskParserBlockComments } from "../../../../utils/parserSql"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import type { ChartType, ColumnRole, QueryChart } from "./chartTypes"
+import type {
+  BandColumns,
+  BoxColumns,
+  ChartType,
+  ColumnRole,
+  HeatmapColumns,
+  QueryChart,
+  RangeColumns,
+  RoleChartType,
+} from "./chartTypes"
 
 export type InferredChart = { xColumn: string | null; chart: QueryChart }
 
@@ -26,7 +35,7 @@ export const classifyColumn = (col: ColumnDefinition): ColumnRole => {
   const t = col.type?.toUpperCase()
   if (!t) return "other"
   if (TEMPORAL.has(t)) return "temporal"
-  if (NUMERIC.has(t)) return "numeric"
+  if (NUMERIC.has(t) || t.startsWith("DECIMAL(")) return "numeric"
   if (CATEGORICAL.has(t)) return "categorical"
   return "other"
 }
@@ -221,5 +230,90 @@ export const availableChartTypes = (
   if (hasNumeric && hasCategorical) types.push("pie")
   if (hasTemporal && (hasOhlc || groups.numeric.length >= 4))
     types.push("candlestick")
+  const hasAxis = hasTemporal || hasCategorical
+  const columnCount =
+    groups.temporal.length +
+    groups.numeric.length +
+    groups.categorical.length +
+    groups.other.length
+  if (hasNumeric && columnCount >= 3) types.push("heatmap")
+  if (groups.numeric.length >= 2 && (hasAxis || groups.numeric.length >= 3))
+    types.push("band")
+  if (
+    (groups.numeric.length >= 2 && hasAxis) ||
+    (groups.temporal.length >= 2 && hasCategorical)
+  )
+    types.push("rangeBar")
+  if (groups.numeric.length >= 5 && hasAxis) types.push("boxplot")
   return types.length ? types : ["bar"]
+}
+
+const LOWER = /(^|_)(lo|low|lower|min|floor|bottom|p0?1|p0?5|p10)($|_)/i
+const UPPER = /(^|_)(hi|high|upper|max|ceil|top|p90|p95|p99)($|_)/i
+const START = /(^|_)(start|begin|from|since|opened?|s)($|_)/i
+const END = /(^|_)(end|finish|to|until|closed?|e)($|_)/i
+const BOX: [keyof BoxColumns, RegExp][] = [
+  ["min", /(^|_)(min|lo|low|p0)($|_)/i],
+  ["q1", /(^|_)(q1|p25|lower_quartile)($|_)/i],
+  ["median", /(^|_)(median|med|p50|q2)($|_)/i],
+  ["q3", /(^|_)(q3|p75|upper_quartile)($|_)/i],
+  ["max", /(^|_)(max|hi|high|p100)($|_)/i],
+]
+
+const named = (columns: ColumnDefinition[], pattern: RegExp) =>
+  columns.find((c) => pattern.test(c.name))?.name
+
+const pair = (
+  columns: ColumnDefinition[],
+  first: RegExp,
+  second: RegExp,
+): [string, string] | undefined => {
+  if (columns.length < 2) return undefined
+  const a = named(columns, first)
+  const b = named(
+    columns.filter((c) => c.name !== a),
+    second,
+  )
+  if (a && b) return [a, b]
+  return [columns[0].name, columns[1].name]
+}
+
+/**
+ * The columns a heatmap, band, range bar or boxplot reads, guessed from names
+ * (low/high, start/end, q1/median/q3) and kinds, for a query that does not
+ * set them. Undefined when the result cannot draw it.
+ */
+export const guessRoleColumns = (
+  type: RoleChartType,
+  columns: ColumnDefinition[],
+  xColumn: string | null,
+): HeatmapColumns | BandColumns | RangeColumns | BoxColumns | undefined => {
+  const rest = columns.filter((c) => c.name !== xColumn)
+  const groups = groupColumns(rest)
+  switch (type) {
+    case "heatmap": {
+      const y = groups.categorical[0] ?? groups.temporal[0] ?? groups.numeric[0]
+      const value = groups.numeric.find((c) => c.name !== y?.name)
+      return y && value ? { y: y.name, value: value.name } : undefined
+    }
+    case "band": {
+      const found = pair(groups.numeric, LOWER, UPPER)
+      return found ? { lower: found[0], upper: found[1] } : undefined
+    }
+    case "rangeBar": {
+      const found =
+        pair(groups.temporal, START, END) ?? pair(groups.numeric, LOWER, UPPER)
+      return found ? { start: found[0], end: found[1] } : undefined
+    }
+    case "boxplot": {
+      if (groups.numeric.length < 5) return undefined
+      const byName = BOX.map(([, pattern]) => named(groups.numeric, pattern))
+      if (byName.every(Boolean) && new Set(byName).size === 5) {
+        const [min, q1, median, q3, max] = byName as string[]
+        return { min, q1, median, q3, max }
+      }
+      const [min, q1, median, q3, max] = groups.numeric.map((c) => c.name)
+      return { min, q1, median, q3, max }
+    }
+  }
 }

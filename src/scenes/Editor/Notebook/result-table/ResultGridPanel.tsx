@@ -15,16 +15,26 @@ import {
   removeNotebookColumnLayout,
 } from "../notebookColumnLayoutStore"
 import { ResultActionsBar } from "./ResultActionsBar"
-import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawer"
+import {
+  HighlightSettingsDrawer,
+  type GridSettingsSave,
+} from "../CellHighlight/HighlightSettingsDrawer"
+import { columnsAndSamplesOf } from "../CellFormats/formatSummary"
+import { eventBus } from "../../../../modules/EventBus"
 import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
-import { useNotebookActions } from "../NotebookProvider"
+import { useNotebookActions, useNotebookSettings } from "../NotebookProvider"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
 import { useResultTrendStore } from "./ResultTrendContext"
-import { resolveHighlightConfig } from "./highlightConfig"
+import {
+  gridSettingsPatch,
+  resolveHighlightConfig,
+  sameGridSettings,
+  type GridSettings,
+} from "./highlightConfig"
 import { flashDurationFor } from "./flashDuration"
 import {
   columnRangeOf,
@@ -36,6 +46,25 @@ import {
 } from "../../../../components/ResultGrid/highlight"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
+import type { CellInteractions, GridMode } from "../../../../store/notebook"
+import type { ResultGridRow } from "../../../../components/ResultGrid"
+import type { CellHighlight } from "../../../../components/ResultGrid/highlight/types"
+import { pickLiteral, pickOf } from "../interactions/selection"
+import { useLiveRows } from "./liveRows"
+import { withNewVariables } from "../interactions/InteractionsEditor"
+import { normalizeVariables } from "../declareUtils"
+import { identityColumnIndexes } from "../../../../components/ResultGrid/highlight/identityIndex"
+
+const SELECTED_ROW_HIGHLIGHT: CellHighlight = {
+  color: "dataSeries9",
+  display: "always",
+}
+
+const NEW_ROW_HIGHLIGHT: CellHighlight = {
+  color: "dataSeries2",
+  display: "temporary",
+}
 
 type Props = {
   data: DqlQueryResult
@@ -55,6 +84,9 @@ type Props = {
   // Every column any result of the cell has, for the rule pickers.
   cellColumns: ColumnDefinition[]
   refreshIntervalMs: number | undefined
+  formats?: ColumnFormats
+  gridMode?: GridMode
+  interactions?: CellInteractions
 }
 
 const trackHighlightOpen = () =>
@@ -87,7 +119,7 @@ const useInitialGridState = ({
   }, [bufferId, cellId, data.query, statementKey, runToken, viewportStore])
 
 const ResultGridPanelInner: React.FC<Props> = ({
-  data,
+  data: rawData,
   statementKey,
   runToken,
   isFocused,
@@ -100,49 +132,101 @@ const ResultGridPanelInner: React.FC<Props> = ({
   highlightConfig: savedHighlightConfig,
   cellColumns,
   refreshIntervalMs,
+  formats,
+  gridMode,
+  interactions,
 }) => {
   const { queryKey, columnLayout, viewport } = useInitialGridState({
     bufferId,
     cellId,
-    data,
+    data: rawData,
     statementKey,
     runToken,
     viewportStore,
   })
   const { maxColumnWidth } = useLocalStorage()
-  const { setCellHighlightConfig } = useNotebookActions()
+  const { setCellSettings, setVariableValues, updateSettings, getVariables } =
+    useNotebookActions()
   const trendStore = useResultTrendStore()
+  // What the grid drawer edits; compared field by field, so a remount
+  // keeps an open drawer and a change made elsewhere closes it.
+  const savedGridSettings: GridSettings = useMemo(
+    () => ({
+      highlightConfig: savedHighlightConfig,
+      formats,
+      gridMode,
+      interactions,
+    }),
+    [savedHighlightConfig, formats, gridMode, interactions],
+  )
   const highlightDrawer = useSettingsDrawerSession({
     sessions: highlightSettingsSessions,
     cellId,
-    config: savedHighlightConfig,
+    config: savedGridSettings,
+    sameConfig: sameGridSettings,
     openEvent: EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
     onOpen: trackHighlightOpen,
     onCancel: trackHighlightCancel,
     changedWhileOpenMessage:
-      "Highlight rules were updated since last check. Reopen highlight rules to edit.",
+      "Grid settings were updated since last check. Reopen grid settings to edit.",
   })
   const [hasSelection, setHasSelection] = useState(false)
   const [pinnedCount, setPinnedCount] = useState(
     columnLayout?.pinnedColumns?.length ?? 0,
   )
   const gridRef = useRef<ResultGridHandle | null>(null)
+  const highlightConfig = useMemo(
+    () => resolveHighlightConfig(savedHighlightConfig, rawData),
+    [savedHighlightConfig, rawData],
+  )
+  // Live grid modes reorder rows by identity, and mark rows that are new.
+  const {
+    data,
+    isNew,
+    at: liveAt,
+    revision: liveRevision,
+  } = useLiveRows(
+    rawData,
+    highlightConfig.identityColumns,
+    gridMode,
+    gridMode === "stable"
+      ? viewportStore.liveRows(statementKey, runToken)
+      : undefined,
+  )
   const dataSource = useMemo(
     () => inMemoryDataSource(data.columns, data.dataset, data.timestamp ?? -1),
     [data.columns, data.dataset, data.timestamp],
   )
+  // The grid's statement, as a click reads it.
+  const statements = useMemo(
+    () => [{ columns: data.columns, rows: data.dataset }],
+    [data.columns, data.dataset],
+  )
+  // A cell activation picks its row of the statement, drawn from the
+  // clicked column.
+  const onCellActivate = useMemo(() => {
+    const click = interactions?.click
+    if (!click) return undefined
+    return (row: ResultGridRow, column: number) => {
+      const index = statements[0].rows.indexOf(row)
+      if (index < 0) return
+      const literal = pickLiteral(
+        pickOf(0, [index], column),
+        click.column,
+        statements,
+      )
+      if (literal !== undefined)
+        setVariableValues({ [click.variable]: literal })
+    }
+  }, [interactions, statements, setVariableValues])
   const saveViewport = useCallback(
     (nextViewport: ResultGridViewport) =>
       viewportStore.save(statementKey, runToken, nextViewport),
     [viewportStore, statementKey, runToken],
   )
-  const highlightConfig = useMemo(
-    () => resolveHighlightConfig(savedHighlightConfig, data),
-    [savedHighlightConfig, data],
-  )
   // Captured when the cells state changed, before this render.
   const trend = trendStore.get(cellId, statementKey)
-  const previous = trend?.result === data ? trend.previous : null
+  const previous = trend?.result === rawData ? trend.previous : null
   const capturedAt = trend?.capturedAt ?? 0
   const revision = trend?.revision ?? 0
   const columnRange = useMemo(
@@ -156,7 +240,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   )
   // Pattern rules match nothing until RE2 has loaded, then evaluate again.
   const re2Ready = useRe2Ready(usesPatterns(highlightConfig))
-  const highlights = useMemo(
+  const evaluated = useMemo(
     () =>
       evaluateHighlights({
         columns: data.columns,
@@ -166,24 +250,111 @@ const ResultGridPanelInner: React.FC<Props> = ({
       }),
     [data, highlightConfig, previous, re2Ready],
   )
+  // The row a click selected: its column holds the variable's value.
+  const settings = useNotebookSettings()
+  const selectedValue = interactions?.click
+    ? settings.variables?.find((v) => v.name === interactions.click?.variable)
+        ?.value
+    : undefined
+  // Only a bound click names the column its value comes from.
+  const selectedColumn = interactions?.click?.column
+  const isSelected = useMemo(() => {
+    if (selectedValue === undefined || selectedColumn === undefined) return null
+    const rows = new Set(
+      statements[0].rows.flatMap((_, i) =>
+        pickLiteral(pickOf(0, [i]), selectedColumn, statements) ===
+        selectedValue
+          ? [i]
+          : [],
+      ),
+    )
+    return rows.size > 0 ? (row: number) => rows.has(row) : null
+  }, [statements, selectedColumn, selectedValue])
+  const highlights = useMemo(
+    () =>
+      isNew || isSelected
+        ? {
+            ...evaluated,
+            lookup: {
+              ...evaluated.lookup,
+              row: (row: number) =>
+                (isSelected?.(row) ? SELECTED_ROW_HIGHLIGHT : undefined) ??
+                evaluated.lookup.row(row) ??
+                (isNew?.(row) ? NEW_ROW_HIGHLIGHT : undefined),
+            },
+          }
+        : evaluated,
+    [evaluated, isNew, isSelected],
+  )
 
-  const saveHighlight = (next: typeof highlightConfig) => {
-    void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_SAVE, {
-      source: "notebook",
-      ruleCount: next.rules.length,
-      kinds: next.rules.map((rule) => rule.kind),
-    })
-    signalUserEdit(bufferId)
-    setCellHighlightConfig(cellId, next)
+  const defaultIdentity = useMemo(
+    () => resolveHighlightConfig(undefined, rawData).identityColumns,
+    [rawData],
+  )
+
+  const formatColumns = useMemo(() => {
+    const activeTypes = new Map(
+      rawData.columns.map((column) => [column.name, column]),
+    )
+    return cellColumns.map((column) => activeTypes.get(column.name) ?? column)
+  }, [cellColumns, rawData.columns])
+
+  const saveGridSettings = (save: GridSettingsSave) => {
+    const { highlight, newVariables } = save
+    const highlightChanged =
+      JSON.stringify(highlight ?? null) !==
+      JSON.stringify(savedHighlightConfig ?? null)
+    if (highlightChanged && highlight && highlight.rules.length > 0)
+      void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_SAVE, {
+        source: "notebook",
+        ruleCount: highlight.rules.length,
+        kinds: highlight.rules.map((rule) => rule.kind),
+      })
+    else if (highlightChanged && (savedHighlightConfig?.rules.length ?? 0) > 0)
+      void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
+    // Only the fields the save changed; one that changed none writes nothing.
+    const patch = gridSettingsPatch(savedGridSettings, save)
+    if (newVariables.length > 0 || Object.keys(patch).length > 0)
+      signalUserEdit(bufferId)
+    if (newVariables.length > 0)
+      updateSettings({
+        variables: withNewVariables(
+          normalizeVariables(getVariables()),
+          newVariables,
+        ),
+      })
+    if (Object.keys(patch).length > 0) setCellSettings(cellId, patch)
     highlightDrawer.close()
   }
 
-  const clearHighlight = () => {
-    void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
-    signalUserEdit(bufferId)
-    setCellHighlightConfig(cellId, null)
-    highlightDrawer.close()
-  }
+  const formatColumn = useCallback(
+    (column: string) =>
+      eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, {
+        cellId,
+        mode: "open",
+        focus: { section: "formats", column },
+      }),
+    [cellId],
+  )
+  const openLiveUpdates = useCallback(
+    () =>
+      eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, {
+        cellId,
+        mode: "open",
+        focus: { section: "highlights" },
+      }),
+    [cellId],
+  )
+  const variables = useMemo(
+    () => normalizeVariables(settings.variables),
+    [settings.variables],
+  )
+  const samples = useMemo(
+    () =>
+      columnsAndSamplesOf([{ columns: data.columns, rows: data.dataset }])
+        .samples,
+    [data],
+  )
 
   return (
     <>
@@ -194,15 +365,29 @@ const ResultGridPanelInner: React.FC<Props> = ({
         hasSelection={hasSelection}
         isRunning={isRunning}
         onReRun={() => onReRun(statementKey)}
+        gridMode={gridMode}
+        liveInactive={
+          gridMode !== undefined &&
+          identityColumnIndexes(
+            data.columns,
+            highlightConfig.identityColumns,
+          ) === null
+        }
+        onOpenLiveUpdates={openLiveUpdates}
       />
       <ResultGrid
         ref={gridRef}
         dataSource={dataSource}
         maxColumnWidth={maxColumnWidth}
+        columnFormats={formats}
+        onFormatColumn={formatColumn}
+        onCellActivate={onCellActivate}
         runToken={runToken}
         cellHighlights={highlights.lookup}
-        flashParity={revision % 2 === 0 ? 0 : 1}
-        flashStartedAt={capturedAt}
+        flashParity={(liveRevision || revision) % 2 === 0 ? 0 : 1}
+        // A flash is timed from the result's landing: a result read back from
+        // storage, or a remounted live view, never replays it.
+        flashStartedAt={trend ? capturedAt : liveAt}
         flashDurationMs={flashDurationFor(refreshIntervalMs)}
         isFocused={isFocused}
         initialColumnSizing={columnLayout?.columnSizing}
@@ -247,11 +432,19 @@ const ResultGridPanelInner: React.FC<Props> = ({
         initialDraft={highlightDrawer.initialDraft}
         onDraftChange={highlightDrawer.keepDraft}
         columns={cellColumns}
+        formatColumns={formatColumns}
         columnRange={columnRange}
         config={highlightConfig}
+        formats={formats}
+        gridMode={gridMode}
+        interactions={interactions}
+        variables={variables}
+        samples={samples}
+        focus={highlightDrawer.request?.focus}
+        defaultIdentity={defaultIdentity}
+        savedConfig={savedHighlightConfig}
         duplicateCountOf={duplicateCountOf}
-        onSave={saveHighlight}
-        onClear={clearHighlight}
+        onSave={saveGridSettings}
         onCancel={highlightDrawer.cancel}
       />
     </>

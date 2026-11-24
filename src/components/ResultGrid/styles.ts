@@ -1,3 +1,4 @@
+import { Button } from "../Button"
 import styled, { css, keyframes, type DefaultTheme } from "styled-components"
 import { color } from "../../utils"
 import type { CellHighlight, HighlightColorToken } from "./highlight/types"
@@ -71,8 +72,32 @@ export const HeaderCell = styled.div<{ $align: string; $frozen?: boolean }>`
     `}
 
   &:hover .header-copy-btn,
-  &:focus-within .header-copy-btn {
+  &:focus-within .header-copy-btn,
+  &:hover .header-format-btn,
+  &:focus-within .header-format-btn {
     visibility: visible;
+  }
+`
+
+// Over the type line, at the side away from the text, so it takes no width.
+// Inset past the 10px a column resizer reaches into each neighbouring header,
+// so no part of the button sits under a resize handle.
+export const HeaderFormatButton = styled(Button)<{
+  $align: string
+  $formatted: boolean
+}>`
+  && {
+    position: absolute;
+    bottom: 0.2rem;
+    ${({ $align }) => ($align === "right" ? "left" : "right")}: 1.1rem;
+    visibility: ${({ $formatted }) => ($formatted ? "visible" : "hidden")};
+    height: 1.8rem;
+    width: 1.8rem;
+    min-width: 0;
+    padding: 0;
+    color: ${({ theme, $formatted }) =>
+      $formatted ? theme.color.contentAccent : theme.color.contentSecondary};
+    background: ${({ theme }) => theme.color.gridHeader};
   }
 `
 

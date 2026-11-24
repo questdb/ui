@@ -206,6 +206,7 @@ export const useCellExecution = ({
         cellId,
         results: result.results,
         savedAt: Date.now(),
+        runToken: result.timestamp,
         activeResultIndex: result.activeResultIndex,
         ...(result.activeStatementKey !== undefined
           ? { activeStatementKey: result.activeStatementKey }
@@ -546,7 +547,11 @@ export const useCellExecution = ({
               return
             }
             const result = launch.exec
-            const landed = singleResultFromExec(result, sql)
+            const mapped = singleResultFromExec(result, sql)
+            const landed =
+              perQuery.signal.aborted && mapped.type === "error"
+                ? { ...mapped, stoppedByUser: true as const }
+                : mapped
             finalResults[index] = landed
             updateCellResult(cellId, index, landed)
             if (result.type === "error") failedCount++
@@ -799,7 +804,11 @@ export const useCellExecution = ({
           ? singleResultFromExec(launch.exec, recordedQuery)
           : cancelledResult(recordedQuery, "user")
         const cellResult: CellResult = {
-          results: [recorded],
+          results: [
+            ac.signal.aborted && recorded.type === "error"
+              ? { ...recorded, stoppedByUser: true }
+              : recorded,
+          ],
           activeResultIndex: 0,
           timestamp: Date.now(),
         }
@@ -980,11 +989,10 @@ export const useCellExecution = ({
       const target = cellsRef.current.find((c) => c.id === cellId)?.result
         ?.results[index]
       if (target?.type === "running") {
-        updateCellResult(
-          cellId,
-          index,
-          errorResult(target.query, "Cancelled by user"),
-        )
+        updateCellResult(cellId, index, {
+          ...errorResult(target.query, "Cancelled by user"),
+          stoppedByUser: true,
+        })
       }
     },
     [cellsRef, updateCellResult],
@@ -1053,6 +1061,7 @@ export const useCellExecution = ({
 
   return {
     runningCellIds,
+    isCellRunning: (cellId: string) => abortControllersRef.current.has(cellId),
     runCell,
     validateForDraw,
     reRunResultAt,

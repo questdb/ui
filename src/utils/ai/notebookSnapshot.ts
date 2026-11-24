@@ -29,6 +29,17 @@ import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import { loadPassiveResultStatusReader } from "../notebooks/notebookResultStatus"
 
+import {
+  toHighlightConfigWire,
+  type HighlightConfigWire,
+} from "../tools/highlightConfigWire"
+import { cellDashboardWire, visualToWire } from "../tools/dashboardWire"
+import {
+  getRenderReport,
+  renderReportWire,
+  type RenderReportWire,
+} from "../../scenes/Editor/Notebook/renderReports"
+
 type ChartQueryWire = {
   type: string
   y_columns: string[]
@@ -37,11 +48,15 @@ type ChartQueryWire = {
   axis?: "left" | "right"
   enabled?: boolean
   name?: string
+  events?: { time?: string; end?: string; label?: string; tone?: string }
+  heatmap?: { y: string; value: string }
+  band?: { lower: string; upper: string }
+  range?: { start: string; end: string }
+  box?: { min: string; q1: string; median: string; q3: string; max: string }
+  percent_stack?: boolean
+  pie_shape?: string
+  scatter?: { size?: string; color?: string }
 }
-import {
-  toHighlightConfigWire,
-  type HighlightConfigWire,
-} from "../tools/highlightConfigWire"
 
 export type { HighlightConfigWire }
 
@@ -49,6 +64,11 @@ export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
   right_axis?: { name?: string; min?: number; max?: number }
+  horizontal?: boolean
+  thresholds?: "lines" | "bands"
+  visual?: ReturnType<typeof visualToWire>
+  // The custom ECharts option, as the JSON text set_cell_custom_chart takes.
+  custom_option_json?: string
 }
 
 // Structural data only — previews ≤ 120 chars, error summaries ≤ 200 chars.
@@ -71,6 +91,11 @@ export type NotebookContextCell = {
   view: AgentCellView | null
   chart_config?: ChartConfigWire
   highlight_config?: HighlightConfigWire
+  // The dashboard fields (see cellDashboardWire): apply_notebook_state
+  // replaces them, so they are shown to be sent back.
+  formats?: Record<string, unknown>
+  interactions?: Record<string, unknown>
+  grid_mode?: string
   last_run_status?: RunStatus
   last_run_error_summary?: string
   // Live-only: present for the mounted notebook alone. Absence never means
@@ -91,6 +116,7 @@ export type NotebookContextSnapshot =
       auto_refresh_default?: AutoRefresh
       maximized_cell_id: string | null
       variables?: Array<{ name: string; value: string }>
+      chart_sync?: { crosshair: "off" | "line" | "tooltip"; zoom: boolean }
       cells: NotebookContextCell[]
     }
   | {
@@ -135,9 +161,23 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.axis ? { axis: q.axis } : {}),
           ...(q.enabled === false ? { enabled: false } : {}),
           ...(q.name != null ? { name: q.name } : {}),
+          ...(q.events ? { events: q.events } : {}),
+          ...(q.heatmap ? { heatmap: q.heatmap } : {}),
+          ...(q.band ? { band: q.band } : {}),
+          ...(q.range ? { range: q.range } : {}),
+          ...(q.box ? { box: q.box } : {}),
+          ...(q.percentStack ? { percent_stack: true } : {}),
+          ...(q.pieShape ? { pie_shape: q.pieShape } : {}),
+          ...(q.scatter ? { scatter: q.scatter } : {}),
         },
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
+  ...(cfg.horizontal ? { horizontal: true } : {}),
+  ...(cfg.thresholds ? { thresholds: cfg.thresholds } : {}),
+  ...(cfg.visual ? { visual: visualToWire(cfg.visual) } : {}),
+  ...(cfg.custom
+    ? { custom_option_json: JSON.stringify(cfg.custom.option) }
+    : {}),
 })
 
 const highlightConfigWire = (
@@ -217,6 +257,7 @@ const buildCell = (
   }
   const highlightConfig = highlightConfigWire(cell)
   if (highlightConfig) out.highlight_config = highlightConfig
+  Object.assign(out, cellDashboardWire(cell))
   if (layoutMode === "grid") {
     const g = gridByCellId.get(cell.id)
     if (g) {
@@ -283,10 +324,24 @@ export const buildSnapshot = async (
   if (variables.length > 0) {
     out.variables = variables
   }
+  if (settings.chartSync) out.chart_sync = settings.chartSync
   return out
 }
 
 // YAML-ish shape — stable regardless of escape characters in cell values.
+// Custom options can be long; every turn carries this block, so a long one is
+// named, not repeated.
+const CONTEXT_OPTION_MAX = 2000
+
+const contextChartConfig = (config: ChartConfigWire) =>
+  config.custom_option_json &&
+  config.custom_option_json.length > CONTEXT_OPTION_MAX
+    ? {
+        ...config,
+        custom_option_json: `(${config.custom_option_json.length} characters: read it with get_cell, and send it back unchanged in apply_notebook_state to keep it)`,
+      }
+    : config
+
 export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
   if (snap.status !== "ok") {
     const lines = [
@@ -317,6 +372,8 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
     }`,
   )
+  if (snap.chart_sync)
+    lines.push(`  chart_sync: ${stringifyForPromptContext(snap.chart_sync)}`)
   if (snap.variables && snap.variables.length > 0) {
     lines.push("  variables:")
     for (const { name, value } of snap.variables) {
@@ -348,7 +405,7 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
     lines.push(`      view: ${c.view}`)
     if (c.chart_config) {
       lines.push(
-        `      chart_config: ${stringifyForPromptContext(c.chart_config)}`,
+        `      chart_config: ${stringifyForPromptContext(contextChartConfig(c.chart_config))}`,
       )
     }
     if (c.highlight_config) {
@@ -356,6 +413,13 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
         `      highlight_config: ${stringifyForPromptContext(c.highlight_config)}`,
       )
     }
+    if (c.formats)
+      lines.push(`      formats: ${stringifyForPromptContext(c.formats)}`)
+    if (c.interactions)
+      lines.push(
+        `      interactions: ${stringifyForPromptContext(c.interactions)}`,
+      )
+    if (c.grid_mode) lines.push(`      grid_mode: ${c.grid_mode}`)
     if (c.last_run_status)
       lines.push(`      last_run_status: ${c.last_run_status}`)
     if (c.last_run_error_summary)
@@ -492,6 +556,11 @@ export type NotebookCellDetails = {
   result_height: number | "auto" | null
   view: AgentCellView | null
   chart_config?: ChartConfigWire
+  // What the cell's chart last drew and what went wrong (mounted notebooks).
+  render_report?: RenderReportWire
+  formats?: unknown
+  interactions?: unknown
+  grid_mode?: string
   highlight_config?: HighlightConfigWire
   last_run_status?: RunStatus
   last_run_error?: string
@@ -530,6 +599,9 @@ export const serializeCell = (
   getFullContent: boolean,
   refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
   resultStatus: CellResultStatus,
+  // Whether the reader may see query results ('read'): the render report
+  // describes them.
+  canReadResults: boolean,
 ): NotebookCellDetails => {
   const cell = cells.find((c) => c.id === cellId)
   if (!cell) {
@@ -571,6 +643,9 @@ export const serializeCell = (
     out.chart_config = toChartConfigWire(cell.chartConfig)
   const highlightConfig = highlightConfigWire(cell)
   if (highlightConfig) out.highlight_config = highlightConfig
+  Object.assign(out, cellDashboardWire(cell))
+  const report = getRenderReport(bufferId, cell.id)
+  if (report) out.render_report = renderReportWire(report, canReadResults)
   return out
 }
 

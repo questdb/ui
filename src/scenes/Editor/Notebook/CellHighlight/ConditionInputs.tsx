@@ -6,13 +6,8 @@ import {
   type ColumnRange,
   type HighlightRule,
 } from "../../../../components/ResultGrid/highlight"
-import { FieldLabel } from "../CellChart/chartSettingsStyles"
-import {
-  CompactInput,
-  CompactSelect,
-  FieldError,
-  RuleField,
-} from "./highlightSettingsStyles"
+import { FieldLabel, SettingsSelect } from "../CellChart/chartSettingsStyles"
+import { CompactInput, FieldError, RuleField } from "./highlightSettingsStyles"
 import type { RuleErrors } from "./ruleValidation"
 
 const CHANGE_UNIT_OPTIONS = [
@@ -99,7 +94,7 @@ export const ConditionInputs: React.FC<{
           </RuleField>
           <RuleField>
             <FieldLabel>Unit</FieldLabel>
-            <CompactSelect
+            <SettingsSelect
               name="change-unit"
               ariaLabel="Change unit"
               value={condition.unit}

@@ -65,7 +65,7 @@ export const useCellViewActions = ({
     setCellPaneView(cellId, resultOnly ? "editor_result" : "result")
   }
 
-  const resetZoom = () => resetChartZoom(cellId)
+  const resetZoom = () => resetChartZoom({ bufferId, cellId })
 
   return { viewTable, viewChart, toggleEditor, resetZoom }
 }

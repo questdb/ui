@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from "react"
-import type { ChartConfig } from "./CellChart/chartTypes"
 import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
 import { withHighlightConfig } from "./result-table/highlightConfig"
 import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
@@ -9,6 +8,9 @@ import {
   setResultAt,
 } from "./notebookUtils"
 import type { AutoRefresh } from "../../../store/notebook"
+import { applyCellSettings, type CellSettingsPatch } from "./cellSettings"
+
+export type { CellSettingsPatch }
 
 type Options = {
   initialCells: NotebookCell[]
@@ -96,10 +98,17 @@ export const useCellsStore = ({
     [updateCells],
   )
 
-  const setCellChartConfig = useCallback(
-    (cellId: string, config: ChartConfig) =>
-      updateCell(cellId, { chartConfig: config }),
-    [updateCell],
+  // A drawer's save: the given fields, removed when undefined. A patch that
+  // changes nothing writes nothing.
+  const setCellSettings = useCallback(
+    (cellId: string, patch: CellSettingsPatch) => {
+      const cell = cellsRef.current.find((c) => c.id === cellId)
+      if (!cell || applyCellSettings(cell, patch) === cell) return
+      updateCells((prev) =>
+        prev.map((c) => (c.id === cellId ? applyCellSettings(c, patch) : c)),
+      )
+    },
+    [updateCells],
   )
 
   const setCellHighlightConfig = useCallback(
@@ -131,7 +140,7 @@ export const useCellsStore = ({
     updateCell,
     updateCellResult,
     setScriptSummary,
-    setCellChartConfig,
+    setCellSettings,
     setCellHighlightConfig,
     setCellRefresh,
   }

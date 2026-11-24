@@ -17,7 +17,7 @@ import { useCellToolbarTier } from "./useCellToolbarTier"
 import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
 import { ResizeHandle } from "../resize"
 import { CellWrapper } from "./CellWrapper"
-import type { ChartConfig } from "../CellChart/chartTypes"
+import type { DrawSettings } from "../CellChart/drawSettings"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { exceedsCellLineLimit } from "../../../../store/notebook"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
@@ -139,7 +139,7 @@ const CellInner: React.FC<Props> = ({
   isMaximized,
   isRunning,
 }) => {
-  const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
+  const { setCellSettings, clearCellResult, updateCell, setFocusedCell } =
     useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
@@ -162,7 +162,7 @@ const CellInner: React.FC<Props> = ({
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
   const { loading: chartLoading, stopVisible: chartStopVisible } =
     useChartLoading(cell)
-  const chartZoomed = useChartZoomed(cell.id)
+  const chartZoomed = useChartZoomed(bufferIdForEvents, cell.id)
   const contentMode = useCellContentMode(cell.id)
   const virtualizationEngine = useCellVirtualizationEngine()
   const resultStatus = useCellResultStatus(cell.id)
@@ -282,9 +282,11 @@ const CellInner: React.FC<Props> = ({
       ?.focus()
   }
 
-  const handleChartConfigChange = (config: ChartConfig) => {
+  // A save writes the fields it changed; one that changed none writes nothing.
+  const handleDrawSettingsChange = (patch: Partial<DrawSettings>) => {
+    if (Object.keys(patch).length === 0) return
     signalUserEdit(bufferIdForEvents)
-    setCellChartConfig(cell.id, config)
+    setCellSettings(cell.id, patch)
   }
 
   // Install the content-height getter that `topResize.resetHeight`
@@ -634,7 +636,7 @@ const CellInner: React.FC<Props> = ({
               isFocused={isFocused}
               isRunning={isRunning}
               refreshIntervalMs={autoRefreshIntervalMs(effectiveAutoRefresh)}
-              onConfigChange={handleChartConfigChange}
+              onSettingsChange={handleDrawSettingsChange}
               onRetryUnmountWhileFocused={focusCellToolbar}
               onYieldFocus={() => editorRef.current?.focus()}
             />

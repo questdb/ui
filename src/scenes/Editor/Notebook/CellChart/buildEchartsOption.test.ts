@@ -25,6 +25,39 @@ const firstAxis = (axis: unknown): Record<string, unknown> =>
 const seriesList = (s: unknown): Record<string, unknown>[] =>
   (Array.isArray(s) ? s : [s]) as Record<string, unknown>[]
 
+it.each(["area", "stepArea"] as const)(
+  "enables hover hit targets for a bound %s",
+  (type) => {
+    const chart = { xColumn: "label" }
+    const queries = [
+      resolved({
+        columns: [
+          col("label", "STRING"),
+          col("price", "DOUBLE"),
+          col("symbol", "SYMBOL"),
+        ],
+        dataset: [["B", 16, "ETH"]],
+        xColumn: "label",
+        type,
+        yColumns: ["price"],
+      }),
+    ]
+    const clickable = buildEchartsOption(chart, queries, {
+      clickEnabled: true,
+    })
+    expect(seriesList(clickable.series)[0]).toMatchObject({
+      symbol: "circle",
+      showSymbol: false,
+      data: [{ value: 16, pick: { statement: 0, rows: [0], column: 0 } }],
+    })
+    const plain = buildEchartsOption(chart, queries)
+    expect(seriesList(plain.series)[0]).toMatchObject({
+      symbol: "none",
+      showSymbol: false,
+    })
+  },
+)
+
 describe("buildEchartsOption — order-book depth (numeric value x-axis + step)", () => {
   const depthColumns = [
     col("price", "DOUBLE"),
@@ -392,7 +425,7 @@ describe("buildEchartsOption — axis labels", () => {
 })
 
 describe("buildEchartsOption — right-axis bounds", () => {
-  it("keeps unset bounds as explicit keys so a cleared bound resets the merged chart", () => {
+  it("leaves cleared bounds unset", () => {
     // Given a chart with a right axis whose min/max were cleared
     const columns = [
       col("ts", "TIMESTAMP"),
@@ -412,9 +445,9 @@ describe("buildEchartsOption — right-axis bounds", () => {
         axis: "right",
       }),
     ])
-    // Then both bound keys are present, so ECharts' merge overwrites stale bounds
+    // Then the axis fits its data (every draw replaces the whole option)
     const rightAxis = (opt.yAxis as Record<string, unknown>[])[1]
-    expect(rightAxis).toHaveProperty("min", undefined)
-    expect(rightAxis).toHaveProperty("max", undefined)
+    expect(rightAxis).not.toHaveProperty("min")
+    expect(rightAxis).not.toHaveProperty("max")
   })
 })

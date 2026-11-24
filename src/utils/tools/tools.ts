@@ -40,9 +40,12 @@ export const declaresBufferId = (name: string): boolean =>
 export const requiresFreshNotebookRead = (name: string): boolean =>
   mutatesNotebook(name) && declaresBufferId(name)
 
-export const MCP_META_TOOL_NAMES: readonly string[] = ALL_DEFINITIONS.filter(
-  (d) => d.surfaces.length === 1 && d.surfaces[0] === "mcp",
-).map((d) => d.name)
+// Answered by the MCP dispatcher itself, from the workspace, not by
+// dispatchTool. Other MCP-only tools (get_cell_image) dispatch as usual.
+export const MCP_META_TOOL_NAMES: readonly string[] = [
+  "get_workspace_state",
+  "get_recent_user_actions",
+]
 
 export const isMcpMetaToolName = (name: string): boolean =>
   MCP_META_TOOL_NAMES.includes(name)

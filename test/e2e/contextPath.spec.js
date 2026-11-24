@@ -301,7 +301,7 @@ describe("Console served by QuestDB under a context path", () => {
 
     // When
     cy.get("[data-notebook-cell] button[aria-label='More actions']").click()
-    cy.contains("[role='menuitem']", "Highlight rules").click()
+    cy.contains("[role='menuitem']", "Grid settings").click()
     cy.contains("button", "+ Add rule").click()
     cy.getByDataHook("highlight-rule")
       .find("button[aria-label='Column']")

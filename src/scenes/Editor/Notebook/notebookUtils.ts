@@ -1,3 +1,10 @@
+import { NOTEBOOK_FORMAT_VERSION } from "../../../store/notebookFormat"
+import type { ColumnFormats } from "../../../utils/formats/columnFormat"
+import type {
+  CellInteractions,
+  ChartSync,
+  GridMode,
+} from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
@@ -59,6 +66,7 @@ import {
   topHeightForSql,
   validateAgentCellDimensions,
 } from "./cellSizing"
+import { maxOf } from "../../../utils/values"
 
 // Auto-refresh (draw cells): true = adaptive poll, false = off, a token like
 // "5s" = fixed cadence. The cell stores this value verbatim (= the MCP wire
@@ -517,6 +525,7 @@ export const buildPersistPayload = (
   maximizedCellId: string | null,
   settings: NotebookViewState["settings"],
 ): NotebookViewState => ({
+  formatVersion: NOTEBOOK_FORMAT_VERSION,
   cells: stripCellResults(cells),
   focusedCellId: focusedCellId ?? undefined,
   maximizedCellId: maximizedCellId ?? undefined,
@@ -537,7 +546,7 @@ export const mergeCellLayout = (
 ): (CellLayoutItem & { minW: number; minH: number })[] => {
   const layoutMap = new Map(savedLayout.map((l) => [l.i, l]))
   const maxY =
-    savedLayout.length > 0 ? Math.max(...savedLayout.map((l) => l.y + l.h)) : 0
+    savedLayout.length > 0 ? maxOf(savedLayout.map((l) => l.y + l.h)) : 0
   let nextY = maxY
   return cells.map((cell) => {
     const existing = layoutMap.get(cell.id)
@@ -578,7 +587,7 @@ export const nextGridSeedPosition = (
   layout: CellLayoutItem[] | undefined,
 ): CellGridPosition => {
   const items = layout ?? []
-  const maxY = items.length > 0 ? Math.max(...items.map((l) => l.y + l.h)) : 0
+  const maxY = items.length > 0 ? maxOf(items.map((l) => l.y + l.h)) : 0
   return { x: 0, y: maxY, w: 12, h: 1 }
 }
 
@@ -718,6 +727,9 @@ type ApplyCellRequest = {
   view?: AgentCellView | null
   chartConfig?: ChartConfig | null
   highlightConfig?: HighlightConfig | null
+  formats?: ColumnFormats | null
+  interactions?: CellInteractions | null
+  gridMode?: GridMode | null
   grid?: { x: number; y: number; w: number } | null
 }
 
@@ -726,6 +738,7 @@ type ApplyRequest = {
   autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
+  chartSync?: ChartSync | null
   cells: ApplyCellRequest[]
 }
 
@@ -828,6 +841,14 @@ const normalizeQueryChart = (q: QueryChart): QueryChart => {
   if (q.axis) next.axis = q.axis
   if (q.enabled === false) next.enabled = false
   if (q.name) next.name = q.name
+  if (q.events) next.events = q.events
+  if (q.heatmap) next.heatmap = q.heatmap
+  if (q.band) next.band = q.band
+  if (q.range) next.range = q.range
+  if (q.box) next.box = q.box
+  if (q.percentStack) next.percentStack = true
+  if (q.pieShape) next.pieShape = q.pieShape
+  if (q.scatter) next.scatter = q.scatter
   return next
 }
 
@@ -840,6 +861,10 @@ const normalizeChartConfig = (
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
+  if (cfg.horizontal) next.horizontal = true
+  if (cfg.thresholds) next.thresholds = cfg.thresholds
+  if (cfg.visual) next.visual = cfg.visual
+  if (cfg.custom) next.custom = cfg.custom
   return next
 }
 
@@ -978,13 +1003,24 @@ export const buildAppliedCells = (
         "cells",
       )
     }
-    if (req.chartConfig && req.chartConfig.queries.length === 0) {
+    const drawsOwnChart = Boolean(
+      req.chartConfig?.visual || req.chartConfig?.custom,
+    )
+    if (
+      req.chartConfig &&
+      req.chartConfig.queries.length === 0 &&
+      !drawsOwnChart
+    ) {
       throw new ApplyNotebookStateError(
         `Cell at index ${index} has a chart_config with no queries. Provide one entry per ;-split query (apply replaces the chart wholesale).`,
         "cells",
       )
     }
-    if (req.chartConfig && req.chartConfig.queries.length > 0) {
+    if (
+      req.chartConfig &&
+      !drawsOwnChart &&
+      req.chartConfig.queries.length > 0
+    ) {
       const statementCount = getQueriesFromText(value).length
       if (
         statementCount > 0 &&
@@ -997,6 +1033,7 @@ export const buildAppliedCells = (
       }
     }
     if (
+      !drawsOwnChart &&
       chartConfig?.queries.some(
         (q) => q != null && q.type === "candlestick" && !q.ohlc,
       )
@@ -1018,6 +1055,7 @@ export const buildAppliedCells = (
     const dimensionCell: NotebookCell = {
       ...(existing ?? { id, position: index, value, type: resolvedType }),
       value,
+      chartConfig,
     }
     if (isDraw) dimensionCell.mode = "draw"
     else delete dimensionCell.mode
@@ -1109,6 +1147,13 @@ export const buildAppliedCells = (
       else delete next.chartConfig
       if (highlightConfig !== undefined) next.highlightConfig = highlightConfig
       else delete next.highlightConfig
+      // PUT like highlightConfig: omitted clears.
+      if (req.formats) next.formats = req.formats
+      else delete next.formats
+      if (req.interactions) next.interactions = req.interactions
+      else delete next.interactions
+      if (req.gridMode) next.gridMode = req.gridMode
+      else delete next.gridMode
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
       if (req.view === "editor" && cellHasRunOutcome(existing)) {
@@ -1152,6 +1197,9 @@ export const buildAppliedCells = (
     if (resolvedMode === "draw") created.mode = "draw"
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (highlightConfig !== undefined) created.highlightConfig = highlightConfig
+    if (req.formats) created.formats = req.formats
+    if (req.interactions) created.interactions = req.interactions
+    if (req.gridMode) created.gridMode = req.gridMode
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
     // Draw cells are double-view from creation (chart visible immediately),
     // so seed bottomHeight with the chart default. Run cells stay single-
@@ -1278,6 +1326,9 @@ export const buildAppliedNotebookState = (
   }
   if (request.variables !== undefined) {
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }
+  }
+  if (request.chartSync !== undefined && request.chartSync !== null) {
+    nextSettings = { ...nextSettings, chartSync: request.chartSync }
   }
 
   let nextMaximizedCellId = current.maximizedCellId

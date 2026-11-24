@@ -1,4 +1,5 @@
 import type { ResultGridViewport } from "../../../../components/ResultGrid/types"
+import { createLiveRowsState, type LiveRowsState } from "./liveRows"
 
 const MAX_VIEWPORTS_PER_CELL = 20
 
@@ -15,15 +16,43 @@ export type ResultGridViewportStore = {
     runToken: number,
     viewport: ResultGridViewport,
   ) => void
+  liveRows: (statementKey: string, runToken: number) => LiveRowsState
   clear: () => void
 }
 
 const normalizeOffset = (value: number): number =>
   Number.isFinite(value) ? Math.max(0, value) : 0
 
-export const createResultGridViewportStore = (): ResultGridViewportStore => {
-  const entries = new Map<string, ViewportEntry>()
+export const createLiveRowsHistory = (): Pick<
+  ResultGridViewportStore,
+  "liveRows" | "clear"
+> => {
+  const rowStates = new Map<
+    string,
+    { runToken: number; state: LiveRowsState }
+  >()
+  return {
+    liveRows(statementKey, runToken) {
+      const entry = rowStates.get(statementKey)
+      const state =
+        entry?.runToken === runToken ? entry.state : createLiveRowsState()
+      rowStates.delete(statementKey)
+      rowStates.set(statementKey, { runToken, state })
+      if (rowStates.size > MAX_VIEWPORTS_PER_CELL) {
+        const oldest = rowStates.keys().next().value
+        if (oldest !== undefined) rowStates.delete(oldest)
+      }
+      return state
+    },
+    clear: () => rowStates.clear(),
+  }
+}
 
+export const createResultGridViewportStore = (
+  notebookHistory?: ReturnType<typeof createLiveRowsHistory>,
+): ResultGridViewportStore => {
+  const entries = new Map<string, ViewportEntry>()
+  const history = notebookHistory ?? createLiveRowsHistory()
   return {
     load(statementKey, runToken) {
       const entry = entries.get(statementKey)
@@ -45,8 +74,11 @@ export const createResultGridViewportStore = (): ResultGridViewportStore => {
       }
     },
 
+    liveRows: history.liveRows,
+
     clear() {
       entries.clear()
+      if (!notebookHistory) history.clear()
     },
   }
 }

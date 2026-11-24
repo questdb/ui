@@ -103,6 +103,7 @@ import {
   GlyphWidgetOptions,
 } from "./glyphUtils"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
+import { minOf } from "../../../utils/values"
 
 type IndividualQueryResult = {
   success: boolean
@@ -1231,9 +1232,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       let shiftedQueryKeys = false
       if (e.changes.length > 0) {
-        const earliestChangeOffset = Math.min(
-          ...e.changes.map((c) => c.rangeOffset),
-        )
+        const earliestChangeOffset = minOf(e.changes.map((c) => c.rangeOffset))
         const totalDelta = e.changes.reduce(
           (acc, c) => acc + c.text.length - c.rangeLength,
           0,

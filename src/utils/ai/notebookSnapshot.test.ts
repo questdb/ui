@@ -95,6 +95,48 @@ describe("formatSnapshot", () => {
     expect(out).toContain("create_notebook")
   })
 
+  it("shows the dashboard fields apply_notebook_state would replace", () => {
+    // Given a cell with formats, interactions, a live mode and a long custom
+    // option, in a notebook with linked charts
+    const snap: NotebookContextSnapshot = {
+      status: "ok",
+      buffer_id: 1,
+      label: "x",
+      layout_mode: "list",
+      maximized_cell_id: null,
+      chart_sync: { crosshair: "line", zoom: true },
+      cells: [
+        {
+          id: "c",
+          preview: "SELECT 1",
+          mode: "draw",
+          editor_height: 100,
+          result_height: 200,
+          view: null,
+          chart_config: {
+            x_column: null,
+            queries: [],
+            custom_option_json: JSON.stringify({ data: "x".repeat(3000) }),
+          },
+          formats: { price: { decimals: 2 } },
+          interactions: { click: { variable: "symbol" } },
+          grid_mode: "stable",
+        },
+      ],
+    }
+
+    // When
+    const out = formatSnapshot(snap)
+
+    // Then
+    expect(out).toContain("chart_sync:")
+    expect(out).toContain('formats: {"price":{"decimals":2}}')
+    expect(out).toContain('interactions: {"click":{"variable":"symbol"}}')
+    expect(out).toContain("grid_mode: stable")
+    expect(out).toContain("read it with get_cell")
+    expect(out).not.toContain("x".repeat(3000))
+  })
+
   it("emits a warning block for deleted status without label", () => {
     const out = formatSnapshot({ status: "deleted", buffer_id: 9 })
     expect(out).toContain("status: deleted")

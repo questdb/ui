@@ -77,7 +77,7 @@ const callTool = (name, args) =>
 
 const openHighlightDrawer = () => {
   cy.get("[data-notebook-cell] button[aria-label='More actions']").click()
-  cy.contains("[role='menuitem']", "Highlight rules").click()
+  cy.contains("[role='menuitem']", "Grid settings").click()
   cy.getByDataHook("highlight-settings-drawer").should("be.visible")
 }
 
@@ -151,7 +151,7 @@ describe("notebook highlight rules with the assistant (e2e)", () => {
       1,
     )
     cy.get("[data-hook=grid-cell][data-highlight=always]")
-      .should("have.id", "cell-0-1")
+      .should("have.attr", "data-grid-coordinate", "cell-0-1")
       .and("have.attr", "data-highlight-color", "dataSeries9")
     openHighlightDrawer()
     cy.getByDataHook("highlight-rule").should("have.length", 1)

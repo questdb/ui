@@ -146,6 +146,8 @@ export type ColorShape = {
   chartSeries8: string
   dataPositive: string
   dataNegative: string
+  chartUp: string
+  chartDown: string
   authBackdrop: string
   authAccent: string
   authAccentMuted: string

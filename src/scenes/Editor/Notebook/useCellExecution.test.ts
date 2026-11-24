@@ -182,3 +182,60 @@ describe("launchStatement", () => {
     })
   })
 })
+
+describe("useCellExecution snapshots", () => {
+  it("persists the run token of the frame a run landed", async () => {
+    // Given a cell whose query returns rows
+    vi.mocked(persistCellSnapshot).mockClear()
+    const sql = "select 1 x"
+    const cellsRef = {
+      current: [{ id: "c1", position: 0, value: sql }] as NotebookCell[],
+    }
+    const executeSingle = vi.fn(() =>
+      Promise.resolve<QueryExecResult>({
+        type: "dql",
+        query: sql,
+        columns: [{ name: "x", type: "INT" }],
+        dataset: [[1]],
+        count: 1,
+      }),
+    )
+    const updateCell = vi.fn(
+      (cellId: string, updates: Partial<NotebookCell>) => {
+        cellsRef.current = cellsRef.current.map((cell) =>
+          cell.id === cellId ? { ...cell, ...updates } : cell,
+        )
+      },
+    )
+    let runCell!: ReturnType<typeof useCellExecution>["runCell"]
+    const Harness = () => {
+      runCell = useCellExecution({
+        bufferId: 1,
+        cellsRef,
+        executeSingle,
+        validateWithGlobals: vi.fn(),
+        updateCellResult: vi.fn(),
+        updateCell,
+        updateCells: vi.fn(),
+        setScriptSummary: vi.fn(),
+        onSnapshotPersisted: vi.fn(),
+      }).runCell
+      return null
+    }
+    const { unmount } = render(createElement(Harness))
+
+    // When the run lands
+    await act(async () => {
+      await runCell("c1")
+    })
+
+    // Then its snapshot carries the run token the grid keys its state on
+    const result = cellsRef.current[0].result
+    expect(typeof result?.timestamp).toBe("number")
+    expect(persistCellSnapshot).toHaveBeenCalled()
+    const snapshot = vi.mocked(persistCellSnapshot).mock.lastCall?.[0]
+    expect(snapshot?.results).toBe(result?.results)
+    expect(snapshot?.runToken).toBe(result?.timestamp)
+    unmount()
+  })
+})

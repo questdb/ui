@@ -2,6 +2,21 @@ import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
 import { loadRe2 } from "../../components/ResultGrid/highlight"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import {
+  backgroundOf,
+  bringCellIntoView,
+  cellChartInstance,
+  pictureOf,
+  settled,
+  waitForCellChart,
+  type CellChartPicture,
+} from "../../scenes/Editor/Notebook/cellChartImages"
+import { getRenderReport } from "../../scenes/Editor/Notebook/renderReports"
+import {
+  cellImage,
+  denyReasonForCellImage,
+  type CellImageDeps,
+} from "./cellImageTool"
+import {
   getQuestDBTableOfContents,
   getSpecificDocumentation,
   parseDocItems,
@@ -54,8 +69,10 @@ import { formatSql } from "../formatSql"
 import { dispatchApplyNotebookState } from "./applyNotebookState"
 import {
   mapQueryChart,
+  mapChartOptions,
   mapRightAxis,
   type ToolQueryChart,
+  type ToolChartOptions,
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
@@ -66,6 +83,20 @@ import {
   wireUsesPatterns,
 } from "./highlightConfigWire"
 import { loadCellSnapshot } from "../../store/notebookResults"
+import {
+  WireError,
+  parseChartSync,
+  parseCustomOption,
+  parseFormats,
+  parseGridMode,
+  parseInteractions,
+  parseVisual,
+  type FormatWire,
+  type InteractionsWire,
+  type VisualWire,
+} from "./dashboardWire"
+import { lightColors } from "../../theme"
+import { checkCustomOption } from "../../scenes/Editor/Notebook/customChart/prepareCustomOption"
 import {
   invalidBufferIdResult,
   notebookErrorHint,
@@ -80,10 +111,13 @@ import {
   clearCellAutoRefreshTransition,
   deleteCellTransition,
   duplicateCellTransition,
+  getController,
   moveCellDownTransition,
   moveCellUpTransition,
   setCellChartConfigTransition,
+  setCellDashboardTransition,
   setCellHighlightConfigTransition,
+  setNotebookSettingsTransition,
   setCellDimensionsTransition,
   setCellLayoutTransition,
   setCellMaximizedTransition,
@@ -164,6 +198,24 @@ const readCells = (
     (view) => Promise.resolve(view.cells),
     signal,
   )
+
+const readSettings = (
+  bufferId: number,
+  signal?: AbortSignal,
+): Promise<NonNullable<ViewParts["settings"]>> =>
+  withBoundNotebookReadOnly(
+    bufferId,
+    (view) => Promise.resolve(view.settings ?? {}),
+    signal,
+  )
+
+const validationResult = (message: string) => ({
+  content: JSON.stringify({
+    error_code: "validation",
+    message: `VALIDATION_ERROR: ${message}`,
+  }),
+  is_error: true,
+})
 
 const cellValueOf = async (
   bufferId: number,
@@ -292,6 +344,43 @@ const dispatchRunQuery = async (
   }
 }
 
+/** A picture a tool returns besides its text (get_cell_image). */
+export type ToolImage = { data: string; mimeType: "image/png" }
+
+export type DispatchOutput = {
+  content: string
+  is_error?: boolean
+  images?: ToolImage[]
+}
+
+/** A tool's result with a picture beside its text, unless it failed. */
+export const withPicture = (
+  out: DispatchOutput,
+  picture: CellChartPicture | null,
+): DispatchOutput =>
+  out.is_error || !picture
+    ? out
+    : { ...out, images: [{ data: picture.data, mimeType: "image/png" }] }
+
+// The page side of get_cell_image (see cellImageTool).
+const cellImageDeps: CellImageDeps = {
+  readCells,
+  liveView: async (bufferId) => {
+    // Only the open notebook has a live controller; the rest live in storage.
+    const controller = getController(bufferId)
+    if (controller?.kind !== "live") return null
+    const view = await controller.readView()
+    return { maximizedCellId: view.maximizedCellId ?? null }
+  },
+  chartOf: cellChartInstance,
+  bringIntoView: bringCellIntoView,
+  waitForChart: (bufferId, cellId, signal) =>
+    waitForCellChart(bufferId, cellId, 4000, signal),
+  settle: (instance, signal) => settled(instance, 1500, signal),
+  picture: (instance) => pictureOf(instance, backgroundOf(instance.getDom())),
+  reportOf: getRenderReport,
+}
+
 export const dispatchTool = async (
   toolName: string,
   input: unknown,
@@ -301,7 +390,7 @@ export const dispatchTool = async (
   validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal?: AbortSignal,
   toolContext?: ToolExecutionContext,
-): Promise<{ content: string; is_error?: boolean }> => {
+): Promise<DispatchOutput> => {
   const perms =
     typeof permsOrResolver === "function" ? permsOrResolver() : permsOrResolver
 
@@ -587,11 +676,33 @@ export const dispatchTool = async (
                 get_full_content === true,
                 controller?.readRefreshState?.(),
                 resultStatusOf(cell_id),
+                perms.read,
               )
             },
             signal,
           ),
         )
+      }
+      case "get_cell_image": {
+        const { buffer_id, cell_id } =
+          (input as { buffer_id: number; cell_id: string }) || {}
+        // A picture shows query results, which only a read grant may see.
+        if (!perms.read)
+          return { content: denyReasonForCellImage(), is_error: true }
+        setStatus(AIOperationStatus.InspectingNotebook, { cellId: cell_id })
+        // The picture travels beside the JSON text, not inside it.
+        const taken: { picture: CellChartPicture | null } = { picture: null }
+        const out = await routeNotebookTool(async () => {
+          const result = await cellImage(
+            buffer_id,
+            cell_id,
+            cellImageDeps,
+            signal,
+          )
+          taken.picture = result.picture
+          return result.body
+        })
+        return withPicture(out, taken.picture)
       }
       case "get_notebook_state": {
         const { buffer_id } = (input as { buffer_id: number }) || {}
@@ -953,14 +1064,22 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_chart_config": {
-        const { buffer_id, cell_id, x_column, queries, right_axis } =
+        const {
+          buffer_id,
+          cell_id,
+          x_column,
+          queries,
+          right_axis,
+          horizontal,
+          thresholds,
+        } =
           (input as {
             buffer_id: number
             cell_id: string
             x_column?: string | null
             queries?: (ToolQueryChart | null)[] | null
             right_axis?: ToolRightAxis | null
-          }) || {}
+          } & ToolChartOptions) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         const chartBaseline = getBufferActionSeq(buffer_id)
         // Patch: top-level null = preserve; a non-null queries array replaces
@@ -968,10 +1087,15 @@ export const dispatchTool = async (
         const patch: Partial<ChartConfig> = {}
         if (x_column !== undefined && x_column !== null)
           patch.xColumn = x_column
-        if (queries !== undefined && queries !== null)
+        if (queries !== undefined && queries !== null) {
           patch.queries = queries.map((q) => (q ? mapQueryChart(q) : null))
+          // Preset series replace a visual or custom option.
+          patch.visual = undefined
+          patch.custom = undefined
+        }
         if (right_axis !== undefined && right_axis !== null)
           patch.rightAxis = mapRightAxis(right_axis)
+        Object.assign(patch, mapChartOptions({ horizontal, thresholds }))
         if (
           patch.queries?.some(
             (q) => q != null && q.type === "candlestick" && !q.ohlc,
@@ -1015,6 +1139,197 @@ export const dispatchTool = async (
               signal,
               chartBaseline,
             ),
+          toolContext,
+        )
+      }
+      case "set_cell_visual": {
+        const { buffer_id, cell_id, visual } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            visual?: VisualWire | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
+        const baseline = getBufferActionSeq(buffer_id)
+        let parsed: ReturnType<typeof parseVisual> | undefined
+        try {
+          parsed = visual ? parseVisual(visual, "visual") : undefined
+        } catch (e) {
+          if (e instanceof WireError) return validationResult(e.message)
+          throw e
+        }
+        return routeNotebookTool(async () => {
+          const cell = (await readCells(buffer_id, signal)).find(
+            (c) => c.id === cell_id,
+          )
+          await runTransition(
+            buffer_id,
+            (parts) =>
+              setCellChartConfigTransition(parts, buffer_id, cell_id, {
+                visual: parsed,
+                ...(parsed ? { custom: undefined } : {}),
+              }),
+            signal,
+            baseline,
+          )
+          return {
+            ok: true,
+            ...(cell?.mode !== "draw"
+              ? {
+                  note: "The visual shows once the cell is in draw mode: call set_cell_mode with mode 'draw'.",
+                }
+              : {}),
+            hint: "Read render_report with get_cell to see what was drawn and any missing columns.",
+          }
+        }, toolContext)
+      }
+      case "set_cell_custom_chart": {
+        const { buffer_id, cell_id, option_json } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            option_json?: string | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
+        const baseline = getBufferActionSeq(buffer_id)
+        let option: Record<string, unknown> | undefined
+        try {
+          option = option_json
+            ? parseCustomOption(option_json, "option_json")
+            : undefined
+        } catch (e) {
+          if (e instanceof WireError) return validationResult(e.message)
+          throw e
+        }
+        return routeNotebookTool(async () => {
+          const problems = option ? checkCustomOption(option, lightColors) : []
+          if (problems.some((p) => p.severity === "error" && p.path === ""))
+            throw new NotebookToolError("validation", problems[0].message)
+          const cell = (await readCells(buffer_id, signal)).find(
+            (c) => c.id === cell_id,
+          )
+          await runTransition(
+            buffer_id,
+            (parts) =>
+              setCellChartConfigTransition(parts, buffer_id, cell_id, {
+                custom: option ? { option } : undefined,
+                ...(option ? { visual: undefined } : {}),
+              }),
+            signal,
+            baseline,
+          )
+          return {
+            ok: true,
+            ...(problems.length > 0 ? { problems } : {}),
+            ...(cell?.mode !== "draw"
+              ? {
+                  note: "The chart shows once the cell is in draw mode: call set_cell_mode with mode 'draw'.",
+                }
+              : {}),
+            hint: "Read render_report with get_cell after the chart draws: it lists data problems such as encode columns that are not in a dataset.",
+          }
+        }, toolContext)
+      }
+      case "set_cell_formats": {
+        const { buffer_id, cell_id, formats, grid_mode } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            formats?: FormatWire[] | null
+            grid_mode?: string | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringHighlight, { cellId: cell_id })
+        const baseline = getBufferActionSeq(buffer_id)
+        const patch: Parameters<typeof setCellDashboardTransition>[3] = {}
+        try {
+          if (formats != null) {
+            const parsed = parseFormats(formats, "formats")
+            patch.formats = Object.keys(parsed).length > 0 ? parsed : undefined
+          }
+          if (grid_mode != null)
+            patch.gridMode = parseGridMode(grid_mode, "grid_mode")
+        } catch (e) {
+          if (e instanceof WireError) return validationResult(e.message)
+          throw e
+        }
+        return routeNotebookTool(
+          () =>
+            runTransition(
+              buffer_id,
+              (parts) =>
+                setCellDashboardTransition(parts, buffer_id, cell_id, patch),
+              signal,
+              baseline,
+            ).then(() => ({ ok: true })),
+          toolContext,
+        )
+      }
+      case "set_cell_interactions": {
+        const { buffer_id, cell_id, click, brush } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            click?: InteractionsWire["click"]
+            brush?: InteractionsWire["brush"]
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
+        const baseline = getBufferActionSeq(buffer_id)
+        let interactions: ReturnType<typeof parseInteractions>
+        try {
+          interactions = parseInteractions({ click, brush }, "interactions")
+        } catch (e) {
+          if (e instanceof WireError) return validationResult(e.message)
+          throw e
+        }
+        return routeNotebookTool(async () => {
+          const settings = await readSettings(buffer_id, signal)
+          const known = new Set((settings.variables ?? []).map((v) => v.name))
+          const missing = [
+            interactions?.click?.variable,
+            interactions?.brush?.from,
+            interactions?.brush?.to,
+          ].filter((v): v is string => v !== undefined && !known.has(v))
+          await runTransition(
+            buffer_id,
+            (parts) =>
+              setCellDashboardTransition(parts, buffer_id, cell_id, {
+                interactions,
+              }),
+            signal,
+            baseline,
+          )
+          return {
+            ok: true,
+            ...(missing.length > 0
+              ? {
+                  note: `Variables ${missing.map((m) => `@${m}`).join(", ")} do not exist yet; a click or drag creates them. Declare them with apply_notebook_state variables to give cells a starting value.`,
+                }
+              : {}),
+          }
+        }, toolContext)
+      }
+      case "set_notebook_chart_sync": {
+        const { buffer_id, crosshair, zoom } =
+          (input as {
+            buffer_id: number
+            crosshair?: string | null
+            zoom?: boolean | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringLayout)
+        const baseline = getBufferActionSeq(buffer_id)
+        const sync = parseChartSync({ crosshair, zoom })
+        return routeNotebookTool(
+          () =>
+            runTransition(
+              buffer_id,
+              (parts) =>
+                setNotebookSettingsTransition(parts, {
+                  chartSync:
+                    sync.crosshair === "off" && !sync.zoom ? undefined : sync,
+                }),
+              signal,
+              baseline,
+            ).then(() => ({ ok: true })),
           toolContext,
         )
       }

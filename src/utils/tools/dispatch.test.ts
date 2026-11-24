@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import type { Permissions } from "./permissions"
 import { __resetNotebookAIBridgeForTests } from "../notebooks/notebookAIBridge"
-import { dispatchTool } from "./dispatch"
+import { dispatchTool, withPicture } from "./dispatch"
 
 const noop = () => undefined
 
@@ -151,5 +151,40 @@ describe("dispatch — create/duplicate/activate", () => {
     // Then it is an error naming the failure
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/activation_failed/)
+  })
+})
+
+describe("dispatch — get_cell_image", () => {
+  it("needs the read permission: a picture shows query results", async () => {
+    // Given an agent without read
+    const res = await dispatchTool(
+      "get_cell_image",
+      { buffer_id: 1, cell_id: "c" },
+      {} as Parameters<typeof dispatchTool>[2],
+      noop,
+      { grantSchemaAccess: true, read: false, write: false },
+      dqlValidator,
+    )
+
+    // Then
+    expect(res.is_error).toBe(true)
+    expect(res.content).toMatch(/PERMISSION_DENIED.*'read'/)
+    expect(res.images).toBeUndefined()
+  })
+
+  it("sends the picture beside the text, and none with an error", () => {
+    // Given
+    const picture = { data: "QUJD", width: 2, height: 1 }
+
+    // When / Then
+    expect(withPicture({ content: "{}" }, picture)).toEqual({
+      content: "{}",
+      images: [{ data: "QUJD", mimeType: "image/png" }],
+    })
+    expect(withPicture({ content: "no", is_error: true }, picture)).toEqual({
+      content: "no",
+      is_error: true,
+    })
+    expect(withPicture({ content: "{}" }, null)).toEqual({ content: "{}" })
   })
 })

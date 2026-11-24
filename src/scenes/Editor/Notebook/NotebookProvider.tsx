@@ -10,6 +10,7 @@ import React, {
 import type { MutableRefObject } from "react"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
+import { sameVariableName } from "./variableName"
 import type {
   CellPaneView,
   CellResult,
@@ -20,10 +21,12 @@ import type {
   CellMode,
   CellType,
 } from "../../../store/notebook"
-import type { ChartConfig } from "./CellChart/chartTypes"
 import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
-import { useQueryExecution } from "../../../hooks/useQueryExecution"
-import { useCellsStore } from "./useCellsStore"
+import {
+  executeSingleRaw,
+  RESULT_DISPLAY_LIMIT,
+} from "../../../hooks/useQueryExecution"
+import { useCellsStore, type CellSettingsPatch } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
 import type { DrawGateOutcome } from "./useCellExecution"
 import { useNotebookPersistence } from "./useNotebookPersistence"
@@ -82,7 +85,12 @@ import {
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import type { QueryKey } from "../../../store/Query/types"
-import { createValidateWithGlobals } from "./declareUtils"
+import {
+  affectedVariables,
+  createBindingKeys,
+  createValidateWithGlobals,
+  usesVariables,
+} from "./declareUtils"
 import {
   CellRefreshProvider,
   useCellRefreshEngine,
@@ -94,12 +102,16 @@ import {
 } from "./cellVirtualization/CellVirtualizationContext"
 import {
   clearChartZoom,
-  clearChartZooms,
+  clearNotebookChartZooms,
 } from "./cellVirtualization/chartZoomStore"
 import { clearSettingsDrawerSessions } from "./settingsDrawer/settingsDrawerSessions"
 import { createResultTrendStore } from "./result-table/resultTrendStore"
 import { captureResultTrends } from "./result-table/resultTrendCapture"
 import { ResultTrendProvider } from "./result-table/ResultTrendContext"
+import {
+  createNotebookRowHistories,
+  RowHistoriesProvider,
+} from "./result-table/LiveRowsHistoryContext"
 import type { CellVirtualizationEngine } from "./cellVirtualization/cellVirtualizationEngine"
 import {
   CellResultHydrationEngine,
@@ -142,7 +154,9 @@ export type NotebookActions = {
   setActiveStatement: (cellId: string, statementKey: string) => void
   setCellMode: (cellId: string, mode: CellMode) => void
   clearCellResult: (cellId: string) => void
-  setCellChartConfig: (cellId: string, config: ChartConfig) => void
+  // Sets the given fields and removes those passed as undefined, in one
+  // update: a settings drawer's save.
+  setCellSettings: (cellId: string, patch: CellSettingsPatch) => void
   setCellHighlightConfig: (
     cellId: string,
     config: HighlightConfig | null,
@@ -150,6 +164,9 @@ export type NotebookActions = {
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
+  // Sets variables to SQL expressions (adding missing ones) and refreshes the
+  // read cells that use them.
+  setVariableValues: (values: Record<string, string>) => void
   setCellPaneView: (cellId: string, view: CellPaneView) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
@@ -177,11 +194,12 @@ const NOOP_ACTIONS: NotebookActions = {
   setActiveStatement: () => undefined,
   setCellMode: () => undefined,
   clearCellResult: () => undefined,
-  setCellChartConfig: () => undefined,
+  setCellSettings: () => undefined,
   setCellHighlightConfig: () => undefined,
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
   refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
+  setVariableValues: () => undefined,
   setCellPaneView: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
@@ -240,10 +258,16 @@ const createNotebookScopeKey = (bufferId: number, cellId: string): string =>
   `notebook:${bufferId}:${cellId}`
 
 const NotebookStateContext = createContext<NotebookState>(EMPTY_STATE)
+// The settings alone, for components inside a cell: they must not re-render
+// whenever any cell's text or result changes.
+const NotebookSettingsContext = createContext<NotebookSettings>(
+  EMPTY_STATE.settings,
+)
 const NotebookActionsContext = createContext<NotebookActions>(NOOP_ACTIONS)
 const NotebookBufferIdContext = createContext<number>(0)
 
 export const useNotebookState = () => useContext(NotebookStateContext)
+export const useNotebookSettings = () => useContext(NotebookSettingsContext)
 export const useNotebookActions = () => useContext(NotebookActionsContext)
 export const useNotebookBufferId = () => useContext(NotebookBufferIdContext)
 
@@ -273,11 +297,32 @@ export const NotebookProvider: React.FC<{
   const focusedCellIdRef = useRef(focusedCellId)
   const maximizedCellIdRef = useRef(maximizedCellId)
   const settingsRef = useRef(settings)
+  // The variable values a statement would read now, and the ones a result
+  // was read with: the refresh engine compares the two.
+  const bindingKeys = useMemo(() => createBindingKeys(), [])
   const activeCellQueryKeysRef = useRef<Map<string, QueryKey>>(new Map())
   const notebookRunIdRef = useRef(0)
   const liveActionsRef = useRef<LiveNotebookActions>(NOOP_LIVE_ACTIONS)
 
-  const { executeSingle } = useQueryExecution(settings.variables)
+  // Reads the current variables at call time, so a query never runs with
+  // values older than the ones the refresh engine compares against.
+  const executeSingle = useCallback(
+    (
+      sql: string,
+      signal?: AbortSignal,
+      limit: number = RESULT_DISPLAY_LIMIT,
+      options?: { background?: boolean },
+    ) =>
+      executeSingleRaw(
+        quest,
+        sql,
+        settingsRef.current.variables,
+        signal,
+        limit,
+        options,
+      ),
+    [quest],
+  )
 
   const cellRefreshEngineRef = useRef<CellRefreshEngine | null>(null)
 
@@ -299,6 +344,8 @@ export const NotebookProvider: React.FC<{
   // Baselines for "previous result" highlight rules live with the notebook,
   // so a cell remount (maximize, restore) keeps them.
   const resultTrendStore = useMemo(() => createResultTrendStore(), [])
+  // Keep stable row ranks when the layout remounts a cell; scroll stays view-local.
+  const rowHistories = useMemo(() => createNotebookRowHistories(), [bufferId])
   // Results the hydration engine read back from storage, so their flashes
   // are timed from the save and never replay.
   const restoredResults = useMemo(() => new WeakSet<CellResult>(), [])
@@ -361,6 +408,10 @@ export const NotebookProvider: React.FC<{
   useEffect(() => {
     resultHydration.sync(store.cells)
   }, [store.cells])
+
+  useEffect(() => {
+    rowHistories.retainCells(store.cells)
+  }, [rowHistories, store.cells])
 
   // Reconcile live cells against the persisted snapshot index on mount:
   //   - snapshots whose cell no longer exists (out-of-band divergence, e.g. an
@@ -430,14 +481,25 @@ export const NotebookProvider: React.FC<{
     [bufferId],
   )
 
-  const updateSettings = useCallback(
-    (updates: Partial<NotebookSettings>) => {
-      const next = { ...settingsRef.current, ...updates }
+  // A selection re-reads the cells that use the variables it changed; any
+  // other change (Apply in the Variables popover, a settings save, an agent)
+  // keeps the rows on screen.
+  const applySettings = useCallback(
+    (updates: Partial<NotebookSettings>, selection = false) => {
+      const previous = settingsRef.current
+      const next = { ...previous, ...updates }
       settingsRef.current = next
       setSettingsState(next)
+      if (next.variables !== previous.variables)
+        cellRefreshEngineRef.current?.variablesChanged(!selection)
       void persistImmediately(store.cellsRef.current).catch(warnPersistFailure)
     },
     [persistImmediately, store.cellsRef, warnPersistFailure],
+  )
+
+  const updateSettings = useCallback(
+    (updates: Partial<NotebookSettings>) => applySettings(updates),
+    [applySettings],
   )
 
   const releaseCellExecution = useCallback(
@@ -456,10 +518,14 @@ export const NotebookProvider: React.FC<{
 
   const cancelCell = useCallback(
     (cellId: string, reason?: RunCancelReason) => {
+      cellRefreshEngineRef.current?.noteCellStopped(
+        cellId,
+        store.cellsRef.current.find((c) => c.id === cellId),
+      )
       execution.cancelCell(cellId, reason)
       releaseCellExecution(cellId)
     },
-    [execution, releaseCellExecution],
+    [execution, releaseCellExecution, store.cellsRef],
   )
 
   const abortCellRun = useCallback(
@@ -495,6 +561,7 @@ export const NotebookProvider: React.FC<{
       const { parts } = out
       // Sync refs so a second transition in the same tick composes on top of
       // this one (cells is kept current by the store's setters).
+      const variablesBefore = settingsRef.current.variables
       settingsRef.current = parts.settings
       maximizedCellIdRef.current = parts.maximizedCellId
       focusedCellIdRef.current = parts.focusedCellId
@@ -509,6 +576,8 @@ export const NotebookProvider: React.FC<{
       }
       store.hydrateCells(() => parts.cells)
       setSettingsState(parts.settings)
+      if (parts.settings.variables !== variablesBefore)
+        cellRefreshEngineRef.current?.variablesChanged(true)
       setMaximizedCellIdState(parts.maximizedCellId)
       setFocusedCellState(parts.focusedCellId)
       const persisted = persistImmediately(parts.cells, true)
@@ -520,7 +589,7 @@ export const NotebookProvider: React.FC<{
         for (const cellId of out.cleanup.cellIds) {
           abortCellRun(cellId, "cell_deleted")
           removeNotebookCellLayouts(bufferId, cellId)
-          clearChartZoom(cellId)
+          clearChartZoom({ bufferId, cellId })
           clearSettingsDrawerSessions(cellId)
         }
       }
@@ -646,11 +715,17 @@ export const NotebookProvider: React.FC<{
       executeSingle,
       validateWithGlobals,
       setCellResult,
+      statementBinding: (sql) =>
+        bindingKeys.current(sql, settingsRef.current.variables),
+      resultBinding: (result) =>
+        result.type === "dql" && result.effectiveQuery !== undefined
+          ? bindingKeys.of(result.query, result.effectiveQuery)
+          : undefined,
       getCellResult: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
       isDrawCell: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.mode === "draw",
-      isCellRunning: (cellId) => execution.runningCellIds.has(cellId),
+      isCellRunning: execution.isCellRunning,
       resultLoadStatus: (cellId) => resultHydration.statusOf(cellId),
       subscribeResultLoad: (cellId, listener) =>
         resultHydration.subscribe(cellId, listener),
@@ -661,6 +736,7 @@ export const NotebookProvider: React.FC<{
         resultHydration.notePersisted(cellId, results),
     },
   })
+
   cellRefreshEngineRef.current = cellRefreshEngine
 
   const cellVirtualizationEngine = createVirtualizationEngine({
@@ -680,7 +756,7 @@ export const NotebookProvider: React.FC<{
   useEffect(
     () => () => {
       resetChartEntryAnimation(bufferId)
-      clearChartZooms(cellsRef.current.map((c) => c.id))
+      clearNotebookChartZooms(bufferId)
       cellsRef.current.forEach((c) => clearSettingsDrawerSessions(c.id))
     },
     [bufferId, cellsRef],
@@ -730,8 +806,17 @@ export const NotebookProvider: React.FC<{
       } finally {
         // Balance noteRunStarted on every outcome — denied, skipped,
         // superseded, thrown included — or refresh stays gated forever.
-        cellRefreshEngineRef.current?.noteRunFinished(cellId)
-        if (activeCellQueryKeysRef.current.get(cellId) === queryKey) {
+        const ownsRun = activeCellQueryKeysRef.current.get(cellId) === queryKey
+        if (signal?.aborted && ownsRun)
+          cellRefreshEngineRef.current?.noteCellStopped(
+            cellId,
+            store.cellsRef.current.find((cell) => cell.id === cellId),
+          )
+        cellRefreshEngineRef.current?.noteRunFinished(
+          cellId,
+          store.cellsRef.current.find((cell) => cell.id === cellId),
+        )
+        if (ownsRun) {
           activeCellQueryKeysRef.current.delete(cellId)
           questExecution.releaseExecution(queryKey, scopeKey)
         }
@@ -904,7 +989,7 @@ export const NotebookProvider: React.FC<{
       // any COMMIT clears that statement's refresh error — a committed error
       // result is newer than the stale refresh failure it replaces.
       const engine = cellRefreshEngineRef.current
-      engine?.noteRunStarted(cellId)
+      engine?.noteRunStarted(cellId, true)
       const result = store.cellsRef.current.find((c) => c.id === cellId)?.result
       const statementKey = result
         ? statementKeysFor(result.results.map((r) => r.query))[index]
@@ -918,19 +1003,59 @@ export const NotebookProvider: React.FC<{
           return outcome.ok
         })
         .finally(() => {
-          cellRefreshEngineRef.current?.noteRunFinished(cellId)
+          engine?.noteRunFinished(
+            cellId,
+            store.cellsRef.current.find((cell) => cell.id === cellId),
+          )
         })
     },
     cancelCell,
+    // A statement Stop leaves its siblings' refresh alone: the stopped
+    // statement has no rows for the engine to re-read.
     cancelQuery: execution.cancelQuery,
     setActiveStatement: execution.setActiveStatement,
     setCellMode,
     clearCellResult,
-    setCellChartConfig: store.setCellChartConfig,
+    setCellSettings: store.setCellSettings,
     setCellHighlightConfig: store.setCellHighlightConfig,
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
+    setVariableValues: (given) => {
+      const current = settingsRef.current.variables ?? []
+      // A name that differs only in case is the stored variable.
+      const values = Object.fromEntries(
+        Object.entries(given).map(([name, value]) => [
+          current.find((v) => sameVariableName(v.name, name))?.name ?? name,
+          value,
+        ]),
+      )
+      const names = Object.keys(values).filter(
+        (name) => current.find((v) => v.name === name)?.value !== values[name],
+      )
+      // A click on what is already selected saves nothing; it re-reads the
+      // cells still showing rows for another value (after Apply in the
+      // Variables popover, or a Stop). A cell already reading keeps its read.
+      const repeated = Object.keys(values).filter(
+        (name) => !names.includes(name),
+      )
+      if (repeated.length > 0) {
+        const used = affectedVariables(repeated, current)
+        cellRefreshEngine.refreshStale((_cellId, sql) =>
+          usesVariables(sql, used),
+        )
+      }
+      if (names.length === 0) return
+      const next = current.map((v) =>
+        names.includes(v.name) ? { ...v, value: values[v.name] } : v,
+      )
+      for (const name of names) {
+        if (!current.some((v) => v.name === name))
+          next.push({ name, value: values[name] })
+      }
+      signalUserEdit(bufferId)
+      applySettings({ variables: next }, true)
+    },
     setCellPaneView,
     setFocusedCell,
     setMaximizedCellId,
@@ -989,15 +1114,19 @@ export const NotebookProvider: React.FC<{
     <NotebookBufferIdContext.Provider value={bufferId}>
       <NotebookActionsContext.Provider value={actionsValue}>
         <NotebookStateContext.Provider value={stateValue}>
-          <CellRefreshProvider value={cellRefreshEngine}>
-            <CellVirtualizationProvider value={cellVirtualizationEngine}>
-              <CellResultHydrationProvider value={resultHydration}>
-                <ResultTrendProvider value={resultTrendStore}>
-                  {children}
-                </ResultTrendProvider>
-              </CellResultHydrationProvider>
-            </CellVirtualizationProvider>
-          </CellRefreshProvider>
+          <NotebookSettingsContext.Provider value={settings}>
+            <CellRefreshProvider value={cellRefreshEngine}>
+              <CellVirtualizationProvider value={cellVirtualizationEngine}>
+                <CellResultHydrationProvider value={resultHydration}>
+                  <ResultTrendProvider value={resultTrendStore}>
+                    <RowHistoriesProvider value={rowHistories}>
+                      {children}
+                    </RowHistoriesProvider>
+                  </ResultTrendProvider>
+                </CellResultHydrationProvider>
+              </CellVirtualizationProvider>
+            </CellRefreshProvider>
+          </NotebookSettingsContext.Provider>
         </NotebookStateContext.Provider>
       </NotebookActionsContext.Provider>
     </NotebookBufferIdContext.Provider>

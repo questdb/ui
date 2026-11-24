@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { createResultGridViewportStore } from "./resultGridViewportStore"
+import {
+  createLiveRowsHistory,
+  createResultGridViewportStore,
+} from "./resultGridViewportStore"
 
 describe("resultGridViewportStore", () => {
   it("restores offsets for the same statement and settle token", () => {
@@ -53,6 +56,19 @@ describe("resultGridViewportStore", () => {
     // Then the oldest is evicted and the newest remains
     expect(oldest).toBeNull()
     expect(newest).toEqual({ scrollTop: 20, scrollLeft: 20 })
+  })
+
+  it("keeps notebook row ranks, not scroll, across the cell view's unmount", () => {
+    const history = createLiveRowsHistory()
+    const original = createResultGridViewportStore(history)
+    const ranks = original.liveRows("q1", 100)
+    original.save("q1", 100, { scrollTop: 640, scrollLeft: 320 })
+    original.clear()
+
+    const remounted = createResultGridViewportStore(history)
+    expect(remounted.load("q1", 100)).toBeNull()
+    expect(remounted.liveRows("q1", 100)).toBe(ranks)
+    expect(remounted.liveRows("q1", 101)).not.toBe(ranks)
   })
 
   it("releases all offsets when the owning cell unmounts", () => {

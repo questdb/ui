@@ -7,6 +7,7 @@ import type {
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 import type { HighlightConfig } from "../components/ResultGrid/highlight/types"
+import type { ColumnFormats } from "../utils/formats/columnFormat"
 import { isHighlightConfig } from "../components/ResultGrid/highlight/isHighlightConfig"
 
 // Virtualization + lazy hydration bound render and memory cost; the cap guards
@@ -70,6 +71,14 @@ export type NotebookCell = {
   // edit to the SQL never touches it.
   highlightConfig?: HighlightConfig
   autoRefresh?: AutoRefresh
+  // How the cell's columns read, by column name: number formats, colour
+  // thresholds and in-cell visuals. Shared by its grid, chart and visual.
+  formats?: ColumnFormats
+  // What clicking or dragging on the cell's result sets.
+  interactions?: CellInteractions
+  // How the result grid follows refreshes: "stable" keeps each row (by its
+  // identity columns) where it was; "stream" adds new rows at the top.
+  gridMode?: GridMode
   // Stored pane arrangement for a cell with a result. A cell without one
   // shows only the editor; that never rewrites it.
   paneView?: CellPaneView
@@ -103,6 +112,7 @@ export type ErrorQueryResult = SessionFailure & {
   type: "error"
   query: string
   error: string
+  stoppedByUser?: true
   fetchedAt?: number
 }
 
@@ -139,7 +149,7 @@ export type CellResult = {
   error?: string
   // The run token: it changes when a run replaces the frame, and the grid
   // keys its viewport on it. It is not a time — each result carries its own
-  // fetchedAt — and after a reload it is the snapshot's save time.
+  // fetchedAt. Legacy snapshots use their save time as a fallback token.
   timestamp: number
   script?: {
     successCount: number
@@ -158,6 +168,25 @@ export type CellLayoutItem = {
 
 export type NotebookLayoutMode = "list" | "grid"
 
+export type GridMode = "stable" | "stream"
+
+export type CellInteractions = {
+  // A click on a bar, slice, point, node or grid row sets `variable` to the
+  // `column` value of the rows the item was drawn from, else to the value of
+  // the column it is drawn from (see interactions/selection.ts).
+  click?: { variable: string; column?: string }
+  // Dragging across a time chart sets `from` and `to` to the window's bounds.
+  brush?: { from: string; to: string }
+}
+
+export type ChartSync = {
+  // Moving over one time chart shows the same time on the others: as a line,
+  // or as a line with each chart's tooltip.
+  crosshair: "off" | "line" | "tooltip"
+  // Zooming one time chart zooms the others to the same time window.
+  zoom: boolean
+}
+
 export type NotebookVariable = {
   name: string
   value: string
@@ -168,9 +197,12 @@ export type NotebookSettings = {
   layout?: CellLayoutItem[]
   variables?: NotebookVariable[]
   autoRefreshDefault?: AutoRefresh
+  chartSync?: ChartSync
 }
 
 export type NotebookViewState = {
+  // The notebook format this state was written in; see notebookFormat.ts.
+  formatVersion?: number
   cells: NotebookCell[]
   focusedCellId?: string
   maximizedCellId?: string

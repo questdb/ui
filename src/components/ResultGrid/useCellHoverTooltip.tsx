@@ -18,7 +18,8 @@ const SHOW_DELAY_MS = 700
 // the "+N more" note is accurate and nothing is clipped without indication.
 const MAX_TOOLTIP_CHARS = 400
 const TOOLTIP_MAX_WIDTH = "min(800px, 90vw)"
-const CELL_ID_PATTERN = /^cell-(\d+)-(\d+)$/
+// Cells carry their coordinate separately from the grid-scoped element id.
+const CELL_COORDINATE_PATTERN = /^cell-(\d+)-(\d+)$/
 const TARGET_SELECTOR =
   '[data-hook="grid-cell"], [data-hook="grid-header-name"]'
 
@@ -81,8 +82,10 @@ const resolveTruncatedText = (
     if (target.scrollWidth <= target.clientWidth) return null
     return target.textContent ?? ""
   }
-  const cellText = target.firstElementChild
-  const match = CELL_ID_PATTERN.exec(target.id)
+  const cellText = target.querySelector('[data-hook="grid-cell-text"]')
+  const match = CELL_COORDINATE_PATTERN.exec(
+    target.getAttribute("data-grid-coordinate") ?? "",
+  )
   if (!match || !(cellText instanceof HTMLElement)) return null
   const [, row, col] = match
   const value = getData(Number(row), Number(col))
@@ -90,9 +93,11 @@ const resolveTruncatedText = (
   const fullText = formatCellValueForCopy(value, getColumn(Number(col)))
   // Most types render full text clipped by CSS; arrays are cut at format
   // time to fit the column, so the ellipsis check alone would miss them.
+  // A column format deliberately shows other text than the raw value, so only
+  // clipping makes that cell's text truncated.
   const isTruncated =
     cellText.scrollWidth > cellText.clientWidth ||
-    cellText.textContent !== fullText
+    (cellText.dataset.formatted !== "true" && cellText.textContent !== fullText)
   return isTruncated ? fullText : null
 }
 

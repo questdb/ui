@@ -1,3 +1,10 @@
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
+import type {
+  CellInteractions,
+  GridMode,
+  NotebookVariable,
+} from "../../../../store/notebook"
+import type { VariableSlot } from "../interactions/InteractionsEditor"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   columnKindOf,
@@ -341,7 +348,17 @@ export type DraftConfig = {
 // expanded. Carried across a cell remount as one unit.
 export type HighlightDraft = {
   config: DraftConfig
+  // Whether the user changed the identity or the rules. A save that did not
+  // keeps the saved highlight settings (or none) as they are.
+  configEdited?: boolean
   expandedRuleId: string | null
+  // The cell's column formats, edited in the drawer's Formats section.
+  formats?: ColumnFormats
+  // How the grid treats rows on refresh.
+  gridMode?: GridMode
+  // What a click on the grid sets, and variables created for it.
+  interactions?: CellInteractions
+  created?: Partial<Record<VariableSlot, NotebookVariable>>
 }
 
 export const createUnsetRule = (id: string): UnsetRule => ({

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import queries from "./__fixtures__/declare-cases.json"
 import {
+  affectedVariables,
+  bindingKey,
+  expandGlobals,
   isValidVariableName,
   mapWireErrorPosition,
   normalizeVariables,
@@ -8,11 +11,57 @@ import {
   prependGlobalsDeclare,
   renderDeclareBlock,
   stripLeadingAt,
+  usesVariables,
   validateVariableShape,
 } from "./declareUtils"
 
 const vars = (values: Record<string, string>) =>
   Object.entries(values).map(([name, value]) => ({ name, value }))
+
+describe("affectedVariables", () => {
+  it("follows chains and cycles without treating quoted references as edges", () => {
+    const affected = affectedVariables(
+      ["BASE"],
+      [
+        { name: "base", value: "@third" },
+        { name: "second", value: "@BASE * 2" },
+        { name: "third", value: "@second + 1" },
+        { name: "quoted", value: "'@second'" },
+      ],
+    )
+    expect(affected).toEqual(new Set(["base", "second", "third"]))
+  })
+})
+
+it("recognizes stale snapshots for derived variables but not unrelated changes", () => {
+  const old = vars({ current: "'east'", selected: "@current", unrelated: "1" })
+  const sql = "select @selected"
+  const previous = bindingKey(sql, expandGlobals(sql, old))
+  const now = (values: Record<string, string>) =>
+    bindingKey(sql, expandGlobals(sql, vars(values)))
+  expect(
+    now({ current: "'west'", selected: "@current", unrelated: "1" }),
+  ).not.toBe(previous)
+  expect(now({ current: "'east'", selected: "@current", unrelated: "2" })).toBe(
+    previous,
+  )
+})
+
+describe("usesVariables", () => {
+  const changed = new Set(["σx", "desk"])
+
+  it("recognizes complete variable names regardless of case or script", () => {
+    expect(usesVariables("select @Σx", changed)).toBe(true)
+    expect(usesVariables("select @DESK", changed)).toBe(true)
+    expect(usesVariables("select @desk2, @deské", changed)).toBe(false)
+  })
+
+  it("ignores quoted text and comments containing variable names", () => {
+    expect(
+      usesVariables(`select '@desk', "@Σx" -- @desk\n/* @Σx */`, changed),
+    ).toBe(false)
+  })
+})
 
 describe("isValidVariableName", () => {
   it.each(["x", "X", "_x", "symbol", "from_time", "v1", "_"])(

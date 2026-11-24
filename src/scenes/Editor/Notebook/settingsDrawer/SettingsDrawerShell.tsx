@@ -4,6 +4,11 @@ import { XIcon } from "@phosphor-icons/react"
 import { Button, Spinner } from "../../../../components"
 import { prefersReducedMotion } from "../../../../utils/prefersReducedMotion"
 import { CellOverlayPortal } from "./CellOverlayContext"
+import {
+  CODE_EDITOR_FRAME,
+  MONACO_OPEN_WIDGET,
+  tabPastCodeEditor,
+} from "../CellChart/codeEditorKeys"
 
 export type SettingsPresentation = "drawer" | "panel"
 
@@ -114,6 +119,11 @@ const Body = styled.form`
   display: flex;
   flex-direction: column;
   gap: 1.4rem;
+
+  /* A long form scrolls; its fields keep their height. */
+  & > * {
+    flex-shrink: 0;
+  }
 `
 
 const Footer = styled.div`
@@ -262,14 +272,42 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
     if (visible) return
     const opener = openerRef.current
     openerRef.current = null
-    if (opener?.isConnected) opener.focus()
+    if (!opener?.isConnected) return
+    // A control shown only while its header has focus or the pointer (a
+    // column's Format button) is hidden by now, and a hidden control cannot
+    // take focus. Show it for the hand-back; once focused, its header keeps
+    // it shown.
+    const inline = opener.style.visibility
+    const hidden = getComputedStyle(opener).visibility === "hidden"
+    if (hidden) opener.style.visibility = "visible"
+    opener.focus()
+    if (hidden) opener.style.visibility = inline
   }, [visible])
 
   useEffect(() => {
     if (!open || !isDrawer) return
     const onKey = (e: KeyboardEvent) => {
+      // Tab from a code editor's frame (where Escape left the editor) moves
+      // on to the next control instead of back into the editor.
+      if (tabPastCodeEditor(e, panelRef.current)) return
       if (e.key !== "Escape") return
       if (isRadixPopperOpen()) return
+      // A foreground dialog owns the key before it reaches our drawer.
+      const target = e.target instanceof Element ? e.target : null
+      const dialog = target?.closest('[role="dialog"], [role="alertdialog"]')
+      if (dialog && dialog !== panelRef.current) return
+      // In a code editor, Escape first closes the editor's own widgets
+      // (suggestions, find), then leaves the editor; the next one dismisses.
+      const editor =
+        e.target instanceof Element ? e.target.closest(".monaco-editor") : null
+      if (editor?.querySelector(MONACO_OPEN_WIDGET)) return
+      const frame = editor?.closest<HTMLElement>(CODE_EDITOR_FRAME)
+      if (frame && panelRef.current?.contains(frame)) {
+        frame.focus()
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
       onDismiss("escape")
       e.stopImmediatePropagation()
     }

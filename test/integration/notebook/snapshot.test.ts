@@ -357,6 +357,7 @@ describe("buildSnapshot", () => {
       false,
       undefined,
       "unrequested",
+      true,
     )
     expect(details).toMatchObject({
       view: null,
@@ -381,6 +382,7 @@ describe("buildSnapshot", () => {
       false,
       undefined,
       "missing",
+      true,
     )
 
     // Then it reports editor with no mode while keeping its run history

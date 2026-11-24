@@ -1970,7 +1970,9 @@ describe("editor settings", () => {
 
   it("caps column width at the configured maximum and returns to auto", () => {
     const cell = () =>
-      cy.get("[data-hook='result-grid-tanstack']:visible #cell-0-0")
+      cy.get(
+        "[data-hook='result-grid-tanstack']:visible [data-grid-coordinate='cell-0-0']",
+      )
 
     // Given a result with a very wide column under automatic sizing
     loadEditorWithQuery(

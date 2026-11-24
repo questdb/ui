@@ -1,15 +1,15 @@
-import type { ChartConfig } from "../CellChart/chartTypes"
-import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
+import type { DrawDraft, DrawSettings } from "../CellChart/drawSettings"
+import type { GridSettings } from "../result-table/highlightConfig"
 import type { HighlightDraft } from "../CellHighlight/ruleDraft"
 import { createSettingsDrawerSessionStore } from "./settingsDrawerSessionStore"
 
 export type ChartSettingsSession = {
-  configAtOpen: ChartConfig | undefined
-  draft: ChartConfig | null
+  configAtOpen: DrawSettings | undefined
+  draft: DrawDraft | null
 }
 
 export type HighlightSettingsSession = {
-  configAtOpen: HighlightConfig | undefined
+  configAtOpen: GridSettings | undefined
   draft: HighlightDraft | null
 }
 
@@ -18,6 +18,9 @@ export type HighlightSettingsSession = {
 export type SettingsDrawerRequest = {
   cellId: string
   mode: "open" | "toggle"
+  // Open on a section, and in it on a column (the grid header's "Format
+  // column").
+  focus?: { section: string; column?: string }
 }
 
 export const chartSettingsSessions =

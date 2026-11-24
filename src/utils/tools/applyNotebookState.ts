@@ -42,6 +42,18 @@ import {
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
+  WireError,
+  parseChartSync,
+  parseCustomOption,
+  parseFormats,
+  parseGridMode,
+  parseInteractions,
+  parseVisual,
+  type FormatWire,
+  type InteractionsWire,
+  type VisualWire,
+} from "./dashboardWire"
+import {
   type HighlightConfigWire,
   parseHighlightConfigFor,
   regexLiteralNotes,
@@ -221,6 +233,7 @@ export const dispatchApplyNotebookState = async (
     maximized_cell_id,
     variables,
     cells,
+    chart_sync,
   } =
     (input as {
       buffer_id: number
@@ -244,9 +257,17 @@ export const dispatchApplyNotebookState = async (
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
           right_axis?: ToolRightAxis | null
+          visual?: VisualWire | null
+          custom_option_json?: string | null
+          horizontal?: boolean | null
+          thresholds?: "off" | "lines" | "bands" | null
         } | null
+        formats?: FormatWire[] | null
+        interactions?: InteractionsWire | null
+        grid_mode?: string | null
         grid?: { x: number; y: number; w: number } | null
       }>
+      chart_sync?: { crosshair?: string | null; zoom?: boolean | null } | null
     }) || {}
   setStatus(AIOperationStatus.BuildingNotebook)
   // The MCP freshness gate is checked once before dispatch, but the
@@ -415,40 +436,74 @@ export const dispatchApplyNotebookState = async (
         : undefined,
     ),
   )
-  const request: ApplyNotebookStateRequest = {
-    layoutMode: layout_mode ?? null,
-    autoRefreshDefault: isAutoRefresh(auto_refresh_default)
-      ? auto_refresh_default
-      : null,
-    maximizedCellId:
-      maximized_cell_id === undefined ? undefined : maximized_cell_id,
-    variables:
-      variables === undefined || variables === null ? undefined : variables,
-    cells: cells.map<ApplyNotebookStateCellRequest>((c) => {
-      const cell: ApplyNotebookStateCellRequest =
-        c.preserve_value === true ? { preserveValue: true } : { value: c.value }
-      if (c.id !== undefined && c.id !== null) cell.id = c.id
-      if (c.name !== undefined) cell.name = c.name
-      if (c.type === "sql" || c.type === "markdown") cell.type = c.type
-      if (c.mode !== undefined && c.mode !== null) cell.mode = c.mode
-      if (isAutoRefresh(c.auto_refresh)) cell.autoRefresh = c.auto_refresh
-      if (c.editor_height !== undefined) cell.editorHeight = c.editor_height
-      if (c.result_height !== undefined) cell.resultHeight = c.result_height
-      if (c.view !== undefined) cell.view = c.view
-      if (c.chart_config) {
-        const cfg = c.chart_config
-        const chartConfig: ChartConfig = {
-          xColumn: cfg.x_column ?? null,
-          queries: (cfg.queries ?? []).map((q) =>
-            q ? mapQueryChart(q) : null,
-          ),
+  let request: ApplyNotebookStateRequest
+  try {
+    request = {
+      layoutMode: layout_mode ?? null,
+      autoRefreshDefault: isAutoRefresh(auto_refresh_default)
+        ? auto_refresh_default
+        : null,
+      maximizedCellId:
+        maximized_cell_id === undefined ? undefined : maximized_cell_id,
+      variables:
+        variables === undefined || variables === null ? undefined : variables,
+      cells: cells.map<ApplyNotebookStateCellRequest>((c, index) => {
+        const cell: ApplyNotebookStateCellRequest =
+          c.preserve_value === true
+            ? { preserveValue: true }
+            : { value: c.value }
+        if (c.id !== undefined && c.id !== null) cell.id = c.id
+        if (c.name !== undefined) cell.name = c.name
+        if (c.type === "sql" || c.type === "markdown") cell.type = c.type
+        if (c.mode !== undefined && c.mode !== null) cell.mode = c.mode
+        if (isAutoRefresh(c.auto_refresh)) cell.autoRefresh = c.auto_refresh
+        if (c.editor_height !== undefined) cell.editorHeight = c.editor_height
+        if (c.result_height !== undefined) cell.resultHeight = c.result_height
+        if (c.view !== undefined) cell.view = c.view
+        if (c.chart_config) {
+          const cfg = c.chart_config
+          const chartConfig: ChartConfig = {
+            xColumn: cfg.x_column ?? null,
+            queries: (cfg.queries ?? []).map((q) =>
+              q ? mapQueryChart(q) : null,
+            ),
+          }
+          if (cfg.right_axis)
+            chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
+          if (cfg.horizontal) chartConfig.horizontal = true
+          if (cfg.thresholds && cfg.thresholds !== "off")
+            chartConfig.thresholds = cfg.thresholds
+          if (cfg.visual)
+            chartConfig.visual = parseVisual(
+              cfg.visual,
+              `cells[${index}].chart_config.visual`,
+            )
+          if (cfg.custom_option_json)
+            chartConfig.custom = {
+              option: parseCustomOption(
+                cfg.custom_option_json,
+                `cells[${index}].chart_config.custom_option_json`,
+              ),
+            }
+          cell.chartConfig = chartConfig
         }
-        if (cfg.right_axis) chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
-        cell.chartConfig = chartConfig
-      }
-      if (c.grid) cell.grid = c.grid
-      return cell
-    }),
+        if (c.formats && c.formats.length > 0)
+          cell.formats = parseFormats(c.formats, `cells[${index}].formats`)
+        if (c.interactions)
+          cell.interactions = parseInteractions(
+            c.interactions,
+            `cells[${index}].interactions`,
+          )
+        const gridMode = parseGridMode(c.grid_mode, `cells[${index}].grid_mode`)
+        if (gridMode) cell.gridMode = gridMode
+        if (c.grid) cell.grid = c.grid
+        return cell
+      }),
+      ...(chart_sync ? { chartSync: parseChartSync(chart_sync) } : {}),
+    }
+  } catch (e) {
+    if (e instanceof WireError) return validationError(e.message)
+    throw e
   }
   // Rules are checked against the columns the cell's results have shown, in
   // memory or in its snapshot, so the parse waits for the live cells. A new
