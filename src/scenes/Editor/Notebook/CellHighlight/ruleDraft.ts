@@ -348,6 +348,9 @@ export type DraftConfig = {
 // expanded. Carried across a cell remount as one unit.
 export type HighlightDraft = {
   config: DraftConfig
+  // Whether the user changed the identity or the rules. A save that did not
+  // keeps the saved highlight settings (or none) as they are.
+  configEdited?: boolean
   expandedRuleId: string | null
   // The cell's column formats, edited in the drawer's Formats section.
   formats?: ColumnFormats

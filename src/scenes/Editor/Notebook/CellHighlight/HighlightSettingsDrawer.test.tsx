@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { Button } from "../../../../components/Button"
 import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
+import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import {
   HighlightSettingsDrawer,
   highlightToSave,
@@ -35,6 +36,8 @@ const configuration: HighlightConfig = {
 const Fixture = ({
   onSave,
   saved = configuration,
+  stored,
+  formats = { v: { decimals: 1 } },
   focus,
   gridMode,
   columns = [
@@ -44,6 +47,9 @@ const Fixture = ({
 }: {
   onSave: (next: GridSettingsSave) => void
   saved?: HighlightConfig
+  // The cell's saved highlight settings; none when `saved` is the default.
+  stored?: HighlightConfig
+  formats?: ColumnFormats
   focus?: { section: string; column?: string }
   gridMode?: "stable" | "stream"
   columns?: { name: string; type: string }[]
@@ -71,7 +77,8 @@ const Fixture = ({
           columns={columns}
           columnRange={() => null}
           config={saved}
-          formats={{ v: { decimals: 1 } }}
+          savedConfig={stored}
+          formats={formats}
           gridMode={gridMode}
           samples={{ v: 12 }}
           focus={focus}
@@ -198,10 +205,11 @@ describe("highlight settings validation", () => {
   })
 
   it("saves the live update mode the user picks, and warns while no columns match rows", async () => {
-    // Given a grid with no identity columns
+    // Given a grid saved with no identity columns
     const onSave = vi.fn()
+    const noIdentity = { identityColumns: [], rules: [] }
     renderComponent(
-      <Fixture saved={{ identityColumns: [], rules: [] }} onSave={onSave} />,
+      <Fixture saved={noIdentity} stored={noIdentity} onSave={onSave} />,
     )
     fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
 
@@ -229,6 +237,39 @@ describe("highlight settings validation", () => {
         newVariables: [],
       },
     ])
+  })
+
+  it("keeps the formats and highlight settings an agent saved when only the live mode changes", async () => {
+    // Given a grid an agent formatted with a Number-only format, an empty
+    // one, and an explicit row key
+    const onSave = vi.fn()
+    const formats: ColumnFormats = { v: { kind: "number" }, k: {} }
+    const identity = { identityColumns: ["k"], rules: [] }
+    renderComponent(
+      <Fixture
+        saved={identity}
+        stored={identity}
+        formats={formats}
+        onSave={onSave}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Grid settings" }))
+
+    // When the user keeps rows in place
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^Live updates:/ }),
+    )
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: /^Keep rows in place/ }),
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    // Then only the mode is new; the rest is handed back as saved
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    const saved = (onSave.mock.calls[0] as [GridSettingsSave])[0]
+    expect(saved.gridMode).toBe("stable")
+    expect(saved.formats).toBe(formats)
+    expect(saved.highlight).toBe(identity)
   })
 
   it("turns a live mode off", async () => {

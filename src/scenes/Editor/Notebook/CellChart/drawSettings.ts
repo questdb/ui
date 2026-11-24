@@ -1,5 +1,7 @@
+import isEqual from "lodash.isequal"
 import type {
   CellInteractions,
+  NotebookCell,
   NotebookVariable,
 } from "../../../../store/notebook"
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
@@ -11,8 +13,11 @@ import {
   MAX_OPTION_NODES,
   copyPlainOption,
 } from "../../../../store/notebookFormat"
-import { tidyFormats } from "../CellFormats/formatSummary"
+import { formatsToSave } from "../CellFormats/formatSummary"
 import type { VariableSlot } from "../interactions/InteractionsEditor"
+import { interactionsToSave } from "../interactions/interactionsToSave"
+import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
+import { withoutUnofferedOptions } from "./chartOptions"
 
 // What the chart settings drawer edits: everything a draw cell shows, saved in
 // one update. A draw cell is drawn as one of three kinds: a preset chart, a
@@ -54,6 +59,17 @@ export type DrawDraft = {
   // Variables the Interactions section creates, by the slot using them.
   created: Partial<Record<VariableSlot, NotebookVariable>>
 }
+
+const NO_CHART: ChartConfig = { xColumn: null, queries: [] }
+
+/** A cell's draw settings, as the drawer edits them. */
+export const drawSettingsOf = (
+  cell: Pick<NotebookCell, "chartConfig" | "formats" | "interactions">,
+): DrawSettings => ({
+  chartConfig: cell.chartConfig ?? NO_CHART,
+  ...(cell.formats ? { formats: cell.formats } : {}),
+  ...(cell.interactions ? { interactions: cell.interactions } : {}),
+})
 
 /** The same saved settings: each field the same object as before. */
 export const sameDrawSettings = (
@@ -132,32 +148,80 @@ export type SaveResult =
   | { ok: true; settings: DrawSettings }
   | { ok: false; error: string }
 
-/** The settings a save stores: the chosen kind only. */
-export const settingsOf = (draft: DrawDraft): SaveResult => {
-  const chartConfig: ChartConfig = presetOnly(
-    draft.kind === "chart" || draft.chartEdited
-      ? draft.chart
-      : draft.savedChart,
-  )
+/** Components that take no clicks or drags. */
+export const supportsInteractions = (
+  draft: Pick<DrawDraft, "kind" | "visual">,
+): boolean =>
+  draft.kind !== "component" ||
+  (draft.visual?.type !== "bullet" && draft.visual?.type !== "planTree")
+
+const customJsonOf = (config: ChartConfig): string =>
+  config.custom ? JSON.stringify(config.custom.option, null, 2) : ""
+
+/**
+ * The settings a save stores. Each section is the saved one, the same object,
+ * unless the user changed it in the drawer; an edited section is rebuilt as
+ * the drawer shows it and tidied. So a save never rewrites what the user left
+ * alone from the current result, which may have no rows, or lack a column.
+ *
+ * The chart section saves the chosen kind only, with the preset kept for
+ * switching back. Options the preset no longer offers after an edit (bars
+ * lying down after a switch to lines, thresholds on a pie) are not saved;
+ * `tabs` are the current result's statements, which tell.
+ */
+export const settingsOf = (
+  draft: DrawDraft,
+  saved: DrawSettings,
+  tabs: QueryTab[] = [],
+): SaveResult => {
+  const savedConfig = saved.chartConfig
+  let custom: Record<string, unknown> | undefined
   if (draft.kind === "component") {
     if (!draft.visual)
       return { ok: false, error: "Choose a component to draw." }
     const { min, max } = draft.visual
     if (min !== undefined && max !== undefined && min >= max)
       return { ok: false, error: "The minimum must be below the maximum." }
-    chartConfig.visual = draft.visual
   } else if (draft.kind === "custom") {
     const parsed = parseCustomJson(draft.customJson)
     if (!parsed.ok) return parsed
-    chartConfig.custom = { option: parsed.option }
+    custom = parsed.option
   }
-  const formats = tidyFormats(draft.formats)
+  const chartEdited =
+    draft.kind !== kindOf(savedConfig) ||
+    draft.chartEdited ||
+    (draft.kind === "component" &&
+      !isEqual(draft.visual, savedConfig.visual)) ||
+    (draft.kind === "custom" &&
+      draft.customJson !== customJsonOf(savedConfig) &&
+      !isEqual(custom, savedConfig.custom?.option))
+  let chartConfig = savedConfig
+  if (chartEdited) {
+    chartConfig = presetOnly(
+      draft.chartEdited
+        ? withoutUnofferedOptions(draft.chart, tabs)
+        : draft.kind === "chart"
+          ? draft.chart
+          : draft.savedChart,
+    )
+    if (draft.kind === "component" && draft.visual)
+      chartConfig.visual = draft.visual
+    else if (custom) chartConfig.custom = { option: custom }
+  }
+  const formats = formatsToSave(saved.formats, draft.formats)
+  // A switch to a component without clicks or drags drops them; one saved
+  // that way keeps them until its chart changes.
+  const interactions = supportsInteractions(draft)
+    ? interactionsToSave(saved.interactions, draft)
+    : chartEdited
+      ? undefined
+      : saved.interactions
   return {
     ok: true,
     settings: {
       chartConfig,
       ...(formats ? { formats } : {}),
-      ...(draft.interactions ? { interactions: draft.interactions } : {}),
+      ...(interactions ? { interactions } : {}),
     },
   }
 }

@@ -47,7 +47,7 @@ type Props = {
   isFocused: boolean
   isRunning: boolean
   refreshIntervalMs: number | undefined
-  onSettingsChange: (settings: DrawSettings) => void
+  onSettingsChange: (patch: Partial<DrawSettings>) => void
   onRetryUnmountWhileFocused: () => void
   onYieldFocus: () => void
 }

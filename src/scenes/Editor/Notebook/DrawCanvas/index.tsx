@@ -3,12 +3,16 @@ import styled, { useTheme } from "styled-components"
 import type { EChartsType } from "echarts"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
-import type { ChartConfig } from "../CellChart/chartTypes"
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
 import { DrawSettingsDrawer } from "../CellChart/DrawSettingsDrawer"
-import { sameDrawSettings, type DrawSettings } from "../CellChart/drawSettings"
+import {
+  drawSettingsOf,
+  sameDrawSettings,
+  type DrawSettings,
+} from "../CellChart/drawSettings"
+import { changedSettings } from "../cellSettings"
 import { resolveDraw, toChartResult } from "./drawCanvasUtils"
 import { presetDraw } from "./presetOutcome"
 import { Button } from "../../../../components/Button"
@@ -124,11 +128,10 @@ type Props = {
   cell: NotebookCell
   isFocused: boolean
   refreshIntervalMs: number | undefined
-  onSettingsChange: (settings: DrawSettings) => void
+  // The fields a save changed.
+  onSettingsChange: (patch: Partial<DrawSettings>) => void
   onRetryUnmountWhileFocused: () => void
 }
-
-const NO_CHART: ChartConfig = { xColumn: null, queries: [] }
 
 export const DrawCanvas: React.FC<Props> = ({
   cell,
@@ -141,11 +144,12 @@ export const DrawCanvas: React.FC<Props> = ({
   // changes elsewhere (the assistant), compared field by field so a remount
   // (maximize, restore) keeps the drawer and its draft.
   const savedSettings: DrawSettings = useMemo(
-    () => ({
-      chartConfig: cell.chartConfig ?? NO_CHART,
-      ...(cell.formats ? { formats: cell.formats } : {}),
-      ...(cell.interactions ? { interactions: cell.interactions } : {}),
-    }),
+    () =>
+      drawSettingsOf({
+        chartConfig: cell.chartConfig,
+        formats: cell.formats,
+        interactions: cell.interactions,
+      }),
     [cell.chartConfig, cell.formats, cell.interactions],
   )
   const trackSettingsOpen = useCallback(() => {
@@ -208,7 +212,7 @@ export const DrawCanvas: React.FC<Props> = ({
   const { setVariableValues, updateSettings, getVariables } =
     useNotebookActions()
   // A save adds the variables the Interactions section created, then the
-  // cell's settings.
+  // settings it changed: the drawer hands back the others as saved.
   const saveSettings = useCallback(
     (next: DrawSettings, newVariables: NotebookVariable[]) => {
       if (newVariables.length > 0)
@@ -218,9 +222,9 @@ export const DrawCanvas: React.FC<Props> = ({
             newVariables,
           ),
         })
-      onSettingsChange(next)
+      onSettingsChange(changedSettings(savedSettings, next))
     },
-    [updateSettings, getVariables, onSettingsChange],
+    [updateSettings, getVariables, onSettingsChange, savedSettings],
   )
   const visual = cell.chartConfig?.visual
   const custom = cell.chartConfig?.custom

@@ -3,7 +3,7 @@ import styled from "styled-components"
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
-import { tidyFormats } from "../CellFormats/formatSummary"
+import { formatsToSave } from "../CellFormats/formatSummary"
 import { Button } from "../../../../components"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
@@ -29,6 +29,7 @@ import {
   type InteractionsDraft,
   type VariableSlot,
 } from "../interactions/InteractionsEditor"
+import { interactionsToSave } from "../interactions/interactionsToSave"
 import { QuestContext } from "../../../../providers/QuestProvider"
 import type {
   CellInteractions,
@@ -71,7 +72,10 @@ const SECTIONS: { id: GridSection; label: string }[] = [
   { id: "interactions", label: "Interactions" },
 ]
 
-/** What the grid settings drawer saves. */
+/**
+ * What the grid settings drawer saves: every field it edits, the ones the
+ * user left alone as the saved values they were given (the same objects).
+ */
 export type GridSettingsSave = {
   highlight: HighlightConfig | null
   formats: ColumnFormats | undefined
@@ -89,7 +93,11 @@ type Props = {
   columns: ColumnDefinition[]
   formatColumns?: ColumnDefinition[]
   columnRange: (column: string) => ColumnRange | null
+  // The highlight settings the drawer edits: the saved ones, else the
+  // default identity of the current result.
   config: HighlightConfig
+  // The cell's saved highlight settings, if any.
+  savedConfig?: HighlightConfig
   formats?: ColumnFormats
   gridMode?: GridMode
   interactions?: CellInteractions
@@ -101,7 +109,6 @@ type Props = {
   focus?: { section: string; column?: string } | null
   // The identity a cell without highlight settings uses.
   defaultIdentity?: string[]
-  hasSavedIdentity?: boolean
   // Rows of the current result that share a key under a chosen identity.
   duplicateCountOf: (identityColumns: string[]) => number
   onSave: (next: GridSettingsSave) => void
@@ -143,6 +150,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   formatColumns = columns,
   columnRange,
   config,
+  savedConfig,
   formats: savedFormats,
   gridMode: savedGridMode,
   interactions: savedInteractions,
@@ -150,7 +158,6 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   samples = {},
   focus,
   defaultIdentity = [],
-  hasSavedIdentity,
   duplicateCountOf,
   onSave,
   onCancel,
@@ -158,6 +165,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   const [
     {
       config: draft,
+      configEdited = false,
       expandedRuleId,
       formats,
       gridMode,
@@ -204,6 +212,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   // it waited.
   const acceptsSaveRef = useRef(open)
   const draftRef = useRef(draft)
+  const configEditedRef = useRef(configEdited)
   const formatsRef = useRef(formats)
   const gridModeRef = useRef(gridMode)
   const interactionsRef = useRef<InteractionsDraft>({ interactions, created })
@@ -217,6 +226,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   const updateDraft = (patch: Partial<HighlightDraft>) => {
     const next = {
       config: draft,
+      configEdited,
       expandedRuleId,
       formats,
       gridMode,
@@ -228,13 +238,18 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     onDraftChange(next)
   }
 
-  const setDraft = (next: DraftConfig) => updateDraft({ config: next })
+  const setDraft = (next: DraftConfig) =>
+    updateDraft({ config: next, configEdited: true })
 
   const setExpandedRuleId = (id: string | null) =>
     updateDraft({ expandedRuleId: id })
 
   const setRules = (rules: DraftRule[], expanded = expandedRuleId) =>
-    updateDraft({ config: { ...draft, rules }, expandedRuleId: expanded })
+    updateDraft({
+      config: { ...draft, rules },
+      configEdited: true,
+      expandedRuleId: expanded,
+    })
 
   // Removing a rule from its menu removes the menu's trigger too, so the
   // menu's focus handback has nowhere to go. Once it has closed, focus the
@@ -310,6 +325,19 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     return server === null
   }
 
+  // A save: the highlight settings given, and the other sections as saved
+  // unless the user changed them.
+  const savedOf = (
+    highlight: HighlightConfig | null,
+    interactionDraft: InteractionsDraft,
+  ): GridSettingsSave => ({
+    highlight,
+    formats: formatsToSave(savedFormats, formatsRef.current),
+    gridMode: gridModeRef.current,
+    interactions: interactionsToSave(savedInteractions, interactionDraft),
+    newVariables: newVariablesInUse(interactionDraft),
+  })
+
   const commit = (
     current: DraftConfig,
     interactionDraft: InteractionsDraft,
@@ -322,18 +350,19 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       setSection("highlights")
       return
     }
-    onSave({
-      highlight: highlightToSave(
-        current.identityColumns,
-        current.rules.filter(isCompleteRule),
-        defaultIdentity,
-        hasSavedIdentity,
+    onSave(
+      savedOf(
+        configEditedRef.current
+          ? highlightToSave(
+              current.identityColumns,
+              current.rules.filter(isCompleteRule),
+              defaultIdentity,
+              savedConfig !== undefined,
+            )
+          : (savedConfig ?? null),
+        interactionDraft,
       ),
-      formats: tidyFormats(formatsRef.current),
-      gridMode: gridModeRef.current,
-      interactions: interactionDraft.interactions,
-      newVariables: newVariablesInUse(interactionDraft),
-    })
+    )
   }
 
   // Clear rules sits in the Highlights footer: when an unfinished interaction
@@ -365,18 +394,17 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       )
     )
       return
-    onSave({
-      highlight: highlightToSave(
-        draftRef.current.identityColumns,
-        [],
-        defaultIdentity,
-        hasSavedIdentity,
+    onSave(
+      savedOf(
+        highlightToSave(
+          draftRef.current.identityColumns,
+          [],
+          defaultIdentity,
+          savedConfig !== undefined,
+        ),
+        interactionDraft,
       ),
-      formats: tidyFormats(formatsRef.current),
-      gridMode: gridModeRef.current,
-      interactions: interactionDraft.interactions,
-      newVariables: newVariablesInUse(interactionDraft),
-    })
+    )
   }
 
   const save = async () => {
@@ -406,10 +434,11 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
 
   useEffect(() => {
     draftRef.current = draft
+    configEditedRef.current = configEdited
     formatsRef.current = formats
     gridModeRef.current = gridMode
     interactionsRef.current = { interactions, created }
-  }, [draft, formats, gridMode, interactions, created])
+  }, [draft, configEdited, formats, gridMode, interactions, created])
 
   return (
     <SettingsDrawerShell

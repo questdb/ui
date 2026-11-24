@@ -129,19 +129,23 @@ const openDrawer = async () => {
 
 describe("draw settings drawer", () => {
   it.each(["bullet", "planTree"] as const)(
-    "does not offer or save interactions for %s",
+    "does not offer interactions for %s, and keeps saved ones it was not asked to change",
     async (type) => {
+      // Given a component without clicks that an agent saved with one
       const onSave = vi.fn<[DrawSettings], void>()
+      const interactions = { click: { variable: "target" } }
       renderComponent(
         <Fixture
           onSave={onSave}
           saved={{
             chartConfig: { ...effective, visual: { type } },
-            interactions: { click: { variable: "target" } },
+            interactions,
           }}
         />,
       )
       const drawer = await openDrawer()
+
+      // When the user looks at Interactions and saves
       await userEvent.click(
         within(drawer).getByRole("tab", { name: "Interactions" }),
       )
@@ -151,9 +155,42 @@ describe("draw settings drawer", () => {
       await userEvent.click(
         within(drawer).getByRole("button", { name: "Save" }),
       )
-      expect(onSave.mock.calls[0]?.[0].interactions).toBeUndefined()
+
+      // Then the save leaves them as they were
+      expect(onSave.mock.calls[0]?.[0].interactions).toBe(interactions)
     },
   )
+
+  it("drops the clicks of a chart switched to bullet bars", async () => {
+    // Given a chart whose clicks set a variable
+    const onSave = vi.fn<[DrawSettings], void>()
+    renderComponent(
+      <Fixture
+        onSave={onSave}
+        saved={{
+          chartConfig: effective,
+          interactions: { click: { variable: "target" } },
+        }}
+      />,
+    )
+    const drawer = await openDrawer()
+
+    // When the user draws it as bullet bars
+    fireEvent.click(within(drawer).getByRole("button", { name: "Component" }))
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: /^Component:/ }),
+    )
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: /^Bullet bars/ }),
+    )
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }))
+
+    // Then the clicks go with the chart
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave.mock.calls[0]?.[0]).toEqual({
+      chartConfig: { ...effective, visual: { type: "bullet" } },
+    })
+  })
 
   beforeEach(() => {
     // The kind switch is a segmented control, which reads the motion

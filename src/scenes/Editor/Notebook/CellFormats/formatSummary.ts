@@ -1,6 +1,8 @@
+import isEqual from "lodash.isequal"
 import type {
   CellVisual,
   ColumnFormat,
+  ColumnFormats,
   FormatKind,
   Tone,
 } from "../../../../utils/formats/columnFormat"
@@ -121,6 +123,32 @@ export const tidyFormats = (
     if (Object.keys(tidy).length > 0) out[column] = tidy
   }
   return Object.keys(out).length > 0 ? out : undefined
+}
+
+/**
+ * The formats a save stores: the saved ones where the user left a column as
+ * it was, tidied where they changed it. The saved formats themselves when
+ * nothing changed, so a format only an agent writes (an empty one, a sign
+ * tone next to thresholds) stays until the user edits its column.
+ */
+export const formatsToSave = (
+  saved: ColumnFormats | undefined,
+  draft: ColumnFormats | undefined,
+): ColumnFormats | undefined => {
+  if (draft === saved || isEqual(draft ?? {}, saved ?? {})) return saved
+  const out: ColumnFormats = {}
+  for (const [column, format] of Object.entries(draft ?? {})) {
+    const before = saved?.[column]
+    if (before !== undefined && isEqual(format, before)) {
+      out[column] = before
+      continue
+    }
+    const tidy = tidyFormat(format)
+    if (Object.keys(tidy).length > 0) out[column] = tidy
+  }
+  const next = Object.keys(out).length > 0 ? out : undefined
+  // A column added and left empty is not a change.
+  return isEqual(next ?? {}, saved ?? {}) ? saved : next
 }
 
 type Rows = {

@@ -30,7 +30,7 @@ import {
 } from "./ChartSettingsDrawer"
 import { ComponentSettings } from "./ComponentSettings"
 import { ChartCodeBoundary } from "./lazyCharts"
-import { chartOptionsOffered, withoutUnofferedOptions } from "./chartOptions"
+import { chartOptionsOffered } from "./chartOptions"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
 import { columnsAndSamplesOf } from "../CellFormats/formatSummary"
@@ -51,6 +51,7 @@ import {
   draftOf,
   settingsOf,
   starterCustomOption,
+  supportsInteractions,
   type DrawDraft,
   type DrawKind,
   type DrawSettings,
@@ -269,10 +270,6 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     }
   }, [open])
 
-  const supportsInteractions = (value: typeof draft) =>
-    value.kind !== "component" ||
-    (value.visual?.type !== "bullet" && value.visual?.type !== "planTree")
-
   const commit = async (): Promise<void> => {
     if (committing) return
     const original = draftRef.current
@@ -312,14 +309,8 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
         return
       }
     }
-    // Options the chart no longer offers (bars lying down after a switch to
-    // lines, thresholds on a pie) are not saved.
-    const result = settingsOf({
-      ...draft,
-      chart: draft.chartEdited
-        ? withoutUnofferedOptions(draft.chart, tabs)
-        : draft.chart,
-    })
+    // Only what the user changed is saved; the rest stays as saved.
+    const result = settingsOf(original, saved, tabs)
     if (!result.ok) {
       setSaveError(result.error)
       setSection("chart")

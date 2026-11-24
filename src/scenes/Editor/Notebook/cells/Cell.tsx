@@ -282,13 +282,11 @@ const CellInner: React.FC<Props> = ({
       ?.focus()
   }
 
-  const handleDrawSettingsChange = (settings: DrawSettings) => {
+  // A save writes the fields it changed; one that changed none writes nothing.
+  const handleDrawSettingsChange = (patch: Partial<DrawSettings>) => {
+    if (Object.keys(patch).length === 0) return
     signalUserEdit(bufferIdForEvents)
-    setCellSettings(cell.id, {
-      chartConfig: settings.chartConfig,
-      formats: settings.formats,
-      interactions: settings.interactions,
-    })
+    setCellSettings(cell.id, patch)
   }
 
   // Install the content-height getter that `topResize.resetHeight`

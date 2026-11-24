@@ -30,6 +30,7 @@ import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
 import { useResultTrendStore } from "./ResultTrendContext"
 import {
+  gridSettingsPatch,
   resolveHighlightConfig,
   sameGridSettings,
   type GridSettings,
@@ -298,13 +299,8 @@ const ResultGridPanelInner: React.FC<Props> = ({
     return cellColumns.map((column) => activeTypes.get(column.name) ?? column)
   }, [cellColumns, rawData.columns])
 
-  const saveGridSettings = ({
-    highlight,
-    formats: nextFormats,
-    gridMode: nextGridMode,
-    interactions: nextInteractions,
-    newVariables,
-  }: GridSettingsSave) => {
+  const saveGridSettings = (save: GridSettingsSave) => {
+    const { highlight, newVariables } = save
     const highlightChanged =
       JSON.stringify(highlight ?? null) !==
       JSON.stringify(savedHighlightConfig ?? null)
@@ -316,7 +312,10 @@ const ResultGridPanelInner: React.FC<Props> = ({
       })
     else if (highlightChanged && (savedHighlightConfig?.rules.length ?? 0) > 0)
       void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
-    signalUserEdit(bufferId)
+    // Only the fields the save changed; one that changed none writes nothing.
+    const patch = gridSettingsPatch(savedGridSettings, save)
+    if (newVariables.length > 0 || Object.keys(patch).length > 0)
+      signalUserEdit(bufferId)
     if (newVariables.length > 0)
       updateSettings({
         variables: withNewVariables(
@@ -324,12 +323,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
           newVariables,
         ),
       })
-    setCellSettings(cellId, {
-      highlightConfig: highlight ?? undefined,
-      formats: nextFormats,
-      gridMode: nextGridMode,
-      interactions: nextInteractions,
-    })
+    if (Object.keys(patch).length > 0) setCellSettings(cellId, patch)
     highlightDrawer.close()
   }
 
@@ -448,7 +442,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         samples={samples}
         focus={highlightDrawer.request?.focus}
         defaultIdentity={defaultIdentity}
-        hasSavedIdentity={savedHighlightConfig !== undefined}
+        savedConfig={savedHighlightConfig}
         duplicateCountOf={duplicateCountOf}
         onSave={saveGridSettings}
         onCancel={highlightDrawer.cancel}

@@ -25,12 +25,13 @@ import type {
 import { DrawSettingsDrawer } from "./CellChart/DrawSettingsDrawer"
 import {
   draftOf,
+  drawSettingsOf,
   settingsOf,
   starterCustomOption,
+  supportsInteractions,
   type DrawDraft,
   type DrawSettings,
 } from "./CellChart/drawSettings"
-import { withoutUnofferedOptions } from "./CellChart/chartOptions"
 import { resolveDraw, type QueryTab } from "./DrawCanvas/drawCanvasUtils"
 import type { StatementRows } from "./visuals/statementRows"
 import {
@@ -39,10 +40,11 @@ import {
 } from "./CellHighlight/HighlightSettingsDrawer"
 import {
   cellColumnsOf,
+  gridSettingsPatch,
   resolveHighlightConfig,
 } from "./result-table/highlightConfig"
 import { columnsAndSamplesOf } from "./CellFormats/formatSummary"
-import type { CellSettingsPatch } from "./useCellsStore"
+import { applyCellSettings, changedSettings } from "./cellSettings"
 import {
   CellOverlayProvider,
   CellOverlaySlot,
@@ -55,7 +57,7 @@ import {
 // random current result (none, no rows, rows lacking saved columns, every
 // column, a row-capped prefix). Through each save path:
 //
-//   (a) Save without a change: the cell is written back deep-equal.
+//   (a) Save without a change: nothing is written.
 //   (b) One edit in one section, then Save: only that section's fields may
 //       differ; every other field is deep-equal to before.
 
@@ -403,49 +405,29 @@ const worldOf = (seed: number): World => {
 }
 
 // ------------------------------------------------------------------------
-// How a save reaches the cell, as the notebook writes it today.
+// How a save reaches the cell: DrawCanvas hands Cell the settings the Chart
+// settings drawer changed; ResultGridPanel writes those the Grid settings
+// drawer changed. The notebook writes them as a patch.
 
-const applyPatch = (
-  cell: NotebookCell,
-  patch: CellSettingsPatch,
-): NotebookCell => {
-  const next: NotebookCell = { ...cell }
-  for (const key of Object.keys(patch) as (keyof CellSettingsPatch)[]) {
-    const value = patch[key]
-    if (value === undefined) delete next[key]
-    else (next as Record<string, unknown>)[key] = value
-  }
-  return next
-}
-
-const NO_CHART: ChartConfig = { xColumn: null, queries: [] }
-
-// DrawCanvas's saved settings.
-const drawSettingsOf = (cell: NotebookCell): DrawSettings => ({
-  chartConfig: cell.chartConfig ?? NO_CHART,
-  ...(cell.formats ? { formats: cell.formats } : {}),
-  ...(cell.interactions ? { interactions: cell.interactions } : {}),
-})
-
-// Cell.handleDrawSettingsChange.
 const persistDraw = (cell: NotebookCell, next: DrawSettings): NotebookCell =>
-  applyPatch(cell, {
-    chartConfig: next.chartConfig,
-    formats: next.formats,
-    interactions: next.interactions,
-  })
+  applyCellSettings(cell, changedSettings(drawSettingsOf(cell), next))
 
-// ResultGridPanel's saveGridSettings.
 const persistGrid = (
   cell: NotebookCell,
   save: GridSettingsSave,
 ): NotebookCell =>
-  applyPatch(cell, {
-    highlightConfig: save.highlight ?? undefined,
-    formats: save.formats,
-    gridMode: save.gridMode,
-    interactions: save.interactions,
-  })
+  applyCellSettings(
+    cell,
+    gridSettingsPatch(
+      {
+        highlightConfig: cell.highlightConfig,
+        formats: cell.formats,
+        gridMode: cell.gridMode,
+        interactions: cell.interactions,
+      },
+      save,
+    ),
+  )
 
 // ------------------------------------------------------------------------
 // The properties.
@@ -490,10 +472,18 @@ const tallyOf = () => {
     )
   }
   return {
-    /** A save without a change: the cell is written back as it was. */
+    /** A save without a change: nothing is written. */
     unchanged: (world: World, after: NotebookCell) => {
       saves++
-      report(world, after, changedFields(world.cell, after), "no edit")
+      const changed = changedFields(world.cell, after)
+      report(
+        world,
+        after,
+        changed.length === 0 && after !== world.cell
+          ? ["(written back)" as Field]
+          : changed,
+        "no edit",
+      )
     },
     /** One edit: only `allowed` fields may change. */
     only: (
@@ -570,22 +560,9 @@ const resolvedOf = (world: World): Resolved => {
   }
 }
 
-const supportsInteractions = (draft: DrawDraft) =>
-  draft.kind !== "component" ||
-  (draft.visual?.type !== "bullet" && draft.visual?.type !== "planTree")
-
-// The drawer's commit, without its checks.
-const drawSave = (draft: DrawDraft, { tabs }: Resolved) => {
-  const checked = supportsInteractions(draft)
-    ? draft
-    : { ...draft, interactions: undefined }
-  return settingsOf({
-    ...checked,
-    chart: checked.chartEdited
-      ? withoutUnofferedOptions(checked.chart, tabs)
-      : checked.chart,
-  })
-}
+// The drawer's save, without its checks.
+const drawSave = (draft: DrawDraft, { saved, tabs }: Resolved) =>
+  settingsOf(draft, saved, tabs)
 
 type DraftEdit = {
   section: "chart" | "formats" | "interactions"
@@ -701,11 +678,11 @@ const SECTION_FIELDS = {
 const SEEDS = 400
 
 describe("a draw settings save (pure)", () => {
-  // Fails today: an unchanged save writes the preset the current result
-  // resolves to (a saved x-axis lost with no rows, inferred series frozen into
-  // an empty preset), tidies agent-only formats away, and drops the saved
-  // clicks of a bullet or plan tree.
-  it.fails("writes the cell back as saved when nothing changed", () => {
+  // Before a save patched only edited sections, an unchanged save wrote the
+  // preset the current result resolves to (a saved x-axis lost with no rows,
+  // inferred series frozen into an empty preset), tidied agent-only formats
+  // away, and dropped the saved clicks of a bullet or plan tree.
+  it("writes the cell back as saved when nothing changed", () => {
     const tally = tallyOf()
     for (let seed = 1; seed <= SEEDS; seed++) {
       const world = worldOf(seed)
@@ -720,10 +697,9 @@ describe("a draw settings save (pure)", () => {
     tally.done(SEEDS / 2)
   })
 
-  // Fails today: an edit in Formats or Interactions also rewrites the preset
-  // from the current result, and every save re-tidies the other columns'
-  // formats.
-  it.fails("changes only the section the user edited", () => {
+  // Before: an edit in Formats or Interactions also rewrote the preset from
+  // the current result, and every save re-tidied the other columns' formats.
+  it("changes only the section the user edited", () => {
     const tally = tallyOf()
     for (let seed = 1; seed <= SEEDS; seed++) {
       const world = worldOf(seed)
@@ -896,9 +872,9 @@ const UI_SEEDS = 40
 const UI_TIMEOUT = 60_000
 
 describe("a draw settings save (drawer)", () => {
-  // Fails today, as the pure save: the preset is rebuilt from the current
-  // result and agent-only formats are tidied away.
-  it.fails(
+  // Before, as the pure save: the preset was rebuilt from the current result
+  // and agent-only formats were tidied away.
+  it(
     "writes the cell back as saved when nothing changed",
     async () => {
       const tally = tallyOf()
@@ -913,9 +889,9 @@ describe("a draw settings save (drawer)", () => {
     UI_TIMEOUT,
   )
 
-  // Fails today: a Formats or Interactions save rewrites the preset (R41
-  // #4/#5's class), a kind switch tidies the formats.
-  it.fails(
+  // Before: a Formats or Interactions save rewrote the preset (R41 #4/#5's
+  // class), a kind switch tidied the formats.
+  it(
     "changes only the section the user edited",
     async () => {
       const tally = tallyOf()
@@ -1039,7 +1015,7 @@ const GridFixture = ({
           defaultIdentity={
             resolveHighlightConfig(undefined, data).identityColumns
           }
-          hasSavedIdentity={saved !== undefined}
+          savedConfig={saved}
           duplicateCountOf={() => 0}
           onSave={onSave}
           onCancel={() => setOpen(false)}
@@ -1083,9 +1059,9 @@ const runGridDrawer = async (
 }
 
 describe("a grid settings save (drawer)", () => {
-  // Fails today: agent-only formats (an empty format, an empty prefix, a sign
-  // tone next to thresholds) are tidied on every save (R27 #10's class).
-  it.fails(
+  // Before: agent-only formats (an empty format, an empty prefix, a sign tone
+  // next to thresholds) were tidied on every save (R27 #10's class).
+  it(
     "writes the cell back as saved when nothing changed",
     async () => {
       const tally = tallyOf()
@@ -1100,9 +1076,9 @@ describe("a grid settings save (drawer)", () => {
     UI_TIMEOUT,
   )
 
-  // Fails today: a Live updates, Interactions or rule edit also tidies the
+  // Before: a Live updates, Interactions or rule edit also tidied the
   // formats.
-  it.fails(
+  it(
     "changes only the section the user edited",
     async () => {
       const tally = tallyOf()
@@ -1157,8 +1133,8 @@ describe("a grid settings save (drawer)", () => {
     UI_TIMEOUT,
   )
 
-  // Fails today: Clear rules also tidies the formats.
-  it.fails(
+  // Before: Clear rules also tidied the formats.
+  it(
     "clears the rules without changing anything else",
     async () => {
       const tally = tallyOf()

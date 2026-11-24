@@ -26,7 +26,7 @@ describe("draw settings", () => {
 
     // When the drawer opens and saves without changes
     const draft = draftOf(saved, preset)
-    const result = settingsOf(draft)
+    const result = settingsOf(draft, saved)
 
     // Then the gauge, the preset and the formats are all still there
     expect(draft.kind).toBe("component")
@@ -47,7 +47,7 @@ describe("draw settings", () => {
     const draft = draftOf(saved, preset)
 
     // When the user picks the preset chart again
-    const result = settingsOf({ ...draft, kind: "chart" })
+    const result = settingsOf({ ...draft, kind: "chart" }, saved)
 
     // Then the custom option is gone and the preset stays
     expect(kindOf(saved.chartConfig)).toBe("custom")
@@ -58,7 +58,10 @@ describe("draw settings", () => {
     // Given / When / Then
     const draft = draftOf({ chartConfig: preset }, preset)
     expect(
-      settingsOf({ ...draft, kind: "custom", customJson: "{ nope" }),
+      settingsOf(
+        { ...draft, kind: "custom", customJson: "{ nope" },
+        { chartConfig: preset },
+      ),
     ).toMatchObject({ ok: false })
     expect(parseCustomJson("[1, 2]")).toMatchObject({ ok: false })
     expect(parseCustomJson('{"series": []}')).toEqual({
@@ -76,18 +79,24 @@ describe("draw settings", () => {
 
     // When / Then: a custom option past the size limit is refused
     expect(
-      settingsOf({ ...draft, kind: "custom", customJson: huge }),
+      settingsOf(
+        { ...draft, kind: "custom", customJson: huge },
+        { chartConfig: preset },
+      ),
     ).toMatchObject({
       ok: false,
       error: expect.stringMatching(/too large/) as string,
     })
     // and a component scale whose minimum is not below its maximum
     expect(
-      settingsOf({
-        ...draft,
-        kind: "component",
-        visual: { type: "gauge", min: 10, max: 10 },
-      }),
+      settingsOf(
+        {
+          ...draft,
+          kind: "component",
+          visual: { type: "gauge", min: 10, max: 10 },
+        },
+        { chartConfig: preset },
+      ),
     ).toMatchObject({
       ok: false,
       error: expect.stringMatching(/minimum/) as string,
@@ -174,7 +183,7 @@ describe("draw settings", () => {
     }
 
     // When the drawer saves without touching the chart
-    const result = settingsOf(draftOf(saved, preset))
+    const result = settingsOf(draftOf(saved, preset), saved)
 
     // Then the preset stays empty, so it keeps following the SQL
     expect(result).toEqual({
@@ -183,5 +192,34 @@ describe("draw settings", () => {
         chartConfig: { xColumn: null, queries: [], visual: { type: "stat" } },
       },
     })
+  })
+
+  it("keeps the saved chart when the current result cannot resolve it", () => {
+    // Given a line chart over ts, and a result with no rows to resolve it
+    // from (the x-axis falls back, a missing column is pruned)
+    const saved = {
+      chartConfig: {
+        ...preset,
+        queries: [{ type: "line" as const, yColumns: ["price", "gone"] }],
+      },
+      formats: { price: { kind: "number" as const } },
+    }
+    const resolved: ChartConfig = { xColumn: null, queries: [] }
+
+    // When the drawer saves without a change, or with a Formats edit only
+    const unchanged = settingsOf(draftOf(saved, resolved), saved)
+    const formatsOnly = settingsOf(
+      { ...draftOf(saved, resolved), formats: { qty: { decimals: 1 } } },
+      saved,
+    )
+
+    // Then the chart is the saved one, the same object
+    expect(unchanged).toEqual({ ok: true, settings: saved })
+    expect(unchanged.ok && unchanged.settings.chartConfig).toBe(
+      saved.chartConfig,
+    )
+    expect(formatsOnly.ok && formatsOnly.settings.chartConfig).toBe(
+      saved.chartConfig,
+    )
   })
 })
