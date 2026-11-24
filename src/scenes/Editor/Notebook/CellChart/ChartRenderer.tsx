@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react"
 import ReactECharts from "echarts-for-react/lib/core"
 import type { EChartsOption, EChartsType } from "echarts"
@@ -23,6 +24,9 @@ import {
 } from "./zoomWindow"
 import {
   chartLegendSelected,
+  chartRoam,
+  chartRoamResets,
+  subscribeChartZoom,
   chartZoomState,
   resetOwnChartZoom,
   setChartZoomAxes,
@@ -139,6 +143,15 @@ export const ChartRenderer = ({
     [scopeBuffer, scopeCell],
   )
   const zoomAxes = useMemo(() => zoomAxesOf(optionToDraw), [optionToDraw])
+  // A Reset of a panned map or graph redraws it without the pan.
+  const subscribeRoam = useCallback(
+    (listener: () => void) =>
+      scope ? subscribeChartZoom(scope, listener) : () => undefined,
+    [scope],
+  )
+  const roamResets = useSyncExternalStore(subscribeRoam, () =>
+    scope ? chartRoamResets(scope) : 0,
+  )
   const suppressEntryAnimation =
     !animateEntryRef.current && !firstInstanceDoneRef.current
   // The option drawn: the chart's option with the zoom windows and legend
@@ -150,6 +163,7 @@ export const ChartRenderer = ({
           optionToDraw,
           (axis) => chartZoomState(scope, axis, zoomAxes),
           chartLegendSelected(scope),
+          chartRoam(scope),
         )
       : { option: optionToDraw, states: NO_STATES }
     return {
@@ -162,7 +176,15 @@ export const ChartRenderer = ({
       },
     }
     // `key`: a new instance draws from the store as it is now.
-  }, [optionToDraw, zoomAxes, scope, suppressEntryAnimation, animate, key])
+  }, [
+    optionToDraw,
+    zoomAxes,
+    scope,
+    suppressEntryAnimation,
+    animate,
+    key,
+    roamResets,
+  ])
   const drawnRef = useRef(drawn)
   const instanceRef = useRef<EChartsType | null>(null)
   const bindingRef = useRef<ChartZoomBinding | null>(null)

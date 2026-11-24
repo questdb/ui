@@ -1,3 +1,4 @@
+import type { ChartRoam } from "../cellVirtualization/chartZoomStore"
 import type { EChartsOption } from "echarts"
 import type { ZoomControl } from "./liveZoom"
 
@@ -197,6 +198,7 @@ export const withViewState = (
   option: EChartsOption,
   stateOf: (key: AxisKey) => ZoomState,
   legendSelected: Record<string, boolean> | undefined,
+  roam?: ChartRoam,
 ): { option: EChartsOption; states: Map<AxisKey, ZoomState> } => {
   const raw = option as Part
   const states = new Map<AxisKey, ZoomState>()
@@ -234,6 +236,26 @@ export const withViewState = (
         ? option.legend.map(select)
         : select(option.legend)) as EChartsOption["legend"],
     }
+  }
+  // A roaming map or graph keeps where the user panned and zoomed it.
+  for (const [path, view] of Object.entries(roam ?? {})) {
+    const [component, at] = path.split(".")
+    if (component !== "series" && component !== "geo") continue
+    const parts: unknown = (next as Part)[component]
+    const list: unknown[] = Array.isArray(parts)
+      ? (parts as unknown[])
+      : parts == null
+        ? []
+        : [parts]
+    const index = Number(at)
+    const part = list[index]
+    if (typeof part !== "object" || part === null) continue
+    const moved: unknown[] = [...list]
+    moved[index] = { ...part, ...view }
+    next = {
+      ...next,
+      [component]: Array.isArray(parts) ? moved : moved[0],
+    } as EChartsOption
   }
   return { option: next, states }
 }

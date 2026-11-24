@@ -29,7 +29,14 @@ type CellZoom = {
   axes?: ZoomAxes
   // Series the user hid in the legend.
   legend?: Record<string, boolean>
+  // Where the user panned and zoomed a roaming map or graph, by component
+  // ("series.0", "geo.0").
+  roam?: ChartRoam
+  // Bumped when the roam is reset, so the chart redraws without it.
+  roamReset: number
 }
+
+export type ChartRoam = Record<string, { center?: unknown; zoom?: unknown }>
 
 const cells = new Map<string, CellZoom>()
 const linked = new Map<number, Stamped>()
@@ -45,7 +52,7 @@ const cellOf = (scope: ZoomScope): CellZoom => {
   const key = keyOf(scope)
   let cell = cells.get(key)
   if (!cell) {
-    cell = { own: new Map() }
+    cell = { own: new Map(), roamReset: 0 }
     cells.set(key, cell)
   }
   return cell
@@ -100,6 +107,7 @@ const keysOf = (scope: ZoomScope): AxisKey[] => {
 
 /** Whether any control of the chart shows less than its option's window. */
 export const chartZoomed = (scope: ZoomScope): boolean =>
+  cells.get(keyOf(scope))?.roam !== undefined ||
   keysOf(scope).some((key) => isZoomedState(chartZoomState(scope, key)))
 
 /** A gesture's window on one control of this chart only. */
@@ -128,8 +136,12 @@ export const resetChartZoom = (
   { localOnly = false }: { localOnly?: boolean } = {},
 ) => {
   const keys = keysOf(scope)
-  if (keys.length === 0) return
-  const cell = cellOf(scope)
+  const cell = cells.get(keyOf(scope))
+  const roamed = clearRoam(cell)
+  if (keys.length === 0 || !cell) {
+    if (roamed) notify(keyOf(scope))
+    return
+  }
   for (const key of keys) cell.own.set(key, { state: DEFAULT_ZOOM, seq: ++seq })
   if (!localOnly && cell.axes?.time && chartSyncOf(scope.bufferId)?.zoom)
     setLinkedZoom(scope.bufferId, DEFAULT_ZOOM)
@@ -143,11 +155,15 @@ export const resetChartZoom = (
 export const resetOwnChartZoom = (scope: ZoomScope) => {
   const cell = cells.get(keyOf(scope))
   if (!cell) return
+  const roamed = clearRoam(cell)
   const own = keysOf(scope).filter((key) => {
     const { stamp, linked: fromLink } = winning(scope, key, cell.axes)
     return !fromLink && stamp !== undefined && isZoomedState(stamp.state)
   })
-  if (own.length === 0) return
+  if (own.length === 0) {
+    if (roamed) notify(keyOf(scope))
+    return
+  }
   for (const key of own) cell.own.set(key, { state: DEFAULT_ZOOM, seq: ++seq })
   notify(keyOf(scope))
 }
@@ -169,6 +185,30 @@ export const setChartLegendSelected = (
   selected: Record<string, boolean>,
 ) => {
   cellOf(scope).legend = { ...selected }
+}
+
+/** Where the user panned and zoomed the chart's roaming maps and graphs. */
+export const chartRoam = (scope: ZoomScope): ChartRoam | undefined =>
+  cells.get(keyOf(scope))?.roam
+
+/** A count that changes when the chart's roam is reset. */
+export const chartRoamResets = (scope: ZoomScope): number =>
+  cells.get(keyOf(scope))?.roamReset ?? 0
+
+/** A pan or zoom of a roaming map or graph, so a redraw keeps it. */
+export const setChartRoam = (scope: ZoomScope, roam: ChartRoam) => {
+  const cell = cellOf(scope)
+  const wasRoamed = cell.roam !== undefined
+  cell.roam = roam
+  // The toolbar's Reset shows once the chart is moved.
+  if (!wasRoamed) notify(keyOf(scope))
+}
+
+const clearRoam = (cell: CellZoom | undefined): boolean => {
+  if (!cell?.roam) return false
+  cell.roam = undefined
+  cell.roamReset++
+  return true
 }
 
 /** Forgets a deleted cell's chart. */

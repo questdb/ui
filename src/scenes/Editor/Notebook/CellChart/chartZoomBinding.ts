@@ -2,6 +2,8 @@ import type { EChartsOption, EChartsType } from "echarts"
 import {
   chartZoomState,
   setChartLegendSelected,
+  setChartRoam,
+  type ChartRoam,
   setChartZoom,
   setLinkedZoom,
   subscribeChartZoom,
@@ -51,6 +53,8 @@ const LEGEND_EVENTS = [
   "legendselectall",
   "legendinverseselect",
 ]
+
+const ROAM_EVENTS = ["georoam", "graphroam", "treeroam"]
 
 export type ChartZoomBinding = {
   /** The chart was drawn with these states written into its option. */
@@ -139,8 +143,31 @@ export const bindChartZoom = (
     if (selected) setChartLegendSelected(scope, selected)
   }
 
+  // Pans and zooms of roaming maps and graphs: kept as the chart reports
+  // them, so a redraw (which replaces the whole option) puts them back.
+  const onRoam = () => {
+    if (instance.isDisposed()) return
+    const drawn = instance.getOption() as Record<string, unknown>
+    const roam: ChartRoam = {}
+    for (const component of ["series", "geo"] as const) {
+      const parts = drawn[component]
+      if (!Array.isArray(parts)) continue
+      parts.forEach((part: unknown, index) => {
+        if (typeof part !== "object" || part === null) return
+        const { roam: roams, center, zoom } = part as Record<string, unknown>
+        if (!roams || (center === undefined && zoom === undefined)) return
+        roam[`${component}.${index}`] = {
+          ...(center === undefined ? {} : { center }),
+          ...(zoom === undefined ? {} : { zoom }),
+        }
+      })
+    }
+    if (Object.keys(roam).length > 0) setChartRoam(scope, roam)
+  }
+
   instance.on("datazoom", onZoom)
   for (const name of LEGEND_EVENTS) instance.on(name, onLegend)
+  for (const name of ROAM_EVENTS) instance.on(name, onRoam)
   const unsubscribe = subscribeChartZoom(scope, apply)
 
   return {
@@ -155,6 +182,7 @@ export const bindChartZoom = (
       if (instance.isDisposed()) return
       instance.off("datazoom", onZoom)
       for (const name of LEGEND_EVENTS) instance.off(name, onLegend)
+      for (const name of ROAM_EVENTS) instance.off(name, onRoam)
     },
   }
 }
