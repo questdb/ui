@@ -676,6 +676,7 @@ export const dispatchTool = async (
                 get_full_content === true,
                 controller?.readRefreshState?.(),
                 resultStatusOf(cell_id),
+                perms.read,
               )
             },
             signal,

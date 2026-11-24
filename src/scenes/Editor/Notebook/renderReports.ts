@@ -43,50 +43,21 @@ export const clearRenderReport = (bufferId: number, cellId: string): void => {
   reports.delete(cellKey(bufferId, cellId))
 }
 
-// Keys of `drawn` that say what was drawn (counts and kinds). The others,
-// such as a gauge's value or a volume profile's point of control, are result
-// values.
-const SHAPE_KEYS = new Set([
-  "type",
-  "series",
-  "points",
-  "events",
-  "datasets",
-  "rows",
-  "tiles",
-  "bars",
-  "targets",
-  "lanes",
-  "states",
-  "segments",
-  "buckets",
-  "operators",
-  "groups",
-  "nodes",
-  "links",
-  "regions",
-  "cells",
-  "levels",
-  "asks",
-  "bands",
-  "bids",
-])
-
 /**
- * A report in the agent wire's snake case. Without `withResultValues` (as in
- * get_cell, which never carries query result data) `drawn` keeps only what
- * was drawn, not the values drawn.
+ * Stands in for the report when the agent may not see query results (no
+ * 'read' permission): the report describes the results a chart drew.
  */
-export const renderReportWire = (
-  report: RenderReport,
-  withResultValues = false,
-) => ({
+export const RENDER_REPORT_NEEDS_READ =
+  "Read access not granted: render_report describes the query results a " +
+  "chart drew, so it is withheld. Without it you cannot check what this " +
+  "cell draws or the data problems found while drawing it. Ask the user to " +
+  "grant the 'read' permission in the QuestDB console (footer → MCP popover " +
+  "or AI Assistant settings)."
+
+/** A report in the agent wire's snake case, for a reader allowed results. */
+export const renderReportWire = (report: RenderReport) => ({
   kind: report.kind,
-  drawn: withResultValues
-    ? report.drawn
-    : Object.fromEntries(
-        Object.entries(report.drawn).filter(([key]) => SHAPE_KEYS.has(key)),
-      ),
+  drawn: report.drawn,
   problems: report.problems,
   seconds_ago: Math.round((Date.now() - report.at) / 1000),
 })

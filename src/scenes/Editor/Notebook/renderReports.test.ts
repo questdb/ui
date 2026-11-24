@@ -4,8 +4,7 @@ import type { NotebookCell } from "../../../store/notebook"
 import { serializeCell } from "../../../utils/ai/notebookSnapshot"
 import {
   clearRenderReport,
-  getRenderReport,
-  renderReportWire,
+  RENDER_REPORT_NEEDS_READ,
   setRenderReport,
 } from "./renderReports"
 
@@ -18,49 +17,64 @@ const cell: NotebookCell = {
   mode: "draw",
 }
 
+const getCell = (target: NotebookCell, canReadResults: boolean) =>
+  serializeCell(
+    [target],
+    target.id,
+    BUFFER_ID,
+    false,
+    undefined,
+    "loaded",
+    canReadResults,
+  ).render_report
+
 afterEach(() => clearRenderReport(BUFFER_ID, cell.id))
 
 describe("render report on the agent wire", () => {
-  it.each([
-    [
-      "a gauge's value",
-      { type: "gauge", value: 987654.321, min: 0, max: 987654.321, bands: 2 },
-      { type: "gauge", bands: 2 },
-    ],
-    [
-      "a volume profile's point of control",
-      { type: "volumeProfile", levels: 3, pointOfControl: "101.5" },
-      { type: "volumeProfile", levels: 3 },
-    ],
-    [
-      "a liquidity heatmap's steps",
-      { type: "liquidityHeatmap", cells: 12, timeStep: 60000, priceStep: 0.5 },
-      { type: "liquidityHeatmap", cells: 12 },
-    ],
-  ])("keeps %s out of get_cell", (_label, drawn, shape) => {
-    // Given a visual that drew result values
+  const drawn = { type: "gauge", value: 987654.321, min: 0, max: 1e6 }
+
+  it("gives a reader allowed results the whole report", () => {
+    // Given a gauge that drew a result value
     setRenderReport(BUFFER_ID, cell.id, {
       kind: "visual",
       drawn,
       problems: [],
     })
 
-    // When an agent reads the cell, which never carries query result data
-    const report = serializeCell(
-      [cell],
-      cell.id,
-      BUFFER_ID,
-      false,
-      undefined,
-      "loaded",
-    ).render_report
+    // When an agent with the 'read' permission reads the cell
+    const report = getCell(cell, true)
 
-    // Then it learns what was drawn, not the values
-    expect(report?.drawn).toEqual(shape)
+    // Then it sees what was drawn, values included
+    expect(report).toMatchObject({ kind: "visual", drawn, problems: [] })
+  })
 
-    // And a reader allowed to see results (get_cell_image) still gets them
-    const stored = getRenderReport(BUFFER_ID, cell.id)
-    if (!stored) throw new Error("no report")
-    expect(renderReportWire(stored, true).drawn).toEqual(drawn)
+  it("withholds the report from a reader not allowed results", () => {
+    // Given a gauge that drew a result value
+    setRenderReport(BUFFER_ID, cell.id, {
+      kind: "visual",
+      drawn,
+      problems: [
+        { message: "value 987654.321 above max", severity: "warning" },
+      ],
+    })
+
+    // When an agent without the 'read' permission reads the cell
+    const report = getCell(cell, false)
+
+    // Then it learns only why the report is withheld
+    expect(report).toEqual({ withheld: RENDER_REPORT_NEEDS_READ })
+    expect(JSON.stringify(report)).not.toContain("987654")
+  })
+
+  it("tells a reader not allowed results why a draw cell has no report", () => {
+    // Given a draw cell that has not drawn since the page loaded
+    // When an agent without the 'read' permission reads it
+    // Then it is told that the report needs 'read'
+    expect(getCell(cell, false)).toEqual({ withheld: RENDER_REPORT_NEEDS_READ })
+
+    // And a SQL cell carries no report either way
+    const sqlCell: NotebookCell = { ...cell, mode: undefined }
+    expect(getCell(sqlCell, false)).toBeUndefined()
+    expect(getCell(sqlCell, true)).toBeUndefined()
   })
 })

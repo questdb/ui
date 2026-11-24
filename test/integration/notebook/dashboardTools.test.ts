@@ -19,6 +19,11 @@ import type {
   NotebookSettings,
 } from "../../../src/store/notebook"
 import { db } from "../../../src/store/db"
+import {
+  clearRenderReport,
+  RENDER_REPORT_NEEDS_READ,
+  setRenderReport,
+} from "../../../src/scenes/Editor/Notebook/renderReports"
 import { __resetNotebookBufferQueuesForTests } from "../../../src/utils/notebooks/notebookBufferQueue"
 import {
   checkStatementsForAutoRun,
@@ -491,4 +496,48 @@ describe("dispatchTool — dashboard tools", () => {
       { column: "p", kind: "price", decimals: 2 },
     ])
   })
+
+  it.each([
+    ["schema only", { grantSchemaAccess: true, read: false, write: false }],
+    ["none", { grantSchemaAccess: false, read: false, write: false }],
+  ])(
+    "get_cell withholds the render report from an agent with %s access",
+    async (_label, permissions: Permissions) => {
+      // Given a draw cell whose gauge drew a result value
+      mountLive(1, [cell("g", "SELECT 1", { mode: "draw" })])
+      setRenderReport(1, "g", {
+        kind: "visual",
+        drawn: { type: "gauge", value: 987654.321 },
+        problems: [],
+      })
+
+      try {
+        // When an agent without 'read' reads the cell
+        const result = await dispatchTool(
+          "get_cell",
+          { buffer_id: 1, cell_id: "g", get_full_content: null },
+          makeClient(),
+          noopStatus,
+          permissions,
+          dqlValidator,
+        )
+
+        // Then it is told why the report is withheld, without the value
+        expect(parsed(result).render_report).toEqual({
+          withheld: RENDER_REPORT_NEEDS_READ,
+        })
+        expect(result.content).not.toContain("987654")
+
+        // And an agent with 'read' sees the value
+        const read = parsed(
+          await call("get_cell", { buffer_id: 1, cell_id: "g" }),
+        )
+        expect(read.render_report).toMatchObject({
+          drawn: { type: "gauge", value: 987654.321 },
+        })
+      } finally {
+        clearRenderReport(1, "g")
+      }
+    },
+  )
 })

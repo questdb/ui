@@ -4,7 +4,7 @@ import { act, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import type { CellResult, NotebookCell } from "../../../../store/notebook"
-import { clearRenderReport } from "../renderReports"
+import { clearRenderReport, type renderReportWire } from "../renderReports"
 import { serializeCell } from "../../../../utils/ai/notebookSnapshot"
 
 const BUFFER_ID = 46
@@ -122,8 +122,24 @@ const ui = (cell: NotebookCell) => (
   />
 )
 
-const getCell = (cell: NotebookCell) =>
-  serializeCell([cell], cell.id, BUFFER_ID, false, undefined, "loaded")
+// get_cell as a reader allowed results ('read') sees it.
+const getCell = (cell: NotebookCell) => {
+  const details = serializeCell(
+    [cell],
+    cell.id,
+    BUFFER_ID,
+    false,
+    undefined,
+    "loaded",
+    true,
+  )
+  return {
+    ...details,
+    render_report: details.render_report as
+      | ReturnType<typeof renderReportWire>
+      | undefined,
+  }
+}
 
 afterEach(() => {
   clearRenderReport(BUFFER_ID, "c1")
