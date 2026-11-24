@@ -11,6 +11,7 @@ import { withAlpha } from "../../../theme"
 import { AssistantMarkdown } from "./AssistantMarkdown"
 import type { OpenInEditorContent } from "./ChatMessages"
 import { buildInterleavedTimeline } from "../../../utils/ai/turnView"
+import { maxOf } from "../../../utils/values"
 
 function formatTokenCount(count: number): string {
   if (count >= 1000) {
@@ -111,7 +112,7 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
       )
       const end =
         fullHistory.length > 0
-          ? Math.max(...fullHistory.map((entry) => entry.timestamp))
+          ? maxOf(fullHistory.map((entry) => entry.timestamp))
           : undefined
       const hasGeneratingResponseContent = filteredHistory.some(
         (op) =>

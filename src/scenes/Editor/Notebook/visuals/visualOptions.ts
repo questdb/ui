@@ -37,6 +37,7 @@ import {
   type StatementRows,
   type TreeNode,
 } from "./statementRows"
+import { maxOf, minOf } from "../../../../utils/values"
 
 // Visuals drawn with ECharts: each builds an option from the cell's statements,
 // in the console's style, and reports what it drew or what it could not find.
@@ -391,7 +392,7 @@ const withColorValues = (nodes: TreeNode[]): unknown[] =>
   }))
 
 const divergingVisualMap = (colors: ColorShape, values: number[]) => {
-  const extent = Math.max(...values.map(Math.abs), 1e-9)
+  const extent = Math.max(maxOf(values.map(Math.abs)), 1e-9)
   return {
     show: false,
     dimension: 1,
@@ -651,8 +652,8 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
     weight.set(l.source, (weight.get(l.source) ?? 0) + l.value)
     weight.set(l.target, (weight.get(l.target) ?? 0) + l.value)
   }
-  const maxWeight = Math.max(...weight.values(), 1)
-  const maxLink = Math.max(...e.links.map((l) => l.value), 1)
+  const maxWeight = Math.max(maxOf(weight.values()), 1)
+  const maxLink = Math.max(maxOf(e.links.map((l) => l.value)), 1)
   const force = e.nodes.length <= MAX_FORCE_GRAPH_NODES
   const format = e.valueName ? formats[e.valueName] : undefined
   return {
@@ -1022,8 +1023,8 @@ export const mapOption = ({
         valueFormatter: (v: unknown) => formatValue(v, format),
       },
       visualMap: {
-        min: Math.min(...values),
-        max: Math.max(...values),
+        min: minOf(values),
+        max: maxOf(values),
         left: 8,
         bottom: 8,
         itemHeight: 90,
@@ -1218,8 +1219,8 @@ export const liquidityHeatmapOption = ({
         type: "continuous",
         seriesIndex: 0,
         dimension: 2,
-        min: Math.min(...values),
-        max: Math.max(...values),
+        min: minOf(values),
+        max: maxOf(values),
         right: 4,
         top: "middle",
         itemHeight: 120,
@@ -1577,11 +1578,8 @@ export const footprintOption = ({
     })),
     progressive: 0,
   }
-  const lows = [Math.min(...prices), ...candles.map((candle) => candle[3])]
-  const highs = [
-    Math.max(...prices) + step,
-    ...candles.map((candle) => candle[2]),
-  ]
+  const lows = [minOf(prices), ...candles.map((candle) => candle[3])]
+  const highs = [maxOf(prices) + step, ...candles.map((candle) => candle[2])]
   const series: unknown[] = [cells]
   if (candles.length > 0)
     series.push({
@@ -1605,13 +1603,13 @@ export const footprintOption = ({
       grid: { left: 12, right: 16, top: 12, bottom: 28, containLabel: true },
       xAxis: {
         type: "time",
-        min: Math.min(...times),
-        max: Math.max(...times) + dt,
+        min: minOf(times),
+        max: maxOf(times) + dt,
       },
       yAxis: {
         type: "value",
-        min: Math.min(...lows),
-        max: Math.max(...highs),
+        min: minOf(lows),
+        max: maxOf(highs),
         axisLabel: { formatter: (v: number) => formatValue(v, priceFormat) },
       },
       series: series as EChartsOption["series"],

@@ -63,6 +63,17 @@ const restrictedControlSyntax = [
   },
 ]
 
+// `Math.max(...rows)` copies every value onto the call stack and throws a
+// RangeError past roughly 100k of them.
+const restrictedMathSpread = [
+  {
+    selector:
+      'CallExpression[callee.object.name="Math"][callee.property.name=/^(min|max)$/] > SpreadElement',
+    message:
+      'Do not spread into Math.min/Math.max; use minOf/maxOf from src/utils/values.ts.',
+  },
+]
+
 export default [
   {
     ignores: ['dist/', 'node_modules/', 'eslint.config.ts'],
@@ -187,7 +198,11 @@ export default [
       'object-shorthand': ['error', 'always'],
       'no-unused-vars': 'off', // Use @typescript-eslint/no-unused-vars instead
       'no-var': ['error'],
-      'no-restricted-syntax': ['error', ...restrictedControlSyntax],
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedControlSyntax,
+        ...restrictedMathSpread,
+      ],
       'no-void': 'off',
       'no-console': [
         'warn',
@@ -207,7 +222,11 @@ export default [
   {
     files: ['src/**/*.{js,jsx}'],
     rules: {
-      'no-restricted-syntax': ['error', ...restrictedControlSyntax],
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedControlSyntax,
+        ...restrictedMathSpread,
+      ],
     },
   },
 

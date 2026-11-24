@@ -16,6 +16,8 @@
 // - text overlays placed in percent (a total in a donut's middle) move with
 //   the part they sit on.
 
+import { maxOf, minOf } from "../../../../utils/values"
+
 export const CHART_PADDING = { top: 16, right: 24, bottom: 16, left: 24 }
 const LEGEND_BAND = 28
 const LEGEND_BOTTOM = 3
@@ -374,8 +376,10 @@ const labelRoomAroundPlot = (option: Box): BoxPart["room"] => {
     if (label.show !== true) continue
     const position = typeof label.position === "string" ? label.position : "top"
     const longest = Math.max(
-      ...(Array.isArray(series.data) ? series.data : []).map((d) =>
-        textWidth(isRecord(d) ? d.value : Array.isArray(d) ? undefined : d),
+      maxOf(
+        (Array.isArray(series.data) ? series.data : []).map((d) =>
+          textWidth(isRecord(d) ? d.value : Array.isArray(d) ? undefined : d),
+        ),
       ),
       5 * CHAR_PX,
     )
@@ -423,10 +427,10 @@ const arcExtent = (start: number, end: number, clockwise: boolean) => {
   const ys = angles.map((a) => -Math.sin((a * Math.PI) / 180))
   // The centre is part of the shape (the hub of a gauge, a donut's base).
   return {
-    left: Math.max(0, -Math.min(0, ...xs)),
-    right: Math.max(0, Math.max(0, ...xs)),
-    top: Math.max(0, -Math.min(0, ...ys)),
-    bottom: Math.max(0, Math.max(0, ...ys)),
+    left: Math.max(0, -Math.min(0, minOf(xs))),
+    right: Math.max(0, Math.max(0, maxOf(xs))),
+    top: Math.max(0, -Math.min(0, minOf(ys))),
+    bottom: Math.max(0, Math.max(0, maxOf(ys))),
   }
 }
 
@@ -470,7 +474,7 @@ const circlePart = (
         return (typeof offset === "number" ? 0.4 : parse(offset, 1, 0)) + 0.18
       }),
     )
-    extent = { ...extent, bottom: Math.max(extent.bottom, ...below) }
+    extent = { ...extent, bottom: Math.max(extent.bottom, maxOf(below)) }
   }
   return {
     kind: "circle",
@@ -514,7 +518,9 @@ const collectParts = (option: Box, size: Size): Part[] => {
   for (const radar of list(option.radar)) {
     const names = Array.isArray(radar.indicator)
       ? Math.max(
-          ...radar.indicator.map((i) => textWidth(isRecord(i) ? i.name : "")),
+          maxOf(
+            radar.indicator.map((i) => textWidth(isRecord(i) ? i.name : "")),
+          ),
           0,
         )
       : 0
@@ -665,8 +671,8 @@ export const fitLayout = <T extends object>(input: T, size: Size): T => {
   } else {
     // Round parts keep their shape: one scale, centred, with room for the
     // labels drawn around them.
-    const roomX = Math.max(...circles.map((c) => c.room.x))
-    const roomY = Math.max(...circles.map((c) => c.room.y))
+    const roomX = maxOf(circles.map((c) => c.room.x))
+    const roomY = maxOf(circles.map((c) => c.room.y))
     const inner = {
       x: content.x + roomX,
       y: content.y + roomY,

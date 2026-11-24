@@ -18,6 +18,7 @@ import { columnIndex, toNumber, type StatementRows } from "./statementRows"
 import type { VisualColumns } from "../CellChart/chartTypes"
 import { RollingNumber } from "./RollingNumber"
 import { pickOf, type Pick } from "../interactions/selection"
+import { maxOf } from "../../../../utils/values"
 
 // An order book ladder: asks above, bids below, the mid price between them.
 // The query does the work: statement 1 returns the asks and statement 2 the
@@ -312,8 +313,8 @@ export const OrderBook = ({
   const asksNotice = levelLimitNotice(asks, "asks")
   const bidsNotice = levelLimitNotice(bids, "bids")
   const maxDepth = Math.max(
-    ...shownAsks.map(depthOf),
-    ...shownBids.map(depthOf),
+    maxOf(shownAsks.map(depthOf)),
+    maxOf(shownBids.map(depthOf)),
     1e-12,
   )
   const bestAsk = asks.levels[0]?.price

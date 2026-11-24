@@ -66,6 +66,7 @@ import {
   topHeightForSql,
   validateAgentCellDimensions,
 } from "./cellSizing"
+import { maxOf } from "../../../utils/values"
 
 // Auto-refresh (draw cells): true = adaptive poll, false = off, a token like
 // "5s" = fixed cadence. The cell stores this value verbatim (= the MCP wire
@@ -545,7 +546,7 @@ export const mergeCellLayout = (
 ): (CellLayoutItem & { minW: number; minH: number })[] => {
   const layoutMap = new Map(savedLayout.map((l) => [l.i, l]))
   const maxY =
-    savedLayout.length > 0 ? Math.max(...savedLayout.map((l) => l.y + l.h)) : 0
+    savedLayout.length > 0 ? maxOf(savedLayout.map((l) => l.y + l.h)) : 0
   let nextY = maxY
   return cells.map((cell) => {
     const existing = layoutMap.get(cell.id)
@@ -586,7 +587,7 @@ export const nextGridSeedPosition = (
   layout: CellLayoutItem[] | undefined,
 ): CellGridPosition => {
   const items = layout ?? []
-  const maxY = items.length > 0 ? Math.max(...items.map((l) => l.y + l.h)) : 0
+  const maxY = items.length > 0 ? maxOf(items.map((l) => l.y + l.h)) : 0
   return { x: 0, y: maxY, w: 12, h: 1 }
 }
 

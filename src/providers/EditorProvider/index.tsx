@@ -66,6 +66,7 @@ import { enqueueBufferTask } from "../../utils/notebooks/notebookBufferQueue"
 import { useLiveQuery } from "dexie-react-hooks"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { maxOf } from "../../utils/values"
 
 export const MAX_TABS = 100
 
@@ -225,7 +226,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({
   const getNextPosition = useCallback(() => {
     if (!buffers) return 0
     const activeBuffers = buffers.filter((b) => !b.archived || b.isTemporary)
-    return Math.max(...activeBuffers.map((b) => b.position), -1) + 1
+    return Math.max(maxOf(activeBuffers.map((b) => b.position)), -1) + 1
   }, [buffers])
 
   const cleanupExecutionRefs = useCallback((bufferId: number) => {

@@ -25,6 +25,7 @@ import {
   resolveRoles,
 } from "../DrawCanvas/drawCanvasUtils"
 import { interactionEvents } from "../interactions/chartInteractions"
+import { maxOf, minOf } from "../../../../utils/values"
 
 const col = (name: string, type: string): ColumnDefinition => ({ name, type })
 
@@ -711,8 +712,8 @@ describe("role chart types", () => {
     expect(hits.map((points) => points.length)).toEqual([1, 1])
     expect(
       hits.map(([shape]) => [
-        Math.min(...shape.shape.points.map(([x]) => x)),
-        Math.max(...shape.shape.points.map(([x]) => x)),
+        minOf(shape.shape.points.map(([x]) => x)),
+        maxOf(shape.shape.points.map(([x]) => x)),
       ]),
     ).toEqual([
       [0, 5],

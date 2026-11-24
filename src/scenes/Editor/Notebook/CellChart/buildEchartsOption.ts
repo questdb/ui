@@ -29,6 +29,7 @@ import {
   withPick,
   type Pick as MarkPick,
 } from "../interactions/selection"
+import { maxOf, minOf } from "../../../../utils/values"
 
 type Dataset = (boolean | string | number | null)[][]
 
@@ -268,7 +269,7 @@ const isPercentStack = (q: Pick<ResolvedQuery, "type" | "percentStack">) =>
 
 const numericExtent = (values: (number | null)[]): [number, number] | null => {
   const finite = values.filter((v): v is number => v !== null)
-  return finite.length ? [Math.min(...finite), Math.max(...finite)] : null
+  return finite.length ? [minOf(finite), maxOf(finite)] : null
 }
 
 const MIN_POINT = 6
@@ -1017,8 +1018,8 @@ const buildHeatmapOption = (
     },
     visualMap: {
       type: "continuous",
-      min: values.length ? Math.min(...values) : 0,
-      max: values.length ? Math.max(...values) : 1,
+      min: values.length ? minOf(values) : 0,
+      max: values.length ? maxOf(values) : 1,
       calculable: false,
       orient: "horizontal",
       left: "center",
@@ -1029,7 +1030,7 @@ const buildHeatmapOption = (
       formatter: (v: unknown) => format(v),
       // A slider without handles shows no numbers, so label its ends.
       text: values.length
-        ? [format(Math.max(...values)), format(Math.min(...values))]
+        ? [format(maxOf(values)), format(minOf(values))]
         : undefined,
       ...(colors
         ? {
@@ -1647,8 +1648,8 @@ export const buildEchartsOption = (
     return values
       ? {
           ...(a as object),
-          dataMin: Math.min(...values.map((t) => t.value)),
-          dataMax: Math.max(...values.map((t) => t.value)),
+          dataMin: minOf(values.map((t) => t.value)),
+          dataMax: maxOf(values.map((t) => t.value)),
         }
       : a
   })

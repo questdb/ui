@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { sparklinePointsOf } from "./cellVisuals"
+import { maxOf, minOf } from "../../utils/values"
 
 const vertices = (points: string | undefined) =>
   (points ?? "").split(" ").map((pair) => pair.split(",").map(Number))
@@ -19,8 +20,8 @@ describe("sparklinePointsOf", () => {
     expect(points[0][0]).toBe(0)
     expect(points.at(-1)?.[0]).toBe(100)
     const ys = points.map(([, y]) => y)
-    expect(Math.min(...ys)).toBe(1)
-    expect(Math.max(...ys)).toBe(19)
+    expect(minOf(ys)).toBe(1)
+    expect(maxOf(ys)).toBe(19)
     expect(points.find(([, y]) => y === 1)?.[0]).toBeCloseTo(
       (4321 / 9999) * 100,
     )

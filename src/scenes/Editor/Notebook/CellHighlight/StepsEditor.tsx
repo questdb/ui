@@ -19,6 +19,7 @@ import {
   StepRemainder,
 } from "./highlightSettingsStyles"
 import { stepErrorKey, type RuleErrors } from "./ruleValidation"
+import { maxOf, minOf } from "../../../../utils/values"
 
 type Props = {
   rule: StepsRule
@@ -40,8 +41,8 @@ export const StepsEditor: React.FC<Props> = ({ rule, errors, onChange }) => {
   const bounds = steps
     .map((step) => step.from)
     .filter((from) => Number.isFinite(from))
-  const lowestBound = Math.min(...bounds)
-  const highestBound = Math.max(...bounds)
+  const lowestBound = minOf(bounds)
+  const highestBound = maxOf(bounds)
 
   const updateStep = (id: string, patch: Partial<HighlightStep>) =>
     onChange({
