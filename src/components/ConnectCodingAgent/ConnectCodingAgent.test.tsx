@@ -53,7 +53,7 @@ describe("connecting a coding agent", () => {
     // Then
     await waitFor(() => expect(getByHook("connect-agent-dialog")).toBeVisible())
     expect(queryByHook("ai-promo-modal")).not.toBeInTheDocument()
-    expect(getByHook("connect-agent-command")).toHaveTextContent(
+    expect(getByHook("connect-agent-dialog")).toHaveTextContent(
       connectCommandOf(thisConsole(), "npx"),
     )
 
@@ -61,7 +61,7 @@ describe("connecting a coding agent", () => {
     await userEvent.click(getByHook("connect-agent-channel-switch"))
 
     // Then
-    expect(getByHook("connect-agent-command")).toHaveTextContent(
+    expect(getByHook("connect-agent-dialog")).toHaveTextContent(
       connectCommandOf(thisConsole(), "standalone"),
     )
   })

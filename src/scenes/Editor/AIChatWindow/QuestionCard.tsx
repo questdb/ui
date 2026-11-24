@@ -119,8 +119,8 @@ const SendError = styled.p`
 
 export const AnswerSendError = () => (
   <SendError role="alert">
-    Could not send the answer. Check the connection to the QuestDB MCP server
-    and try again.
+    Could not send the answer. Check the connection to your coding agent and try
+    again.
   </SendError>
 )
 

@@ -15,57 +15,20 @@ import type { BridgeVersionMismatch } from "../../utils/mcp/protocolVersion"
 import type { Permissions } from "../../utils/tools/permissions"
 import type { PendingPairAgent } from "../../utils/mcp/mcpBridgeStorage"
 import { BridgeUpgradeNotice } from "../../scenes/Footer/MCPBridgeStatus/BridgeUpgradeNotice"
+import { AgentUpgradeNotice } from "../../scenes/Footer/MCPBridgeStatus/AgentUpgradeNotice"
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
 
+import {
+  Actions,
+  Body,
+  Hero,
+  IconBadge,
+  Lede,
+  StyledContent,
+  Title,
+} from "./consentDialogParts"
+
 const CONNECT_HOOK = "mcp-pair-consent-connect"
-
-const StyledContent = styled(AlertDialog.Content)`
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-`
-
-const Hero = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 2.4rem 2.4rem 1.6rem;
-  gap: 1.2rem;
-`
-
-const IconBadge = styled.div<{ $tone?: "neutral" | "success" }>`
-  width: 4.8rem;
-  height: 4.8rem;
-  border-radius: 0.8rem;
-  border: 1px solid
-    ${({ theme, $tone }) =>
-      $tone === "success"
-        ? theme.color.statusSuccess
-        : theme.color.contentAccentStrong};
-  color: ${({ theme, $tone }) =>
-    $tone === "success"
-      ? theme.color.statusSuccess
-      : theme.color.contentAccentStrong};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-`
-
-const Title = styled(AlertDialog.Title)`
-  margin: 0;
-  font-size: 1.8rem;
-  font-weight: 600;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
-
-const Lede = styled(AlertDialog.Description)`
-  margin: 0;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  line-height: 1.5;
-  font-size: 1.4rem;
-`
 
 const WorkspaceNote = styled.p`
   margin: 0;
@@ -87,24 +50,6 @@ const Workspace = styled.code`
 const DetailsToggle = styled(TextButton)`
   align-self: flex-start;
   font-size: 1.2rem;
-`
-
-const Body = styled.div`
-  padding: 0 2.4rem 1.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.6rem;
-
-  [aria-haspopup="menu"] {
-    font-size: 1.4rem;
-    font-weight: 400;
-    background: ${({ theme }) => theme.color.surfaceInput};
-    border-color: ${({ theme }) => theme.color.interactionNeutral};
-
-    &:focus {
-      background: ${({ theme }) => theme.color.surfaceInput};
-    }
-  }
 `
 
 const Fields = styled.dl`
@@ -210,21 +155,6 @@ const StatusDetail = styled.span`
   font-size: 1.2rem;
   color: ${({ theme }) => theme.color.contentSecondary};
   word-break: break-word;
-`
-
-const Actions = styled.div`
-  display: flex;
-  gap: 0.8rem;
-  justify-content: flex-end;
-  padding: 2rem 2.4rem 2.4rem;
-
-  @media (max-width: 28em) {
-    flex-direction: column-reverse;
-
-    > * {
-      width: 100%;
-    }
-  }
 `
 
 type Props = {
@@ -379,7 +309,11 @@ export const PairingConsentModal: React.FC<Props> = ({
             >
               <LoadingSpinner size="16px" />
               <StatusText>
-                <span>Establishing WebSocket connection...</span>
+                <span>
+                  {agent
+                    ? `Connecting to ${agent.label}…`
+                    : "Establishing WebSocket connection..."}
+                </span>
                 {/* -1 on both sides so the counter shows retries-allowed,
                     not total attempts (the first attempt isn't a retry). */}
                 {retryAttempt > 1 && (
@@ -423,7 +357,14 @@ export const PairingConsentModal: React.FC<Props> = ({
               data-hook="mcp-pair-consent-version-mismatch"
               role="alert"
             >
-              <BridgeUpgradeNotice severity={versionMismatch} />
+              {agent ? (
+                <AgentUpgradeNotice
+                  severity={versionMismatch}
+                  agentLabel={agent.label}
+                />
+              ) : (
+                <BridgeUpgradeNotice severity={versionMismatch} />
+              )}
             </StatusRow>
           )}
 

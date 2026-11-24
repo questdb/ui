@@ -3,7 +3,13 @@ import ReactDOM from "react-dom"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import { Close } from "../icons"
-import { CheckIcon, KeyIcon } from "@phosphor-icons/react"
+import {
+  RowsPlusBottomIcon,
+  StethoscopeIcon,
+  GradientIcon,
+  HammerIcon,
+  FileSqlIcon,
+} from "@phosphor-icons/react"
 import { Button } from "../Button"
 import { TextButton } from "../TextButton"
 import { IconButton } from "../IconButton"
@@ -98,56 +104,89 @@ const CloseButton = styled(IconButton).attrs({
   padding: 0.4rem;
 `
 
-const Headline = styled(Text)`
-  font-weight: 600;
-  font-size: 1.6rem;
-  line-height: 2.2rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
-
 const Description = styled(Text)`
   font-size: 1.3rem;
   line-height: 1.857rem;
-  color: ${({ theme }) => theme.color.contentSecondary};
+  color: ${({ theme }) => theme.color.contentPrimary};
   padding-right: 0.8rem;
 `
 
-const Perks = styled.ul`
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-`
-
-const Perk = styled.li`
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-
-  svg {
-    flex-shrink: 0;
-    color: ${({ theme }) => theme.color.statusSuccess};
-  }
-`
-
-const Footer = styled(Box).attrs({
+const AssistantModes = styled(Box).attrs({
   flexDirection: "column",
-  align: "stretch",
   gap: "1rem",
 })`
-  padding-top: 0.6rem;
+  padding-top: 1.4rem;
+`
+
+const AssistantMode = styled(Box).attrs({
+  gap: "1rem",
+  align: "flex-start",
+})`
   width: 100%;
 `
 
-const ApiKeyButton = styled(TextButton)`
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+const IconContainer = styled(Box).attrs({
+  align: "center",
+  justifyContent: "center",
+})`
+  background: ${({ theme }) => theme.color.interactionNeutralHover};
+  border-radius: 0.4rem;
+  padding: 0.8rem;
+  width: 4.8rem;
+  height: 4rem;
+  flex-shrink: 0;
+`
+
+const ModeIconWrapper = styled(Box).attrs({
+  align: "center",
+  justifyContent: "center",
+})`
+  width: 2.4rem;
+  height: 2.4rem;
+  color: ${({ theme }) => theme.color.aiPinkStart};
+`
+
+const ModeContent = styled(Box).attrs({
+  flexDirection: "column",
+  gap: "0.5rem",
+  align: "flex-start",
+})`
+  flex: 1;
+`
+
+const ModeTitleRow = styled(Box).attrs({
+  align: "center",
+  gap: "1rem",
+})`
+  width: 100%;
+`
+
+const ModeTitle = styled(Text)`
+  font-weight: 600;
+  font-size: 1.4rem;
+  line-height: 1.8rem;
+  text-align: left;
+  color: ${({ theme }) => theme.color.contentPrimary};
+`
+
+const ModeDescription = styled(Text)`
+  font-size: 1.3rem;
+  line-height: 1.857rem;
+  color: ${({ theme }) => theme.color.contentPrimary};
+`
+
+const Footer = styled(Box).attrs({
+  align: "center",
+  justifyContent: "space-between",
+})`
+  padding-top: 1.4rem;
+  width: 100%;
+`
+
+const SetupButton = styled(Button).attrs({
+  variant: "primary",
+})`
+  margin-left: auto;
 `
 
 type Props = {
@@ -323,42 +362,105 @@ export const AIAssistantPromo = ({
                 </CloseButton>
               </Header>
 
-              <Headline>Chat with your coding agent here</Headline>
               <Description>
-                Use Claude Code, Codex, Gemini, Copilot or Cursor in the
-                console. It works on your tables and notebooks.
+                Our AI Assistant is a specialized programming and support agent
+                that makes you more effective and helps you solve problems as
+                you interface with your QuestDB database. Use it with the coding
+                agent you already have, like Claude Code or Codex. It can help
+                you in the following ways:
               </Description>
-              <Perks>
-                <Perk>
-                  <CheckIcon size={14} weight="bold" />
-                  Uses the subscription you already have
-                </Perk>
-                <Perk>
-                  <CheckIcon size={14} weight="bold" />
-                  No API key, no config files
-                </Perk>
-                <Perk>
-                  <CheckIcon size={14} weight="bold" />
-                  Set up in about a minute
-                </Perk>
-              </Perks>
+
+              <AssistantModes>
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIconWrapper>
+                      <RowsPlusBottomIcon size={24} />
+                    </ModeIconWrapper>
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitleRow>
+                      <ModeTitle>Generate Queries</ModeTitle>
+                    </ModeTitleRow>
+                    <ModeDescription>
+                      Create SQL queries from natural language, with
+                      schema-aware context.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIconWrapper>
+                      <FileSqlIcon size={24} />
+                    </ModeIconWrapper>
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitleRow>
+                      <ModeTitle>Explain Queries</ModeTitle>
+                    </ModeTitleRow>
+                    <ModeDescription>
+                      Get an inline explanation of your query.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
+
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIconWrapper>
+                      <HammerIcon size={24} />
+                    </ModeIconWrapper>
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitle>Fix Queries</ModeTitle>
+                    <ModeDescription>
+                      Documentation-referenced suggestions to fix query errors.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
+
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIconWrapper>
+                      <GradientIcon size={24} />
+                    </ModeIconWrapper>
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitle>Explain Schema</ModeTitle>
+                    <ModeDescription>
+                      Detailed overview and structure of tables.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
+
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIconWrapper>
+                      <StethoscopeIcon size={24} />
+                    </ModeIconWrapper>
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitle>Analyze Health Issues</ModeTitle>
+                    <ModeDescription>
+                      Diagnose and resolve table health issues with AI-powered
+                      recommendations.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
+              </AssistantModes>
 
               <Footer>
-                <Button
-                  variant="primary"
-                  onClick={handleConnectAgentClick}
-                  data-hook="ai-promo-connect-agent"
-                >
-                  Connect your coding agent
-                </Button>
-                <ApiKeyButton
+                <TextButton
                   type="button"
                   onClick={handleSetupClick}
                   data-hook="ai-promo-continue"
                 >
-                  <KeyIcon size={14} />
                   Use an API key instead
-                </ApiKeyButton>
+                </TextButton>
+                <SetupButton
+                  onClick={handleConnectAgentClick}
+                  data-hook="ai-promo-connect-agent"
+                >
+                  Connect your coding agent
+                </SetupButton>
               </Footer>
             </Content>
           </TooltipContainer>

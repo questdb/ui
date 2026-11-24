@@ -72,6 +72,8 @@ export type MCPBridgeContextValue = {
   disconnect: () => void
   permissions: Permissions
   setPermissions: (next: Permissions) => void
+  // The coding agent the pairing link announced, known before it says hello.
+  pairedAgent: PendingPairAgent | null
 }
 
 const defaultContext: MCPBridgeContextValue = {
@@ -86,6 +88,7 @@ const defaultContext: MCPBridgeContextValue = {
   disconnect: () => undefined,
   permissions: DEFAULT_GRANTED,
   setPermissions: () => undefined,
+  pairedAgent: null,
 }
 
 const MCPBridgeContext = createContext<MCPBridgeContextValue>(defaultContext)
@@ -116,6 +119,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const localAgentsEnabled = consoleConfig.localAgents !== false
   const [url, setUrl] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [pairedAgent, setPairedAgent] = useState<PendingPairAgent | null>(null)
   const [status, setStatus] = useState<MCPBridgeClientStatus>("disconnected")
   const [latencyMs, setLatencyMs] = useState<number | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
@@ -406,6 +410,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setConnectAttempt((n) => n + 1)
     setUrl(nextUrl)
     setToken(nextToken)
+    setPairedAgent(null)
     writePendingPair({
       url: nextUrl,
       token: nextToken,
@@ -440,6 +445,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     clearPendingPair()
     setUrl(null)
     setToken(null)
+    setPairedAgent(null)
     setStatus("disconnected")
     setLatencyMs(null)
     setLastError(null)
@@ -461,6 +467,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setConnectAttempt((n) => n + 1)
       setUrl(pair.url)
       setToken(pair.token)
+      setPairedAgent(pair.agent ?? null)
     } else {
       void trackEvent(ConsoleEvent.MCP_PAIRING_PROMPTED)
       setPendingConsent({ url: pair.url, token: pair.token, agent: pair.agent })
@@ -539,6 +546,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setConnectAttempt((n) => n + 1)
       setUrl(pendingConsent.url)
       setToken(pendingConsent.token)
+      setPairedAgent(pendingConsent.agent ?? null)
     },
     [pendingConsent, consentInFlight, setPermissions],
   )
@@ -561,6 +569,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     }
     setUrl(null)
     setToken(null)
+    setPairedAgent(null)
     setRetryAttempt(0)
     setLastError(null)
     setVersionMismatch(null)
@@ -580,6 +589,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       disconnect,
       permissions,
       setPermissions,
+      pairedAgent,
     }),
     [
       status,
@@ -593,6 +603,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       disconnect,
       permissions,
       setPermissions,
+      pairedAgent,
     ],
   )
 

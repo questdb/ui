@@ -19,10 +19,10 @@ import { buildQuestionRecord, type QuestionRecord } from "./questionTranscript"
 
 const CANCEL_GRACE_MS = 5_000
 
-const BRIDGE_DISCONNECTED: AgentTurnResult = {
+const connectionLost = (agentLabel: string): AgentTurnResult => ({
   outcome: "failed",
-  error: "The connection to the QuestDB MCP server was lost.",
-}
+  error: `The connection to ${agentLabel} was lost.`,
+})
 
 const TURN_IN_PROGRESS: AgentTurnResult = {
   outcome: "failed",
@@ -163,7 +163,9 @@ export class LocalAgentChannel {
     onToolStatus,
   }: LocalAgentPrompt): Promise<AgentTurnResult> {
     if (signal?.aborted) return Promise.resolve(CANCELLED)
-    if (this.disposed) return Promise.resolve(BRIDGE_DISCONNECTED)
+    if (this.disposed) {
+      return Promise.resolve(connectionLost(this.options.info.label))
+    }
     const previous = this.turns.get(conversationId)
     if (previous) {
       // A message sent right after Stop waits for the agent to end the
@@ -193,7 +195,7 @@ export class LocalAgentChannel {
         ...images.map((image) => ({ type: "image" as const, ...image })),
       ],
     })
-    if (!sent) return Promise.resolve(BRIDGE_DISCONNECTED)
+    if (!sent) return Promise.resolve(connectionLost(this.options.info.label))
     onSent?.()
     if (notebookRead) this.options.onNotebookRead(conversationId, notebookRead)
     // Cancels on the wire target the conversation. Once the new prompt is
@@ -351,7 +353,11 @@ export class LocalAgentChannel {
     this.unsubscribe()
     this.pendingCancels.clear()
     for (const [conversationId, turn] of Array.from(this.turns)) {
-      this.settleTurn(conversationId, turn.turnId, BRIDGE_DISCONNECTED)
+      this.settleTurn(
+        conversationId,
+        turn.turnId,
+        connectionLost(this.options.info.label),
+      )
     }
     this.listeners.clear()
   }

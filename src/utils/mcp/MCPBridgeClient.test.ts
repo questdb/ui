@@ -413,12 +413,12 @@ describe("MCPBridgeClient", () => {
       {
         code: WS_CLOSE_CODES.superseded,
         label: "superseded (4001)",
-        expectInMessage: "Another browser tab is paired",
+        expectInMessage: "Another browser tab is connected",
       },
       {
         code: WS_CLOSE_CODES.token_invalid,
         label: "token_invalid (4002)",
-        expectInMessage: "token is no longer valid",
+        expectInMessage: "link is no longer valid",
       },
       {
         code: WS_CLOSE_CODES.major_version_mismatch,

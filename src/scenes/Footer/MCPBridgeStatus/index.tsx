@@ -5,6 +5,8 @@ import { PlugsConnectedIcon, PlugsIcon } from "@phosphor-icons/react"
 import { ButtonBase, PopperToggle } from "../../../components"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
 import { MCPBridgePairPopover } from "./PairPopover"
+import { AgentPopover } from "./AgentPopover"
+import { agentStatusOf } from "./agentStatus"
 import { AgentChangesPopper } from "./AgentChangesPopper"
 import { useAgentChanges } from "./useAgentChanges"
 import { Tone, accentColor, deriveTone, pillSuffix } from "./tone"
@@ -157,40 +159,34 @@ const Announcer = styled.span`
   border: 0;
 `
 
-const AGENT_TONES = {
-  ready: "connected",
-  starting: "connecting",
-  error: "warning",
-} as const satisfies Record<string, Tone>
-
-const AGENT_STATE_WORDS = {
-  ready: "connected",
-  starting: "starting…",
-  error: "unavailable",
-} as const
-
 export const MCPBridgeStatus: React.FC = () => {
-  const { status, url, token, versionMismatch } = useMCPBridge()
+  const { status, url, token, versionMismatch, pairedAgent } = useMCPBridge()
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null)
   const agentChanges = useAgentChanges()
   const localAgent = useLocalAgent()
   const paired = !!(url && token)
   const bridgeTone = deriveTone(paired, status, versionMismatch)
-  const tone =
-    bridgeTone === "connected" && localAgent
-      ? AGENT_TONES[localAgent.state]
-      : bridgeTone
+  // A pairing that brought a coding agent is about that agent, never MCP.
+  const agentLabel = paired
+    ? (localAgent?.info.label ?? pairedAgent?.label ?? null)
+    : null
+  const agentStatus = agentLabel
+    ? agentStatusOf({
+        agentLabel,
+        agent: localAgent,
+        bridgeTone,
+        versionMismatch,
+      })
+    : null
+  const tone = agentStatus?.tone ?? bridgeTone
 
   let label: string
   let title: string
 
-  if (bridgeTone === "connected" && localAgent) {
-    label = `${localAgent.info.label} ${AGENT_STATE_WORDS[localAgent.state]}`
-    title =
-      localAgent.state === "error" && localAgent.error
-        ? localAgent.error
-        : `${localAgent.info.label} runs on your computer through the QuestDB MCP server. Click to manage.`
+  if (agentStatus) {
+    label = agentStatus.label
+    title = `${agentStatus.description} Click to manage.`
   } else if (tone === "idle") {
     label = "MCP not connected"
     title =
@@ -249,11 +245,20 @@ export const MCPBridgeStatus: React.FC = () => {
           />
         }
       >
-        <MCPBridgePairPopover
-          open={popoverOpen}
-          onClose={closePopover}
-          agentChanges={agentChanges}
-        />
+        {agentLabel ? (
+          <AgentPopover
+            open={popoverOpen}
+            onClose={closePopover}
+            agentChanges={agentChanges}
+            agentLabel={agentLabel}
+          />
+        ) : (
+          <MCPBridgePairPopover
+            open={popoverOpen}
+            onClose={closePopover}
+            agentChanges={agentChanges}
+          />
+        )}
       </PopperToggle>
       <AgentChangesPopper
         open={agentChanges.showPopper && !popoverOpen}

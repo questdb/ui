@@ -293,7 +293,7 @@ it("settles a pending turn when replacement sockets never acknowledge hello", as
   } finally {
     vi.useRealTimers()
   }
-  await screen.findByText("The connection to the QuestDB MCP server was lost.")
+  await screen.findByText("The connection to Mock local agent was lost.")
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Chat history" })).toBeEnabled(),
   )
@@ -331,7 +331,7 @@ it("keeps a prepared prompt queued until the replacement socket acknowledges hel
     expect(second.prompts()).toHaveLength(0)
     expect(getByHook("chat-queued-message-text")).toHaveTextContent(text)
     expect(getByHook("chat-queued-message")).toHaveTextContent(
-      "Waiting for the QuestDB MCP server",
+      "Waiting for Mock local agent",
     )
     expect(queryByHook("chat-message-user")).not.toBeInTheDocument()
     const picker = getByHook("chat-model-picker")
@@ -401,7 +401,7 @@ it("does not record Explain while the bridge is waiting for hello", async () => 
   const { first, reconnect } = await openLocalChat(true)
   const second = reconnect()
   await userEvent.click(getByHook("button-explain-query"))
-  const feedback = await screen.findByText(/Waiting for the QuestDB MCP server/)
+  const feedback = await screen.findByText(/Waiting for Mock local agent/)
   expect(feedback.closest('[role="alert"]')).not.toBeNull()
   expect(first.prompts()).toHaveLength(0)
   expect(second.prompts()).toHaveLength(0)

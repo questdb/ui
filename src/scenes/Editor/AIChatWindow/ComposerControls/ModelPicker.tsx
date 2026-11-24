@@ -12,7 +12,6 @@ import {
   CaretRightIcon,
   CheckIcon,
   MagnifyingGlassIcon,
-  TerminalWindowIcon,
   XIcon,
 } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../components/Button"
@@ -200,15 +199,11 @@ const Invite = styled.div`
   align-items: center;
   gap: 0.8rem;
   margin-top: 0.4rem;
-  padding: 0.8rem 0.4rem 0.4rem 0.8rem;
-  border-top: 1px solid ${({ theme }) => theme.color.borderDefault};
+  padding: 0.6rem 0.4rem 0.2rem 0.8rem;
+  border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
   font-size: 1.2rem;
+  line-height: 1.5;
   color: ${({ theme }) => theme.color.contentSecondary};
-
-  > svg {
-    flex-shrink: 0;
-    color: ${({ theme }) => theme.color.contentAccent};
-  }
 `
 
 const InviteText = styled.span`
@@ -571,15 +566,14 @@ export const ModelPicker = ({
           </List>
           {agentInvite && (
             <Invite data-hook="chat-model-picker-agent-invite">
-              <TerminalWindowIcon size={16} weight="duotone" />
               <InviteText>Chat with your coding agent here</InviteText>
-              <TextButton
+              <NoticeAction
                 type="button"
                 onClick={() => connectAgent(agentInvite)}
                 data-hook="chat-model-picker-agent-connect"
               >
                 Connect
-              </TextButton>
+              </NoticeAction>
               <IconButton
                 label="Dismiss"
                 variant="ghost"

@@ -36,15 +36,15 @@ const TERMINAL_BRIDGE_CLOSE_CODES = new Set<number>([
 
 const terminalCloseMessage = (code: number, reason: string): string => {
   if (code === WS_CLOSE_CODES.superseded) {
-    return "Another browser tab is paired with this MCP server. Disconnect the other tab or pair this one via a fresh link."
+    return "Another browser tab is connected. Disconnect it there, or open a fresh link in this tab."
   }
   if (code === WS_CLOSE_CODES.token_invalid) {
-    return "Pairing token is no longer valid, the MCP server likely restarted. Re-pair via a fresh deep link."
+    return "This link is no longer valid, likely because it restarted on your computer. Open a fresh link."
   }
   if (code === WS_CLOSE_CODES.major_version_mismatch) {
     return `${MCP_VERSION_MISMATCH_COPY.major.message} ${MCP_UPGRADE_COMMAND}`
   }
-  return reason || `MCP server closed with code ${code}.`
+  return reason || `The connection closed with code ${code}.`
 }
 
 export type MCPBridgeClientStatus =

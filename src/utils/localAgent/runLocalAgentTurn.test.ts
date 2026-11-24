@@ -583,7 +583,7 @@ describe("runLocalAgentTurn", () => {
     // Then
     await expect(turn).resolves.toMatchObject({
       type: "unknown",
-      message: "The connection to the QuestDB MCP server was lost.",
+      message: "The connection to Claude Code was lost.",
     })
   })
 
