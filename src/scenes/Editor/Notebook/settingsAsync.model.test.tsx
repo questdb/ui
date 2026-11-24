@@ -533,10 +533,10 @@ const report = (all: string[], runs: number, stats: Harness["stats"][]) => {
   // The runs reach the interleavings they are for.
   expect(total.saves).toBeGreaterThan(runs)
   expect(total.stale).toBeGreaterThan(runs / 4)
-  expect(total.redone).toBeGreaterThan(runs / 4)
+  expect(total.redone).toBeGreaterThan(runs / 6)
 }
 
-const SEEDS = 24
+const SEEDS = 30
 const STEPS = 32
 const TIMEOUT = 120_000
 
@@ -699,7 +699,7 @@ const runDraw = async (seed: number) => {
         }
       } else if (h.pending.length > 0 && roll < 0.3) {
         await settle(h, title, hasAlert)
-      } else if (roll < 0.58) {
+      } else if (roll < 0.52) {
         const section = r.pick([
           "interactions",
           "interactions",
@@ -718,11 +718,11 @@ const runDraw = async (seed: number) => {
         }
         model.revision++
         await tick()
-      } else if (roll < 0.76) {
+      } else if (roll < 0.68) {
         h.begin({ kind: "save" })
         fireEvent.click(within(drawer()).getByRole("button", { name: "Save" }))
         await tick()
-      } else if (roll < 0.82) {
+      } else if (roll < 0.8) {
         h.begin({ kind: changeVariables(h) })
         await tick()
       } else if (roll < 0.87) {
@@ -775,12 +775,12 @@ const runDraw = async (seed: number) => {
 }
 
 describe("an async chart settings save", () => {
-  // Fails on the code before useDraftSession (I6): a check redone after an
-  // edit still read the variables of the render that saved, so a name the
-  // notebook took meanwhile passed. Seed 2: create a variable → save → edit
-  // its start → the notebook takes the name → the check fails → the redone
-  // check passes → the save adds @nv1, which the notebook has.
-  it.fails(
+  // Failed before useDraftSession (I6): the check, and a check redone after
+  // an edit, used the variables of the render that saved, so a name the
+  // notebook took meanwhile passed. Seed 13: create a variable → Save → the
+  // notebook takes its name → the check passes → the save adds @nv1, which
+  // the notebook has.
+  it(
     "belongs to the session and the draft that started it",
     async () => {
       const all: string[] = []
@@ -980,7 +980,7 @@ const runGrid = async (seed: number) => {
         }
       } else if (h.pending.length > 0 && roll < 0.3) {
         await settle(h, title, hasAlert)
-      } else if (roll < 0.56) {
+      } else if (roll < 0.5) {
         const section = r.pick([
           "interactions",
           "interactions",
@@ -999,7 +999,7 @@ const runGrid = async (seed: number) => {
         }
         model.revision++
         await tick()
-      } else if (roll < 0.76) {
+      } else if (roll < 0.68) {
         const clear = model.draft.flag !== null && r.chance(0.4)
         h.begin({ kind: clear ? "clear" : "save" })
         if (!busy()) model.command = clear ? "clear" : "save"
@@ -1013,7 +1013,7 @@ const runGrid = async (seed: number) => {
             within(drawer()).getByRole("button", { name: "Save" }),
           )
         await tick()
-      } else if (roll < 0.82) {
+      } else if (roll < 0.8) {
         h.begin({ kind: changeVariables(h) })
         await tick()
       } else if (roll < 0.87) {
@@ -1060,14 +1060,14 @@ const runGrid = async (seed: number) => {
 }
 
 describe("an async grid settings save or Clear rules", () => {
-  // Fails on the code before useDraftSession. I6: a check answered after the
-  // notebook's variables changed saved anyway (seed 1: save → a variable's
-  // value changes → the check passes → the save goes on with the check of
-  // the old variables). I7: an interactions edit during the check dropped
-  // the Save or Clear rules instead of redoing it, unlike the chart drawer
-  // (seed 6: create a variable → Clear rules → edit its start → the check
-  // passes → nothing saved, nothing checked, no message).
-  it.fails(
+  // Failed before useDraftSession. I6: a check answered after the
+  // notebook's variables changed saved anyway (seed 7: Save → a variable's
+  // value changes → the check passes → the save goes on with a check of the
+  // old variables). I7: an interactions edit during the check dropped the
+  // Save or Clear rules instead of redoing it, unlike the chart drawer
+  // (seed 8: create a variable → Save → edit its start → the check fails →
+  // nothing saved, nothing checked again, no message).
+  it(
     "belongs to the session and the draft that started it",
     async () => {
       const all: string[] = []

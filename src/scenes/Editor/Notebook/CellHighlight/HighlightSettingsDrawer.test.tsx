@@ -302,7 +302,7 @@ describe("highlight settings validation", () => {
     expect(saved.gridMode).toBeUndefined()
   })
 
-  it("requires another Save when a new variable is edited during validation", async () => {
+  it("checks a new variable edited during validation again before it saves", async () => {
     // Given a drawer with a new variable and a database that answers late
     const onSave = vi.fn()
     type Answer = Awaited<ReturnType<typeof questClient.validateQuery>>
@@ -341,10 +341,10 @@ describe("highlight settings validation", () => {
         return Promise.resolve()
       })
 
-      // Then the old validation result cannot save that edit
-      expect(onSave).not.toHaveBeenCalled()
-      fireEvent.click(save)
+      // Then the old validation result cannot save that edit: the edit is
+      // checked, then saved
       await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+      expect(validate).toHaveBeenCalledTimes(2)
       expect(validate).toHaveBeenLastCalledWith(
         expect.stringContaining("'west'"),
       )

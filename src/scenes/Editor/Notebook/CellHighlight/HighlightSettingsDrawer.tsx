@@ -2,6 +2,8 @@ import React, { useContext, useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
 import type { ColumnFormats } from "../../../../utils/formats/columnFormat"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
+import { useDraftSession } from "../settingsDrawer/useDraftSession"
+import { sameGridSettings } from "../result-table/highlightConfig"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
 import { formatsToSave } from "../CellFormats/formatSummary"
 import { Button } from "../../../../components"
@@ -26,7 +28,6 @@ import {
   interactionErrors,
   newVariablesInUse,
   serverInteractionErrors,
-  type InteractionsDraft,
   type VariableSlot,
 } from "../interactions/InteractionsEditor"
 import { interactionsToSave } from "../interactions/interactionsToSave"
@@ -133,6 +134,9 @@ export const highlightToSave = (
     ? null
     : { identityColumns, rules }
 
+const NO_CREATED: Partial<Record<VariableSlot, NotebookVariable>> = {}
+const NO_VARIABLES: NotebookVariable[] = []
+
 const sectionOf = (focus: Props["focus"]): GridSection =>
   focus?.section === "formats" ? "formats" : "highlights"
 
@@ -154,7 +158,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   formats: savedFormats,
   gridMode: savedGridMode,
   interactions: savedInteractions,
-  variables = [],
+  variables = NO_VARIABLES,
   samples = {},
   focus,
   defaultIdentity = [],
@@ -170,7 +174,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       formats,
       gridMode,
       interactions,
-      created = {},
+      created = NO_CREATED,
     },
     setDraftState,
   ] = useState<HighlightDraft>(
@@ -206,16 +210,6 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   // Checked on Save only; the map stays until the next Save.
   const [errors, setErrors] = useState<Map<string, RuleErrors>>(new Map())
   const [identityError, setIdentityError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  // Read after the regex engine loads: a save started before a dismiss or
-  // an unmount is dropped, and one that goes on saves the edits made while
-  // it waited.
-  const acceptsSaveRef = useRef(open)
-  const draftRef = useRef(draft)
-  const configEditedRef = useRef(configEdited)
-  const formatsRef = useRef(formats)
-  const gridModeRef = useRef(gridMode)
-  const interactionsRef = useRef<InteractionsDraft>({ interactions, created })
   const duplicateCount = useMemo(
     () => duplicateCountOf(draft.identityColumns),
     [duplicateCountOf, draft.identityColumns],
@@ -289,83 +283,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     setRules(draft.rules.map((rule) => (rule.id === next.id ? next : rule)))
   }
 
-  // Interactions are complete, and their new variables declare cleanly:
-  // they join every query of the notebook, so the server checks them.
-  // Synchronous unless there are new variables to check, so a plain save
-  // stays one step.
-  const interactionsComplete = (interactionDraft: InteractionsDraft) => {
-    setInteractionsChecked(true)
-    if (!interactionErrors(interactionDraft, variables)) return true
-    setSection("interactions")
-    return false
-  }
-
-  const serverAccepts = async (
-    interactionDraft: InteractionsDraft,
-    onRejected?: () => void,
-  ): Promise<boolean> => {
-    setSaving(true)
-    const server = await serverInteractionErrors(
-      interactionDraft,
-      variables,
-      (q) => quest.validateQuery(q),
-    ).finally(() => setSaving(false))
-    const latest = interactionsRef.current
-    if (
-      !acceptsSaveRef.current ||
-      latest.interactions !== interactionDraft.interactions ||
-      latest.created !== interactionDraft.created
-    )
-      return false
-    setServerProblems(server)
-    if (server) {
-      setSection("interactions")
-      onRejected?.()
-    }
-    return server === null
-  }
-
-  // A save: the highlight settings given, and the other sections as saved
-  // unless the user changed them.
-  const savedOf = (
-    highlight: HighlightConfig | null,
-    interactionDraft: InteractionsDraft,
-  ): GridSettingsSave => ({
-    highlight,
-    formats: formatsToSave(savedFormats, formatsRef.current),
-    gridMode: gridModeRef.current,
-    interactions: interactionsToSave(savedInteractions, interactionDraft),
-    newVariables: newVariablesInUse(interactionDraft),
-  })
-
-  const commit = (
-    current: DraftConfig,
-    interactionDraft: InteractionsDraft,
-  ) => {
-    const next = validateRules(current.rules, columns)
-    const identity = validateIdentity(current)
-    setErrors(next)
-    setIdentityError(identity)
-    if (next.size > 0 || identity !== null) {
-      setSection("highlights")
-      return
-    }
-    onSave(
-      savedOf(
-        configEditedRef.current
-          ? highlightToSave(
-              current.identityColumns,
-              current.rules.filter(isCompleteRule),
-              defaultIdentity,
-              savedConfig !== undefined,
-            )
-          : (savedConfig ?? null),
-        interactionDraft,
-      ),
-    )
-  }
-
-  // Clear rules sits in the Highlights footer: when an unfinished interaction
+  // Clear rules sits in the Highlights footer: when an interaction problem
   // stops it, the button goes with the tab, so focus moves to the
   // Interactions tab that shows the problem.
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -377,68 +295,163 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       ?.focus()
   }, [focusTabRequest])
 
-  // Clears the rules, keeps the identity, and saves the rest of the draft.
-  const clearRules = async () => {
-    if (saving) return
-    const interactionDraft = interactionsRef.current
-    if (!interactionsComplete(interactionDraft)) {
-      setFocusTabRequest((n) => n + 1)
+  // A Save or Clear rules that waits (the regex engine, the database check
+  // of new variables) belongs to this session, and to the draft and
+  // variables it checked.
+  const variablesKey = useMemo(
+    () => JSON.stringify(variables.map((v) => [v.name, v.value])),
+    [variables],
+  )
+  const session = useDraftSession({
+    open,
+    config: {
+      highlightConfig: savedConfig,
+      formats: savedFormats,
+      gridMode: savedGridMode,
+      interactions: savedInteractions,
+    },
+    sameConfig: sameGridSettings,
+    inputs: [
+      draft,
+      configEdited,
+      formats,
+      gridMode,
+      interactions,
+      created,
+      variablesKey,
+    ],
+    live: {
+      draft,
+      configEdited,
+      formats,
+      gridMode,
+      interactions,
+      created,
+      variables,
+      columns,
+      savedConfig,
+      savedFormats,
+      savedInteractions,
+      defaultIdentity,
+      onSave,
+    },
+  })
+  type Live = ReturnType<typeof session.read>
+
+  // A save: the highlight settings given, and the other sections as saved
+  // unless the user changed them.
+  const savedOf = (
+    live: Live,
+    highlight: HighlightConfig | null,
+  ): GridSettingsSave => {
+    const interactionDraft = {
+      interactions: live.interactions,
+      created: live.created,
+    }
+    return {
+      highlight,
+      formats: formatsToSave(live.savedFormats, live.formats),
+      gridMode: live.gridMode,
+      interactions: interactionsToSave(
+        live.savedInteractions,
+        interactionDraft,
+      ),
+      newVariables: newVariablesInUse(interactionDraft),
+    }
+  }
+
+  const commit = (live: Live) => {
+    const current = live.draft
+    const next = validateRules(current.rules, live.columns)
+    const identity = validateIdentity(current)
+    setErrors(next)
+    setIdentityError(identity)
+    if (next.size > 0 || identity !== null) {
+      setSection("highlights")
       return
     }
-    if (
-      newVariablesInUse(interactionDraft).length > 0 &&
-      !(
-        (await serverAccepts(interactionDraft, () =>
-          setFocusTabRequest((n) => n + 1),
-        )) && acceptsSaveRef.current
-      )
-    )
-      return
-    onSave(
+    live.onSave(
       savedOf(
-        highlightToSave(
-          draftRef.current.identityColumns,
-          [],
-          defaultIdentity,
-          savedConfig !== undefined,
-        ),
-        interactionDraft,
+        live,
+        live.configEdited
+          ? highlightToSave(
+              current.identityColumns,
+              current.rules.filter(isCompleteRule),
+              live.defaultIdentity,
+              live.savedConfig !== undefined,
+            )
+          : (live.savedConfig ?? null),
       ),
     )
   }
 
-  const save = async () => {
-    if (saving) return
-    if (draft.rules.some(isPatternRule) && !isRe2Ready()) {
-      setSaving(true)
-      await loadRe2()
-      if (!acceptsSaveRef.current) return
-      setSaving(false)
-    }
-    const interactionDraft = interactionsRef.current
-    if (!interactionsComplete(interactionDraft)) return
-    if (
-      newVariablesInUse(interactionDraft).length > 0 &&
-      !((await serverAccepts(interactionDraft)) && acceptsSaveRef.current)
+  // Clears the rules, keeps the identity, and saves the rest of the draft.
+  const clear = (live: Live) =>
+    live.onSave(
+      savedOf(
+        live,
+        highlightToSave(
+          live.draft.identityColumns,
+          [],
+          live.defaultIdentity,
+          live.savedConfig !== undefined,
+        ),
+      ),
     )
+
+  // Save, or Clear rules.
+  const run = async (command: "save" | "clear"): Promise<void> => {
+    const ticket = session.begin()
+    const live = session.read()
+    const showInteractions = () => {
+      setSection("interactions")
+      if (command === "clear") setFocusTabRequest((n) => n + 1)
+    }
+    if (
+      command === "save" &&
+      live.draft.rules.some(isPatternRule) &&
+      !isRe2Ready()
+    ) {
+      await session.wait(ticket, loadRe2())
+      if (!session.isLive(ticket)) return
+      if (!session.isCurrent(ticket)) return run(command)
+    }
+    // Interactions are complete, and their new variables declare cleanly:
+    // they join every query of the notebook, so the server checks them.
+    // Synchronous unless there are new variables to check, so a plain save
+    // stays one step.
+    const interactionDraft = {
+      interactions: live.interactions,
+      created: live.created,
+    }
+    setInteractionsChecked(true)
+    if (interactionErrors(interactionDraft, live.variables)) {
+      showInteractions()
       return
-    commit(draftRef.current, interactionDraft)
+    }
+    if (newVariablesInUse(interactionDraft).length > 0) {
+      const server = await session.wait(
+        ticket,
+        serverInteractionErrors(interactionDraft, live.variables, (q) =>
+          quest.validateQuery(q),
+        ),
+      )
+      if (!session.isLive(ticket)) return
+      // Edited, or the variables changed, while it waited: check again.
+      if (!session.isCurrent(ticket)) return run(command)
+      setServerProblems(server)
+      if (server) {
+        showInteractions()
+        return
+      }
+    }
+    if (command === "clear") clear(session.read())
+    else commit(session.read())
   }
 
-  useEffect(() => {
-    acceptsSaveRef.current = open
-    return () => {
-      acceptsSaveRef.current = false
-    }
-  }, [open])
-
-  useEffect(() => {
-    draftRef.current = draft
-    configEditedRef.current = configEdited
-    formatsRef.current = formats
-    gridModeRef.current = gridMode
-    interactionsRef.current = { interactions, created }
-  }, [draft, configEdited, formats, gridMode, interactions, created])
+  const start = (command: "save" | "clear") => {
+    if (!session.isBusy()) void run(command)
+  }
 
   return (
     <SettingsDrawerShell
@@ -449,16 +462,12 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       dataHookBase="highlight-settings"
       drawerWidth="48rem"
       onDismiss={onCancel}
-      onCommit={save}
-      committing={saving}
+      onCommit={() => start("save")}
+      committing={session.busy}
       footerStart={
         section === "highlights" &&
         draft.rules.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => void clearRules()}
-          >
+          <Button type="button" variant="ghost" onClick={() => start("clear")}>
             Clear rules
           </Button>
         )
@@ -484,7 +493,6 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
         <InteractionsEditor
           draft={{ interactions, created }}
           onChange={(next) => {
-            interactionsRef.current = next
             setServerProblems(null)
             updateDraft({
               interactions: next.interactions,

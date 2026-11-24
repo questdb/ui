@@ -32,6 +32,7 @@ import { ComponentSettings } from "./ComponentSettings"
 import { ChartCodeBoundary } from "./lazyCharts"
 import { chartOptionsOffered } from "./chartOptions"
 import { SettingsTabs } from "../settingsDrawer/SettingsTabs"
+import { useDraftSession } from "../settingsDrawer/useDraftSession"
 import { ColumnFormatsEditor } from "../CellFormats/ColumnFormatsEditor"
 import { columnsAndSamplesOf } from "../CellFormats/formatSummary"
 import {
@@ -49,6 +50,7 @@ import type { NotebookVariable } from "../../../../store/notebook"
 import {
   DRAW_KINDS,
   draftOf,
+  sameDrawSettings,
   settingsOf,
   starterCustomOption,
   supportsInteractions,
@@ -150,7 +152,6 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   const [serverProblems, setServerProblems] = useState<Partial<
     Record<VariableSlot, string>
   > | null>(null)
-  const [committing, setCommitting] = useState(false)
   const { quest } = useContext(QuestContext)
   const settings = useNotebookSettings()
   const variables = useMemo(
@@ -163,7 +164,6 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
   )
   // Mounting already open means a remount mid-session: keep the draft.
   const wasOpenRef = useRef(open)
-  const saveEpoch = useRef(0)
 
   const updateDraft = useCallback(
     (next: DrawDraft) => {
@@ -188,7 +188,6 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
 
   const dismiss = useCallback(
     (method: SettingsDismissMethod) => {
-      saveEpoch.current++
       telemetry?.onCancel?.(method)
       onClose()
     },
@@ -256,23 +255,23 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     ? (interactionErrors(draft, variables) ?? serverProblems)
     : null
 
-  // A save waiting on the database check goes on only while the drawer is
-  // open, and with the draft as it is then.
-  const acceptsSaveRef = useRef(open)
-  const draftRef = useRef(draft)
-  draftRef.current = draft
-  useEffect(() => {
-    acceptsSaveRef.current = open
-    setCommitting(false)
-    return () => {
-      acceptsSaveRef.current = false
-      saveEpoch.current++
-    }
-  }, [open])
+  // A save that waits on the database check belongs to this session, and
+  // to the draft and variables it checked.
+  const variablesKey = useMemo(
+    () => JSON.stringify(variables.map((v) => [v.name, v.value])),
+    [variables],
+  )
+  const session = useDraftSession({
+    open,
+    config: saved,
+    sameConfig: sameDrawSettings,
+    inputs: [draft, variablesKey],
+    live: { draft, variables, saved, tabs, telemetry, onSave, onClose },
+  })
 
   const commit = async (): Promise<void> => {
-    if (committing) return
-    const original = draftRef.current
+    const ticket = session.begin()
+    const { draft: original, variables } = session.read()
     const draft = supportsInteractions(original)
       ? original
       : { ...original, interactions: undefined }
@@ -293,16 +292,16 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
     }
     // New variables join every query of the notebook: the server checks them.
     if (newVariablesInUse(draft).length > 0) {
-      const epoch = saveEpoch.current
-      setCommitting(true)
-      const server = await serverInteractionErrors(draft, variables, (q) =>
-        quest.validateQuery(q),
-      ).finally(() => {
-        if (saveEpoch.current === epoch) setCommitting(false)
-      })
-      if (!acceptsSaveRef.current || saveEpoch.current !== epoch) return
-      // Edited while the database checked: check the edits instead.
-      if (draftRef.current !== original) return commit()
+      const server = await session.wait(
+        ticket,
+        serverInteractionErrors(draft, variables, (q) =>
+          quest.validateQuery(q),
+        ),
+      )
+      if (!session.isLive(ticket)) return
+      // Edited, or the variables changed, while the database checked: check
+      // again.
+      if (!session.isCurrent(ticket)) return commit()
       setServerProblems(server)
       if (server) {
         setSection("interactions")
@@ -310,13 +309,14 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
       }
     }
     // Only what the user changed is saved; the rest stays as saved.
+    const { saved, tabs, telemetry: track, onSave, onClose } = session.read()
     const result = settingsOf(original, saved, tabs)
     if (!result.ok) {
       setSaveError(result.error)
       setSection("chart")
       return
     }
-    telemetry?.onSave?.({
+    track?.onSave?.({
       ...savePayloadOf(draft.chart, tabs),
       kind: draft.kind,
     })
@@ -333,8 +333,10 @@ export const DrawSettingsDrawer: React.FC<Props> = ({
       dataHookBase="chart-settings"
       drawerWidth="44rem"
       onDismiss={dismiss}
-      onCommit={() => void commit()}
-      committing={committing}
+      onCommit={() => {
+        if (!session.isBusy()) void commit()
+      }}
+      committing={session.busy}
       footerNote={
         saveError && (
           <SaveError role="alert">
