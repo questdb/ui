@@ -336,10 +336,15 @@ const scatterEncoding = (q: ResolvedQuery) => {
 // Bound the dense stack before allocating ECharts' per-series slots.
 const MAX_PERCENT_STACK_SLOTS = 40_000
 
-export const percentStackProblem = (
-  queries: ResolvedQuery[],
-): string | undefined => {
+/**
+ * Why a chart that shows shares of a total cannot be drawn: a pie or a 100%
+ * stack drawn from a row-capped result would show the shares of the rows
+ * that came back, not of the whole; a stack also has a size limit.
+ */
+export const sharesProblem = (queries: ResolvedQuery[]): string | undefined => {
   const anchor = queries[0]
+  if (anchor?.type === "pie" && anchor.partial)
+    return `Q${anchor.index + 1}: a pie requires complete results. Narrow the query or aggregate the result in SQL.`
   if (anchor && anchor.type !== "pie" && drawsAlone(anchor)) return
   for (const q of queries) {
     if (!isPercentStack(q)) continue
@@ -1329,7 +1334,7 @@ export const buildEchartsOption = (
   }
 
   const anchor = queries[0]
-  if (!anchor || percentStackProblem(queries))
+  if (!anchor || sharesProblem(queries))
     return { tooltip: { textStyle: chartText } }
 
   const single = queries.length === 1

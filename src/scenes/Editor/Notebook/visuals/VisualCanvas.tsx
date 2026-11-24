@@ -16,6 +16,7 @@ import {
   type Pick,
 } from "../interactions/selection"
 import type { StatementRows } from "./statementRows"
+import { incompleteResultProblem } from "./visualCatalog"
 import {
   chordOption,
   gaugeOption,
@@ -141,10 +142,19 @@ export const VisualCanvas = ({
   const builder = ECHARTS_VISUALS[visual.type]
   const mapStatus = useWorldMap(visual.type === "map")
   const click = interactions?.click
+  // Every visual but the order book (which reports each side) draws from the
+  // first statement, so its failure is the visual's failure, not "no rows".
+  // A visual that needs every row is not drawn from a row-capped result.
+  const primaryError =
+    visual.type === "orderBook" ? null : (statementErrors?.[0] ?? null)
+  const primaryFailure =
+    primaryError === null
+      ? (incompleteResultProblem(visual, statements) ?? null)
+      : `Query failed: ${primaryError}`
   // A map fits its view to the regions once the world map has loaded.
   const built = useMemo(
     () =>
-      builder && mapStatus === "ready"
+      builder && mapStatus === "ready" && primaryFailure === null
         ? builder({
             visual,
             statements,
@@ -152,7 +162,15 @@ export const VisualCanvas = ({
             formats,
           })
         : null,
-    [builder, visual, statements, theme.color, formats, mapStatus],
+    [
+      builder,
+      visual,
+      statements,
+      theme.color,
+      formats,
+      mapStatus,
+      primaryFailure,
+    ],
   )
   // What a click on an item of an HTML visual writes, and the click.
   const clickColumn = click?.column
@@ -167,13 +185,6 @@ export const VisualCanvas = ({
       }
     : undefined
   const pickable = click ? literalOf : undefined
-
-  // Every visual but the order book (which reports each side) draws from the
-  // first statement, so its failure is the visual's failure, not "no rows".
-  const primaryError =
-    visual.type === "orderBook" ? null : (statementErrors?.[0] ?? null)
-  const primaryFailure =
-    primaryError === null ? null : `Query failed: ${primaryError}`
 
   // What was drawn, for the agent.
   useEffect(() => {

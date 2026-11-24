@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import { clearRenderReport, getRenderReport } from "../renderReports"
 import { VisualCanvas } from "./VisualCanvas"
+import type { StatementRows } from "./statementRows"
 import { VISUAL_CATALOG } from "./visualCatalog"
 import { ThemeProvider } from "styled-components"
 import { lightTheme } from "../../../../theme"
@@ -364,37 +365,123 @@ describe("VisualCanvas", () => {
     },
   )
 
-  it.each(
-    VISUAL_CATALOG.filter((spec) => spec.partialResult === "refuse").map(
-      (spec) => spec.type,
-    ),
-  )("refuses a row-capped result for %s, as its catalog entry says", (type) => {
-    // Given a capped result that would otherwise draw
-    renderComponent(
-      <VisualCanvas
-        {...defaults}
-        visual={{ type }}
-        statements={[
-          {
-            columns: [
-              { name: "ts", type: "TIMESTAMP" },
-              { name: "source", type: "SYMBOL" },
-              { name: "target", type: "SYMBOL" },
-              { name: "amount", type: "DOUBLE" },
-              { name: "other", type: "DOUBLE" },
-            ],
-            rows: [["2026-01-01T00:00:00.000000Z", "east", "west", 10, 2]],
-            partial: true,
-          },
-        ]}
-      />,
-    )
+  // A valid result for every visual that refuses a row-capped one, so the
+  // refusal below comes from the row limit, not a missing column.
+  const t = (h: number) => `2026-01-01T0${h}:00:00.000000Z`
+  const COMPLETE_ROWS: Record<string, StatementRows> = {
+    states: {
+      columns: [
+        { name: "ts", type: "TIMESTAMP" },
+        { name: "lane", type: "SYMBOL" },
+        { name: "state", type: "SYMBOL" },
+      ],
+      rows: [
+        [t(0), "a", "up"],
+        [t(1), "a", "down"],
+      ],
+    },
+    tree: {
+      columns: [
+        { name: "sector", type: "SYMBOL" },
+        { name: "v", type: "DOUBLE" },
+      ],
+      rows: [
+        ["a", 1],
+        ["b", 2],
+      ],
+    },
+    flows: {
+      columns: [
+        { name: "source", type: "SYMBOL" },
+        { name: "target", type: "SYMBOL" },
+        { name: "amount", type: "DOUBLE" },
+      ],
+      rows: [
+        ["a", "b", 1],
+        ["b", "c", 2],
+      ],
+    },
+    cells: {
+      columns: [
+        { name: "ts", type: "TIMESTAMP" },
+        { name: "price", type: "DOUBLE" },
+        { name: "size", type: "DOUBLE" },
+      ],
+      rows: [
+        [t(0), 100, 5],
+        [t(1), 101, 3],
+      ],
+    },
+    levels: {
+      columns: [
+        { name: "price", type: "DOUBLE" },
+        { name: "buy", type: "DOUBLE" },
+        { name: "sell", type: "DOUBLE" },
+      ],
+      rows: [
+        [100, 1, 2],
+        [101, 3, 1],
+      ],
+    },
+    footprint: {
+      columns: [
+        { name: "ts", type: "TIMESTAMP" },
+        { name: "lvl", type: "DOUBLE" },
+        { name: "buy", type: "DOUBLE" },
+        { name: "sell", type: "DOUBLE" },
+      ],
+      rows: [
+        [t(0), 100, 1, 2],
+        [t(0), 125, 3, 1],
+      ],
+    },
+  }
+  const ROWS_OF: Record<string, keyof typeof COMPLETE_ROWS> = {
+    uptime: "states",
+    stateTimeline: "states",
+    treemap: "tree",
+    sunburst: "tree",
+    sankey: "flows",
+    graph: "flows",
+    chord: "flows",
+    liquidityHeatmap: "cells",
+    volumeProfile: "levels",
+    footprint: "footprint",
+  }
 
-    // Then the agent report says why nothing was drawn
-    expect(getRenderReport(bufferId, cellId)?.problems[0]?.severity).toBe(
-      "error",
-    )
-  })
+  it.each(
+    VISUAL_CATALOG.flatMap((spec) =>
+      spec.partialResult === "draw"
+        ? []
+        : [[spec.type, spec.partialResult.refuse] as const],
+    ),
+  )(
+    "draws %s from a complete result and refuses a row-capped one",
+    (type, why) => {
+      // Given a valid result for the visual
+      const rows = COMPLETE_ROWS[ROWS_OF[type]]
+      expect(rows).toBeDefined()
+      const report = (statement: StatementRows) => {
+        const { unmount } = renderComponent(
+          <VisualCanvas
+            {...defaults}
+            visual={{ type }}
+            statements={[statement]}
+          />,
+        )
+        const problems = getRenderReport(bufferId, cellId)?.problems ?? []
+        unmount()
+        return problems
+      }
+
+      // When it comes back whole, then it draws
+      expect(report(rows).filter((p) => p.severity === "error")).toEqual([])
+      // When the same rows were cut at the row limit, then it says why not
+      expect(report({ ...rows, partial: true })).toEqual([
+        { message: why, severity: "error" },
+      ])
+    },
+  )
 
   it("does not draw a Sankey from an incomplete result", () => {
     // Given an otherwise valid flow in a capped statement result

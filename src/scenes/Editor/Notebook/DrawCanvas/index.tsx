@@ -6,7 +6,7 @@ import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import {
   buildEchartsOption,
-  percentStackProblem,
+  sharesProblem,
 } from "../CellChart/buildEchartsOption"
 import type { ChartRendererHandle } from "../CellChart/ChartRenderer"
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
@@ -396,9 +396,7 @@ export const DrawCanvas: React.FC<Props> = ({
 
   const stackProblem = useMemo(
     () =>
-      !visual && !custom
-        ? percentStackProblem(resolution.renderQueries)
-        : undefined,
+      !visual && !custom ? sharesProblem(resolution.renderQueries) : undefined,
     [visual, custom, resolution.renderQueries],
   )
   const empty =

@@ -348,29 +348,6 @@ it("keeps a named liquidity bucket selection with the rendered row", () => {
   )
 })
 
-it("withholds a liquidity heatmap when the bucket grid is incomplete", () => {
-  const result = liquidityHeatmapOption({
-    visual: { type: "liquidityHeatmap" },
-    colors: lightColors,
-    formats: {},
-    statements: [
-      {
-        ...rows(
-          [
-            ["ts", "TIMESTAMP"],
-            ["price", "DOUBLE"],
-            ["size", "DOUBLE"],
-          ],
-          [["2026-01-01T00:00:00Z", 10, 1]],
-        ),
-        partial: true,
-      },
-    ],
-  })
-  expect(result.option).toBeNull()
-  expect(result.problems[0].message).toContain("complete set of buckets")
-})
-
 it("retains exact leaf selections but doesn't pick among conflicting rows", () => {
   const statements = [
     rows(
@@ -789,27 +766,6 @@ it("keeps the mapped point’s exact selection field separate from its coordinat
 })
 
 describe("volumeProfileOption", () => {
-  it("does not report point of control for a capped prefix", () => {
-    const result = volumeProfileOption({
-      visual: { type: "volumeProfile" },
-      statements: [
-        {
-          ...rows(
-            [
-              ["price", "DOUBLE"],
-              ["volume", "DOUBLE"],
-            ],
-            [[10, 2]],
-          ),
-          partial: true,
-        },
-      ],
-      colors: lightColors,
-      formats: {},
-    })
-    expect(result.option).toBeNull()
-    expect(result.problems[0]?.message).toContain("requires a complete result")
-  })
   const common = { colors: lightColors, formats: {} }
   it("anchors POC to the winning bar, not a rounded display label", () => {
     const result = volumeProfileOption({
@@ -1551,16 +1507,8 @@ describe("footprintOption", () => {
     expect(written).toBe("125")
   })
 
-  it("refuses a capped result and names a missing column", () => {
+  it("names a missing column", () => {
     // Given / When / Then
-    expect(
-      footprintOption({
-        visual: { type: "footprint" },
-        statements: [{ ...levels, partial: true }],
-        colors: lightColors,
-        formats: {},
-      }).problems[0]?.message,
-    ).toContain("requires every price level")
     expect(
       footprintOption({
         visual: { type: "footprint", columns: { sell: "asks" } },

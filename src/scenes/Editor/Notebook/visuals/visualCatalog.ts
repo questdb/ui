@@ -33,10 +33,11 @@ export type VisualSpec = {
   // Text columns from outer to inner level (treemap, sunburst).
   path?: boolean
   options: VisualOption[]
-  // A row-capped result: "refuse" when a prefix of the rows would draw a
-  // wrong total, duration or flow (the builder shows why instead), "draw"
-  // when what a prefix shows is still correct.
-  partialResult: "refuse" | "draw"
+  // A row-capped result: refused, with why, when a prefix of the rows would
+  // draw a wrong total, duration or flow; "draw" when what a prefix shows is
+  // still correct. Checked once, before the visual is built
+  // (incompleteResultProblem).
+  partialResult: { refuse: string } | "draw"
 }
 
 const value = (fallback = "First numeric column"): RoleSpec => ({
@@ -166,7 +167,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       "Rows of time, lane and state. Each lane shows its current state, bars coloured by the worst state in each slice of time, and its uptime.",
     roles: stateRoles,
     options: ["buckets", "severity"],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "Uptime requires a complete result. Narrow the time window or aggregate the query.",
+    },
   },
   {
     type: "stateTimeline",
@@ -174,7 +178,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     shape: "Rows of time, lane and state, drawn as coloured bands per lane.",
     roles: stateRoles,
     options: ["severity"],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "A state timeline requires a complete result. Narrow the time window or aggregate the query.",
+    },
   },
   {
     type: "treemap",
@@ -193,7 +200,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     ],
     path: true,
     options: [],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "The query returned only part of its rows. Aggregate by path in SQL or reduce the result before drawing this hierarchy.",
+    },
   },
   {
     type: "sunburst",
@@ -212,7 +222,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     ],
     path: true,
     options: [],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "The query returned only part of its rows. Aggregate by path in SQL or reduce the result before drawing this hierarchy.",
+    },
   },
   {
     type: "sankey",
@@ -220,7 +233,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     shape: "One row per flow: from, to and how much.",
     roles: flowRoles,
     options: [],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "The query returned only part of its rows. Aggregate flows in SQL or reduce the result before drawing this Sankey chart.",
+    },
   },
   {
     type: "graph",
@@ -229,7 +245,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       "One row per link: from, to and its weight. Nodes are sized by their total flow.",
     roles: flowRoles,
     options: [],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "The query returned only part of its rows. Aggregate links in SQL or reduce the result before drawing.",
+    },
   },
   {
     type: "chord",
@@ -237,7 +256,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
     shape: "One row per flow: from, to and how much, drawn around a circle.",
     roles: flowRoles,
     options: [],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "The query returned only part of its rows. Aggregate links in SQL or reduce the result before drawing.",
+    },
   },
   {
     type: "map",
@@ -298,7 +320,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       value("Second numeric column"),
     ],
     options: [],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "Liquidity heatmap requires a complete set of buckets. Narrow the query or aggregate into larger buckets in SQL.",
+    },
   },
   {
     type: "volumeProfile",
@@ -323,7 +348,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       },
     ],
     options: [],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "Volume profile requires a complete result to calculate the point of control. Aggregate by price in SQL or narrow the query.",
+    },
   },
   {
     type: "footprint",
@@ -357,7 +385,10 @@ export const VISUAL_CATALOG: VisualSpec[] = [
       },
     ],
     options: [],
-    partialResult: "refuse",
+    partialResult: {
+      refuse:
+        "Footprint requires every price level of every bar to find each bar's point of control. Narrow the time range or use larger price levels in SQL.",
+    },
   },
   {
     type: "planTree",
@@ -388,3 +419,15 @@ export const HTML_VISUAL_TYPES: ReadonlySet<string> = new Set([
   "uptime",
   "planTree",
 ])
+
+/**
+ * Why a visual is not drawn from its result: the result was capped at the
+ * row limit and the visual's catalog entry refuses a prefix of the rows.
+ */
+export const incompleteResultProblem = (
+  visual: { type: VisualType },
+  statements: readonly ({ partial?: true } | null)[],
+): string | undefined => {
+  const policy = visualSpecOf(visual.type).partialResult
+  return policy !== "draw" && statements[0]?.partial ? policy.refuse : undefined
+}

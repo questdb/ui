@@ -74,10 +74,6 @@ export const readStateSegments = (
   rows: StatementRows | null,
 ): StateSegments | string => {
   if (!rows || rows.rows.length === 0) return "The query returned no rows."
-  // A prefix of the rows would end each lane's last state at the cut and
-  // drop the lanes after it.
-  if (rows.partial)
-    return `${visual.type === "uptime" ? "Uptime" : "A state timeline"} requires a complete result. Narrow the time window or aggregate the query.`
   const c = visual.columns ?? {}
   const names = () => rows.columns.map((x) => x.name).join(", ")
   const timeIdx =

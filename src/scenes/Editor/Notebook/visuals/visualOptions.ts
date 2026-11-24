@@ -351,8 +351,6 @@ const hierarchy = (
   ctx: VisualContext,
 ): { tree: TreeNode[]; valueName: string; colorName?: string } | string => {
   const rows = ctx.statements[0]
-  if (rows?.partial)
-    return "The query returned only part of its rows. Aggregate by path in SQL or reduce the result before drawing this hierarchy."
   if (!rows || rows.rows.length === 0) return "The query returned no rows."
   const c = ctx.visual.columns ?? {}
   const pathIdx = c.path
@@ -604,8 +602,6 @@ export const sunburstOption = (ctx: VisualContext): VisualBuild => {
 
 const edges = (ctx: VisualContext) => {
   const rows = ctx.statements[0]
-  if (rows?.partial)
-    return "The query returned only part of its rows. Aggregate links in SQL or reduce the result before drawing."
   if (!rows || rows.rows.length === 0) return "The query returned no rows."
   const c = ctx.visual.columns ?? {}
   const fromIdx = columnIndex(rows, c.from, 0)
@@ -713,10 +709,6 @@ export const graphOption = (ctx: VisualContext): VisualBuild => {
 }
 
 export const sankeyOption = (ctx: VisualContext): VisualBuild => {
-  if (ctx.statements[0]?.partial)
-    return missing(
-      "The query returned only part of its rows. Aggregate flows in SQL or reduce the result before drawing this Sankey chart.",
-    )
   const e = edges(ctx)
   if (typeof e === "string") return missing(e)
   if (e.links.length > MAX_SANKEY_LINKS)
@@ -1098,10 +1090,6 @@ export const liquidityHeatmapOption = ({
   formats,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
-  if (rows?.partial)
-    return missing(
-      "Liquidity heatmap requires a complete set of buckets. Narrow the query or aggregate into larger buckets in SQL.",
-    )
   if (!rows || rows.rows.length === 0)
     return missing("The query returned no rows.")
   const c = visual.columns ?? {}
@@ -1234,10 +1222,6 @@ export const volumeProfileOption = ({
   formats,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
-  if (rows?.partial)
-    return missing(
-      "Volume profile requires a complete result to calculate the point of control. Aggregate by price in SQL or narrow the query.",
-    )
   if (!rows || rows.rows.length === 0)
     return missing("The query returned no rows.")
   const c = visual.columns ?? {}
@@ -1463,10 +1447,6 @@ export const footprintOption = ({
   formats,
 }: VisualContext): VisualBuild => {
   const rows = statements[0]
-  if (rows?.partial)
-    return missing(
-      "Footprint requires every price level of every bar to find each bar's point of control. Narrow the time range or use larger price levels in SQL.",
-    )
   if (!rows || rows.rows.length === 0)
     return missing("The query returned no rows.")
   const c = visual.columns ?? {}

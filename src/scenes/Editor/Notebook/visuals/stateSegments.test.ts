@@ -67,24 +67,6 @@ it("counts overlapping intervals of the same state once in hover buckets", () =>
   expect(bucket?.time.get("down")).toBe(6)
 })
 
-it("does not calculate uptime for a server-capped result", () => {
-  const result: StatementRows = {
-    columns: [
-      { name: "ts", type: "TIMESTAMP" },
-      { name: "lane", type: "SYMBOL" },
-      { name: "state", type: "SYMBOL" },
-    ],
-    rows: [["2026-01-01T00:00:00Z", "primary", "up"]],
-    partial: true,
-  }
-  expect(readStateSegments({ type: "uptime" }, result)).toContain(
-    "requires a complete result",
-  )
-  expect(readStateSegments({ type: "stateTimeline" }, result)).toContain(
-    "requires a complete result",
-  )
-})
-
 const states = (data: [number, string, string][]): StatementRows => ({
   columns: [
     { name: "ts", type: "TIMESTAMP" },

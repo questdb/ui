@@ -10,7 +10,7 @@ import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
 import {
   buildEchartsOption,
-  percentStackProblem,
+  sharesProblem,
 } from "../../Editor/Notebook/CellChart/buildEchartsOption"
 import type { ChartRendererHandle } from "../../Editor/Notebook/CellChart/ChartRenderer"
 import {
@@ -192,8 +192,7 @@ export const ResultChart: React.FC<Props> = ({
   )
 
   const stackProblem = useMemo(
-    () =>
-      resolution ? percentStackProblem(resolution.renderQueries) : undefined,
+    () => (resolution ? sharesProblem(resolution.renderQueries) : undefined),
     [resolution],
   )
 

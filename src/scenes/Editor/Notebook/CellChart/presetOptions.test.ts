@@ -363,6 +363,40 @@ describe("preset options", () => {
     ).toHaveLength(2)
   })
 
+  it("refuses a pie of a row-capped result, whose shares would be of the rows that came back", () => {
+    // Given a pie over a result cut at the row limit (3 rows, 2 returned)
+    const sql = "SELECT fuel, mw FROM mix"
+    const result = (count: number) => ({
+      type: "dql" as const,
+      query: sql,
+      count,
+      columns: [col("fuel", "SYMBOL"), col("mw", "DOUBLE")],
+      dataset: [
+        ["gas", 2],
+        ["wind", 1],
+      ],
+    })
+    const pie = {
+      xColumn: "fuel",
+      queries: [{ type: "pie" as const, yColumns: ["mw"] }],
+    }
+
+    // When / Then it says why and draws nothing; the complete result draws
+    const capped = resolveDraw([sql], [result(3)], pie)
+    expect(drawProblems(capped, undefined)).toContainEqual({
+      severity: "error",
+      message:
+        "Q1: a pie requires complete results. Narrow the query or aggregate the result in SQL.",
+    })
+    expect(
+      buildEchartsOption(capped.chart, capped.renderQueries).series,
+    ).toBeUndefined()
+    const whole = resolveDraw([sql], [result(2)], pie)
+    expect(
+      buildEchartsOption(whole.chart, whole.renderQueries).series,
+    ).toHaveLength(1)
+  })
+
   it("enables per-row Band hit targets only for configured selections", () => {
     const band = query({
       type: "band",
