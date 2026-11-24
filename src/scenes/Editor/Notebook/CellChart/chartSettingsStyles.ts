@@ -1,6 +1,6 @@
 import styled, { css } from "styled-components"
 import {
-  MultiSelect,
+  SearchableSelect,
   SelectMenuControl,
   TOOLBAR_CONTROL_HEIGHT,
 } from "../../../../components"
@@ -19,7 +19,7 @@ export const SettingsSelect = styled(SelectMenuControl)`
   ${settingsSelectHeight}
 `
 
-export const SettingsMultiSelect = styled(MultiSelect)`
+export const SettingsSearchableSelect = styled(SearchableSelect)`
   ${settingsSelectHeight}
 `
 

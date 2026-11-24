@@ -15,8 +15,9 @@ import {
   FieldGroup,
   FieldLabel,
   SettingsSelect,
-  SettingsMultiSelect,
+  SettingsSearchableSelect,
 } from "./chartSettingsStyles"
+import { summarizePicked, togglePicked } from "./multiPick"
 import type { StatementRows } from "../visuals/statementRows"
 import {
   VISUAL_CATALOG,
@@ -207,6 +208,7 @@ export const ComponentSettings: React.FC<Props> = ({
     set("severity", Object.keys(next).length > 0 ? next : undefined)
   }
 
+  const levels = visual.columns?.path ?? []
   const pathOptions = columns
     .filter((c) => accepts("categorical", c.type))
     .map((c) => ({ label: c.name, value: c.name }))
@@ -242,14 +244,22 @@ export const ComponentSettings: React.FC<Props> = ({
         {spec.path && (
           <Field as="div">
             <FieldLabel>Levels (in column order)</FieldLabel>
-            <SettingsMultiSelect
-              name="Levels"
-              value={visual.columns?.path ?? []}
-              onChange={(path) =>
-                setColumns({ path: path.length > 0 ? path : undefined })
-              }
+            <SettingsSearchableSelect
+              ariaLabel="Levels"
               options={pathOptions}
+              value={summarizePicked(levels, pathOptions)}
+              selectedValues={levels}
+              allowCreate={false}
+              onSelect={(name) => {
+                const path = togglePicked(levels, name, pathOptions)
+                setColumns({ path: path.length > 0 ? path : undefined })
+              }}
+              onReset={() => setColumns({ path: undefined })}
               placeholder="Default: every text column"
+              searchPlaceholder="Column name"
+              emptyLabel="No text columns"
+              noMatchLabel="No columns matched"
+              dataHookBase="component-levels"
             />
           </Field>
         )}

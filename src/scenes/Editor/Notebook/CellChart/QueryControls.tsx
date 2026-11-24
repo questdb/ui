@@ -5,7 +5,6 @@ import {
   Checkbox,
   CopyButton,
   Input,
-  SearchableSelect,
   Text,
 } from "../../../../components"
 import { HighlightedSql } from "../../../../components/HighlightedSql"
@@ -35,8 +34,9 @@ import {
   FieldLabel,
   IncompatibleIcon,
   SettingsSelect,
-  SettingsMultiSelect,
+  SettingsSearchableSelect,
 } from "./chartSettingsStyles"
+import { summarizePicked, togglePicked } from "./multiPick"
 
 const TYPE_LABELS: Record<ChartType, string> = {
   line: "Line",
@@ -215,28 +215,6 @@ export type QueryControlsProps = {
   // Offer "Events" for statements after the first that have a timestamp:
   // their rows mark the chart's time axis (notebook charts).
   offerEvents?: boolean
-}
-
-type ColumnOption = { label: string; value: string }
-
-const summarizeSeries = (value: string[], options: ColumnOption[]): string => {
-  if (value.length === 0) return "None selected"
-  if (value.length === options.length && options.length > 0)
-    return `All (${options.length})`
-  if (value.length <= 2) return value.join(", ")
-  return `${value.length} of ${options.length}`
-}
-
-// Toggles a series and keeps the columns' query order, so persisted
-// selections stay stable across toggles.
-const toggleSeries = (
-  value: string[],
-  name: string,
-  options: ColumnOption[],
-): string[] => {
-  if (value.includes(name)) return value.filter((v) => v !== name)
-  const next = new Set([...value, name])
-  return options.filter((o) => next.has(o.value)).map((o) => o.value)
 }
 
 export const QueryControls: React.FC<QueryControlsProps> = ({
@@ -507,15 +485,15 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           <FieldLabel>
             {query.type === "band" ? "Lines inside the band" : "Series"}
           </FieldLabel>
-          <SearchableSelect
+          <SettingsSearchableSelect
             ariaLabel="Series"
             options={numericOptions}
-            value={summarizeSeries(query.yColumns, numericOptions)}
+            value={summarizePicked(query.yColumns, numericOptions)}
             selectedValues={query.yColumns}
             allowCreate={false}
             onSelect={(name) =>
               onUpdateQuery({
-                yColumns: toggleSeries(query.yColumns, name, numericOptions),
+                yColumns: togglePicked(query.yColumns, name, numericOptions),
               })
             }
             onReset={() => onUpdateQuery({ yColumns: [] })}
