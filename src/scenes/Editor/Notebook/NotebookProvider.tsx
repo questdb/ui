@@ -102,7 +102,7 @@ import {
 } from "./cellVirtualization/CellVirtualizationContext"
 import {
   clearChartZoom,
-  clearChartZooms,
+  clearNotebookChartZooms,
 } from "./cellVirtualization/chartZoomStore"
 import { clearSettingsDrawerSessions } from "./settingsDrawer/settingsDrawerSessions"
 import { createResultTrendStore } from "./result-table/resultTrendStore"
@@ -589,7 +589,7 @@ export const NotebookProvider: React.FC<{
         for (const cellId of out.cleanup.cellIds) {
           abortCellRun(cellId, "cell_deleted")
           removeNotebookCellLayouts(bufferId, cellId)
-          clearChartZoom(cellId)
+          clearChartZoom({ bufferId, cellId })
           clearSettingsDrawerSessions(cellId)
         }
       }
@@ -756,7 +756,7 @@ export const NotebookProvider: React.FC<{
   useEffect(
     () => () => {
       resetChartEntryAnimation(bufferId)
-      clearChartZooms(cellsRef.current.map((c) => c.id))
+      clearNotebookChartZooms(bufferId)
       cellsRef.current.forEach((c) => clearSettingsDrawerSessions(c.id))
     },
     [bufferId, cellsRef],

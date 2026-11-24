@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef } from "react"
 import styled, { useTheme } from "styled-components"
 import type { EChartsType } from "echarts"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
@@ -8,7 +8,6 @@ import {
   buildEchartsOption,
   sharesProblem,
 } from "../CellChart/buildEchartsOption"
-import type { ChartRendererHandle } from "../CellChart/ChartRenderer"
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
@@ -29,10 +28,6 @@ import {
   type CellFetchState,
 } from "../cellRefresh/cellRefreshEngine"
 import { useChartLoading } from "../cells/useChartLoading"
-import {
-  getChartZoom,
-  setChartZoom,
-} from "../cellVirtualization/chartZoomStore"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { ChartSettingsTelemetry } from "../CellChart/chartSettingsTelemetry"
@@ -192,14 +187,10 @@ export const DrawCanvas: React.FC<Props> = ({
   const drawState = useCellFetchSelector(cell.id, selectDrawState, shallowEqual)
   const { loading } = useChartLoading(cell)
 
-  const [zoomStart, setZoomStart] = useState(
-    () => getChartZoom(cell.id)?.start ?? 0,
+  const zoomScope = useMemo(
+    () => ({ bufferId, cellId: cell.id }),
+    [bufferId, cell.id],
   )
-  const [zoomEnd, setZoomEnd] = useState(
-    () => getChartZoom(cell.id)?.end ?? 100,
-  )
-
-  const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
   const state: DrawState = useMemo(
     () => drawState ?? pendingCellFetchState(cell.value),
@@ -213,29 +204,6 @@ export const DrawCanvas: React.FC<Props> = ({
   const results =
     chartResult.kind === "settled" ? chartResult.results : NO_RESULTS
   const hadError = chartResult.kind === "settled" && chartResult.hadError
-
-  const handleZoomChange = useCallback(
-    (
-      start: number,
-      end: number,
-      bounds?: NonNullable<ReturnType<typeof getChartZoom>>["bounds"],
-    ) => {
-      setZoomStart(start)
-      setZoomEnd(end)
-      setChartZoom(cell.id, start, end, bounds)
-    },
-    [cell.id],
-  )
-
-  const handleResetZoom = useCallback(
-    (localOnly = false) => {
-      chartRendererRef.current?.resetZoom(localOnly)
-      setZoomStart(0)
-      setZoomEnd(100)
-      setChartZoom(cell.id, 0, 100)
-    },
-    [cell.id],
-  )
 
   const resolution = useMemo(
     () => resolveDraw(queries, results, cell.chartConfig),
@@ -344,7 +312,6 @@ export const DrawCanvas: React.FC<Props> = ({
       leaveSyncRef.current?.()
       leaveSyncRef.current = null
       if (!instance) return
-      armBrush(instance, cell.interactions)
       const leaveSync = joinChartSync(bufferId, instance)
       // Agents ask for a picture of the chart (get_cell_image).
       const unregister = registerCellChart(bufferId, cell.id, instance)
@@ -353,9 +320,14 @@ export const DrawCanvas: React.FC<Props> = ({
         unregister()
       }
     },
-    [bufferId, cell.id, cell.interactions],
+    [bufferId, cell.id],
   )
   useEffect(() => () => leaveSyncRef.current?.(), [])
+  // A full redraw drops the brush cursor; each draw takes it again.
+  const handleDraw = useCallback(
+    (instance: EChartsType) => armBrush(instance, cell.interactions),
+    [cell.interactions],
+  )
 
   // What the preset chart drew, for the agent (visuals and custom charts
   // report their own). It is written again when a blocked chart is drawn
@@ -463,14 +435,6 @@ export const DrawCanvas: React.FC<Props> = ({
     visual,
   ])
 
-  useEffect(() => {
-    const reset = (payload?: { cellId?: string; localOnly?: boolean }) => {
-      if (payload?.cellId === cell.id) handleResetZoom(payload.localOnly)
-    }
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
-    return () => eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
-  }, [cell.id, handleResetZoom])
-
   return (
     <Wrapper>
       <VisuallyHiddenStatus role="status">
@@ -526,6 +490,7 @@ export const DrawCanvas: React.FC<Props> = ({
                 isFocused={isFocused}
                 events={events}
                 onInstance={handleInstance}
+                onDraw={handleDraw}
               />
             ) : custom ? (
               <LazyCustomChart
@@ -538,29 +503,17 @@ export const DrawCanvas: React.FC<Props> = ({
                 isFocused={isFocused}
                 events={events}
                 onInstance={handleInstance}
+                onDraw={handleDraw}
               />
             ) : (
               <LazyChartRenderer
-                ref={chartRendererRef}
                 option={option}
-                specKey={JSON.stringify([
-                  preciseTimePointer,
-                  resolution.chart.horizontal === true,
-                  resolution.chart.thresholds ?? null,
-                  resolution.renderQueries.map(({ percentStack, scatter }) => [
-                    percentStack === true,
-                    scatter?.size ?? null,
-                    scatter?.color ?? null,
-                  ]),
-                ])}
-                onZoomChange={handleZoomChange}
+                zoomScope={zoomScope}
                 isFocused={isFocused}
                 animate={animatesAt(refreshIntervalMs)}
-                zoomWindow={
-                  getChartZoom(cell.id) ?? { start: zoomStart, end: zoomEnd }
-                }
                 events={events}
                 onInstance={handleInstance}
+                onDraw={handleDraw}
               />
             )}
           </ChartSuspense>

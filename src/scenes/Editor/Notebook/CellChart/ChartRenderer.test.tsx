@@ -8,6 +8,11 @@ import { renderComponent } from "../../../../test/component"
 import { darkTheme, lightTheme } from "../../../../theme"
 import { ChartRenderer } from "./ChartRenderer"
 import { echarts } from "./echartsSetup"
+import {
+  chartZoomed,
+  clearChartZoom,
+  setChartZoom,
+} from "../cellVirtualization/chartZoomStore"
 
 vi.mock("../NotebookProvider", () => ({ useNotebookBufferId: () => undefined }))
 
@@ -44,7 +49,6 @@ it("does not retain a removed overlay when a plain series takes its slot", async
   const view = (withMarker: boolean) => (
     <ChartRenderer
       animate={false}
-      zoomWindow={{ start: 0, end: 100 }}
       height={400}
       option={{
         xAxis: { type: "value" },
@@ -86,8 +90,8 @@ it("does not retain a removed overlay when a plain series takes its slot", async
   expect(original).toBeDefined()
   rerender(view(false))
   await waitFor(() => {
-    expect(current()).toBeDefined()
-    expect(current()).not.toBe(original)
+    // The same instance draws the new option in full: no remount
+    expect(current()).toBe(original)
     const options = current()?.getOption() as {
       series: { name: string; markLine?: unknown }[]
     }
@@ -101,7 +105,6 @@ it("removes a horizontal bar chart's unused top scale", async () => {
   const view = (secondary: boolean) => (
     <ChartRenderer
       animate={false}
-      zoomWindow={{ start: 0, end: 100 }}
       height={400}
       option={{
         xAxis: secondary
@@ -147,15 +150,12 @@ it("uses the current data and restores zoom when the chart theme changes", async
       },
     ],
   })
-  const view = (
-    theme: typeof lightTheme,
-    reading: number,
-    zoomWindow = { start: 0, end: 100 },
-  ) => (
+  const scope = { bufferId: 61, cellId: "theme" }
+  const view = (theme: typeof lightTheme, reading: number) => (
     <ThemeProvider theme={theme}>
       <ChartRenderer
         option={option(reading)}
-        zoomWindow={zoomWindow}
+        zoomScope={scope}
         animate={false}
         height={400}
       />
@@ -188,16 +188,19 @@ it("uses the current data and restores zoom when the chart theme changes", async
   expect(currentZoom()).toContainEqual(zoom)
 
   // When the user changes theme, then the current frame and range survive
-  rerender(view(darkTheme, 88, zoom))
+  const before = read()
+  rerender(view(darkTheme, 88))
   await waitFor(() => {
+    expect(read()).not.toBe(before)
     expect(currentReading()).toBe(88)
     expect(currentZoom()).toContainEqual(zoom)
   })
+  clearChartZoom(scope)
 })
 
-it("discards timestamp zoom bounds when remounting on a numeric axis", async () => {
+it("discards a time zoom window when the x axis turns numeric", async () => {
   setChartSize()
-  const onZoomChange = vi.fn()
+  const scope = { bufferId: 61, cellId: "axis" }
   const view = (axis: "time" | "value") => (
     <ChartRenderer
       option={{
@@ -211,20 +214,27 @@ it("discards timestamp zoom bounds when remounting on a numeric axis", async () 
           },
         ],
       }}
-      zoomWindow={{
-        start: 20,
-        end: 80,
-        bounds: { startValue: 1767225799800, endValue: 1767226399200 },
-      }}
-      onZoomChange={onZoomChange}
+      zoomScope={scope}
       animate={false}
       height={400}
     />
   )
+  // Given a time chart zoomed to a time window
+  setChartZoom(scope, "x0", {
+    mode: "pinned",
+    from: 1767225799800,
+    to: 1767226399200,
+    axis: "time",
+  })
   const { rerender, container } = renderComponent(view("time"))
+  await waitFor(() => expect(chartZoomed(scope)).toBe(true))
+
+  // When its x axis turns numeric
   rerender(view("value"))
+
+  // Then the chart shows all its data and is no longer zoomed
   await waitFor(() => {
-    expect(onZoomChange).toHaveBeenCalledWith(0, 100)
+    expect(chartZoomed(scope)).toBe(false)
     const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
     expect(
       host && echarts.getInstanceByDom(host)?.getOption().dataZoom,
@@ -232,6 +242,7 @@ it("discards timestamp zoom bounds when remounting on a numeric axis", async () 
       expect.arrayContaining([expect.objectContaining({ start: 0, end: 100 })]),
     )
   })
+  clearChartZoom(scope)
 })
 
 it("matches each scatter color scale to the new series order after a refresh", async () => {
@@ -257,7 +268,6 @@ it("matches each scatter color scale to the new series order after a refresh", a
           },
         ],
       }}
-      zoomWindow={{ start: 0, end: 100 }}
       animate={false}
       height={400}
     />
@@ -279,4 +289,118 @@ it("matches each scatter color scale to the new series order after a refresh", a
   await waitFor(() => expect(targets()).toEqual([["a1"], ["b1", "b2"]]))
   rerender(view(["a1", "a2", "b1"], [0, 1]))
   await waitFor(() => expect(targets()).toEqual([["a1", "a2"], ["b1"]]))
+})
+
+it("keeps series hidden in the legend across refreshes and a theme change", async () => {
+  setChartSize()
+  const scope = { bufferId: 61, cellId: "legend" }
+  const view = (theme: typeof lightTheme, reading: number) => (
+    <ThemeProvider theme={theme}>
+      <ChartRenderer
+        option={{
+          legend: {},
+          xAxis: { type: "value" },
+          yAxis: { type: "value" },
+          series: ["Bid", "Ask"].map((name) => ({
+            type: "line",
+            name,
+            data: [
+              [0, reading],
+              [1, reading + 1],
+            ],
+          })),
+        }}
+        zoomScope={scope}
+        animate={false}
+        height={400}
+      />
+    </ThemeProvider>
+  )
+  const { container, rerender } = renderComponent(view(lightTheme, 1))
+  const read = (): EChartsType | undefined => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host ? echarts.getInstanceByDom(host) : undefined
+  }
+  const hidden = () =>
+    (
+      read()?.getOption() as
+        | { legend?: { selected?: Record<string, boolean> }[] }
+        | undefined
+    )?.legend?.[0]?.selected?.Ask === false
+  // The instance drawing the option (not the one echarts-for-react measures)
+  await waitFor(() => expect(read()?.getOption()?.series).toBeDefined())
+
+  // Given the user hides a series in the legend
+  act(() => {
+    read()?.dispatchAction({ type: "legendUnSelect", name: "Ask" })
+  })
+  expect(hidden()).toBe(true)
+
+  // When the chart refreshes, and then the theme changes
+  rerender(view(lightTheme, 5))
+  await waitFor(() => expect(hidden()).toBe(true))
+  rerender(view(darkTheme, 6))
+
+  // Then the series stays hidden
+  await waitFor(() => {
+    expect(
+      (read()?.getOption() as { series: { data: number[][] }[] }).series[0]
+        .data[0][1],
+    ).toBe(6)
+    expect(hidden()).toBe(true)
+  })
+  clearChartZoom(scope)
+})
+
+it("arms the brush again after every draw", async () => {
+  setChartSize()
+  const armed: unknown[] = []
+  const brushOf = (instance: EChartsType) =>
+    (
+      instance as unknown as {
+        getModel(): {
+          getComponent(type: "brush", i: number): { brushType?: unknown }
+        }
+      }
+    )
+      .getModel()
+      .getComponent("brush", 0)?.brushType
+  const view = (reading: number) => (
+    <ChartRenderer
+      option={{
+        xAxis: { type: "time" },
+        yAxis: { type: "value" },
+        brush: { toolbox: [], xAxisIndex: 0, brushType: "lineX" },
+        series: [
+          {
+            type: "line",
+            data: [
+              [0, reading],
+              [1000, reading],
+            ],
+          },
+        ],
+      }}
+      animate={false}
+      height={400}
+      onDraw={(instance) => {
+        instance.dispatchAction({
+          type: "takeGlobalCursor",
+          key: "brush",
+          brushOption: { brushType: "lineX", brushMode: "single" },
+        })
+        armed.push(brushOf(instance))
+      }}
+    />
+  )
+  const { container, rerender } = renderComponent(view(1))
+  const read = (): EChartsType | undefined => {
+    const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+    return host ? echarts.getInstanceByDom(host) : undefined
+  }
+  await waitFor(() => expect(armed).toEqual(["lineX"]))
+  // When the chart is drawn again with new data, the brush stays armed
+  rerender(view(2))
+  await waitFor(() => expect(armed.length).toBeGreaterThanOrEqual(2))
+  expect(brushOf(read()!)).toBe("lineX")
 })

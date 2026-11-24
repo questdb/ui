@@ -6,10 +6,10 @@ export type ZoomControl = {
   id: string
   componentIndex: number
   getAxisModel(dim: string, index: number): unknown
+  /** Each axis the control moves, first the one it is known by. */
+  eachTargetAxis(callback: (dim: string, index: number) => void): void
   getPercentRange(): [number, number] | undefined
   getValueRange(dim?: string, index?: number): [number, number] | undefined
-  /** Whether start and end are held as percentages or as axis values. */
-  getRangePropMode?(): ["percent" | "value", "percent" | "value"]
 }
 
 type LiveModel = {

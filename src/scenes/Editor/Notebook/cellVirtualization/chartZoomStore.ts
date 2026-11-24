@@ -1,62 +1,205 @@
-import { eventBus } from "../../../../modules/EventBus"
-import { EventType } from "../../../../modules/EventBus/types"
+import { chartSyncOf } from "../interactions/chartSync"
+import {
+  DEFAULT_ZOOM,
+  LINKED_AXIS,
+  isZoomedState,
+  zoomStateFits,
+  type AxisKey,
+  type ZoomAxes,
+  type ZoomState,
+} from "../CellChart/zoomWindow"
 
-import type { ZoomWindow } from "../CellChart/zoomWindow"
+// The zoom of every chart, per control, and the only place it is kept. A
+// chart draws the windows it finds here and writes the user's gestures here;
+// chartZoomBinding applies changes to the charts that are mounted, and a
+// chart that mounts later draws from here, so a chart scrolled away or hidden
+// by Maximize does not miss a zoom.
+//
+// A notebook with "Zoom time charts together" also holds one linked window:
+// the first x axis of its time charts shows it, unless the chart was zoomed
+// or reset on its own after it was set.
 
-const zoomWindows = new Map<string, ZoomWindow>()
+export type ZoomScope = { bufferId: number; cellId: string }
+
+type Stamped = { state: ZoomState; seq: number }
+
+type CellZoom = {
+  own: Map<AxisKey, Stamped>
+  // The axes of the option last drawn, kept after the chart unmounts.
+  axes?: ZoomAxes
+  // Series the user hid in the legend.
+  legend?: Record<string, boolean>
+}
+
+const cells = new Map<string, CellZoom>()
+const linked = new Map<number, Stamped>()
 const listeners = new Map<string, Set<() => void>>()
+let seq = 0
 
-const notify = (cellId: string) => {
-  listeners.get(cellId)?.forEach((listener) => listener())
-}
+const SEP = "\u0000"
+const keyOf = ({ bufferId, cellId }: ZoomScope) => `${bufferId}${SEP}${cellId}`
+const inBuffer = (key: string, bufferId: number) =>
+  key.startsWith(`${bufferId}${SEP}`)
 
-export const setChartZoom = (
-  cellId: string,
-  start: number,
-  end: number,
-  bounds?: ZoomWindow["bounds"],
-) => {
-  if (!bounds && start <= 0 && end >= 100) {
-    clearChartZoom(cellId)
-    return
+const cellOf = (scope: ZoomScope): CellZoom => {
+  const key = keyOf(scope)
+  let cell = cells.get(key)
+  if (!cell) {
+    cell = { own: new Map() }
+    cells.set(key, cell)
   }
-  zoomWindows.set(cellId, { start, end, ...(bounds ? { bounds } : {}) })
-  notify(cellId)
+  return cell
 }
 
-export const getChartZoom = (cellId: string): ZoomWindow | undefined =>
-  zoomWindows.get(cellId)
-
-export const clearChartZoom = (cellId: string) => {
-  if (!zoomWindows.delete(cellId)) return
-  notify(cellId)
+const notify = (key: string) => {
+  listeners.get(key)?.forEach((listener) => listener())
 }
 
-// A mounted chart holds its window in ECharts too: the event resets it there.
-export const resetChartZoom = (cellId: string, localOnly = false) => {
-  if (!zoomWindows.has(cellId)) return
-  clearChartZoom(cellId)
-  eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId, localOnly })
+const notifyBuffer = (bufferId: number) => {
+  for (const key of [...listeners.keys()])
+    if (inBuffer(key, bufferId)) notify(key)
 }
 
-export const clearChartZooms = (cellIds: Iterable<string>) => {
-  for (const cellId of cellIds) clearChartZoom(cellId)
+// The stamp that decides a control's state: its own, or the linked window
+// when that is newer and the chart is a time chart.
+const winning = (
+  scope: ZoomScope,
+  key: AxisKey,
+  axes: ZoomAxes | undefined,
+): { stamp?: Stamped; linked: boolean } => {
+  const own = cells.get(keyOf(scope))?.own.get(key)
+  const link =
+    key === LINKED_AXIS && axes?.time ? linked.get(scope.bufferId) : undefined
+  return link && (!own || link.seq > own.seq)
+    ? { stamp: link, linked: true }
+    : { stamp: own, linked: false }
+}
+
+/**
+ * The zoom state of a chart's control. `axes` describes the option being
+ * drawn; without it, the one drawn last.
+ */
+export const chartZoomState = (
+  scope: ZoomScope,
+  key: AxisKey,
+  axes: ZoomAxes | undefined = cells.get(keyOf(scope))?.axes,
+): ZoomState => {
+  const state = winning(scope, key, axes).stamp?.state ?? DEFAULT_ZOOM
+  return zoomStateFits(state, axes?.axes[key]) ? state : DEFAULT_ZOOM
+}
+
+const keysOf = (scope: ZoomScope): AxisKey[] => {
+  const cell = cells.get(keyOf(scope))
+  const keys = new Set([
+    ...(cell?.own.keys() ?? []),
+    ...Object.keys(cell?.axes?.axes ?? {}),
+  ])
+  if (cell?.axes?.time) keys.add(LINKED_AXIS)
+  return [...keys]
+}
+
+/** Whether any control of the chart shows less than its option's window. */
+export const chartZoomed = (scope: ZoomScope): boolean =>
+  keysOf(scope).some((key) => isZoomedState(chartZoomState(scope, key)))
+
+/** A gesture's window on one control of this chart only. */
+export const setChartZoom = (
+  scope: ZoomScope,
+  key: AxisKey,
+  state: ZoomState,
+) => {
+  cellOf(scope).own.set(key, { state, seq: ++seq })
+  notify(keyOf(scope))
+}
+
+/** A gesture's window on a linked time chart: every time chart's x axis. */
+export const setLinkedZoom = (bufferId: number, state: ZoomState) => {
+  linked.set(bufferId, { state, seq: ++seq })
+  notifyBuffer(bufferId)
+}
+
+/**
+ * Puts every control of the chart back on its option's window. Reset zoom
+ * also resets the linked window when the chart is a linked time chart; an
+ * SQL edit (`localOnly`) resets the edited chart alone.
+ */
+export const resetChartZoom = (
+  scope: ZoomScope,
+  { localOnly = false }: { localOnly?: boolean } = {},
+) => {
+  const keys = keysOf(scope)
+  if (keys.length === 0) return
+  const cell = cellOf(scope)
+  for (const key of keys) cell.own.set(key, { state: DEFAULT_ZOOM, seq: ++seq })
+  if (!localOnly && cell.axes?.time && chartSyncOf(scope.bufferId)?.zoom)
+    setLinkedZoom(scope.bufferId, DEFAULT_ZOOM)
+  else notify(keyOf(scope))
+}
+
+/**
+ * Resets the windows this chart holds on its own (not a linked window), for
+ * a chart left without any control that could move them back.
+ */
+export const resetOwnChartZoom = (scope: ZoomScope) => {
+  const cell = cells.get(keyOf(scope))
+  if (!cell) return
+  const own = keysOf(scope).filter((key) => {
+    const { stamp, linked: fromLink } = winning(scope, key, cell.axes)
+    return !fromLink && stamp !== undefined && isZoomedState(stamp.state)
+  })
+  if (own.length === 0) return
+  for (const key of own) cell.own.set(key, { state: DEFAULT_ZOOM, seq: ++seq })
+  notify(keyOf(scope))
+}
+
+/** Records the axes of the option a chart drew. */
+export const setChartZoomAxes = (scope: ZoomScope, axes: ZoomAxes) => {
+  const cell = cellOf(scope)
+  if (JSON.stringify(cell.axes) === JSON.stringify(axes)) return
+  cell.axes = axes
+  notify(keyOf(scope))
+}
+
+export const chartLegendSelected = (
+  scope: ZoomScope,
+): Record<string, boolean> | undefined => cells.get(keyOf(scope))?.legend
+
+export const setChartLegendSelected = (
+  scope: ZoomScope,
+  selected: Record<string, boolean>,
+) => {
+  cellOf(scope).legend = { ...selected }
+}
+
+/** Forgets a deleted cell's chart. */
+export const clearChartZoom = (scope: ZoomScope) => {
+  if (!cells.delete(keyOf(scope))) return
+  notify(keyOf(scope))
+}
+
+/** Forgets every chart of a closed notebook, and its linked window. */
+export const clearNotebookChartZooms = (bufferId: number) => {
+  linked.delete(bufferId)
+  for (const key of [...cells.keys()])
+    if (inBuffer(key, bufferId)) cells.delete(key)
+  notifyBuffer(bufferId)
 }
 
 export const subscribeChartZoom = (
-  cellId: string,
+  scope: ZoomScope,
   listener: () => void,
 ): (() => void) => {
-  let set = listeners.get(cellId)
+  const key = keyOf(scope)
+  let set = listeners.get(key)
   if (!set) {
     set = new Set()
-    listeners.set(cellId, set)
+    listeners.set(key, set)
   }
   set.add(listener)
   return () => {
-    const current = listeners.get(cellId)
+    const current = listeners.get(key)
     if (!current) return
     current.delete(listener)
-    if (current.size === 0) listeners.delete(cellId)
+    if (current.size === 0) listeners.delete(key)
   }
 }

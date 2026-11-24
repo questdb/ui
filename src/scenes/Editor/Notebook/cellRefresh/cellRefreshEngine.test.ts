@@ -31,9 +31,12 @@ import { deriveStatementFrame, statementKeysFor } from "../statementIdentity"
 import { buildStatementSlotViews } from "../result-table/statementSlotView"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
 import {
+  chartZoomState,
+  chartZoomed,
   clearChartZoom,
-  getChartZoom,
   setChartZoom,
+  setChartZoomAxes,
+  subscribeChartZoom,
 } from "../cellVirtualization/chartZoomStore"
 
 vi.mock("../persistCellSnapshot", () => ({
@@ -1351,13 +1354,17 @@ describe("CellRefreshEngine", () => {
   })
 
   describe("chart zoom on SQL edits", () => {
-    let resets: unknown[]
-    const recordReset = (payload?: unknown) => resets.push(payload)
+    const scope = { bufferId: BUFFER_ID, cellId: "c1" }
+    const window = { mode: "pinned-pct", start: 20, end: 60 } as const
+    let changes: number
+    let unsubscribe: () => void
 
     const zoomedDrawCell = async () => {
       syncOnScreen([drawCell("c1", "select 1", false)])
       await flushAsync()
-      setChartZoom("c1", 20, 60)
+      setChartZoomAxes(scope, { time: false, axes: { x0: "category" } })
+      setChartZoom(scope, "x0", window)
+      changes = 0
     }
 
     const editSql = async (value: string) => {
@@ -1367,13 +1374,13 @@ describe("CellRefreshEngine", () => {
     }
 
     beforeEach(() => {
-      resets = []
-      eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, recordReset)
+      changes = 0
+      unsubscribe = subscribeChartZoom(scope, () => changes++)
     })
 
     afterEach(() => {
-      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, recordReset)
-      clearChartZoom("c1")
+      unsubscribe()
+      clearChartZoom(scope)
     })
 
     it.each([
@@ -1386,9 +1393,10 @@ describe("CellRefreshEngine", () => {
       // When the edit changes the chart's statements
       await editSql(value)
 
-      // Then the stored window clears and the mounted chart is told to reset
-      expect(getChartZoom("c1")).toBeUndefined()
-      expect(resets).toEqual([{ cellId: "c1", localOnly: true }])
+      // Then the stored window clears, which the mounted chart hears
+      expect(chartZoomed(scope)).toBe(false)
+      expect(chartZoomState(scope, "x0")).toEqual({ mode: "default" })
+      expect(changes).toBe(1)
     })
 
     it("keeps the zoom when an edit only adds trailing whitespace", async () => {
@@ -1399,8 +1407,8 @@ describe("CellRefreshEngine", () => {
       await editSql("select 1;\n")
 
       // Then the window survives
-      expect(getChartZoom("c1")).toEqual({ start: 20, end: 60 })
-      expect(resets).toEqual([])
+      expect(chartZoomState(scope, "x0")).toEqual(window)
+      expect(changes).toBe(0)
     })
   })
 

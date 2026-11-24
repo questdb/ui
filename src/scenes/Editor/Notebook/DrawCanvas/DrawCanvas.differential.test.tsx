@@ -715,12 +715,6 @@ const check = async ([, from, to]: Pair) => {
   expect(differences(JSON.parse(shown), JSON.parse(expected))).toEqual([])
 }
 
-// Today's renderer still keeps these from A (see the commit message).
-const KNOWN_STALE = new Set<string>([
-  "visual: state severities",
-  "visual: state severities (back)",
-])
-
 describe("a chart whose settings change shows what a fresh chart shows", () => {
   const all: Pair[] = [
     ...variationPairs(),
@@ -731,8 +725,5 @@ describe("a chart whose settings change shows what a fresh chart shows", () => {
     ...DATA_PAIRS,
     ...KIND_PAIRS,
   ]
-  for (const pair of all) {
-    const run = KNOWN_STALE.has(pair[0]) ? it.fails : it
-    run(pair[0], () => check(pair), 20_000)
-  }
+  for (const pair of all) it(pair[0], () => check(pair), 20_000)
 })

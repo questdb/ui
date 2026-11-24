@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import type { EChartsOption, EChartsType } from "echarts"
 import styled, { useTheme } from "styled-components"
 import type { CellInteractions } from "../../../../store/notebook"
@@ -17,46 +23,10 @@ import {
 import { ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
 import { prepareCustomOption, problemsOf } from "./prepareCustomOption"
 import { PaneEmptyState } from "../PaneEmptyState"
-import {
-  isTimeChart,
-  primaryXControls,
-  zoomControls,
-  zoomForTarget,
-} from "../CellChart/liveZoom"
-import type { DataZoomEvent } from "../CellChart/zoomWindow"
-
-const NO_ZOOM_WINDOW = { start: 0, end: 100 }
+import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
 
 const MAP_LOAD_FAILED =
   "Could not load the world map. Reload the console to try again."
-
-const WINDOW_KEYS = ["start", "end", "startValue", "endValue"]
-
-const withoutWindow = (zoom: unknown): unknown =>
-  typeof zoom === "object" && zoom !== null && !Array.isArray(zoom)
-    ? Object.fromEntries(
-        Object.entries(zoom).filter(([key]) => !WINDOW_KEYS.includes(key)),
-      )
-    : zoom
-
-/**
- * The option without its authored zoom windows: once the chart is zoomed, a
- * refresh's merge must not move it back to the authored window.
- */
-const withoutZoomWindows = (
-  option: Record<string, unknown>,
-): Record<string, unknown> => {
-  const strip = (part: Record<string, unknown>) =>
-    part.dataZoom === undefined
-      ? part
-      : {
-          ...part,
-          dataZoom: Array.isArray(part.dataZoom)
-            ? part.dataZoom.map(withoutWindow)
-            : withoutWindow(part.dataZoom),
-        }
-  return strip(option)
-}
 
 const PartialNotice = styled.div`
   height: 2.8rem;
@@ -75,6 +45,7 @@ type Props = {
   interactions?: CellInteractions
   events?: Record<string, ChartEventHandler>
   onInstance?: React.ComponentProps<typeof ChartRenderer>["onInstance"]
+  onDraw?: React.ComponentProps<typeof ChartRenderer>["onDraw"]
 }
 
 /** Draws an agent-written ECharts option over the cell's statements. */
@@ -88,23 +59,20 @@ export const CustomChart = ({
   interactions,
   events,
   onInstance,
+  onDraw,
 }: Props) => {
   const theme = useTheme()
+  const zoomScope = useMemo(() => ({ bufferId, cellId }), [bufferId, cellId])
   // The option's content, so a save that leaves it unchanged (a new object
   // with the same JSON) keeps the chart's zoom.
   const optionKey = useMemo(() => JSON.stringify(rawOption), [rawOption])
-  // The window the user (or a linked chart) last zoomed this option to, so a
-  // new instance (a theme change, a brush toggled) opens on it again.
-  const lastZoom = useRef<{
-    optionKey: string
-    componentIndex: number
-    percent: [number, number]
-    // A partial time window pinned to linked charts' times.
-    times?: [number, number]
-  } | null>(null)
-  // The option whose drawn chart was zoomed: its authored window applies when
-  // it is first drawn, not on later refreshes.
-  const [zoomedKey, setZoomedKey] = useState<string | null>(null)
+  // An edited option opens on its own zoom windows, as a new chart would.
+  const drawnKey = useRef(optionKey)
+  useLayoutEffect(() => {
+    if (drawnKey.current === optionKey) return
+    drawnKey.current = optionKey
+    resetChartZoom(zoomScope, { localOnly: true })
+  }, [optionKey, zoomScope])
   // The option drawn, for the click: a dataset-bound series' marks are rows
   // of a statement, drawn from the column its encoding names.
   const drawnRef = useRef<{
@@ -138,68 +106,8 @@ export const CustomChart = ({
             },
           }
         : {}),
-      datazoom: (payload: unknown, instance: EChartsType) => {
-        events?.datazoom?.(payload, instance)
-        setZoomedKey(optionKey)
-        const event = payload as DataZoomEvent
-        const timeChart = isTimeChart(instance)
-        const controls = timeChart
-          ? primaryXControls(instance)
-          : zoomControls(instance)
-        for (const target of event.batch ?? [event]) {
-          const control = zoomForTarget(controls, target)
-          const percent = control?.getPercentRange()
-          if (!control || !percent?.every(Number.isFinite)) continue
-          // A window held as percentages keeps its share of the refreshed data
-          // and comes back as one. A time window chart sync pinned to its
-          // peers' times comes back as those times.
-          const full = percent[0] <= 0 && percent[1] >= 100
-          const pinned =
-            timeChart &&
-            !full &&
-            control.getRangePropMode?.().every((mode) => mode === "value") ===
-              true
-          const times = pinned ? control.getValueRange("x", 0) : undefined
-          lastZoom.current = {
-            optionKey,
-            componentIndex: control.componentIndex,
-            percent,
-            ...(times?.every(Number.isFinite) ? { times } : {}),
-          }
-          break
-        }
-      },
     }),
-    [events, optionKey],
-  )
-  const handleInstance = useCallback(
-    (instance: EChartsType | null) => {
-      const previous = lastZoom.current
-      let restored = false
-      if (instance && previous?.optionKey === optionKey) {
-        const control = zoomControls(instance).find(
-          ({ componentIndex }) => componentIndex === previous.componentIndex,
-        )
-        if (control) {
-          restored = true
-          instance.dispatchAction(
-            {
-              type: "dataZoom",
-              dataZoomIndex: control.componentIndex,
-              ...(previous.times
-                ? { startValue: previous.times[0], endValue: previous.times[1] }
-                : { start: previous.percent[0], end: previous.percent[1] }),
-            },
-            { silent: true },
-          )
-        }
-      }
-      // A new instance that gets no zoom back opens on the option's own
-      // window again.
-      if (instance && !restored) setZoomedKey(null)
-      onInstance?.(instance)
-    },
-    [onInstance, optionKey],
+    [events],
   )
   const clickable = interactions?.click !== undefined
   const { sanitized, built } = useMemo(
@@ -215,13 +123,10 @@ export const CustomChart = ({
   useEffect(() => {
     drawnRef.current = { option: built.option, statements }
   }, [built, statements])
-  const specKey = useMemo(() => JSON.stringify(sanitized.option), [sanitized])
-
-  const zoomed = zoomedKey === optionKey
-  const option = useMemo(() => {
-    const raw = zoomed ? withoutZoomWindows(built.option) : built.option
-    return withBrush(raw as EChartsOption, interactions)
-  }, [built, interactions, zoomed])
+  const option = useMemo(
+    () => withBrush(built.option as EChartsOption, interactions),
+    [built, interactions],
+  )
   // Keyed by the map names, so a data refresh does not reload (or retry a
   // failed load of) the same maps.
   const neededMapsKey = useMemo(
@@ -291,12 +196,12 @@ export const CustomChart = ({
         height={partial.length > 0 ? "calc(100% - 2.8rem)" : undefined}
         isFocused={isFocused}
         animate={!live}
-        zoomWindow={NO_ZOOM_WINDOW}
+        zoomScope={zoomScope}
         zoomable={false}
         fit
-        specKey={`${specKey}:${Boolean(interactions?.brush)}`}
         events={chartEvents}
-        onInstance={handleInstance}
+        onInstance={onInstance}
+        onDraw={onDraw}
       />
     </>
   )

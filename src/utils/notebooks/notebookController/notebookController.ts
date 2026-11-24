@@ -448,7 +448,7 @@ export const createDexieNotebookController = (
           for (const cellId of out.cleanup.cellIds) {
             void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
             removeNotebookCellLayouts(bufferId, cellId)
-            clearChartZoom(cellId)
+            clearChartZoom({ bufferId, cellId })
           }
         }
         const outdatedSnapshots = await snapshotsOutdatedBy(

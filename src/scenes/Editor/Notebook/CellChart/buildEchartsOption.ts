@@ -860,12 +860,10 @@ const buildCandlestickSeries = (
   ]
 }
 
-// Write the full-circle geometry too: ECharts merges options into the
-// existing series when a user switches out of the half ring.
-const fullPie = { center: ["50%", "50%"], startAngle: 90, endAngle: "auto" }
+// A full pie, a ring, or a half ring standing on its flat side.
 const PIE_GEOMETRY: Record<PieShape, Record<string, unknown>> = {
-  pie: { ...fullPie, radius: "70%" },
-  donut: { ...fullPie, radius: ["35%", "70%"] },
+  pie: { radius: "70%" },
+  donut: { radius: ["35%", "70%"] },
   halfDonut: {
     radius: ["45%", "90%"],
     center: ["50%", "78%"],
@@ -1474,10 +1472,12 @@ export const buildEchartsOption = (
           nameTextStyle: axisName,
           axisLabel,
           splitLine: { show: false },
-          // Keep both keys even when unset: chart updates merge into the prior
-          // option, and an omitted key would keep a cleared bound on screen.
-          min: chart.rightAxis?.min,
-          max: chart.rightAxis?.max,
+          ...(chart.rightAxis?.min !== undefined
+            ? { min: chart.rightAxis.min }
+            : {}),
+          ...(chart.rightAxis?.max !== undefined
+            ? { max: chart.rightAxis.max }
+            : {}),
         },
       ]
     : leftAxis
@@ -1552,10 +1552,8 @@ export const buildEchartsOption = (
     delete s[Y_COLUMN]
     delete s[PERCENT]
     delete s[POINT_COLUMNS]
-    s.tooltip = {
-      formatter: points ? pointTooltip(points, formats) : undefined,
-      valueFormatter: !points && format ? valueFormatterFor(format) : undefined,
-    }
+    if (points) s.tooltip = { formatter: pointTooltip(points, formats) }
+    else if (format) s.tooltip = { valueFormatter: valueFormatterFor(format) }
   }
   const sharedFormat = (list: (ColumnFormat | undefined)[]) =>
     list.length > 0 &&
@@ -1582,17 +1580,16 @@ export const buildEchartsOption = (
           formatter: (v: number) => `${v}%`,
         },
       }
-    return {
-      min: undefined,
-      max: undefined,
-      ...axis,
-      axisLabel: {
-        ...(axis.axisLabel as object),
-        formatter: format
-          ? (v: number) => formatValue(v, { ...format, prefix: "", suffix: "" })
-          : undefined,
-      },
-    }
+    return format
+      ? {
+          ...axis,
+          axisLabel: {
+            ...(axis.axisLabel as object),
+            formatter: (v: number) =>
+              formatValue(v, { ...format, prefix: "", suffix: "" }),
+          },
+        }
+      : axis
   }
   const formattedYAxis = Array.isArray(yAxis)
     ? yAxis.map((a, i) =>
@@ -1647,13 +1644,13 @@ export const buildEchartsOption = (
   ).map((a, i) => {
     if (i !== 0) return a
     const values = thresholdSeries && thresholdFormat?.thresholds
-    // The same ECharts axis may survive a save. Explicitly clear its old
-    // threshold extent; an omitted option is retained by setOption's merge.
-    return {
-      ...(a as object),
-      dataMin: values ? Math.min(...values.map((t) => t.value)) : null,
-      dataMax: values ? Math.max(...values.map((t) => t.value)) : null,
-    }
+    return values
+      ? {
+          ...(a as object),
+          dataMin: Math.min(...values.map((t) => t.value)),
+          dataMax: Math.max(...values.map((t) => t.value)),
+        }
+      : a
   })
   const yAxisOut = Array.isArray(formattedYAxis) ? valueAxes : valueAxes[0]
 
@@ -1758,7 +1755,6 @@ const thresholdMarks = (
       type: "line",
       data: [],
       silent: true,
-      markArea: { data: [] },
       markLine: {
         symbol: "none",
         animation: false,
@@ -1797,7 +1793,6 @@ const thresholdMarks = (
     type: "line",
     data: [],
     silent: true,
-    markLine: { data: [] },
     markArea: {
       silent: true,
       animation: false,

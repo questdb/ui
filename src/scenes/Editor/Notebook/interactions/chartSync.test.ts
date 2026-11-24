@@ -2,12 +2,14 @@ import type { EChartsType } from "echarts"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { joinChartSync, setChartSync } from "./chartSync"
 import {
-  clearChartZoom,
-  getChartZoom,
-  setChartZoom,
+  chartZoomed,
+  clearNotebookChartZooms,
+  setChartZoomAxes,
+  subscribeChartZoom,
 } from "../cellVirtualization/chartZoomStore"
+import { bindChartZoom } from "../CellChart/chartZoomBinding"
 import { echarts } from "../CellChart/echartsSetup"
-import { zoomWindowForEvent, type DataZoomEvent } from "../CellChart/zoomWindow"
+import { zoomAxesOf } from "../CellChart/zoomWindow"
 
 type Handler = (payload?: unknown) => void
 
@@ -69,150 +71,6 @@ const move = {
 }
 
 describe("notebook chart sync", () => {
-  it("keeps a linked interval that currently covers every peer sample", () => {
-    const cellId = "sparse-time-peer"
-    const bounds = { startValue: 40, endValue: 80 }
-    try {
-      setChartZoom(cellId, 0, 100, bounds)
-      expect(getChartZoom(cellId)).toEqual({ start: 0, end: 100, bounds })
-      setChartZoom(cellId, 0, 100)
-      expect(getChartZoom(cellId)).toBeUndefined()
-    } finally {
-      clearChartZoom(cellId)
-    }
-  })
-
-  it("links generated time zoom IDs without linking generated Y zoom IDs", () => {
-    const makeLiveChart = () => {
-      const instance = echarts.init(null, undefined, {
-        renderer: "svg",
-        ssr: true,
-        width: 600,
-        height: 400,
-      })
-      instance.setOption({
-        xAxis: { type: "time", min: 0, max: 1000 },
-        yAxis: { type: "value", min: 0, max: 100 },
-        dataZoom: [
-          { type: "slider", xAxisIndex: 0 },
-          { type: "slider", yAxisIndex: 0 },
-        ],
-        series: [
-          {
-            type: "line",
-            data: [
-              [0, 5],
-              [1000, 95],
-            ],
-          },
-        ],
-      })
-      return instance
-    }
-    const source = makeLiveChart()
-    const peer = makeLiveChart()
-    const leaveSource = joinChartSync(1, source)
-    const leavePeer = joinChartSync(1, peer)
-    setChartSync(1, { crosshair: "off", zoom: true })
-    const model = (
-      source as unknown as {
-        getModel(): {
-          getComponent(type: "dataZoom", index: number): { id: string }
-        }
-      }
-    ).getModel()
-    const peerZoom = vi.fn()
-    peer.on("datazoom", peerZoom)
-    try {
-      const zoomOptions = source.getOption() as { dataZoom: { id?: string }[] }
-      expect(zoomOptions.dataZoom.map(({ id }) => id)).toEqual([
-        undefined,
-        undefined,
-      ])
-      source.dispatchAction({
-        type: "dataZoom",
-        dataZoomId: model.getComponent("dataZoom", 1).id,
-        start: 10,
-        end: 90,
-      })
-      expect(peerZoom).not.toHaveBeenCalled()
-      source.dispatchAction({
-        type: "dataZoom",
-        dataZoomId: model.getComponent("dataZoom", 0).id,
-        start: 20,
-        end: 80,
-      })
-      expect(peerZoom).toHaveBeenCalledOnce()
-      expect(peer.getOption()).toMatchObject({
-        dataZoom: [
-          { startValue: 200, endValue: 800 },
-          { start: 0, end: 100 },
-        ],
-      })
-    } finally {
-      leaveSource()
-      leavePeer()
-      source.dispose()
-      peer.dispose()
-    }
-  })
-
-  it("forwards a full reset as percentages, not a fixed time range", () => {
-    const source = makeChart()
-    const peer = makeChart()
-    setChartSync(1, { crosshair: "off", zoom: true })
-    join(1, source)
-    join(1, peer)
-    source.emit("datazoom", { dataZoomIndex: 1, start: 0, end: 100 })
-    expect(peer.dispatchAction).toHaveBeenCalledWith({
-      type: "dataZoom",
-      dataZoomIndex: 1,
-      start: 0,
-      end: 100,
-    })
-  })
-
-  it("reads the peer's calculated zoom window from a value-only event", () => {
-    // Given a time chart using a different scale from its sender
-    const chart = echarts.init(null, undefined, {
-      renderer: "svg",
-      ssr: true,
-      width: 500,
-      height: 300,
-    })
-    try {
-      chart.setOption({
-        xAxis: { type: "time", min: 0, max: 1000 },
-        yAxis: { type: "value" },
-        dataZoom: [{ type: "inside" }],
-        series: [
-          {
-            type: "line",
-            data: [
-              [0, 1],
-              [1000, 2],
-            ],
-          },
-        ],
-      })
-      const seen = vi.fn()
-      chart.on("datazoom", (event) => {
-        seen(zoomWindowForEvent(event as DataZoomEvent, chart))
-      })
-
-      // When linking changes the peer's time window
-      chart.dispatchAction({ type: "dataZoom", startValue: 200, endValue: 800 })
-
-      // Then the renderer can update the peer's Reset zoom state
-      expect(seen).toHaveBeenCalledWith({
-        start: 20,
-        end: 80,
-        bounds: { startValue: 200, endValue: 800 },
-      })
-    } finally {
-      chart.dispose()
-    }
-  })
   it("projects the time into each peer's pixels and changes modes without rejoining", () => {
     const source = makeChart()
     const peer = makeChart()
@@ -276,48 +134,200 @@ describe("notebook chart sync", () => {
     expect(peer.dispatchAction).not.toHaveBeenCalled()
   })
 
-  it("copies an absolute zoom range without echoing it and detaches on leave", () => {
+  it("leaves zooming to the zoom store", () => {
+    // Given two linked time charts joined to chart sync
     const source = makeChart()
     const peer = makeChart()
-    join(1, source)
-    const leave = join(1, peer)
-    peer.dispatchAction.mockImplementation(() => peer.emit("datazoom"))
-
-    setChartSync(1, { crosshair: "off", zoom: false })
-    source.emit("datazoom")
-    expect(peer.dispatchAction).not.toHaveBeenCalled()
-
     setChartSync(1, { crosshair: "off", zoom: true })
-    source.emit("datazoom", { dataZoomIndex: 0 })
-    expect(peer.dispatchAction).not.toHaveBeenCalled()
-    source.emit("datazoom", { batch: [{ dataZoomIndex: 1 }] })
-    expect(peer.dispatchAction).toHaveBeenCalledTimes(1)
-    expect(peer.dispatchAction).toHaveBeenCalledWith({
-      type: "dataZoom",
-      dataZoomIndex: 1,
-      startValue: 0,
-      endValue: 1_000,
-    })
-    expect(source.getOption).not.toHaveBeenCalled()
-    expect(peer.getOption).not.toHaveBeenCalled()
-    // The source is pinned to the same absolute window, without an echo
-    expect(source.dispatchAction).toHaveBeenCalledTimes(1)
-    expect(source.dispatchAction).toHaveBeenCalledWith({
-      type: "dataZoom",
-      dataZoomIndex: 1,
-      startValue: 0,
-      endValue: 1_000,
-    })
+    join(1, source)
+    join(1, peer)
 
-    leave()
-    expect(peer.off.mock.calls.map(([event]) => event)).toEqual([
-      "updateAxisPointer",
-      "globalout",
+    // When the source reports a zoom, chart sync does not move the peer
+    source.emit("datazoom", { dataZoomIndex: 1, start: 20, end: 80 })
+    expect(peer.dispatchAction).not.toHaveBeenCalled()
+    expect(source.on.mock.calls.map(([event]) => event)).not.toContain(
       "datazoom",
+    )
+  })
+})
+
+// Zooming time charts together: each chart is bound to the zoom store as
+// ChartRenderer binds it, and the store carries a zoom to its peers.
+describe("linked zoom", () => {
+  const BUFFER = 3
+  const TIME_OPTION = {
+    xAxis: { type: "time", min: 0, max: 1000 },
+    yAxis: { type: "value", min: 0, max: 100 },
+    dataZoom: [
+      { type: "slider", xAxisIndex: 0 },
+      { type: "slider", yAxisIndex: 0 },
+    ],
+    series: [
+      {
+        type: "line",
+        data: [
+          [0, 5],
+          [1000, 95],
+        ],
+      },
+    ],
+  }
+  const charts: { instance: EChartsType; dispose: () => void }[] = []
+  const bound = (cellId: string) => {
+    const instance = echarts.init(null, undefined, {
+      renderer: "svg",
+      ssr: true,
+      width: 600,
+      height: 400,
+    })
+    instance.setOption(TIME_OPTION)
+    const scope = { bufferId: BUFFER, cellId }
+    setChartZoomAxes(scope, zoomAxesOf(TIME_OPTION as never))
+    const binding = bindChartZoom(instance, scope, () => TIME_OPTION as never)
+    charts.push({
+      instance,
+      dispose: () => {
+        binding.dispose()
+        instance.dispose()
+      },
+    })
+    return { instance, scope, binding }
+  }
+  type Model = {
+    getComponent(type: "dataZoom", index: number): { id: string }
+  }
+  const zoomId = (instance: EChartsType, index: number) =>
+    (instance as unknown as { getModel(): Model })
+      .getModel()
+      .getComponent("dataZoom", index).id
+  const ranges = (instance: EChartsType) =>
+    (
+      instance.getOption() as {
+        dataZoom: { start: number; end: number; startValue: number }[]
+      }
+    ).dataZoom
+
+  afterEach(() => {
+    charts.splice(0).forEach(({ dispose }) => dispose())
+    setChartSync(BUFFER, undefined)
+    clearNotebookChartZooms(BUFFER)
+  })
+
+  it("links generated time zoom IDs without linking generated Y zoom IDs", () => {
+    // Given two linked time charts whose zoom controls have generated IDs
+    setChartSync(BUFFER, { crosshair: "off", zoom: true })
+    const source = bound("a").instance
+    const peer = bound("b").instance
+    const zoomOptions = source.getOption() as { dataZoom: { id?: string }[] }
+    expect(zoomOptions.dataZoom.map(({ id }) => id)).toEqual([
+      undefined,
+      undefined,
     ])
-    source.emit("datazoom")
-    peer.emit("datazoom")
-    expect(peer.dispatchAction).toHaveBeenCalledTimes(1)
-    expect(source.dispatchAction).toHaveBeenCalledTimes(1)
+
+    // When the user moves the source's Y control, the peer stays
+    source.dispatchAction({
+      type: "dataZoom",
+      dataZoomId: zoomId(source, 1),
+      start: 10,
+      end: 90,
+    })
+    expect(ranges(peer)).toMatchObject([
+      { start: 0, end: 100 },
+      { start: 0, end: 100 },
+    ])
+
+    // When the user moves its X control, the peer shows the same times
+    source.dispatchAction({
+      type: "dataZoom",
+      dataZoomId: zoomId(source, 0),
+      start: 20,
+      end: 80,
+    })
+    expect(ranges(peer)).toMatchObject([
+      { startValue: 200, endValue: 800 },
+      { start: 0, end: 100 },
+    ])
+  })
+
+  it("forwards a full range as percentages, not a fixed time range", () => {
+    setChartSync(BUFFER, { crosshair: "off", zoom: true })
+    const source = bound("a").instance
+    const peer = bound("b").instance
+    const x = (instance: EChartsType, range: object) =>
+      instance.dispatchAction({
+        type: "dataZoom",
+        dataZoomId: zoomId(instance, 0),
+        ...range,
+      })
+    x(source, { start: 20, end: 80 })
+    x(source, { start: 0, end: 100 })
+    // A peer at 0–100% follows its data as new samples arrive
+    const [peerX] = ranges(peer) as unknown as {
+      start: number
+      end: number
+      startValue?: unknown
+    }[]
+    expect(peerX).toMatchObject({ start: 0, end: 100 })
+    const model = (
+      peer as unknown as {
+        getModel(): {
+          getComponent(
+            type: "dataZoom",
+            index: number,
+          ): { getRangePropMode(): string[] }
+        }
+      }
+    ).getModel()
+    expect(model.getComponent("dataZoom", 0).getRangePropMode()).toEqual([
+      "percent",
+      "percent",
+    ])
+  })
+
+  it("marks the peer zoomed, so its Reset zoom shows", () => {
+    setChartSync(BUFFER, { crosshair: "off", zoom: true })
+    const source = bound("a").instance
+    const { scope } = bound("b")
+    source.dispatchAction({
+      type: "dataZoom",
+      dataZoomId: zoomId(source, 0),
+      startValue: 200,
+      endValue: 800,
+    })
+    expect(chartZoomed(scope)).toBe(true)
+  })
+
+  it("copies a zoom only while linked, without echoing it, until unbound", () => {
+    // Given two time charts, not linked
+    const source = bound("a")
+    const peer = bound("b")
+    const x = (start: number, end: number) =>
+      source.instance.dispatchAction({
+        type: "dataZoom",
+        dataZoomId: zoomId(source.instance, 0),
+        start,
+        end,
+      })
+    const peerHeard = vi.fn()
+    const off = subscribeChartZoom(peer.scope, peerHeard)
+    x(20, 80)
+    expect(ranges(peer.instance)[0]).toMatchObject({ start: 0, end: 100 })
+    expect(peerHeard).not.toHaveBeenCalled()
+
+    // When they are linked, a zoom reaches the peer once, and the peer's
+    // silent move is not written back as a gesture of its own
+    setChartSync(BUFFER, { crosshair: "off", zoom: true })
+    x(30, 70)
+    expect(ranges(peer.instance)[0]).toMatchObject({
+      startValue: 300,
+      endValue: 700,
+    })
+    expect(peerHeard).toHaveBeenCalledTimes(1)
+
+    // When the source is unbound (unmounted), its events write nothing
+    source.binding.dispose()
+    x(40, 60)
+    expect(peerHeard).toHaveBeenCalledTimes(1)
+    off()
   })
 })

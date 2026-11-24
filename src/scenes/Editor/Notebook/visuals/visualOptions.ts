@@ -918,8 +918,6 @@ export const mapOption = ({
     map: "world",
     roam: true,
     zoom: 1.15,
-    // ECharts retains omitted geo fields when it merges a refreshed option.
-    boundingCoords: null,
     itemStyle: {
       areaColor: colors.surfaceRaised,
       borderColor: colors.borderDefault,
@@ -1363,7 +1361,7 @@ export const volumeProfileOption = ({
         },
       },
       series: series.map((s, i) =>
-        i === series.length - 1
+        poc >= 0 && i === series.length - 1
           ? {
               ...s,
               markLine: {
@@ -1375,7 +1373,7 @@ export const volumeProfileOption = ({
                   color: colors.statusWarning,
                   position: "insideEndTop",
                 },
-                data: poc < 0 ? [] : [{ yAxis: poc }],
+                data: [{ yAxis: poc }],
               },
             }
           : s,

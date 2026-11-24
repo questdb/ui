@@ -162,7 +162,7 @@ const CellInner: React.FC<Props> = ({
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
   const { loading: chartLoading, stopVisible: chartStopVisible } =
     useChartLoading(cell)
-  const chartZoomed = useChartZoomed(cell.id)
+  const chartZoomed = useChartZoomed(bufferIdForEvents, cell.id)
   const contentMode = useCellContentMode(cell.id)
   const virtualizationEngine = useCellVirtualizationEngine()
   const resultStatus = useCellResultStatus(cell.id)

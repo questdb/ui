@@ -1,16 +1,12 @@
 import type { EChartsType } from "echarts"
 import type { ChartSync } from "../../../../store/notebook"
-import {
-  isTimeChart,
-  primaryXControls,
-  zoomForTarget,
-  type ZoomTarget,
-} from "../CellChart/liveZoom"
+import { isTimeChart } from "../CellChart/liveZoom"
 
 // Links a notebook's time charts: moving over one shows the same time on the
-// others (a crosshair, optionally with their tooltips), and zooming one zooms
-// the others to the same time window. Charts join by notebook; each chart
-// registers its live instance and leaves on unmount.
+// others (a crosshair, optionally with their tooltips). Charts join by
+// notebook; each chart registers its live instance and leaves on unmount.
+// Zooming them together goes through the zoom store (chartZoomStore), which
+// reads the notebook's setting here.
 
 type Member = { instance: EChartsType; off: () => void }
 
@@ -79,60 +75,14 @@ const hideTime = (bufferId: number, source: EChartsType) => {
   })
 }
 
-type ZoomEventTarget = ZoomTarget & { start?: number; end?: number }
-
-const zoomTo = (
-  bufferId: number,
-  source: EChartsType,
-  event?: ZoomEventTarget & { batch?: ZoomEventTarget[] },
-) => {
-  const sync = settings.get(bufferId)
-  if (!sync?.zoom || !isTimeChart(source)) return
-  const controls = primaryXControls(source)
-  const sourceZoom = (event?.batch ?? [event])
-    .map((target) => ({ target, zoom: zoomForTarget(controls, target) }))
-    .find(({ zoom }) => zoom !== undefined)
-  const range = sourceZoom?.zoom?.getValueRange("x", 0)
-  // A percentage reset means "follow all data", including future samples.
-  // An ordinary partial window still needs absolute bounds for sparse peers.
-  const reset = sourceZoom?.target?.start === 0 && sourceZoom.target.end === 100
-  const bounds = reset
-    ? { start: 0, end: 100 }
-    : range?.every(Number.isFinite)
-      ? { startValue: range[0], endValue: range[1] }
-      : null
-  if (!bounds) return
-  const peers = others(bufferId, source).filter(({ instance }) =>
-    isTimeChart(instance),
-  )
-  if (peers.length === 0) return
-  drive(() => {
-    // The source keeps the same absolute window as its peers. A percentage
-    // window would slide over the next refresh's time range while the peers
-    // stay on the times the user picked.
-    if (!reset && sourceZoom?.zoom) {
-      source.dispatchAction({
-        type: "dataZoom",
-        dataZoomIndex: sourceZoom.zoom.componentIndex,
-        ...bounds,
-      })
-    }
-    for (const { instance } of peers) {
-      const [peer] = primaryXControls(instance)
-      if (!peer) continue
-      instance.dispatchAction({
-        type: "dataZoom",
-        dataZoomIndex: peer.componentIndex,
-        ...bounds,
-      })
-    }
-  })
-}
-
 export const setChartSync = (bufferId: number, sync: ChartSync | undefined) => {
   if (sync) settings.set(bufferId, sync)
   else settings.delete(bufferId)
 }
+
+/** The notebook's chart linking setting, as its canvases last reported it. */
+export const chartSyncOf = (bufferId: number): ChartSync | undefined =>
+  settings.get(bufferId)
 
 /** Adds a chart to its notebook's group; returns the function that removes it. */
 export const joinChartSync = (
@@ -167,20 +117,14 @@ export const joinChartSync = (
     if (!driving && sync && sync.crosshair !== "off" && isTimeChart(instance))
       clearPointer()
   }
-  const onZoom = (event: unknown) => {
-    if (!driving)
-      zoomTo(bufferId, instance, event as ZoomTarget & { batch?: ZoomTarget[] })
-  }
   instance.on("updateAxisPointer", onPointer)
   instance.on("globalout", onOut)
-  instance.on("datazoom", onZoom)
   const member: Member = {
     instance,
     off: () => {
       if (instance.isDisposed()) return
       instance.off("updateAxisPointer", onPointer)
       instance.off("globalout", onOut)
-      instance.off("datazoom", onZoom)
     },
   }
   let group = groups.get(bufferId)

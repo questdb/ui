@@ -1061,7 +1061,10 @@ export class CellRefreshEngine {
       normalizedQueriesKey(entry.state.queriesKey) !==
         normalizedQueriesKey(queriesKey)
     ) {
-      resetChartZoom(entry.cellId, true)
+      resetChartZoom(
+        { bufferId: this.bufferId, cellId: entry.cellId },
+        { localOnly: true },
+      )
     }
     // Refresh errors follow statement content: an edited statement's error
     // clears, an unchanged sibling's survives the edit.

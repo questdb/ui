@@ -6,9 +6,19 @@ import {
 } from "../CellChart/buildEchartsOption"
 import { echarts } from "../CellChart/echartsSetup"
 import { primaryXControls } from "../CellChart/liveZoom"
-import { zoomWindowForEvent, type DataZoomEvent } from "../CellChart/zoomWindow"
+import {
+  bindChartZoom,
+  type ChartZoomBinding,
+} from "../CellChart/chartZoomBinding"
+import { withViewState, zoomAxesOf } from "../CellChart/zoomWindow"
+import {
+  chartZoomState,
+  clearNotebookChartZooms,
+  setChartZoomAxes,
+  type ZoomScope,
+} from "../cellVirtualization/chartZoomStore"
 import { resolveDraw, toChartResult } from "../DrawCanvas/drawCanvasUtils"
-import { joinChartSync, setChartSync } from "./chartSync"
+import { setChartSync } from "./chartSync"
 
 const MIN = 60_000
 const T0 = Date.parse("2026-01-01T00:00:00.000Z")
@@ -52,18 +62,39 @@ const optionFor = (metric: string, fromMin: number, toMin: number) => {
 const mounted: {
   instance: ReturnType<typeof echarts.init>
   host: HTMLElement
+  binding: ChartZoomBinding
 }[] = []
-const leaves: (() => void)[] = []
 afterEach(() => {
-  leaves.splice(0).forEach((l) => l())
-  mounted.splice(0).forEach(({ instance, host }) => {
+  mounted.splice(0).forEach(({ instance, host, binding }) => {
+    binding.dispose()
     instance.dispose()
     host.remove()
   })
   setChartSync(9, undefined)
+  clearNotebookChartZooms(9)
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
+
+// What ChartRenderer does on each draw: the option with the store's windows
+// written in, replacing the instance's whole option.
+const draw = (
+  instance: ReturnType<typeof echarts.init>,
+  scope: ZoomScope,
+  option: ReturnType<typeof optionFor>,
+  binding?: ChartZoomBinding,
+) => {
+  const axes = zoomAxesOf(option)
+  setChartZoomAxes(scope, axes)
+  const view = withViewState(
+    option,
+    (key) => chartZoomState(scope, key, axes),
+    undefined,
+  )
+  instance.setOption(view.option, { notMerge: true })
+  binding?.drew(view.states)
+  return view.states
+}
 
 const stubCanvas = () =>
   vi
@@ -78,12 +109,7 @@ const stubCanvas = () =>
       ) as unknown as CanvasRenderingContext2D
     } as unknown as typeof HTMLCanvasElement.prototype.getContext)
 
-const mount = (
-  metric: string,
-  from: number,
-  to: number,
-  handlerAfterSync = false,
-) => {
+const mount = (metric: string, from: number, to: number) => {
   const host = document.createElement("div")
   document.body.append(host)
   const instance = echarts.init(host, undefined, {
@@ -91,21 +117,18 @@ const mount = (
     width: 640,
     height: 300,
   })
-  mounted.push({ instance, host })
-  // echarts-for-react first render: setOption(option, notMerge=false, lazyUpdate=true)
-  instance.setOption(optionFor(metric, from, to), false, false)
-  const persisted: unknown[] = []
-  // ChartRenderer's datazoom handler -> onZoomChange (what the store keeps).
-  // echarts-for-react binds it before chart sync joins, and binds it again
-  // after sync when the cell's interactions change.
-  const persist = () =>
-    instance.on("datazoom", (evt) => {
-      persisted.push(zoomWindowForEvent(evt as DataZoomEvent, instance))
-    })
-  if (!handlerAfterSync) persist()
-  leaves.push(joinChartSync(9, instance))
-  if (handlerAfterSync) persist()
-  return { instance, host, persisted }
+  const scope = { bufferId: 9, cellId: metric }
+  const option = optionFor(metric, from, to)
+  const states = draw(instance, scope, option)
+  let drawn = option
+  const binding = bindChartZoom(instance, scope, () => drawn)
+  binding.drew(states)
+  mounted.push({ instance, host, binding })
+  const refresh = (refreshFrom: number, refreshTo: number) => {
+    drawn = optionFor(metric, refreshFrom, refreshTo)
+    draw(instance, scope, drawn, binding)
+  }
+  return { instance, host, scope, refresh }
 }
 
 const xRange = (instance: ReturnType<typeof echarts.init>) => {
@@ -157,23 +180,11 @@ const scenario = (refreshFrom: number, refreshTo: number) => {
   expect(before.peerA).toEqual(before.source)
   expect(before.peerB).toEqual(before.source)
 
-  // Refresh tick: every chart's query re-runs and the new rows merge into the
-  // same instance (stable structural key; notMerge=false).
-  source.instance.setOption(
-    optionFor("cpu", refreshFrom, refreshTo),
-    false,
-    false,
-  )
-  peerA.instance.setOption(
-    optionFor("mem", refreshFrom, refreshTo),
-    false,
-    false,
-  )
-  peerB.instance.setOption(
-    optionFor("disk", refreshFrom, refreshTo),
-    false,
-    false,
-  )
+  // Refresh tick: every chart's query re-runs and each chart is drawn again
+  // in full, with the windows the zoom store holds.
+  source.refresh(refreshFrom, refreshTo)
+  peerA.refresh(refreshFrom, refreshTo)
+  peerB.refresh(refreshFrom, refreshTo)
   vi.advanceTimersByTime(500)
 
   const after = {
@@ -200,36 +211,38 @@ it.each([
     if (windowInRange) expect(after.source).toEqual(before.source)
     expect(after.peerA).toEqual(after.source)
     expect(after.peerB).toEqual(after.source)
-    // And the zoomed chart remembers the same absolute window as its peers
-    expect(source.persisted.at(-1)).toHaveProperty("bounds")
+    // And the store keeps the absolute window the charts share
+    expect(chartZoomState(source.scope, "x0")).toMatchObject({
+      mode: "pinned",
+    })
   },
 )
 
-it("keeps the zoomed chart's absolute window when its zoom handler runs after chart sync", () => {
+it("keeps an unlinked zoom on its times while the data grows", () => {
   vi.useFakeTimers()
   stubCanvas()
-  setChartSync(9, { crosshair: "off", zoom: true })
-  // Given a linked chart whose zoom handler was bound again after it joined
-  // chart sync (a saved click interaction rebinds the chart's events)
-  const source = mount("cpu", 0, 60, true)
-  const peer = mount("mem", 0, 60)
-
-  // When the user zooms it to the middle half
-  const inside = primaryXControls(source.instance).find(
-    (c) => (c as unknown as { type: string }).type === "dataZoom.inside",
-  )!
-  source.instance.dispatchAction({
+  // Given an unlinked time chart zoomed to the middle half
+  const chart = mount("cpu", 0, 60)
+  const [control] = primaryXControls(chart.instance)
+  chart.instance.dispatchAction({
     type: "dataZoom",
-    batch: [{ dataZoomId: inside.id, start: 25, end: 75 }],
+    dataZoomId: control.id,
+    start: 25,
+    end: 75,
   })
-  vi.advanceTimersByTime(500)
+  const before = xRange(chart.instance)
 
-  // Then it remembers the same absolute window as its peer, so a remount
-  // after a refresh restores the times the peer shows
-  const [startValue, endValue] = primaryXControls(
-    peer.instance,
-  )[0].getValueRange("x", 0)!
-  expect(source.persisted.at(-1)).toMatchObject({
-    bounds: { startValue, endValue },
+  // When new rows arrive, then it still shows the same times
+  chart.refresh(0, 90)
+  expect(xRange(chart.instance)).toEqual(before)
+
+  // And zoomed out to all its data, it follows the next rows
+  chart.instance.dispatchAction({
+    type: "dataZoom",
+    dataZoomId: control.id,
+    start: 0,
+    end: 100,
   })
+  chart.refresh(0, 120)
+  expect(xRange(chart.instance)).toEqual([iso(0), iso(120)])
 })

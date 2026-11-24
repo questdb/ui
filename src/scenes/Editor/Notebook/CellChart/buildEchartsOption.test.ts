@@ -425,7 +425,7 @@ describe("buildEchartsOption — axis labels", () => {
 })
 
 describe("buildEchartsOption — right-axis bounds", () => {
-  it("keeps unset bounds as explicit keys so a cleared bound resets the merged chart", () => {
+  it("leaves cleared bounds unset", () => {
     // Given a chart with a right axis whose min/max were cleared
     const columns = [
       col("ts", "TIMESTAMP"),
@@ -445,9 +445,9 @@ describe("buildEchartsOption — right-axis bounds", () => {
         axis: "right",
       }),
     ])
-    // Then both bound keys are present, so ECharts' merge overwrites stale bounds
+    // Then the axis fits its data (every draw replaces the whole option)
     const rightAxis = (opt.yAxis as Record<string, unknown>[])[1]
-    expect(rightAxis).toHaveProperty("min", undefined)
-    expect(rightAxis).toHaveProperty("max", undefined)
+    expect(rightAxis).not.toHaveProperty("min")
+    expect(rightAxis).not.toHaveProperty("max")
   })
 })

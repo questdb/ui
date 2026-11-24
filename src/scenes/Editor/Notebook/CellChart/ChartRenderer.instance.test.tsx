@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import React from "react"
 import type { EChartsType } from "echarts"
+import { ThemeProvider } from "styled-components"
 import { expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
+import { darkTheme, lightTheme } from "../../../../theme"
 import { ChartRenderer } from "./ChartRenderer"
 
 vi.mock("../NotebookProvider", () => ({ useNotebookBufferId: () => undefined }))
@@ -41,24 +43,25 @@ vi.mock("echarts-for-react/lib/core", async () => {
   return { default: FakeECharts }
 })
 
+// A theme change is what draws a chart on a new instance.
 const chart = (
-  specKey: string,
+  theme: typeof lightTheme,
   onInstance: (i: EChartsType | null) => void,
 ) => (
-  <ChartRenderer
-    option={{ series: [] }}
-    zoomWindow={{ start: 0, end: 100 }}
-    zoomable={false}
-    animateEntry={false}
-    specKey={specKey}
-    onInstance={onInstance}
-  />
+  <ThemeProvider theme={theme}>
+    <ChartRenderer
+      option={{ series: [] }}
+      zoomable={false}
+      animateEntry={false}
+      onInstance={onInstance}
+    />
+  </ThemeProvider>
 )
 
 it("keeps a remounted instance registered when it is ready before the old cleanup", () => {
   const onInstance = vi.fn<[EChartsType | null], void>()
-  const view = renderComponent(chart("a", onInstance))
-  view.rerender(chart("b", onInstance))
+  const view = renderComponent(chart(lightTheme, onInstance))
+  view.rerender(chart(darkTheme, onInstance))
   const reported = onInstance.mock.calls.map(([instance]) =>
     instance ? (instance as unknown as { id: number }).id : null,
   )

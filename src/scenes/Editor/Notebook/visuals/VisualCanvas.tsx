@@ -72,8 +72,6 @@ const clickedStatements = (
     ? statements.slice(0, 2)
     : statements.slice(0, 1)
 
-const NO_ZOOM_WINDOW = { start: 0, end: 100 }
-
 const Fill = styled.div`
   height: 100%;
   min-height: 0;
@@ -119,6 +117,7 @@ type Props = {
   isFocused: boolean
   events?: Record<string, ChartEventHandler>
   onInstance?: React.ComponentProps<typeof ChartRenderer>["onInstance"]
+  onDraw?: React.ComponentProps<typeof ChartRenderer>["onDraw"]
 }
 
 /** Draws a cell's visual (stat tiles, order book, gauge, …) from its statements. */
@@ -137,8 +136,10 @@ export const VisualCanvas = ({
   isFocused,
   events,
   onInstance,
+  onDraw,
 }: Props) => {
   const theme = useTheme()
+  const zoomScope = useMemo(() => ({ bufferId, cellId }), [bufferId, cellId])
   const builder = ECHARTS_VISUALS[visual.type]
   const mapStatus = useWorldMap(visual.type === "map")
   const click = interactions?.click
@@ -329,12 +330,12 @@ export const VisualCanvas = ({
         option={built.option}
         isFocused={isFocused}
         animate={!live}
-        zoomWindow={NO_ZOOM_WINDOW}
+        zoomScope={zoomScope}
         zoomable={false}
         fit
-        specKey={`visual:${visual.type}:${JSON.stringify(visual.columns ?? {})}`}
         events={events}
         onInstance={onInstance}
+        onDraw={onDraw}
       />
     </Fill>
   )

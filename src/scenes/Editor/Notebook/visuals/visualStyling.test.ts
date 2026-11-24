@@ -399,7 +399,7 @@ it("reports a liquidity heatmap with no drawable cells", () => {
   expect(result.problems[0]?.message).toContain("No drawable liquidity")
 })
 
-it("explicitly clears obsolete point-map bounds for a global frame", () => {
+it("drops point-map bounds for a global frame", () => {
   const build = (points: number[][]) =>
     mapOption({
       visual: { type: "map" },
@@ -426,7 +426,7 @@ it("explicitly clears obsolete point-map bounds for a global frame", () => {
       [37, -122],
       [35, 139],
     ])?.geo,
-  ).toMatchObject({ boundingCoords: null })
+  ).not.toHaveProperty("boundingCoords")
 })
 
 it("outlines Dark Treemap labels with the chart surface on palette tiles", () => {
@@ -812,7 +812,7 @@ describe("volumeProfileOption", () => {
       { data: [{ value: null }, { value: null }] },
     ])
     const series = rendered.option?.series as unknown[] | undefined
-    expect(series?.[0]).toMatchObject({ markLine: { data: [] } })
+    expect(series?.[0]).not.toHaveProperty("markLine")
   })
   it("reports a missing configured sell column instead of changing the point of control", () => {
     const result = volumeProfileOption({

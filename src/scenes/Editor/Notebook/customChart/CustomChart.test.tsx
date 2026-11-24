@@ -2,13 +2,16 @@
 import React from "react"
 import { act, screen, waitFor } from "@testing-library/react"
 import type { EChartsType } from "echarts"
+import { ThemeProvider } from "styled-components"
 import { afterEach, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
+import { darkTheme, lightTheme } from "../../../../theme"
 import { echarts } from "../CellChart/echartsSetup"
 import { primaryXControls } from "../CellChart/liveZoom"
 import { joinChartSync, setChartSync } from "../interactions/chartSync"
 import { interactionEvents } from "../interactions/chartInteractions"
 import { clearRenderReport, getRenderReport } from "../renderReports"
+import { clearNotebookChartZooms } from "../cellVirtualization/chartZoomStore"
 import type { StatementRows } from "../visuals/statementRows"
 import { CustomChart } from "./CustomChart"
 
@@ -23,6 +26,7 @@ const BUFFER_ID = 913
 
 afterEach(() => {
   setChartSync(BUFFER_ID, undefined)
+  clearNotebookChartZooms(BUFFER_ID)
   clearRenderReport(BUFFER_ID, "a")
   clearRenderReport(BUFFER_ID, "b")
   vi.restoreAllMocks()
@@ -119,6 +123,12 @@ const Charts = ({
     </>
   )
 }
+
+// A chart is drawn on a new instance when the theme changes. These tests turn
+// the theme dark together with adding a brush interaction.
+const themed = (dark: boolean, node: React.ReactElement) => (
+  <ThemeProvider theme={dark ? darkTheme : lightTheme}>{node}</ThemeProvider>
+)
 
 const percent = (instance: EChartsType) =>
   primaryXControls(instance)[0]?.getPercentRange()?.map(Math.round)
@@ -222,19 +232,21 @@ it("keeps a zoomed category chart's window across a remount and an unchanged sav
       rows: Array.from({ length: 50 }, (_, i) => [`k${i}`, i]),
     },
   ]
-  const chart = (brush: boolean, rawOption = option) => (
-    <div data-hook="a">
-      <CustomChart
-        bufferId={BUFFER_ID}
-        cellId="a"
-        rawOption={rawOption}
-        statements={statements}
-        live={false}
-        isFocused={false}
-        interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
-      />
-    </div>
-  )
+  const chart = (brush: boolean, rawOption = option) =>
+    themed(
+      brush,
+      <div data-hook="a">
+        <CustomChart
+          bufferId={BUFFER_ID}
+          cellId="a"
+          rawOption={rawOption}
+          statements={statements}
+          live={false}
+          isFocused={false}
+          interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
+        />
+      </div>,
+    )
   const { container, rerender } = renderComponent(chart(false))
   const instance = () => {
     const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
@@ -253,11 +265,12 @@ it("keeps a zoomed category chart's window across a remount and an unchanged sav
   })
   await waitFor(() => expect(range()).toMatchObject({ start: 10, end: 30 }))
 
-  // When the chart is drawn on a new instance (a brush interaction is added)
+  // When the chart is drawn on a new instance (the theme changes as a brush
+  // interaction is added)
   rerender(chart(true))
   await waitFor(() => {
     expect(instance()).toBeTruthy()
-    expect(instance()).not.toBe(first)
+    expect(instance() !== first).toBe(true)
   })
 
   // Then it opens on the window the user chose, not the option's own
@@ -308,17 +321,19 @@ it("keeps a time chart zoomed out to its full range across a remount", async () 
   // the user zoomed out to the full range
   sizeCharts()
   const statements = minutes(200)
-  const chart = (brush: boolean) => (
-    <CustomChart
-      bufferId={BUFFER_ID}
-      cellId="a"
-      rawOption={AUTHORED}
-      statements={statements}
-      live={false}
-      isFocused={false}
-      interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
-    />
-  )
+  const chart = (brush: boolean) =>
+    themed(
+      brush,
+      <CustomChart
+        bufferId={BUFFER_ID}
+        cellId="a"
+        rawOption={AUTHORED}
+        statements={statements}
+        live={false}
+        isFocused={false}
+        interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
+      />,
+    )
   const { container, rerender } = renderComponent(chart(false))
   const instance = () => {
     const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
@@ -339,7 +354,7 @@ it("keeps a time chart zoomed out to its full range across a remount", async () 
   rerender(chart(true))
   await waitFor(() => {
     expect(instance()).toBeTruthy()
-    expect(instance()).not.toBe(first)
+    expect(instance() !== first).toBe(true)
     expect(primaryXControls(instance()!)).not.toHaveLength(0)
   })
 
@@ -350,17 +365,19 @@ it("keeps a time chart zoomed out to its full range across a remount", async () 
 it("restores a time chart's share of its refreshed data after a remount", async () => {
   // Given an unlinked custom time chart zoomed to 10-30% of its data
   sizeCharts()
-  const chart = (rows: number, brush: boolean) => (
-    <CustomChart
-      bufferId={BUFFER_ID}
-      cellId="a"
-      rawOption={PEER}
-      statements={minutes(rows)}
-      live={false}
-      isFocused={false}
-      interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
-    />
-  )
+  const chart = (rows: number, brush: boolean) =>
+    themed(
+      brush,
+      <CustomChart
+        bufferId={BUFFER_ID}
+        cellId="a"
+        rawOption={PEER}
+        statements={minutes(rows)}
+        live={false}
+        isFocused={false}
+        interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
+      />,
+    )
   const { container, rerender } = renderComponent(chart(200, false))
   const instance = () => {
     const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
@@ -384,7 +401,7 @@ it("restores a time chart's share of its refreshed data after a remount", async 
   rerender(chart(300, true))
   await waitFor(() => {
     expect(instance()).toBeTruthy()
-    expect(instance()).not.toBe(first)
+    expect(instance() !== first).toBe(true)
   })
 
   // Then it shows the window it showed just before, not the times of the zoom
@@ -395,30 +412,34 @@ it("records a zoom on a control that does not move the x axis", async () => {
   // Given a horizontal bar chart zoomed with a vertical slider on its y axis
   sizeCharts()
   const errors: unknown[] = []
-  const chart = (brush: boolean) => (
-    <CustomChart
-      bufferId={BUFFER_ID}
-      cellId="a"
-      rawOption={{
-        xAxis: { type: "value" },
-        yAxis: { type: "category" },
-        series: [{ type: "bar", datasetId: "q0", encode: { x: "v", y: "k" } }],
-        dataZoom: [{ type: "slider", yAxisIndex: 0, orient: "vertical" }],
-      }}
-      statements={[
-        {
-          columns: [
-            { name: "k", type: "SYMBOL" },
-            { name: "v", type: "DOUBLE" },
+  const chart = (brush: boolean) =>
+    themed(
+      brush,
+      <CustomChart
+        bufferId={BUFFER_ID}
+        cellId="a"
+        rawOption={{
+          xAxis: { type: "value" },
+          yAxis: { type: "category" },
+          series: [
+            { type: "bar", datasetId: "q0", encode: { x: "v", y: "k" } },
           ],
-          rows: Array.from({ length: 20 }, (_, i) => [`k${i}`, i]),
-        },
-      ]}
-      live={false}
-      isFocused={false}
-      interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
-    />
-  )
+          dataZoom: [{ type: "slider", yAxisIndex: 0, orient: "vertical" }],
+        }}
+        statements={[
+          {
+            columns: [
+              { name: "k", type: "SYMBOL" },
+              { name: "v", type: "DOUBLE" },
+            ],
+            rows: Array.from({ length: 20 }, (_, i) => [`k${i}`, i]),
+          },
+        ]}
+        live={false}
+        isFocused={false}
+        interactions={brush ? { brush: { from: "f", to: "t" } } : undefined}
+      />,
+    )
   const { container, rerender } = renderComponent(chart(false))
   const instance = () => {
     const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
@@ -447,7 +468,7 @@ it("records a zoom on a control that does not move the x axis", async () => {
   rerender(chart(true))
   await waitFor(() => {
     expect(instance()).toBeTruthy()
-    expect(instance()).not.toBe(first)
+    expect(instance() !== first).toBe(true)
   })
   await waitFor(() => expect(range()).toMatchObject({ start: 20, end: 60 }))
 })

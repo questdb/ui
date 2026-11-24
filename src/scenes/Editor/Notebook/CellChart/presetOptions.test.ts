@@ -424,6 +424,7 @@ describe("preset options", () => {
       width: 800,
       height: 400,
     })
+    // ChartRenderer replaces the whole option on every draw.
     const render = (percentStack: boolean, formatted = false) => {
       chart.setOption(
         buildEchartsOption(
@@ -431,6 +432,7 @@ describe("preset options", () => {
           [{ ...venues, type: "stackedBar", percentStack }],
           formatted ? { formats: { volume: { kind: "percent" } } } : {},
         ),
+        { notMerge: true },
       )
       return chart.getOption() as { yAxis: Loose[]; series: Loose[] }
     }
@@ -450,7 +452,7 @@ describe("preset options", () => {
       expect(cleared.yAxis[0].max).not.toBe(100)
       expect((cleared.yAxis[0].axisLabel as Loose).formatter).toBeUndefined()
       expect(
-        (cleared.series[0].tooltip as Loose).valueFormatter,
+        (cleared.series[0].tooltip as Loose | undefined)?.valueFormatter,
       ).toBeUndefined()
     } finally {
       chart.dispose()
@@ -488,8 +490,8 @@ describe("preset options", () => {
       chart.setOption(build("halfDonut"))
       expect(seriesOf(chart.getOption())[0].startAngle).toBe(180)
 
-      // When merged options switch the same series to a full donut
-      chart.setOption(build("donut"))
+      // When ChartRenderer redraws the same chart as a full donut
+      chart.setOption(build("donut"), { notMerge: true })
 
       // Then the previous arc and offset no longer apply
       expect(seriesOf(chart.getOption())[0]).toMatchObject({
@@ -677,14 +679,14 @@ describe("preset options", () => {
       chart.setOption(build("lines"))
       expect(marks()?.markLine).toMatchObject({ data: [{ yAxis: 20 }] })
 
-      // When the options are merged as in ChartRenderer
-      chart.setOption(build("bands"))
+      // When ChartRenderer redraws the same chart (a full replace)
+      chart.setOption(build("bands"), { notMerge: true })
 
       // Then the bands replace the lines, and vice versa
-      expect(marks()?.markLine).toMatchObject({ data: [] })
+      expect(marks()?.markLine).toBeUndefined()
       expect((marks()?.markArea as { data: unknown[] }).data).toHaveLength(2)
-      chart.setOption(build("lines"))
-      expect(marks()?.markArea).toMatchObject({ data: [] })
+      chart.setOption(build("lines"), { notMerge: true })
+      expect(marks()?.markArea).toBeUndefined()
     } finally {
       chart.dispose()
     }
@@ -749,6 +751,8 @@ describe("preset options", () => {
           [series],
           context,
         ),
+        // ChartRenderer replaces the whole option on every draw.
+        { notMerge: true },
       )
       expect(extent()).toEqual([10, 20])
     } finally {

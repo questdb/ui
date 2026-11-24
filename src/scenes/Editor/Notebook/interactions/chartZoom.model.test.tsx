@@ -10,7 +10,8 @@ import type { ChartSync, NotebookCell } from "../../../../store/notebook"
 import { echarts } from "../CellChart/echartsSetup"
 import { primaryXControls } from "../CellChart/liveZoom"
 import {
-  clearChartZoom,
+  chartZoomState,
+  clearNotebookChartZooms,
   resetChartZoom,
 } from "../cellVirtualization/chartZoomStore"
 import {
@@ -50,6 +51,7 @@ vi.mock("../../../../modules/ConsoleEventTracker", () => ({
   trackEvent: vi.fn(),
 }))
 
+const BUFFER_ID = 977
 const MIN = 60_000
 const T0 = Date.UTC(2026, 0, 1)
 // Enough points for the preset chart to show its slider and wheel zoom.
@@ -103,7 +105,19 @@ const statementOf = (id: CellId, world: World): Statement => {
   }
 }
 
+// A cell keeps its identity until its rows change, as the notebook's do: a
+// step that does not refresh a chart does not redraw it.
+const cells = new Map<string, NotebookCell>()
 const cellOf = (id: CellId, world: World): NotebookCell => {
+  const key = `${id}:${world.rows[id].from}:${world.rows[id].to}`
+  const known = cells.get(key)
+  if (known) return known
+  const cell = newCell(id, world)
+  cells.set(key, cell)
+  return cell
+}
+
+const newCell = (id: CellId, world: World): NotebookCell => {
   const statement = statementOf(id, world)
   return {
     id,
@@ -400,7 +414,7 @@ const apply = (root: ParentNode, world: World, step: Step): World => {
 
 // What the toolbar's Reset zoom and an SQL edit do to a cell's zoom.
 const resetZoom = (id: CellId, localOnly: boolean) =>
-  resetChartZoom(id, localOnly)
+  resetChartZoom({ bufferId: BUFFER_ID, cellId: id }, { localOnly })
 
 const checkInvariant = (root: ParentNode, world: World, trail: string[]) => {
   const ids = shownIds(world)
@@ -409,6 +423,17 @@ const checkInvariant = (root: ParentNode, world: World, trail: string[]) => {
     const shown = instance && shownWindow(instance)
     const expected = expectedWindow(world, id)
     const where = `[${ids.join(",")}] ${id} (${JSON.stringify(effective(world, id))}) after\n  ${trail.join("\n  ")}`
+    // The store holds the state the model expects (the chart may be gone).
+    const stored = chartZoomState({ bufferId: BUFFER_ID, cellId: id }, "x0")
+    const model = effective(world, id)
+    expect(
+      model.mode === "pinned"
+        ? stored.mode === "pinned" &&
+            stored.from === model.from &&
+            stored.to === model.to
+        : stored.mode === model.mode,
+      `${where}\n  store holds ${JSON.stringify(stored)}`,
+    ).toBe(true)
     expect(shown, where).toBeDefined()
     expect(expected, where).toBeDefined()
     const span = world.rows[id].to - world.rows[id].from
@@ -478,7 +503,7 @@ const run = async (seed: number, steps: number) => {
     }
   } finally {
     unmount()
-    for (const id of CELL_IDS) clearChartZoom(id)
+    clearNotebookChartZooms(BUFFER_ID)
   }
 }
 
@@ -487,14 +512,6 @@ afterEach(() => {
 })
 
 const SEEDS = Array.from({ length: 16 }, (_, i) => i + 1)
-// Seeds whose sequences today's code fails (see the commit message).
-const FAILING_TODAY = new Set<number>([
-  1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16,
-])
-
 describe("every chart shows its zoom state's window on its current data", () => {
-  for (const seed of SEEDS) {
-    const test = FAILING_TODAY.has(seed) ? it.fails : it
-    test(`seed ${seed}`, () => run(seed, 30), 60_000)
-  }
+  for (const seed of SEEDS) it(`seed ${seed}`, () => run(seed, 30), 60_000)
 })

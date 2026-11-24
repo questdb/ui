@@ -8,8 +8,8 @@ import type { NotebookCell } from "../../../../store/notebook"
 import { echarts } from "../CellChart/echartsSetup"
 import { primaryXControls } from "../CellChart/liveZoom"
 import {
-  clearChartZoom,
-  getChartZoom,
+  chartZoomed,
+  clearNotebookChartZooms,
   resetChartZoom,
 } from "../cellVirtualization/chartZoomStore"
 import { DrawCanvas } from "./index"
@@ -87,6 +87,8 @@ const cell = (id: string, metric: string): NotebookCell => {
 }
 
 const noop = () => undefined
+const fa = { bufferId: 909, cellId: "fa" }
+const fb = { bufferId: 909, cellId: "fb" }
 
 const percent = (instance: EChartsType) =>
   primaryXControls(instance)[0]?.getPercentRange()?.map(Math.round)
@@ -137,8 +139,8 @@ const mount = async () => {
   await waitFor(() => {
     expect(percent(a)).toEqual([20, 60])
     expect(percent(b)).toEqual([20, 60])
-    expect(getChartZoom("fa")).toBeDefined()
-    expect(getChartZoom("fb")).toBeDefined()
+    expect(chartZoomed(fa)).toBe(true)
+    expect(chartZoomed(fb)).toBe(true)
   })
   return { a, b }
 }
@@ -147,27 +149,25 @@ it("resets only the edited chart when its SQL changes", async () => {
   try {
     const { a, b } = await mount()
     // When the engine applies a statement-changing SQL edit to cell A
-    act(() => resetChartZoom("fa", true))
+    act(() => resetChartZoom(fa, { localOnly: true }))
     // Then A resets, B keeps its window
     expect(percent(a)).toEqual([0, 100])
-    expect(getChartZoom("fa")).toBeUndefined()
+    expect(chartZoomed(fa)).toBe(false)
     expect(percent(b)).toEqual([20, 60])
-    expect(getChartZoom("fb")).toBeDefined()
+    expect(chartZoomed(fb)).toBe(true)
   } finally {
-    clearChartZoom("fa")
-    clearChartZoom("fb")
+    clearNotebookChartZooms(909)
   }
 })
 
 it("resets linked peers when the user resets zoom", async () => {
   try {
     const { a, b } = await mount()
-    act(() => resetChartZoom("fa"))
+    act(() => resetChartZoom(fa))
     expect(percent(a)).toEqual([0, 100])
     expect(percent(b)).toEqual([0, 100])
-    expect(getChartZoom("fb")).toBeUndefined()
+    expect(chartZoomed(fb)).toBe(false)
   } finally {
-    clearChartZoom("fa")
-    clearChartZoom("fb")
+    clearNotebookChartZooms(909)
   }
 })
