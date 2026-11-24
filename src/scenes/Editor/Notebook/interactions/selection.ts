@@ -106,60 +106,17 @@ export const pickOfItem = (item: unknown): Pick | undefined =>
     ? asPick((item as Record<string, unknown>)[PICK_KEY])
     : undefined
 
-/**
- * Dataset rows carry their source in two hidden dimensions, so a row keeps
- * it through ECharts dataset transforms (filter, sort).
- */
-export const STATEMENT_DIMENSION = "__statement"
-export const ROW_DIMENSION = "__row"
-
 /** Click params, as far as a pick is read from them. */
 export type PickParams = {
   data?: unknown
-  value?: unknown
-  dimensionNames?: (string | undefined | null)[] | null
-  // A dataset-bound series' statement and the column it draws its marks
-  // from, by name (see buildCustomOption's `datasetSource`).
-  datasetStatement?: number
-  drawnColumn?: string
+  // A pick the chart worked out for the click (a dataset-bound series'
+  // mark, see buildCustomOption's `datasetPick`).
+  pick?: unknown
 }
 
-/**
- * The pick of a clicked item: the one it carries, else the hidden dimensions
- * of the dataset row it was drawn from.
- */
-export const pickOfParams = (
-  params: PickParams,
-  statements: PickSources,
-): Pick | undefined => {
-  const carried = pickOfItem(params.data)
-  if (carried) return carried
-  const value = params.value
-  if (!Array.isArray(value)) return undefined
-  const names = Array.isArray(params.dimensionNames)
-    ? params.dimensionNames
-    : []
-  let statementAt = names.indexOf(STATEMENT_DIMENSION)
-  let rowAt = names.indexOf(ROW_DIMENSION)
-  // Some series (a pie) name no dimensions: the hidden ones follow the
-  // statement's columns.
-  const known = params.datasetStatement
-  if ((statementAt < 0 || rowAt < 0) && known !== undefined) {
-    statementAt = statements[known]?.columns.length ?? -1
-    rowAt = statementAt + 1
-  }
-  if (statementAt < 0 || rowAt < 0) return undefined
-  const statement = value[statementAt] as unknown
-  const row = value[rowAt] as unknown
-  if (!isIndex(statement) || !isIndex(row)) return undefined
-  if (known !== undefined && statement !== known) return undefined
-  const columns = statements[statement]?.columns ?? []
-  const drawn =
-    params.drawnColumn === undefined
-      ? -1
-      : columns.findIndex((c) => c.name === params.drawnColumn)
-  return pickOf(statement, [row], drawn)
-}
+/** The pick of a clicked item: the one worked out for it, else its own. */
+export const pickOfParams = (params: PickParams): Pick | undefined =>
+  asPick(params.pick) ?? pickOfItem(params.data)
 
 /**
  * The SQL literal a click on `pick` writes: column `bound` (else the pick's

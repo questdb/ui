@@ -8,12 +8,7 @@ import {
   treeFromPath,
   type StatementRows,
 } from "../visuals/statementRows"
-import {
-  PICK_KEY,
-  ROW_DIMENSION,
-  STATEMENT_DIMENSION,
-  pickOf,
-} from "../interactions/selection"
+import { PICK_KEY, pickOf, type Pick } from "../interactions/selection"
 import { isSafeImage, type OptionProblem } from "./sanitizeOption"
 import {
   MAX_SANKEY_LINKS,
@@ -26,9 +21,9 @@ import {
 // it always owns.
 //
 // When clicks set a variable, every bound item carries the statement rows it
-// is drawn from (a `pick`, see selection.ts), and every dataset row carries
-// its statement and row in two hidden dimensions, which survive dataset
-// transforms.
+// is drawn from (a `pick`, see selection.ts). A dataset-bound series' mark is
+// matched back to its statement rows by value when it is clicked
+// (`datasetPick`), since ECharts copies dataset rows.
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -45,44 +40,38 @@ export const datasetId = (index: number) => `q${index}`
 // Plot coordinates must not be rounded for display before reaching ECharts.
 export const chartNumber = (value: unknown): number | null => toNumber(value)
 
-const HIDDEN_DIMENSIONS = [
-  { name: STATEMENT_DIMENSION, type: "int" },
-  { name: ROW_DIMENSION, type: "int" },
-]
+// A statement row as its dataset holds it: numbers parsed for plotting, the
+// exact text kept where parsing would change it.
+const datasetRow = (row: unknown[], numeric: number[]): unknown[] => {
+  if (numeric.length === 0) return row
+  const copy: unknown[] = row.slice()
+  for (const k of numeric) {
+    const raw = row[k]
+    const number = chartNumber(raw)
+    // ECharts parses float dimensions for plotting. Retain the exact text in
+    // raw event data for clicks and tooltips.
+    copy[k] = typeof raw === "string" && number !== null ? raw : number
+  }
+  return copy
+}
 
-const datasetsOf = (statements: (StatementRows | null)[], hidden: boolean) =>
+const numericColumns = (s: StatementRows | null): number[] =>
+  (s?.columns ?? []).flatMap((c, k) =>
+    classifyColumn(c) === "numeric" ? [k] : [],
+  )
+
+const datasetsOf = (statements: (StatementRows | null)[]) =>
   statements.map((s, i) => {
-    const columns = s?.columns ?? []
-    const numeric = columns.flatMap((c, k) =>
-      classifyColumn(c) === "numeric" ? [k] : [],
-    )
+    const numeric = numericColumns(s)
     return {
       id: datasetId(i),
-      dimensions: [
-        ...columns.map((c) => ({
-          name: c.name,
-          type: dimensionType(c.type),
-        })),
-        ...(hidden ? HIDDEN_DIMENSIONS : []),
-      ],
+      dimensions: (s?.columns ?? []).map((c) => ({
+        name: c.name,
+        type: dimensionType(c.type),
+      })),
       // QuestDB provides schema separately; the first array is always data.
       sourceHeader: false,
-      source:
-        numeric.length === 0 && !hidden
-          ? (s?.rows ?? [])
-          : (s?.rows ?? []).map((row, r) => {
-              const copy: unknown[] = row.slice()
-              for (const k of numeric) {
-                const raw = row[k]
-                const number = chartNumber(raw)
-                // ECharts parses float dimensions for plotting. Retain the
-                // exact text in raw event data for clicks and tooltips.
-                copy[k] =
-                  typeof raw === "string" && number !== null ? raw : number
-              }
-              if (hidden) copy.push(i, r)
-              return copy
-            }),
+      source: (s?.rows ?? []).map((row) => datasetRow(row, numeric)),
     }
   })
 
@@ -589,27 +578,6 @@ const DATASET_SERIES = new Set([
   "custom",
 ])
 
-// Series types whose coordinates are only a cartesian x and y.
-const XY_SERIES = new Set([
-  "line",
-  "bar",
-  "scatter",
-  "effectScatter",
-  "pictorialBar",
-  "custom",
-])
-
-// Encode keys that map no coordinate.
-const NON_COORD_ENCODES = new Set([
-  "tooltip",
-  "label",
-  "itemName",
-  "itemId",
-  "itemGroupId",
-  "itemChildGroupId",
-  "seriesName",
-])
-
 /**
  * The statement whose rows a dataset-bound series draws: its dataset is the
  * statement's, or derives from it through transforms.
@@ -645,99 +613,6 @@ const seriesStatement = (
             : -1
   }
   return undefined
-}
-
-/**
- * The option's series and visual maps with the hidden dimensions appended to
- * the statements' datasets, drawn as they are without them; null when they
- * cannot be (a series laid out by row, a visual map over series with
- * different dimensions), and the datasets stay as they are.
- */
-const withHiddenDimensions = (
-  option: Record<string, unknown>,
-  statements: (StatementRows | null)[],
-  datasets: unknown[],
-  datasetIds: string[],
-): Record<string, unknown> | null => {
-  const series = asList(option.series)
-  const statementOf = (s: unknown) =>
-    seriesStatement(s, datasets, datasetIds, statements.length)
-  // A series laid out by row would take the hidden values as categories.
-  if (
-    series.some(
-      (s) =>
-        isRecord(s) &&
-        s.seriesLayoutBy === "row" &&
-        statementOf(s) !== undefined,
-    )
-  )
-    return null
-  // A visual map without a dimension maps a series' last one: keep it on the
-  // last column, not on the hidden row number.
-  const visualMaps: unknown[] = []
-  for (const visualMap of asList(option.visualMap)) {
-    if (!isRecord(visualMap) || visualMap.dimension !== undefined) {
-      visualMaps.push(visualMap)
-      continue
-    }
-    const targets =
-      visualMap.seriesIndex === undefined
-        ? series.map((_, i) => i)
-        : asList(visualMap.seriesIndex).filter(
-            (i): i is number => typeof i === "number",
-          )
-    const last = new Set<number>()
-    let unbound = false
-    for (const target of targets) {
-      if (target >= series.length) continue
-      const statement = statementOf(series[target])
-      if (statement === undefined) unbound = true
-      else last.add((statements[statement]?.columns.length ?? 0) - 1)
-    }
-    if (last.size > 1 || (last.size === 1 && unbound)) return null
-    visualMaps.push(
-      last.size === 1 ? { ...visualMap, dimension: [...last][0] } : visualMap,
-    )
-  }
-  // A cartesian series whose x and y are both times or categories shows
-  // every dimension in its tooltip: keep that to the statement's columns.
-  const fitted = series.map((s) => {
-    const statement = statementOf(s)
-    if (statement === undefined || !isRecord(s) || !isRecord(s.encode)) return s
-    const encode = s.encode
-    if (
-      typeof s.type !== "string" ||
-      !XY_SERIES.has(s.type) ||
-      (s.coordinateSystem !== undefined &&
-        s.coordinateSystem !== "cartesian2d") ||
-      encode.tooltip !== undefined ||
-      !("x" in encode && "y" in encode)
-    )
-      return s
-    const columns = statements[statement]?.columns ?? []
-    const coords = Object.entries(encode)
-      .filter(([key]) => !NON_COORD_ENCODES.has(key))
-      .flatMap(([, value]) => asList(value))
-      .map((dim) =>
-        typeof dim === "number"
-          ? columns[dim]
-          : columns.find((c) => c.name === dim),
-      )
-    if (coords.some((c) => !c || classifyColumn(c) === "numeric")) return s
-    return { ...s, encode: { ...encode, tooltip: columns.map((c) => c.name) } }
-  })
-  return {
-    ...(option.series === undefined
-      ? {}
-      : { series: Array.isArray(option.series) ? fitted : fitted[0] }),
-    ...(option.visualMap === undefined
-      ? {}
-      : {
-          visualMap: Array.isArray(option.visualMap)
-            ? visualMaps
-            : visualMaps[0],
-        }),
-  }
 }
 
 /**
@@ -851,15 +726,7 @@ export const buildCustomOption = (
         : String(i),
   )
   checkEncodes(base, statements, datasetIds, report)
-  const hidden = pickable
-    ? withHiddenDimensions(
-        base,
-        statements,
-        [...statements.map(() => null), ...kept],
-        datasetIds,
-      )
-    : null
-  const datasets = [...datasetsOf(statements, hidden !== null), ...kept]
+  const datasets = [...datasetsOf(statements), ...kept]
 
   const tooltip = isRecord(base.tooltip)
     ? base.tooltip
@@ -869,10 +736,39 @@ export const buildCustomOption = (
   const option = {
     useUTC: true,
     ...base,
-    ...hidden,
     dataset: datasets,
     tooltip: { ...tooltip, confine: true, renderMode: "richText" },
     ...(live ? { animation: false } : {}),
   }
   return { option, problems }
+}
+
+/**
+ * The pick of a clicked mark of a dataset-bound series: the rows of its
+ * statement that hold exactly the clicked row's values (rows that match are
+ * identical, so any column of them reads the same), drawn from the series'
+ * item-name or category column.
+ */
+export const datasetPick = (
+  option: Record<string, unknown>,
+  statements: (StatementRows | null)[],
+  seriesIndex: number,
+  value: unknown,
+): Pick | undefined => {
+  const source = datasetSource(option, statements, seriesIndex)
+  if (!source || !Array.isArray(value)) return undefined
+  const statement = statements[source.datasetStatement]
+  if (!statement || value.length !== statement.columns.length) return undefined
+  const numeric = numericColumns(statement)
+  const rows: number[] = []
+  statement.rows.forEach((row, r) => {
+    const drawn = datasetRow(row, numeric)
+    if (drawn.every((cell, k) => Object.is(cell, value[k]))) rows.push(r)
+  })
+  if (rows.length === 0) return undefined
+  const column =
+    source.drawnColumn === undefined
+      ? undefined
+      : statement.columns.findIndex((c) => c.name === source.drawnColumn)
+  return pickOf(source.datasetStatement, rows, column)
 }

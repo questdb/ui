@@ -38,7 +38,7 @@ import { readStateSegments } from "../visuals/stateSegments"
 import { toLabel, toTime, type StatementRows } from "../visuals/statementRows"
 import {
   buildCustomOption,
-  datasetSource,
+  datasetPick,
 } from "../customChart/buildCustomOption"
 import { interactionEvents } from "./chartInteractions"
 import { pickLiteral, sqlLiteral, type Pick as MarkPick } from "./selection"
@@ -639,11 +639,13 @@ const datasetCase = (
     expect(count).toBeGreaterThan(0)
     return Array.from({ length: count }, (_, i) => {
       const params = series.getDataParams(i)
-      // As the custom chart passes a click on, with where the series' rows
-      // come from.
+      // As the custom chart passes a click on, with the rows it matched.
       const value = params.value as unknown[]
       return {
-        params: { ...params, ...datasetSource(option, [fixture], 0) },
+        params: {
+          ...params,
+          pick: datasetPick(option, [fixture], 0, params.value),
+        },
         rows: rowsWithV(value[V]),
         drawn,
       }

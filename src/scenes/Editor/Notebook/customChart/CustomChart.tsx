@@ -13,7 +13,7 @@ import { sanitizeOption } from "./sanitizeOption"
 import {
   buildCustomOption,
   customSeriesCount,
-  datasetSource,
+  datasetPick,
   partialDatasetWarnings,
 } from "./buildCustomOption"
 import { BUILTIN_RENDER_ITEMS } from "../CellChart/customSeriesNames"
@@ -123,13 +123,23 @@ export const CustomChart = ({
         ? {
             click: (payload: unknown, instance: EChartsType) => {
               const drawn = drawnRef.current
-              const seriesIndex = (payload as { seriesIndex?: unknown })
-                .seriesIndex
-              const source =
+              const { seriesIndex, value } = payload as {
+                seriesIndex?: unknown
+                value?: unknown
+              }
+              const pick =
                 drawn && typeof seriesIndex === "number"
-                  ? datasetSource(drawn.option, drawn.statements, seriesIndex)
+                  ? datasetPick(
+                      drawn.option,
+                      drawn.statements,
+                      seriesIndex,
+                      value,
+                    )
                   : undefined
-              events.click?.({ ...(payload as object), ...source }, instance)
+              events.click?.(
+                pick ? { ...(payload as object), pick } : payload,
+                instance,
+              )
             },
           }
         : {}),

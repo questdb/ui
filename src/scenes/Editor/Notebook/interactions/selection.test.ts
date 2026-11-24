@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest"
 import {
-  ROW_DIMENSION,
-  STATEMENT_DIMENSION,
   boundColumnProblem,
   mergePicks,
   pickLiteral,
@@ -138,76 +136,28 @@ describe("mergePicks", () => {
 })
 
 describe("pickOfParams", () => {
-  const statements = [trades]
-
   it("reads the pick a clicked item carries", () => {
     expect(
-      pickOfParams(
-        { data: { name: "d1", pick: { statement: 0, rows: [1], column: 0 } } },
-        statements,
-      ),
+      pickOfParams({
+        data: { name: "d1", pick: { statement: 0, rows: [1], column: 0 } },
+      }),
     ).toEqual(pickOf(0, [1], 0))
   })
 
-  it("never takes a label, a name or a value for a pick", () => {
+  it("prefers the pick worked out for the click", () => {
     expect(
-      pickOfParams({ data: { name: "d1", value: 3 }, value: 3 }, statements),
-    ).toBeUndefined()
-    expect(
-      pickOfParams(
-        {
-          data: ["d1", 3],
-          value: ["d1", 3],
-          dimensionNames: ["desk", "qty"],
-        },
-        statements,
-      ),
-    ).toBeUndefined()
-    expect(
-      pickOfParams(
-        { data: { pick: { statement: -1, rows: [0] } } },
-        statements,
-      ),
-    ).toBeUndefined()
-  })
-
-  it("reads a dataset row's source from its hidden dimensions", () => {
-    // Given a dataset row as ECharts reports it after a transform
-    const row = [...trades.rows[2], 0, 2]
-    const dimensionNames = [
-      ...trades.columns.map((c) => c.name),
-      STATEMENT_DIMENSION,
-      ROW_DIMENSION,
-    ]
-
-    // When / Then: drawn from the series' drawn column, when it has one
-    expect(
-      pickOfParams(
-        { data: row, value: row, dimensionNames, drawnColumn: "desk" },
-        statements,
-      ),
+      pickOfParams({
+        data: ["d1", 3],
+        pick: { statement: 0, rows: [2], column: 0 },
+      }),
     ).toEqual(pickOf(0, [2], 0))
-    expect(
-      pickOfParams({ data: row, value: row, dimensionNames }, statements),
-    ).toEqual(pickOf(0, [2]))
   })
 
-  it("finds the hidden dimensions after the columns of a known statement", () => {
-    // Given a series that names no dimensions (a pie)
-    const row = [...trades.rows[1], 0, 1]
-
-    // When / Then
+  it("never takes a label, a name or a value for a pick", () => {
+    expect(pickOfParams({ data: { name: "d1", value: 3 } })).toBeUndefined()
+    expect(pickOfParams({ data: ["d1", 3] })).toBeUndefined()
     expect(
-      pickOfParams(
-        { value: row, dimensionNames: [], datasetStatement: 0 },
-        statements,
-      ),
-    ).toEqual(pickOf(0, [1]))
-    expect(
-      pickOfParams({ value: row, dimensionNames: [], datasetStatement: 1 }, [
-        trades,
-        trades,
-      ]),
+      pickOfParams({ data: { pick: { statement: -1, rows: [0] } } }),
     ).toBeUndefined()
   })
 })

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import { buildCustomOption, chartNumber } from "./buildCustomOption"
+import {
+  buildCustomOption,
+  chartNumber,
+  datasetPick,
+} from "./buildCustomOption"
+import { pickOf } from "../interactions/selection"
 import { interactionEvents } from "../interactions/chartInteractions"
 import type { StatementRows } from "../visuals/statementRows"
 import { echarts } from "../CellChart/echartsSetup"
@@ -694,7 +699,7 @@ describe("buildCustomOption", () => {
     expect(q0.source).toEqual(measured)
   })
 
-  describe("the hidden source of clickable dataset rows", () => {
+  describe("clickable dataset rows", () => {
     const desks = rows(
       [
         ["ts", "TIMESTAMP"],
@@ -843,7 +848,7 @@ describe("buildCustomOption", () => {
       expect(drawn(raw, true)).toEqual(drawn(raw, false))
     })
 
-    it("appends them to each statement's rows, after its columns", () => {
+    it("keeps each statement's rows as they are", () => {
       // Given / When
       const { option } = buildCustomOption({}, [desks], false, true)
 
@@ -857,32 +862,119 @@ describe("buildCustomOption", () => {
         "desk",
         "pnl",
         "id",
-        "__statement",
-        "__row",
       ])
-      expect(q0.source.map((row) => row.slice(4))).toEqual([
-        [0, 0],
-        [0, 1],
-        [0, 2],
+      expect(q0.source[0]).toHaveLength(4)
+    })
+
+    // The raw rows ECharts reports for a series' items, as a click does.
+    const clickedRows = (
+      raw: Record<string, unknown>,
+      statements = [desks],
+    ) => {
+      const { option } = buildCustomOption(raw, statements, false, true)
+      const chart = echarts.init(null, undefined, {
+        renderer: "svg",
+        ssr: true,
+        width: 640,
+        height: 360,
+      })
+      try {
+        chart.setOption(option)
+        const data = (
+          chart as unknown as {
+            getModel(): {
+              getSeriesByIndex(i: number): {
+                getData(): {
+                  count(): number
+                  getRawDataItem(i: number): unknown
+                }
+              }
+            }
+          }
+        )
+          .getModel()
+          .getSeriesByIndex(0)
+          .getData()
+        return {
+          option,
+          values: Array.from({ length: data.count() }, (_, i) =>
+            data.getRawDataItem(i),
+          ),
+        }
+      } finally {
+        chart.dispose()
+      }
+    }
+
+    it("matches a clicked row behind a filter to its statement row", () => {
+      // Given a bar series over the rows of desk "a" only
+      const { option, values } = clickedRows({
+        dataset: [
+          {
+            id: "a",
+            fromDatasetId: "q0",
+            transform: {
+              type: "filter",
+              config: { dimension: "desk", "=": "a" },
+            },
+          },
+        ],
+        xAxis: { type: "category" },
+        yAxis: {},
+        series: [
+          {
+            type: "bar",
+            datasetId: "a",
+            encode: { x: "id", y: "pnl", itemName: "desk" },
+          },
+        ],
+      })
+
+      // When / Then each item maps to its own row, drawn from the item name
+      expect(values.map((v) => datasetPick(option, [desks], 0, v))).toEqual([
+        pickOf(0, [0], 1),
+        pickOf(0, [2], 1),
       ])
     })
 
-    it("leaves rows a series lays out as series without them", () => {
-      // Given a series that reads each row as a series of its own
-      const { option } = buildCustomOption(
+    it("takes every identical row and the category column", () => {
+      // Given two identical rows on a category axis
+      const twice = rows(
+        desks.columns.map((c): [string, string] => [c.name, c.type]),
+        [desks.rows[1], desks.rows[1]] as never,
+      )
+      const { option, values } = clickedRows(
         {
           xAxis: { type: "category" },
           yAxis: {},
-          series: [{ type: "bar", datasetId: "q0", seriesLayoutBy: "row" }],
+          series: [
+            { type: "bar", datasetId: "q0", encode: { x: "desk", y: "pnl" } },
+          ],
         },
-        [desks],
-        false,
-        true,
+        [twice],
       )
 
-      // Then the rows keep only their columns
-      const [q0] = option.dataset as { source: unknown[][] }[]
-      expect(q0.source[0]).toHaveLength(4)
+      // When / Then
+      expect(datasetPick(option, [twice], 0, values[0])).toEqual(
+        pickOf(0, [0, 1], 1),
+      )
+    })
+
+    it("has no drawn column on a time axis, and no pick for an unknown row", () => {
+      // Given points over time
+      const { option, values } = clickedRows({
+        xAxis: { type: "time" },
+        yAxis: {},
+        series: [
+          { type: "line", datasetId: "q0", encode: { x: "ts", y: "pnl" } },
+        ],
+      })
+
+      // When / Then
+      expect(datasetPick(option, [desks], 0, values[1])).toEqual(pickOf(0, [1]))
+      expect(
+        datasetPick(option, [desks], 0, ["x", "y", 0, "0"]),
+      ).toBeUndefined()
     })
   })
 })

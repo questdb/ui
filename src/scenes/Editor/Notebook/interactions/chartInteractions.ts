@@ -36,11 +36,7 @@ export const interactionEvents = (
       if (p.componentType === "markLine" || p.componentType === "markArea")
         return
       const current = statements()
-      const literal = pickLiteral(
-        pickOfParams(p, current),
-        click.column,
-        current,
-      )
+      const literal = pickLiteral(pickOfParams(p), click.column, current)
       // Nothing to select: the mark has no such column, or its rows disagree.
       if (literal === undefined) return
       setVariables({ [click.variable]: literal })
