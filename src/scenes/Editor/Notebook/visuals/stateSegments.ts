@@ -9,7 +9,9 @@ import {
 
 // States over time, per lane, as the state timeline and the uptime bars read
 // them: rows of (time, lane, state[, end]). Without an end column a state
-// lasts until the lane's next row.
+// lasts until the lane's next row; a lane's last state lasts until the end of
+// the range, which runs one sampling step (the median gap between a lane's
+// rows) past the newest row, so the newest sample counts.
 
 export type Severity = "good" | "neutral" | "warning" | "bad"
 
@@ -121,17 +123,20 @@ export const readStateSegments = (
     })
   })
   if (open.length === 0) return "No row has a valid time."
-  const to = Math.max(...open.map((s) => s.end ?? s.start))
-  const from = Math.min(...open.map((s) => s.start))
   const byLane = new Map<string, typeof open>()
   for (const s of open) {
     const lane = byLane.get(s.lane)
     if (lane) lane.push(s)
     else byLane.set(s.lane, [s])
   }
+  for (const list of byLane.values()) list.sort((a, b) => a.start - b.start)
+  const step = open.some((s) => s.end === null) ? samplingStep(byLane) : 0
+  let to = -Infinity
+  for (const s of open) to = Math.max(to, s.end ?? s.start + step)
+  let from = Infinity
+  for (const s of open) from = Math.min(from, s.start)
   const segments: Segment[] = []
   for (const list of byLane.values()) {
-    list.sort((a, b) => a.start - b.start)
     list.forEach((s, i) =>
       segments.push({ ...s, end: s.end ?? list[i + 1]?.start ?? to }),
     )
@@ -145,6 +150,20 @@ export const readStateSegments = (
     from,
     to,
   }
+}
+
+// The median gap between consecutive rows of a lane, over every lane: how
+// long one sample stands for. A single sample of each lane stands for 1 ms.
+const samplingStep = (byLane: Map<string, { start: number }[]>): number => {
+  const gaps: number[] = []
+  for (const list of byLane.values())
+    for (let i = 1; i < list.length; i++) {
+      const gap = list[i].start - list[i - 1].start
+      if (gap > 0) gaps.push(gap)
+    }
+  if (gaps.length === 0) return 1
+  gaps.sort((a, b) => a - b)
+  return gaps[Math.floor(gaps.length / 2)]
 }
 
 export const latestStateByLane = (segments: Span[]): Map<string, string> => {

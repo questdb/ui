@@ -3,6 +3,7 @@ import {
   asNumeric,
   compareValues,
 } from "../../components/ResultGrid/highlight/comparable"
+import { isRecord, toFiniteNumber as toNumber } from "../values"
 
 // One way to format and colour a column's values, shared by the result grid,
 // charts, stat tiles, gauges, the order book and every other visual. A format
@@ -97,16 +98,6 @@ export const formatTargetOf = (type: string): "number" | "array" | null => {
 
 const DASH = "—"
 
-const toNumber = (value: unknown): number | null => {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value)
-    return Number.isFinite(n) ? n : null
-  }
-  if (typeof value === "bigint") return Number(value)
-  return null
-}
-
 const groupedCache = new Map<string, Intl.NumberFormat>()
 
 const grouped = (
@@ -125,6 +116,21 @@ const grouped = (
       ...(compact ? { notation: "compact" as const } : {}),
     })
     groupedCache.set(key, formatter)
+  }
+  return formatter
+}
+
+const significantCache = new Map<number, Intl.NumberFormat>()
+
+// A value below one keeps its first significant digits, so a small non-zero
+// value never reads as 0.
+const significant = (digits: number): Intl.NumberFormat => {
+  let formatter = significantCache.get(digits)
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("en-US", {
+      maximumSignificantDigits: digits,
+    })
+    significantCache.set(digits, formatter)
   }
   return formatter
 }
@@ -187,9 +193,15 @@ const formatNumberBody = (
           value,
         )
       if (format.compact) return grouped(0, 1, true).format(value)
-      return Number.isInteger(n) && typeof exact !== "string"
-        ? grouped(0, 0).format(value)
-        : grouped(0, Math.abs(n) >= 100 ? 2 : 4).format(value)
+      if (Number.isInteger(n) && typeof exact !== "string")
+        return grouped(0, 0).format(value)
+      // Decimal text (a DECIMAL column) keeps its scale: 2.00 stays 2.00.
+      if (typeof exact === "string") {
+        const scale = exact.split(".")[1]?.length ?? 0
+        return grouped(scale, scale).format(exact)
+      }
+      if (Math.abs(n) < 1) return significant(4).format(value)
+      return grouped(0, Math.abs(n) >= 100 ? 2 : 4).format(value)
     }
   }
 }
@@ -233,9 +245,19 @@ export const formatValue = (
   return `${f.prefix ?? ""}${formatNumberBody(n, f, exact)}${f.suffix ?? ""}`
 }
 
-/** True when the format changes how a number reads. */
+/**
+ * True when the format changes how a number reads: a kind, decimals, compact
+ * notation, a prefix or a suffix. A format that only colours a column or
+ * draws a visual in it leaves the text as the column shows it.
+ */
 export const formatsNumbers = (format: ColumnFormat | undefined): boolean =>
-  format !== undefined && format.kind !== "text"
+  format !== undefined &&
+  format.kind !== "text" &&
+  (format.kind !== undefined ||
+    format.decimals !== undefined ||
+    format.compact === true ||
+    Boolean(format.prefix) ||
+    Boolean(format.suffix))
 
 /** The tone a value takes from the format's thresholds or sign colouring. */
 export const toneOf = (
@@ -330,9 +352,6 @@ export const thresholdBands = (
   bands.push({ from, to: max, tone })
   return bands
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 // Limits shared by the format editor, the agent tools and the importer, so
 // what one accepts the others keep.

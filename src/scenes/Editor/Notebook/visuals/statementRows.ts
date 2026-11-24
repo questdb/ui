@@ -7,6 +7,7 @@ import {
 import { hasPendingResult } from "../statementIdentity"
 import { classifyColumn } from "../CellChart/inferChartConfig"
 import { pickOf, type Pick } from "../interactions/selection"
+import { toFiniteNumber } from "../../../../utils/values"
 
 // Statement results for visuals and custom charts: one entry per statement,
 // in statement order, including statements that returned no rows (an empty
@@ -74,15 +75,9 @@ export const firstColumnOf = (
     (c, i) => !skip.includes(i) && classifyColumn(c) === role,
   )
 
-export const toNumber = (value: unknown): number | null => {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value)
-    return Number.isFinite(n) ? n : null
-  }
-  if (typeof value === "boolean") return value ? 1 : 0
-  return null
-}
+/** A number to draw: numbers, numeric text and bigints, and booleans as 1/0. */
+export const toNumber = (value: unknown): number | null =>
+  typeof value === "boolean" ? (value ? 1 : 0) : toFiniteNumber(value)
 
 export const toLabel = (value: unknown): string => {
   if (value === null || value === undefined) return ""

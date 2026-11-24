@@ -22,23 +22,25 @@ export type RenderReport = {
 
 const reports = new Map<string, RenderReport>()
 
-const keyOf = (bufferId: number, cellId: string) => `${bufferId}:${cellId}`
+/** The key of a cell across notebooks, for per-cell registries. */
+export const cellKey = (bufferId: number, cellId: string) =>
+  `${bufferId}:${cellId}`
 
 export const setRenderReport = (
   bufferId: number,
   cellId: string,
   report: Omit<RenderReport, "at">,
 ): void => {
-  reports.set(keyOf(bufferId, cellId), { ...report, at: Date.now() })
+  reports.set(cellKey(bufferId, cellId), { ...report, at: Date.now() })
 }
 
 export const getRenderReport = (
   bufferId: number,
   cellId: string,
-): RenderReport | undefined => reports.get(keyOf(bufferId, cellId))
+): RenderReport | undefined => reports.get(cellKey(bufferId, cellId))
 
 export const clearRenderReport = (bufferId: number, cellId: string): void => {
-  reports.delete(keyOf(bufferId, cellId))
+  reports.delete(cellKey(bufferId, cellId))
 }
 
 // Keys of `drawn` that say what was drawn (counts and kinds). The others,

@@ -207,12 +207,12 @@ const setup = async (bufferId: number, hold?: (q: string) => boolean) => {
     </QuestContext.Provider>,
   )
   fireEvent.click(screen.getByRole("button", { name: "Reveal cells" }))
-  const chart = await waitFor(() => {
+  // The chart has drawn the source rows.
+  await waitFor(() => {
     const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
     expect(host).not.toBeNull()
     const chart = echarts.getInstanceByDom(host!)!
     expect(drawnValues(chart)).toEqual([4, 9, 6])
-    return chart
   })
   expect(await screen.findByRole("gridcell")).toHaveTextContent(/^east$/)
   const dependentCalls = () =>
@@ -224,20 +224,29 @@ const setup = async (bufferId: number, hold?: (q: string) => boolean) => {
   })
   const settle = () =>
     act(() => new Promise((resolve) => setTimeout(resolve, 400)))
-  const clickMark = (name: string, value: number) => {
-    const canvas = chart.getDom().querySelector("canvas")!
-    const [x, y] = chart.convertToPixel({ seriesIndex: 0 }, [name, value])
+  // The chart can be drawn again on a new instance (its code loads lazily, a
+  // remount): click the live one, once it can place the mark.
+  const clickMark = async (name: string, value: number) => {
+    const { live, x, y } = await waitFor(() => {
+      const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+      const live = host ? echarts.getInstanceByDom(host) : undefined
+      const at = live?.convertToPixel({ seriesIndex: 0 }, [name, value])
+      expect(at?.every(Number.isFinite)).toBe(true)
+      return { live: live!, x: at![0], y: at![1] }
+    })
+    const canvas = live.getDom().querySelector("canvas")!
     const coordinates = { clientX: Math.round(x), clientY: Math.round(y) }
     const pointer = (ev: string) =>
       fireEvent(canvas, new MouseEvent(ev, { bubbles: true, ...coordinates }))
     act(() => {
       pointer("mousemove")
-      chart.getZr().flush()
+      live.getZr().flush()
       pointer("mousedown")
       pointer("mouseup")
       pointer("click")
     })
   }
+
   return { observation, settle, clickMark }
 }
 
@@ -257,7 +266,7 @@ it("re-runs a cell left on another value when its stored value is clicked", asyn
   })
 
   // When the user clicks the west mark, the value already stored
-  clickMark("west", 9)
+  await clickMark("west", 9)
 
   // Then the dependent cell shows west
   await waitFor(() =>
@@ -276,7 +285,7 @@ it("re-runs a stopped selection when its value is clicked again", async () => {
     9903,
     (q) => q.includes("@station := 'west'") && held++ === 0,
   )
-  clickMark("west", 9)
+  await clickMark("west", 9)
   const refreshing = await screen.findByText("Refreshing...")
   fireEvent.click(refreshing.parentElement!.querySelector("button")!)
   await settle()
@@ -287,7 +296,7 @@ it("re-runs a stopped selection when its value is clicked again", async () => {
   })
 
   // When the user clicks west again
-  clickMark("west", 9)
+  await clickMark("west", 9)
 
   // Then the cell runs again and shows west
   await waitFor(() =>
@@ -304,11 +313,11 @@ it("keeps a running re-query when its value is clicked again", async () => {
   const { observation, settle, clickMark } = await setup(9904, (q) =>
     q.includes("@station := 'west'"),
   )
-  clickMark("west", 9)
+  await clickMark("west", 9)
   await screen.findByText("Refreshing...")
 
   // When the user clicks west again
-  clickMark("west", 9)
+  await clickMark("west", 9)
   await settle()
 
   // Then the running fetch is not restarted
@@ -319,11 +328,11 @@ it("keeps a running re-query when its value is clicked again", async () => {
 it("does not re-run a cell already showing the clicked value", async () => {
   // Given the dependent cell re-ran for west after a click
   const { observation, clickMark } = await setup(9905)
-  clickMark("west", 9)
+  await clickMark("west", 9)
   await waitFor(() => expect(observation().dependent).toBe("west"))
 
   // When the user clicks west again
-  clickMark("west", 9)
+  await clickMark("west", 9)
   await act(() => new Promise((resolve) => setTimeout(resolve, 400)))
 
   // Then its rows already match, and nothing runs

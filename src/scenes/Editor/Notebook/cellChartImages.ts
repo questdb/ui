@@ -1,4 +1,5 @@
 import type { EChartsType } from "echarts"
+import { cellKey } from "./renderReports"
 
 // The ECharts instance each drawn cell shows, so an agent can ask for a
 // picture of it (get_cell_image). Only cells on screen have one: a notebook
@@ -6,15 +7,13 @@ import type { EChartsType } from "echarts"
 
 const instances = new Map<string, EChartsType>()
 
-const keyOf = (bufferId: number, cellId: string) => `${bufferId}:${cellId}`
-
 /** Registers a cell's chart; the returned function unregisters it. */
 export const registerCellChart = (
   bufferId: number,
   cellId: string,
   instance: EChartsType,
 ): (() => void) => {
-  const key = keyOf(bufferId, cellId)
+  const key = cellKey(bufferId, cellId)
   instances.set(key, instance)
   return () => {
     if (instances.get(key) === instance) instances.delete(key)
@@ -25,7 +24,7 @@ export const cellChartInstance = (
   bufferId: number,
   cellId: string,
 ): EChartsType | null => {
-  const instance = instances.get(keyOf(bufferId, cellId))
+  const instance = instances.get(cellKey(bufferId, cellId))
   return instance && !instance.isDisposed() ? instance : null
 }
 

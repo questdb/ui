@@ -174,6 +174,24 @@ describe("interactions editor", () => {
     ).toEqual({ click: "@symbol already exists: pick it from the list." })
   })
 
+  it("treats a name that differs only in case as the existing variable", () => {
+    // Given a notebook variable @symbol: QuestDB reads @Symbol as the same one
+    // When / Then a new @Symbol is refused, and an existing @SYMBOL is
+    // not shown as undeclared or added again
+    expect(
+      interactionErrors(
+        {
+          interactions: { click: { variable: "Symbol" } },
+          created: { click: { name: "Symbol", value: "'X'" } },
+        },
+        variables,
+      ),
+    ).toEqual({ click: "@Symbol already exists: pick it from the list." })
+    expect(
+      withNewVariables(variables, [{ name: "SYMBOL", value: "'ETH'" }]),
+    ).toEqual(variables)
+  })
+
   it("reports the server's error on the slot whose variable fails", async () => {
     // Given a new variable the server rejects
     const draft: InteractionsDraft = {

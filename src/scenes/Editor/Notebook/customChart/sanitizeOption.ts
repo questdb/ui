@@ -2,6 +2,7 @@ import type { ColorShape } from "../../../../types/styled"
 import { isTone, toneColor } from "../../../../utils/formats/columnFormat"
 import { copyPlainOption } from "../../../../store/notebookFormat"
 import { escapeHtml } from "../../../../utils/escapeHtml"
+import { isRecord } from "../../../../utils/values"
 
 // Makes an agent-written ECharts option safe and on-style before it is drawn.
 //
@@ -120,9 +121,6 @@ export const resolveToken = (
     ? hexToRgba(color, Number(match[2]))
     : color
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 export const isSafeImage = (value: string): boolean =>
   /^data:image\/(png|gif|jpeg|webp|svg\+xml);/i.test(value)

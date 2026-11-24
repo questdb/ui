@@ -192,13 +192,13 @@ const setup = async (bufferId: number, revealDependent = true) => {
       name: revealDependent ? "Reveal cells" : "Reveal chart",
     }),
   )
-  const chart = await waitFor(
+  // The chart has drawn the source rows.
+  await waitFor(
     () => {
       const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
       expect(host).not.toBeNull()
       const chart = echarts.getInstanceByDom(host!)!
       expect(drawnValues(chart)).toEqual([4, 9, 6])
-      return chart
       // The chart code loads lazily: the first test in a busy run waits longer.
     },
     { timeout: 10_000 },
@@ -214,20 +214,29 @@ const setup = async (bufferId: number, revealDependent = true) => {
   })
   const settle = () =>
     act(() => new Promise((resolve) => setTimeout(resolve, 400)))
-  const clickMark = (name: string, value: number) => {
-    const canvas = chart.getDom().querySelector("canvas")!
-    const [x, y] = chart.convertToPixel({ seriesIndex: 0 }, [name, value])
+  // The chart can be drawn again on a new instance (its code loads lazily, a
+  // remount): click the live one, once it can place the mark.
+  const clickMark = async (name: string, value: number) => {
+    const { live, x, y } = await waitFor(() => {
+      const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+      const live = host ? echarts.getInstanceByDom(host) : undefined
+      const at = live?.convertToPixel({ seriesIndex: 0 }, [name, value])
+      expect(at?.every(Number.isFinite)).toBe(true)
+      return { live: live!, x: at![0], y: at![1] }
+    })
+    const canvas = live.getDom().querySelector("canvas")!
     const coordinates = { clientX: Math.round(x), clientY: Math.round(y) }
     const pointer = (ev: string) =>
       fireEvent(canvas, new MouseEvent(ev, { bubbles: true, ...coordinates }))
     act(() => {
       pointer("mousemove")
-      chart.getZr().flush()
+      live.getZr().flush()
       pointer("mousedown")
       pointer("mouseup")
       pointer("click")
     })
   }
+
   return { observation, settle, clickMark }
 }
 
@@ -237,7 +246,7 @@ it("does not re-run a cell that declares the clicked variable itself", async () 
   const { observation, settle, clickMark } = await setup(9921)
 
   // When the user clicks west, a new value
-  clickMark("west", 9)
+  await clickMark("west", 9)
   await settle()
 
   // Then the binding changes but the cell, whose rows cannot change, does not run
@@ -254,7 +263,7 @@ it("re-runs a dependent cell whose stored result was not loaded yet", async () =
   const { observation, settle, clickMark } = await setup(9922, false)
 
   // When the user clicks west, then scrolls to the cell
-  clickMark("west", 9)
+  await clickMark("west", 9)
   await settle()
   fireEvent.click(screen.getByRole("button", { name: "Reveal dependent" }))
 

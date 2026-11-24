@@ -14,6 +14,7 @@ import {
   MAX_SANKEY_LINKS,
   SANKEY_LINK_LIMIT_MESSAGE,
 } from "../visuals/sankeyLayoutLimit"
+import { isRecord } from "../../../../utils/values"
 
 // Turns a sanitized agent option into the option ECharts draws: the cell's
 // statements become datasets "q0", "q1", …, `{"$rows": …}` placeholders
@@ -24,9 +25,6 @@ import {
 // is drawn from (a `pick`, see selection.ts). A dataset-bound series' mark is
 // matched back to its statement rows by value when it is clicked
 // (`datasetPick`), since ECharts copies dataset rows.
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 const dimensionType = (type: string): "time" | "float" | "ordinal" => {
   const role = classifyColumn({ name: "", type })

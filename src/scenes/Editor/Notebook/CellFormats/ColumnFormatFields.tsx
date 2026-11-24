@@ -32,6 +32,7 @@ import {
   withColourMode,
   type ColourMode,
 } from "./formatSummary"
+import { parseNumberInput as parseNumber } from "../../../../utils/values"
 
 const Row = styled.div`
   display: flex;
@@ -84,11 +85,6 @@ const COLOUR_LABELS: Record<ColourMode, string> = {
   none: "None",
   sign: "Green when positive, red when negative",
   thresholds: "By thresholds",
-}
-
-const parseNumber = (text: string): number | undefined => {
-  const n = Number(text)
-  return text.trim() === "" || !Number.isFinite(n) ? undefined : n
 }
 
 /** A number typed freely ("-", "0."), applied whenever it reads as one. */

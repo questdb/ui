@@ -296,3 +296,16 @@ describe("inferChartConfig", () => {
     expect(config.chart.yColumns).toEqual([])
   })
 })
+
+describe("classifyColumn", () => {
+  it("treats a DECIMAL of any precision and scale as a number to chart", () => {
+    // Given / When / Then
+    expect(classifyColumn(col("amount", "DECIMAL(18,2)"))).toBe("numeric")
+    expect(classifyColumn(col("amount", "decimal(38,18)"))).toBe("numeric")
+    const groups = groupColumns([
+      col("ts", "TIMESTAMP"),
+      col("amount", "DECIMAL(18,2)"),
+    ])
+    expect(groups.numeric.map((c) => c.name)).toEqual(["amount"])
+  })
+})

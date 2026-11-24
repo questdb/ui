@@ -28,6 +28,7 @@ import {
   readFromClipboard,
 } from "../../../../utils/copyToClipboard"
 import type { NotebookVariable } from "../../../../store/notebook"
+import { sameVariableName } from "../variableName"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import {
   useNotebookActions,
@@ -238,9 +239,13 @@ const isDuplicate = (drafts: Draft[], idx: number): boolean => {
   if (!name) return false
   // Flag only the LAST occurrence of a duplicated name. Earlier rows stay
   // clean; user fixes/removes the most recent conflict.
-  const hasPrior = drafts.slice(0, idx).some((d) => d.name === name)
+  const hasPrior = drafts
+    .slice(0, idx)
+    .some((d) => sameVariableName(d.name, name))
   if (!hasPrior) return false
-  const hasLater = drafts.slice(idx + 1).some((d) => d.name === name)
+  const hasLater = drafts
+    .slice(idx + 1)
+    .some((d) => sameVariableName(d.name, name))
   return !hasLater
 }
 

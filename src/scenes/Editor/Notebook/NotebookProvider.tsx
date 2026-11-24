@@ -10,6 +10,7 @@ import React, {
 import type { MutableRefObject } from "react"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
+import { sameVariableName } from "./variableName"
 import type {
   CellPaneView,
   CellResult,
@@ -1014,8 +1015,15 @@ export const NotebookProvider: React.FC<{
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
-    setVariableValues: (values) => {
+    setVariableValues: (given) => {
       const current = settingsRef.current.variables ?? []
+      // A name that differs only in case is the stored variable.
+      const values = Object.fromEntries(
+        Object.entries(given).map(([name, value]) => [
+          current.find((v) => sameVariableName(v.name, name))?.name ?? name,
+          value,
+        ]),
+      )
       const names = Object.keys(values).filter(
         (name) => current.find((v) => v.name === name)?.value !== values[name],
       )

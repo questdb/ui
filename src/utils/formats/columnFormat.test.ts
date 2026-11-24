@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   formatTargetOf,
+  formatsNumbers,
   formatValue,
   sanitizeColumnFormats,
   thresholdBands,
@@ -177,5 +178,30 @@ describe("formatTargetOf", () => {
     expect(formatTargetOf("TIMESTAMP")).toBeNull()
     expect(formatTargetOf("CHAR")).toBeNull()
     expect(formatTargetOf("SYMBOL")).toBeNull()
+  })
+})
+
+describe("number text a format leaves alone", () => {
+  it("keeps the column's text when a format only colours or draws", () => {
+    // Given formats with only a visual, thresholds or sign tone
+    // When / Then they do not reformat the numbers
+    expect(formatsNumbers({ visual: "bar" })).toBe(false)
+    expect(
+      formatsNumbers({ thresholds: [{ value: 0, tone: "positive" }] }),
+    ).toBe(false)
+    expect(formatsNumbers({ signTone: true })).toBe(false)
+    expect(formatsNumbers({ decimals: 2, visual: "bar" })).toBe(true)
+    expect(formatsNumbers({ kind: "percent" })).toBe(true)
+    expect(formatsNumbers({ prefix: "$" })).toBe(true)
+  })
+
+  it("never rounds a small non-zero value to zero, and keeps a DECIMAL's scale", () => {
+    // Given / When / Then
+    expect(formatValue(0.0000123, {})).toBe("0.0000123")
+    expect(formatValue(-0.000456789, {})).toBe("-0.0004568")
+    expect(formatValue(0.5, {})).toBe("0.5")
+    expect(formatValue(1234.56789, {})).toBe("1,234.57")
+    expect(formatValue("2.00", {})).toBe("2.00")
+    expect(formatValue("1234.50", {})).toBe("1,234.50")
   })
 })

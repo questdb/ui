@@ -69,6 +69,25 @@ describe("get_cell_image", () => {
     expect(result.body.picture).toBe(true)
   })
 
+  it("says the cell draws no chart when its chart is replaced while it settles", async () => {
+    // Given a chart disposed while it draws in (e.g. a theme change)
+    const replaced = { isDisposed: () => true } as unknown as EChartsType
+    const picture = vi.fn()
+    const d = deps({
+      chartOf: () => null,
+      waitForChart: () => Promise.resolve(replaced),
+      picture,
+    })
+
+    // When
+    const result = await cellImage(1, "c", d)
+
+    // Then no picture is taken of it, and the agent is told why
+    expect(picture).not.toHaveBeenCalled()
+    expect(result.picture).toBeNull()
+    expect(result.body).toMatchObject({ picture: false })
+  })
+
   it.each([
     undefined,
     report,

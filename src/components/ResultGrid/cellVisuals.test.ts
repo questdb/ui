@@ -32,4 +32,12 @@ describe("sparklinePointsOf", () => {
     expect(sparklinePointsOf(value)).toBe(sparklinePointsOf(value))
     expect(sparklinePointsOf([1])).toBeUndefined()
   })
+
+  it("draws each sample at its place in the array, past NULL elements", () => {
+    // Given an array whose middle samples are NULL (QuestDB sends NaN as null)
+    const points = vertices(sparklinePointsOf([1, null, null, null, 5, 5]))
+
+    // Then the samples keep their positions: 0, 4 and 5 of 0..5
+    expect(points.map(([x]) => x)).toEqual([0, 80, 100])
+  })
 })

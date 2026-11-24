@@ -131,17 +131,20 @@ export const cellImage = async (
       restoreScroll = deps.bringIntoView(cellId)
       instance = await deps.waitForChart(bufferId, cellId, signal)
     }
-    if (!instance)
-      return {
-        body: {
-          picture: false,
-          reason:
-            "The cell draws no chart right now: it may have no results yet (run_cell), or nothing to draw. Its render_report says why.",
-          ...report(),
-        },
-        picture: null,
-      }
+    const notDrawn = () => ({
+      body: {
+        picture: false,
+        reason:
+          "The cell draws no chart right now: it may have no results yet (run_cell), or nothing to draw. Its render_report says why.",
+        ...report(),
+      },
+      picture: null,
+    })
+    if (!instance) return notDrawn()
     if (justDrawn) await deps.settle(instance, signal)
+    // The chart can be replaced while it settles (a theme change, a new
+    // option, the cell scrolled away again).
+    if (instance.isDisposed?.()) return notDrawn()
     const picture = deps.picture(instance)
     if (!picture)
       return {

@@ -13,6 +13,7 @@ import {
   SettingsSelect,
 } from "../CellChart/chartSettingsStyles"
 import { isVariableName } from "../../../../store/notebookFormat"
+import { sameVariableName } from "../variableName"
 import {
   renderDeclareValidationQuery,
   validateVariableShape,
@@ -96,9 +97,9 @@ export const interactionErrors = (
         (other) =>
           other !== slot &&
           draft.created[other] !== undefined &&
-          slotName(draft.interactions, other) === name,
+          sameVariableName(slotName(draft.interactions, other) ?? "", name),
       )
-      if (variables.some((v) => v.name === name))
+      if (variables.some((v) => sameVariableName(v.name, name)))
         errors[slot] = `@${name} already exists: pick it from the list.`
       else if (clash) errors[slot] = `Another new variable is named @${name}.`
       else if (created.value.trim() === "")
@@ -125,7 +126,7 @@ export const newVariablesInUse = (
   for (const slot of activeSlots(draft.interactions)) {
     const created = draft.created[slot]
     const name = slotName(draft.interactions, slot)
-    if (created && name && !out.some((v) => v.name === name))
+    if (created && name && !out.some((v) => sameVariableName(v.name, name)))
       out.push({ name, value: created.value.trim() })
   }
   return out
@@ -137,7 +138,8 @@ export const withNewVariables = (
   created: NotebookVariable[],
 ): NotebookVariable[] => {
   const out = [...variables]
-  for (const c of created) if (!out.some((v) => v.name === c.name)) out.push(c)
+  for (const c of created)
+    if (!out.some((v) => sameVariableName(v.name, c.name))) out.push(c)
   return out
 }
 
@@ -221,7 +223,9 @@ const VariableField: React.FC<VariableFieldProps> = ({
   const created = draft.created[slot]
   const name = slotName(draft.interactions, slot) ?? ""
   const undeclared =
-    !created && name !== "" && !variables.some((v) => v.name === name)
+    !created &&
+    name !== "" &&
+    !variables.some((v) => sameVariableName(v.name, name))
   return (
     <FieldGroup>
       <Field as="div">

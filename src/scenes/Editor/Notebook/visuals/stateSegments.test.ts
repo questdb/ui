@@ -140,8 +140,9 @@ describe("uptime buckets", () => {
     )
     if (typeof read === "string") throw new Error(read)
 
-    // When split into 4 hourly buckets
-    const buckets = bucketLanes(read, 4).get("db") ?? []
+    // When split into hourly buckets (the newest row stands for one more
+    // hour, the median gap between rows)
+    const buckets = bucketLanes(read, 5).get("db") ?? []
 
     // Then
     expect(buckets.map((b) => bucketSeverity(b))).toEqual([
@@ -149,8 +150,30 @@ describe("uptime buckets", () => {
       "bad",
       "good",
       "good",
+      "good",
     ])
-    expect(uptimeByLane(read.segments).get("db")).toBeCloseTo(0.75)
+    expect(uptimeByLane(read.segments).get("db")).toBeCloseTo(0.8)
+  })
+
+  it("counts a lane's newest sample, also when every lane has one there", () => {
+    // Given two hosts sampled hourly, one down at the newest sample
+    const read = readStateSegments(
+      { type: "uptime" },
+      states([
+        [0, "a", "up"],
+        [1, "a", "down"],
+        [0, "b", "up"],
+        [1, "b", "up"],
+      ]),
+    )
+    if (typeof read === "string") throw new Error(read)
+
+    // When / Then the down sample shows in the last bucket and the uptime
+    expect(
+      (bucketLanes(read, 2).get("a") ?? []).map((b) => bucketSeverity(b)),
+    ).toEqual(["good", "bad"])
+    expect(uptimeByLane(read.segments).get("a")).toBeCloseTo(0.5)
+    expect(uptimeByLane(read.segments).get("b")).toBe(1)
   })
 
   it("counts overlapping coverage once and treats any simultaneous bad state as down", () => {

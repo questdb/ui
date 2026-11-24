@@ -14,6 +14,7 @@ import {
   type VisualColumns,
   type VisualConfig,
 } from "../scenes/Editor/Notebook/CellChart/chartTypes"
+import { isRecord } from "../utils/values"
 
 // The notebook format version, and the steps that bring an older state up to
 // it. A state is read through `migrateNotebookFormat` on load and on import;
@@ -73,9 +74,6 @@ export const migrateNotebookFormat = (
 }
 
 // ── Sanitizers for the version 2 fields, used on import ───────────────────
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 // These names identify returned SQL columns, not notebook identifiers.
 const isColumnName = (value: unknown): value is string =>

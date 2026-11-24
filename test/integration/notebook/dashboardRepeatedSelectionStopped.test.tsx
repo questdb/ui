@@ -215,12 +215,12 @@ const setup = async (bufferId: number, hold?: (q: string) => boolean) => {
     </QuestContext.Provider>,
   )
   fireEvent.click(screen.getByRole("button", { name: "Reveal cells" }))
-  const chart = await waitFor(() => {
+  // The chart has drawn the source rows.
+  await waitFor(() => {
     const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
     expect(host).not.toBeNull()
     const chart = echarts.getInstanceByDom(host!)!
     expect(drawnValues(chart)).toEqual([4, 9, 6])
-    return chart
   })
   expect(await screen.findByRole("gridcell")).toHaveTextContent(/^east$/)
   const dependentCalls = () =>
@@ -236,20 +236,29 @@ const setup = async (bufferId: number, hold?: (q: string) => boolean) => {
   })
   const settle = () =>
     act(() => new Promise((resolve) => setTimeout(resolve, 400)))
-  const clickMark = (name: string, value: number) => {
-    const canvas = chart.getDom().querySelector("canvas")!
-    const [x, y] = chart.convertToPixel({ seriesIndex: 0 }, [name, value])
+  // The chart can be drawn again on a new instance (its code loads lazily, a
+  // remount): click the live one, once it can place the mark.
+  const clickMark = async (name: string, value: number) => {
+    const { live, x, y } = await waitFor(() => {
+      const host = container.querySelector<HTMLElement>("[_echarts_instance_]")
+      const live = host ? echarts.getInstanceByDom(host) : undefined
+      const at = live?.convertToPixel({ seriesIndex: 0 }, [name, value])
+      expect(at?.every(Number.isFinite)).toBe(true)
+      return { live: live!, x: at![0], y: at![1] }
+    })
+    const canvas = live.getDom().querySelector("canvas")!
     const coordinates = { clientX: Math.round(x), clientY: Math.round(y) }
     const pointer = (ev: string) =>
       fireEvent(canvas, new MouseEvent(ev, { bubbles: true, ...coordinates }))
     act(() => {
       pointer("mousemove")
-      chart.getZr().flush()
+      live.getZr().flush()
       pointer("mousedown")
       pointer("mouseup")
       pointer("click")
     })
   }
+
   return { observation, settle, clickMark, release, queryRaw }
 }
 
@@ -263,14 +272,14 @@ it("re-runs a stopped statement after the round when its value is clicked again"
       q.includes("@station := 'west'") &&
       ((q.includes(sqlA) && heldA++ === 0) || q.includes(sqlB)),
   )
-  clickMark("west", 9)
+  await clickMark("west", 9)
   const refreshing = await screen.findByText("Refreshing...")
   fireEvent.click(refreshing.parentElement!.querySelector("button")!)
   await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
   const stopped = observation()
 
   // When the user clicks west again while the second statement runs
-  clickMark("west", 9)
+  await clickMark("west", 9)
   await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
   // Then the running round is kept

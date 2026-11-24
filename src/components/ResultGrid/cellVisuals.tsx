@@ -7,21 +7,13 @@ import type {
 } from "../../utils/formats/columnFormat"
 import type { ResultGridRow } from "./types"
 import { sparklineSample } from "../../utils/sparklineSample"
+import { toFiniteNumber as toNumber } from "../../utils/values"
 
 // In-cell visuals a column format can ask for: a bar scaled to the column's
 // range, a meter showing the value's share of the column total, or a
 // sparkline drawn from an array value.
 
 export type ColumnScale = { min: number; max: number; total: number }
-
-const toNumber = (value: unknown): number | null => {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
-}
 
 /** Scales for the columns whose format draws a bar or meter, by data index. */
 export const columnScalesOf = (
@@ -69,19 +61,25 @@ const Spark = styled.svg`
 
 const sparklinePointsCache = new WeakMap<unknown[], string | undefined>()
 
+// Each sample is drawn at its own place in the array, so the line spans a
+// run of NULL or NaN elements at its true width instead of closing it up.
 const computeSparklinePoints = (value: unknown[]): string | undefined => {
   const values: number[] = []
-  for (const sample of value) {
+  const positions: number[] = []
+  value.forEach((sample, position) => {
     const n = toNumber(sample)
-    if (n !== null) values.push(n)
-  }
+    if (n === null) return
+    values.push(n)
+    positions.push(position)
+  })
   const sample = sparklineSample(values)
   if (!sample) return undefined
   const { indexes, scale, min, span } = sample
+  const last = value.length - 1
   return indexes
     .map(
       (i) =>
-        `${(i / (values.length - 1)) * 100},${20 - ((values[i] / scale - min / scale) / span) * 18 - 1}`,
+        `${(positions[i] / last) * 100},${20 - ((values[i] / scale - min / scale) / span) * 18 - 1}`,
     )
     .join(" ")
 }

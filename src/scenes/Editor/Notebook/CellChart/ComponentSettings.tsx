@@ -25,6 +25,7 @@ import {
   type RoleSpec,
 } from "../visuals/visualCatalog"
 import { readStateSegments, severityOf } from "../visuals/stateSegments"
+import { parseNumberInput as parseNumber } from "../../../../utils/values"
 
 const Row = styled.div`
   display: flex;
@@ -75,11 +76,6 @@ const accepts = (kind: RoleKind, type: string) => {
   return kind === "categorical"
     ? role === "categorical" || role === "other"
     : role === kind
-}
-
-const parseNumber = (text: string): number | undefined => {
-  const n = Number(text)
-  return text.trim() === "" || !Number.isFinite(n) ? undefined : n
 }
 
 const FieldHint = styled.span<{ $invalid: boolean }>`
