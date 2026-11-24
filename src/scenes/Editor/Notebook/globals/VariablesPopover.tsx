@@ -30,6 +30,7 @@ import {
 import type { NotebookVariable } from "../../../../store/notebook"
 import { sameVariableName } from "../variableName"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
+import { useDraftSession } from "../settingsDrawer/useDraftSession"
 import {
   useNotebookActions,
   useNotebookBufferId,
@@ -297,12 +298,19 @@ export const VariablesPopover: React.FC = () => {
   const [open, setOpen] = useState(false)
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({})
-  const [validating, setValidating] = useState(false)
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
   const [importedFlash, setImportedFlash] = useState(false)
   const importedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const draggingKeyRef = useRef<string | null>(null)
-  const cancelledRef = useRef(false)
+  // An Apply that waits on the database, and an import that waits on the
+  // clipboard, belong to the popover session that started them; an Apply
+  // whose rows changed meanwhile checks them again.
+  const session = useDraftSession({
+    open,
+    inputs: [drafts],
+    live: { drafts, variables: settings.variables },
+  })
+  const validating = session.busy
 
   useEffect(
     () => () => {
@@ -401,70 +409,66 @@ export const VariablesPopover: React.FC = () => {
     }
   }
 
-  const validateOnServer = async (
+  // The database's verdict on the rows: an error by row, or none.
+  const serverErrorsOf = async (
+    drafts: Draft[],
     list: NotebookVariable[],
-  ): Promise<boolean> => {
-    const nextErrors: Record<string, string> = {}
+  ): Promise<Record<string, string> | null> => {
+    const errorOf = (name: string, error: string) => {
+      const draft = drafts.find((d) => d.name === name)
+      return draft ? { [draft.key]: error } : {}
+    }
     for (let i = 0; i < list.length; i += 1) {
-      const shapeError = validateVariableShape(list[i])
-      if (shapeError) {
-        const draft = drafts.find((d) => d.name === list[i].name)
-        if (draft) {
-          nextErrors[draft.key] =
-            "Value must be a single expression — wrap in parentheses if you need commas."
-        }
-        setServerErrors(nextErrors)
-        return false
-      }
+      if (validateVariableShape(list[i]))
+        return errorOf(
+          list[i].name,
+          "Value must be a single expression — wrap in parentheses if you need commas.",
+        )
       const prefix = list.slice(0, i + 1)
       const result = await quest.validateQuery(
         renderDeclareValidationQuery(prefix),
       )
-      if ("error" in result) {
-        const draft = drafts.find((d) => d.name === list[i].name)
-        if (draft) nextErrors[draft.key] = result.error
-        setServerErrors(nextErrors)
-        return false
-      }
+      if ("error" in result) return errorOf(list[i].name, result.error)
     }
-    setServerErrors({})
-    return true
+    return null
   }
 
-  const handleApply = async () => {
+  const handleApply = async (): Promise<void> => {
+    const ticket = session.begin()
+    const { drafts } = session.read()
+    // Rows edited while the database checked may no longer apply.
+    if (drafts.some((_, i) => isRowInvalid(drafts, i))) return
     const list = buildPersistList(drafts)
-    cancelledRef.current = false
-    setValidating(true)
-    try {
-      if (!(await validateOnServer(list))) return
-      if (cancelledRef.current) return
-      if (!variablesEqual(normalizeVariables(settings.variables), list)) {
-        void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_APPLY, {
-          variableCount: list.length,
-        })
-        signalUserEdit(bufferId)
-        updateSettings({ variables: list })
-      }
-      setOpen(false)
-    } finally {
-      setValidating(false)
+    const errors = await session.wait(ticket, serverErrorsOf(drafts, list))
+    if (!session.isLive(ticket)) return
+    if (!session.isCurrent(ticket)) return handleApply()
+    setServerErrors(errors ?? {})
+    if (errors) return
+    const { variables } = session.read()
+    if (!variablesEqual(normalizeVariables(variables), list)) {
+      void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_APPLY, {
+        variableCount: list.length,
+      })
+      signalUserEdit(bufferId)
+      updateSettings({ variables: list })
     }
+    setOpen(false)
   }
 
   const handleCancel = () => {
-    cancelledRef.current = true
     setOpen(false)
   }
 
   const handleOpenChange = (next: boolean) => {
     if (next) void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_OPEN)
-    if (!next) cancelledRef.current = true
     setOpen(next)
   }
 
   const handleImport = async () => {
+    const ticket = session.begin()
     try {
       const text = await readFromClipboard()
+      if (!session.isLive(ticket)) return
       const parsed = parseDeclareBlock(text)
       if (parsed.length === 0) {
         toast.error("No DECLARE block found in clipboard")
@@ -492,6 +496,7 @@ export const VariablesPopover: React.FC = () => {
         2000,
       )
     } catch (e) {
+      if (!session.isLive(ticket)) return
       toast.error(e instanceof Error ? e.message : "Could not read clipboard")
     }
   }
@@ -661,7 +666,9 @@ export const VariablesPopover: React.FC = () => {
             </Button>
             <Button
               variant="primary"
-              onClick={handleApply}
+              onClick={() => {
+                if (!session.isBusy()) void handleApply()
+              }}
               disabled={!canApply || validating}
               disabledTooltip={
                 hasInvalid
