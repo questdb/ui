@@ -286,7 +286,7 @@ export const PairingConsentModal: React.FC<Props> = ({
                   ? "Chat with it in the AI Assistant. Its status is in the bottom bar."
                   : "You can track the connection status from the bottom bar."
                 : agent
-                  ? `${agent.label} runs on your computer through the QuestDB bridge, and you chat with it here. It can read and edit notebooks, run SQL and inspect schemas. It can also edit files and run commands on your machine without asking.`
+                  ? `${agent.label} runs on your computer through the QuestDB MCP server, and you chat with it here. It can read and edit notebooks, run SQL and inspect schemas. It can also edit files and run commands on your machine without asking.`
                   : "An external coding agent is asking to pair with this Web Console. Once connected, it can read and edit notebooks, run SQL, and inspect schemas on your behalf."}
             </Lede>
           </Hero>

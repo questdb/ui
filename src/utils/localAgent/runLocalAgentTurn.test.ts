@@ -570,7 +570,7 @@ describe("runLocalAgentTurn", () => {
     await expect(next.turn).resolves.not.toMatchObject({ type: "aborted" })
   })
 
-  it("fails the running turn when the bridge connection goes away", async () => {
+  it("fails the running turn when the connection to the MCP server goes away", async () => {
     // Given
     const bridge = createFakeBridge()
     const { channel } = connectChannel(bridge.client)
@@ -583,7 +583,7 @@ describe("runLocalAgentTurn", () => {
     // Then
     await expect(turn).resolves.toMatchObject({
       type: "unknown",
-      message: "The connection to the local agent bridge was lost.",
+      message: "The connection to the QuestDB MCP server was lost.",
     })
   })
 

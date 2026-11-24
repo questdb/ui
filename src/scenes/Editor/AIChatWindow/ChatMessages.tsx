@@ -1393,7 +1393,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 disabled={retryDisabled}
                 title={
                   retryDisabled
-                    ? "Waiting for the local agent bridge"
+                    ? "Waiting for the QuestDB MCP server"
                     : undefined
                 }
                 data-hook="retry-button"

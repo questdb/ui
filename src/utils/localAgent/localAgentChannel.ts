@@ -21,7 +21,7 @@ const CANCEL_GRACE_MS = 5_000
 
 const BRIDGE_DISCONNECTED: AgentTurnResult = {
   outcome: "failed",
-  error: "The connection to the local agent bridge was lost.",
+  error: "The connection to the QuestDB MCP server was lost.",
 }
 
 const TURN_IN_PROGRESS: AgentTurnResult = {

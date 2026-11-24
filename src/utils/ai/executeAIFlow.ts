@@ -547,7 +547,7 @@ export const localAgentDispatchError = (
   }
   return channel.isTransportReady()
     ? null
-    : "Waiting for the local agent bridge. Try again after it reconnects."
+    : "Waiting for the QuestDB MCP server. Try again after it reconnects."
 }
 
 export async function executeAIFlow(

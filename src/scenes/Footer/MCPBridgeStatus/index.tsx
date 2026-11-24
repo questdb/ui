@@ -190,7 +190,7 @@ export const MCPBridgeStatus: React.FC = () => {
     title =
       localAgent.state === "error" && localAgent.error
         ? localAgent.error
-        : `${localAgent.info.label} runs on your computer through the QuestDB bridge. Click to manage.`
+        : `${localAgent.info.label} runs on your computer through the QuestDB MCP server. Click to manage.`
   } else if (tone === "idle") {
     label = "MCP not connected"
     title =

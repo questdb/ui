@@ -901,7 +901,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                     : queueMismatch
                       ? "Restore the original destination or edit the queued message."
                       : waitingForBridge
-                        ? "Waiting for the local agent bridge."
+                        ? "Waiting for the QuestDB MCP server."
                         : undefined)
                 }
                 editDisabled={Boolean(queueEditHint)}
