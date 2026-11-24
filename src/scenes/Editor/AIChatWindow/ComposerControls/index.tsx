@@ -10,6 +10,9 @@ import { ModelPicker } from "./ModelPicker"
 import { useComposerModel } from "./useComposerModel"
 import { TokenUsage, type TokenUsageCounts } from "./TokenUsage"
 import { ContextUsage } from "./ContextUsage"
+import { useOpenConnectCodingAgent } from "../../../../components/ConnectCodingAgent"
+import { getValue, setValue } from "../../../../utils/localStorage"
+import { StoreKey } from "../../../../utils/localStorage/types"
 import type { ContextUsage as ContextUsageCounts } from "../../../../utils/ai/aiAssistant"
 
 const Row = styled.div`
@@ -55,7 +58,17 @@ export const ComposerControls = ({
   onPicked,
 }: ComposerControlsProps) => {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [inviteDismissed, setInviteDismissed] = useState(
+    () => getValue(StoreKey.LOCAL_AGENT_INVITE_DISMISSED) === "true",
+  )
   const model = useComposerModel()
+  const openConnectCodingAgent = useOpenConnectCodingAgent()
+
+  const dismissInvite = () => {
+    void trackEvent(ConsoleEvent.LOCAL_AGENT_INVITE_DISMISS)
+    setValue(StoreKey.LOCAL_AGENT_INVITE_DISMISSED, "true")
+    setInviteDismissed(true)
+  }
 
   const openSettings = () => {
     void trackEvent(ConsoleEvent.AI_SETTINGS_OPEN)
@@ -71,6 +84,14 @@ export const ComposerControls = ({
           triggerLabel={model.triggerLabel}
           triggerProvider={model.triggerProvider}
           agent={model.agent}
+          agentInvite={
+            model.agent || inviteDismissed
+              ? null
+              : {
+                  onConnect: () => openConnectCodingAgent("model_picker"),
+                  onDismiss: dismissInvite,
+                }
+          }
           disabled={disabled}
           onSelect={model.selectModel}
           onRestartAgent={model.restartAgent}

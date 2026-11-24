@@ -12,8 +12,11 @@ import {
   CaretRightIcon,
   CheckIcon,
   MagnifyingGlassIcon,
+  TerminalWindowIcon,
+  XIcon,
 } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../components/Button"
+import { IconButton } from "../../../../components/IconButton"
 import { Input } from "../../../../components/Input"
 import { TextButton } from "../../../../components/TextButton"
 import {
@@ -191,12 +194,41 @@ const NoticeAction = styled(TextButton)`
   margin-left: auto;
 `
 
+const Invite = styled.div`
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.4rem;
+  padding: 0.8rem 0.4rem 0.4rem 0.8rem;
+  border-top: 1px solid ${({ theme }) => theme.color.borderDefault};
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
+
+  > svg {
+    flex-shrink: 0;
+    color: ${({ theme }) => theme.color.contentAccent};
+  }
+`
+
+const InviteText = styled.span`
+  flex: 1;
+  min-width: 0;
+`
+
+export type AgentInvite = {
+  onConnect: () => void
+  onDismiss: () => void
+}
+
 type ModelPickerProps = {
   groups: ModelGroup[]
   selectedKey: string | null
   triggerLabel: string
   triggerProvider: string | null
   agent: LocalAgentSnapshot | null
+  // Offers to connect a coding agent, while none is.
+  agentInvite: AgentInvite | null
   disabled: boolean
   onSelect: (selection: ModelSelection) => void
   // Takes focus once a model is chosen, or the picker /model opened closes.
@@ -269,6 +301,7 @@ export const ModelPicker = ({
   triggerLabel,
   triggerProvider,
   agent,
+  agentInvite,
   disabled,
   onSelect,
   onRestartAgent,
@@ -365,6 +398,11 @@ export const ModelPicker = ({
       else next.add(groupKey)
       return next
     })
+  }
+
+  const connectAgent = (invite: AgentInvite) => {
+    changeOpen(false)
+    invite.onConnect()
   }
 
   const choose = (option: ModelOption) => {
@@ -531,6 +569,28 @@ export const ModelPicker = ({
               )
             })}
           </List>
+          {agentInvite && (
+            <Invite data-hook="chat-model-picker-agent-invite">
+              <TerminalWindowIcon size={16} weight="duotone" />
+              <InviteText>Chat with your coding agent here</InviteText>
+              <TextButton
+                type="button"
+                onClick={() => connectAgent(agentInvite)}
+                data-hook="chat-model-picker-agent-connect"
+              >
+                Connect
+              </TextButton>
+              <IconButton
+                label="Dismiss"
+                variant="ghost"
+                size="sm"
+                onClick={agentInvite.onDismiss}
+                data-hook="chat-model-picker-agent-dismiss"
+              >
+                <XIcon size={12} />
+              </IconButton>
+            </Invite>
+          )}
         </Content>
       </RadixPopover.Portal>
     </RadixPopover.Root>

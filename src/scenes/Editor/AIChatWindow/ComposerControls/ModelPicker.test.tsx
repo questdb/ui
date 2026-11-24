@@ -44,6 +44,7 @@ const renderPicker = (openSignal: number | null = null) => {
         triggerLabel="Claude Sonnet"
         triggerProvider="anthropic"
         agent={null}
+        agentInvite={null}
         disabled={disabled}
         onSelect={onSelect}
         onRestartAgent={vi.fn()}

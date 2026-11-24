@@ -10,6 +10,7 @@ import { isAiAssistantConfigured } from "../../utils/ai"
 import { useLocalAgent } from "../../utils/localAgent/LocalAgentContext"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { useOpenConnectCodingAgent } from "../ConnectCodingAgent"
 
 export const SetupAIAssistant = () => {
   const [configModalOpen, setConfigModalOpen] = useState(false)
@@ -18,6 +19,7 @@ export const SetupAIAssistant = () => {
   const configureButtonRef = useRef<HTMLElement>(null)
   const { aiAssistantSettings } = useAIStatus()
   const localAgent = useLocalAgent()
+  const openConnectCodingAgent = useOpenConnectCodingAgent()
   const isConfigured =
     isAiAssistantConfigured(aiAssistantSettings) || localAgent !== null
   const configureButtonVariantProps = isConfigured
@@ -62,6 +64,7 @@ export const SetupAIAssistant = () => {
         triggerRef={configureButtonRef}
         showPromo={showPromo}
         setShowPromo={setShowPromo}
+        onConnectAgentClick={() => openConnectCodingAgent("ai_promo")}
         onSetupClick={() => {
           void trackEvent(ConsoleEvent.AI_CONFIGURATION_OPEN)
           setShowPromo(false)

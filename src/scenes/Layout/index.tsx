@@ -47,6 +47,7 @@ import { AIChatWindowLazy } from "../Editor/AIChatWindow/AIChatWindowLazy"
 
 import { AIStatusProvider } from "../../providers/AIStatusProvider"
 import { MCPBridgeProvider } from "../../providers/MCPBridgeProvider"
+import { ConnectCodingAgentProvider } from "../../components/ConnectCodingAgent"
 import { NotebookOnboardingModal } from "../../components/NotebookOnboardingModal"
 
 const Page = styled.div`
@@ -97,32 +98,34 @@ const Layout = () => {
         <AIConversationProvider>
           <MCPBridgeProvider>
             <AIStatusProvider>
-              <TopBar />
-              <Warnings />
-              <Root>
-                <Main>
-                  <Page>
-                    <Console />
-                  </Page>
-                </Main>
+              <ConnectCodingAgentProvider>
+                <TopBar />
+                <Warnings />
+                <Root>
+                  <Main>
+                    <Page>
+                      <Console />
+                    </Page>
+                  </Main>
 
-                <Sidebar align="top">
-                  <AIChatButton />
-                  <TableDetailsButton />
-                  <QueryActivityButton />
-                  <News />
-                  <Help />
-                </Sidebar>
-                <TableDetailsDrawer />
-                <QueryActivityDrawer />
-                <AIChatWindowLazy />
-                <LocalAgentChatLauncher />
-              </Root>
+                  <Sidebar align="top">
+                    <AIChatButton />
+                    <TableDetailsButton />
+                    <QueryActivityButton />
+                    <News />
+                    <Help />
+                  </Sidebar>
+                  <TableDetailsDrawer />
+                  <QueryActivityDrawer />
+                  <AIChatWindowLazy />
+                  <LocalAgentChatLauncher />
+                </Root>
 
-              <SideMenu />
+                <SideMenu />
 
-              <Footer />
-              <NotebookOnboardingModal />
+                <Footer />
+                <NotebookOnboardingModal />
+              </ConnectCodingAgentProvider>
             </AIStatusProvider>
           </MCPBridgeProvider>
         </AIConversationProvider>

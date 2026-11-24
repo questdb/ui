@@ -18,6 +18,7 @@ import { SetupAIAssistant } from ".."
 import { AIChatButton } from "../../../scenes/Layout/AIChatButton"
 import { useAIStatus } from "../../../providers/AIStatusProvider"
 import { ComposerControls } from "../../../scenes/Editor/AIChatWindow/ComposerControls"
+import { ConnectCodingAgentProvider } from "../../ConnectCodingAgent"
 import type { AiAssistantSettings } from "../../../providers/LocalStorageProvider/types"
 
 vi.mock("../../../providers/AIConversationProvider", () => ({
@@ -183,8 +184,10 @@ export const renderAISettings = (
         <Provider store={createStore(rootReducer)}>
           <LocalStorageProvider>
             <AIStatusProvider>
-              {children}
-              <ToastContainer />
+              <ConnectCodingAgentProvider>
+                {children}
+                <ToastContainer />
+              </ConnectCodingAgentProvider>
             </AIStatusProvider>
           </LocalStorageProvider>
         </Provider>

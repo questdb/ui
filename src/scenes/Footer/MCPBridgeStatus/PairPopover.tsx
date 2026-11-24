@@ -24,6 +24,8 @@ import { permissionLevelOf } from "../../../modules/ConsoleEventTracker/mcpToolE
 import { Tone, accentColor, deriveTone } from "./tone"
 import { BridgeUpgradeNotice } from "./BridgeUpgradeNotice"
 import { BridgeSetupNotice } from "./BridgeSetupNotice"
+import { CodingAgentChatInvite } from "./CodingAgentChatInvite"
+import { useLocalAgent } from "../../../utils/localAgent/LocalAgentContext"
 import { PermissionsSection } from "./PermissionsSection"
 import { floatingSurfaceStyles } from "../../../components/overlayStyles"
 
@@ -233,6 +235,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       permissions,
       setPermissions,
     } = useMCPBridge()
+    const localAgent = useLocalAgent()
     const [draftUrl, setDraftUrl] = useState(DEFAULT_WS_URL_PREFIX)
     const [draftToken, setDraftToken] = useState("")
     const [draftPermissions, setDraftPermissions] = useState<Permissions>(
@@ -524,6 +527,10 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
         )}
 
         {tone === "idle" && !validationError && <BridgeSetupNotice />}
+
+        {(tone === "connected" || tone === "warning") && !localAgent && (
+          <CodingAgentChatInvite onOpen={onClose} />
+        )}
 
         {agentChanges.hasUnseen && (
           <AgentChangesRow $tone="info" data-hook="mcp-pair-agent-changes">

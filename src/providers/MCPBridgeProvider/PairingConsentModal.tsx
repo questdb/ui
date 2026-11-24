@@ -9,6 +9,7 @@ import {
 import { AlertDialog } from "../../components/AlertDialog"
 import { Overlay } from "../../components/Overlay"
 import { Button, LoadingSpinner } from "../../components"
+import { TextButton } from "../../components/TextButton"
 import { MAX_RECONNECT_ATTEMPTS } from "../../utils/mcp/MCPBridgeClient"
 import type { BridgeVersionMismatch } from "../../utils/mcp/protocolVersion"
 import type { Permissions } from "../../utils/tools/permissions"
@@ -64,6 +65,28 @@ const Lede = styled(AlertDialog.Description)`
   color: ${({ theme }) => theme.color.contentSecondary};
   line-height: 1.5;
   font-size: 1.4rem;
+`
+
+const WorkspaceNote = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  line-height: 1.5;
+  font-size: 1.4rem;
+`
+
+const Workspace = styled.code`
+  font-family: ${({ theme }) => theme.fontMonospace};
+  font-size: 1.25rem;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  background: ${({ theme }) => theme.color.surfaceBase};
+  border-radius: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  white-space: nowrap;
+`
+
+const DetailsToggle = styled(TextButton)`
+  align-self: flex-start;
+  font-size: 1.2rem;
 `
 
 const Body = styled.div`
@@ -230,10 +253,22 @@ export const PairingConsentModal: React.FC<Props> = ({
   const [pendingPermissions, setPendingPermissions] = useState<Permissions>(
     () => permissions,
   )
+  const [showDetails, setShowDetails] = useState(false)
   useEffect(() => {
-    if (pending) setPendingPermissions(permissions)
+    if (!pending) return
+    setPendingPermissions(permissions)
+    setShowDetails(false)
   }, [pending])
   const agent = pending?.agent
+  const connectionFields = (
+    <Fields>
+      <dt>WebSocket URL:</dt>
+      <dd data-hook="mcp-pair-consent-ws">{pending?.url ?? ""}</dd>
+      <dt>Token:</dt>
+      <dd data-hook="mcp-pair-consent-token">{pending?.token ?? ""}</dd>
+    </Fields>
+  )
+
   const handleOpenAutoFocus = (e: Event) => {
     e.preventDefault()
     const root = e.currentTarget as HTMLElement | null
@@ -286,27 +321,23 @@ export const PairingConsentModal: React.FC<Props> = ({
                   ? "Chat with it in the AI Assistant. Its status is in the bottom bar."
                   : "You can track the connection status from the bottom bar."
                 : agent
-                  ? `${agent.label} runs on your computer through the QuestDB MCP server, and you chat with it here. It can read and edit notebooks, run SQL and inspect schemas. It can also edit files and run commands on your machine without asking.`
+                  ? "Chat with it here, about your data and notebooks."
                   : "An external coding agent is asking to pair with this Web Console. Once connected, it can read and edit notebooks, run SQL, and inspect schemas on your behalf."}
             </Lede>
+            {!succeeded && agent?.cwd && (
+              <WorkspaceNote>
+                Your coding agent is going to work in{" "}
+                <Workspace data-hook="mcp-pair-consent-workspace">
+                  {agent.cwd}
+                </Workspace>{" "}
+                on your computer.
+              </WorkspaceNote>
+            )}
           </Hero>
 
           {!succeeded && (
             <Body>
-              <Fields>
-                {agent?.cwd && (
-                  <>
-                    <dt>Workspace:</dt>
-                    <dd data-hook="mcp-pair-consent-workspace">{agent.cwd}</dd>
-                  </>
-                )}
-                <dt>WebSocket URL:</dt>
-                <dd data-hook="mcp-pair-consent-ws">{pending?.url ?? ""}</dd>
-                <dt>Token:</dt>
-                <dd data-hook="mcp-pair-consent-token">
-                  {pending?.token ?? ""}
-                </dd>
-              </Fields>
+              {!agent && connectionFields}
 
               <PermissionsSection
                 value={pendingPermissions}
@@ -314,14 +345,28 @@ export const PairingConsentModal: React.FC<Props> = ({
                 disabled={isConnecting}
               />
 
-              <TrustNote>
-                <ShieldCheckIcon size={16} weight="duotone" />
-                <span>
-                  <strong>Loopback only:</strong> The MCP server runs on your
-                  machine and never leaves it. Every action runs through your
-                  already-authenticated console session.
-                </span>
-              </TrustNote>
+              {agent && (
+                <DetailsToggle
+                  type="button"
+                  aria-expanded={showDetails}
+                  onClick={() => setShowDetails(!showDetails)}
+                  data-hook="mcp-pair-consent-details"
+                >
+                  {showDetails ? "Hide details" : "Details"}
+                </DetailsToggle>
+              )}
+              {agent && showDetails && connectionFields}
+
+              {!agent && (
+                <TrustNote>
+                  <ShieldCheckIcon size={16} weight="duotone" />
+                  <span>
+                    <strong>Loopback only:</strong> The MCP server runs on your
+                    machine and never leaves it. Every action runs through your
+                    already-authenticated console session.
+                  </span>
+                </TrustNote>
+              )}
             </Body>
           )}
 
@@ -357,10 +402,16 @@ export const PairingConsentModal: React.FC<Props> = ({
               >
                 <WarningIcon size={16} weight="duotone" />
                 <StatusText>
-                  <strong>Could not connect to MCP server</strong>
+                  <strong>
+                    {agent
+                      ? `Could not connect to ${agent.label}`
+                      : "Could not connect to MCP server"}
+                  </strong>
                   <StatusDetail>
                     {error ??
-                      `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
+                      (agent
+                        ? `It stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or run the connect command again in your terminal.`
+                        : `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`)}
                   </StatusDetail>
                 </StatusText>
               </StatusRow>

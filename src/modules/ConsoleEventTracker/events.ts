@@ -208,4 +208,7 @@ export enum ConsoleEvent {
   LOCAL_AGENT_TURN = "local_agent.turn",
   LOCAL_AGENT_QUESTION = "local_agent.question",
   LOCAL_AGENT_RESTART = "local_agent.restart",
+  LOCAL_AGENT_SETUP_OPEN = "local_agent.setup_open",
+  LOCAL_AGENT_COMMAND_COPY = "local_agent.command_copy",
+  LOCAL_AGENT_INVITE_DISMISS = "local_agent.invite_dismiss",
 }
