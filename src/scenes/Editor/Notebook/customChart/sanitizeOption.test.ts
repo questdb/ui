@@ -107,66 +107,6 @@ describe("sanitizeOption", () => {
     )
   })
 
-  it("drops a link set on the option itself, which titles fall back to", () => {
-    // Given links at the option's own level, outside any title
-    const raw = {
-      link: "https://example.invalid/phish",
-      target: "self",
-      title: { text: "Click me" },
-      series: [{ type: "bar" }],
-    }
-
-    // When
-    const { option, problems } = sanitizeOption(raw, context)
-
-    // Then no title can open them
-    expect(option).not.toHaveProperty("link")
-    expect(option).not.toHaveProperty("target")
-    expect(problems.map(({ path }) => path)).toEqual(
-      expect.arrayContaining(["link", "target"]),
-    )
-  })
-
-  it("escapes HTML in tooltip templates and drops title links", () => {
-    // Given
-    const raw = {
-      title: { text: "Fill", link: "javascript:alert(1)", target: "self" },
-      tooltip: {
-        formatter: "<img src=x onerror=alert(1)> {b}",
-        extraCssText: "position:fixed",
-      },
-      series: [{ type: "bar" }],
-    }
-
-    // When
-    const { option, problems } = sanitizeOption(raw, context)
-
-    // Then
-    expect(option.title).toEqual({ text: "Fill" })
-    expect(option.tooltip).toEqual({
-      formatter: "&lt;img src=x onerror=alert(1)&gt; {b}",
-    })
-    expect(problems.map((p) => p.path)).toEqual(
-      expect.arrayContaining(["title.link", "tooltip.formatter"]),
-    )
-  })
-
-  it("escapes a tooltip given as a string, which ECharts takes as a template", () => {
-    // Given a series-level string tooltip
-    const raw = {
-      series: [{ type: "line", tooltip: "<img src=x onerror=alert(1)>" }],
-    }
-
-    // When
-    const { option, problems } = sanitizeOption(raw, context)
-
-    // Then
-    expect((option.series as { tooltip: string }[])[0].tooltip).toBe(
-      "&lt;img src=x onerror=alert(1)&gt;",
-    )
-    expect(problems.map((p) => p.path)).toContain("series[0].tooltip")
-  })
-
   it("resolves tone tokens and removes literal colours and fonts", () => {
     // Given
     const raw = {
@@ -241,24 +181,5 @@ describe("sanitizeOption", () => {
     // Then
     expect(option.series).toEqual([{ type: "custom", renderItem: "violin" }])
     expect(problems.filter((p) => p.severity === "error")).toHaveLength(2)
-  })
-
-  it("allows only data: images", () => {
-    // Given
-    const raw = {
-      series: [
-        { type: "scatter", symbol: "image://https://evil.example/beacon.png" },
-        { type: "scatter", symbol: "image://data:image/png;base64,AAAA" },
-      ],
-    }
-
-    // When
-    const { option } = sanitizeOption(raw, context)
-
-    // Then
-    expect(option.series).toEqual([
-      { type: "scatter", symbol: "circle" },
-      { type: "scatter", symbol: "image://data:image/png;base64,AAAA" },
-    ])
   })
 })

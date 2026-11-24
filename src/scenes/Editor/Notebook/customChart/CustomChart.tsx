@@ -9,16 +9,13 @@ import {
 } from "../CellChart/ChartRenderer"
 import type { StatementRows } from "../visuals/statementRows"
 import { setRenderReport, type RenderProblem } from "../renderReports"
-import { sanitizeOption } from "./sanitizeOption"
 import {
-  buildCustomOption,
   customSeriesCount,
   datasetPick,
   partialDatasetWarnings,
 } from "./buildCustomOption"
-import { BUILTIN_RENDER_ITEMS } from "../CellChart/customSeriesNames"
-import { MAP_NAMES, ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
-import { problemsOf } from "./prepareCustomOption"
+import { ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
+import { prepareCustomOption, problemsOf } from "./prepareCustomOption"
 import { PaneEmptyState } from "../PaneEmptyState"
 import {
   isTimeChart,
@@ -27,8 +24,6 @@ import {
   zoomForTarget,
 } from "../CellChart/liveZoom"
 import type { DataZoomEvent } from "../CellChart/zoomWindow"
-
-const MAPS = new Set<string>(MAP_NAMES)
 
 const NO_ZOOM_WINDOW = { start: 0, end: 100 }
 
@@ -206,19 +201,16 @@ export const CustomChart = ({
     },
     [onInstance, optionKey],
   )
-  const sanitized = useMemo(
-    () =>
-      sanitizeOption(rawOption, {
-        colors: theme.color,
-        renderItems: BUILTIN_RENDER_ITEMS,
-        maps: MAPS,
-      }),
-    [rawOption, theme.color],
-  )
   const clickable = interactions?.click !== undefined
-  const built = useMemo(
-    () => buildCustomOption(sanitized.option, statements, live, clickable),
-    [sanitized, statements, live, clickable],
+  const { sanitized, built } = useMemo(
+    () =>
+      prepareCustomOption(rawOption, {
+        colors: theme.color,
+        statements,
+        live,
+        pickable: clickable,
+      }),
+    [rawOption, theme.color, statements, live, clickable],
   )
   useEffect(() => {
     drawnRef.current = { option: built.option, statements }

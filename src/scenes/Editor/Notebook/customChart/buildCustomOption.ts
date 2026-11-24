@@ -9,7 +9,8 @@ import {
   type StatementRows,
 } from "../visuals/statementRows"
 import { PICK_KEY, pickOf, type Pick } from "../interactions/selection"
-import { isSafeImage, type OptionProblem } from "./sanitizeOption"
+import type { OptionProblem } from "./sanitizeOption"
+import { enforceSinks } from "./sinks"
 import {
   MAX_SANKEY_LINKS,
   SANKEY_LINK_LIMIT_MESSAGE,
@@ -341,30 +342,6 @@ const bindRows = (
 // Values bound from rows arrive after the option was made safe, so they get
 // its image rule again: an `image://` symbol other than a data: image would
 // make the browser fetch any URL, which a query can fill with its results.
-const withSafeImages = (
-  value: unknown,
-  path: string,
-  report: Report,
-): unknown => {
-  if (typeof value === "string") {
-    if (!value.startsWith("image://") || isSafeImage(value.slice(8)))
-      return value
-    report(path, "Only data: images are allowed; the symbol is a circle.")
-    return "circle"
-  }
-  if (Array.isArray(value))
-    return value.map((child, i) =>
-      withSafeImages(child, `${path}[${i}]`, report),
-    )
-  if (!isRecord(value)) return value
-  return Object.fromEntries(
-    Object.entries(value).map(([key, child]) => [
-      key,
-      withSafeImages(child, `${path}.${key}`, report),
-    ]),
-  )
-}
-
 const fillRows = (
   node: unknown,
   statements: (StatementRows | null)[],
@@ -379,11 +356,7 @@ const fillRows = (
   if (!isRecord(node)) return node
   const keys = Object.keys(node)
   if (keys.length === 1 && keys[0] === ROWS_KEY && isRecord(node[ROWS_KEY])) {
-    return withSafeImages(
-      resolveRows(node[ROWS_KEY] as RowsSpec, statements, binding, report),
-      path,
-      report,
-    )
+    return resolveRows(node[ROWS_KEY] as RowsSpec, statements, binding, report)
   }
   const seriesType =
     SERIES_PATH.test(path) && typeof node.type === "string"
@@ -433,54 +406,6 @@ const checkEncodes = (
       }
     }
   })
-}
-
-// Enforce console-owned rendering policies after row binding.
-const TITLE_NAVIGATION = new Set(["link", "sublink", "target", "subtarget"])
-
-const enforceRendererPolicy = (
-  node: unknown,
-  inTitle = false,
-  inTreemapData = false,
-): unknown => {
-  if (Array.isArray(node))
-    return node.map((child) =>
-      enforceRendererPolicy(child, inTitle, inTreemapData),
-    )
-  if (!isRecord(node)) return node
-  // Tree series inherit `link` from the series and its levels into every
-  // node, so navigation is removed at all three scopes.
-  const treeSeries = node.type === "treemap" || node.type === "sunburst"
-  return Object.fromEntries(
-    Object.entries(node)
-      .filter(
-        ([key]) =>
-          !(inTitle || inTreemapData || treeSeries) ||
-          !TITLE_NAVIGATION.has(key),
-      )
-      .map(([key, value]) => {
-        const child = enforceRendererPolicy(
-          value,
-          key === "title" || inTitle,
-          (treeSeries && (key === "data" || key === "levels")) || inTreemapData,
-        )
-        if (key !== "tooltip") return [key, child]
-        const normalize = (tooltip: unknown) => {
-          if (tooltip === false) return false
-          if (typeof tooltip === "string")
-            return { formatter: tooltip, renderMode: "richText" }
-          return isRecord(tooltip)
-            ? { ...tooltip, renderMode: "richText" }
-            : undefined
-        }
-        return [
-          key,
-          Array.isArray(child)
-            ? child.map(normalize).filter(Boolean)
-            : normalize(child),
-        ]
-      }),
-  )
 }
 
 const sankeyProblem = (node: unknown): string | undefined => {
@@ -684,7 +609,9 @@ export const buildCustomOption = (
   }
   const bound = fillRows(sanitized, statements, { path: "", pickable }, report)
   if (fatal) return { option: {}, problems: [fatal] }
-  const filled = enforceRendererPolicy(bound) as Record<string, unknown>
+  // Bound rows can carry links and image URLs too: make the drawn option
+  // safe, not only the template.
+  const filled = enforceSinks(bound as Record<string, unknown>, report)
   const invalidSankey = sankeyProblem(filled)
   if (invalidSankey) {
     return {

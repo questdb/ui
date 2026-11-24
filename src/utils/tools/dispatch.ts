@@ -96,9 +96,7 @@ import {
   type VisualWire,
 } from "./dashboardWire"
 import { lightColors } from "../../theme"
-import { sanitizeOption } from "../../scenes/Editor/Notebook/customChart/sanitizeOption"
-import { BUILTIN_RENDER_ITEMS } from "../../scenes/Editor/Notebook/CellChart/customSeriesNames"
-import { MAP_NAMES } from "../../scenes/Editor/Notebook/customChart/mapNames"
+import { checkCustomOption } from "../../scenes/Editor/Notebook/customChart/prepareCustomOption"
 import {
   invalidBufferIdResult,
   notebookErrorHint,
@@ -1203,13 +1201,7 @@ export const dispatchTool = async (
           throw e
         }
         return routeNotebookTool(async () => {
-          const problems = option
-            ? sanitizeOption(option, {
-                colors: lightColors,
-                renderItems: BUILTIN_RENDER_ITEMS,
-                maps: new Set<string>(MAP_NAMES),
-              }).problems
-            : []
+          const problems = option ? checkCustomOption(option, lightColors) : []
           if (problems.some((p) => p.severity === "error" && p.path === ""))
             throw new NotebookToolError("validation", problems[0].message)
           const cell = (await readCells(buffer_id, signal)).find(
