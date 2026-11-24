@@ -52,7 +52,7 @@ import { useCellExecution } from "../useCellExecution"
 import {
   affectedVariables,
   expandGlobals,
-  hasChangedBindings,
+  createBindingKeys,
   usesVariables,
 } from "../declareUtils"
 import { normalizeQueryText } from "../../Monaco/utils"
@@ -405,6 +405,8 @@ class World {
   }
 
   retired = new Map<string, { cellId: string; stmt: Stmt }>()
+  // Charts whose edited SQL has not been read yet.
+  chartEdits = new Set<string>()
 
   setCells(next: NotebookCell[]) {
     this.cells = next
@@ -587,6 +589,9 @@ class World {
       this.violate(5, `${cellId}: engine read during a foreground run`)
     if (others.some((r) => r.origin === "engine" && r.sid === sid))
       this.violate(5, `${sid}: two engine reads at once`)
+    // A chart runs its SQL by design: the first read of an edit is its Run.
+    if (this.chartEdits.delete(cellId))
+      this.explicitRefresh((this.stmts.get(cellId) ?? []).map((s) => s.sid))
     if (this.pollCells.has(cellId)) return
     const record = this.slot(sid)
     if (
@@ -679,8 +684,6 @@ class Mount {
   hydration: CellResultHydrationEngine
   exec: ReturnType<typeof useCellExecution>
   unmountHook: () => void
-  renderedVars: NotebookVariable[]
-  pendingVariableRefresh: string[] = []
   activeKeys = new Map<string, number>()
   running = new Set<string>()
   agent: { cellId: string; controller: AbortController } | null = null
@@ -688,10 +691,10 @@ class Mount {
   runIds = 0
 
   constructor(private world: World) {
-    this.renderedVars = world.vars
+    const bindingKeys = createBindingKeys()
     const deps: CellRefreshDeps = {
       executeSingle: (sql, signal) =>
-        world.exec("engine", sql, this.renderedVars, signal),
+        world.exec("engine", sql, world.vars, signal),
       validateWithGlobals: (sql) =>
         Promise.resolve({ query: sql, columns: [], timestamp: 0 }),
       setCellResult: (cellId, result) =>
@@ -699,14 +702,11 @@ class Mount {
           world.cells.map((c) => (c.id === cellId ? { ...c, result } : c)),
         ),
       getCellResult: (cellId) => world.cell(cellId)?.result,
-      hasStaleStatementBindings: (statement) =>
-        statement.type === "dql" &&
-        statement.effectiveQuery !== undefined &&
-        hasChangedBindings(
-          statement.query,
-          statement.effectiveQuery,
-          world.vars,
-        ),
+      statementBinding: (sql) => bindingKeys.current(sql, world.vars),
+      resultBinding: (result) =>
+        result.type === "dql" && result.effectiveQuery !== undefined
+          ? bindingKeys.of(result.query, result.effectiveQuery)
+          : undefined,
       isDrawCell: (cellId) => world.cell(cellId)?.mode === "draw",
       isCellRunning: (cellId) => this.exec.isCellRunning(cellId),
       resultLoadStatus: (cellId) => this.hydration.statusOf(cellId),
@@ -761,7 +761,7 @@ class Mount {
         bufferId: BUFFER_ID,
         cellsRef: world.cellsRef,
         executeSingle: (sql, signal) =>
-          world.exec("foreground", sql, this.renderedVars, signal),
+          world.exec("foreground", sql, world.vars, signal),
         validateWithGlobals: (sql, signal) =>
           new Promise((resolve, reject) => {
             const timer = setTimeout(
@@ -824,52 +824,14 @@ class Mount {
     }, 0)
   }
 
-  // A React commit: the engines see the new cells, then the provider's
-  // effect redeems a selection's refresh with the values just rendered.
+  // A React commit: the engines see the new cells.
   render() {
     if (this.renderTimer) {
       clearTimeout(this.renderTimer)
       this.renderTimer = null
     }
-    const varsChanged = this.renderedVars !== this.world.vars
-    this.renderedVars = this.world.vars
     this.engine.sync(this.world.cells, undefined)
     this.hydration.sync(this.world.cells)
-    if (varsChanged) this.redeemVariableRefresh()
-  }
-
-  private hasStaleBindings = (statement: SingleQueryResult) =>
-    statement.type === "dql" &&
-    statement.effectiveQuery !== undefined &&
-    hasChangedBindings(
-      statement.query,
-      statement.effectiveQuery,
-      this.world.vars,
-    )
-
-  private redeemVariableRefresh() {
-    const names = this.pendingVariableRefresh
-    if (names.length === 0) return
-    this.pendingVariableRefresh = []
-    const changedNames = affectedVariables(names, this.renderedVars)
-    const readWithCurrentValues = (cellId: string) => {
-      const results = this.world.cell(cellId)?.result?.results
-      return (
-        results !== undefined &&
-        results.length > 0 &&
-        results.every(
-          (r) =>
-            r.type === "dql" &&
-            r.effectiveQuery !== undefined &&
-            !this.hasStaleBindings(r),
-        )
-      )
-    }
-    this.engine.refreshWhere(
-      (cellId, sql) =>
-        usesVariables(sql, changedNames) && !readWithCurrentValues(cellId),
-      this.world.cellsRef.current,
-    )
   }
 
   setVariableValues(values: Record<string, string>) {
@@ -880,35 +842,20 @@ class Mount {
     const repeated = Object.keys(values).filter((name) => !names.includes(name))
     if (repeated.length > 0) {
       const used = affectedVariables(repeated, current)
-      const fetching = this.engine.readRefreshState()
-      const running: string[] = []
-      this.engine.refreshWhere((cellId, sql) => {
-        if (!usesVariables(sql, used)) return false
-        const stale = (this.world.cell(cellId)?.result?.results ?? []).some(
-          this.hasStaleBindings,
-        )
-        if (!stale) return false
-        if (fetching.get(cellId)?.refreshing === true) {
-          running.push(cellId)
-          return false
-        }
-        return true
-      }, this.world.cellsRef.current)
-      this.engine.recheckBindingsAfterRound(running)
+      this.engine.refreshStale((_cellId, sql) => usesVariables(sql, used))
     }
     if (names.length === 0) return
     this.world.vars = current.map((v) =>
       names.includes(v.name) ? { ...v, value: values[v.name] } : v,
     )
-    this.pendingVariableRefresh = [
-      ...new Set([...this.pendingVariableRefresh, ...names]),
-    ]
+    this.engine.variablesChanged(false)
   }
 
   applyVariables(values: Record<string, string>) {
     this.world.vars = this.world.vars.map((v) =>
       v.name in values ? { ...v, value: values[v.name] } : v,
     )
+    this.engine.variablesChanged(true)
   }
 
   async runCellNow(cellId: string, sql?: string, signal?: AbortSignal) {
@@ -922,7 +869,8 @@ class Mount {
       return outcome
     } finally {
       const ownsRun = this.activeKeys.get(cellId) === queryKey
-      if (signal?.aborted && ownsRun) this.engine.discardVariableRefresh(cellId)
+      if (signal?.aborted && ownsRun)
+        this.engine.noteCellStopped(cellId, this.world.cell(cellId))
       this.engine.noteRunFinished(cellId, this.world.cell(cellId))
       if (ownsRun) {
         this.activeKeys.delete(cellId)
@@ -950,7 +898,7 @@ class Mount {
   }
 
   cancelCell(cellId: string) {
-    this.engine.discardVariableRefresh(cellId)
+    this.engine.noteCellStopped(cellId, this.world.cell(cellId))
     this.exec.cancelCell(cellId)
   }
 
@@ -1173,6 +1121,7 @@ const applyEvent = async (world: World, event: HarnessEvent) => {
         world.stmts.set(cellId, stmts)
         world.updateTargets()
         value = stmts.map(stmtText).join(";\n")
+        if (world.kinds.get(cellId) === "chart") world.chartEdits.add(cellId)
       }
       world.setCells(
         world.cells.map((c) => (c.id === cellId ? { ...c, value } : c)),
@@ -1367,18 +1316,12 @@ describe("variable refresh invariants", () => {
   const holds = (invariant: number) => () =>
     expect(found.get(invariant)?.slice(0, 3) ?? []).toEqual([])
 
-  // Today's engine breaks 1–4 on random sequences; the cases below are the
-  // minimized sequences, one per distinct cause.
-  it.fails(
-    `1: a visible stale slot gets current rows (${SEEDS} seeds)`,
-    holds(1),
-  )
-  it.fails(`2: the engine never re-reads a target (${SEEDS} seeds)`, holds(2))
-  it.fails(`3: a Stop holds for its target (${SEEDS} seeds)`, holds(3))
-  it.fails(
-    `4: the engine runs only SQL the user ran (${SEEDS} seeds)`,
-    holds(4),
-  )
+  // The cases below are minimized sequences that broke an invariant before
+  // the engine reconciled desired and observed bindings, one per cause.
+  it(`1: a visible stale slot gets current rows (${SEEDS} seeds)`, holds(1))
+  it(`2: the engine never re-reads a target (${SEEDS} seeds)`, holds(2))
+  it(`3: a Stop holds for its target (${SEEDS} seeds)`, holds(3))
+  it(`4: the engine runs only SQL the user ran (${SEEDS} seeds)`, holds(4))
   it(`5: one fetch at a time per cell and slot (${SEEDS} seeds)`, holds(5))
   it(
     `6: a saved snapshot matches the rows on screen (${SEEDS} seeds)`,
@@ -1388,7 +1331,7 @@ describe("variable refresh invariants", () => {
   const holdsFor = (scenario: Scenario) => async () =>
     expect(await runScenario(scenario)).toEqual([])
 
-  it.fails(
+  it(
     "1: returning to the shown value while a read for another value runs keeps that read's rows",
     holdsFor({
       cells: [grid(["@a"])],
@@ -1401,7 +1344,7 @@ describe("variable refresh invariants", () => {
     }),
   )
 
-  it.fails(
+  it(
     "1: selecting the value a stale snapshot shows while its restore read runs keeps the restore read's rows",
     holdsFor({
       cells: [grid(["@a"], "stale")],
@@ -1409,17 +1352,17 @@ describe("variable refresh invariants", () => {
     }),
   )
 
-  it.fails(
+  it(
     "1: an auto-refresh cell whose first tick beats its snapshot load never checks the restored bindings",
     holdsFor({ cells: [grid(["@b"], "stale", "1m")], events: [] }),
   )
 
-  it.fails(
+  it(
     "2: a selection re-reads a sibling statement that does not use the variable",
     holdsFor({ cells: [grid(["@a", "1"])], events: [click("a", "'y'")] }),
   )
 
-  it.fails(
+  it(
     "2: a selection re-reads a chart statement that does not use the variable",
     holdsFor({
       cells: [chart(["@a", "1"])],
@@ -1427,7 +1370,7 @@ describe("variable refresh invariants", () => {
     }),
   )
 
-  it.fails(
+  it(
     "2: a selection made while a Run validates re-runs the cell after the Run read the new value",
     holdsFor({
       cells: [grid(["@a"])],
@@ -1439,12 +1382,12 @@ describe("variable refresh invariants", () => {
     }),
   )
 
-  it.fails(
+  it(
     "2: a selection made before a snapshot loads re-reads rows that already match it",
     holdsFor({ cells: [grid(["@a"], "stale")], events: [click("a", "'y'")] }),
   )
 
-  it.fails(
+  it(
     "3: a Stop after a repeated click is undone when the cell's round ends",
     holdsFor({
       cells: [grid(["@a"], "stale")],
@@ -1452,7 +1395,7 @@ describe("variable refresh invariants", () => {
     }),
   )
 
-  it.fails(
+  it(
     "3: a selection of another variable re-runs a statement the user stopped",
     holdsFor({
       cells: [grid(["@b", "@a"], "stale")],
@@ -1460,7 +1403,7 @@ describe("variable refresh invariants", () => {
     }),
   )
 
-  it.fails(
+  it(
     "4: a repeated click during a round runs a statement edited inside the debounce once the round ends",
     holdsFor({
       cells: [grid(["@a"], "stale")],

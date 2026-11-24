@@ -193,27 +193,68 @@ export const parseDeclareBlock = (text: string): NotebookVariable[] => {
   return out
 }
 
-/** Whether a restored query result was bound to different notebook values. */
-export const hasChangedBindings = (
-  sql: string,
-  previousEffectiveSql: string,
-  globals: readonly NotebookVariable[] | undefined,
-): boolean => {
-  const currentEffectiveSql = expandGlobals(sql, globals)
-  if (currentEffectiveSql === previousEffectiveSql) return false
-  const previous = parseDeclareBlock(previousEffectiveSql)
-  const next = parseDeclareBlock(currentEffectiveSql)
-  const values = (declared: NotebookVariable[]) =>
-    new Map(declared.map(({ name, value }) => [name.toLowerCase(), value]))
-  const before = values(previous)
-  const after = values(next)
-  const changed = [...new Set([...before.keys(), ...after.keys()])].filter(
-    (name) => before.get(name) !== after.get(name),
+/**
+ * The variable values a statement reads when it runs as `effectiveSql` (the
+ * statement with the notebook's DECLARE block): every variable it uses,
+ * directly or through the values of others, with its declared value. Equal
+ * keys mean equal inputs; statement-local declarations and unrelated
+ * variables are accounted for.
+ */
+export const bindingKey = (sql: string, effectiveSql: string): string => {
+  const declared = new Map(
+    parseDeclareBlock(effectiveSql).map(({ name, value }) => [
+      name.toLowerCase(),
+      value,
+    ]),
   )
-  if (changed.length === 0) return false
-  // Use the effective declarations so statement-local overrides and derived
-  // variables are accounted for; unrelated settings don't invalidate a frame.
-  return usesVariables(sql, affectedVariables(changed, next))
+  const used = new Set(sqlVariableNames(sql))
+  // Set iteration visits names added along the way and terminates on cycles.
+  for (const name of used)
+    for (const dependency of sqlVariableNames(declared.get(name) ?? ""))
+      used.add(dependency)
+  return JSON.stringify(
+    [...used].sort().map((name) => [name, declared.get(name) ?? null]),
+  )
+}
+
+const BINDING_CACHE_MAX = 2000
+
+/**
+ * Cached binding keys: the values a statement reads with the given
+ * variables, and the values a result was read with.
+ */
+export const createBindingKeys = () => {
+  const read = new Map<string, string>()
+  const current = new Map<string, string>()
+  let currentFor: readonly NotebookVariable[] | undefined
+  const of = (sql: string, effectiveSql: string): string => {
+    const cacheKey = `${sql}\u0000${effectiveSql}`
+    let key = read.get(cacheKey)
+    if (key === undefined) {
+      if (read.size >= BINDING_CACHE_MAX) read.clear()
+      key = bindingKey(sql, effectiveSql)
+      read.set(cacheKey, key)
+    }
+    return key
+  }
+  return {
+    of,
+    current: (
+      sql: string,
+      variables: readonly NotebookVariable[] | undefined,
+    ): string => {
+      if (variables !== currentFor) {
+        current.clear()
+        currentFor = variables
+      }
+      let key = current.get(sql)
+      if (key === undefined) {
+        key = of(sql, expandGlobals(sql, variables))
+        current.set(sql, key)
+      }
+      return key
+    },
+  }
 }
 
 export type VariableShapeError =

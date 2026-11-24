@@ -140,7 +140,12 @@ const makeDeps = () => {
       deps.requestResultLoad(cellId)
     }),
     onSnapshotPersisted: vi.fn<[string, SingleQueryResult[]], void>(),
-    hasStaleStatementBindings: vi.fn<[SingleQueryResult], boolean>(() => false),
+    // No variable model unless a test gives one: a result's binding is its
+    // effective SQL, and a statement reads what the test selected.
+    statementBinding: vi.fn<[string], string | undefined>(() => undefined),
+    resultBinding: vi.fn((result: SingleQueryResult) =>
+      result.type === "dql" ? result.effectiveQuery : undefined,
+    ),
   }
   const beginLoadOnRequest = () => {
     deps.requestResultLoad.mockImplementation((cellId: string) => {
@@ -196,6 +201,13 @@ describe("CellRefreshEngine", () => {
   ) => {
     for (const cell of cells) engine.setVisible(cell.id, true)
     engine.sync(cells, autoRefreshDefault)
+  }
+
+  // A selection: every statement now reads `binding`. Rows that do not say
+  // what they were read with count as read with the binding before.
+  const selectValues = (binding: string) => {
+    deps.statementBinding.mockReturnValue(binding)
+    engine.variablesChanged()
   }
 
   beforeEach(() => {
@@ -289,7 +301,7 @@ describe("CellRefreshEngine", () => {
       ...dqlResult(sql),
       effectiveQuery: "select abs(1)",
     })
-    engine.refreshWhere(() => true)
+    selectValues("select abs(1)")
     await flushAsync()
     expect(cellResults.get("c1")?.results[0]).toMatchObject({
       effectiveQuery: "select abs(1)",
@@ -716,6 +728,26 @@ describe("CellRefreshEngine", () => {
       expect(deps.executeSingle).toHaveBeenCalledTimes(1)
       expect(engine.getState("c1")?.fetchCancelled).toBe(true)
       expect(engine.getState("c1")?.fetching).toBe(false)
+    })
+
+    it("a stopped first fetch reads again for a new variable value, not for the same one", async () => {
+      // Given a stopped first fetch of a draw cell that reads a variable
+      deps.statementBinding.mockReturnValue("east")
+      deferFetch()
+      syncOnScreen([drawCell("c1", "select @station", false)])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the same value is set again, nothing is read
+      engine.variablesChanged()
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When another value is selected, the chart reads it
+      selectValues("west")
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(engine.getState("c1")?.fetchCancelled).toBe(false)
     })
 
     it("an SQL edit after a stopped first fetch fetches the new SQL", async () => {
@@ -1417,8 +1449,11 @@ describe("CellRefreshEngine", () => {
   it("refetches unchanged Draw SQL with stale variable bindings during edit settle", async () => {
     syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
     await flushAsync()
-    deps.hasStaleStatementBindings.mockImplementation(
-      (result) => result.query === "select 1",
+    deps.statementBinding.mockImplementation((sql) =>
+      sql === "select 1" ? "new" : undefined,
+    )
+    deps.resultBinding.mockImplementation((result) =>
+      result.query === "select 1" ? "old" : undefined,
     )
     engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
     await vi.advanceTimersByTimeAsync(301)
@@ -3132,6 +3167,7 @@ describe("CellRefreshEngine", () => {
     it("commits the new binding even when a variable refresh returns equal rows", async () => {
       const sql = "select abs(@marker)"
       const cell = gridCell("g1", sql, [sql], false)
+      deps.statementBinding.mockReturnValue("initial")
       syncOnScreen([cell])
       await flushAsync()
       const refreshWith = async (effectiveQuery: string) => {
@@ -3139,7 +3175,7 @@ describe("CellRefreshEngine", () => {
           ...dqlResult(sql),
           effectiveQuery,
         })
-        engine.refreshWhere(() => true)
+        selectValues(effectiveQuery)
         await flushAsync()
       }
       await refreshWith("select abs(-1)")
@@ -3155,6 +3191,7 @@ describe("CellRefreshEngine", () => {
     it("keeps an in-flight variable read through an edit that leaves parsed SQL unchanged", async () => {
       const sql = "select @station"
       const cell = gridCell("g1", sql, [sql], false)
+      deps.statementBinding.mockReturnValue("east")
       syncOnScreen([cell])
       await flushAsync()
       let signal: AbortSignal | undefined
@@ -3165,7 +3202,7 @@ describe("CellRefreshEngine", () => {
           finish = resolve
         })
       })
-      engine.refreshWhere(() => true)
+      selectValues("west")
       await flushAsync()
       expect(signal).toBeDefined()
       syncOnScreen([{ ...cell, value: sql + "\n" }])
@@ -3879,14 +3916,12 @@ describe("CellRefreshEngine", () => {
           lastRunStatus: "success",
         }
         const frame = gridFrame([original])
-        deps.hasStaleStatementBindings.mockReturnValue(true)
+        deps.statementBinding.mockReturnValue("new")
+        deps.resultBinding.mockReturnValue("old")
         harness.beginLoadOnRequest()
         engine.sync([cell])
         engine.requestHydrate(cell.id)
         harness.settleLoad(cell.id, frame)
-        expect(deps.hasStaleStatementBindings).toHaveBeenCalledWith(
-          frame.results[0],
-        )
         expect(deps.executeSingle).not.toHaveBeenCalled()
 
         engine.sync([
@@ -3991,6 +4026,7 @@ describe("CellRefreshEngine", () => {
 
     it("refreshes once with the latest variable after the last manual run finishes", async () => {
       const sql = "select @desk"
+      deps.statementBinding.mockReturnValue("London")
       syncOnScreen([gridCell("g1", sql, [sql], false)])
       await flushAsync()
       engine.noteRunStarted("g1")
@@ -4000,13 +4036,13 @@ describe("CellRefreshEngine", () => {
         Promise.resolve({ ...dqlResult(query), dataset: [[selected, 2]] }),
       )
 
-      engine.refreshWhere((_cellId, query) => query === sql)
+      selectValues(selected)
       engine.noteRunFinished("g1")
       await flushAsync()
       expect(deps.executeSingle).not.toHaveBeenCalled()
 
       selected = "Tokyo"
-      engine.refreshWhere((_cellId, query) => query === sql)
+      selectValues(selected)
       engine.noteRunFinished("g1")
       await flushAsync()
       expect(deps.executeSingle).toHaveBeenCalledTimes(1)
@@ -4018,10 +4054,11 @@ describe("CellRefreshEngine", () => {
     it("replays an interrupted variable refresh after rerunning one grid statement", async () => {
       const queries = ["select @desk as a", "select @desk as b"]
       const grid = gridCell("g1", queries.join("; "), queries, false)
+      deps.statementBinding.mockReturnValue("Paris")
       syncOnScreen([grid])
       await flushAsync()
       deps.executeSingle.mockImplementation(() => new Promise(() => undefined))
-      engine.refreshWhere(() => true)
+      selectValues("Tokyo")
       await flushAsync()
       expect(deps.executeSingle).toHaveBeenCalledTimes(2)
 
@@ -4044,10 +4081,11 @@ describe("CellRefreshEngine", () => {
         "select @desk as c",
       ]
       const grid = gridCell("g1", queries.join("; "), queries, false)
+      deps.statementBinding.mockReturnValue("Paris")
       syncOnScreen([grid])
       await flushAsync()
       deps.executeSingle.mockImplementation(() => new Promise(() => undefined))
-      engine.refreshWhere(() => true)
+      selectValues("Tokyo")
       await flushAsync()
       engine.cancelSlot("g1", keyOf(queries[0]))
       engine.noteRunStarted("g1", true)
@@ -4065,10 +4103,11 @@ describe("CellRefreshEngine", () => {
     it("refreshes siblings without replaying a statement stopped in the foreground", async () => {
       const queries = ["select @desk as a", "select @desk as b"]
       const grid = gridCell("g1", queries.join("; "), queries, false)
+      deps.statementBinding.mockReturnValue("Paris")
       syncOnScreen([grid])
       await flushAsync()
       engine.noteRunStarted("g1")
-      engine.refreshWhere(() => true)
+      selectValues("Tokyo")
       const frame = cellResults.get("g1")
       if (!frame) throw new Error("Expected a result frame")
       const current = {
@@ -4100,6 +4139,7 @@ describe("CellRefreshEngine", () => {
       const full = gridCell("g1", sql, [sql], false)
       const result = full.result
       if (!result) throw new Error("Expected a complete frame")
+      deps.statementBinding.mockReturnValue("Paris")
       syncOnScreen([
         {
           ...full,
@@ -4113,7 +4153,7 @@ describe("CellRefreshEngine", () => {
       ])
       await flushAsync()
 
-      engine.refreshWhere((_cellId, text) => text === sql)
+      selectValues("Tokyo")
       await flushAsync()
       expect(deps.executeSingle).toHaveBeenCalledTimes(1)
     })
@@ -4121,11 +4161,12 @@ describe("CellRefreshEngine", () => {
     it("drops a pending variable refresh when the foreground Run is stopped", async () => {
       const sql = "select @desk"
       const grid = gridCell("g1", sql, [sql], false)
+      deps.statementBinding.mockReturnValue("Paris")
       syncOnScreen([grid])
       await flushAsync()
       engine.noteRunStarted("g1")
-      engine.refreshWhere(() => true, [grid])
-      engine.discardVariableRefresh("g1")
+      selectValues("Tokyo")
+      engine.noteCellStopped("g1")
       engine.noteRunFinished("g1", grid)
       await flushAsync()
       expect(deps.executeSingle).not.toHaveBeenCalled()
@@ -4134,10 +4175,11 @@ describe("CellRefreshEngine", () => {
     it("does not replace a partial Run result when redeeming a variable refresh", async () => {
       const fullSql = "select 1; select @desk"
       const partial = gridCell("g1", fullSql, ["select 1"], false)
+      deps.statementBinding.mockReturnValue("Paris")
       syncOnScreen([partial])
       await flushAsync()
       engine.noteRunStarted("g1")
-      engine.refreshWhere(() => true, [partial])
+      selectValues("Tokyo")
 
       // The foreground Run only executed the first statement.
       engine.noteRunFinished("g1", partial)
@@ -4150,10 +4192,11 @@ describe("CellRefreshEngine", () => {
       async (synced) => {
         const sql = "select @desk"
         const grid = gridCell("g1", sql, [sql], false)
+        deps.statementBinding.mockReturnValue("Paris")
         syncOnScreen([grid])
         await flushAsync()
         engine.noteRunStarted("g1")
-        engine.refreshWhere(() => true, [grid])
+        selectValues("Tokyo")
 
         const edited = { ...grid, value: `${sql}; select 42` }
         if (synced) syncOnScreen([edited])
@@ -4166,7 +4209,19 @@ describe("CellRefreshEngine", () => {
     it("remembers a changed variable before the first Run creates a grid entry", async () => {
       // Given a first Run whose validation hasn't produced a placeholder
       const sql = "select @desk"
-      const completed = gridCell("g1", sql, [sql], false)
+      const ran = gridCell("g1", sql, [sql], false)
+      // The Run reads the value selected when it started.
+      const completed: NotebookCell = {
+        ...ran,
+        result: {
+          ...ran.result!,
+          results: ran.result!.results.map((r) => ({
+            ...r,
+            effectiveQuery: "Paris",
+          })),
+        },
+      }
+      cellResults.set("g1", completed.result ?? undefined)
       const first = {
         ...completed,
         result: undefined,
@@ -4177,10 +4232,11 @@ describe("CellRefreshEngine", () => {
       engine.noteRunStarted("g1")
 
       // When a matching selection changes before the first result
-      engine.refreshWhere((_cellId, query) => query === sql, [first])
+      selectValues("Tokyo")
       await flushAsync()
       expect(deps.executeSingle).not.toHaveBeenCalled()
       engine.noteRunFinished("g1", completed)
+      syncOnScreen([completed])
       await flushAsync()
 
       // Then the refresh is redeemed once a completed grid is available

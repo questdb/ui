@@ -242,22 +242,19 @@ const setup = async (bufferId: number) => {
   return { observation, clickMark, releaseHeld }
 }
 
-it.fails(
-  "shows the clicked value when it returns to the rows on screen while another read runs",
-  async () => {
-    // Given the dependent cell is reading west after a click on west
-    const { observation, clickMark, releaseHeld } = await setup(9951)
-    await clickMark("west", 9)
-    await screen.findByText("Refreshing...")
+it("shows the clicked value when it returns to the rows on screen while another read runs", async () => {
+  // Given the dependent cell is reading west after a click on west
+  const { observation, clickMark, releaseHeld } = await setup(9951)
+  await clickMark("west", 9)
+  await screen.findByText("Refreshing...")
 
-    // When the user clicks east, the value its rows were read with, and the
-    // west read answers afterwards
-    await clickMark("east", 4)
-    await waitFor(() => expect(observation().binding).toBe("'east'"))
-    releaseHeld()
-    await act(() => new Promise((resolve) => setTimeout(resolve, 400)))
+  // When the user clicks east, the value its rows were read with, and the
+  // west read answers afterwards
+  await clickMark("east", 4)
+  await waitFor(() => expect(observation().binding).toBe("'east'"))
+  releaseHeld()
+  await act(() => new Promise((resolve) => setTimeout(resolve, 400)))
 
-    // Then the cell shows east, the selected value
-    expect(observation()).toEqual({ binding: "'east'", dependent: "east" })
-  },
-)
+  // Then the cell shows east, the selected value
+  expect(observation()).toEqual({ binding: "'east'", dependent: "east" })
+})

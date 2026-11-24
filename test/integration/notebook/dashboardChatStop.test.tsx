@@ -145,7 +145,10 @@ it("Chat Stop during mounted run validation cancels the run and its queued selec
       ],
     }),
   ).toBe(true)
-  const refreshWhere = vi.spyOn(CellRefreshEngine.prototype, "refreshWhere")
+  const variablesChanged = vi.spyOn(
+    CellRefreshEngine.prototype,
+    "variablesChanged",
+  )
   const targetQuery = expandGlobals(dependentSql, [
     { name: "station", value: "'west'" },
   ])
@@ -277,7 +280,7 @@ it("Chat Stop during mounted run validation cancels the run and its queued selec
   fireEvent.click(west)
   expect(west).toHaveAttribute("aria-pressed", "true")
   expect(screen.getByTestId("binding")).toHaveTextContent("'west'")
-  expect(refreshWhere).toHaveReturnedWith(1)
+  expect(variablesChanged).toHaveBeenCalledWith(false)
   expect(validationSignal?.aborted).toBe(false)
   expect(dependentCalls()).toHaveLength(0)
   expect(screen.getByRole("gridcell")).toHaveTextContent(/^east$/)

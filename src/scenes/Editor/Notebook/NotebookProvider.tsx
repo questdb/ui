@@ -22,7 +22,10 @@ import type {
   CellType,
 } from "../../../store/notebook"
 import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
-import { useQueryExecution } from "../../../hooks/useQueryExecution"
+import {
+  executeSingleRaw,
+  RESULT_DISPLAY_LIMIT,
+} from "../../../hooks/useQueryExecution"
 import { useCellsStore, type CellSettingsPatch } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
 import type { DrawGateOutcome } from "./useCellExecution"
@@ -84,7 +87,7 @@ import { persistCellSnapshot } from "./persistCellSnapshot"
 import type { QueryKey } from "../../../store/Query/types"
 import {
   affectedVariables,
-  hasChangedBindings,
+  createBindingKeys,
   createValidateWithGlobals,
   usesVariables,
 } from "./declareUtils"
@@ -294,23 +297,32 @@ export const NotebookProvider: React.FC<{
   const focusedCellIdRef = useRef(focusedCellId)
   const maximizedCellIdRef = useRef(maximizedCellId)
   const settingsRef = useRef(settings)
-  // Whether a statement's rows were read with other variable values than the
-  // current ones.
-  const hasStaleBindings = (
-    statement: NonNullable<NotebookCell["result"]>["results"][number],
-  ) =>
-    statement.type === "dql" &&
-    statement.effectiveQuery !== undefined &&
-    hasChangedBindings(
-      statement.query,
-      statement.effectiveQuery,
-      settingsRef.current.variables,
-    )
+  // The variable values a statement would read now, and the ones a result
+  // was read with: the refresh engine compares the two.
+  const bindingKeys = useMemo(() => createBindingKeys(), [])
   const activeCellQueryKeysRef = useRef<Map<string, QueryKey>>(new Map())
   const notebookRunIdRef = useRef(0)
   const liveActionsRef = useRef<LiveNotebookActions>(NOOP_LIVE_ACTIONS)
 
-  const { executeSingle } = useQueryExecution(settings.variables)
+  // Reads the current variables at call time, so a query never runs with
+  // values older than the ones the refresh engine compares against.
+  const executeSingle = useCallback(
+    (
+      sql: string,
+      signal?: AbortSignal,
+      limit: number = RESULT_DISPLAY_LIMIT,
+      options?: { background?: boolean },
+    ) =>
+      executeSingleRaw(
+        quest,
+        sql,
+        settingsRef.current.variables,
+        signal,
+        limit,
+        options,
+      ),
+    [quest],
+  )
 
   const cellRefreshEngineRef = useRef<CellRefreshEngine | null>(null)
 
@@ -469,14 +481,25 @@ export const NotebookProvider: React.FC<{
     [bufferId],
   )
 
-  const updateSettings = useCallback(
-    (updates: Partial<NotebookSettings>) => {
-      const next = { ...settingsRef.current, ...updates }
+  // A selection re-reads the cells that use the variables it changed; any
+  // other change (Apply in the Variables popover, a settings save, an agent)
+  // keeps the rows on screen.
+  const applySettings = useCallback(
+    (updates: Partial<NotebookSettings>, selection = false) => {
+      const previous = settingsRef.current
+      const next = { ...previous, ...updates }
       settingsRef.current = next
       setSettingsState(next)
+      if (next.variables !== previous.variables)
+        cellRefreshEngineRef.current?.variablesChanged(!selection)
       void persistImmediately(store.cellsRef.current).catch(warnPersistFailure)
     },
     [persistImmediately, store.cellsRef, warnPersistFailure],
+  )
+
+  const updateSettings = useCallback(
+    (updates: Partial<NotebookSettings>) => applySettings(updates),
+    [applySettings],
   )
 
   const releaseCellExecution = useCallback(
@@ -495,11 +518,14 @@ export const NotebookProvider: React.FC<{
 
   const cancelCell = useCallback(
     (cellId: string, reason?: RunCancelReason) => {
-      cellRefreshEngineRef.current?.discardVariableRefresh(cellId)
+      cellRefreshEngineRef.current?.noteCellStopped(
+        cellId,
+        store.cellsRef.current.find((c) => c.id === cellId),
+      )
       execution.cancelCell(cellId, reason)
       releaseCellExecution(cellId)
     },
-    [execution, releaseCellExecution],
+    [execution, releaseCellExecution, store.cellsRef],
   )
 
   const abortCellRun = useCallback(
@@ -535,6 +561,7 @@ export const NotebookProvider: React.FC<{
       const { parts } = out
       // Sync refs so a second transition in the same tick composes on top of
       // this one (cells is kept current by the store's setters).
+      const variablesBefore = settingsRef.current.variables
       settingsRef.current = parts.settings
       maximizedCellIdRef.current = parts.maximizedCellId
       focusedCellIdRef.current = parts.focusedCellId
@@ -549,6 +576,8 @@ export const NotebookProvider: React.FC<{
       }
       store.hydrateCells(() => parts.cells)
       setSettingsState(parts.settings)
+      if (parts.settings.variables !== variablesBefore)
+        cellRefreshEngineRef.current?.variablesChanged(true)
       setMaximizedCellIdState(parts.maximizedCellId)
       setFocusedCellState(parts.focusedCellId)
       const persisted = persistImmediately(parts.cells, true)
@@ -678,7 +707,6 @@ export const NotebookProvider: React.FC<{
     [hydrateCells],
   )
 
-  const pendingVariableRefreshRef = useRef<string[]>([])
   const cellRefreshEngine = useCellRefreshEngine({
     bufferId,
     cells: store.cells,
@@ -687,7 +715,12 @@ export const NotebookProvider: React.FC<{
       executeSingle,
       validateWithGlobals,
       setCellResult,
-      hasStaleStatementBindings: hasStaleBindings,
+      statementBinding: (sql) =>
+        bindingKeys.current(sql, settingsRef.current.variables),
+      resultBinding: (result) =>
+        result.type === "dql" && result.effectiveQuery !== undefined
+          ? bindingKeys.of(result.query, result.effectiveQuery)
+          : undefined,
       getCellResult: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
       isDrawCell: (cellId) =>
@@ -704,36 +737,6 @@ export const NotebookProvider: React.FC<{
     },
   })
 
-  // Cells that use variables a click or drag just set re-run once the new
-  // values reached the query runner.
-  useEffect(() => {
-    const names = pendingVariableRefreshRef.current
-    if (names.length === 0) return
-    pendingVariableRefreshRef.current = []
-    const changedNames = affectedVariables(names, settings.variables)
-    // A cell whose every statement was read with the values it would use
-    // now (it declares the variable itself) has nothing to refresh. Without
-    // that proof (no result yet, or one still loading), it refreshes.
-    const readWithCurrentValues = (cellId: string) => {
-      const results = store.cellsRef.current.find((c) => c.id === cellId)
-        ?.result?.results
-      return (
-        results !== undefined &&
-        results.length > 0 &&
-        results.every(
-          (r) =>
-            r.type === "dql" &&
-            r.effectiveQuery !== undefined &&
-            !hasStaleBindings(r),
-        )
-      )
-    }
-    cellRefreshEngine.refreshWhere(
-      (cellId, sql) =>
-        usesVariables(sql, changedNames) && !readWithCurrentValues(cellId),
-      store.cellsRef.current,
-    )
-  }, [settings.variables, cellRefreshEngine, store.cellsRef])
   cellRefreshEngineRef.current = cellRefreshEngine
 
   const cellVirtualizationEngine = createVirtualizationEngine({
@@ -805,7 +808,10 @@ export const NotebookProvider: React.FC<{
         // superseded, thrown included — or refresh stays gated forever.
         const ownsRun = activeCellQueryKeysRef.current.get(cellId) === queryKey
         if (signal?.aborted && ownsRun)
-          cellRefreshEngineRef.current?.discardVariableRefresh(cellId)
+          cellRefreshEngineRef.current?.noteCellStopped(
+            cellId,
+            store.cellsRef.current.find((cell) => cell.id === cellId),
+          )
         cellRefreshEngineRef.current?.noteRunFinished(
           cellId,
           store.cellsRef.current.find((cell) => cell.id === cellId),
@@ -1004,8 +1010,8 @@ export const NotebookProvider: React.FC<{
         })
     },
     cancelCell,
-    // A statement Stop must not discard the pending refresh of its siblings.
-    // The engine keeps the stopped slot out of the variable refresh.
+    // A statement Stop leaves its siblings' refresh alone: the stopped
+    // statement has no rows for the engine to re-read.
     cancelQuery: execution.cancelQuery,
     setActiveStatement: execution.setActiveStatement,
     setCellMode,
@@ -1027,33 +1033,17 @@ export const NotebookProvider: React.FC<{
       const names = Object.keys(values).filter(
         (name) => current.find((v) => v.name === name)?.value !== values[name],
       )
-      // A click on what is already selected saves nothing and re-runs only
-      // the cells still showing rows for another value (after Apply in the
-      // Variables popover, or a stopped re-query); a cell already fetching
-      // keeps its fetch.
+      // A click on what is already selected saves nothing; it re-reads the
+      // cells still showing rows for another value (after Apply in the
+      // Variables popover, or a Stop). A cell already reading keeps its read.
       const repeated = Object.keys(values).filter(
         (name) => !names.includes(name),
       )
       if (repeated.length > 0) {
         const used = affectedVariables(repeated, current)
-        const fetching = cellRefreshEngine.readRefreshState()
-        const running: string[] = []
-        cellRefreshEngine.refreshWhere((cellId, sql) => {
-          if (!usesVariables(sql, used)) return false
-          const stale = (
-            store.cellsRef.current.find((c) => c.id === cellId)?.result
-              ?.results ?? []
-          ).some(hasStaleBindings)
-          if (!stale) return false
-          // A running round may not cover a statement the user stopped:
-          // check again once it ends.
-          if (fetching.get(cellId)?.refreshing === true) {
-            running.push(cellId)
-            return false
-          }
-          return true
-        }, store.cellsRef.current)
-        cellRefreshEngine.recheckBindingsAfterRound(running)
+        cellRefreshEngine.refreshStale((_cellId, sql) =>
+          usesVariables(sql, used),
+        )
       }
       if (names.length === 0) return
       const next = current.map((v) =>
@@ -1063,13 +1053,8 @@ export const NotebookProvider: React.FC<{
         if (!current.some((v) => v.name === name))
           next.push({ name, value: values[name] })
       }
-      // The refresh waits for the render that hands the new values to the
-      // query runner (the effect below).
-      pendingVariableRefreshRef.current = [
-        ...new Set([...pendingVariableRefreshRef.current, ...names]),
-      ]
       signalUserEdit(bufferId)
-      updateSettings({ variables: next })
+      applySettings({ variables: next }, true)
     },
     setCellPaneView,
     setFocusedCell,
