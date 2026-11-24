@@ -68,7 +68,7 @@ export const cellImage = async (
   // Read when answering: a cell scrolled into view reports once drawn.
   const report = () => {
     const r = deps.reportOf(bufferId, cellId)
-    return r ? { render_report: renderReportWire(r) } : {}
+    return r ? { render_report: renderReportWire(r, true) } : {}
   }
   const visual = cell.chartConfig?.visual
   if (visual && HTML_VISUAL_TYPES.has(visual.type)) {
@@ -101,7 +101,7 @@ export const cellImage = async (
         picture: false,
         reason: `The ${visual.type} component is drawn in HTML, not as a chart, so there is no picture.`,
         ...(current
-          ? { render_report: renderReportWire(current) }
+          ? { render_report: renderReportWire(current, true) }
           : {
               report_status:
                 "The component has not reported a draw in the console.",

@@ -4,7 +4,7 @@ import type { NotebookCell } from "../../../store/notebook"
 import { serializeCell } from "../../../utils/ai/notebookSnapshot"
 import {
   clearRenderReport,
-  RENDER_REPORT_NEEDS_READ,
+  DRAWN_NEEDS_READ,
   setRenderReport,
 } from "./renderReports"
 
@@ -48,33 +48,36 @@ describe("render report on the agent wire", () => {
     expect(report).toMatchObject({ kind: "visual", drawn, problems: [] })
   })
 
-  it("withholds the report from a reader not allowed results", () => {
-    // Given a gauge that drew a result value
-    setRenderReport(BUFFER_ID, cell.id, {
-      kind: "visual",
-      drawn,
-      problems: [
-        { message: "value 987654.321 above max", severity: "warning" },
-      ],
-    })
+  it("withholds what was drawn, not the problems, from a reader not allowed results", () => {
+    // Given a gauge that drew a result value, with a problem about its columns
+    const problems = [
+      {
+        message: 'column "v" is not in the result',
+        severity: "error" as const,
+      },
+    ]
+    setRenderReport(BUFFER_ID, cell.id, { kind: "visual", drawn, problems })
 
     // When an agent without the 'read' permission reads the cell
     const report = getCell(cell, false)
 
-    // Then it learns only why the report is withheld
-    expect(report).toEqual({ withheld: RENDER_REPORT_NEEDS_READ })
+    // Then it sees the problems and why `drawn` is withheld, not the value
+    expect(report).toMatchObject({
+      kind: "visual",
+      drawn_withheld: DRAWN_NEEDS_READ,
+      problems,
+    })
+    expect(report).not.toHaveProperty("drawn")
     expect(JSON.stringify(report)).not.toContain("987654")
   })
 
-  it("tells a reader not allowed results why a draw cell has no report", () => {
-    // Given a draw cell that has not drawn since the page loaded
-    // When an agent without the 'read' permission reads it
-    // Then it is told that the report needs 'read'
-    expect(getCell(cell, false)).toEqual({ withheld: RENDER_REPORT_NEEDS_READ })
-
-    // And a SQL cell carries no report either way
+  it("has no report for a cell that has not drawn", () => {
+    // Given a draw cell and a SQL cell that have not drawn since the page loaded
+    // When an agent reads them, with or without 'read'
+    // Then neither carries a report
     const sqlCell: NotebookCell = { ...cell, mode: undefined }
-    expect(getCell(sqlCell, false)).toBeUndefined()
-    expect(getCell(sqlCell, true)).toBeUndefined()
+    for (const target of [cell, sqlCell])
+      for (const canRead of [true, false])
+        expect(getCell(target, canRead)).toBeUndefined()
   })
 })

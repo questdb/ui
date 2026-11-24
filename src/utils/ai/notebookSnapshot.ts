@@ -36,8 +36,8 @@ import {
 import { cellDashboardWire, visualToWire } from "../tools/dashboardWire"
 import {
   getRenderReport,
-  RENDER_REPORT_NEEDS_READ,
   renderReportWire,
+  type RenderReportWire,
 } from "../../scenes/Editor/Notebook/renderReports"
 
 type ChartQueryWire = {
@@ -556,9 +556,8 @@ export type NotebookCellDetails = {
   result_height: number | "auto" | null
   view: AgentCellView | null
   chart_config?: ChartConfigWire
-  // What the cell's chart last drew and what went wrong (mounted notebooks),
-  // or, without the 'read' permission, why it is withheld.
-  render_report?: ReturnType<typeof renderReportWire> | { withheld: string }
+  // What the cell's chart last drew and what went wrong (mounted notebooks).
+  render_report?: RenderReportWire
   formats?: unknown
   interactions?: unknown
   grid_mode?: string
@@ -646,11 +645,7 @@ export const serializeCell = (
   if (highlightConfig) out.highlight_config = highlightConfig
   Object.assign(out, cellDashboardWire(cell))
   const report = getRenderReport(bufferId, cell.id)
-  if (canReadResults) {
-    if (report) out.render_report = renderReportWire(report)
-  } else if (report || cell.mode === "draw") {
-    out.render_report = { withheld: RENDER_REPORT_NEEDS_READ }
-  }
+  if (report) out.render_report = renderReportWire(report, canReadResults)
   return out
 }
 

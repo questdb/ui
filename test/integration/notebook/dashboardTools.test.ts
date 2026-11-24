@@ -21,7 +21,7 @@ import type {
 import { db } from "../../../src/store/db"
 import {
   clearRenderReport,
-  RENDER_REPORT_NEEDS_READ,
+  DRAWN_NEEDS_READ,
   setRenderReport,
 } from "../../../src/scenes/Editor/Notebook/renderReports"
 import { __resetNotebookBufferQueuesForTests } from "../../../src/utils/notebooks/notebookBufferQueue"
@@ -501,14 +501,14 @@ describe("dispatchTool — dashboard tools", () => {
     ["schema only", { grantSchemaAccess: true, read: false, write: false }],
     ["none", { grantSchemaAccess: false, read: false, write: false }],
   ])(
-    "get_cell withholds the render report from an agent with %s access",
+    "get_cell withholds what a chart drew from an agent with %s access",
     async (_label, permissions: Permissions) => {
       // Given a draw cell whose gauge drew a result value
       mountLive(1, [cell("g", "SELECT 1", { mode: "draw" })])
       setRenderReport(1, "g", {
         kind: "visual",
         drawn: { type: "gauge", value: 987654.321 },
-        problems: [],
+        problems: [{ message: 'column "v" is missing', severity: "error" }],
       })
 
       try {
@@ -522,9 +522,10 @@ describe("dispatchTool — dashboard tools", () => {
           dqlValidator,
         )
 
-        // Then it is told why the report is withheld, without the value
-        expect(parsed(result).render_report).toEqual({
-          withheld: RENDER_REPORT_NEEDS_READ,
+        // Then it sees the problem and why `drawn` is withheld, not the value
+        expect(parsed(result).render_report).toMatchObject({
+          drawn_withheld: DRAWN_NEEDS_READ,
+          problems: [{ message: 'column "v" is missing' }],
         })
         expect(result.content).not.toContain("987654")
 

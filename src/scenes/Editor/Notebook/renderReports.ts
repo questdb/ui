@@ -44,20 +44,37 @@ export const clearRenderReport = (bufferId: number, cellId: string): void => {
 }
 
 /**
- * Stands in for the report when the agent may not see query results (no
- * 'read' permission): the report describes the results a chart drew.
+ * Stands in for `drawn` when the agent may not see query results (no 'read'
+ * permission): `drawn` describes the results a chart drew. The problems stay;
+ * they are about the cell's columns and settings.
  */
-export const RENDER_REPORT_NEEDS_READ =
-  "Read access not granted: render_report describes the query results a " +
-  "chart drew, so it is withheld. Without it you cannot check what this " +
-  "cell draws or the data problems found while drawing it. Ask the user to " +
-  "grant the 'read' permission in the QuestDB console (footer → MCP popover " +
-  "or AI Assistant settings)."
+export const DRAWN_NEEDS_READ =
+  "Read access not granted: `drawn` describes the query results the chart " +
+  "drew, so it is withheld. `problems` still lists what went wrong while " +
+  "drawing. To check what the chart shows, ask the user to grant the 'read' " +
+  "permission in the QuestDB console (footer → MCP popover or AI Assistant " +
+  "settings)."
 
-/** A report in the agent wire's snake case, for a reader allowed results. */
-export const renderReportWire = (report: RenderReport) => ({
+export type RenderReportWire = {
+  kind: RenderReport["kind"]
+  drawn?: RenderReport["drawn"]
+  drawn_withheld?: string
+  problems: RenderProblem[]
+  seconds_ago: number
+}
+
+/**
+ * A report in the agent wire's snake case. A reader not allowed query results
+ * gets everything but `drawn`.
+ */
+export const renderReportWire = (
+  report: RenderReport,
+  canReadResults: boolean,
+): RenderReportWire => ({
   kind: report.kind,
-  drawn: report.drawn,
+  ...(canReadResults
+    ? { drawn: report.drawn }
+    : { drawn_withheld: DRAWN_NEEDS_READ }),
   problems: report.problems,
   seconds_ago: Math.round((Date.now() - report.at) / 1000),
 })
