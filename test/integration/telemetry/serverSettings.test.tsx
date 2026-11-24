@@ -2,7 +2,15 @@
 import "../auth/support/authHarness"
 import React from "react"
 import { act, render } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import { Provider, useSelector } from "react-redux"
 import { applyMiddleware, createStore } from "redux"
 import { createEpicMiddleware } from "redux-observable"
@@ -24,6 +32,18 @@ const ConfigConsumer = () => {
   const config = useSelector(selectors.telemetry.getConfig)
   return <output>{config?.id ?? "Waiting for telemetry config"}</output>
 }
+
+const reactTestGlobals = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+
+// Telemetry runs on fake timers while vi.waitFor polls in real time, so the
+// providers update outside act by design.
+beforeAll(() => {
+  reactTestGlobals.IS_REACT_ACT_ENVIRONMENT = false
+})
+
+afterAll(() => {
+  reactTestGlobals.IS_REACT_ACT_ENVIRONMENT = true
+})
 
 afterEach(() => {
   stopEpics.next()
@@ -116,7 +136,7 @@ describe("Authenticated telemetry startup", () => {
       )
       await trackEvent("help_open")
       const epic = createEpicMiddleware<StoreAction, StoreAction, StoreShape>()
-      const store = createStore(rootReducer, applyMiddleware(epic))
+      const store = createStore(rootReducer, undefined, applyMiddleware(epic))
       epic.run((...args) => rootEpic(...args).pipe(takeUntil(stopEpics)))
       render(
         <ThemeProvider theme={darkTheme}>
@@ -129,13 +149,11 @@ describe("Authenticated telemetry startup", () => {
           </Provider>
         </ThemeProvider>,
       )
-      await act(async () => {
-        await vi.waitFor(() =>
-          expect(requests.some((request) => request.sql === "SELECT 1")).toBe(
-            true,
-          ),
-        )
-      })
+      await vi.waitFor(() =>
+        expect(requests.some((request) => request.sql === "SELECT 1")).toBe(
+          true,
+        ),
+      )
       expect(
         requests.filter(
           (request) => request.sql === "telemetry_config limit -1",
@@ -143,26 +161,20 @@ describe("Authenticated telemetry startup", () => {
       ).toHaveLength(0)
 
       // When
-      await act(async () => {
-        authenticate()
-        await vi.waitFor(() =>
-          expect(store.getState().telemetry.config?.id).toBe("mock-id-123"),
-        )
-      })
+      act(() => authenticate())
+      await vi.waitFor(() =>
+        expect(store.getState().telemetry.config?.id).toBe("mock-id-123"),
+      )
 
       // Then
       expect(document.querySelector("output")).toHaveTextContent("mock-id-123")
       const byPath = (path: string) =>
         requests.filter((request) => request.path === path)
       if (enabled) {
-        await act(async () => {
-          await vi.waitFor(() => expect(byPath("/config")).toHaveLength(1))
-        })
-        await act(async () => {
-          await vi.waitFor(() =>
-            expect(byPath("/console-events-config").length).toBeGreaterThan(0),
-          )
-        })
+        await vi.waitFor(() => expect(byPath("/config")).toHaveLength(1))
+        await vi.waitFor(() =>
+          expect(byPath("/console-events-config").length).toBeGreaterThan(0),
+        )
         for (const path of ["/config", "/add-ent"])
           expect(byPath(path)[0].body).toMatchObject({
             id: "mock-id-123",

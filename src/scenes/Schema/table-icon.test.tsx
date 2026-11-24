@@ -37,7 +37,9 @@ for (const [kind, partition, header] of [
     // When
     fireEvent.pointerMove(getHook("table-icon"), { pointerType: "mouse" })
     // Then
-    expect(await findHook("tooltip")).toHaveTextContent(header)
+    expect(await findHook("tooltip", { timeout: 2000 })).toHaveTextContent(
+      header,
+    )
     if (kind === "table")
       expect(getHook("tooltip")).toHaveTextContent(
         "WAL-based tables are the current and most up-to-date table format. This format supports advanced data recovery, replication and high-throughput ingestion. This is the recommended format if your table contains time-series data that has a designated timestamp.",

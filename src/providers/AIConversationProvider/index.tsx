@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useEffect,
   useRef,
+  type SetStateAction,
 } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import { db, type ConversationMeta } from "../../store/db"
@@ -231,14 +232,37 @@ export const AIConversationProvider: React.FC<{
     return cleanupUserActionListener
   }, [])
 
-  const [activeConversationMessages, setActiveConversationMessages] = useState<
-    ConversationMessage[]
-  >([])
+  const [activeConversationMessages, setActiveConversationMessagesState] =
+    useState<ConversationMessage[]>([])
 
+  // Flows persist the messages right after updating them, before React has
+  // rendered the update, so the ref advances with every update itself.
   const activeConversationMessagesRef = useRef<ConversationMessage[]>([])
-  useEffect(() => {
-    activeConversationMessagesRef.current = activeConversationMessages
-  }, [activeConversationMessages])
+  const setActiveConversationMessages = useCallback(
+    (update: SetStateAction<ConversationMessage[]>) => {
+      const next =
+        typeof update === "function"
+          ? update(activeConversationMessagesRef.current)
+          : update
+      activeConversationMessagesRef.current = next
+      setActiveConversationMessagesState(next)
+    },
+    [],
+  )
+  // The conversation the messages belong to. It changes together with the
+  // messages, so a flow still finishing in another chat never saves the
+  // messages of the chat the user has switched to.
+  const activeMessagesConversationIdRef = useRef<ConversationId | null>(null)
+  const showConversationMessages = useCallback(
+    (
+      conversationId: ConversationId | null,
+      messages: ConversationMessage[],
+    ) => {
+      activeMessagesConversationIdRef.current = conversationId
+      setActiveConversationMessages(messages)
+    },
+    [setActiveConversationMessages],
+  )
   const renamedChatsRef = useRef<Set<ConversationId>>(new Set())
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
@@ -255,16 +279,11 @@ export const AIConversationProvider: React.FC<{
 
   const activeConversationId = chatWindowState.activeConversationId
 
-  const activeConversationIdRef = useRef(activeConversationId)
-  useEffect(() => {
-    activeConversationIdRef.current = activeConversationId
-  }, [activeConversationId])
-
   const isOpeningChatWindowRef = useRef(false)
 
   const persistMessages = useCallback(
     async (conversationId: ConversationId, updateTimestamp: boolean = true) => {
-      if (conversationId !== activeConversationIdRef.current) {
+      if (conversationId !== activeMessagesConversationIdRef.current) {
         return
       }
       try {
@@ -723,16 +742,16 @@ export const AIConversationProvider: React.FC<{
         }
 
         if (!activeConversationId) {
-          setActiveConversationMessages([])
+          showConversationMessages(null, [])
         }
 
         if (loadMessages && conversationId !== prevId) {
           setIsLoadingMessages(true)
           const msgs = await aiConversationStore.getMessages(conversationId)
-          setActiveConversationMessages(msgs)
+          showConversationMessages(conversationId, msgs)
           setIsLoadingMessages(false)
         } else if (!loadMessages) {
-          setActiveConversationMessages([])
+          showConversationMessages(conversationId, [])
         }
 
         setChatWindowState((prev) => ({
@@ -748,7 +767,13 @@ export const AIConversationProvider: React.FC<{
         setIsLoadingMessages(false)
       }
     },
-    [activeSidebar, chatWindowState, conversationMetas, persistMessages],
+    [
+      activeSidebar,
+      chatWindowState,
+      conversationMetas,
+      persistMessages,
+      showConversationMessages,
+    ],
   )
 
   const closeChatWindow = useCallback(() => {
@@ -879,9 +904,9 @@ export const AIConversationProvider: React.FC<{
       if (activeConversationId === conversationId) {
         if (fallbackId) {
           const msgs = await aiConversationStore.getMessages(fallbackId)
-          setActiveConversationMessages(msgs)
+          showConversationMessages(fallbackId, msgs)
         } else {
-          setActiveConversationMessages([])
+          showConversationMessages(null, [])
         }
       }
 
@@ -896,7 +921,7 @@ export const AIConversationProvider: React.FC<{
         return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev
       })
     },
-    [activeConversationId, conversationMetas],
+    [activeConversationId, conversationMetas, showConversationMessages],
   )
 
   const {

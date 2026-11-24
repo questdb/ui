@@ -187,7 +187,7 @@ const disposeEpics: Array<() => void> = []
 export const renderAuth = () => {
   const stop = new Subject<void>()
   const epic = createEpicMiddleware<StoreAction, StoreAction, StoreShape>()
-  const store = createStore(rootReducer, applyMiddleware(epic))
+  const store = createStore(rootReducer, undefined, applyMiddleware(epic))
   epic.run((...args) => getServerInfo(...args).pipe(takeUntil(stop)))
   disposeEpics.push(() => {
     stop.next()

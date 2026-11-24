@@ -1,7 +1,12 @@
 import "@testing-library/jest-dom/vitest"
 import "fake-indexeddb/auto"
 import React from "react"
-import { cleanup, render, waitFor } from "@testing-library/react"
+import {
+  cleanup,
+  render,
+  waitFor,
+  type waitForOptions,
+} from "@testing-library/react"
 import { afterEach, beforeEach, vi } from "vitest"
 import { ThemeProvider } from "styled-components"
 import { darkTheme } from "../theme"
@@ -66,7 +71,8 @@ export const getHook = (name: string): HTMLElement => {
 export const queryHook = (name: string) =>
   document.querySelector<HTMLElement>(`[data-hook="${name}"]`)
 
-export const findHook = (name: string) => waitFor(() => getHook(name))
+export const findHook = (name: string, options?: waitForOptions) =>
+  waitFor(() => getHook(name), options)
 
 export const requestUrl = (input: RequestInfo | URL) =>
   new URL(

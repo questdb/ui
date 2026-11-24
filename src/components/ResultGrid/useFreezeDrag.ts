@@ -14,8 +14,8 @@ type GridHeader = Header<ResultGridRow, unknown>
 // Drives the freeze-handle drag: it snaps to the nearest column boundary and,
 // on release, pins every column up to that boundary.
 export const useFreezeDrag = (
-  gridRef: React.RefObject<HTMLDivElement>,
-  scrollRef: React.RefObject<HTMLDivElement>,
+  gridRef: React.RefObject<HTMLDivElement | null>,
+  scrollRef: React.RefObject<HTMLDivElement | null>,
   headers: GridHeader[],
   frozenCount: number,
   visualLeafIds: string[],

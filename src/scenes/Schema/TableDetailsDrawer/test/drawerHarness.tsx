@@ -50,10 +50,16 @@ export const click = async (name: string) => {
     await Promise.resolve()
   })
 }
+// React 19 commits async state updates in a scheduler task, so a poll that
+// reacts to its previous result needs a render between timer steps.
+const ADVANCE_STEP_MS = 250
+
 export const advance = async (ms: number) => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms)
-  })
+  for (let elapsed = 0; elapsed < ms; elapsed += ADVANCE_STEP_MS) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(Math.min(ADVANCE_STEP_MS, ms - elapsed))
+    })
+  }
 }
 export const flush = async () => {
   await act(async () => {})

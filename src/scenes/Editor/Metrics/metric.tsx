@@ -86,7 +86,7 @@ export const Metric = ({
   const dateFromRef = React.useRef(dateFrom)
   const dateToRef = React.useRef(dateTo)
   const dataRef = React.useRef<uPlot.AlignedData>([[], []])
-  const tableNameRef = React.useRef<string | undefined>()
+  const tableNameRef = React.useRef<string | undefined>(undefined)
   const [hasError, setHasError] = useState(false)
 
   dateFromRef.current = dateFrom

@@ -40,7 +40,7 @@ export const createGlobalFadeTransition = (
 
   .${className}-enter-active {
     opacity: 1;
-    transition: all ${duration}ms;
+    transition: opacity ${duration}ms;
   }
 
   .${className}-exit {
@@ -49,7 +49,7 @@ export const createGlobalFadeTransition = (
 
   .${className}-exit-active {
     opacity: 0;
-    transition: all ${duration}ms;
+    transition: opacity ${duration}ms;
   }
 `
 

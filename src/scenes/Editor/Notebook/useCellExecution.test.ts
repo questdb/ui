@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { createElement } from "react"
-import { act, create } from "react-test-renderer"
+import { act, render } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { authSessionState } from "../../../modules/OAuth2/authSessionState"
@@ -63,29 +64,35 @@ describe("useCellExecution at session end", () => {
       }).runCell
       return null
     }
-    const renderer = create(createElement(Harness))
-    const run = runCell("c1")
-    await vi.waitFor(() => expect(executeSingle).toHaveBeenCalledOnce())
+    const { unmount } = render(createElement(Harness))
+    let run!: ReturnType<typeof runCell>
+    await act(async () => {
+      run = runCell("c1")
+      await vi.waitFor(() => expect(executeSingle).toHaveBeenCalledOnce())
+    })
     expect(updateCell).toHaveBeenCalledOnce()
 
     // When logout ends the session before React unmounts the notebook, and
     // the aborted request settles
     act(() => authSessionState.endSession())
-    finish({
-      type: "error",
-      query: sql,
-      columns: [],
-      dataset: [],
-      count: 0,
-      error: SESSION_ENDED_MESSAGE,
-      sessionEnded: true,
+    await act(async () => {
+      finish({
+        type: "error",
+        query: sql,
+        columns: [],
+        dataset: [],
+        count: 0,
+        error: SESSION_ENDED_MESSAGE,
+        sessionEnded: true,
+      })
+      await run
     })
 
     // Then the run is superseded: the last good result and run history stay
     await expect(run).resolves.toMatchObject({ superseded: true })
     expect(updateCell).toHaveBeenCalledOnce()
     expect(persistCellSnapshot).not.toHaveBeenCalled()
-    act(() => renderer.unmount())
+    unmount()
   })
 })
 

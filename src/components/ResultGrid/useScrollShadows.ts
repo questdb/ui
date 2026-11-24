@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type RefObject } from "react"
 
 // Tracks whether `ref` is scrolled past its top/left edge, so the header and
 // frozen-column shadows can show.
-export const useScrollShadows = (ref: RefObject<HTMLElement>) => {
+export const useScrollShadows = (ref: RefObject<HTMLElement | null>) => {
   const [scrolledDown, setScrolledDown] = useState(false)
   const [shadowLeft, setShadowLeft] = useState(false)
   const scrolledDownRef = useRef(false)

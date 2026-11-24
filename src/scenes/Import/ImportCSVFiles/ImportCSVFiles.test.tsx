@@ -1,5 +1,6 @@
-import React from "react"
-import { act, create, type ReactTestRenderer } from "react-test-renderer"
+// @vitest-environment jsdom
+import React, { act } from "react"
+import { cleanup, render, type RenderResult } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   FileCheckStatus,
@@ -80,13 +81,11 @@ const settle = (check: { promise: Promise<unknown> }) =>
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
 
-let renderer: ReactTestRenderer | undefined
+let view: RenderResult | undefined
 
 // Drops trades.csv, whose first check finds no table.
 const mountWithFile = async () => {
-  act(() => {
-    renderer = create(element())
-  })
+  view = render(element())
   mocks.quest.checkCSVFile.mockResolvedValueOnce({
     status: FileCheckStatus.DOES_NOT_EXIST,
   })
@@ -103,7 +102,7 @@ const showWithPendingCheck = () => {
   const check = deferred<{ status: string }>()
   mocks.quest.checkCSVFile.mockReturnValueOnce(check.promise)
   mocks.visible = true
-  act(() => renderer!.update(element()))
+  view!.rerender(element())
   return check
 }
 
@@ -117,8 +116,8 @@ const startUpload = () => {
 }
 
 afterEach(() => {
-  act(() => renderer?.unmount())
-  renderer = undefined
+  cleanup()
+  view = undefined
   mocks.visible = false
   vi.resetAllMocks()
 })
@@ -131,9 +130,7 @@ describe("Import file checks that fail", () => {
   }
 
   it("lists a dropped file whose table name check fails, and lets it be uploaded", async () => {
-    act(() => {
-      renderer = create(element())
-    })
+    view = render(element())
     mocks.quest.checkCSVFile.mockRejectedValueOnce(
       new AuthRefreshUnavailableError(),
     )
@@ -152,9 +149,7 @@ describe("Import file checks that fail", () => {
   })
 
   it("lists a file dropped for an existing table whose schema cannot be read", async () => {
-    act(() => {
-      renderer = create(element())
-    })
+    view = render(element())
     mocks.quest.checkCSVFile.mockResolvedValueOnce({
       status: FileCheckStatus.EXISTS,
     })
@@ -183,7 +178,7 @@ describe("Import file checks that fail", () => {
 
     mocks.visible = true
     await act(async () => {
-      renderer!.update(element())
+      view!.rerender(element())
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
 
@@ -315,9 +310,7 @@ describe("Import file checks that finish after other changes", () => {
 
   it("counts dropped files as queued until they are listed, also once the list is shown", async () => {
     // Given two drops on the upload view whose table name checks are pending
-    act(() => {
-      renderer = create(element())
-    })
+    view = render(element())
     const tradesCheck = deferred<{ status: string }>()
     const quotesCheck = deferred<{ status: string }>()
     mocks.quest.checkCSVFile
@@ -349,6 +342,34 @@ describe("Import file checks that finish after other changes", () => {
       "quotes.csv",
     ])
     expect(queue().unlistedNames()).toEqual([])
+  })
+
+  // The drop box finds listed names in the rendered list. If a file stopped
+  // counting as unlisted before the list rendered it, a drop in between would
+  // accept the same file again.
+  it("renders a dropped file in the list before it stops counting as unlisted", async () => {
+    view = render(element())
+    const check = deferred<{ status: string }>()
+    mocks.quest.checkCSVFile.mockReturnValueOnce(check.promise)
+    const { onFilesDropped, unlistedNames } = mocks.upload.mock.lastCall![0]
+    let drop!: Promise<void>
+    act(() => {
+      drop = onFilesDropped([csv("trades.csv")])
+    })
+
+    let listedOnceUnlisted: string[] | undefined
+    await act(async () => {
+      check.resolve({ status: FileCheckStatus.DOES_NOT_EXIST })
+      await drop
+      // act holds scheduled renders until it returns: only a render the drop
+      // forces has happened by now.
+      expect(unlistedNames()).toEqual([])
+      listedOnceUnlisted = mocks.queue.mock.lastCall?.[0].files.map(
+        ({ table_name }) => table_name,
+      )
+    })
+
+    expect(listedOnceUnlisted).toEqual(["trades.csv"])
   })
 
   it("ignores the check of a name that was changed again", async () => {

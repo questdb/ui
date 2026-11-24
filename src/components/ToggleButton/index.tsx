@@ -92,18 +92,18 @@ const PrimaryToggleButtonStyled = styled(SegmentedControlButton)<Props>`
 const PrimaryToggleButtonWithRef = (
   { activeTone, ...props }: RenderRefProps,
   ref: Ref<HTMLButtonElement>,
-) => (
-  <PrimaryToggleButtonStyled
-    {...defaultProps}
-    {...props}
-    ref={ref}
-    $size="md"
-    $active={props.selected}
-    $activeTone={activeTone}
-    data-selected={props.selected}
-  />
-)
+) => {
+  const resolvedProps = { ...defaultProps, ...props }
+  return (
+    <PrimaryToggleButtonStyled
+      {...resolvedProps}
+      ref={ref}
+      $size="md"
+      $active={resolvedProps.selected}
+      $activeTone={activeTone}
+      data-selected={resolvedProps.selected}
+    />
+  )
+}
 
 export const PrimaryToggleButton = forwardRef(PrimaryToggleButtonWithRef)
-
-PrimaryToggleButton.defaultProps = defaultProps

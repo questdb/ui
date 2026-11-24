@@ -13,8 +13,8 @@ type Params = {
   tickValue?: (rawValue: number) => string
   mapXValue: (rawValue: number, index: number, ticks: number[]) => string
   mapYValue: (rawValue: number) => number | string
-  timeRef: React.RefObject<HTMLSpanElement>
-  valueRef: React.RefObject<HTMLSpanElement>
+  timeRef: React.RefObject<HTMLSpanElement | null>
+  valueRef: React.RefObject<HTMLSpanElement | null>
   widgetConfig: Widget
   theme: DefaultTheme
 }
@@ -22,8 +22,8 @@ type Params = {
 export type UplotOptions = Omit<uPlot.Options, "width" | "height">
 
 const valuePlugin = (
-  timeRef: React.RefObject<HTMLSpanElement>,
-  valueRef: React.RefObject<HTMLSpanElement>,
+  timeRef: React.RefObject<HTMLSpanElement | null>,
+  valueRef: React.RefObject<HTMLSpanElement | null>,
   mapYValue: Params["mapYValue"],
 ) => ({
   hooks: {

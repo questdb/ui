@@ -1,4 +1,4 @@
-import React from "react"
+import React, { type Ref } from "react"
 import styled, { keyframes } from "styled-components"
 import {
   ArrowUpRightIcon,
@@ -12,6 +12,7 @@ import { FOOTER_HEIGHT } from "../../../consts"
 
 type Props = Readonly<{
   onClick: () => void
+  ref?: Ref<HTMLDivElement>
 }>
 
 const bannerAttention = (
@@ -170,8 +171,8 @@ const CloseButton = styled(IconButton)`
   }
 `
 
-const CtaBanner = ({ onClick }: Props) => (
-  <Wrapper>
+const CtaBanner = ({ onClick, ref }: Props) => (
+  <Wrapper ref={ref}>
     <BrandMark aria-hidden="true">
       <RocketLaunchIcon size={20} weight="duotone" />
     </BrandMark>

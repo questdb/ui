@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useCallback, useEffect } from "react"
+import React from "react"
 import styled from "styled-components"
 import Footer from "../Footer"
 import Console from "../Console"
@@ -44,8 +44,6 @@ import { TableDetailsDrawer } from "../Schema/TableDetailsDrawer"
 import { QueryActivityDrawer } from "../QueryActivity"
 import { AIChatWindowLazy } from "../Editor/AIChatWindow/AIChatWindowLazy"
 
-import { eventBus } from "../../modules/EventBus"
-import { EventType } from "../../modules/EventBus/types"
 import { AIStatusProvider } from "../../providers/AIStatusProvider"
 import { MCPBridgeProvider } from "../../providers/MCPBridgeProvider"
 import { NotebookOnboardingModal } from "../../components/NotebookOnboardingModal"
@@ -92,24 +90,6 @@ const Main = styled.div`
 `
 
 const Layout = () => {
-  const focusListener = useCallback(() => {
-    eventBus.publish(EventType.TAB_FOCUS)
-  }, [])
-
-  const blurListener = useCallback(() => {
-    eventBus.publish(EventType.TAB_BLUR)
-  }, [])
-
-  useEffect(() => {
-    window.addEventListener("focus", focusListener)
-    window.addEventListener("blur", blurListener)
-
-    return () => {
-      window.removeEventListener("focus", focusListener)
-      window.removeEventListener("blur", blurListener)
-    }
-  }, [])
-
   return (
     <SearchProvider>
       <EditorProvider>

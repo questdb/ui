@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import styled from "styled-components"
 import { FilesToUpload } from "./files-to-upload"
 import { ProcessedFile, TableNameCheck } from "./types"
@@ -228,11 +229,13 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     unlistedDrops.current.add(names)
     try {
       const fileConfigs = await getFileConfigs(files)
-      setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
-      setState("list")
+      // Render the list now, so the drop box counts the files as listed
+      // before they stop counting as unlisted.
+      flushSync(() => {
+        setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
+        setState("list")
+      })
     } finally {
-      // React 17 has rendered the list already, as it renders updates outside
-      // event handlers at once: the drop box counts the files as listed.
       unlistedDrops.current.delete(names)
     }
   }

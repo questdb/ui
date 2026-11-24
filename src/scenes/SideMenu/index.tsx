@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useCallback } from "react"
+import React, { useCallback, useRef } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
@@ -84,6 +84,8 @@ const Wrapper = styled.div`
 const SideMenu = () => {
   const opened = useSelector(selectors.console.getSideMenuOpened)
   const dispatch = useDispatch()
+  const backdropRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const handleBackdropClick = useCallback(() => {
     dispatch(actions.console.toggleSideMenu())
   }, [dispatch])
@@ -91,21 +93,23 @@ const SideMenu = () => {
   return (
     <>
       <CSSTransition
+        nodeRef={backdropRef}
         classNames="fade-reg"
         in={opened}
         timeout={TransitionDuration.REG}
         unmountOnExit
       >
-        <Backdrop onClick={handleBackdropClick} />
+        <Backdrop ref={backdropRef} onClick={handleBackdropClick} />
       </CSSTransition>
 
       <CSSTransition
+        nodeRef={panelRef}
         classNames="side-menu-slide"
         in={opened}
         timeout={TransitionDuration.REG}
         unmountOnExit
       >
-        <Wrapper id="mobile-data-sources-panel">
+        <Wrapper ref={panelRef} id="mobile-data-sources-panel">
           <Schema open />
         </Wrapper>
       </CSSTransition>

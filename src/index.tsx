@@ -22,11 +22,10 @@
  *
  ******************************************************************************/
 
-import "core-js/features/promise"
 import "./styles/_fonts.scss"
-import "./js/console"
+import "./styles/main.scss"
 import "./utils/monacoInit"
-import "./js/console/cryptoPolyfill"
+import "./utils/cryptoPolyfill"
 
 import { consumePendingPairFromUrl } from "./utils/mcp/consumePendingPair"
 
@@ -36,6 +35,7 @@ consumePendingPairFromUrl()
 
 import React from "react"
 import ReactDOM from "react-dom"
+import { createRoot } from "react-dom/client"
 import { Provider } from "react-redux"
 import { applyMiddleware, compose, createStore } from "redux"
 import { createEpicMiddleware } from "redux-observable"
@@ -69,7 +69,11 @@ const epicMiddleware = createEpicMiddleware<
   StoreShape
 >()
 
-const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
+const store = createStore(
+  rootReducer,
+  undefined,
+  compose(applyMiddleware(epicMiddleware)),
+)
 
 epicMiddleware.run(rootEpic)
 
@@ -82,7 +86,7 @@ const FadeSlow = createGlobalFadeTransition(
   TransitionDuration.SLOW,
 )
 
-ReactDOM.render(
+createRoot(document.getElementById("root") as HTMLElement).render(
   <ThemeModeProvider>
     <VendorGlobalStyle />
     <ThemeCssVariables />
@@ -108,5 +112,4 @@ ReactDOM.render(
       </ScreenSizeProvider>
     </TooltipProvider>
   </ThemeModeProvider>,
-  document.getElementById("root"),
 )

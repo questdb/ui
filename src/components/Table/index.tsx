@@ -84,7 +84,7 @@ export const Table = <T,>({
   className,
   rowRender,
 }: TableProps<Row<T>>): React.ReactElement => {
-  const hasHeader = columns.filter(({ header }) => header).length > 0
+  const hasHeader = columns.some(({ header }) => Boolean(header))
 
   return (
     <table className={className}>

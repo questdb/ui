@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 
-import $ from "jquery"
 import React, {
   useCallback,
   useContext,
@@ -33,14 +32,12 @@ import React, {
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { ArrowClockwiseIcon } from "@phosphor-icons/react"
-import { Download2, Play, ResetGrid } from "../../components/icons"
+import { Download2, ResetGrid } from "../../components/icons"
 import { MoveColumnToFront } from "../../components/icons"
 import { TableFreezeColumn } from "../../components/icons"
 import { Markdown } from "../../components/icons"
 import { Check } from "../../components/icons"
 import { ArrowDownS } from "../../components/icons"
-import { grid } from "../../js/console/grid"
-import { quickVis } from "../../js/console/quick-vis"
 import {
   Box,
   Button,
@@ -56,7 +53,6 @@ import { actions, selectors } from "../../store"
 import { color, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
-import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { isSessionEnded } from "../../modules/OAuth2/session"
@@ -70,8 +66,10 @@ import { useQueryExecutionState } from "../../hooks/useQueryExecutionState"
 import { downloadQueryResult } from "../../utils/downloadQueryResult"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { ResultGridAdapter } from "./ResultGridAdapter"
+import {
+  ResultGridAdapter,
+  type ResultGridAdapterHandle,
+} from "./ResultGridAdapter"
 import { type PaginationFn } from "./usePagedDataSource"
 import { ResultChart } from "./ResultChart"
 
@@ -177,23 +175,21 @@ const DownloadMenuItem = styled(Button)`
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
-  const { quest, questExecution } = useContext(QuestContext)
+  const { quest } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
   const running = useSelector(selectors.query.getRunning)
   const { active: activeQueryExecution } = useQueryExecutionState()
-  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-  const gridRef = useRef<IQuestDBGrid | null>(null)
+  const gridRef = useRef<ResultGridAdapterHandle | null>(null)
   const resultActionsRef = useRef<HTMLDivElement | null>(null)
   const runningRef = useRef(running)
-  const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
+  const [gridFrozenColumns, setGridFrozenColumns] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
-  const { useNewGrid, useQuickVis } = useLocalStorage()
   const dispatch = useDispatch()
 
-  // Shared by both grids. On a failed fetch it surfaces a notification and never
-  // calls the renderer, leaving the failing page unloaded.
+  // On a failed fetch it surfaces a notification and never calls the renderer,
+  // leaving the failing page unloaded.
   const paginationFn = useCallback<PaginationFn>(
     async (sql, lo, hi, rendererFn) => {
       try {
@@ -233,66 +229,12 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     runningRef.current = running
   }, [running])
 
-  useEffect(() => {
-    let disposeQuickVis: (() => void) | undefined
+  const handleYieldFocus = useCallback(
+    () => eventBus.publish(EventType.MSG_EDITOR_FOCUS),
+    [],
+  )
 
-    if (!useNewGrid) {
-      gridRef.current = grid(document.getElementById("grid"), paginationFn)
-    }
-
-    if (useQuickVis) {
-      disposeQuickVis = quickVis(
-        $("#quick-vis"),
-        window.bus as unknown as ReturnType<typeof $>,
-        quest,
-        questExecution,
-      )
-    }
-
-    const _grid = gridRef.current
-    if (!_grid) return disposeQuickVis
-
-    const onSelectionChange = (event: CustomEvent<{ hasSelection: boolean }>) =>
-      setGridHasSelection(event.detail.hasSelection)
-    const onYieldFocus = () => eventBus.publish(EventType.MSG_EDITOR_FOCUS)
-    const onFreezeState = (event: CustomEvent<{ freezeLeft: number }>) =>
-      setGridFreezeLeftState(event.detail.freezeLeft)
-
-    _grid.addEventListener("selection.change", onSelectionChange)
-    _grid.addEventListener("yield.focus", onYieldFocus)
-    _grid.addEventListener("freeze.state", onFreezeState)
-
-    return () => {
-      disposeQuickVis?.()
-      _grid.removeEventListener?.("selection.change", onSelectionChange)
-      _grid.removeEventListener?.("yield.focus", onYieldFocus)
-      _grid.removeEventListener?.("freeze.state", onFreezeState)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (result?.type === QuestDB.Type.DQL) {
-      setCount(result.count)
-      gridRef?.current?.setData(result)
-    }
-  }, [result])
-
-  useEffect(() => {
-    if (viewMode === "grid") {
-      gridRef?.current?.show()
-    } else {
-      gridRef?.current?.hide()
-    }
-
-    if (useQuickVis) {
-      const chart = document.getElementById("quick-vis")
-      if (chart) chart.style.display = viewMode === "grid" ? "none" : "flex"
-    }
-  }, [viewMode, useQuickVis])
-
-  useEffect(() => {
-    gridRef?.current?.render()
-  }, [activeSidebar])
+  const dqlResult = result?.type === QuestDB.Type.DQL ? result : null
 
   const [isCopied, setIsCopied] = useState<boolean>(false)
 
@@ -306,7 +248,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_MARKDOWN_COPY)
             void copyToClipboard(
-              gridRef?.current?.getResultAsMarkdown() as string,
+              gridRef.current?.getResultAsMarkdown() ?? "",
             ).then(() => {
               setIsCopied(true)
               setTimeout(() => setIsCopied(false), 1000)
@@ -326,10 +268,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_COLUMN_FREEZE)
-            gridRef?.current?.toggleFreezeLeft()
-            gridRef?.current?.focus()
+            gridRef.current?.toggleFreezeLeft()
+            gridRef.current?.focus()
           }}
-          selected={gridFreezeLeftState > 0}
+          selected={gridFrozenColumns > 0}
         >
           <TableFreezeColumnIcon size="18px" />
         </StyledPrimaryToggleButton>
@@ -346,7 +288,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_COLUMN_MOVE_TO_FRONT)
-            gridRef?.current?.shuffleFocusedColumnToFront()
+            gridRef.current?.shuffleFocusedColumnToFront()
           }}
         >
           <MoveColumnToFront size="18px" weight="regular" />
@@ -363,7 +305,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_LAYOUT_RESET)
-            gridRef?.current?.clearCustomLayout()
+            gridRef.current?.resetLayout()
           }}
         >
           <ResetGrid size="18px" weight="regular" />
@@ -379,7 +321,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           disabled={activeQueryExecution !== null}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_REFRESH)
-            const sql = gridRef?.current?.getSQL()
+            const sql = gridRef.current?.getSQL()
             if (sql) {
               eventBus.publish(EventType.MSG_QUERY_EXEC, { q: sql })
             }
@@ -404,7 +346,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         : ConsoleEvent.GRID_CSV_DOWNLOAD,
     )
     setDownloadMenuActive(false)
-    const sql = gridRef?.current?.getSQL()
+    const sql = gridRef.current?.getSQL()
     if (!sql) {
       toast.error("No SQL query found to download")
       return
@@ -495,59 +437,21 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         </Actions>
 
         <Content>
-          {useNewGrid ? (
-            <ResultGridAdapter ref={gridRef} paginationFn={paginationFn} />
-          ) : (
-            <div id="grid" />
-          )}
+          <ResultGridAdapter
+            ref={gridRef}
+            result={dqlResult}
+            visible={viewMode === "grid"}
+            paginationFn={paginationFn}
+            onSelectionChange={setGridHasSelection}
+            onYieldFocus={handleYieldFocus}
+            onFrozenColumnsChange={setGridFrozenColumns}
+          />
 
-          {useQuickVis ? (
-            <div id="quick-vis">
-              <div className="quick-vis-controls">
-                <form className="v-fit">
-                  <div className="form-group">
-                    <label htmlFor="_qvis_frm_chart_type">Chart type</label>
-                    <select id="_qvis_frm_chart_type">
-                      <option>bar</option>
-                      <option>line</option>
-                      <option>area</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="_qvis_frm_axis_x">Labels</label>
-                    <select
-                      id="_qvis_frm_axis_x"
-                      data-hook="chart-panel-labels-select"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="_qvis_frm_axis_y">Series</label>
-                    <select
-                      id="_qvis_frm_axis_y"
-                      data-hook="chart-panel-series-select"
-                      multiple
-                    />
-                  </div>
-                  <Button
-                    variant="primary"
-                    className="js-chart-draw"
-                    id="_qvis_frm_draw"
-                    data-hook="chart-panel-draw-button"
-                  >
-                    <Play size="16px" weight="fill" />
-                    <span>Draw</span>
-                  </Button>
-                </form>
-              </div>
-              <div className="quick-vis-canvas" />
-            </div>
-          ) : (
-            <ResultChart
-              result={result?.type === QuestDB.Type.DQL ? result : null}
-              visible={viewMode === "chart"}
-              onResetZoomFocus={focusResultActions}
-            />
-          )}
+          <ResultChart
+            result={dqlResult}
+            visible={viewMode === "chart"}
+            onResetZoomFocus={focusResultActions}
+          />
         </Content>
       </Wrapper>
     </Root>
