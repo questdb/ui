@@ -7,6 +7,7 @@ import {
   drawnOutcome,
   notDrawn,
   queryFailed,
+  withLeftOutStatements,
   type DrawOutcome,
 } from "../drawOutcome"
 import { customSeriesCount, partialDatasetWarnings } from "./buildCustomOption"
@@ -24,18 +25,28 @@ export type CustomDraw = {
  * the pane renders and the report carries. The option drawn is
  * `prepared.built.option`.
  */
-export const customDraw = ({
-  prepared,
-  statements,
-  statementErrors,
-  mapStatus,
-}: {
+export const customDraw = (input: CustomDrawInput): CustomDraw => {
+  const drawn = draw(input)
+  return {
+    ...drawn,
+    outcome: withLeftOutStatements(drawn.outcome, input.statementErrors),
+  }
+}
+
+type CustomDrawInput = {
   prepared: PreparedCustomOption
   statements: (StatementRows | null)[]
   statementErrors?: (string | null)[]
   // The maps the option draws on.
   mapStatus: "ready" | "loading" | "error"
-}): CustomDraw => {
+}
+
+const draw = ({
+  prepared,
+  statements,
+  statementErrors,
+  mapStatus,
+}: CustomDrawInput): CustomDraw => {
   const { sanitized, built } = prepared
   const problems: RenderProblem[] = problemsOf(prepared)
   const partial = partialDatasetWarnings(statements)

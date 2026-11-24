@@ -917,4 +917,72 @@ describe("the draw-outcome contract", () => {
       )
     })
   })
+
+  describe("a failed statement the drawing goes on without", () => {
+    // The pane draws the rest as it is; the report says what was left out.
+    const failing = (statements: Statement[], index: number): CellResult => {
+      const result = resultOf(statements)
+      const failed = {
+        type: "error",
+        query: statements[index].query,
+        error: "table does not exist",
+      }
+      return {
+        ...result,
+        results: result.results.map((r, i) => (i === index ? failed : r)),
+      } as unknown as CellResult
+    }
+    const LEFT_OUT = "Statement 2 failed and is left out: table does not exist"
+
+    it.each([
+      ["a preset chart's events statement", PRESETS.events, [MAIN, EVENTS]],
+      ["a stat visual's sparkline statement", VISUALS.stat, [DESKS, MAIN]],
+      [
+        "a custom option's second dataset",
+        CUSTOM["dataset-bound bars"],
+        [DESKS, MAIN],
+      ],
+    ] as [string, DrawCase, Statement[]][])(
+      "%s is reported, and the rest drawn",
+      (_name, kind, statements) => {
+        // Given a cell whose second statement failed and whose first drew
+        Object.assign(engine, { sql: sqlOf(statements) })
+        const { container } = renderComponent(
+          ui(cellOf(kind.config, statements, failing(statements, 1))),
+        )
+
+        // Then the pane draws the rest, with no alert
+        expect(paneOf(container).pane).toBe("drawing")
+        expect(container.querySelector('[role="alert"]')).toBeNull()
+
+        // And the report says the chart is drawn and what was left out
+        const report = getRenderReport(BUFFER_ID, CELL_ID)
+        expect(report?.status).toBe("drawn")
+        expect(report?.problems).toContainEqual({
+          message: LEFT_OUT,
+          severity: "error",
+        })
+      },
+    )
+
+    it("leaves an order book's failed side to its own report", () => {
+      // Given an order book whose bid query failed
+      const statements = [ASKS, BIDS]
+      Object.assign(engine, { sql: sqlOf(statements) })
+      renderComponent(
+        ui(
+          cellOf(VISUALS.orderBook.config, statements, failing(statements, 1)),
+        ),
+      )
+
+      // Then the failure is reported once, by the side, not as left out
+      const messages = getRenderReport(BUFFER_ID, CELL_ID)?.problems.map(
+        (p) => p.message,
+      )
+      expect(messages).not.toContain(LEFT_OUT)
+      expect(messages?.some((m) => m.includes("table does not exist"))).toBe(
+        true,
+      )
+    })
+  })
 })

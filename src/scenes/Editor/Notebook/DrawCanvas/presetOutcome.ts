@@ -15,6 +15,7 @@ import {
   leading,
   notDrawn,
   queryFailed,
+  withLeftOutStatements,
   type DrawOutcome,
 } from "../drawOutcome"
 import { drawProblems, type DrawResolution } from "./drawCanvasUtils"
@@ -26,9 +27,10 @@ export const NOTHING_TO_DRAW =
 const DECORATIONS = new Set(["Events", "Thresholds"])
 
 export type PresetDrawInput = {
-  // The statements that returned rows, and the first failed statement's error.
+  // The statements that returned rows, and each statement's error (null for
+  // one that succeeded).
   results: QueryExecResult[]
-  error: string | undefined
+  statementErrors: (string | null)[] | undefined
   resolution: DrawResolution
   config: ChartConfig | undefined
   formats: ColumnFormats
@@ -37,15 +39,26 @@ export type PresetDrawInput = {
 }
 
 /** A preset chart's option, and what drawing it shows: the pane and report. */
-export const presetDraw = ({
+export const presetDraw = (
+  input: PresetDrawInput,
+): { option: EChartsOption; outcome: DrawOutcome } => {
+  const drawn = draw(input)
+  return {
+    ...drawn,
+    outcome: withLeftOutStatements(drawn.outcome, input.statementErrors),
+  }
+}
+
+const draw = ({
   results,
-  error,
+  statementErrors,
   resolution,
   config,
   formats,
   context,
   interactions,
 }: PresetDrawInput): { option: EChartsOption; outcome: DrawOutcome } => {
+  const error = statementErrors?.find((e): e is string => e !== null)
   const option = withBrush(
     buildEchartsOption(resolution.chart, resolution.renderQueries, {
       ...context,

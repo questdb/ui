@@ -249,7 +249,7 @@ export const DrawCanvas: React.FC<Props> = ({
       drawKind === "chart"
         ? presetDraw({
             results,
-            error: statementErrors?.find((e): e is string => e !== null),
+            statementErrors,
             resolution,
             config: cell.chartConfig,
             formats,

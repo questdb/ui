@@ -51,6 +51,41 @@ export const TYPE_A_QUERY = "Type a query to draw."
 
 export const queryFailed = (error: string) => `Query failed: ${error}`
 
+export const statementLeftOut = (index: number, error: string) =>
+  `Statement ${index + 1} failed and is left out: ${error}`
+
+/**
+ * The outcome with a problem for each failed statement the drawing went on
+ * without (the others drew, or settled empty or refused). Only the report
+ * carries them; the pane shows what was drawn. `skip` names statements whose
+ * failure the outcome already accounts for.
+ */
+export const withLeftOutStatements = (
+  outcome: DrawOutcome,
+  statementErrors: readonly (string | null)[] | undefined,
+  skip: (index: number) => boolean = () => false,
+): DrawOutcome => {
+  if (
+    outcome.status !== "drawn" &&
+    outcome.status !== "empty" &&
+    outcome.status !== "refused"
+  )
+    return outcome
+  const leftOut: RenderProblem[] = (statementErrors ?? []).flatMap(
+    (error, index) =>
+      error !== null && !skip(index)
+        ? [{ message: statementLeftOut(index, error), severity: "error" }]
+        : [],
+  )
+  if (leftOut.length === 0) return outcome
+  const problems = [...outcome.problems, ...leftOut]
+  return {
+    ...outcome,
+    problems,
+    message: outcome.message ?? problems[0].message,
+  }
+}
+
 const SEVERITY: Record<
   Exclude<DrawStatus, "drawn" | "waiting">,
   RenderProblem["severity"]

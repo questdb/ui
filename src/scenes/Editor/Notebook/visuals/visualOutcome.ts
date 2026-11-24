@@ -11,6 +11,7 @@ import {
   drawnOutcome,
   notDrawn,
   queryFailed,
+  withLeftOutStatements,
   type DrawOutcome,
 } from "../drawOutcome"
 import type { StatementRows } from "./statementRows"
@@ -243,6 +244,20 @@ const readVisual = (
  * rows"; a visual that needs every row is not drawn from a row-capped result.
  */
 export const visualDraw = (input: VisualDrawInput): VisualDraw => {
+  const drawn = drawVisual(input)
+  // Statement 0 is the visual's own (its failure is the visual's); the order
+  // book reports each side itself.
+  return {
+    ...drawn,
+    outcome: withLeftOutStatements(
+      drawn.outcome,
+      input.statementErrors,
+      (index) => index === 0 || input.visual.type === "orderBook",
+    ),
+  }
+}
+
+const drawVisual = (input: VisualDrawInput): VisualDraw => {
   const { visual, statements, statementErrors, mapStatus, clickColumn } = input
   const typed = { type: visual.type }
   const primaryError =
