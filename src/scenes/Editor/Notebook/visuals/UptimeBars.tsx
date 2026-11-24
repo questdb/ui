@@ -6,25 +6,23 @@ import React, {
   useRef,
   useState,
 } from "react"
-import { PaneEmptyState } from "../PaneEmptyState"
 import styled, { useTheme } from "styled-components"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import type { ColorShape } from "../../../../types/styled"
 import type { VisualConfig } from "../CellChart/chartTypes"
 import { withAlpha } from "../../../../theme"
-import type { StatementRows } from "./statementRows"
 import { pickOf, type Pick } from "../interactions/selection"
 import {
   SEVERITY_RANK,
   bucketLanes,
   bucketSeverity,
   latestStateByLane,
-  readStateSegments,
   severityOf,
   uptimeByLane,
   type Bucket,
   type Segment,
   type Severity,
+  type StateSegments,
 } from "./stateSegments"
 
 // Uptime as a status page draws it: one row per lane with its current state,
@@ -330,19 +328,15 @@ const LaneBars = memo(function LaneBars({
 })
 
 type Props = {
+  // The segments, read by the visual's outcome (visualOutcome.ts).
+  read: StateSegments
   visual: VisualConfig
-  statements: (StatementRows | null)[]
   // What a click on a lane writes (undefined: nothing), and the click.
   pickLiteral?: (pick: Pick) => string | undefined
   onSelect?: (pick: Pick) => void
 }
 
-export const UptimeBars = ({
-  visual,
-  statements,
-  pickLiteral,
-  onSelect,
-}: Props) => {
+export const UptimeBars = ({ read, visual, pickLiteral, onSelect }: Props) => {
   const { color: colors } = useTheme()
   const [ref, scrollElement, width] = useWidth()
   const [hover, setHover] = useState<{ lane: string; index: number } | null>(
@@ -357,12 +351,8 @@ export const UptimeBars = ({
       ),
     [],
   )
-  const read = useMemo(
-    () => readStateSegments(visual, statements[0]),
-    [visual, statements],
-  )
   const lanesRef = useRef<HTMLDivElement>(null)
-  const laneNames = typeof read === "string" ? [] : read.lanes
+  const laneNames = read.lanes
   const windowLanes = laneNames.length > 50
   const virtual = useVirtualizer({
     count: laneNames.length,
@@ -391,16 +381,14 @@ export const UptimeBars = ({
   const lastVisibleLane = visible.at(-1)?.index ?? -1
   const segmentsByLane = useMemo(() => {
     const grouped = new Map<string, Segment[]>()
-    if (typeof read !== "string")
-      for (const segment of read.segments) {
-        const lane = grouped.get(segment.lane)
-        if (lane) lane.push(segment)
-        else grouped.set(segment.lane, [segment])
-      }
+    for (const segment of read.segments) {
+      const lane = grouped.get(segment.lane)
+      if (lane) lane.push(segment)
+      else grouped.set(segment.lane, [segment])
+    }
     return grouped
   }, [read])
   const lanes = useMemo(() => {
-    if (typeof read === "string") return null
     const names = read.lanes.slice(firstVisibleLane, lastVisibleLane + 1)
     return bucketLanes(
       {
@@ -413,27 +401,21 @@ export const UptimeBars = ({
   }, [read, count, firstVisibleLane, lastVisibleLane, segmentsByLane])
   const severity = visual.severity
   const uptimes = useMemo(
-    () =>
-      typeof read === "string" ? null : uptimeByLane(read.segments, severity),
+    () => uptimeByLane(read.segments, severity),
     [read, severity],
   )
-  const current = useMemo(
-    () => (typeof read === "string" ? null : latestStateByLane(read.segments)),
-    [read],
-  )
+  const current = useMemo(() => latestStateByLane(read.segments), [read])
   // A lane is drawn from all of its rows, by its lane column; a click on it
   // selects only when they agree, so it is a button only then.
   const clickableLanes = useMemo(() => {
     const out = new Map<string, Pick>()
-    if (typeof read === "string" || !pickLiteral) return out
+    if (!pickLiteral) return out
     for (const [lane, rows] of read.laneRows) {
       const pick = pickOf(0, rows, read.laneColumn)
       if (pickLiteral(pick) !== undefined) out.set(lane, pick)
     }
     return out
   }, [read, pickLiteral])
-  if (typeof read === "string") return <PaneEmptyState>{read}</PaneEmptyState>
-  if (!lanes || !uptimes || !current) return null
   const counts = { bad: 0, warning: 0, neutral: 0, good: 0 }
   for (const state of current.values()) counts[severityOf(state, severity)]++
   const overallSeverity = counts.bad

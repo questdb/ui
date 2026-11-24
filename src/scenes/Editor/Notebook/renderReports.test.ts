@@ -37,6 +37,7 @@ describe("render report on the agent wire", () => {
     // Given a gauge that drew a result value
     setRenderReport(BUFFER_ID, cell.id, {
       kind: "visual",
+      status: "drawn",
       drawn,
       problems: [],
     })
@@ -45,7 +46,12 @@ describe("render report on the agent wire", () => {
     const report = getCell(cell, true)
 
     // Then it sees what was drawn, values included
-    expect(report).toMatchObject({ kind: "visual", drawn, problems: [] })
+    expect(report).toMatchObject({
+      kind: "visual",
+      status: "drawn",
+      drawn,
+      problems: [],
+    })
   })
 
   it("withholds what was drawn, not the problems, from a reader not allowed results", () => {
@@ -56,7 +62,12 @@ describe("render report on the agent wire", () => {
         severity: "error" as const,
       },
     ]
-    setRenderReport(BUFFER_ID, cell.id, { kind: "visual", drawn, problems })
+    setRenderReport(BUFFER_ID, cell.id, {
+      kind: "visual",
+      status: "drawn",
+      drawn,
+      problems,
+    })
 
     // When an agent without the 'read' permission reads the cell
     const report = getCell(cell, false)
@@ -64,6 +75,7 @@ describe("render report on the agent wire", () => {
     // Then it sees the problems and why `drawn` is withheld, not the value
     expect(report).toMatchObject({
       kind: "visual",
+      status: "drawn",
       drawn_withheld: DRAWN_NEEDS_READ,
       problems,
     })

@@ -18,7 +18,6 @@ import {
   type StatementRows,
 } from "./statementRows"
 import type { VisualConfig } from "../CellChart/chartTypes"
-import { PaneEmptyState } from "../PaneEmptyState"
 
 // Each row's value against its target (a limit, a budget) on a shared scale:
 // a bar coloured by the value format's thresholds, a marker for the target,
@@ -211,10 +210,18 @@ const statusOf = (tone: Tone | undefined) =>
 
 const TARGET_NAMES = ["target", "limit", "budget", "max"]
 
+export type BulletRows = {
+  rows: StatementRows
+  valueIdx: number
+  targetIdx: number
+  labelIdx: number
+}
+
+/** The rows a bullet visual draws, or why it cannot. */
 export const bulletRows = (
   visual: VisualConfig,
   rows: StatementRows | null,
-) => {
+): BulletRows | { error: string } => {
   if (!rows || rows.rows.length === 0)
     return { error: "The query returned no rows." }
   const c = visual.columns ?? {}
@@ -240,19 +247,16 @@ export const bulletRows = (
 }
 
 type Props = {
+  // The rows, read by the visual's outcome (visualOutcome.ts).
+  read: BulletRows
   visual: VisualConfig
-  statements: (StatementRows | null)[]
   formats: ColumnFormats
 }
 
-export const Bullets = ({ visual, statements, formats }: Props) => {
+export const Bullets = ({ read, visual, formats }: Props) => {
   const theme = useTheme()
   const listRef = useRef<HTMLDivElement>(null)
-  const read = useMemo(
-    () => bulletRows(visual, statements[0]),
-    [visual, statements],
-  )
-  const count = "error" in read ? 0 : read.rows.rows.length
+  const count = read.rows.rows.length
   const windowed = count > 50
   const window = useVirtualizer({
     count,
@@ -265,7 +269,7 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
     gap: 4,
   })
   const extent = useMemo(() => {
-    if ("error" in read || visual.max !== undefined) return visual.max ?? 1
+    if (visual.max !== undefined) return visual.max
     let max = 1e-12
     const { rows, valueIdx, targetIdx } = read
     for (const row of rows.rows) {
@@ -275,7 +279,6 @@ export const Bullets = ({ visual, statements, formats }: Props) => {
     }
     return max
   }, [read, visual.max])
-  if ("error" in read) return <PaneEmptyState>{read.error}</PaneEmptyState>
   const { rows, valueIdx, targetIdx, labelIdx } = read
   const valueName = rows.columns[valueIdx].name
   const format = formats[valueName]

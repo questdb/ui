@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { EChartsType } from "echarts"
 import type { NotebookCell } from "../../store/notebook"
+import type { RenderReport } from "../../scenes/Editor/Notebook/renderReports"
 import { cellImage, type CellImageDeps } from "./cellImageTool"
 
 const drawCell = (over: Partial<NotebookCell> = {}) =>
@@ -17,6 +18,7 @@ const instance = {} as EChartsType
 const picture = { data: "QUJD", width: 800, height: 400 }
 const report = {
   kind: "chart" as const,
+  status: "drawn" as const,
   drawn: { series: 1 },
   problems: [],
   at: Date.now(),
@@ -138,6 +140,41 @@ describe("get_cell_image", () => {
       })
     },
   )
+
+  it("waits for an HTML visual whose draw is pending, and says so if it stays pending", async () => {
+    // Given a stat visual whose report says its draw is pending
+    const stat = drawCell({
+      chartConfig: { xColumn: null, queries: [], visual: { type: "stat" } },
+    })
+    const pending = {
+      ...report,
+      kind: "visual" as const,
+      status: "waiting" as const,
+      drawn: { type: "stat" },
+      visualConfig: { type: "stat" as const },
+    }
+    let current: RenderReport = pending
+    const d = deps({
+      readCells: () => Promise.resolve([stat]),
+      reportOf: () => current,
+      bringIntoView: vi.fn(() => {
+        // The draw lands once the cell is in view
+        setTimeout(() => {
+          current = { ...pending, status: "drawn", drawn: { type: "stat" } }
+        }, 150)
+        return () => undefined
+      }),
+    })
+
+    // When the agent asks for its picture
+    const result = await cellImage(1, "c", d)
+
+    // Then it waited for the draw rather than answering with the pending one
+    expect(d.bringIntoView).toHaveBeenCalledWith("c")
+    expect(result.body).toMatchObject({
+      render_report: { status: "drawn" },
+    })
+  })
 
   it("says why there is no picture", async () => {
     // Given / When

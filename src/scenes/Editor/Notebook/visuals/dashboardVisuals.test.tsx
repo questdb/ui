@@ -4,8 +4,13 @@ import React from "react"
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
-import { MAX_ORDER_BOOK_LEVELS, OrderBook, orderBookDrawn } from "./OrderBook"
-import { StatTiles } from "./StatTiles"
+import {
+  MAX_ORDER_BOOK_LEVELS,
+  OrderBook,
+  orderBookDrawn,
+  orderBookRead,
+} from "./OrderBook"
+import { StatTiles, statTiles } from "./StatTiles"
 import type { StatementRows } from "./statementRows"
 import { pickLiteral, type Pick } from "../interactions/selection"
 
@@ -34,7 +39,7 @@ describe("dashboard visuals", () => {
       <StatTiles
         visual={{ type: "stat" }}
         formats={{}}
-        statements={statements}
+        read={statTiles({ type: "stat" }, statements)}
         pickLiteral={literalOf(statements)}
         onSelect={onSelect}
         selectedValue={selectedValue}
@@ -79,7 +84,7 @@ describe("dashboard visuals", () => {
       <StatTiles
         visual={{ type: "stat" }}
         formats={{}}
-        statements={statements}
+        read={statTiles({ type: "stat" }, statements)}
         pickLiteral={literalOf(statements, "id")}
         onSelect={vi.fn()}
         selectedValue="42"
@@ -112,7 +117,7 @@ describe("dashboard visuals", () => {
         formats={{}}
         pickLiteral={literalOf(statements)}
         onSelect={onSelect}
-        statements={statements}
+        read={orderBookRead(statements)}
       />,
     )
     const ask = screen.getByRole("button", { name: /9,007,199,254,740,993/ })
@@ -141,10 +146,10 @@ describe("dashboard visuals", () => {
     renderComponent(
       <OrderBook
         formats={{ size: { decimals: 0 } }}
-        statements={[
+        read={orderBookRead([
           { columns, rows: [[102, "9007199254740993"]] },
           { columns, rows: [[100, "9007199254740992"]] },
-        ]}
+        ])}
       />,
     )
     expect(screen.getByText("9,007,199,254,740,993")).toBeVisible()
@@ -162,10 +167,10 @@ describe("dashboard visuals", () => {
         animateDigits
         queriesKey={queriesKey}
         formats={{ price: { kind: "price", decimals: 2 } }}
-        statements={[
+        read={orderBookRead([
           { columns, rows: [[mid + 1, 2]] },
           { columns, rows: [[mid - 1, 10]] },
-        ]}
+        ])}
       />
     )
     const { container, rerender } = renderComponent(book(100.1))
@@ -202,7 +207,9 @@ describe("dashboard visuals", () => {
       <StatTiles
         visual={{ type: "stat", animateDigits }}
         formats={{ price: { kind: "price", decimals: 2 } }}
-        statements={[{ columns, rows: [[price]] }]}
+        read={statTiles({ type: "stat", animateDigits }, [
+          { columns, rows: [[price]] },
+        ])}
       />
     )
     const { container, rerender } = renderComponent(tile(12.1))
@@ -229,10 +236,10 @@ describe("dashboard visuals", () => {
     const book = (asks: [number, number][]) => (
       <OrderBook
         formats={{}}
-        statements={[
+        read={orderBookRead([
           { columns, rows: asks },
           { columns, rows: [[99, 10]] },
-        ]}
+        ])}
       />
     )
     const errors = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -281,10 +288,10 @@ describe("dashboard visuals", () => {
     const book = (size: number) => (
       <OrderBook
         formats={{}}
-        statements={[
+        read={orderBookRead([
           { columns, rows: [[101, size]] },
           { columns, rows: [[99, 10]] },
-        ]}
+        ])}
       />
     )
     const { container, rerender } = renderComponent(book(2))
@@ -319,7 +326,7 @@ describe("dashboard visuals", () => {
           formats={{}}
           pickLiteral={literalOf(statements)}
           onSelect={vi.fn()}
-          statements={statements}
+          read={orderBookRead(statements)}
         />,
       )
       const level = container.querySelector<HTMLElement>(
@@ -370,7 +377,7 @@ describe("dashboard visuals", () => {
         formats={{}}
         pickLiteral={literalOf(statements)}
         onSelect={vi.fn()}
-        statements={statements}
+        read={orderBookRead(statements)}
       />,
     )
 
@@ -392,10 +399,10 @@ describe("dashboard visuals", () => {
     renderComponent(
       <OrderBook
         formats={{}}
-        statements={[
+        read={orderBookRead([
           { columns, rows: [[101, 1]] },
           { columns, rows: [[99, 1]] },
-        ]}
+        ])}
       />,
     )
     const bar = screen.getByText("Spread", { exact: false }).parentElement
@@ -437,7 +444,7 @@ describe("dashboard visuals", () => {
       { columns, rows: Array.from({ length: 3 }, (_, i) => [99 - i, 1]) },
     ]
     const { container } = renderComponent(
-      <OrderBook formats={{}} statements={statements} />,
+      <OrderBook formats={{}} read={orderBookRead(statements)} />,
     )
     const asks = container.querySelectorAll('[data-hook="order-book-ask"]')
     expect(asks).toHaveLength(MAX_ORDER_BOOK_LEVELS)
@@ -449,7 +456,9 @@ describe("dashboard visuals", () => {
     ).toHaveLength(3)
     const notice = `Showing the first ${MAX_ORDER_BOOK_LEVELS} of ${depth} asks.`
     expect(screen.getByText(notice)).toBeVisible()
-    expect(orderBookDrawn(statements)).toMatchObject({
+    expect(
+      orderBookDrawn(orderBookRead(statements), statements.length),
+    ).toMatchObject({
       drawn: { asks: MAX_ORDER_BOOK_LEVELS, bids: 3 },
       problems: [{ message: notice, severity: "warning" }],
     })

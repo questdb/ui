@@ -507,6 +507,7 @@ describe("dispatchTool — dashboard tools", () => {
       mountLive(1, [cell("g", "SELECT 1", { mode: "draw" })])
       setRenderReport(1, "g", {
         kind: "visual",
+        status: "drawn",
         drawn: { type: "gauge", value: 987654.321 },
         problems: [{ message: 'column "v" is missing', severity: "error" }],
       })
@@ -541,4 +542,48 @@ describe("dispatchTool — dashboard tools", () => {
       }
     },
   )
+
+  it("get_cell says whether a chart is drawn, pending or why not", async () => {
+    // Given a draw cell whose chart is waiting for its query
+    mountLive(1, [cell("w", "SELECT 1", { mode: "draw" })])
+    setRenderReport(1, "w", {
+      kind: "chart",
+      status: "waiting",
+      drawn: {},
+      problems: [],
+    })
+
+    try {
+      // When an agent reads the cell
+      const waiting = parsed(
+        await call("get_cell", { buffer_id: 1, cell_id: "w" }),
+      )
+
+      // Then its report says the draw is pending, not that it has no rows
+      expect(waiting.render_report).toMatchObject({
+        kind: "chart",
+        status: "waiting",
+        problems: [],
+      })
+
+      // And once the query fails, the report says so
+      setRenderReport(1, "w", {
+        kind: "chart",
+        status: "failed",
+        drawn: {},
+        problems: [
+          { message: "Query failed: table does not exist", severity: "error" },
+        ],
+      })
+      const failed = parsed(
+        await call("get_cell", { buffer_id: 1, cell_id: "w" }),
+      )
+      expect(failed.render_report).toMatchObject({
+        status: "failed",
+        problems: [{ message: "Query failed: table does not exist" }],
+      })
+    } finally {
+      clearRenderReport(1, "w")
+    }
+  })
 })

@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef } from "react"
+import React, { useLayoutEffect, useRef } from "react"
 import styled, { css } from "styled-components"
 import {
   formatValue,
@@ -36,6 +36,15 @@ type Level = {
 }
 
 type Side = { levels: Level[]; totalName?: string; problem?: string }
+
+/** Both sides of a book, read once from its statements. */
+export type OrderBookRead = {
+  asks: Side
+  bids: Side
+  // The price and size columns, by role or position, for their formats.
+  priceName?: string
+  sizeName?: string
+}
 
 // A ladder lists the levels nearest the spread; deeper levels of an unlimited
 // book would only cost render time on every refresh.
@@ -244,10 +253,27 @@ const Empty = styled.div`
   color: ${({ theme }) => theme.color.contentMuted};
 `
 
+/** The asks (statement 1) and bids (statement 2) a ladder draws. */
+export const orderBookRead = (
+  statements: (StatementRows | null)[],
+  columns?: VisualColumns,
+): OrderBookRead => {
+  const name = (i: number, role: "price" | "size") => {
+    const rows = statements[0] ?? statements[1]
+    return rows?.columns[columnIndex(rows, columns?.[role], i)]?.name
+  }
+  return {
+    asks: readSide(statements[0], 0, columns),
+    bids: readSide(statements[1], 1, columns),
+    priceName: name(0, "price"),
+    sizeName: name(1, "size"),
+  }
+}
+
 type Props = {
-  statements: (StatementRows | null)[]
+  // Both sides, read by the visual's outcome (visualOutcome.ts).
+  read: OrderBookRead
   statementErrors?: (string | null)[]
-  columns?: VisualColumns
   formats: ColumnFormats
   animateDigits?: boolean
   queriesKey?: string
@@ -258,33 +284,19 @@ type Props = {
 }
 
 export const OrderBook = ({
-  statements,
+  read,
   statementErrors,
-  columns,
   formats,
   animateDigits = false,
   queriesKey,
   pickLiteral,
   onSelect,
 }: Props) => {
-  const asks = useMemo(
-    () => readSide(statements[0], 0, columns),
-    [statements, columns],
-  )
-  const bids = useMemo(
-    () => readSide(statements[1], 1, columns),
-    [statements, columns],
-  )
+  const { asks, bids, priceName, sizeName } = read
   const ladderRef = useRef<HTMLDivElement | null>(null)
   const midRef = useRef<HTMLDivElement | null>(null)
   const centred = useRef(false)
 
-  const name = (i: number, role: "price" | "size") => {
-    const rows = statements[0] ?? statements[1]
-    return rows?.columns[columnIndex(rows, columns?.[role], i)]?.name
-  }
-  const priceName = name(0, "price")
-  const sizeName = name(1, "size")
   const priceFormat: ColumnFormat = (priceName && formats[priceName]) || {
     kind: "number",
   }
@@ -446,13 +458,12 @@ export const OrderBook = ({
   )
 }
 
+/** What a ladder drew from its read, and each side's problems. */
 export const orderBookDrawn = (
-  statements: (StatementRows | null)[],
-  columns?: VisualColumns,
+  { asks, bids }: OrderBookRead,
+  statementCount: number,
   statementErrors?: (string | null)[],
 ) => {
-  const asks = readSide(statements[0], 0, columns)
-  const bids = readSide(statements[1], 1, columns)
   return {
     drawn: {
       asks: shownLevels(asks).length,
@@ -473,7 +484,7 @@ export const orderBookDrawn = (
             ]
           : []
       }),
-      ...(statements.length < 2
+      ...(statementCount < 2
         ? [
             {
               message:

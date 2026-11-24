@@ -1,7 +1,6 @@
 import React, { useMemo } from "react"
 import styled, { useTheme } from "styled-components"
 import { RollingNumber } from "./RollingNumber"
-import { PaneEmptyState } from "../PaneEmptyState"
 import { Check } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../components/Button"
 import { pickOf, type Pick } from "../interactions/selection"
@@ -195,7 +194,7 @@ const Sparkline = ({ values, color }: { values: number[]; color: string }) => {
 
 const MAX_STAT_TILES = 24
 
-export const statTileLimitNotice = (
+const statTileLimitNotice = (
   statements: (StatementRows | null)[],
 ): string | undefined => {
   const count = statements[0]?.rows.length ?? 0
@@ -209,15 +208,20 @@ const LimitNotice = styled.span`
   color: ${({ theme }) => theme.color.contentSecondary};
 `
 
-export const statTiles = (
-  visual: VisualConfig,
-  statements: (StatementRows | null)[],
-): {
+export type StatTilesRead = {
   tiles: Tile[]
   valueName: string | null
   changeName?: string
   problems: string[]
-} => {
+  // Why some rows have no tile.
+  limitNotice?: string
+}
+
+/** The tiles a stat visual draws from its statements, read once. */
+export const statTiles = (
+  visual: VisualConfig,
+  statements: (StatementRows | null)[],
+): StatTilesRead => {
   const rows = statements[0]
   if (!rows || rows.rows.length === 0)
     return {
@@ -298,17 +302,20 @@ export const statTiles = (
       spark: sparks.get(k >= 0 && labelIdx >= 0 ? label : "") ?? [],
     }
   })
+  const limitNotice = statTileLimitNotice(statements)
   return {
     tiles,
     valueName: rows.columns[valueIdx].name,
     changeName: rows.columns[changeIdx]?.name,
     problems,
+    ...(limitNotice ? { limitNotice } : {}),
   }
 }
 
 type Props = {
+  // The tiles, read by the visual's outcome (visualOutcome.ts).
+  read: StatTilesRead
   visual: VisualConfig
-  statements: (StatementRows | null)[]
   formats: ColumnFormats
   queriesKey?: string
   selectedValue?: string
@@ -318,8 +325,8 @@ type Props = {
 }
 
 export const StatTiles = ({
+  read,
   visual,
-  statements,
   formats,
   queriesKey,
   selectedValue,
@@ -327,13 +334,7 @@ export const StatTiles = ({
   onSelect,
 }: Props) => {
   const theme = useTheme()
-  const { tiles, valueName, changeName, problems } = useMemo(
-    () => statTiles(visual, statements),
-    [visual, statements],
-  )
-  if (tiles.length === 0)
-    return <PaneEmptyState>{problems[0] ?? "No data to plot."}</PaneEmptyState>
-  const limitNotice = statTileLimitNotice(statements)
+  const { tiles, valueName, changeName, limitNotice } = read
   const format = valueName ? formats[valueName] : undefined
   const changeFormat = changeName ? formats[changeName] : undefined
   const labelOccurrences = new Map<string, number>()

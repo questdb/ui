@@ -18,8 +18,18 @@ vi.mock("./stateSegments", async (importOriginal) => {
 })
 
 import { UptimeBars } from "./UptimeBars"
+import { readStateSegments } from "./stateSegments"
 
 const T0 = Date.parse("2024-01-01T00:00:00Z")
+const VISUAL = { type: "uptime" as const, buckets: 90 }
+
+// The segments of `lanes` lanes, read as the visual's outcome reads them.
+const segments = (lanes: number) => {
+  const read = readStateSegments(VISUAL, statement(lanes))
+  if (typeof read === "string") throw new Error(read)
+  return read
+}
+
 const statement = (lanes: number): StatementRows => ({
   columns: [
     { name: "ts", type: "TIMESTAMP" },
@@ -34,12 +44,7 @@ const statement = (lanes: number): StatementRows => ({
 })
 
 it("redraws only the lanes whose hovered bar changed", () => {
-  renderComponent(
-    <UptimeBars
-      visual={{ type: "uptime", buckets: 90 }}
-      statements={[statement(5)]}
-    />,
-  )
+  renderComponent(<UptimeBars read={segments(5)} visual={VISUAL} />)
   const lanes = Array.from(document.querySelectorAll("[data-lane-index]"))
   expect(lanes).toHaveLength(5)
   const barsPerLane = lanes[0].querySelectorAll("i").length
@@ -62,12 +67,7 @@ it("redraws only the lanes whose hovered bar changed", () => {
 
 it("opens a lower lane's bucket card above its bars, inside the pane", () => {
   // Given two lanes, the second at the bottom of the pane
-  renderComponent(
-    <UptimeBars
-      visual={{ type: "uptime", buckets: 90 }}
-      statements={[statement(2)]}
-    />,
-  )
+  renderComponent(<UptimeBars read={segments(2)} visual={VISUAL} />)
   const root = document.querySelector<HTMLElement>('[data-hook="uptime-bars"]')
   const [top, bottom] = Array.from(
     document.querySelectorAll<HTMLElement>("[data-lane-index]"),

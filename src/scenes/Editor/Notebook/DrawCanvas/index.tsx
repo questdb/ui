@@ -4,18 +4,14 @@ import type { EChartsType } from "echarts"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
-import {
-  buildEchartsOption,
-  sharesProblem,
-} from "../CellChart/buildEchartsOption"
 import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
 import { DrawSettingsDrawer } from "../CellChart/DrawSettingsDrawer"
 import { sameDrawSettings, type DrawSettings } from "../CellChart/drawSettings"
-import { drawProblems, resolveDraw, toChartResult } from "./drawCanvasUtils"
+import { resolveDraw, toChartResult } from "./drawCanvasUtils"
+import { presetDraw } from "./presetOutcome"
 import { Button } from "../../../../components/Button"
-import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import {
@@ -45,13 +41,10 @@ import {
   LazyVisualCanvas,
   preloadChartCode,
 } from "../CellChart/lazyCharts"
-import {
-  armBrush,
-  interactionEvents,
-  withBrush,
-} from "../interactions/chartInteractions"
+import { armBrush, interactionEvents } from "../interactions/chartInteractions"
 import { joinChartSync, setChartSync } from "../interactions/chartSync"
-import { setRenderReport } from "../renderReports"
+import { fetchOutcome, useReportOutcome } from "../drawOutcome"
+import { DrawOutcomePane, VisuallyHiddenStatus } from "../DrawOutcomePane"
 import { registerCellChart } from "../cellChartImages"
 import { PaneEmptyState } from "../PaneEmptyState"
 import { withNewVariables } from "../interactions/InteractionsEditor"
@@ -127,18 +120,6 @@ const CancelledState = styled(PaneEmptyState)`
   gap: 1rem;
 `
 
-// Announces loading/empty transitions. Stays mounted with only its text
-// changing — inserting an already-populated live region announces
-// inconsistently across screen readers.
-const VisuallyHiddenStatus = styled.span`
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-`
-
 type Props = {
   cell: NotebookCell
   isFocused: boolean
@@ -203,7 +184,6 @@ export const DrawCanvas: React.FC<Props> = ({
   )
   const results =
     chartResult.kind === "settled" ? chartResult.results : NO_RESULTS
-  const hadError = chartResult.kind === "settled" && chartResult.hadError
 
   const resolution = useMemo(
     () => resolveDraw(queries, results, cell.chartConfig),
@@ -225,27 +205,6 @@ export const DrawCanvas: React.FC<Props> = ({
   const sharedTimePointer =
     preciseTimePointer || settings.chartSync?.crosshair === "tooltip"
   const formats = useMemo(() => cell.formats ?? {}, [cell.formats])
-  const option = useMemo(
-    () =>
-      withBrush(
-        buildEchartsOption(resolution.chart, resolution.renderQueries, {
-          colors: theme.color,
-          formats,
-          clickEnabled: cell.interactions?.click !== undefined,
-          preciseTimePointer,
-          sharedTimePointer,
-        }),
-        cell.interactions,
-      ),
-    [
-      resolution,
-      theme.color,
-      formats,
-      cell.interactions,
-      preciseTimePointer,
-      sharedTimePointer,
-    ],
-  )
   const { setVariableValues, updateSettings, getVariables } =
     useNotebookActions()
   // A save adds the variables the Interactions section created, then the
@@ -282,6 +241,39 @@ export const DrawCanvas: React.FC<Props> = ({
           )
         : undefined,
     [cell.result, statementResults],
+  )
+  // A preset chart's option and what it shows, from the statements that
+  // returned rows (visuals and custom charts derive their own).
+  const preset = useMemo(
+    () =>
+      drawKind === "chart"
+        ? presetDraw({
+            results,
+            error: statementErrors?.find((e): e is string => e !== null),
+            resolution,
+            config: cell.chartConfig,
+            formats,
+            context: {
+              colors: theme.color,
+              clickEnabled: cell.interactions?.click !== undefined,
+              preciseTimePointer,
+              sharedTimePointer,
+            },
+            interactions: cell.interactions,
+          })
+        : null,
+    [
+      drawKind,
+      results,
+      statementErrors,
+      resolution,
+      cell.chartConfig,
+      formats,
+      theme.color,
+      cell.interactions,
+      preciseTimePointer,
+      sharedTimePointer,
+    ],
   )
   const live = !animatesAt(refreshIntervalMs)
 
@@ -329,130 +321,70 @@ export const DrawCanvas: React.FC<Props> = ({
     [cell.interactions],
   )
 
-  // What the preset chart drew, for the agent (visuals and custom charts
-  // report their own). It is written again when a blocked chart is drawn
-  // again with the same rows, so the block's report does not outlive it.
-  const presetDrawn =
-    !visual && !custom && classifyBlock === null && results.length > 0
-  useEffect(() => {
-    if (!presetDrawn) return
-    const series = (Array.isArray(option.series) ? option.series : []) as {
-      name?: string
-      data?: unknown[]
-    }[]
-    const problems = drawProblems(resolution, cell.chartConfig, formats)
-    setRenderReport(bufferId, cell.id, {
-      kind: "chart",
-      drawn: {
-        series: series.filter(
-          (s) => s.name !== "Events" && s.name !== "Thresholds",
-        ).length,
-        points: series.reduce((n, s) => n + (s.data?.length ?? 0), 0),
-        events: (resolution.chart.events ?? []).reduce(
-          (n, e) => n + e.dataset.length,
-          0,
-        ),
-      },
-      problems,
-    })
-  }, [
-    bufferId,
-    cell.id,
-    cell.chartConfig,
-    formats,
-    option,
-    presetDrawn,
-    resolution,
-    results,
-  ])
-
-  const stackProblem = useMemo(
-    () =>
-      !visual && !custom ? sharesProblem(resolution.renderQueries) : undefined,
-    [visual, custom, resolution.renderQueries],
-  )
-  const empty =
-    classifyBlock !== null ||
-    queries.length === 0 ||
-    (visual || custom
-      ? statementResults.kind !== "settled" ||
-        statements.every((s) => s === null)
-      : results.length === 0)
   // The engine takes up edited SQL after a short debounce; until then its
   // settled answer is for the old SQL, not for what the cell holds.
   const sqlApplied = useMemo(
     () => fetchStateIsFor(queriesKey, cell.value),
     [queriesKey, cell.value],
   )
-  const settledForCurrentQueries = settledKey === queriesKey && sqlApplied
+  const settledForCurrentSql =
+    settledKey === queriesKey && sqlApplied && chartResult.kind === "settled"
+  // Rows to draw: a preset chart draws the statements that returned rows; a
+  // visual or custom chart every statement that succeeded, rows or none.
+  const hasFrame =
+    drawKind === "chart"
+      ? results.length > 0
+      : statementResults.kind === "settled" &&
+        statements.some((s) => s !== null)
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
-  let emptyMessage: string
-  if (classifyBlock?.kind === "write") {
-    emptyMessage = `Cannot draw a write query ('${classifyBlock.queryType}'). Switch to Run mode to execute this SQL.`
-  } else if (classifyBlock?.kind === "failed") {
-    emptyMessage = `Cannot classify cell SQL (${classifyBlock.message}). Refusing to draw until the query can be classified safely.`
-  } else if (queries.length === 0) {
-    emptyMessage = "Type a query to draw."
-  } else if (!settledForCurrentQueries) {
-    emptyMessage = "Drawing…"
-  } else if (hadError) {
-    emptyMessage = "Query failed: check the SQL editor for the error."
-  } else {
-    emptyMessage = "No data to plot."
-  }
-
-  // A draw with nothing to show (settled empty, blocked or cancelled) replaces
-  // the previous report, so the agent does not read an earlier draw's series
-  // as the current chart.
-  const reportedEmpty =
-    empty &&
-    queries.length > 0 &&
-    (classifyBlock !== null ||
-      (!loading && (cancelled || settledForCurrentQueries)))
-  const emptyReportMessage =
-    classifyBlock === null && cancelled
-      ? "Chart loading was cancelled."
-      : emptyMessage
-  const emptyReportSeverity =
-    classifyBlock !== null || (!cancelled && hadError) ? "error" : "warning"
-  useEffect(() => {
-    if (!reportedEmpty) return
-    setRenderReport(bufferId, cell.id, {
-      kind: drawKind,
-      ...(visual ? { visualConfig: visual } : {}),
-      drawn: visual ? { type: visual.type } : {},
-      problems: [
-        { message: emptyReportMessage, severity: emptyReportSeverity },
-      ],
-    })
-  }, [
+  // The states every kind shares; null once there are settled rows to draw.
+  const fetched = useMemo(
+    () =>
+      fetchOutcome(
+        {
+          statementCount: queries.length,
+          classifyBlock,
+          loading,
+          cancelled,
+          hasFrame,
+          settledForCurrentSql,
+        },
+        visual ? { type: visual.type } : {},
+      ),
+    [
+      queries.length,
+      classifyBlock,
+      loading,
+      cancelled,
+      hasFrame,
+      settledForCurrentSql,
+      visual,
+    ],
+  )
+  // What the pane shows instead of a chart or component, if anything.
+  const shown =
+    fetched ??
+    (preset && preset.outcome.status !== "drawn" ? preset.outcome : null)
+  // The report follows the same outcome. Once a visual or custom chart is
+  // drawn from settled rows, it reports what it decided itself.
+  useReportOutcome(
     bufferId,
     cell.id,
     drawKind,
-    emptyReportMessage,
-    emptyReportSeverity,
-    reportedEmpty,
+    fetched ?? preset?.outcome ?? null,
     visual,
-  ])
+  )
 
   return (
     <Wrapper>
       <VisuallyHiddenStatus role="status">
-        {loading
-          ? "Loading chart data"
-          : cancelled
-            ? "Chart loading was cancelled"
-            : empty
-              ? emptyMessage
-              : ""}
+        {shown && shown.status !== "blocked" && shown.status !== "failed"
+          ? shown.message
+          : ""}
       </VisuallyHiddenStatus>
-      {loading ? (
-        <PaneEmptyState aria-hidden="true">
-          <CircleNotchSpinner size={24} />
-        </PaneEmptyState>
-      ) : cancelled ? (
+      {shown?.status === "cancelled" ? (
         <CancelledState data-hook="draw-canvas-cancelled">
-          <span aria-hidden="true">Chart loading was cancelled.</span>
+          <span aria-hidden="true">{shown.message}</span>
           <Button
             variant="secondary"
             size="sm"
@@ -462,10 +394,8 @@ export const DrawCanvas: React.FC<Props> = ({
             Retry
           </Button>
         </CancelledState>
-      ) : stackProblem ? (
-        <PaneEmptyState role="alert">{stackProblem}</PaneEmptyState>
-      ) : empty ? (
-        <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
+      ) : shown ? (
+        <DrawOutcomePane outcome={shown} announced />
       ) : (
         <Canvas data-hook="draw-canvas">
           <ChartSuspense>
@@ -498,6 +428,7 @@ export const DrawCanvas: React.FC<Props> = ({
                 cellId={cell.id}
                 rawOption={custom.option}
                 statements={statements}
+                statementErrors={statementErrors}
                 interactions={cell.interactions}
                 live={live}
                 isFocused={isFocused}
@@ -506,15 +437,17 @@ export const DrawCanvas: React.FC<Props> = ({
                 onDraw={handleDraw}
               />
             ) : (
-              <LazyChartRenderer
-                option={option}
-                zoomScope={zoomScope}
-                isFocused={isFocused}
-                animate={animatesAt(refreshIntervalMs)}
-                events={events}
-                onInstance={handleInstance}
-                onDraw={handleDraw}
-              />
+              preset && (
+                <LazyChartRenderer
+                  option={preset.option}
+                  zoomScope={zoomScope}
+                  isFocused={isFocused}
+                  animate={animatesAt(refreshIntervalMs)}
+                  events={events}
+                  onInstance={handleInstance}
+                  onDraw={handleDraw}
+                />
+              )
             )}
           </ChartSuspense>
         </Canvas>

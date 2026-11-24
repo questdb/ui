@@ -31,8 +31,8 @@ import {
   volumeProfileOption,
   type VisualContext,
 } from "../visuals/visualOptions"
-import { StatTiles } from "../visuals/StatTiles"
-import { OrderBook } from "../visuals/OrderBook"
+import { StatTiles, statTiles } from "../visuals/StatTiles"
+import { OrderBook, orderBookRead } from "../visuals/OrderBook"
 import { UptimeBars } from "../visuals/UptimeBars"
 import { readStateSegments } from "../visuals/stateSegments"
 import { toLabel, toTime, type StatementRows } from "../visuals/statementRows"
@@ -402,12 +402,27 @@ const htmlCase = (
 // Every item is clickable here; what a click writes is checked below.
 const anything = () => "clicked"
 
+const STAT: VisualConfig = {
+  type: "stat",
+  columns: { label: "lane", value: "v" },
+}
+const UPTIME: VisualConfig = {
+  type: "uptime",
+  columns: { time: "ts", lane: "lane", state: "state" },
+}
+// The segments the uptime visual draws: read once, as its outcome reads them.
+const uptimeRead = () => {
+  const read = readStateSegments(UPTIME, fixture)
+  if (typeof read === "string") throw new Error(read)
+  return read
+}
+
 const VISUALS: Record<VisualType, Case | typeof NOT_CLICKABLE> = {
   stat: htmlCase(
     (onSelect) => (
       <StatTiles
-        visual={{ type: "stat", columns: { label: "lane", value: "v" } }}
-        statements={[fixture]}
+        read={statTiles(STAT, [fixture])}
+        visual={STAT}
         formats={{}}
         pickLiteral={anything}
         onSelect={onSelect}
@@ -430,8 +445,7 @@ const VISUALS: Record<VisualType, Case | typeof NOT_CLICKABLE> = {
   orderBook: htmlCase(
     (onSelect) => (
       <OrderBook
-        statements={[fixture, fixture]}
-        columns={{ price: "px", size: "v" }}
+        read={orderBookRead([fixture, fixture], { price: "px", size: "v" })}
         formats={{}}
         pickLiteral={anything}
         onSelect={onSelect}
@@ -470,26 +484,15 @@ const VISUALS: Record<VisualType, Case | typeof NOT_CLICKABLE> = {
   uptime: htmlCase(
     (onSelect) => (
       <UptimeBars
-        visual={{
-          type: "uptime",
-          columns: { time: "ts", lane: "lane", state: "state" },
-        }}
-        statements={[fixture]}
+        read={uptimeRead()}
+        visual={UPTIME}
         pickLiteral={anything}
         onSelect={onSelect}
       />
     ),
     // A lane holds every row of its lane.
     (lane) => {
-      const read = readStateSegments(
-        {
-          type: "uptime",
-          columns: { time: "ts", lane: "lane", state: "state" },
-        },
-        fixture,
-      )
-      if (typeof read === "string") throw new Error(read)
-      const name = read.lanes[Number(lane.dataset.laneIndex)]
+      const name = uptimeRead().lanes[Number(lane.dataset.laneIndex)]
       return {
         rows: rowsWhere(fixture, (row) => toLabel(row[col("lane")]) === name),
         drawn: "lane",

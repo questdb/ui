@@ -9,11 +9,14 @@ export type RenderProblem = {
 }
 
 import type { VisualConfig } from "./CellChart/chartTypes"
+import type { DrawStatus } from "./drawOutcome"
 
 export type RenderReport = {
   /** Internal provenance; not exposed on the wire. */
   visualConfig?: VisualConfig
   kind: "chart" | "custom" | "visual"
+  // What the pane shows: drawn, or why not (see drawOutcome.ts).
+  status: DrawStatus
   // What was drawn, e.g. { series: 2, points: 240 } or { asks: 12, bids: 12 }.
   drawn: Record<string, number | string | boolean>
   problems: RenderProblem[]
@@ -57,6 +60,7 @@ export const DRAWN_NEEDS_READ =
 
 export type RenderReportWire = {
   kind: RenderReport["kind"]
+  status: DrawStatus
   drawn?: RenderReport["drawn"]
   drawn_withheld?: string
   problems: RenderProblem[]
@@ -72,6 +76,7 @@ export const renderReportWire = (
   canReadResults: boolean,
 ): RenderReportWire => ({
   kind: report.kind,
+  status: report.status,
   ...(canReadResults
     ? { drawn: report.drawn }
     : { drawn_withheld: DRAWN_NEEDS_READ }),

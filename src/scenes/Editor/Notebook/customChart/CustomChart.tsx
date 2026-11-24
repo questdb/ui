@@ -14,19 +14,13 @@ import {
   type ChartEventHandler,
 } from "../CellChart/ChartRenderer"
 import type { StatementRows } from "../visuals/statementRows"
-import { setRenderReport, type RenderProblem } from "../renderReports"
-import {
-  customSeriesCount,
-  datasetPick,
-  partialDatasetWarnings,
-} from "./buildCustomOption"
+import { useReportOutcome } from "../drawOutcome"
+import { DrawOutcomePane } from "../DrawOutcomePane"
+import { datasetPick } from "./buildCustomOption"
 import { ensureMaps, isMapLoaded, mapsUsedBy } from "./maps"
-import { prepareCustomOption, problemsOf } from "./prepareCustomOption"
-import { PaneEmptyState } from "../PaneEmptyState"
+import { prepareCustomOption } from "./prepareCustomOption"
+import { customDraw } from "./customOutcome"
 import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
-
-const MAP_LOAD_FAILED =
-  "Could not load the world map. Reload the console to try again."
 
 const PartialNotice = styled.div`
   height: 2.8rem;
@@ -40,6 +34,8 @@ type Props = {
   cellId: string
   rawOption: Record<string, unknown>
   statements: (StatementRows | null)[]
+  // Each statement's error, null for one that succeeded.
+  statementErrors?: (string | null)[]
   live: boolean
   isFocused: boolean
   interactions?: CellInteractions
@@ -54,6 +50,7 @@ export const CustomChart = ({
   cellId,
   rawOption,
   statements,
+  statementErrors,
   live,
   isFocused,
   interactions,
@@ -110,7 +107,7 @@ export const CustomChart = ({
     [events],
   )
   const clickable = interactions?.click !== undefined
-  const { sanitized, built } = useMemo(
+  const prepared = useMemo(
     () =>
       prepareCustomOption(rawOption, {
         colors: theme.color,
@@ -120,6 +117,7 @@ export const CustomChart = ({
       }),
     [rawOption, theme.color, statements, live, clickable],
   )
+  const { built } = prepared
   useEffect(() => {
     drawnRef.current = { option: built.option, statements }
   }, [built, statements])
@@ -156,34 +154,15 @@ export const CustomChart = ({
     }
   }, [neededMaps])
 
-  useEffect(() => {
-    const problems: RenderProblem[] = [
-      ...problemsOf({ sanitized, built }),
-      ...(mapStatus === "error"
-        ? [{ path: "", message: MAP_LOAD_FAILED, severity: "error" as const }]
-        : []),
-    ]
-    setRenderReport(bufferId, cellId, {
-      kind: "custom",
-      drawn: {
-        series: customSeriesCount(built.option),
-        datasets: statements.length,
-        rows: statements.reduce((n, s) => n + (s?.rows.length ?? 0), 0),
-      },
-      problems,
-    })
-  }, [bufferId, cellId, sanitized, built, statements, mapStatus])
-
-  const fatal = [...sanitized.problems, ...built.problems].find(
-    (problem) => problem.severity === "error" && problem.path === "",
+  // What the option shows, decided once: the pane draws it and the agent's
+  // report carries it.
+  const { outcome, partial } = useMemo(
+    () => customDraw({ prepared, statements, statementErrors, mapStatus }),
+    [prepared, statements, statementErrors, mapStatus],
   )
-  if (fatal)
-    return <PaneEmptyState role="alert">{fatal.message}</PaneEmptyState>
-  if (mapStatus === "error")
-    return <PaneEmptyState role="alert">{MAP_LOAD_FAILED}</PaneEmptyState>
-  if (mapStatus === "loading")
-    return <PaneEmptyState>Loading map…</PaneEmptyState>
-  const partial = partialDatasetWarnings(statements)
+  useReportOutcome(bufferId, cellId, "custom", outcome)
+
+  if (outcome.status !== "drawn") return <DrawOutcomePane outcome={outcome} />
   return (
     <>
       {partial.length > 0 && (

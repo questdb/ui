@@ -1,4 +1,4 @@
-import React, { useMemo } from "react"
+import React from "react"
 import styled, { useTheme } from "styled-components"
 import {
   CircleIcon,
@@ -332,17 +332,8 @@ export const planLines = (
   return textIdx < 0 ? [] : rows.rows.map((r) => toLabel(r[textIdx]))
 }
 
-export const PlanTree = ({
-  visual,
-  statements,
-}: {
-  visual: VisualConfig
-  statements: (StatementRows | null)[]
-}) => {
-  const tree = useMemo(
-    () => parsePlan(planLines(visual, statements[0])),
-    [visual, statements],
-  )
+/** A parsed plan (parsePlan), read by the visual's outcome. */
+export const PlanTree = ({ tree }: { tree: PlanNode[] }) => {
   return (
     <Root data-hook="plan-tree">
       <Tree>

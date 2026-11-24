@@ -133,16 +133,18 @@ afterEach(() => {
 
 describe("DrawCanvas render report", () => {
   it.each([
-    ["no rows", dql(0), "No data to plot.", "warning"],
+    ["no rows", dql(0), "The query returned no rows.", "warning", "empty"],
+    // The statement's own error, not "no rows" or a pointer to the editor.
     [
       "a failed statement",
       failed,
-      "Query failed: check the SQL editor for the error.",
+      "Query failed: table does not exist",
       "error",
+      "failed",
     ],
   ] as const)(
     "replaces the previous draw's report when a re-run settles with %s",
-    (_label, next, message, severity) => {
+    (_label, next, message, severity, status) => {
       ;(globalThis as unknown as { __sql: string }).__sql = SQL
       const first = cellWith(dql(5))
       const { rerender } = renderComponent(ui(first))
@@ -159,6 +161,7 @@ describe("DrawCanvas render report", () => {
       expect(screen.getAllByText(message).length).toBeGreaterThan(0)
       const report = getCell(second).render_report
       expect(report?.kind).toBe("chart")
+      expect(report?.status).toBe(status)
       expect(report?.drawn).toEqual({})
       expect(report?.problems).toEqual([{ message, severity }])
     },
@@ -209,6 +212,9 @@ describe("DrawCanvas render report", () => {
 
       // Then the agent reads the state the pane shows, not the old chart
       const report = getCell(second).render_report
+      expect(report?.status).toBe(
+        "fetchCancelled" in fetch ? "cancelled" : "blocked",
+      )
       expect(report?.drawn).toEqual({})
       expect(report?.problems).toEqual([{ message, severity }])
     },
@@ -236,6 +242,7 @@ describe("DrawCanvas render report", () => {
 
     // Then the agent reads the chart the pane shows again
     const report = getCell(cell).render_report
+    expect(report?.status).toBe("drawn")
     expect(report?.drawn).toEqual({ series: 1, points: 5, events: 0 })
     expect(report?.problems).toEqual([])
   })
@@ -258,9 +265,13 @@ describe("DrawCanvas render report", () => {
       rerender(ui(edited))
     })
 
-    // Then the cell is drawing, and the agent is not told it has no data
+    // Then the cell is drawing, and the agent is told the draw is pending,
+    // not that it has no data
     expect(screen.getAllByText("Drawing…").length).toBeGreaterThan(0)
-    expect(getCell(edited).render_report?.problems).toEqual([])
+    expect(getCell(edited).render_report).toMatchObject({
+      status: "waiting",
+      problems: [],
+    })
   })
 })
 

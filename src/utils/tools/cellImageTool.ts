@@ -80,7 +80,13 @@ export const cellImage = async (
         ? current
         : undefined
     }
-    let current = reportForVisual()
+    // A pending draw ("waiting") is worth waiting for; if it does not end in
+    // time, the agent reads that the draw is still pending.
+    const settledReport = () => {
+      const current = reportForVisual()
+      return current?.status === "waiting" ? undefined : current
+    }
+    let current = settledReport()
     if (!current) {
       const view = await deps.liveView(bufferId)
       if (
@@ -90,11 +96,12 @@ export const cellImage = async (
         const restore = deps.bringIntoView(cellId)
         try {
           current =
-            (await waitForCellDraw(reportForVisual, 4000, signal)) ?? undefined
+            (await waitForCellDraw(settledReport, 4000, signal)) ?? undefined
         } finally {
           restore()
         }
       }
+      current ??= reportForVisual()
     }
     return {
       body: {

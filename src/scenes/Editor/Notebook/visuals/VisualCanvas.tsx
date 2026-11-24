@@ -7,78 +7,23 @@ import {
   ChartRenderer,
   type ChartEventHandler,
 } from "../CellChart/ChartRenderer"
-import { setRenderReport } from "../renderReports"
-import { PaneEmptyState } from "../PaneEmptyState"
+import { useReportOutcome } from "../drawOutcome"
+import { DrawOutcomePane } from "../DrawOutcomePane"
 import type { SetVariables } from "../interactions/chartInteractions"
-import {
-  boundColumnProblem,
-  pickLiteral,
-  type Pick,
-} from "../interactions/selection"
+import { pickLiteral, type Pick } from "../interactions/selection"
 import type { StatementRows } from "./statementRows"
-import { incompleteResultProblem } from "./visualCatalog"
-import {
-  chordOption,
-  gaugeOption,
-  graphOption,
-  footprintOption,
-  liquidityHeatmapOption,
-  mapOption,
-  sankeyOption,
-  stateTimelineOption,
-  sunburstOption,
-  treemapOption,
-  volumeProfileOption,
-  type VisualBuild,
-  type VisualContext,
-} from "./visualOptions"
-import { OrderBook, orderBookDrawn } from "./OrderBook"
-import { StatTiles, statTiles, statTileLimitNotice } from "./StatTiles"
-import { Bullets, bulletRows } from "./Bullets"
-import { PlanTree, parsePlan, planLines } from "./PlanTree"
+import { visualDraw } from "./visualOutcome"
+import { OrderBook } from "./OrderBook"
+import { StatTiles } from "./StatTiles"
+import { Bullets } from "./Bullets"
+import { PlanTree } from "./PlanTree"
 import { UptimeBars } from "./UptimeBars"
-import { readStateSegments } from "./stateSegments"
 import { MAP_NAMES, ensureMaps, isMapLoaded } from "../customChart/maps"
-
-const ECHARTS_VISUALS: Partial<
-  Record<VisualConfig["type"], (ctx: VisualContext) => VisualBuild>
-> = {
-  gauge: gaugeOption,
-  stateTimeline: stateTimelineOption,
-  treemap: treemapOption,
-  sunburst: sunburstOption,
-  graph: graphOption,
-  sankey: sankeyOption,
-  chord: chordOption,
-  map: mapOption,
-  liquidityHeatmap: liquidityHeatmapOption,
-  volumeProfile: volumeProfileOption,
-  footprint: footprintOption,
-}
-
-// Visuals a click on which sets nothing.
-const UNCLICKABLE_VISUALS: ReadonlySet<VisualConfig["type"]> = new Set([
-  "bullet",
-  "planTree",
-])
-
-// The statements a visual's clickable items are drawn from: the first, and
-// the bids of an order book or the price line of a liquidity heatmap.
-const clickedStatements = (
-  type: VisualConfig["type"],
-  statements: (StatementRows | null)[],
-) =>
-  type === "orderBook" || type === "liquidityHeatmap"
-    ? statements.slice(0, 2)
-    : statements.slice(0, 1)
 
 const Fill = styled.div`
   height: 100%;
   min-height: 0;
 `
-
-const MAP_LOAD_FAILED =
-  "Could not load the world map. Reload the console to try again."
 
 const useWorldMap = (needed: boolean) => {
   const [status, setStatus] = React.useState<"ready" | "loading" | "error">(
@@ -140,41 +85,34 @@ export const VisualCanvas = ({
 }: Props) => {
   const theme = useTheme()
   const zoomScope = useMemo(() => ({ bufferId, cellId }), [bufferId, cellId])
-  const builder = ECHARTS_VISUALS[visual.type]
   const mapStatus = useWorldMap(visual.type === "map")
   const click = interactions?.click
-  // Every visual but the order book (which reports each side) draws from the
-  // first statement, so its failure is the visual's failure, not "no rows".
-  // A visual that needs every row is not drawn from a row-capped result.
-  const primaryError =
-    visual.type === "orderBook" ? null : (statementErrors?.[0] ?? null)
-  const primaryFailure =
-    primaryError === null
-      ? (incompleteResultProblem(visual, statements) ?? null)
-      : `Query failed: ${primaryError}`
-  // A map fits its view to the regions once the world map has loaded.
-  const built = useMemo(
+  const clickColumn = click?.column
+  // What the visual shows, decided once: the pane draws it and the agent's
+  // report carries it.
+  const { outcome, read } = useMemo(
     () =>
-      builder && mapStatus === "ready" && primaryFailure === null
-        ? builder({
-            visual,
-            statements,
-            colors: theme.color,
-            formats,
-          })
-        : null,
+      visualDraw({
+        visual,
+        statements,
+        statementErrors,
+        mapStatus,
+        colors: theme.color,
+        formats,
+        clickColumn,
+      }),
     [
-      builder,
       visual,
       statements,
+      statementErrors,
+      mapStatus,
       theme.color,
       formats,
-      mapStatus,
-      primaryFailure,
+      clickColumn,
     ],
   )
+  useReportOutcome(bufferId, cellId, "visual", outcome, visual)
   // What a click on an item of an HTML visual writes, and the click.
-  const clickColumn = click?.column
   const literalOf = useCallback(
     (pick: Pick) => pickLiteral(pick, clickColumn, statements),
     [clickColumn, statements],
@@ -187,95 +125,14 @@ export const VisualCanvas = ({
     : undefined
   const pickable = click ? literalOf : undefined
 
-  // What was drawn, for the agent.
-  useEffect(() => {
-    let drawn: Record<string, number | string | boolean> = {}
-    let problems: { message: string; severity: "error" | "warning" }[] = []
-    if (primaryFailure) {
-      problems = [{ message: primaryFailure, severity: "error" }]
-    } else if (mapStatus === "error") {
-      problems = [{ message: MAP_LOAD_FAILED, severity: "error" }]
-    } else if (built) {
-      drawn = built.drawn
-      problems = built.problems
-    } else if (visual.type === "orderBook") {
-      ;({ drawn, problems } = orderBookDrawn(
-        statements,
-        visual.columns,
-        statementErrors,
-      ))
-    } else if (visual.type === "stat") {
-      const read = statTiles(visual, statements)
-      drawn = { tiles: read.tiles.length }
-      problems = read.problems.map((message) => ({
-        message,
-        severity: "error",
-      }))
-      const limitNotice = statTileLimitNotice(statements)
-      if (limitNotice)
-        problems.push({ message: limitNotice, severity: "warning" })
-    } else if (visual.type === "bullet") {
-      const read = bulletRows(visual, statements[0])
-      if ("error" in read)
-        problems = [{ message: read.error ?? "", severity: "error" }]
-      else drawn = { bars: read.rows.rows.length, targets: read.targetIdx >= 0 }
-    } else if (visual.type === "uptime") {
-      const read = readStateSegments(visual, statements[0])
-      if (typeof read === "string")
-        problems = [{ message: read, severity: "error" }]
-      else
-        drawn = {
-          lanes: read.lanes.length,
-          states: read.states.length,
-          segments: read.segments.length,
-          buckets: visual.buckets ?? 90,
-        }
-    } else if (visual.type === "planTree") {
-      const nodes = parsePlan(planLines(visual, statements[0]))
-      drawn = { operators: nodes.length }
-      if (nodes.length === 0)
-        problems = [
-          {
-            message: "No plan lines: run EXPLAIN <query> in the cell.",
-            severity: "error",
-          },
-        ]
-    }
-    // A click bound to a column no statement returns writes nothing.
-    const clickProblem = UNCLICKABLE_VISUALS.has(visual.type)
-      ? undefined
-      : boundColumnProblem(
-          clickColumn,
-          clickedStatements(visual.type, statements),
-        )
-    if (clickProblem && !primaryFailure)
-      problems = [...problems, { message: clickProblem, severity: "error" }]
-    setRenderReport(bufferId, cellId, {
-      kind: "visual",
-      visualConfig: visual,
-      drawn: { type: visual.type, ...drawn },
-      problems,
-    })
-  }, [
-    bufferId,
-    cellId,
-    built,
-    visual,
-    statements,
-    statementErrors,
-    primaryFailure,
-    mapStatus,
-    clickColumn,
-  ])
-
-  if (primaryFailure)
-    return <PaneEmptyState role="alert">{primaryFailure}</PaneEmptyState>
-  switch (visual.type) {
+  if (outcome.status !== "drawn" || !read)
+    return <DrawOutcomePane outcome={outcome} />
+  switch (read.kind) {
     case "stat":
       return (
         <StatTiles
+          read={read.read}
           visual={visual}
-          statements={statements}
           formats={formats}
           queriesKey={queriesKey}
           selectedValue={click ? clickVariableValue : undefined}
@@ -286,9 +143,8 @@ export const VisualCanvas = ({
     case "orderBook":
       return (
         <OrderBook
-          statements={statements}
+          read={read.read}
           statementErrors={statementErrors}
-          columns={visual.columns}
           formats={formats}
           animateDigits={visual.animateDigits}
           queriesKey={queriesKey}
@@ -297,46 +153,33 @@ export const VisualCanvas = ({
         />
       )
     case "bullet":
-      return (
-        <Bullets visual={visual} statements={statements} formats={formats} />
-      )
+      return <Bullets read={read.read} visual={visual} formats={formats} />
     case "planTree":
-      return <PlanTree visual={visual} statements={statements} />
+      return <PlanTree tree={read.tree} />
     case "uptime":
       return (
         <UptimeBars
+          read={read.read}
           visual={visual}
-          statements={statements}
           pickLiteral={pickable}
           onSelect={select}
         />
       )
-    default:
-      break
+    case "echarts":
+      return (
+        <Fill>
+          <ChartRenderer
+            option={read.option}
+            isFocused={isFocused}
+            animate={!live}
+            zoomScope={zoomScope}
+            zoomable={false}
+            fit
+            events={events}
+            onInstance={onInstance}
+            onDraw={onDraw}
+          />
+        </Fill>
+      )
   }
-  if (mapStatus === "error")
-    return <PaneEmptyState role="alert">{MAP_LOAD_FAILED}</PaneEmptyState>
-  if (mapStatus === "loading")
-    return <PaneEmptyState>Loading map…</PaneEmptyState>
-  if (!built?.option)
-    return (
-      <PaneEmptyState>
-        {built?.problems[0]?.message ?? "Nothing to draw."}
-      </PaneEmptyState>
-    )
-  return (
-    <Fill>
-      <ChartRenderer
-        option={built.option}
-        isFocused={isFocused}
-        animate={!live}
-        zoomScope={zoomScope}
-        zoomable={false}
-        fit
-        events={events}
-        onInstance={onInstance}
-        onDraw={onDraw}
-      />
-    </Fill>
-  )
 }
