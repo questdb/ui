@@ -693,7 +693,7 @@
         },
         "reference_lines": {
           "type": ["array", "null"],
-          "description": "Horizontal lines at fixed values, like RSI's 30 (oversold) and 70 (overbought), or a price target. A line goes on the left axis unless axis:'right'; on an axis with no series it goes on the other one. The axis grows to keep each line in view unless its min/max is pinned. Null preserves; [] removes them all; an array replaces them.",
+          "description": "Horizontal lines at fixed values, like RSI's 30 (oversold) and 70 (overbought), or a price target. A line goes on the left axis unless axis:'right'. A right line needs an enabled query on the right axis, or the call is refused. A line on an axis with no series (say, its query returned no rows) is not drawn; a left line moves to the right axis only when no enabled query is on the left. The axis grows to keep each line in view unless its min/max is pinned. Null preserves; [] removes them all; an array replaces them.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -1248,7 +1248,7 @@
                   },
                   "reference_lines": {
                     "type": ["array", "null"],
-                    "description": "Horizontal lines at fixed values, like RSI's 30 (oversold) and 70 (overbought), or a price target. A line goes on the left axis unless axis:'right'; on an axis with no series it goes on the other one. The axis grows to keep each line in view unless its min/max is pinned. Null = none.",
+                    "description": "Horizontal lines at fixed values, like RSI's 30 (oversold) and 70 (overbought), or a price target. A line goes on the left axis unless axis:'right'. A right line needs an enabled query on the right axis, or the call is refused. A line on an axis with no series (say, its query returned no rows) is not drawn; a left line moves to the right axis only when no enabled query is on the left. The axis grows to keep each line in view unless its min/max is pinned. Null = none.",
                     "items": {
                       "type": "object",
                       "additionalProperties": false,
