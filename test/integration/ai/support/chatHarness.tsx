@@ -22,6 +22,8 @@ import { AIChatButton } from "../../../../src/scenes/Layout/AIChatButton"
 // Preload the drawer with the harness's mocked dependencies before React.lazy.
 import "../../../../src/scenes/Editor/AIChatWindow"
 import { AIChatWindowLazy } from "../../../../src/scenes/Editor/AIChatWindow/AIChatWindowLazy"
+import { createQueryKey } from "../../../../src/scenes/Editor/Monaco/utils"
+import * as QuestDB from "../../../../src/utils/questdb"
 import type { AiAssistantSettings } from "../../../../src/providers/LocalStorageProvider/types"
 import type { AIConversation } from "../../../../src/providers/AIConversationProvider/types"
 import type { EditorContext } from "../../../../src/providers/EditorProvider"
@@ -107,6 +109,49 @@ export const seedChat = async (
   }
   await aiConversationStore.saveConversation(conversation)
   return conversation
+}
+
+// The editor's record of a failed run, as Fix query reads it: the error from
+// executionRefs and the word at the error position from the Monaco model.
+export const failQuery = (
+  bufferId: number,
+  sql: string,
+  error: { message: string; position: number },
+) => {
+  const queryKey = createQueryKey(sql, 0)
+  const model = {
+    getPositionAt: (offset: number) => ({ lineNumber: 1, column: offset + 1 }),
+    getWordAtPosition: ({ column }: { column: number }) => {
+      const word = /^\w+/.exec(sql.slice(column - 1))?.[0]
+      return word
+        ? { word, startColumn: column, endColumn: column + word.length }
+        : null
+    },
+  }
+  editorAdapter.overrides = {
+    ...editorAdapter.overrides,
+    editorRef: {
+      current: { getModel: () => model },
+    } as unknown as EditorContext["editorRef"],
+    executionRefs: {
+      current: {
+        [bufferId]: {
+          [queryKey]: {
+            error: {
+              type: QuestDB.Type.ERROR,
+              error: error.message,
+              position: error.position,
+              query: sql,
+            },
+            queryText: sql,
+            startOffset: 0,
+            endOffset: sql.length,
+          },
+        },
+      },
+    },
+  }
+  return queryKey
 }
 
 export const renderChat = (

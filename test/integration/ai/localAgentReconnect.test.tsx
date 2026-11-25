@@ -13,6 +13,7 @@ import {
   queryByHook,
   sendMessage,
   seedChat,
+  failQuery,
 } from "./support/chatHarness"
 import { darkTheme } from "../../../src/theme"
 import { Button } from "../../../src/components/Button"
@@ -140,7 +141,11 @@ const reportReady = (
     acceptsImages,
   })
 
-const openLocalChat = async (query = false, starting = false) => {
+const openLocalChat = async (
+  query = false,
+  starting = false,
+  failedQuery = false,
+) => {
   sockets.length = 0
   vi.stubGlobal("WebSocket", MemorySocket)
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
@@ -150,6 +155,11 @@ const openLocalChat = async (query = false, starting = false) => {
     position: 0,
     ...(!query && { notebookViewState: { cells: [] } }),
   })
+  if (failedQuery)
+    failQuery(bufferId, "SELECT 1", {
+      message: "unexpected token [1]",
+      position: 7,
+    })
   const Probe = () => {
     const { connect, status } = useMCPBridge()
     const { openNotebookChat, handleGlyphClick } = useAIConversationActions()
@@ -397,30 +407,41 @@ it.each(["initial model only", "later model change"])(
   },
 )
 
-it("does not record Explain while the bridge is waiting for hello", async () => {
-  const { first, reconnect } = await openLocalChat(true)
-  const second = reconnect()
-  await userEvent.click(getByHook("button-explain-query"))
-  const feedback = await screen.findByText(/Waiting for Mock local agent/)
-  expect(feedback.closest('[role="alert"]')).not.toBeNull()
-  expect(first.prompts()).toHaveLength(0)
-  expect(second.prompts()).toHaveLength(0)
-  expect(queryByHook("chat-message-user")).not.toBeInTheDocument()
-  expect(queryByHook("chat-message-error")).not.toBeInTheDocument()
-
-  act(() => ack(second, true))
-  await userEvent.click(getByHook("button-explain-query"))
-  await waitFor(() => expect(second.prompts()).toHaveLength(1))
-  act(() => answer(second, "This query returns one row."))
-  await screen.findByText("This query returns one row.")
-  await waitFor(async () => {
-    const messages = await aiConversationStore.getMessages(
-      second.prompts()[0].conversationId,
+it.each([
+  ["Explain", "button-explain-query", "explain this SQL query"],
+  ["Fix", "button-fix-query", "unexpected token [1]"],
+])(
+  "does not record %s while the bridge is waiting for hello",
+  async (_action, hook, asks) => {
+    const { first, reconnect } = await openLocalChat(
+      true,
+      false,
+      hook === "button-fix-query",
     )
-    expect(messages.map(({ role }) => role)).toEqual(["user", "assistant"])
-  })
-  expect(fetch).not.toHaveBeenCalled()
-})
+    const second = reconnect()
+    await userEvent.click(getByHook(hook))
+    const feedback = await screen.findByText(/Waiting for Mock local agent/)
+    expect(feedback.closest('[role="alert"]')).not.toBeNull()
+    expect(first.prompts()).toHaveLength(0)
+    expect(second.prompts()).toHaveLength(0)
+    expect(queryByHook("chat-message-user")).not.toBeInTheDocument()
+    expect(queryByHook("chat-message-error")).not.toBeInTheDocument()
+
+    act(() => ack(second, true))
+    await userEvent.click(getByHook(hook))
+    await waitFor(() => expect(second.prompts()).toHaveLength(1))
+    expect(JSON.stringify(second.prompts()[0].prompt)).toContain(asks)
+    act(() => answer(second, "This query returns one row."))
+    await screen.findByText("This query returns one row.")
+    await waitFor(async () => {
+      const messages = await aiConversationStore.getMessages(
+        second.prompts()[0].conversationId,
+      )
+      expect(messages.map(({ role }) => role)).toEqual(["user", "assistant"])
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  },
+)
 
 it.each(["cancel", "delete"] as const)(
   "pauses a reconnecting queue during delete confirmation (%s)",

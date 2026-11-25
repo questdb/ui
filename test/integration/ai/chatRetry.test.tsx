@@ -9,10 +9,15 @@ import {
   queryByHook,
   getAllByHook,
   httpResponse,
+  failQuery,
+  seedChat,
 } from "./support/chatHarness"
+import React from "react"
 import { describe, expect, it, vi } from "vitest"
-import { act, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { Button } from "../../../src/components/Button"
+import { useAIQuickActions } from "../../../src/hooks/useAIQuickActions"
 import type { AiAssistantSettings } from "../../../src/providers/LocalStorageProvider/types"
 
 const customSettings: AiAssistantSettings = {
@@ -62,6 +67,29 @@ const finishRetries = async (releaseFirstResponse: () => void) => {
     releaseFirstResponse()
     await vi.advanceTimersByTimeAsync(20000)
   })
+}
+
+const failedSQL = "SELECT * FROM tradess"
+const ddl = "CREATE TABLE trades (price DOUBLE);"
+
+const ExplainSchema = () => {
+  const { handleExplainSchema } = useAIQuickActions()
+  return (
+    <Button onClick={() => void handleExplainSchema(1, "trades", "table")}>
+      Explain schema
+    </Button>
+  )
+}
+
+const lastUserText = (body: Record<string, unknown>) => {
+  const messages = body.messages as Array<{
+    role: string
+    content: string | Array<{ text?: string }>
+  }>
+  const content = messages.filter(({ role }) => role === "user").at(-1)!.content
+  return typeof content === "string"
+    ? content
+    : content.map(({ text = "" }) => text).join("")
 }
 
 const finishScroll = async () => {
@@ -120,6 +148,139 @@ describe("chat recovery", () => {
       await finishScroll()
     },
   )
+
+  it.each([
+    {
+      action: "Explain query",
+      asked: ["explain this SQL query", failedSQL],
+      retried: ["explain this SQL query", failedSQL],
+      ddlReads: 0,
+    },
+    {
+      action: "Fix query",
+      asked: [
+        "Fix this SQL query",
+        failedSQL,
+        "Error: table does not exist [table=tradess]",
+        'Error near: "tradess"',
+      ],
+      retried: ["Fix this SQL query", failedSQL],
+      ddlReads: 0,
+    },
+    {
+      action: "Explain schema",
+      asked: [ddl],
+      retried: [ddl],
+      ddlReads: 2,
+    },
+  ])(
+    "retries a failed $action answer with one new request",
+    async ({ action, asked, retried, ddlReads }) => {
+      // Given a chat about a failed query and a provider that rejects the first request
+      const queryKey = failQuery(1, failedSQL, {
+        message: "table does not exist [table=tradess]",
+        position: 14,
+      })
+      await seedChat("Failed query", {
+        bufferId: 1,
+        queryKey,
+        currentSQL: failedSQL,
+        messages: [],
+      })
+      const server = chatServer("anthropic", [
+        unauthorized,
+        fixtures.createFinalResponse("anthropic", "The retry succeeded."),
+      ])
+      server.other = (request) => {
+        expect(new URL(request.url).searchParams.get("query")).toBe(
+          "SHOW CREATE TABLE 'trades';",
+        )
+        return Response.json({
+          columns: [{ name: "ddl", type: "STRING" }],
+          dataset: [[ddl]],
+          count: 1,
+        })
+      }
+      renderChat("anthropic", <ExplainSchema />)
+      await openChat()
+      await userEvent.click(
+        screen.getByRole("button", { name: new RegExp(`^${action}`) }),
+      )
+      await waitFor(() => expect(getByHook("retry-button")).toBeEnabled())
+      expect(server.requests).toHaveLength(1)
+      for (const part of asked)
+        expect(lastUserText(server.requests[0].body)).toContain(part)
+
+      // When the user retries after the provider recovers
+      vi.setSystemTime(Date.now() + 3000)
+      await userEvent.click(getByHook("retry-button"))
+
+      // Then the same request goes out once more and its answer replaces the error
+      await waitFor(() =>
+        expect(getByHook("chat-message-assistant")).toHaveTextContent(
+          "The retry succeeded.",
+        ),
+      )
+      expect(server.requests).toHaveLength(2)
+      for (const part of retried)
+        expect(lastUserText(server.requests[1].body)).toContain(part)
+      expect(server.otherRequests).toHaveLength(ddlReads)
+      expect(queryByHook("chat-message-error")).not.toBeInTheDocument()
+      expect(getAllByHook("chat-message-user")).toHaveLength(1)
+      await waitFor(() =>
+        expect(queryByHook("chat-stop-button")).not.toBeInTheDocument(),
+      )
+      await finishScroll()
+    },
+  )
+
+  it("keeps the failed schema answer when Retry cannot read the dropped table's schema", async () => {
+    // Given a failed schema answer for a table that is dropped afterwards
+    const server = chatServer("anthropic", [unauthorized])
+    const schemaReads: string[] = []
+    server.other = (request) => {
+      const query = new URL(request.url).searchParams.get("query")!
+      schemaReads.push(query)
+      return schemaReads.length === 1
+        ? Response.json({
+            columns: [{ name: "ddl", type: "STRING" }],
+            dataset: [[ddl]],
+            count: 1,
+          })
+        : Response.json(
+            {
+              query,
+              error: "table does not exist [table=trades]",
+              position: 18,
+            },
+            { status: 400 },
+          )
+    }
+    renderChat("anthropic", <ExplainSchema />)
+    await userEvent.click(
+      screen.getByRole("button", { name: "Explain schema" }),
+    )
+    await waitFor(() => expect(getByHook("retry-button")).toBeEnabled())
+
+    // When the user retries
+    vi.setSystemTime(Date.now() + 3000)
+    await userEvent.click(getByHook("retry-button"))
+
+    // Then the chat says the retry could not start and keeps the failed turn
+    expect(
+      await screen.findByText(
+        "Could not prepare the retry. The failed message was kept.",
+      ),
+    ).toBeVisible()
+    expect(schemaReads).toEqual([
+      "SHOW CREATE TABLE 'trades';",
+      "SHOW CREATE TABLE 'trades';",
+    ])
+    expect(server.requests).toHaveLength(1)
+    expect(getAllByHook("chat-message-user")).toHaveLength(1)
+    expect(getByHook("chat-message-error")).toBeVisible()
+    expect(getByHook("retry-button")).toBeEnabled()
+  })
 
   it("shows a recoverable error when the custom provider cannot be reached", async () => {
     // Given a configured provider with a failed HTTP connection
