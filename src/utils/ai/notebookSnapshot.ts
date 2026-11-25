@@ -96,6 +96,9 @@ export type NotebookContextCell = {
   refreshing?: true
   last_refresh_error?: string
   auto_refresh_blocked?: "contains_write"
+  // Live-only, draw cells: when the data the chart currently shows was
+  // fetched (epoch ms). Absent while no chart data is loaded.
+  refreshed_at?: number
   grid?: { x: number; y: number; w: number }
 }
 
@@ -173,6 +176,21 @@ const highlightConfigWire = (
 ): HighlightConfigWire | undefined =>
   cell.highlightConfig ? toHighlightConfigWire(cell.highlightConfig) : undefined
 
+// A draw cell's result is the chart frame loaded while the cell is on screen
+// (the live view keeps it; stored cells never carry one). Reporting when its
+// data was fetched lets an agent tell a drawn chart from one never loaded.
+const drawFrameFields = (
+  cell: NotebookCell,
+): Pick<NotebookContextCell, "refreshed_at"> => {
+  if (cell.mode !== "draw" || !cell.result) return {}
+  let fetchedAt: number | undefined
+  for (const result of cell.result.results) {
+    if (result.type !== "dql" || result.fetchedAt === undefined) continue
+    fetchedAt = Math.max(fetchedAt ?? 0, result.fetchedAt)
+  }
+  return fetchedAt === undefined ? {} : { refreshed_at: fetchedAt }
+}
+
 // Forwards ONLY status + trimmed error — no columns, rows, or counts.
 const lastRunSummary = (
   cell: NotebookCell,
@@ -246,6 +264,7 @@ const buildCell = (
     ...presentation,
     ...lastRunSummary(cell),
     ...refreshFields(refreshState?.get(cell.id)),
+    ...drawFrameFields(cell),
   }
   if (cell.value.length > PREVIEW_MAX) {
     out.preview_truncated = true
@@ -483,6 +502,8 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       )
     if (c.auto_refresh_blocked)
       lines.push(`      auto_refresh_blocked: ${c.auto_refresh_blocked}`)
+    if (c.refreshed_at !== undefined)
+      lines.push(`      refreshed_at: ${c.refreshed_at}`)
     if (c.grid) {
       lines.push(
         `      grid: { x: ${c.grid.x}, y: ${c.grid.y}, w: ${c.grid.w} }`,
@@ -591,6 +612,7 @@ export type NotebookCellSummary = {
   refreshing?: true
   last_refresh_error?: string
   auto_refresh_blocked?: "contains_write"
+  refreshed_at?: number
 }
 
 export type NotebookCellDetails = {
@@ -617,6 +639,7 @@ export type NotebookCellDetails = {
   refreshing?: true
   last_refresh_error?: string
   auto_refresh_blocked?: "contains_write"
+  refreshed_at?: number
 }
 
 export const summarizeCells = (
@@ -635,6 +658,7 @@ export const summarizeCells = (
       mode: agentCellPresentation(cell, resultStatusOf(cell.id)).mode,
       last_run_status: runStatusOf(cell).status,
       ...refreshFields(refreshState?.get(cell.id)),
+      ...drawFrameFields(cell),
     }
     if (cell.name) summary.name = cell.name
     if (cell.type === "markdown") summary.type = "markdown"
@@ -678,6 +702,7 @@ export const serializeCell = (
     result_height: dimensions.resultHeight,
     ...presentation,
     ...refreshFields(refreshState?.get(cell.id)),
+    ...drawFrameFields(cell),
   }
   if (truncated) {
     out.truncated = true

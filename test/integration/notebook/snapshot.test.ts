@@ -328,6 +328,57 @@ describe("buildSnapshot", () => {
     }
   })
 
+  it("reports when a drawn chart's data was fetched and never counts the chart as a run", async () => {
+    // Given a mounted draw cell showing a two-statement chart, never run
+    const drawn = sql("a", "SELECT 1;\nSELECT 2", {
+      mode: "draw",
+      result: {
+        results: [
+          {
+            type: "dql",
+            query: "SELECT 1",
+            columns: [],
+            dataset: [],
+            count: 0,
+            fetchedAt: 5,
+          },
+          {
+            type: "dql",
+            query: "SELECT 2",
+            columns: [],
+            dataset: [],
+            count: 0,
+            fetchedAt: 9,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 9,
+      },
+    })
+    const id = await seedNotebook({ cells: [drawn] })
+    registerController(makeController(id, [drawn]))
+
+    // When every read path reports it
+    const snap = await buildSnapshot(id)
+    const summary = summarizeCells([drawn], undefined, () => "unrequested")[0]
+    const details = serializeCell(
+      [drawn],
+      "a",
+      id,
+      false,
+      undefined,
+      "unrequested",
+    )
+
+    // Then each one gives the latest fetch time and no run status
+    const cell = snap?.status === "ok" ? snap.cells[0] : undefined
+    expect(cell).toMatchObject({ refreshed_at: 9, last_run_status: "none" })
+    expect(summary).toMatchObject({ refreshed_at: 9, last_run_status: "none" })
+    expect(details).toMatchObject({ refreshed_at: 9, last_run_status: "none" })
+    if (snap?.status === "ok")
+      expect(formatSnapshot(snap)).toContain("refreshed_at: 9")
+  })
+
   it("reports editor when the mounted cell's saved result is known missing", async () => {
     // Given a mounted cell that ran before but whose saved result is known missing
     const released = sql("a", "SELECT 1", {
