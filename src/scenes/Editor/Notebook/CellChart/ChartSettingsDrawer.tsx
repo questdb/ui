@@ -10,6 +10,10 @@ import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
 import { resolveQueryAxes, type QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
+  hasEnabledRightAxisQuery,
+  hasRightAxisLineWithoutQuery,
+} from "../../../../utils/tools/chartConfigWire"
+import {
   Field,
   FieldGroup,
   FieldLabel,
@@ -161,6 +165,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
     : null
   // A pie chart has no value axis to draw a line on.
   const hasValueAxis = primary != null && primary.type !== "pie"
+  const rightAxisDrawn = hasEnabledRightAxisQuery(draft.queries)
 
   const updateQuery = (index: number, patch: Partial<QueryChart>) =>
     updateDraft({
@@ -195,6 +200,17 @@ const ChartSettings: React.FC<SettingsProps> = ({
       setActiveIndex(badIdx)
       return
     }
+    const referenceLines = savedReferenceLines(draft.referenceLines)
+    // The same rule as the agent tools: a right line needs a right query. The
+    // lines editor shows why; with no value axis it is hidden, and no line is
+    // drawn anyway.
+    if (
+      hasValueAxis &&
+      hasRightAxisLineWithoutQuery({ queries: draft.queries, referenceLines })
+    ) {
+      telemetry?.onSaveBlocked?.("right_axis_line_without_query")
+      return
+    }
     telemetry?.onSave?.({
       chartType: primary?.type,
       seriesCount: primary?.yColumns.length ?? 0,
@@ -203,7 +219,6 @@ const ChartSettings: React.FC<SettingsProps> = ({
       partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
     })
     const { referenceLines: _lines, ...rest } = draft
-    const referenceLines = savedReferenceLines(draft.referenceLines)
     onSave({ ...rest, ...(referenceLines && { referenceLines }) })
     if (presentation === "drawer") onClose?.()
   }
@@ -287,7 +302,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
       {hasValueAxis && (
         <ReferenceLinesEditor
           lines={draft.referenceLines ?? []}
-          hasRightAxis={hasRight}
+          hasRightAxis={rightAxisDrawn}
           onChange={(referenceLines) =>
             updateDraft({ ...draft, referenceLines })
           }

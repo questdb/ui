@@ -1,10 +1,14 @@
-import React, { useRef } from "react"
+import React, { useId, useRef } from "react"
 import styled from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import { Button, IconButton, SelectMenuControl } from "../../../../components"
 import type { ReferenceLine, SeriesAxis } from "./chartTypes"
-import { FieldGroup, FieldLabel } from "./chartSettingsStyles"
-import { AddRow, CompactInput } from "../CellHighlight/highlightSettingsStyles"
+import { FieldGroup, FieldLabel, IncompatibleIcon } from "./chartSettingsStyles"
+import {
+  AddRow,
+  CompactInput,
+  StatusLine,
+} from "../CellHighlight/highlightSettingsStyles"
 
 const LineRow = styled.div`
   display: flex;
@@ -40,6 +44,7 @@ const valueField = (value: number) => (Number.isNaN(value) ? "" : value)
 
 type Props = {
   lines: ReferenceLine[]
+  // An enabled query draws on the right axis.
   hasRightAxis: boolean
   onChange: (lines: ReferenceLine[]) => void
 }
@@ -50,6 +55,14 @@ export const ReferenceLinesEditor: React.FC<Props> = ({
   hasRightAxis,
   onChange,
 }) => {
+  const undrawnNoteId = useId()
+  // A right line outlives its axis' query: its axis stays editable, flagged
+  // until the line moves left or a query returns to the right.
+  const hasRightLine = lines.some((line) => line.axis === "right")
+  const showAxis = hasRightAxis || hasRightLine
+  const undrawn = (line: ReferenceLine) =>
+    line.axis === "right" && !hasRightAxis
+
   // Lines carry no id of their own; the rows keep theirs while edited.
   const nextId = useRef(0)
   const ids = useRef<number[]>([])
@@ -91,11 +104,13 @@ export const ReferenceLinesEditor: React.FC<Props> = ({
               update(index, { label: e.target.value || undefined })
             }
           />
-          {hasRightAxis && (
+          {showAxis && (
             <AxisSelect>
               <SelectMenuControl
                 name={`reference-line-axis-${index}`}
                 ariaLabel={`Line ${index + 1} axis`}
+                ariaInvalid={undrawn(line) || undefined}
+                ariaDescribedBy={undrawn(line) ? undrawnNoteId : undefined}
                 value={line.axis ?? "left"}
                 onValueChange={(value) =>
                   update(index, {
@@ -118,6 +133,13 @@ export const ReferenceLinesEditor: React.FC<Props> = ({
           </IconButton>
         </LineRow>
       ))}
+      {hasRightLine && !hasRightAxis && (
+        <StatusLine id={undrawnNoteId}>
+          <IncompatibleIcon size={14} weight="fill" />
+          No enabled query is on the right axis, so a right-axis line cannot be
+          drawn. Put a query on the right axis, or draw the line on the left.
+        </StatusLine>
+      )}
       <AddRow>
         <Button
           type="button"

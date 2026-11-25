@@ -41,16 +41,20 @@ export const mapReferenceLines = (
     }))
 
 // A right-axis line is drawn in the units of the queries on that axis, so a
-// chart without one hides it. The tools refuse such a config instead of
-// reporting success for a line nobody sees.
+// chart without one hides it. The tools and the chart settings refuse such a
+// config instead of reporting success for a line nobody sees.
 export const RIGHT_AXIS_LINE_WITHOUT_QUERY =
   "a reference line uses the right axis, but no enabled query is on the right axis. Put a query on the right axis, or draw the line on the left."
+
+export const hasEnabledRightAxisQuery = (
+  queries: ChartConfig["queries"],
+): boolean => queries.some((q) => q?.axis === "right" && q.enabled !== false)
 
 export const hasRightAxisLineWithoutQuery = (
   config: Pick<ChartConfig, "queries" | "referenceLines">,
 ): boolean =>
   (config.referenceLines ?? []).some((line) => line.axis === "right") &&
-  !config.queries.some((q) => q?.axis === "right" && q.enabled !== false)
+  !hasEnabledRightAxisQuery(config.queries)
 
 export const mapQueryChart = (q: ToolQueryChart): QueryChart => {
   const out: QueryChart = { type: q.type, yColumns: q.y_columns ?? [] }
