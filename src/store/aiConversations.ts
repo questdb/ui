@@ -1,4 +1,4 @@
-import { db, ConversationMeta } from "./db"
+import { db, ConversationMeta, PersistedMessageImages } from "./db"
 import { compressMessages, decompressMessages } from "./compression"
 import type {
   AIConversation,
@@ -6,17 +6,62 @@ import type {
   ConversationId,
 } from "../providers/AIConversationProvider/types"
 
+const conversationImages = (conversationId: ConversationId) =>
+  db.ai_message_images.where("conversationId").equals(conversationId)
+
+// Images stay out of the compressed transcript, in a row per message. A
+// message's images never change once it is sent, so a save writes only the
+// rows it does not find, and drops those of messages no longer in the chat.
+const putMessages = async (
+  conversationId: ConversationId,
+  messages: ConversationMessage[],
+) => {
+  const storedKeys = await conversationImages(conversationId).primaryKeys()
+  const stored = new Set(storedKeys.map(([, messageId]) => messageId))
+  const withImages = new Set<string>()
+  const newRows: PersistedMessageImages[] = []
+  const transcript = messages.map((message) => {
+    if (!message.images?.length) return message
+    const { images, ...rest } = message
+    withImages.add(message.id)
+    if (!stored.has(message.id))
+      newRows.push({ conversationId, messageId: message.id, images })
+    return rest
+  })
+  await db.ai_message_images.bulkDelete(
+    storedKeys.filter(([, messageId]) => !withImages.has(messageId)),
+  )
+  await db.ai_message_images.bulkPut(newRows)
+  await db.ai_conversation_messages.put({
+    conversationId,
+    data: compressMessages(transcript),
+  })
+}
+
 export const aiConversationStore = {
   getAllMetas: () => db.ai_conversations.toArray(),
 
   getMeta: (conversationId: ConversationId) =>
     db.ai_conversations.get(conversationId),
 
-  async getMessages(
-    conversationId: ConversationId,
-  ): Promise<ConversationMessage[]> {
-    const record = await db.ai_conversation_messages.get(conversationId)
-    return record ? decompressMessages(record.data) : []
+  getMessages(conversationId: ConversationId): Promise<ConversationMessage[]> {
+    return db.transaction(
+      "r",
+      db.ai_conversation_messages,
+      db.ai_message_images,
+      async () => {
+        const record = await db.ai_conversation_messages.get(conversationId)
+        if (!record) return []
+        const imageRows = await conversationImages(conversationId).toArray()
+        const imagesByMessage = new Map(
+          imageRows.map(({ messageId, images }) => [messageId, images]),
+        )
+        return decompressMessages(record.data).map((message) => {
+          const images = imagesByMessage.get(message.id)
+          return images ? { ...message, images } : message
+        })
+      },
+    )
   },
 
   saveMeta: (meta: ConversationMeta) => db.ai_conversations.put(meta),
@@ -31,6 +76,7 @@ export const aiConversationStore = {
       "rw",
       db.ai_conversations,
       db.ai_conversation_messages,
+      db.ai_message_images,
       async () => {
         const updated = await db.ai_conversations.update(conversationId, {
           hasMessages,
@@ -38,10 +84,7 @@ export const aiConversationStore = {
         })
         // A late save must not recreate a deleted conversation's transcript.
         if (!updated) return
-        await db.ai_conversation_messages.put({
-          conversationId,
-          data: compressMessages(messages),
-        })
+        await putMessages(conversationId, messages)
       },
     )
   },
@@ -53,12 +96,10 @@ export const aiConversationStore = {
       "rw",
       db.ai_conversations,
       db.ai_conversation_messages,
+      db.ai_message_images,
       async () => {
         await db.ai_conversations.put(meta)
-        await db.ai_conversation_messages.put({
-          conversationId: conversation.id,
-          data: compressMessages(messages),
-        })
+        await putMessages(conversation.id, messages)
       },
     )
   },
@@ -68,9 +109,11 @@ export const aiConversationStore = {
       "rw",
       db.ai_conversations,
       db.ai_conversation_messages,
+      db.ai_message_images,
       async () => {
         await db.ai_conversations.delete(conversationId)
         await db.ai_conversation_messages.delete(conversationId)
+        await conversationImages(conversationId).delete()
       },
     ),
 

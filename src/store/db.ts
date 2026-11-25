@@ -29,6 +29,7 @@ import { makeBuffer, fallbackBuffer } from "./buffers"
 import { StoreKey } from "../utils/localStorage/types"
 import { getValue } from "../utils/localStorage"
 import type { AIConversation } from "../providers/AIConversationProvider/types"
+import type { AgentPromptImage } from "../utils/localAgent/protocol"
 import type { NotebookResultSnapshot } from "./notebookResults"
 
 type EditorSettings = {
@@ -45,12 +46,19 @@ export type PersistedMessages = {
   data: Uint8Array
 }
 
+export type PersistedMessageImages = {
+  conversationId: string
+  messageId: string
+  images: AgentPromptImage[]
+}
+
 export class Storage extends Dexie {
   buffers!: Table<Buffer, number>
   editor_settings!: Table<EditorSettings, number>
   read_notifications!: Table<{ newsId: string }, number>
   ai_conversations!: Table<ConversationMeta, string>
   ai_conversation_messages!: Table<PersistedMessages, string>
+  ai_message_images!: Table<PersistedMessageImages, [string, string]>
   events!: Table<
     { id?: number; created: number; name: string; props?: string },
     number
@@ -118,6 +126,11 @@ export class Storage extends Dexie {
     // import/export buffer compatibility below is unaffected.
     this.version(9).stores({
       notebook_results: "[bufferId+cellId], bufferId, savedAt",
+    })
+    // The images a chat message carries, outside its compressed transcript,
+    // so that saving the chat does not recompress every image in it.
+    this.version(10).stores({
+      ai_message_images: "[conversationId+messageId], conversationId",
     })
     // ──────────────────────────────────────────────────────────────────
     // ⚠️ IMPORTANT — Import/Export compatibility (https://github.com/dexie/Dexie.js/issues/1337)

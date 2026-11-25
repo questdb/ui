@@ -213,6 +213,7 @@ beforeEach(async () => {
   sessionStorage.clear()
   await db.ai_conversations.clear()
   await db.ai_conversation_messages.clear()
+  await db.ai_message_images.clear()
   Element.prototype.scrollIntoView = vi.fn()
   vi.stubGlobal(
     "ResizeObserver",

@@ -215,6 +215,7 @@ export const mountSchema = async () => {
   await Promise.all([
     db.ai_conversations.clear(),
     db.ai_conversation_messages.clear(),
+    db.ai_message_images.clear(),
   ])
   render(
     <ThemeProvider theme={darkTheme}>
