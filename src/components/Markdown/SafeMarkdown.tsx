@@ -16,10 +16,12 @@ import remarkGfm from "remark-gfm"
 //   - No raw HTML: react-markdown@10 escapes raw HTML by default and we never
 //     add rehype-raw, so embedded <script>/<img onerror> stay inert text.
 //   - Safe links: http(s) links open in a new tab with rel="noopener
-//     noreferrer"; other protocols are passed through react-markdown's default
-//     urlTransform (which neutralizes javascript: etc.). That default also
-//     drops data: and file: URLs, so image sources keep data:image/ and
-//     file: explicitly; a file: source is never loaded, only named.
+//     noreferrer"; tel: links are kept; other protocols are passed through
+//     react-markdown's default urlTransform, which empties javascript: and
+//     other unsafe URLs. An emptied link renders without an href, so a click
+//     does nothing instead of reloading the console. The default also drops
+//     data: and file: URLs, so image sources keep data:image/ and file:
+//     explicitly; a file: source is never loaded, only named.
 //   - Images off by default: dropped entirely unless allowImages is set, in
 //     which case only http(s)/data:image sources render. allowImages="inline"
 //     renders data:image sources only and links remote ones, so text a model
@@ -85,23 +87,17 @@ const isDataImage = (value: string) => /^data:image\//i.test(value)
 const isSafeImageSrc = (value?: string): value is string =>
   isHttpUrl(value) || (typeof value === "string" && isDataImage(value))
 
-// urlTransform empties the URL of a link it does not allow (javascript:,
-// tel: and the like). Such a link is shown as text: an empty href would
-// reload the console when clicked.
-const SafeLink = ({ children, href, ...props }: React.ComponentProps<"a">) =>
-  href ? (
-    <a
-      href={href}
-      {...(isHttpUrl(href)
-        ? { target: "_blank", rel: "noopener noreferrer" }
-        : {})}
-      {...props}
-    >
-      {children}
-    </a>
-  ) : (
-    <>{children}</>
-  )
+const SafeLink = ({ children, href, ...props }: React.ComponentProps<"a">) => (
+  <a
+    href={href || undefined}
+    {...(isHttpUrl(href)
+      ? { target: "_blank", rel: "noopener noreferrer" }
+      : {})}
+    {...props}
+  >
+    {children}
+  </a>
+)
 
 const SafeImage = ({
   src: rawSrc,
@@ -117,7 +113,7 @@ const SafeImage = ({
 const DropImage = () => null
 
 const isWebLink = (href: string): boolean =>
-  /^(https?:|mailto:)/i.test(href) || href.startsWith("#")
+  /^(https?:|mailto:|tel:)/i.test(href) || href.startsWith("#")
 
 const InlineLink = (props: React.ComponentProps<"a">) => {
   const { href, children } = props
@@ -174,10 +170,11 @@ const fileNameOf = (src: string): string => {
   }
 }
 
-const urlTransform: UrlTransform = (url, key) =>
-  key === "src" && (isDataImage(url) || /^file:/i.test(url))
-    ? url
-    : defaultUrlTransform(url)
+const urlTransform: UrlTransform = (url, key) => {
+  if (key === "src" && (isDataImage(url) || /^file:/i.test(url))) return url
+  if (key === "href" && /^tel:/i.test(url)) return url
+  return defaultUrlTransform(url)
+}
 
 // Chat also keeps file: links, which it shows as text and never opens.
 const inlineUrlTransform: UrlTransform = (url, key, node) =>

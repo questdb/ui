@@ -32,7 +32,7 @@ const AdapterRoot = styled.div<{ $visible: boolean }>`
   min-height: 0;
 `
 
-export type DqlResultInput = {
+type DqlResultInput = {
   columns: ColumnDefinition[]
   dataset: ResultGridRow[]
   count: number

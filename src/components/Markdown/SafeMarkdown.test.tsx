@@ -145,15 +145,32 @@ describe("SafeMarkdown", () => {
   it.each([
     ["javascript:alert(1)", false],
     ["vbscript:msgbox", true],
-    ["tel:+15551234", "inline"],
+    ["javascript:alert(1)", "inline"],
   ] as const)(
-    "shows a %s link as plain text (allowImages: %s)",
+    "renders a %s link inert, without an href (allowImages: %s)",
     (url, allowImages) => {
       // When
       const html = render(`[call me](${url})`, allowImages)
 
-      // Then an empty href would reload the console when clicked
-      expect(html).toBe("<p>call me</p>")
+      // Then a click does nothing: an empty href would reload the console
+      expect(html).toMatch(/<a(?![^>]*\shref=)[^>]*>call me<\/a>/)
+    },
+  )
+
+  // An empty href would navigate to the current page and reload the console.
+  it.each(["javascript:alert(1)", "file:///etc/hosts", "vscode://file/x"])(
+    "renders a link to %s without an href",
+    (url) => {
+      expect(render(`[x](${url})`)).toMatch(/<a(?![^>]*\shref=)[^>]*>x<\/a>/)
+    },
+  )
+
+  it.each([false, true, "inline"] as const)(
+    "keeps tel: links (allowImages: %s)",
+    (allowImages) => {
+      expect(render("[call](tel:+15551234)", allowImages)).toContain(
+        'href="tel:+15551234"',
+      )
     },
   )
 

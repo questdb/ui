@@ -1829,7 +1829,7 @@ __metadata:
     react-redux: "npm:9.3.1"
     react-toastify: "npm:^11.2.0"
     react-transition-group: "npm:4.4.1"
-    react-virtuoso: "npm:^2.2.6"
+    react-virtuoso: "npm:^4.18.24"
     redux: "npm:5.0.1"
     redux-observable: "npm:3.0.0-rc.3"
     remark-gfm: "npm:^4.0.1"
@@ -3430,24 +3430,6 @@ __metadata:
   version: 1.4.0
   resolution: "@ungap/structured-clone@npm:1.4.0"
   checksum: 10/dee21ff372783fa1d4defba14ffdaf5133a27804032261a61293fa75331d1e6c8d137d95e00f5f19a53e580d689f9c8608542f9fc854cd0706bd395a0b55f5b1
-  languageName: node
-  linkType: hard
-
-"@virtuoso.dev/react-urx@npm:^0.2.12":
-  version: 0.2.13
-  resolution: "@virtuoso.dev/react-urx@npm:0.2.13"
-  dependencies:
-    "@virtuoso.dev/urx": "npm:^0.2.13"
-  peerDependencies:
-    react: ">=16"
-  checksum: 10/75ec098a991807b6e963e642c16a9fb03fc25bdfb7e1d46d845f2f912362b2652ec5e22a79c563c9d77548b0345262eca4238585e8f9402077a909657208c933
-  languageName: node
-  linkType: hard
-
-"@virtuoso.dev/urx@npm:^0.2.12, @virtuoso.dev/urx@npm:^0.2.13":
-  version: 0.2.13
-  resolution: "@virtuoso.dev/urx@npm:0.2.13"
-  checksum: 10/9dec1fec47f8cc2eac95f6a2962e5c46468482fc333f8e85f779aef08fbbbedd298c30fe6647b4873df48cf7c85657c73e9f4e414cd78b832307ba901dbc5dfc
   languageName: node
   linkType: hard
 
@@ -9867,15 +9849,15 @@ __metadata:
   linkType: hard
 
 "react-resizable@npm:^3.1.3":
-  version: 3.1.3
-  resolution: "react-resizable@npm:3.1.3"
+  version: 3.2.0
+  resolution: "react-resizable@npm:3.2.0"
   dependencies:
     prop-types: "npm:15.x"
     react-draggable: "npm:^4.5.0"
   peerDependencies:
     react: ">= 16.3"
     react-dom: ">= 16.3"
-  checksum: 10/bc7126fabbd2f0ba422fa0da77fcfcebf2b4f28141d3faf02067632d258e345bc5f63891f9d5eca0e9ea31dc461b74ec69073a18f905b25bdd392ca6283577f9
+  checksum: 10/fb0a7de795107f2d0e854c7ceb53a666ff85bf98cc75735a21f931aa52684740aabf55cf30085ac000f816173d076c69d611858e4d4577d001a56796ec0e7e32
   languageName: node
   linkType: hard
 
@@ -9922,16 +9904,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-virtuoso@npm:^2.2.6":
-  version: 2.19.1
-  resolution: "react-virtuoso@npm:2.19.1"
-  dependencies:
-    "@virtuoso.dev/react-urx": "npm:^0.2.12"
-    "@virtuoso.dev/urx": "npm:^0.2.12"
+"react-virtuoso@npm:^4.18.24":
+  version: 4.18.24
+  resolution: "react-virtuoso@npm:4.18.24"
   peerDependencies:
-    react: ">=16 || >=17 || >= 18"
-    react-dom: ">=16 || >=17 || >= 18"
-  checksum: 10/fe601913b9d61cd97d80859124c5b4408238183f4354d2e2832df74ae01d52ce925f4aa2ce574c46b25239b607d191c86f3653d5481961bf3c133f9d962a7aef
+    react: ">=16 || >=17 || >= 18 || >= 19"
+    react-dom: ">=16 || >=17 || >= 18 || >=19"
+  checksum: 10/ab129f241e40397bf55e46b273c3d356afb0894fdf8f6cfeace9cd9ea713dd2696e7493daadd7e78560e2e44c3e657986ef4454446adb56af6f7ffddb8ce1a1b
   languageName: node
   linkType: hard
 

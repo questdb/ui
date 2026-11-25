@@ -60,19 +60,6 @@ body {
   height: 100%;
 }
 
-body #wrapper {
-  height: calc(100% - 4rem);
-}
-
-.block {
-  display: block;
-}
-
-.clear {
-  display: block;
-  overflow: hidden;
-}
-
 a {
   cursor: pointer;
 }
@@ -100,23 +87,6 @@ video {
   height: auto !important;
 }
 
-/* WRAPPERS */
-
-#wrapper {
-  width: 100%;
-  overflow-x: hidden;
-}
-
-.wrapper {
-  padding: 0 20px;
-}
-
-ul.unstyled,
-ol.unstyled {
-  list-style: none outside none;
-  margin-left: 0;
-}
-
 /* FOOTER */
 
 #footer {
@@ -130,75 +100,6 @@ ol.unstyled {
   border-top: 1px solid theme-color(borderSubtle);
 }
 
-.footer.fixed {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  padding: 10px 20px;
-  background: theme-color(contentPrimary);
-  border-top: 1px solid $border-color;
-  margin-left: $sidebar-width;
-}
-
-body.mini-navbar .footer.fixed {
-  margin: 0 0 0 70px;
-}
-
-/* TABLES */
-
-.table > thead > tr > th {
-  border-bottom: 1px solid theme-color(contentSecondary);
-  vertical-align: bottom;
-}
-
-.table > thead > tr > th,
-.table > tbody > tr > th,
-.table > tfoot > tr > th,
-.table > thead > tr > td,
-.table > tbody > tr > td,
-.table > tfoot > tr > td {
-  border-top: 1px solid $border-color;
-  line-height: 1.42857;
-  padding: 8px;
-  vertical-align: top;
-}
-
-/* GLOBAL  */
-
-.border-left {
-  border-left: 1px solid $border-color;
-  border-right: none;
-  border-top: none;
-  border-bottom: none;
-}
-
-.border-right {
-  border-left: none;
-  border-right: 1px solid $border-color;
-  border-top: none;
-  border-bottom: none;
-}
-
-.full-width {
-  width: 100% !important;
-}
-
-.breadcrumb {
-  background-color: theme-color(contentInverse);
-  padding: 0;
-  margin-bottom: 0;
-}
-
-.breadcrumb > li a {
-  color: inherit;
-}
-
-.breadcrumb > .active {
-  color: inherit;
-}
-
 code {
   background-color: theme-color(statusDangerSurface);
   border-radius: 4px;
@@ -206,26 +107,6 @@ code {
   font-size: 90%;
   padding: 2px 4px;
   white-space: nowrap;
-}
-
-.unread td a,
-.unread td {
-  font-weight: 600;
-  color: inherit;
-}
-
-.read td a,
-.read td {
-  font-weight: normal;
-  color: inherit;
-}
-
-.unread td {
-  background-color: theme-color(contentPrimary);
-}
-
-.block {
-  display: block !important;
 }
 
 label {

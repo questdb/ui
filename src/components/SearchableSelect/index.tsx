@@ -46,6 +46,9 @@ type Props<O extends SearchableSelectOption> = {
   dataHookBase?: string
   ariaLabel?: string
   ariaInvalid?: boolean
+  // When false, only listed options can be picked: typing filters but
+  // never offers to add the typed name.
+  allowCreate?: boolean
 }
 
 const ITEM_HEIGHT_REM = 3.2
@@ -189,17 +192,24 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
   dataHookBase = "searchable-select",
   ariaLabel,
   ariaInvalid,
+  allowCreate = true,
 }: Props<O>) => {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
+  // Selection captured when the menu opens. It is listed first and keeps its
+  // place while the menu is open, so toggling never moves rows under the
+  // pointer.
+  const [pinned, setPinned] = useState<string[]>([])
   const [listId] = useState(() => `searchable-select-${++nextId}`)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<VirtuosoHandle>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const multiple = selectedValues !== undefined
   const hasSelection = multiple ? selectedValues.length > 0 : value !== ""
-  const inputPlaceholder = `${searchPlaceholder} (Enter to add)`
+  const inputPlaceholder = allowCreate
+    ? `${searchPlaceholder} (Enter to add)`
+    : searchPlaceholder
   const isSelected = (item: ListItem<O>) =>
     !item.create &&
     (selectedValues
@@ -225,10 +235,19 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
       .map((name) => ({ label: name, value: name, option: null }))
     const all = [...custom, ...sorted]
     const trimmed = query.trim()
-    if (!trimmed) return all
+    if (!trimmed) {
+      if (!multiple || pinned.length === 0) return all
+      const pinnedSet = new Set(pinned)
+      const top = pinned.flatMap((name) => {
+        const item = all.find((entry) => entry.value === name)
+        return item ? [item] : []
+      })
+      const rest = all.filter((entry) => !pinnedSet.has(entry.value))
+      return [...top, ...rest]
+    }
     const q = trimmed.toLowerCase()
     const matches = all.filter((item) => item.label.toLowerCase().includes(q))
-    if (!all.some((item) => item.label === trimmed)) {
+    if (allowCreate && !all.some((item) => item.label === trimmed)) {
       matches.unshift({
         label: trimmed,
         value: trimmed,
@@ -237,9 +256,10 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
       })
     }
     return matches
-  }, [options, selectedValues, multiple, value, query])
+  }, [options, selectedValues, multiple, value, query, allowCreate, pinned])
 
   const changeOpen = (nextOpen: boolean) => {
+    if (nextOpen) setPinned(selectedValues ?? [])
     setOpen(nextOpen)
     setQuery("")
     setFocusedIndex(null)
@@ -262,6 +282,12 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
       changeOpen(false)
     }
   }
+
+  // A single selection is not pinned; opening scrolls to it instead.
+  const selectedIndex =
+    !multiple && query === ""
+      ? filtered.findIndex((item) => !item.create && item.label === value)
+      : -1
 
   useEffect(() => {
     if (open) {
@@ -430,11 +456,16 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
               ) : (
                 <Virtuoso
                   ref={listRef}
+                  initialTopMostItemIndex={
+                    selectedIndex > 0
+                      ? { index: selectedIndex, align: "center" }
+                      : 0
+                  }
                   fixedItemHeight={
                     ITEM_HEIGHT_REM *
-                    parseFloat(
+                    (parseFloat(
                       getComputedStyle(document.documentElement).fontSize,
-                    )
+                    ) || 16)
                   }
                   data={filtered}
                   computeItemKey={(_index, item) =>

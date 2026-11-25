@@ -131,6 +131,11 @@ export const ToastContainer = (props?: ToastContainerProps) => {
     closeOnClick: true,
     pauseOnHover: true,
     pauseOnFocusLoss: false,
+    // react-toastify's default Alt+T focuses the toasts, but Alt+T adds an
+    // editor tab here. Outside the SQL editor it would move the user's focus.
+    // The default label announces that shortcut, so it goes too.
+    hotKeys: () => false,
+    "aria-label": "Notifications",
     ...props,
   }
 

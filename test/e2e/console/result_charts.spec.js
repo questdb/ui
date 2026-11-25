@@ -44,10 +44,12 @@ describe("questdb charts", () => {
     cy.getByDataHook("chart-settings-panel")
       .find('button[aria-label^="Series"]')
       .click()
-    cy.contains('[role="menuitemcheckbox"]', "x")
-      .should("have.attr", "data-state", "checked")
-      .and("have.attr", "aria-checked", "true")
-    cy.get("body").type("{esc}")
+    cy.contains('[role="option"]', "x").should(
+      "have.attr",
+      "aria-selected",
+      "true",
+    )
+    cy.getByDataHook("chart-series-input").type("{esc}")
 
     cy.getByDataHook("chart-settings-panel")
       .find('button[aria-label^="Chart type"]')
