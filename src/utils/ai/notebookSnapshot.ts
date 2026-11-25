@@ -52,6 +52,10 @@ import {
   toHighlightConfigWire,
   type HighlightConfigWire,
 } from "../tools/highlightConfigWire"
+import {
+  storedVariableToWire,
+  type NotebookVariableWire,
+} from "../tools/variablesWire"
 
 export type { HighlightConfigWire }
 
@@ -104,8 +108,9 @@ export type NotebookContextSnapshot =
       // Absent when the notebook has no configured default.
       auto_refresh_default?: AutoRefresh
       maximized_cell_id: string | null
-      variables?: NotebookVariable[]
-      global_variables?: NotebookVariable[]
+      // Same wire shape apply_notebook_state / apply_global_variables accept.
+      variables?: NotebookVariableWire[]
+      global_variables?: NotebookVariableWire[]
       variable_values?: VariableValuesStatus[]
       time_range?: TimeRange
       cells: NotebookContextCell[]
@@ -320,11 +325,11 @@ export const buildSnapshot = async (
   }
   const variables = normalizeVariables(settings.variables)
   if (variables.length > 0) {
-    out.variables = variables
+    out.variables = variables.map(storedVariableToWire)
   }
   const globals = normalizeVariables((await getNotebookGlobals())?.variables)
   if (globals.length > 0) {
-    out.global_variables = globals
+    out.global_variables = globals.map(storedVariableToWire)
   }
   const values = variableValuesStatus(
     variables,
@@ -350,22 +355,20 @@ const variableValuesStatus = (
       : { name, fetched: false }
   })
 
-const describeVariable = (variable: NotebookVariable): string => {
-  switch (variable.kind) {
-    case "expression":
-      return JSON.stringify(sanitizeForPromptContext(variable.value))
-    case "text":
-      return `text ${JSON.stringify(sanitizeForPromptContext(variable.value))}`
-    case "list": {
-      const selected =
-        variable.selected === "all"
-          ? "all"
-          : JSON.stringify(
-              variable.selected.map((o) => sanitizeForPromptContext(o.value)),
-            )
-      return `list ${selected}${variable.multi ? " (multi)" : ""}`
-    }
+const describeVariable = (variable: NotebookVariableWire): string => {
+  if (variable.kind === "list") {
+    const selected =
+      variable.selected === "all"
+        ? "all"
+        : JSON.stringify(
+            (variable.selected ?? []).map((o) =>
+              sanitizeForPromptContext(o.value),
+            ),
+          )
+    return `list ${selected}${variable.multi ? " (multi)" : ""}`
   }
+  const value = JSON.stringify(sanitizeForPromptContext(variable.value ?? ""))
+  return variable.kind === "text" ? `text ${value}` : value
 }
 
 // YAML-ish shape — stable regardless of escape characters in cell values.
@@ -407,7 +410,7 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
   const values = new Map(
     (snap.variable_values ?? []).map((status) => [status.name, status]),
   )
-  const describeWithValues = (variable: NotebookVariable): string => {
+  const describeWithValues = (variable: NotebookVariableWire): string => {
     const status = values.get(variable.name)
     if (!status) return describeVariable(variable)
     const suffix =

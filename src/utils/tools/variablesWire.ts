@@ -86,3 +86,5 @@ export const storedVariableToWire = (variable: NotebookVariable) => ({
       : null,
   selected: variable.kind === "list" ? variable.selected : null,
 })
+
+export type NotebookVariableWire = ReturnType<typeof storedVariableToWire>

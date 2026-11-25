@@ -25,9 +25,16 @@ import type { ViewParts } from "../../../src/utils/notebooks/notebookDexieView"
 import type {
   NotebookCell,
   NotebookSettings,
+  NotebookVariable,
   SingleQueryResult,
 } from "../../../src/store/notebook"
 import { db } from "../../../src/store/db"
+import {
+  getNotebookGlobals,
+  saveNotebookGlobals,
+} from "../../../src/store/notebookGlobals"
+import { ALL_DEFINITIONS } from "../../../src/utils/tools/tools"
+import { toolInputViolations } from "../../../src/test/toolSchema"
 import {
   loadCellSnapshot,
   loadSnapshotCellIds,
@@ -4996,5 +5003,191 @@ describe("dispatchTool — query-list variable values", () => {
       buffer_id: 1,
       variable_values: fetched,
     })
+  })
+})
+
+describe("dispatchTool — variables read back unchanged", () => {
+  const locals: NotebookVariable[] = [
+    {
+      name: "from_ts",
+      kind: "expression",
+      label: "From",
+      description: "Window start",
+      value: "dateadd('d', -7, now())",
+    },
+    { name: "venue", kind: "text", value: "'LSE'" },
+    {
+      name: "pair",
+      kind: "list",
+      label: "Pair",
+      source: {
+        type: "query",
+        query: "SELECT DISTINCT symbol, name FROM fx_trades",
+        labelColumn: "name",
+        regex: "^EUR",
+      },
+      sort: "alphaAsc",
+      multi: true,
+      includeAll: true,
+      all: { mode: "custom", value: "'%'" },
+      selected: [{ value: "'EURUSD'", label: "Euro" }],
+    },
+    {
+      name: "side",
+      kind: "list",
+      source: { type: "custom", entries: "'buy' as Buy, 'sell' as Sell" },
+      sort: "none",
+      multi: false,
+      includeAll: false,
+      all: { mode: "list" },
+      selected: [{ value: "'buy'", label: "Buy" }],
+    },
+  ]
+  const globals: NotebookVariable[] = [
+    { name: "g_limit", kind: "expression", value: "100" },
+    {
+      name: "g_venue",
+      kind: "list",
+      source: {
+        type: "query",
+        query: "SELECT DISTINCT venue FROM fx_trades",
+      },
+      sort: "none",
+      multi: true,
+      includeAll: true,
+      all: { mode: "list" },
+      selected: "all",
+    },
+  ]
+
+  const readState = async () => {
+    const res = await dispatchTool(
+      "get_notebook_state",
+      { buffer_id: 1 },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    expect(res.is_error).toBeUndefined()
+    return JSON.parse(res.content) as {
+      variables: unknown[]
+      global_variables: unknown[]
+    }
+  }
+
+  beforeEach(() => {
+    registerNotebookAgentDeps({
+      getQuest: () =>
+        ({
+          validateQuery: (query: string) =>
+            Promise.resolve({ query, columns: [], timestamp: -1 }),
+          queryRaw: () => ({
+            queryId: "q",
+            promise: Promise.resolve({
+              type: "dql",
+              columns: [
+                { name: "symbol", type: "SYMBOL" },
+                { name: "name", type: "STRING" },
+              ],
+              dataset: [["EURUSD", "Euro"]],
+              count: 1,
+            }),
+          }),
+          abort: () => undefined,
+        }) as unknown as Client,
+    })
+  })
+
+  it("apply_notebook_state accepts the variables get_notebook_state returns", async () => {
+    // Given a notebook with every variable kind and source, fully configured
+    const nb = mountLive(1, [cell("a", "SELECT 1")], {
+      settings: { variables: locals },
+    })
+    const { variables } = await readState()
+
+    // When the agent sends the variables back exactly as it read them
+    const input = {
+      buffer_id: 1,
+      layout_mode: null,
+      auto_refresh_default: null,
+      maximized_cell_id: null,
+      time_range: null,
+      variables,
+      cells: [
+        {
+          id: "a",
+          name: null,
+          value: null,
+          preserve_value: true,
+          type: null,
+          mode: null,
+          auto_refresh: null,
+          time_range: null,
+          time_shift: null,
+          show_time_range: null,
+          editor_height: null,
+          result_height: null,
+          view: null,
+          chart_config: null,
+          grid: null,
+          highlight_config: null,
+        },
+      ],
+    }
+    const violations = toolInputViolations("apply_notebook_state", input)
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      input,
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the tool schema accepts them and the stored variables are unchanged
+    expect(violations).toEqual([])
+    expect(res.is_error).toBeUndefined()
+    expect(nb.state.parts.settings.variables).toEqual(locals)
+  })
+
+  it("apply_global_variables accepts the global_variables get_notebook_state returns", async () => {
+    // Given workspace globals with an expression and a query list
+    await saveNotebookGlobals(globals)
+    mountLive(1, [cell("a", "SELECT 1")])
+    const { global_variables } = await readState()
+    const { revision } = JSON.parse(
+      (
+        await dispatchTool(
+          "get_global_variables",
+          {},
+          makeClient(),
+          noopStatus,
+          ALL_GRANTED,
+          dqlValidator,
+        )
+      ).content,
+    ) as { revision: number }
+
+    // When the agent sends the globals back exactly as it read them
+    const input = {
+      variables: global_variables,
+      expected_revision: revision,
+      time_range: null,
+    }
+    const violations = toolInputViolations("apply_global_variables", input)
+    const res = await dispatchTool(
+      "apply_global_variables",
+      input,
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the tool schema accepts them and the stored globals are unchanged
+    expect(violations).toEqual([])
+    expect(res.is_error).toBeUndefined()
+    expect((await getNotebookGlobals())?.variables).toEqual(globals)
   })
 })

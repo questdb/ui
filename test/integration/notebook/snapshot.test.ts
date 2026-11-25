@@ -40,6 +40,21 @@ const sql = (
   ...overrides,
 })
 
+// The wire shape apply_notebook_state accepts: every field, null when unused.
+const expressionWire = (name: string, value: string) => ({
+  name,
+  kind: "expression",
+  label: null,
+  description: null,
+  value,
+  source: null,
+  sort: null,
+  multi: null,
+  include_all: null,
+  all: null,
+  selected: null,
+})
+
 const makeController = (
   bufferId: number,
   cells: NotebookCell[],
@@ -220,8 +235,8 @@ describe("buildSnapshot", () => {
     // Then
     if (snap?.status !== "ok") throw new Error("expected an ok snapshot")
     expect(snap.global_variables).toEqual([
-      { name: "sym", kind: "expression", value: "'EURUSD'" },
-      { name: "venue", kind: "expression", value: "'LSE'" },
+      expressionWire("sym", "'EURUSD'"),
+      expressionWire("venue", "'LSE'"),
     ])
     expect(formatSnapshot(snap)).toContain("global_variables")
   })
@@ -610,8 +625,8 @@ describe("buildSnapshot", () => {
     const b = await buildSnapshot(withoutVarsId)
     if (a?.status === "ok" && b?.status === "ok") {
       expect(a.variables).toEqual([
-        { name: "x", kind: "expression", value: "10" },
-        { name: "sym", kind: "expression", value: "'BTC'" },
+        expressionWire("x", "10"),
+        expressionWire("sym", "'BTC'"),
       ])
       expect(b.variables).toBeUndefined()
     } else {

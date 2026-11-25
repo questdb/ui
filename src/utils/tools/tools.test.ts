@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
-import { aiTools } from "./tools"
+import { toolInputValidator } from "../../test/toolSchema"
+import { ALL_DEFINITIONS, aiTools } from "./tools"
 
 type SchemaNode = {
   type?: unknown
@@ -7,6 +8,9 @@ type SchemaNode = {
   required?: string[]
   additionalProperties?: unknown
   items?: SchemaNode
+  anyOf?: SchemaNode[]
+  oneOf?: SchemaNode[]
+  allOf?: SchemaNode[]
 }
 
 const isObjectNode = (node: SchemaNode): boolean =>
@@ -33,6 +37,11 @@ const collectViolations = (
   }
 
   if (node.items) collectViolations(`${path}.items`, node.items, out)
+  for (const keyword of ["anyOf", "oneOf", "allOf"] as const) {
+    node[keyword]?.forEach((branch, i) =>
+      collectViolations(`${path}.${keyword}[${i}]`, branch, out),
+    )
+  }
   for (const key of Object.keys(node.properties ?? {})) {
     collectViolations(`${path}.${key}`, node.properties![key], out)
   }
@@ -46,4 +55,15 @@ describe("AI tool schemas satisfy OpenAI strict mode", () => {
     }
     expect(violations).toEqual([])
   })
+})
+
+describe("tool input schemas", () => {
+  it.each(ALL_DEFINITIONS.map((tool) => tool.name))(
+    "%s compiles under strict JSON Schema validation",
+    (name) => {
+      // Strict mode throws on any keyword the validator does not implement, so
+      // tests that validate inputs against these schemas never skip a rule.
+      expect(() => toolInputValidator(name)).not.toThrow()
+    },
+  )
 })
