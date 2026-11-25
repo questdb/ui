@@ -227,7 +227,11 @@ describe("dispatch — failed steps", () => {
       { failed?: string },
     ]
     expect(failedStatus).toBe(AIOperationStatus.RetrievingTables)
-    expect(failedArgs.failed).toBe(res.content)
+    // The step shows the refusal; asking the user is the model's part.
+    expect(failedArgs.failed).toBe(
+      "PERMISSION_DENIED: tool 'get_tables' requires the 'grantSchemaAccess' permission.",
+    )
+    expect(res.content).toMatch(/^PERMISSION_DENIED: .+ Ask the user to grant/)
   })
 })
 

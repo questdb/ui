@@ -33,6 +33,7 @@ import {
   denyReasonUnresolvedSql,
   requireAllDQL,
   runPermissionGate,
+  withoutGrantPermissionHint,
   type Permissions,
   type RunCellGate,
 } from "./permissions"
@@ -338,7 +339,7 @@ export const dispatchTool = async (
       if (!shown.current) setStatus(status)
       setStatus(status, {
         ...shown.current?.args,
-        failed: toolErrorDetail(result.content),
+        failed: toolErrorDetail(withoutGrantPermissionHint(result.content)),
       })
     }
   } else if (shown.current) {

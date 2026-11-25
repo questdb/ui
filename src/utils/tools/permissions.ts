@@ -37,18 +37,29 @@ export type PermissionDecision =
   | { granted: true }
   | { granted: false; reason: string }
 
+// Tells the model where the user grants a permission. Agents and API models
+// read the same denial but keep their permissions in different places, so it
+// names both.
+const GRANT_PERMISSION_HINT =
+  "Ask the user to grant it in the QuestDB Web Console (for an agent: click the agent status at the bottom of the screen, then Permissions; " +
+  "for an API model: AI Assistant settings → the model's provider → Permissions)."
+
+// A denial as the user's own step shows it: without the request to the model
+// to ask the user.
+export const withoutGrantPermissionHint = (reason: string): string =>
+  reason.replace(` ${GRANT_PERMISSION_HINT}`, "")
+
 export const denyReasonForSchemaTool = (tool: string): string =>
   `PERMISSION_DENIED: tool '${tool}' requires the 'grantSchemaAccess' permission. ` +
-  "Ask the user to grant it in the QuestDB Web Console (click the agent status at the bottom of the screen, then Permissions)."
+  GRANT_PERMISSION_HINT
 
 export const denyReasonForWriteSql = (queryType: string): string =>
   `PERMISSION_DENIED: this SQL is '${queryType}' (write operation) and ` +
-  "requires the 'write' permission. Ask the user to grant it in the " +
-  "QuestDB Web Console (click the agent status at the bottom of the screen, then Permissions)."
+  `requires the 'write' permission. ${GRANT_PERMISSION_HINT}`
 
 const denyReasonForReadSql = (): string =>
   "PERMISSION_DENIED: this SQL needs the 'read' permission to execute. " +
-  "Ask the user to grant it in the QuestDB Web Console (click the agent status at the bottom of the screen, then Permissions)."
+  GRANT_PERMISSION_HINT
 
 const denyReasonNoSql = (tool: string): string =>
   `PERMISSION_DENIED: tool '${tool}' requires a non-empty 'sql' argument.`

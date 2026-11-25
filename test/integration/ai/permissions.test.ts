@@ -268,15 +268,24 @@ describe.each(levels)("AI permission flow: $name", (level) => {
           ? level.read
           : level.write)
     if (!granted) {
-      const suffix =
-        "Ask the user to grant it in the QuestDB Web Console (click the agent status at the bottom of the screen, then Permissions)."
-      const denied =
+      // The model learns where an API model's permissions are, as well as an
+      // agent's; the user's step shows the refusal, not the request to the model.
+      const whereToGrant =
+        "Ask the user to grant it in the QuestDB Web Console (for an agent: click the agent status at the bottom of the screen, then Permissions; for an API model: AI Assistant settings → the model's provider → Permissions)."
+      const refusal =
         probe.scope === "schema"
-          ? `PERMISSION_DENIED: tool '${probe.name}' requires the 'grantSchemaAccess' permission. ${suffix}`
+          ? `PERMISSION_DENIED: tool '${probe.name}' requires the 'grantSchemaAccess' permission.`
           : probe.scope === "read"
-            ? `PERMISSION_DENIED: this SQL needs the 'read' permission to execute. ${suffix}`
-            : `PERMISSION_DENIED: this SQL is '${probe.scope === "ddl" ? "DROP TABLE" : "INSERT"}' (write operation) and requires the 'write' permission. ${suffix}`
-      expect(output).toBe(denied)
+            ? "PERMISSION_DENIED: this SQL needs the 'read' permission to execute."
+            : `PERMISSION_DENIED: this SQL is '${probe.scope === "ddl" ? "DROP TABLE" : "INSERT"}' (write operation) and requires the 'write' permission.`
+      expect(output).toBe(`${refusal} ${whereToGrant}`)
+      expect(
+        vi
+          .mocked(callbacks.setStatus)
+          .mock.calls.flatMap(([, args]) =>
+            args?.failed === undefined ? [] : [args.failed],
+          ),
+      ).toEqual([refusal])
       expect(executedSQL).toEqual([])
       if (probe.scope === "schema")
         expect(requests[0].tools.map((tool) => tool.name)).not.toContain(
