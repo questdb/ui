@@ -22,6 +22,9 @@ import { AIChatButton } from "../../../../src/scenes/Layout/AIChatButton"
 // Preload the drawer with the harness's mocked dependencies before React.lazy.
 import "../../../../src/scenes/Editor/AIChatWindow"
 import { AIChatWindowLazy } from "../../../../src/scenes/Editor/AIChatWindow/AIChatWindowLazy"
+// After the drawer: loaded first, the bridge's import cycle leaves
+// QuestContext undefined in ExplainQueryButton.
+import { MCPBridgeProvider } from "../../../../src/providers/MCPBridgeProvider"
 import { createQueryKey } from "../../../../src/scenes/Editor/Monaco/utils"
 import * as QuestDB from "../../../../src/utils/questdb"
 import type { AiAssistantSettings } from "../../../../src/providers/LocalStorageProvider/types"
@@ -158,6 +161,9 @@ export const renderChat = (
   provider: ProviderName = "openai",
   children?: React.ReactNode,
   settings?: AiAssistantSettings,
+  // With the MCP bridge mounted, children can pair a local agent through
+  // useMCPBridge().connect.
+  { bridge = false }: { bridge?: boolean } = {},
 ) => {
   const configured =
     provider === "anthropic"
@@ -168,19 +174,22 @@ export const renderChat = (
     settings ? JSON.stringify(settings) : configured["ai.assistant.settings"],
   )
   const store = createStore(rootReducer)
+  const chat = (
+    <AIStatusProvider>
+      <AIChatButton />
+      <div id="side-panel-right" />
+      <AIChatWindowLazy />
+      <ToastContainer />
+      {children}
+    </AIStatusProvider>
+  )
   const result = render(
     <ThemeProvider theme={darkTheme}>
       <TooltipProvider>
         <Provider store={store}>
           <LocalStorageProvider>
             <AIConversationProvider>
-              <AIStatusProvider>
-                <AIChatButton />
-                <div id="side-panel-right" />
-                <AIChatWindowLazy />
-                <ToastContainer />
-                {children}
-              </AIStatusProvider>
+              {bridge ? <MCPBridgeProvider>{chat}</MCPBridgeProvider> : chat}
             </AIConversationProvider>
           </LocalStorageProvider>
         </Provider>
