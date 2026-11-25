@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from "react"
 import { screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { getHook, queryHook, renderComponent } from "../../../test/component"
 import { EXPECTED_MCP_VERSION } from "../../../utils/mcp/protocolVersion"
@@ -11,6 +12,8 @@ import type { AgentChanges } from "./useAgentChanges"
 const bridge = vi.hoisted(() => ({
   status: "connected",
   versionMismatch: null as "minor" | "major" | null,
+  permissions: { grantSchemaAccess: true, read: true, write: false },
+  setPermissions: vi.fn(),
 }))
 
 vi.mock("../../../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
@@ -21,8 +24,8 @@ vi.mock("../../../providers/MCPBridgeProvider", () => ({
     url: "ws://127.0.0.1:52253",
     token: "pairing-token",
     disconnect: vi.fn(),
-    permissions: { grantSchemaAccess: true, read: true, write: false },
-    setPermissions: vi.fn(),
+    permissions: bridge.permissions,
+    setPermissions: bridge.setPermissions,
     pairedAgent: { label: "Claude Code", cwd: "~/work" },
   }),
 }))
@@ -136,5 +139,33 @@ describe("ChatAgentPopover", () => {
     const notice = getHook("agent-popover-version-mismatch")
     expect(notice).toHaveTextContent("Update recommended")
     expect(notice).toHaveTextContent("--agent codex")
+  })
+
+  it("takes Write away from the agent when the user saves Read", async () => {
+    // Given an agent that may write
+    bridge.status = "connected"
+    bridge.versionMismatch = null
+    bridge.permissions = { grantSchemaAccess: true, read: true, write: true }
+    bridge.setPermissions.mockClear()
+    const onClose = vi.fn()
+    renderComponent(
+      <ChatAgentPopover
+        open
+        onClose={onClose}
+        agentChanges={noAgentChanges}
+        agentLabel="Claude Code"
+      />,
+    )
+
+    // When
+    await userEvent.click(getHook("permissions-trigger"))
+    await userEvent.click(getHook("permission-level-read"))
+    await userEvent.click(getHook("agent-popover-save"))
+
+    // Then
+    expect(bridge.setPermissions.mock.calls).toEqual([
+      [{ grantSchemaAccess: true, read: true, write: false }],
+    ])
+    expect(onClose).toHaveBeenCalledOnce()
   })
 })
