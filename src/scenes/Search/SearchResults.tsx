@@ -211,6 +211,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     temporaryBufferId,
     editorRef,
     updateBuffer,
+    restoreBuffer,
   } = useEditor()
   const [expandedBuffers, setExpandedBuffers] = useState<Map<number, boolean>>(
     new Map(Array.from(groupedMatches.keys()).map((id) => [id, true])),
@@ -220,11 +221,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   const selectionDecorations = useRef<string[]>([])
   const virtualizedTreeRef = useRef<VirtualizedTreeHandle>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
-
-  const activeBufferCount = useMemo(
-    () => buffers.filter((b) => !b.archived || b.isTemporary).length,
-    [buffers],
-  )
 
   const flattenedItems = useMemo(() => {
     const items: FlattenedItem[] = []
@@ -284,24 +280,13 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   const convertTemporaryToPermanent = useCallback(async () => {
     if (temporaryBufferId !== null) {
       const tempBuffer = buffers.find((b) => b.id === temporaryBufferId)
-      const updatedFields = {
-        archived: false,
-        archivedAt: undefined,
-        isTemporary: false,
-      }
-
       if (tempBuffer) {
-        await updateBuffer(temporaryBufferId, updatedFields)
-        await setActiveBuffer(
-          { ...tempBuffer, ...updatedFields },
-          { focus: true, fromSearch: true },
-        )
-
+        await restoreBuffer(tempBuffer, { focus: true, fromSearch: true })
         return tempBuffer
       }
     }
     return null
-  }, [temporaryBufferId, buffers, updateBuffer, setActiveBuffer])
+  }, [temporaryBufferId, buffers, restoreBuffer])
 
   const toggleBufferExpansion = useCallback((bufferId: number) => {
     setExpandedBuffers((prev) => {
@@ -341,16 +326,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
           if (temporaryBufferId !== null && temporaryBufferId === bufferId) {
             await convertTemporaryToPermanent()
           } else {
-            const restoredFields = {
-              archived: false,
-              archivedAt: undefined,
-              position: activeBufferCount,
-            }
-            await updateBuffer(bufferId, restoredFields)
-            await setActiveBuffer(
-              { ...buffer, ...restoredFields },
-              { focus: true, fromSearch: true },
-            )
+            await restoreBuffer(buffer, { focus: true, fromSearch: true })
 
             if (temporaryBufferId !== null) {
               await updateBuffer(temporaryBufferId, { isTemporary: false })
@@ -371,7 +347,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       updateBuffer,
       setActiveBuffer,
       convertTemporaryToPermanent,
-      activeBufferCount,
+      restoreBuffer,
       setTemporaryBuffer,
     ],
   )

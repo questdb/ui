@@ -147,6 +147,7 @@ export const Tabs = () => {
     updateBuffersPositions,
     deleteBuffer,
     archiveBuffer,
+    restoreBuffer,
     tabsDisabled,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
@@ -634,14 +635,7 @@ export const Tabs = () => {
                     title={buffer.label}
                     onClick={async () => {
                       void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
-                      await updateBuffer(buffer.id as number, {
-                        archived: false,
-                        archivedAt: undefined,
-                        position: buffers.filter(
-                          (b) => !b.archived || b.isTemporary,
-                        ).length,
-                      })
-                      await setActiveBuffer(buffer)
+                      await restoreBuffer(buffer)
                     }}
                     icon={
                       buffer.metricsViewState ? (
