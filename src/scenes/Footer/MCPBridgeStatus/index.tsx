@@ -4,9 +4,9 @@ import type { DefaultTheme } from "styled-components"
 import { PlugsConnectedIcon, PlugsIcon } from "@phosphor-icons/react"
 import { ButtonBase, PopperToggle } from "../../../components"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
-import { MCPBridgePairPopover } from "./PairPopover"
-import { AgentPopover } from "./AgentPopover"
-import { agentStatusOf } from "./agentStatus"
+import { McpAgentPopover } from "./McpAgentPopover"
+import { ChatAgentPopover } from "./ChatAgentPopover"
+import { chatAgentStatusOf, mcpAgentStatusOf } from "./agentStatus"
 import { AgentChangesPopper } from "./AgentChangesPopper"
 import { useAgentChanges } from "./useAgentChanges"
 import { Tone, accentColor, deriveTone, pillSuffix } from "./tone"
@@ -160,52 +160,32 @@ const Announcer = styled.span`
 `
 
 export const MCPBridgeStatus: React.FC = () => {
-  const { status, url, token, versionMismatch, pairedAgent } = useMCPBridge()
+  const { status, url, token, versionMismatch, pairedAgent, mcpClient } =
+    useMCPBridge()
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null)
   const agentChanges = useAgentChanges()
   const localAgent = useLocalAgent()
   const paired = !!(url && token)
   const bridgeTone = deriveTone(paired, status, versionMismatch)
-  // A pairing that brought a coding agent is about that agent, never MCP.
-  const agentLabel = paired
+  // Chat mode: a pairing that brought an agent to chat with.
+  const chatAgentLabel = paired
     ? (localAgent?.info.label ?? pairedAgent?.label ?? null)
     : null
-  const agentStatus = agentLabel
-    ? agentStatusOf({
-        agentLabel,
+  const agentStatus = chatAgentLabel
+    ? chatAgentStatusOf({
+        agentLabel: chatAgentLabel,
         agent: localAgent,
         bridgeTone,
         versionMismatch,
       })
-    : null
-  const tone = agentStatus?.tone ?? bridgeTone
+    : mcpAgentStatusOf({ tone: bridgeTone, client: mcpClient, versionMismatch })
+  const tone = agentStatus.tone
 
-  let label: string
-  let title: string
-
-  if (agentStatus) {
-    label = agentStatus.label
-    title = `${agentStatus.description} Click to manage.`
-  } else if (tone === "idle") {
-    label = "MCP not connected"
-    title =
-      "Click to enter MCP credentials manually, or ask Claude / Codex to pair this console."
-  } else if (tone === "connected") {
-    label = "MCP connected"
-    title = "Paired with the MCP server. Click to manage."
-  } else if (tone === "warning") {
-    label = "MCP connected"
-    title =
-      "Connected, but the MCP server version differs from what this console expects. Click to see the upgrade command."
-  } else if (tone === "connecting") {
-    label = "MCP connecting…"
-    title = "Connecting to the MCP server. Click to manage."
-  } else {
-    label = "MCP disconnected"
-    title =
-      "Click to re-enter MCP credentials, or ask Claude for a fresh pairing link."
-  }
+  let label = agentStatus.label
+  let title = `${agentStatus.description} ${
+    tone === "idle" ? "Click to see how." : "Click to manage."
+  }`
 
   const closePopover = useCallback(() => setPopoverOpen(false), [])
 
@@ -245,15 +225,15 @@ export const MCPBridgeStatus: React.FC = () => {
           />
         }
       >
-        {agentLabel ? (
-          <AgentPopover
+        {chatAgentLabel ? (
+          <ChatAgentPopover
             open={popoverOpen}
             onClose={closePopover}
             agentChanges={agentChanges}
-            agentLabel={agentLabel}
+            agentLabel={chatAgentLabel}
           />
         ) : (
-          <MCPBridgePairPopover
+          <McpAgentPopover
             open={popoverOpen}
             onClose={closePopover}
             agentChanges={agentChanges}

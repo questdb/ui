@@ -2,6 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { TextButton } from "../TextButton"
 import type { LocalAgentSnapshot } from "../../utils/localAgent/localAgentChannel"
+import { PathText } from "../PathText"
 
 const Panel = styled.div`
   display: flex;
@@ -46,15 +47,10 @@ const FactValue = styled.dd`
   overflow-wrap: anywhere;
 `
 
-const Path = styled.span`
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.2rem;
-`
-
 const stateLabel = (agent: LocalAgentSnapshot): string => {
   switch (agent.state) {
     case "ready":
-      return "Ready"
+      return "Connected"
     case "starting":
       return "Starting"
     case "error":
@@ -84,7 +80,7 @@ export const LocalAgentSettingsPanel = ({
         </FactValue>
         <FactName>Workspace</FactName>
         <FactValue>
-          <Path>{agent.info.cwd}</Path>
+          <PathText path={agent.info.cwd} />
         </FactValue>
       </Facts>
     </Section>

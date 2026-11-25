@@ -19,6 +19,13 @@ import type { StatusArgs } from "../../providers/AIStatusProvider"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import {
+  connectCommandOf,
+  consoleUrlOf,
+} from "../../components/ConnectCodingAgent/connectCommand"
+import { chatAgentNames, chatAgentOf } from "./chatAgents"
+import type { AgentInfo } from "./protocol"
+import { DEFAULT_AGENT_LABEL } from "../mcp/pairValidation"
+import {
   isCurrentLocalAgentChannel,
   type LocalAgentChannel,
   type LocalAgentUpdate,
@@ -37,10 +44,24 @@ type LocalAgentTurnParams = {
   abortSignal?: AbortSignal
 }
 
-const NOT_CONNECTED: AiAssistantAPIError = {
-  type: "network",
-  message:
-    "The local agent is not connected. Run `npx @questdb/mcp-server-questdb connect` with this console's address, then pair this console.",
+// Names the agent and the exact command that starts it again, as the
+// connect dialog does. The command ends the message in backticks, so the
+// chat can show it as a command to copy. A custom agent (--agent-command)
+// has no command the console could write.
+const notConnected = (info: AgentInfo | null): AiAssistantAPIError => {
+  const names = chatAgentNames(info?.label ?? DEFAULT_AGENT_LABEL)
+  const preset = chatAgentOf(info)
+  const message =
+    info && !preset
+      ? `${names.subject} is not connected. Run the connect command you started it with again, in your terminal.`
+      : typeof window === "undefined"
+        ? `${names.subject} is not connected. Run the connect command in your terminal, then accept the connection.`
+        : `${names.subject} is not connected. Start it${info ? " again" : ""}, then accept the connection: \`${connectCommandOf(
+            consoleUrlOf(window.location),
+            "npx",
+            preset?.id ?? null,
+          )}\``
+  return { type: "network", message }
 }
 
 const ABORTED: AiAssistantAPIError = {
@@ -284,7 +305,9 @@ export const runLocalAgentTurn = async ({
   onPromptSent,
   abortSignal,
 }: LocalAgentTurnParams): Promise<GeneratedSQL | AiAssistantAPIError> => {
-  if (!isCurrentLocalAgentChannel(channel)) return NOT_CONNECTED
+  // A stale channel still names the agent to start again.
+  const staleInfo = channel?.info ?? null
+  if (!isCurrentLocalAgentChannel(channel)) return notConnected(staleInfo)
 
   const startedAt = Date.now()
   const { handleUpdate, handleStatus, reply, contextUsage } =

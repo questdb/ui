@@ -12,24 +12,25 @@ export const MCP_UPGRADE_COMMAND = `npx ${MCP_PACKAGE}@${EXPECTED_MCP_VERSION} u
 
 export const MCP_SETUP_COMMAND = `npx ${MCP_PACKAGE}@${EXPECTED_MCP_VERSION} setup`
 
-export const MCP_VERSION_MISMATCH_COPY: Record<
-  BridgeVersionMismatch,
-  { title: string; message: string }
-> = {
-  major: {
-    title: "MCP server version mismatch",
-    message:
-      `This MCP server is incompatible with what this console expects (${EXPECTED_MCP_VERSION}). ` +
-      `Upgrade your MCP server with the following command and re-pair:`,
-  },
-  minor: {
-    title: "Update your MCP server",
-    message:
-      `Connected successfully, but the MCP server version doesn't match what this console expects ` +
-      `(${EXPECTED_MCP_VERSION}). Some tools may not work as intended until you upgrade. ` +
-      `Run this command and re-pair:`,
-  },
-}
+// MCP mode copy. The bridge is part of the user's coding agent setup, so the
+// copy names the agent: "Claude Code", or "your coding agent" when unknown.
+export const mcpVersionMismatchCopy = (
+  severity: BridgeVersionMismatch,
+  agent: { subject: string; inline: string },
+): { title: string; message: string } =>
+  severity === "major"
+    ? {
+        title: "Update required",
+        message:
+          `This console expects ${EXPECTED_MCP_VERSION}. Run this command, ` +
+          `restart ${agent.inline}, then connect again:`,
+      }
+    : {
+        title: "Update recommended",
+        message:
+          `This console expects ${EXPECTED_MCP_VERSION}. Some tools may not ` +
+          `work until you update. Run this command, then restart ${agent.inline}:`,
+      }
 
 const parseSemver = (version: string): [number, number, number] | null => {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim())

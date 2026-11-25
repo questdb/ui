@@ -10,6 +10,9 @@ import {
 // redirect (which strips the URL), then scrubs the URL so reloads don't
 // re-trigger pairing.
 
+// The MCP server sends at most 64 characters; cut anything longer.
+const MAX_MCP_CLIENT_NAME = 64
+
 export type PendingPairOutcome =
   | { kind: "consumed" }
   | { kind: "no_params" }
@@ -52,7 +55,13 @@ export const consumePendingPairFromUrl = (
         }
       : undefined
 
-  writePendingPair({ url, token, receivedAt: Date.now(), agent })
+  // MCP mode names its coding agent separately; `mcp-agent` means chat mode.
+  const mcpClient = agent
+    ? undefined
+    : params.get("mcp-client")?.trim().slice(0, MAX_MCP_CLIENT_NAME) ||
+      undefined
+
+  writePendingPair({ url, token, receivedAt: Date.now(), agent, mcpClient })
 
   // Scrub so the token doesn't end up in the user's address bar.
   params.delete("mcp-pair")
@@ -60,6 +69,7 @@ export const consumePendingPairFromUrl = (
   params.delete("mcp-token")
   params.delete("mcp-agent")
   params.delete("mcp-agent-cwd")
+  params.delete("mcp-client")
   const remaining = params.toString()
   const cleanUrl =
     loc.pathname + (remaining ? `?${remaining}` : "") + (loc.hash || "")

@@ -61,7 +61,6 @@ export type LeftPanelState = {
 
 export type NotebookOnboarding = {
   mcpEverConnected: boolean
-  showNotebookPromo: boolean
   showMcpPromo: boolean
   collapseMcpPromo: boolean
 }

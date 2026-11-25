@@ -88,7 +88,7 @@ const connect = async () => {
   })
   vi.useRealTimers()
   await waitFor(() =>
-    expect(getHook("mcp-status-pill")).toHaveTextContent("MCP connected"),
+    expect(getHook("mcp-status-pill")).toHaveTextContent("Agent connected"),
   )
   await waitFor(() =>
     expect(queryHook("mcp-pair-consent-connect")).not.toBeInTheDocument(),

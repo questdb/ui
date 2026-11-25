@@ -413,17 +413,17 @@ describe("MCPBridgeClient", () => {
       {
         code: WS_CLOSE_CODES.superseded,
         label: "superseded (4001)",
-        expectInMessage: "Another browser tab is connected",
+        expectInMessage: "Your agent is connected to another browser tab",
       },
       {
         code: WS_CLOSE_CODES.token_invalid,
         label: "token_invalid (4002)",
-        expectInMessage: "link is no longer valid",
+        expectInMessage: "This link no longer works",
       },
       {
         code: WS_CLOSE_CODES.major_version_mismatch,
         label: "major_version_mismatch (4004)",
-        expectInMessage: "incompatible with what this console expects",
+        expectInMessage: "runs a version this console does not support",
       },
     ]
     for (const { code, label, expectInMessage } of cases) {

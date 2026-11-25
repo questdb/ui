@@ -11,6 +11,7 @@ import { useLocalAgent } from "../../utils/localAgent/LocalAgentContext"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { useOpenConnectCodingAgent } from "../ConnectCodingAgent"
+import { useMCPBridge } from "../../providers/MCPBridgeProvider"
 
 export const SetupAIAssistant = () => {
   const [configModalOpen, setConfigModalOpen] = useState(false)
@@ -20,6 +21,8 @@ export const SetupAIAssistant = () => {
   const { aiAssistantSettings } = useAIStatus()
   const localAgent = useLocalAgent()
   const openConnectCodingAgent = useOpenConnectCodingAgent()
+  // A terminal-mode agent is the one to suggest for the AI Assistant.
+  const { mcpClient } = useMCPBridge()
   const isConfigured =
     isAiAssistantConfigured(aiAssistantSettings) || localAgent !== null
   const configureButtonVariantProps = isConfigured
@@ -64,7 +67,9 @@ export const SetupAIAssistant = () => {
         triggerRef={configureButtonRef}
         showPromo={showPromo}
         setShowPromo={setShowPromo}
-        onConnectAgentClick={() => openConnectCodingAgent("ai_promo")}
+        onConnectAgentClick={() =>
+          openConnectCodingAgent("ai_promo", mcpClient?.chatAgent ?? null)
+        }
         onSetupClick={() => {
           void trackEvent(ConsoleEvent.AI_CONFIGURATION_OPEN)
           setShowPromo(false)

@@ -4,7 +4,8 @@ import { screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { getHook, queryHook, renderComponent } from "../../../test/component"
 import { EXPECTED_MCP_VERSION } from "../../../utils/mcp/protocolVersion"
-import { AgentPopover } from "./AgentPopover"
+import { ChatAgentPopover } from "./ChatAgentPopover"
+import { NEVER_SAID, wordingOf } from "../../../test/wording"
 import type { AgentChanges } from "./useAgentChanges"
 
 const bridge = vi.hoisted(() => ({
@@ -37,17 +38,17 @@ const noAgentChanges: AgentChanges = {
   setAutoHidePaused: vi.fn(),
 }
 
-const renderPopover = () =>
+const renderPopover = (agentLabel = "Claude Code") =>
   renderComponent(
-    <AgentPopover
+    <ChatAgentPopover
       open
       onClose={vi.fn()}
       agentChanges={noAgentChanges}
-      agentLabel="Claude Code"
+      agentLabel={agentLabel}
     />,
   )
 
-describe("AgentPopover", () => {
+describe("ChatAgentPopover", () => {
   it("shows the agent and where it works, with no MCP connection fields", () => {
     // Given
     bridge.status = "connected"
@@ -56,10 +57,10 @@ describe("AgentPopover", () => {
     // When
     renderPopover()
 
-    // Then
-    expect(screen.getByText("Claude Code")).toBeVisible()
+    // Then the title follows the pill, while the agent starts
+    expect(screen.getByText("Claude Code connecting…")).toBeVisible()
     expect(getHook("agent-popover-workspace")).toHaveTextContent("~/work")
-    expect(screen.queryByText(/WebSocket|Token|MCP/)).not.toBeInTheDocument()
+    expect(wordingOf(getHook("agent-popover"))).not.toMatch(NEVER_SAID)
   })
 
   it("asks to run the connect command again for a version update, not the MCP upgrade", () => {
@@ -88,8 +89,52 @@ describe("AgentPopover", () => {
 
     // Then
     expect(getHook("agent-popover-reconnect")).toHaveTextContent(
-      "To connect Claude Code again, run this in your terminal:",
+      "Start Claude Code again",
     )
     expect(queryHook("agent-popover-disconnect")).not.toBeInTheDocument()
+  })
+
+  it("runs the same agent again, not the default one", () => {
+    // Given
+    bridge.status = "disconnected"
+    bridge.versionMismatch = null
+
+    // When
+    renderPopover("Codex")
+
+    // Then
+    expect(getHook("agent-popover-reconnect")).toHaveTextContent(
+      `npx @questdb/mcp-server-questdb@${EXPECTED_MCP_VERSION} connect http://localhost:3000 --agent codex`,
+    )
+  })
+
+  it("does not offer a command that would start another agent than a custom one", () => {
+    // Given an agent started with --agent-command
+    bridge.status = "disconnected"
+    bridge.versionMismatch = null
+
+    // When
+    renderPopover("My agent")
+
+    // Then
+    const reconnect = getHook("agent-popover-reconnect")
+    expect(reconnect).toHaveTextContent(
+      "To connect My agent again, run the connect command you started it with in your terminal.",
+    )
+    expect(reconnect).not.toHaveTextContent("npx")
+  })
+
+  it("titles a version update like the terminal mode does", () => {
+    // Given
+    bridge.status = "connected"
+    bridge.versionMismatch = "minor"
+
+    // When
+    renderPopover("Codex")
+
+    // Then
+    const notice = getHook("agent-popover-version-mismatch")
+    expect(notice).toHaveTextContent("Update recommended")
+    expect(notice).toHaveTextContent("--agent codex")
   })
 })

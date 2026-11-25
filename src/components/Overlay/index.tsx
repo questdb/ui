@@ -49,9 +49,20 @@ export const Overlay = React.forwardRef<
   HTMLDivElement,
   {
     primitive: typeof RadixDialogOverlay | typeof RadixAlertDialogOverlay
+    // An alert dialog does not close on an outside click by itself; pass
+    // this to make the backdrop close it.
+    onClick?: () => void
+    dataHook?: string
   }
->(({ primitive }, ref) => {
-  return <StyledOverlay as={primitive} ref={ref} />
+>(({ primitive, onClick, dataHook }, ref) => {
+  return (
+    <StyledOverlay
+      as={primitive}
+      ref={ref}
+      onClick={onClick}
+      data-hook={dataHook}
+    />
+  )
 })
 
 Overlay.displayName = "Overlay"

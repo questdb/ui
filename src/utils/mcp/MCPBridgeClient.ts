@@ -1,6 +1,4 @@
 import {
-  MCP_UPGRADE_COMMAND,
-  MCP_VERSION_MISMATCH_COPY,
   EXPECTED_MCP_VERSION,
   isBridgeVersionMismatch,
   type BridgeVersionMismatch,
@@ -36,13 +34,13 @@ const TERMINAL_BRIDGE_CLOSE_CODES = new Set<number>([
 
 const terminalCloseMessage = (code: number, reason: string): string => {
   if (code === WS_CLOSE_CODES.superseded) {
-    return "Another browser tab is connected. Disconnect it there, or open a fresh link in this tab."
+    return "Your agent is connected to another browser tab. Disconnect it there, or open a new link in this tab."
   }
   if (code === WS_CLOSE_CODES.token_invalid) {
-    return "This link is no longer valid, likely because it restarted on your computer. Open a fresh link."
+    return "This link no longer works, probably because your agent restarted. Open the new link it shows."
   }
   if (code === WS_CLOSE_CODES.major_version_mismatch) {
-    return `${MCP_VERSION_MISMATCH_COPY.major.message} ${MCP_UPGRADE_COMMAND}`
+    return `Your agent runs a version this console does not support. This console expects ${EXPECTED_MCP_VERSION}.`
   }
   return reason || `The connection closed with code ${code}.`
 }
@@ -266,7 +264,7 @@ export class MCPBridgeClient {
       console.error("[MCPBridgeClient] WebSocket constructor threw:", err)
       this.emit(
         "error",
-        err instanceof Error ? err : new Error("WebSocket constructor failed"),
+        new Error("Could not open the connection to your agent."),
       )
       this.scheduleReconnect()
       return
@@ -586,10 +584,7 @@ export class MCPBridgeClient {
       return true
     } catch (err) {
       console.error("[MCPBridgeClient] send threw:", err)
-      this.emit(
-        "error",
-        err instanceof Error ? err : new Error("WebSocket send failed"),
-      )
+      this.emit("error", new Error("Could not send to your agent."))
       return false
     }
   }

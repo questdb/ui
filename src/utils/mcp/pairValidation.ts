@@ -11,7 +11,7 @@ export const TOKEN_RE = /^[a-zA-Z0-9_-]{20,}$/
 // warning that the agent runs commands. The folder limit is Linux's PATH_MAX.
 const MAX_AGENT_LABEL_LENGTH = 128
 const MAX_AGENT_CWD_LENGTH = 4096
-const DEFAULT_AGENT_LABEL = "Coding agent"
+export const DEFAULT_AGENT_LABEL = "Agent"
 // Control and bidirectional-override characters could hide or reorder the
 // text the dialog shows.
 const UNSAFE_DISPLAY_RE =

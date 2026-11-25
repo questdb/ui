@@ -39,16 +39,16 @@ export type PermissionDecision =
 
 export const denyReasonForSchemaTool = (tool: string): string =>
   `PERMISSION_DENIED: tool '${tool}' requires the 'grantSchemaAccess' permission. ` +
-  "Ask the user to grant it in the QuestDB console (footer → MCP popover or AI Assistant settings)."
+  "Ask the user to grant it in the QuestDB Web Console (click the agent status at the bottom of the screen, then Permissions)."
 
 export const denyReasonForWriteSql = (queryType: string): string =>
   `PERMISSION_DENIED: this SQL is '${queryType}' (write operation) and ` +
   "requires the 'write' permission. Ask the user to grant it in the " +
-  "QuestDB console (footer → MCP popover or AI Assistant settings)."
+  "QuestDB Web Console (click the agent status at the bottom of the screen, then Permissions)."
 
 const denyReasonForReadSql = (): string =>
   "PERMISSION_DENIED: this SQL needs the 'read' permission to execute. " +
-  "Ask the user to grant it in the QuestDB console (footer → MCP popover or AI Assistant settings)."
+  "Ask the user to grant it in the QuestDB Web Console (click the agent status at the bottom of the screen, then Permissions)."
 
 const denyReasonNoSql = (tool: string): string =>
   `PERMISSION_DENIED: tool '${tool}' requires a non-empty 'sql' argument.`

@@ -1,10 +1,5 @@
 import React, { forwardRef, useEffect, useState } from "react"
-import styled from "styled-components"
-import {
-  PlugsConnectedIcon,
-  PlugsIcon,
-  TerminalWindowIcon,
-} from "@phosphor-icons/react"
+import { ChatsCircleIcon } from "@phosphor-icons/react"
 import { Button } from "../../../components"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
 import {
@@ -24,10 +19,11 @@ import {
 } from "../../../components/ConnectCodingAgent/connectCommand"
 import type { AgentChanges } from "./useAgentChanges"
 import { deriveTone } from "./tone"
-import { agentStatusOf } from "./agentStatus"
+import { chatAgentNames, chatAgentStatusOf } from "./agentStatus"
 import { AgentUpgradeNotice } from "./AgentUpgradeNotice"
 import { CopyableCommand } from "./CopyableCommand"
 import { PermissionsSection } from "./PermissionsSection"
+import { chatAgentOf } from "../../../utils/localAgent/chatAgents"
 import {
   AgentChangesNotice,
   Body,
@@ -44,13 +40,7 @@ import {
   StatusText,
   Title,
 } from "./popoverParts"
-
-const Workspace = styled.span`
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-  word-break: break-all;
-`
+import { PathText } from "../../../components/PathText"
 
 const permissionsEqual = (a: Permissions, b: Permissions): boolean =>
   a.grantSchemaAccess === b.grantSchemaAccess &&
@@ -64,7 +54,7 @@ type Props = {
   agentLabel: string
 }
 
-export const AgentPopover = forwardRef<HTMLDivElement, Props>(
+export const ChatAgentPopover = forwardRef<HTMLDivElement, Props>(
   ({ open, onClose, agentChanges, agentLabel, ...rest }, ref) => {
     const {
       status,
@@ -81,21 +71,22 @@ export const AgentPopover = forwardRef<HTMLDivElement, Props>(
     const [draftPermissions, setDraftPermissions] = useState(permissions)
 
     const bridgeTone = deriveTone(!!(url && token), status, versionMismatch)
-    const agentStatus = agentStatusOf({
+    const agentStatus = chatAgentStatusOf({
       agentLabel,
       agent,
       bridgeTone,
       versionMismatch,
     })
     const workspace = agent?.info.cwd ?? pairedAgent?.cwd ?? null
+    const names = chatAgentNames(agentLabel)
+    // A custom agent (--agent-command) has no preset: no command runs it.
+    const preset = chatAgentOf({ id: agent?.info.id, label: agentLabel })
     const isConnected = status === "connected"
     const isDisconnected =
       agentStatus.tone === "error" && versionMismatch !== "major"
     const permissionsDirty = !permissionsEqual(draftPermissions, permissions)
-    const HeaderIcon =
-      agentStatus.tone === "connected" || agentStatus.tone === "warning"
-        ? PlugsConnectedIcon
-        : PlugsIcon
+    // The AI Assistant way has the chat bubble everywhere; the tone colors it.
+    const HeaderIcon = ChatsCircleIcon
 
     useEffect(() => {
       if (open) setDraftPermissions(permissions)
@@ -122,9 +113,16 @@ export const AgentPopover = forwardRef<HTMLDivElement, Props>(
             <HeaderIcon size={20} weight="duotone" />
           </IconBadge>
           <HeaderText>
-            <Title>{agentLabel}</Title>
+            <Title>{agentStatus.label}</Title>
             <Lede data-hook="agent-popover-description">
-              {agentStatus.description}
+              {versionMismatch === "minor"
+                ? chatAgentStatusOf({
+                    agentLabel,
+                    agent,
+                    bridgeTone,
+                    versionMismatch: null,
+                  }).description
+                : agentStatus.description}
             </Lede>
           </HeaderText>
         </Header>
@@ -133,9 +131,7 @@ export const AgentPopover = forwardRef<HTMLDivElement, Props>(
           {workspace && (
             <Field as="div">
               <FieldLabel>Workspace</FieldLabel>
-              <Workspace data-hook="agent-popover-workspace">
-                {workspace}
-              </Workspace>
+              <PathText path={workspace} dataHook="agent-popover-workspace" />
             </Field>
           )}
           <PermissionsSection
@@ -153,20 +149,32 @@ export const AgentPopover = forwardRef<HTMLDivElement, Props>(
             <AgentUpgradeNotice
               severity={versionMismatch}
               agentLabel={agentLabel}
+              agentId={agent?.info.id ?? null}
             />
           </StatusRow>
         )}
 
         {isDisconnected && (
           <StatusRow $tone="info" data-hook="agent-popover-reconnect">
-            <TerminalWindowIcon size={16} weight="duotone" />
+            <ChatsCircleIcon size={16} weight="duotone" />
             <StatusText>
-              <span>
-                To connect {agentLabel} again, run this in your terminal:
-              </span>
-              <CopyableCommand
-                command={connectCommandOf(consoleUrlOf(window.location), "npx")}
-              />
+              {preset ? (
+                <>
+                  <span>Start {names.inline} again</span>
+                  <CopyableCommand
+                    command={connectCommandOf(
+                      consoleUrlOf(window.location),
+                      "npx",
+                      preset.id,
+                    )}
+                  />
+                </>
+              ) : (
+                <span>
+                  To connect {names.inline} again, run the connect command you
+                  started it with in your terminal.
+                </span>
+              )}
             </StatusText>
           </StatusRow>
         )}
@@ -215,4 +223,4 @@ export const AgentPopover = forwardRef<HTMLDivElement, Props>(
   },
 )
 
-AgentPopover.displayName = "AgentPopover"
+ChatAgentPopover.displayName = "ChatAgentPopover"

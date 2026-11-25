@@ -51,7 +51,11 @@ export type HelloAckMessage = {
   // Count only — bridge does NOT validate or filter; don't treat as a
   // "schemas accepted" signal.
   seenToolCount: number
+  // Chat mode: the agent the user chats with in the AI Assistant.
   agent?: AgentInfo
+  // MCP mode: the coding agent that runs the bridge (its MCP clientInfo
+  // name). Never sent together with `agent`. Unvalidated: check the type.
+  mcpClient?: { name: string }
 }
 
 // bridge → browser, forwarded MCP tool call.

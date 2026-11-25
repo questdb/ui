@@ -1,4 +1,5 @@
 import React, { forwardRef, useEffect, useState } from "react"
+import styled from "styled-components"
 import {
   PlugsConnectedIcon,
   PlugsIcon,
@@ -17,9 +18,11 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { permissionLevelOf } from "../../../modules/ConsoleEventTracker/mcpToolEvents"
 import { deriveTone } from "./tone"
+import { mcpAgentNames, mcpAgentStatusOf } from "./agentStatus"
 import {
   AgentChangesNotice,
   Body,
+  DisclosureToggle,
   Field,
   FieldLabel,
   Footer,
@@ -36,7 +39,8 @@ import {
   Title,
 } from "./popoverParts"
 import { BridgeUpgradeNotice } from "./BridgeUpgradeNotice"
-import { BridgeSetupNotice } from "./BridgeSetupNotice"
+import { ConnectAgentOptions } from "./ConnectAgentOptions"
+import { AGENT_VALUE } from "../../../components/ConnectCodingAgent/copy"
 import { CodingAgentChatInvite } from "./CodingAgentChatInvite"
 import { useLocalAgent } from "../../../utils/localAgent/LocalAgentContext"
 import { PermissionsSection } from "./PermissionsSection"
@@ -48,6 +52,12 @@ const permissionsEqual = (a: Permissions, b: Permissions): boolean =>
 
 const SUCCESS_AUTOCLOSE_MS = 3_000
 
+// A section of its own, like the connect options above it.
+const ManualBody = styled(Body)`
+  padding-top: 1.2rem;
+  border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
+`
+
 const DEFAULT_WS_URL_PREFIX = "ws://127.0.0.1:"
 
 type Props = {
@@ -56,7 +66,7 @@ type Props = {
   agentChanges: AgentChanges
 }
 
-export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
+export const McpAgentPopover = forwardRef<HTMLDivElement, Props>(
   ({ open, onClose, agentChanges, ...rest }, ref) => {
     const {
       status,
@@ -69,6 +79,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       disconnect,
       permissions,
       setPermissions,
+      mcpClient,
     } = useMCPBridge()
     const localAgent = useLocalAgent()
     const [draftUrl, setDraftUrl] = useState(DEFAULT_WS_URL_PREFIX)
@@ -79,6 +90,9 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
     const [validationError, setValidationError] = useState<string | null>(null)
     const [submitted, setSubmitted] = useState(false)
     const [succeeded, setSucceeded] = useState(false)
+    // The address and key fields: a fallback for when the agent's link
+    // does not open in this tab, so they start hidden.
+    const [showManual, setShowManual] = useState(false)
 
     // Snapshot via refs so the [open] effect picks up the latest live
     // values without re-running on later background url/token changes.
@@ -98,6 +112,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       setValidationError(null)
       setSubmitted(false)
       setSucceeded(false)
+      setShowManual(false)
       sawDisconnectAfterSubmitRef.current = false
     }, [open])
 
@@ -132,7 +147,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
 
     const isConnecting = status === "connecting" || status === "reconnecting"
 
-    const showConnecting = !succeeded && isConnecting
+    const showConnecting = !succeeded && isConnecting && retryAttempt > 1
     const showValidationError = !succeeded && validationError !== null
     const showMajorMismatch = !succeeded && versionMismatch === "major"
     const showMinorMismatch =
@@ -149,7 +164,16 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
     const inErrorState = !!lastError || retryAttempt > 0
     const submitEnabled =
       !isConnecting && (credsDirty || permsDirty || !isPaired || inErrorState)
-    const submitLabel = isConnecting ? "Connecting…" : "Connect"
+    // Connected with the same address and key: the button only saves
+    // permission changes.
+    const savesOnly = isPaired && status === "connected" && !credsDirty
+    const submitLabel = isConnecting
+      ? "Connecting…"
+      : savesOnly
+        ? "Save"
+        : inErrorState && !credsDirty
+          ? "Try again"
+          : "Connect"
 
     const clearValidationError = () => {
       if (validationError) setValidationError(null)
@@ -169,18 +193,21 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       const nextUrl = draftUrl.trim()
       const nextToken = draftToken.trim()
       if (!nextUrl || !nextToken) {
-        setValidationError("Both URL and token are required.")
+        setShowManual(true)
+        setValidationError("Enter both the address and the key.")
         return
       }
       if (!LOCALHOST_WS_RE.test(nextUrl)) {
+        setShowManual(true)
         setValidationError(
-          "WebSocket URL must point to localhost (ws://127.0.0.1:<port> or ws://localhost:<port>).",
+          "The address must be on this computer: ws://127.0.0.1:<port> or ws://localhost:<port>.",
         )
         return
       }
       if (!TOKEN_RE.test(nextToken)) {
+        setShowManual(true)
         setValidationError(
-          "Token looks malformed — expected a long URL-safe string.",
+          "This key does not look right. Copy it again from your agent's reply.",
         )
         return
       }
@@ -229,11 +256,81 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
 
     const canDisconnect = isPaired && status === "connected"
 
-    const title = succeeded ? "MCP server connected" : "MCP server"
+    const names = mcpAgentNames(mcpClient)
+    const agentStatus = mcpAgentStatusOf({
+      tone,
+      client: mcpClient,
+      versionMismatch,
+    })
+    const isIdle = agentStatus.tone === "idle"
 
+    const title = isIdle ? "Connect your agent" : agentStatus.label
+
+    // The version notice below explains an outdated agent, so the lede
+    // does not repeat it.
     const lede = succeeded
-      ? "You can track the connection status from the bottom bar."
-      : "Paste the WebSocket URL and token your coding agent gave you, or click the deep link from the agent."
+      ? `${names.subject} works from your terminal.`
+      : isIdle
+        ? AGENT_VALUE
+        : versionMismatch === "minor"
+          ? mcpAgentStatusOf({
+              tone: "connected",
+              client: mcpClient,
+              versionMismatch: null,
+            }).description
+          : agentStatus.description
+
+    // An agent that works from the terminal can also chat in the AI
+    // Assistant. With no agent connected, ConnectAgentOptions offers both.
+    const showChatInvite =
+      !localAgent && (tone === "connected" || tone === "warning")
+    const showFooter = !succeeded && (isPaired || showManual)
+
+    const manualFields = (
+      <>
+        <Field>
+          <FieldLabel>Address</FieldLabel>
+          <FullWidthInput
+            name="mcp-pair-url"
+            value={draftUrl}
+            onChange={(e) => {
+              setDraftUrl(e.target.value)
+              clearValidationError()
+            }}
+            placeholder="ws://127.0.0.1:57123"
+            disabled={isConnecting}
+            data-hook="mcp-pair-url-input"
+            autoFocus
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel>Key</FieldLabel>
+          <FullWidthInput
+            name="mcp-pair-token"
+            value={draftToken}
+            onChange={(e) => {
+              setDraftToken(e.target.value)
+              clearValidationError()
+            }}
+            placeholder="Paste the key"
+            disabled={isConnecting}
+            data-hook="mcp-pair-token-input"
+          />
+        </Field>
+      </>
+    )
+
+    const permissionsSection = (
+      <PermissionsSection
+        value={draftPermissions}
+        onChange={(next) => {
+          setDraftPermissions(next)
+          clearValidationError()
+        }}
+        disabled={isConnecting}
+      />
+    )
 
     return (
       <Root ref={ref} {...rest} data-hook="mcp-pair-popover">
@@ -250,48 +347,85 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
           </HeaderText>
         </Header>
 
-        {!succeeded && (
-          <Body>
-            <Field>
-              <FieldLabel>WebSocket URL</FieldLabel>
-              <FullWidthInput
-                name="mcp-pair-url"
-                value={draftUrl}
-                onChange={(e) => {
-                  setDraftUrl(e.target.value)
-                  clearValidationError()
-                }}
-                placeholder="ws://127.0.0.1:57123"
-                disabled={isConnecting}
-                data-hook="mcp-pair-url-input"
-                autoFocus
-              />
-            </Field>
+        {!succeeded && isPaired && <Body>{permissionsSection}</Body>}
 
-            <Field>
-              <FieldLabel>Token</FieldLabel>
-              <FullWidthInput
-                name="mcp-pair-token"
-                value={draftToken}
-                onChange={(e) => {
-                  setDraftToken(e.target.value)
-                  clearValidationError()
-                }}
-                placeholder="Paste the token from the agent's reply"
-                disabled={isConnecting}
-                data-hook="mcp-pair-token-input"
-              />
-            </Field>
+        {showWsError && (
+          <StatusRow $tone="danger" data-hook="mcp-pair-error" role="alert">
+            <WarningIcon size={16} weight="duotone" />
+            <StatusText>
+              <strong>Could not connect to {names.inline}</strong>
+              <StatusDetail>
+                {lastError ??
+                  `${names.subject} stopped responding. Try again, or ask it to connect to the QuestDB Web Console again.`}
+              </StatusDetail>
+            </StatusText>
+          </StatusRow>
+        )}
 
-            <PermissionsSection
-              value={draftPermissions}
-              onChange={(next) => {
-                setDraftPermissions(next)
-                clearValidationError()
-              }}
-              disabled={isConnecting}
-            />
-          </Body>
+        {showMajorMismatch && (
+          <StatusRow
+            $tone="danger"
+            data-hook="mcp-pair-version-mismatch"
+            role="alert"
+          >
+            <BridgeUpgradeNotice severity="major" client={mcpClient} />
+          </StatusRow>
+        )}
+
+        {showConnecting && (
+          <StatusRow
+            $tone="info"
+            data-hook="mcp-pair-connecting"
+            role="status"
+            aria-live="polite"
+          >
+            <LoadingSpinner size="16px" />
+            {/* The title already says it is connecting; the row only counts
+                retries. -1 on both sides so it shows retries-allowed, not
+                total attempts (the first attempt isn't a retry). */}
+            <StatusText>
+              <StatusDetail data-hook="mcp-pair-retries">
+                Retry {retryAttempt - 1} of {MAX_RECONNECT_ATTEMPTS - 1}
+              </StatusDetail>
+            </StatusText>
+          </StatusRow>
+        )}
+
+        {showMinorMismatch && (
+          <StatusRow
+            $tone="warning"
+            data-hook="mcp-pair-version-mismatch"
+            role="alert"
+          >
+            <BridgeUpgradeNotice severity="minor" client={mcpClient} />
+          </StatusRow>
+        )}
+
+        {isIdle && <ConnectAgentOptions />}
+
+        {showChatInvite && (
+          <CodingAgentChatInvite
+            onOpen={onClose}
+            chatAgent={mcpClient?.chatAgent ?? null}
+          />
+        )}
+
+        <AgentChangesNotice agentChanges={agentChanges} onClose={onClose} />
+
+        {/* A fallback for connecting: hidden while an agent is connected. */}
+        {!succeeded && (!isPaired || inErrorState) && (
+          <ManualBody>
+            <DisclosureToggle
+              type="button"
+              aria-expanded={showManual}
+              onClick={() => setShowManual(!showManual)}
+              data-hook="mcp-pair-manual-toggle"
+            >
+              {showManual ? "Hide details" : "Enter details manually"}
+            </DisclosureToggle>
+            {showManual && manualFields}
+            {showManual && !isPaired && permissionsSection}
+          </ManualBody>
         )}
 
         {showValidationError && (
@@ -307,69 +441,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
           </StatusRow>
         )}
 
-        {showWsError && (
-          <StatusRow $tone="danger" data-hook="mcp-pair-error" role="alert">
-            <WarningIcon size={16} weight="duotone" />
-            <StatusText>
-              <strong>Could not connect to MCP server</strong>
-              <StatusDetail>
-                {lastError ??
-                  `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
-              </StatusDetail>
-            </StatusText>
-          </StatusRow>
-        )}
-
-        {showMajorMismatch && (
-          <StatusRow
-            $tone="danger"
-            data-hook="mcp-pair-version-mismatch"
-            role="alert"
-          >
-            <BridgeUpgradeNotice severity="major" />
-          </StatusRow>
-        )}
-
-        {showConnecting && (
-          <StatusRow
-            $tone="info"
-            data-hook="mcp-pair-connecting"
-            role="status"
-            aria-live="polite"
-          >
-            <LoadingSpinner size="16px" />
-            <StatusText>
-              <span>Establishing WebSocket connection...</span>
-              {/* -1 on both sides so the counter shows retries-allowed,
-                  not total attempts (the first attempt isn't a retry). */}
-              {retryAttempt > 1 && (
-                <StatusDetail data-hook="mcp-pair-retries">
-                  (Retry {retryAttempt - 1} of {MAX_RECONNECT_ATTEMPTS - 1})
-                </StatusDetail>
-              )}
-            </StatusText>
-          </StatusRow>
-        )}
-
-        {showMinorMismatch && (
-          <StatusRow
-            $tone="warning"
-            data-hook="mcp-pair-version-mismatch"
-            role="alert"
-          >
-            <BridgeUpgradeNotice severity="minor" />
-          </StatusRow>
-        )}
-
-        {tone === "idle" && !validationError && <BridgeSetupNotice />}
-
-        {(tone === "connected" || tone === "warning") && !localAgent && (
-          <CodingAgentChatInvite onOpen={onClose} />
-        )}
-
-        <AgentChangesNotice agentChanges={agentChanges} onClose={onClose} />
-
-        {!succeeded && (
+        {showFooter && (
           <Footer>
             {canDisconnect && (
               <Button
@@ -404,4 +476,4 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
   },
 )
 
-MCPBridgePairPopover.displayName = "MCPBridgePairPopover"
+McpAgentPopover.displayName = "McpAgentPopover"

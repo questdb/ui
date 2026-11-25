@@ -88,7 +88,7 @@ describe("buildModelGroups", () => {
       ["OpenAI", ["GPT 5", "GPT 5 Mini"]],
       ["Pi", ["Claude Opus 5.5", "GPT 6"]],
     ])
-    expect(groups[2]).toMatchObject({ caption: "Local agent", provider: null })
+    expect(groups[2]).toMatchObject({ caption: "Agent", provider: null })
     expect(groups[2].options[1].detail).toBe("Latest OpenAI model")
   })
 

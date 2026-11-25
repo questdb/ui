@@ -1,6 +1,6 @@
 export interface FakeBridgeSocket {
   framesOfType(type: string): Record<string, unknown>[]
-  helloAck(): void
+  helloAck(extra?: Record<string, unknown>): void
   toolCall(
     name: string,
     args: Record<string, unknown>,

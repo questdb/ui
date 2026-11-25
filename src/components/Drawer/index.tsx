@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useRef } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import styled, { css } from "styled-components"
@@ -14,6 +14,7 @@ import { Panel } from "../Panel"
 import { XIcon, ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { DRAWER_ESCAPE_CLAIM, DRAWER_ESCAPE_EVENT } from "./escapeClaim"
 
 type DrawerProps = {
   mode?: "modal" | "side"
@@ -161,18 +162,33 @@ export const Drawer = ({
 
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
 
+  const contentRef = useRef<HTMLDivElement>(null)
+
   // A text field with content or a control that explicitly handles Escape
-  // gets to handle it before the drawer closes.
+  // gets to handle it before the drawer closes. Then a card waiting on the
+  // user (an agent's question) takes it: Escape closes the card, not the
+  // drawer.
   const handleEscapeKeyDown = (event: KeyboardEvent) => {
     const ownsEscape =
       event.target instanceof HTMLElement &&
       event.target.hasAttribute("data-drawer-owns-escape")
-    if (
-      ownsEscape ||
-      isTextFieldWithValue(event.target) ||
-      !closeOnEscape ||
-      !onDismiss
-    ) {
+    if (ownsEscape || isTextFieldWithValue(event.target)) {
+      event.preventDefault()
+      return
+    }
+    const content = contentRef.current
+    const fromHere =
+      event.target instanceof Node &&
+      (event.target === document.body || !!content?.contains(event.target))
+    const claim = fromHere
+      ? content?.querySelector(`[${DRAWER_ESCAPE_CLAIM}]`)
+      : null
+    if (claim) {
+      event.preventDefault()
+      claim.dispatchEvent(new CustomEvent(DRAWER_ESCAPE_EVENT))
+      return
+    }
+    if (!closeOnEscape || !onDismiss) {
       event.preventDefault()
       return
     }
@@ -247,6 +263,7 @@ export const Drawer = ({
           </ForwardRef>
         )}
         <DrawerContent
+          ref={contentRef}
           aria-describedby={undefined}
           data-hook={dataHook}
           mode={mode}

@@ -543,7 +543,7 @@ export const localAgentDispatchError = (
 ): string | null => {
   if (model === null || !isLocalAgentModel(model)) return null
   if (!isCurrentLocalAgentChannel(channel)) {
-    return "The selected local agent is no longer connected."
+    return "Your agent is no longer connected."
   }
   return channel.isTransportReady()
     ? null
@@ -569,7 +569,10 @@ export async function executeAIFlow(
     ? (config.localAgentChannel ?? null)
     : null
   if (isAgentCommandFlow(config) && !usesLocalAgent) {
-    return { success: false, error: "Agent commands require a local agent." }
+    return {
+      success: false,
+      error: "This command only works when your agent is selected.",
+    }
   }
   const dispatchError = () => {
     if (abortSignal?.aborted || config.canDispatch?.() === false)

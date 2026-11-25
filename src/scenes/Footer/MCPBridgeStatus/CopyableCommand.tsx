@@ -1,6 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 import { CopyButton } from "../../../components"
+import { CommandText } from "../../../components/CommandText"
 
 const Row = styled.div`
   display: flex;
@@ -19,18 +20,26 @@ const Command = styled.code`
   border: 1px solid ${({ theme }) => theme.color.interactionNeutral};
   border-radius: 0.4rem;
   padding: 0.6rem 0.8rem;
+  line-height: 1.5;
+  /* Some hosts, like popovers, set nowrap; a command wraps between its parts. */
   white-space: normal;
-  overflow-wrap: anywhere;
-  user-select: all;
 `
 
 const CopyAction = styled(CopyButton)`
   flex-shrink: 0;
 `
 
-export const CopyableCommand = ({ command }: { command: string }) => (
+export const CopyableCommand = ({
+  command,
+  onCopy,
+}: {
+  command: string
+  onCopy?: () => void
+}) => (
   <Row>
-    <Command>{command}</Command>
-    <CopyAction text={command} iconOnly size="sm" />
+    <Command>
+      <CommandText command={command} />
+    </Command>
+    <CopyAction text={command} iconOnly size="sm" onCopy={onCopy} />
   </Row>
 )

@@ -59,6 +59,27 @@ import {
 } from "../../utils/localAgent/LocalAgentContext"
 import { useSettings } from "../SettingsProvider"
 import { emitLocalAgentPairedViaLink } from "../../utils/localAgent/localAgentPairing"
+import { mcpClientOf, type McpClient } from "../../utils/mcp/mcpClients"
+
+// Glossary. Code names follow the protocols; the user only ever sees "your
+// coding agent" or the agent's name, never MCP, bridge, WebSocket or pairing.
+//
+// - bridge: the MCP server process on the user's computer. This provider
+//   keeps one WebSocket to it (MCPBridgeClient).
+// - pair / pairing: that WebSocket's handshake (link or address + key, then
+//   consent). The user sees it as "connect".
+// - MCP mode: the user talks to their coding agent in a terminal or IDE; the
+//   agent started the bridge and calls console tools. The agent's name comes
+//   as `mcpClient` (link `mcp-client`, hello_ack `mcpClient`). Footer UI:
+//   McpAgentPopover. Screens say "works from your terminal".
+// - Chat mode ("local agent"): `connect` runs the agent and the user chats
+//   with it in the AI Assistant. It comes as `agent` (link `mcp-agent`,
+//   hello_ack `agent`): pairedAgent, useLocalAgentConnection, localAgent*.
+//   Footer UI: ChatAgentPopover. "Local" names this mode only, though the MCP
+//   mode agent runs on the user's computer too.
+// - The bridge never sends `agent` and `mcpClient` together, so the field
+//   present tells the mode. Analytics events (mcp.*) and storage keys keep
+//   their old names.
 
 export type MCPBridgeContextValue = {
   status: MCPBridgeClientStatus
@@ -72,8 +93,11 @@ export type MCPBridgeContextValue = {
   disconnect: () => void
   permissions: Permissions
   setPermissions: (next: Permissions) => void
-  // The coding agent the pairing link announced, known before it says hello.
+  // Chat mode: the agent the pairing link announced, known before it says hello.
   pairedAgent: PendingPairAgent | null
+  // MCP mode: the coding agent that runs the bridge, when the console knows
+  // its name. Kept after the bridge goes away, for "{name} disconnected".
+  mcpClient: McpClient | null
 }
 
 const defaultContext: MCPBridgeContextValue = {
@@ -89,6 +113,7 @@ const defaultContext: MCPBridgeContextValue = {
   permissions: DEFAULT_GRANTED,
   setPermissions: () => undefined,
   pairedAgent: null,
+  mcpClient: null,
 }
 
 const MCPBridgeContext = createContext<MCPBridgeContextValue>(defaultContext)
@@ -120,6 +145,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [url, setUrl] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [pairedAgent, setPairedAgent] = useState<PendingPairAgent | null>(null)
+  const [mcpClientName, setMcpClientName] = useState<string | null>(null)
   const [status, setStatus] = useState<MCPBridgeClientStatus>("disconnected")
   const [latencyMs, setLatencyMs] = useState<number | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
@@ -136,6 +162,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     url: string
     token: string
     agent?: PendingPairAgent
+    mcpClient?: string
   } | null>(null)
   const [consentInFlight, setConsentInFlight] = useState(false)
   const [consentSucceeded, setConsentSucceeded] = useState(false)
@@ -234,10 +261,12 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     const offVersionMismatch = client.on("versionMismatch", (m) =>
       setVersionMismatch(m),
     )
-    const offHelloAck = client.on("helloAck", () => {
+    const offHelloAck = client.on("helloAck", (ack) => {
       // Promote pending → consented so a same-tab refresh silently restores.
       markPendingPairConsented()
       setLastError(null)
+      const name = ack.mcpClient?.name
+      setMcpClientName(!ack.agent && typeof name === "string" ? name : null)
     })
 
     const offToolCall = client.on("toolCall", (call: ToolCallMessage) => {
@@ -411,6 +440,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setUrl(nextUrl)
     setToken(nextToken)
     setPairedAgent(null)
+    setMcpClientName(null)
     writePendingPair({
       url: nextUrl,
       token: nextToken,
@@ -446,6 +476,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setUrl(null)
     setToken(null)
     setPairedAgent(null)
+    setMcpClientName(null)
     setStatus("disconnected")
     setLatencyMs(null)
     setLastError(null)
@@ -468,9 +499,15 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setUrl(pair.url)
       setToken(pair.token)
       setPairedAgent(pair.agent ?? null)
+      setMcpClientName(pair.mcpClient ?? null)
     } else {
       void trackEvent(ConsoleEvent.MCP_PAIRING_PROMPTED)
-      setPendingConsent({ url: pair.url, token: pair.token, agent: pair.agent })
+      setPendingConsent({
+        url: pair.url,
+        token: pair.token,
+        agent: pair.agent,
+        mcpClient: pair.mcpClient,
+      })
     }
   }, [])
 
@@ -547,6 +584,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setUrl(pendingConsent.url)
       setToken(pendingConsent.token)
       setPairedAgent(pendingConsent.agent ?? null)
+      setMcpClientName(pendingConsent.mcpClient ?? null)
     },
     [pendingConsent, consentInFlight, setPermissions],
   )
@@ -554,9 +592,10 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const declinePendingConsent = useCallback(() => {
     // In the success state, Dismiss should NOT disconnect — the user
     // just confirmed connection.
+    // consentSucceeded stays: the dialog keeps showing success while it
+    // closes, and the next accept resets it.
     if (consentSucceeded) {
       setPendingConsent(null)
-      setConsentSucceeded(false)
       return
     }
     void trackEvent(ConsoleEvent.MCP_PAIRING_DECLINED)
@@ -570,11 +609,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setUrl(null)
     setToken(null)
     setPairedAgent(null)
+    setMcpClientName(null)
     setRetryAttempt(0)
     setLastError(null)
     setVersionMismatch(null)
     clearPendingPair()
   }, [consentSucceeded])
+
+  const mcpClient = useMemo(() => mcpClientOf(mcpClientName), [mcpClientName])
 
   const value = useMemo<MCPBridgeContextValue>(
     () => ({
@@ -590,6 +632,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       permissions,
       setPermissions,
       pairedAgent,
+      mcpClient,
     }),
     [
       status,
@@ -604,6 +647,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       permissions,
       setPermissions,
       pairedAgent,
+      mcpClient,
     ],
   )
 

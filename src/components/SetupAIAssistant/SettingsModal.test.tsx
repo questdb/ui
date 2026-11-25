@@ -19,6 +19,7 @@ import type {
 import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
 import { Button } from "../Button"
 import { SettingsModal } from "./SettingsModal"
+import { EXPECTED_MCP_VERSION } from "../../utils/mcp/protocolVersion"
 
 const pairedAgent: LocalAgentSnapshot = {
   info: { id: "fixture", label: "Test local agent", cwd: "/tmp" },
@@ -162,3 +163,25 @@ it.each([configuredOpenAI.selectedModel, LOCAL_AGENT_MODEL])(
     expect(storedSettings().selectedModel).toBe(selectedModel)
   },
 )
+
+describe("the coding agent tab", () => {
+  it("offers to connect a coding agent before one is connected", async () => {
+    // Given an assistant set up with an API key, and no coding agent
+    modelServer()
+    renderAISettings(
+      <SettingsModal open onOpenChange={() => undefined} />,
+      configuredOpenAI,
+    )
+
+    // When
+    await userEvent.click(getByHook("ai-settings-provider-local-agent"))
+
+    // Then
+    expect(getByHook("ai-settings-provider-local-agent")).toHaveTextContent(
+      "AgentNot connected",
+    )
+    expect(getByHook("ai-settings-connect-agent")).toHaveTextContent(
+      `npx @questdb/mcp-server-questdb@${EXPECTED_MCP_VERSION} connect`,
+    )
+  })
+})

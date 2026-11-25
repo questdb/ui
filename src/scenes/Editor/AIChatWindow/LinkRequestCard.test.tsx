@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import React from "react"
-import { screen } from "@testing-library/react"
+import { act, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../test/component"
+import {
+  DRAWER_ESCAPE_CLAIM,
+  DRAWER_ESCAPE_EVENT,
+} from "../../../components/Drawer/escapeClaim"
 import { LinkRequestCard } from "./LinkRequestCard"
 
 const question = {
@@ -21,6 +25,29 @@ afterEach(() => {
 })
 
 describe("LinkRequestCard", () => {
+  it("declines the request when the chat hands it Escape", () => {
+    // Given
+    const onAnswer = vi.fn(() => true)
+    renderComponent(
+      <LinkRequestCard
+        agentLabel="Codex"
+        question={question}
+        onAnswer={onAnswer}
+        onStop={vi.fn()}
+      />,
+    )
+    const card = screen.getByRole("alertdialog")
+    expect(card).toHaveAttribute(DRAWER_ESCAPE_CLAIM)
+
+    // When the drawer it sits in passes it Escape
+    act(() => {
+      card.dispatchEvent(new CustomEvent(DRAWER_ESCAPE_EVENT))
+    })
+
+    // Then the page is not opened and the request is declined
+    expect(onAnswer).toHaveBeenCalledWith(null)
+  })
+
   it("opens an isolated tab and reports opening only after the user confirms", async () => {
     // Given
     const open = vi.spyOn(window, "open").mockReturnValue(null)

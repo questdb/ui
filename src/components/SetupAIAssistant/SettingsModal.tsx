@@ -19,7 +19,7 @@ import {
   TrashIcon,
   PlugsIcon,
   PlusIcon,
-  TerminalWindowIcon,
+  ChatsCircleIcon,
   XIcon,
 } from "@phosphor-icons/react"
 import { OpenAIIcon } from "./OpenAIIcon"
@@ -66,6 +66,7 @@ import {
   useLocalAgentChannel,
 } from "../../utils/localAgent/LocalAgentContext"
 import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
+import { ConnectAgentSettingsPanel } from "./ConnectAgentSettingsPanel"
 
 const ModalContent = styled.div`
   display: flex;
@@ -555,7 +556,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const [isAgentTabActive, setIsAgentTabActive] = useState(
     () => aiAssistantSettings.selectedModel === LOCAL_AGENT_MODEL,
   )
-  const showAgentPanel = isAgentTabActive && localAgent !== null
+  // The coding agent tab is always there: its settings once an agent is
+  // connected, the command to connect one before.
+  const showAgentPanel = isAgentTabActive
   const handleDisconnectAgent = () => {
     void trackEvent(ConsoleEvent.MCP_DISCONNECT_CLICK)
     disconnect()
@@ -1282,35 +1285,37 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                         </ProviderTab>
                       )
                     })}
-                    {localAgent && (
-                      <ProviderTab
-                        $active={showAgentPanel}
-                        role="tab"
-                        onClick={() => {
-                          abortValidation(selectedProvider)
-                          setIsAgentTabActive(true)
-                        }}
-                        data-hook="ai-settings-provider-local-agent"
-                      >
-                        <ProviderTabTitle>
-                          <TerminalWindowIcon
-                            size={20}
-                            color={
-                              showAgentPanel
-                                ? theme.color.contentPrimary
-                                : theme.color.contentSecondary
-                            }
-                          />
-                          <ProviderTabName $active={showAgentPanel}>
-                            {localAgent.info.label}
-                          </ProviderTabName>
-                        </ProviderTabTitle>
-                        <ProviderStatusChip
-                          enabled={localAgent.state === "ready"}
-                          label={LOCAL_AGENT_STATE_LABELS[localAgent.state]}
+                    <ProviderTab
+                      $active={showAgentPanel}
+                      role="tab"
+                      onClick={() => {
+                        abortValidation(selectedProvider)
+                        setIsAgentTabActive(true)
+                      }}
+                      data-hook="ai-settings-provider-local-agent"
+                    >
+                      <ProviderTabTitle>
+                        <ChatsCircleIcon
+                          size={20}
+                          color={
+                            showAgentPanel
+                              ? theme.color.contentPrimary
+                              : theme.color.contentSecondary
+                          }
                         />
-                      </ProviderTab>
-                    )}
+                        <ProviderTabName $active={showAgentPanel}>
+                          {localAgent?.info.label ?? "Agent"}
+                        </ProviderTabName>
+                      </ProviderTabTitle>
+                      <ProviderStatusChip
+                        enabled={localAgent?.state === "ready"}
+                        label={
+                          localAgent
+                            ? LOCAL_AGENT_STATE_LABELS[localAgent.state]
+                            : "Not connected"
+                        }
+                      />
+                    </ProviderTab>
                   </ProviderTabList>
                   <AddProviderButton
                     type="button"
@@ -1324,7 +1329,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                 </Sidebar>
                 <VerticalSeparator />
                 <ContentPanel>
-                  {showAgentPanel ? (
+                  {showAgentPanel && !localAgent ? (
+                    <ConnectAgentSettingsPanel />
+                  ) : showAgentPanel && localAgent ? (
                     <>
                       <LocalAgentSettingsPanel
                         agent={localAgent}

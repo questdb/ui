@@ -29,7 +29,7 @@ export const localAgentDisplayName = (
   agent: LocalAgentSnapshot | null,
   preferredModel: string | null,
 ): string => {
-  if (!agent) return "Local agent"
+  if (!agent) return "Agent"
   const value = effectiveAgentModel(agent, preferredModel)
   const name = agent.config?.model?.choices.find(
     (choice) => choice.value === value,

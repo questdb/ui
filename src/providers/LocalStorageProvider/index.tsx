@@ -60,7 +60,6 @@ export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
 
 export const DEFAULT_NOTEBOOK_ONBOARDING: NotebookOnboarding = {
   mcpEverConnected: false,
-  showNotebookPromo: true,
   showMcpPromo: true,
   collapseMcpPromo: false,
 }

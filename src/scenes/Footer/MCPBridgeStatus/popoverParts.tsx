@@ -2,7 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import type { DefaultTheme } from "styled-components"
 import { ArrowRightIcon, InfoIcon } from "@phosphor-icons/react"
-import { TextButton } from "../../../components"
+import { TextButton } from "../../../components/TextButton"
 import { Input } from "../../../components/Input"
 import { floatingSurfaceStyles } from "../../../components/overlayStyles"
 import type { AgentChanges } from "./useAgentChanges"
@@ -83,6 +83,14 @@ export const FieldLabel = styled.span`
 export const FullWidthInput = styled(Input)`
   width: 100%;
   font-family: ${({ theme }) => theme.fontMonospace};
+`
+
+// Shows or hides an optional part, like the consent dialog's "Details".
+export const DisclosureToggle = styled(TextButton)`
+  align-self: flex-start;
+  font-size: 1.2rem;
+  /* Lines the label up with the text and boxes above it. */
+  margin-left: -0.4rem;
 `
 
 export const StatusDetail = styled.span`

@@ -110,7 +110,7 @@ const agentModelGroup = (agent: LocalAgentSnapshot): ModelGroup => {
   return {
     key: `agent:${agent.info.id}`,
     label: agent.info.label,
-    caption: "Local agent",
+    caption: "Agent",
     provider: null,
     options:
       choices.length === 0

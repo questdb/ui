@@ -50,13 +50,15 @@ const installFakeWebSocket = (win) => {
     receive(payload) {
       this._dispatch("message", { data: JSON.stringify(payload) })
     }
-    helloAck() {
+    // `extra` adds fields, like the coding agent's `mcpClient`.
+    helloAck(extra) {
       this.receive({
         v: PROTOCOL_VERSION,
         type: "hello_ack",
         sessionId: "test-session",
         heartbeatIntervalMs: 60000,
         seenToolCount: 1,
+        ...extra,
       })
     }
     toolCall(name, args, requestId) {

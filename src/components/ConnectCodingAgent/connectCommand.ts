@@ -2,6 +2,7 @@ import {
   EXPECTED_MCP_VERSION,
   MCP_PACKAGE,
 } from "../../utils/mcp/protocolVersion"
+import { CHAT_AGENTS } from "../../utils/localAgent/chatAgents"
 
 export const MCP_RELEASES_URL =
   "https://github.com/questdb/mcp-server-questdb/releases"
@@ -15,10 +16,19 @@ export const consoleUrlOf = ({
 }: Pick<Location, "origin" | "pathname">): string =>
   `${origin}${pathname.replace(/\/(index\.html)?$/, "")}`
 
+// `agentId` names the agent to run, when the console knows it. Without it,
+// `connect` asks in the terminal. Ids `connect` does not know (a custom
+// agent has no preset) are left out too.
 export const connectCommandOf = (
   consoleUrl: string,
   channel: CommandChannel,
-): string =>
-  channel === "npx"
-    ? `npx ${MCP_PACKAGE}@${EXPECTED_MCP_VERSION} connect ${consoleUrl}`
-    : `node mcp-server-questdb-${EXPECTED_MCP_VERSION}.mjs connect ${consoleUrl}`
+  agentId: string | null = null,
+): string => {
+  const launch =
+    channel === "npx"
+      ? `npx ${MCP_PACKAGE}@${EXPECTED_MCP_VERSION}`
+      : `node mcp-server-questdb-${EXPECTED_MCP_VERSION}.mjs`
+  const known = CHAT_AGENTS.some((agent) => agent.id === agentId)
+  const agent = known ? ` --agent ${agentId}` : ""
+  return `${launch} connect ${consoleUrl}${agent}`
+}

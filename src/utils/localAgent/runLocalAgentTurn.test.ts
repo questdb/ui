@@ -14,6 +14,7 @@ import {
   unregisterLocalAgentChannel,
 } from "./localAgentChannel"
 import { runLocalAgentTurn } from "./runLocalAgentTurn"
+import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
 
 vi.mock("../../modules/ConsoleEventTracker", () => ({
   trackEvent: () => Promise.resolve(),
@@ -631,11 +632,51 @@ describe("runLocalAgentTurn", () => {
     expect(streaming.onTextChunk).not.toHaveBeenCalled()
   })
 
-  it("asks the user to start the bridge when no local agent is connected", async () => {
+  it("starts the same agent again when its connection is gone, and offers no command for a custom one", async () => {
+    // Given channels the console no longer uses
+    vi.stubGlobal("window", {
+      location: { origin: "http://localhost:9000", pathname: "/" },
+    })
+    const staleChannel = (info: { id: string; label: string }) =>
+      new LocalAgentChannel(createFakeBridge().client, {
+        info: { ...info, cwd: "/tmp/workspace" },
+        onNotebookRead: vi.fn(),
+      })
+
+    // When
+    activeChannel = staleChannel({ id: "codex", label: "Codex" })
+    const codex = await startTurn().turn
+    activeChannel = staleChannel({ id: "custom", label: "My agent" })
+    const custom = await startTurn().turn
+    activeChannel = null
+
+    // Then
+    expect(codex).toEqual({
+      type: "network",
+      message: `Codex is not connected. Start it again, then accept the connection: \`npx @questdb/mcp-server-questdb@${EXPECTED_MCP_VERSION} connect http://localhost:9000 --agent codex\``,
+    })
+    expect(custom).toEqual({
+      type: "network",
+      message:
+        "My agent is not connected. Run the connect command you started it with again, in your terminal.",
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it("gives the connect command for this console when no coding agent is connected", async () => {
+    // Given
+    vi.stubGlobal("window", {
+      location: { origin: "http://localhost:9000", pathname: "/" },
+    })
+
     // When
     const { turn } = startTurn()
 
     // Then
-    await expect(turn).resolves.toMatchObject({ type: "network" })
+    await expect(turn).resolves.toEqual({
+      type: "network",
+      message: `Your agent is not connected. Start it, then accept the connection: \`npx @questdb/mcp-server-questdb@${EXPECTED_MCP_VERSION} connect http://localhost:9000\``,
+    })
+    vi.unstubAllGlobals()
   })
 })

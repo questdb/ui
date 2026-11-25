@@ -4,6 +4,10 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react"
 import { Button, CopyButton } from "../../../components"
 import { AIStopButton } from "../../../components/AIStopButton"
 import { focusWithinChat } from "./focusWithinChat"
+import {
+  escapeClaimOf,
+  useDrawerEscape,
+} from "../../../components/Drawer/escapeClaim"
 import type { AgentQuestionMessage } from "../../../utils/localAgent/protocol"
 import {
   AnswerSendError,
@@ -94,8 +98,14 @@ export const LinkRequestCard = ({
     setSendFailed(!sent)
   }
 
+  // Escape in the chat declines the request; the chat stays open.
+  const cardRef = useRef<HTMLElement>(null)
+  useDrawerEscape(cardRef, () => finish(false))
+
   return (
     <Card
+      ref={cardRef}
+      {...escapeClaimOf(!answered)}
       role="alertdialog"
       aria-labelledby={`link-${question.requestId}`}
       data-hook="chat-link-request"

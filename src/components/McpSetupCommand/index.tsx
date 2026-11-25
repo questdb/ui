@@ -2,11 +2,8 @@ import React from "react"
 import styled from "styled-components"
 import { CopyButton } from "../CopyButton"
 import { CopyCommand } from "../icons/copy-command"
-import {
-  EXPECTED_MCP_VERSION,
-  MCP_PACKAGE,
-  MCP_SETUP_COMMAND,
-} from "../../utils/mcp/protocolVersion"
+import { MCP_SETUP_COMMAND } from "../../utils/mcp/protocolVersion"
+import { CommandText } from "../CommandText"
 import { color } from "../../utils"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -17,14 +14,8 @@ const Code = styled.span`
   background: transparent;
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.3rem;
+  line-height: 1.5;
   color: ${color("contentSecondary")};
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-`
-
-const Package = styled.span`
-  color: ${color("statusInfo")};
 `
 
 const CopyCommandButton = styled(CopyButton)`
@@ -51,30 +42,50 @@ const CopyCommandButton = styled(CopyButton)`
   }
 `
 
-export const McpSetupCommand = ({
+// A command in a notebook surface's command box, with a copy button.
+// `after` draws more of the command under it (an option that comes and goes),
+// and `copyText` is then the whole command the button copies.
+export const TerminalCommand = ({
+  command,
   iconSize = 16,
-  source,
+  onCopy,
+  after,
+  copyText,
 }: {
+  command: string
   iconSize?: number
-  source: "promo" | "onboarding"
+  onCopy?: () => void
+  after?: React.ReactNode
+  copyText?: string
 }) => (
   <>
     <Code>
-      npx{" "}
-      <Package>
-        {MCP_PACKAGE}@{EXPECTED_MCP_VERSION}
-      </Package>{" "}
-      setup
+      <CommandText command={command} />
+      {after}
     </Code>
     <CopyCommandButton
       iconOnly
       variant="ghost"
       size="sm"
-      text={MCP_SETUP_COMMAND}
+      text={copyText ?? command}
       icon={<CopyCommand size={iconSize} />}
-      onCopy={() =>
-        void trackEvent(ConsoleEvent.MCP_SETUP_COMMAND_COPY, { source })
-      }
+      onCopy={onCopy}
     />
   </>
+)
+
+export const McpSetupCommand = ({
+  iconSize = 16,
+  source,
+}: {
+  iconSize?: number
+  source: "promo" | "agent_promo"
+}) => (
+  <TerminalCommand
+    command={MCP_SETUP_COMMAND}
+    iconSize={iconSize}
+    onCopy={() =>
+      void trackEvent(ConsoleEvent.MCP_SETUP_COMMAND_COPY, { source })
+    }
+  />
 )

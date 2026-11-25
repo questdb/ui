@@ -149,9 +149,10 @@ export enum ConsoleEvent {
   NOTEBOOK_VARIABLES_APPLY = "notebook.variables_apply",
   NOTEBOOK_VARIABLES_IMPORT = "notebook.variables_import",
   NOTEBOOK_RESULT_TAB_SWITCH = "notebook.result_tab_switch",
-  NOTEBOOK_ONBOARDING_OPEN = "notebook.onboarding_open",
-  NOTEBOOK_ONBOARDING_STEP = "notebook.onboarding_step",
-  NOTEBOOK_ONBOARDING_CLOSE = "notebook.onboarding_close",
+  AGENT_PROMO_OPEN = "agent_promo.open",
+  AGENT_PROMO_CLOSE = "agent_promo.close",
+  AGENT_PROMO_FLOW = "agent_promo.flow",
+  AGENT_PROMO_AGENT = "agent_promo.agent",
 
   MCP_ADD_CELL = "mcp.add_cell",
   MCP_UPDATE_CELL = "mcp.update_cell",

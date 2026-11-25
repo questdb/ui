@@ -465,7 +465,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           isConfigured: isConfigured || hasSelectedLocalAgent,
           canUse: false,
           unavailableReason: isLocalAgentSelected
-            ? "The local agent is not connected"
+            ? "Your agent is not connected"
             : "AI Assistant is not configured",
         }
 

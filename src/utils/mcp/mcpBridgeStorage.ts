@@ -22,6 +22,8 @@ export type StoredPendingPair = {
   receivedAt: number
   // Set when the bridge runs a local agent (agent mode).
   agent?: PendingPairAgent
+  // MCP mode: the coding agent's MCP client name, from the link's `mcp-client`.
+  mcpClient?: string
   // `true` once helloAck arrives after a user-confirmed connect.
   // Pre-consent records get re-prompted; consented records auto-restore.
   consented?: boolean

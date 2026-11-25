@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 import styled from "styled-components"
-import { TerminalWindowIcon } from "@phosphor-icons/react"
+import { ChatsCircleIcon } from "@phosphor-icons/react"
 import { AlertDialog } from "../AlertDialog"
 import { Overlay } from "../Overlay"
 import { Button } from "../Button"
@@ -15,12 +15,17 @@ import {
   Title,
 } from "../../providers/MCPBridgeProvider/consentDialogParts"
 import { CopyableCommand } from "../../scenes/Footer/MCPBridgeStatus/CopyableCommand"
+import { DisclosureToggle } from "../../scenes/Footer/MCPBridgeStatus/popoverParts"
 import {
   connectCommandOf,
   consoleUrlOf,
   MCP_RELEASES_URL,
   type CommandChannel,
 } from "./connectCommand"
+import type { ChatAgent } from "../../utils/localAgent/chatAgents"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { AGENT_VALUE } from "./copy"
 
 const Field = styled.div`
   display: flex;
@@ -33,18 +38,6 @@ const FieldLabel = styled.span`
   color: ${({ theme }) => theme.color.contentSecondary};
   text-transform: uppercase;
   font-weight: 600;
-`
-
-const Hint = styled.p`
-  margin: 0;
-  font-size: 1.2rem;
-  line-height: 1.5;
-  color: ${({ theme }) => theme.color.contentSecondary};
-`
-
-const TroublesToggle = styled(TextButton)`
-  align-self: flex-start;
-  font-size: 1.2rem;
 `
 
 const Troubles = styled.ul`
@@ -72,60 +65,71 @@ const CHANNEL_SWITCH: Record<
   CommandChannel,
   { to: CommandChannel; label: string }
 > = {
-  npx: { to: "standalone", label: "Using the downloaded .mjs file?" },
-  standalone: { to: "npx", label: "Using npx?" },
+  npx: { to: "standalone", label: "Show the node command" },
+  standalone: { to: "npx", label: "Show the npx command" },
 }
 
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // The agent to run, when the console knows the user's coding agent.
+  chatAgent: ChatAgent | null
 }
 
-export const ConnectCodingAgentDialog = ({ open, onOpenChange }: Props) => {
+export const ConnectCodingAgentDialog = ({
+  open,
+  onOpenChange,
+  chatAgent,
+}: Props) => {
   const [channel, setChannel] = useState<CommandChannel>("npx")
   const [showTroubles, setShowTroubles] = useState(false)
-  const command = connectCommandOf(consoleUrlOf(window.location), channel)
+  // A known agent is named in the command; otherwise `connect` asks.
+  const command = connectCommandOf(
+    consoleUrlOf(window.location),
+    channel,
+    chatAgent?.id ?? null,
+  )
 
   return (
     <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
       <AlertDialog.Portal>
-        <Overlay primitive={AlertDialog.Overlay} />
+        <Overlay
+          primitive={AlertDialog.Overlay}
+          onClick={() => onOpenChange(false)}
+          dataHook="connect-agent-overlay"
+        />
         <StyledContent data-hook="connect-agent-dialog">
           <Hero>
             <IconBadge>
-              <TerminalWindowIcon size={28} weight="duotone" />
+              <ChatsCircleIcon size={28} weight="duotone" />
             </IconBadge>
-            <Title>Connect your coding agent</Title>
-            <Lede>
-              Chat with Claude Code, Codex, Gemini, Copilot or Cursor here, with
-              the subscription you already have.
-            </Lede>
+            <Title>
+              Use {chatAgent?.label ?? "your agent"} in the AI Assistant
+            </Title>
+            <Lede>{AGENT_VALUE}</Lede>
           </Hero>
 
           <Body>
             <Field>
-              <FieldLabel>Run this in your terminal</FieldLabel>
-              <CopyableCommand command={command} />
+              <FieldLabel>Start {chatAgent?.label ?? "your agent"}</FieldLabel>
+              <CopyableCommand
+                command={command}
+                onCopy={() =>
+                  void trackEvent(ConsoleEvent.LOCAL_AGENT_COMMAND_COPY, {
+                    source: "dialog",
+                    agent: chatAgent?.id ?? null,
+                  })
+                }
+              />
             </Field>
-            <Hint>
-              It opens the Web Console in a new tab, where you accept the
-              connection. It needs Node.js 22 or later.{" "}
-              <TextButton
-                type="button"
-                onClick={() => setChannel(CHANNEL_SWITCH[channel].to)}
-                data-hook="connect-agent-channel-switch"
-              >
-                {CHANNEL_SWITCH[channel].label}
-              </TextButton>
-            </Hint>
-            <TroublesToggle
+            <DisclosureToggle
               type="button"
               aria-expanded={showTroubles}
               onClick={() => setShowTroubles(!showTroubles)}
               data-hook="connect-agent-troubles-toggle"
             >
               Having trouble?
-            </TroublesToggle>
+            </DisclosureToggle>
             {showTroubles && (
               <Troubles data-hook="connect-agent-troubles">
                 <li>
@@ -137,7 +141,7 @@ export const ConnectCodingAgentDialog = ({ open, onOpenChange }: Props) => {
                 </li>
                 <li>
                   <strong>No new tab opens</strong>: open the link the terminal
-                  shows.
+                  shows, and accept the connection there.
                 </li>
                 <li>
                   <strong>npm cannot reach the internet</strong>: download the
@@ -145,7 +149,14 @@ export const ConnectCodingAgentDialog = ({ open, onOpenChange }: Props) => {
                   <a href={MCP_RELEASES_URL} target="_blank" rel="noreferrer">
                     GitHub releases
                   </a>{" "}
-                  and run it with node.
+                  and run it with node.{" "}
+                  <TextButton
+                    type="button"
+                    onClick={() => setChannel(CHANNEL_SWITCH[channel].to)}
+                    data-hook="connect-agent-channel-switch"
+                  >
+                    {CHANNEL_SWITCH[channel].label}
+                  </TextButton>
                 </li>
               </Troubles>
             )}

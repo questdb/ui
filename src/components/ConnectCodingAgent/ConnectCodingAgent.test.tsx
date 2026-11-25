@@ -37,6 +37,18 @@ describe("connectCommandOf", () => {
       `node mcp-server-questdb-${EXPECTED_MCP_VERSION}.mjs connect https://questdb.acme.io/questdb`,
     )
   })
+
+  it("names the agent to run when it is known, and leaves it out otherwise", () => {
+    expect(connectCommandOf("http://localhost:9000", "npx", "codex")).toBe(
+      `npx @questdb/mcp-server-questdb@${EXPECTED_MCP_VERSION} connect http://localhost:9000 --agent codex`,
+    )
+    expect(connectCommandOf("http://localhost:9000", "npx", "claude")).toBe(
+      `npx @questdb/mcp-server-questdb@${EXPECTED_MCP_VERSION} connect http://localhost:9000 --agent claude`,
+    )
+    expect(connectCommandOf("http://localhost:9000", "npx", "custom")).toBe(
+      `npx @questdb/mcp-server-questdb@${EXPECTED_MCP_VERSION} connect http://localhost:9000`,
+    )
+  })
 })
 
 describe("connecting a coding agent", () => {
@@ -57,12 +69,31 @@ describe("connecting a coding agent", () => {
       connectCommandOf(thisConsole(), "npx"),
     )
 
-    // When the user runs the downloaded file instead
+    // When the user runs the downloaded file instead, a help detail
+    await userEvent.click(getByHook("connect-agent-troubles-toggle"))
     await userEvent.click(getByHook("connect-agent-channel-switch"))
 
     // Then
     expect(getByHook("connect-agent-dialog")).toHaveTextContent(
       connectCommandOf(thisConsole(), "standalone"),
+    )
+  })
+
+  it("closes the dialog on a click outside it", async () => {
+    // Given
+    modelServer()
+    renderAISettings()
+    await userEvent.click(getByHook("ai-assistant-settings-button"))
+    await waitFor(() => expect(getByHook("ai-promo-modal")).toBeVisible())
+    await userEvent.click(getByHook("ai-promo-connect-agent"))
+    await waitFor(() => expect(getByHook("connect-agent-dialog")).toBeVisible())
+
+    // When
+    await userEvent.click(getByHook("connect-agent-overlay"))
+
+    // Then
+    await waitFor(() =>
+      expect(queryByHook("connect-agent-dialog")).not.toBeInTheDocument(),
     )
   })
 

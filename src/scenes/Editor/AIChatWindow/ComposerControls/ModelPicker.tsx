@@ -566,7 +566,7 @@ export const ModelPicker = ({
           </List>
           {agentInvite && (
             <Invite data-hook="chat-model-picker-agent-invite">
-              <InviteText>Chat with your coding agent here</InviteText>
+              <InviteText>Use your agent here</InviteText>
               <NoticeAction
                 type="button"
                 onClick={() => connectAgent(agentInvite)}

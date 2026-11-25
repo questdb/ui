@@ -48,7 +48,7 @@ import { AIChatWindowLazy } from "../Editor/AIChatWindow/AIChatWindowLazy"
 import { AIStatusProvider } from "../../providers/AIStatusProvider"
 import { MCPBridgeProvider } from "../../providers/MCPBridgeProvider"
 import { ConnectCodingAgentProvider } from "../../components/ConnectCodingAgent"
-import { NotebookOnboardingModal } from "../../components/NotebookOnboardingModal"
+import { AgentPromoModal } from "../../components/AgentPromo"
 
 const Page = styled.div`
   display: flex;
@@ -124,7 +124,7 @@ const Layout = () => {
                 <SideMenu />
 
                 <Footer />
-                <NotebookOnboardingModal />
+                <AgentPromoModal />
               </ConnectCodingAgentProvider>
             </AIStatusProvider>
           </MCPBridgeProvider>

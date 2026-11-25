@@ -652,7 +652,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
         setAttachError(
           composerModel.usesAgent
             ? `${localAgent?.info.label ?? "This agent"} does not read images.`
-            : "Images work with local agents that read them.",
+            : "Images work with agents that read them.",
         )
         return
       }
@@ -901,7 +901,7 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
                     : queueMismatch
                       ? "Restore the original destination or edit the queued message."
                       : waitingForBridge
-                        ? `Waiting for ${localAgentChannel?.info.label ?? "your coding agent"}.`
+                        ? `Waiting for ${localAgentChannel?.info.label ?? "your agent"}.`
                         : undefined)
                 }
                 editDisabled={Boolean(queueEditHint)}

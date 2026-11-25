@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import React from "react"
-import { fireEvent, screen } from "@testing-library/react"
+import { act, fireEvent, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
-import { renderComponent } from "../../../test/component"
+import { getHook, renderComponent } from "../../../test/component"
+import {
+  DRAWER_ESCAPE_CLAIM,
+  DRAWER_ESCAPE_EVENT,
+} from "../../../components/Drawer/escapeClaim"
 import type {
   AgentQuestionField,
   AgentQuestionMessage,
@@ -357,6 +361,22 @@ describe("QuestionCard", () => {
       })
     },
   )
+
+  it("skips the question when the chat hands it Escape, and stops claiming Escape once answered", () => {
+    // Given
+    const { onAnswer } = renderCard(question([database, features]))
+    const card = getHook("chat-question-card")
+    expect(card).toHaveAttribute(DRAWER_ESCAPE_CLAIM)
+
+    // When the drawer it sits in passes it Escape
+    act(() => {
+      card.dispatchEvent(new CustomEvent(DRAWER_ESCAPE_EVENT))
+    })
+
+    // Then the question is skipped, as Skip does
+    expect(onAnswer).toHaveBeenCalledWith(null)
+    expect(card).not.toHaveAttribute(DRAWER_ESCAPE_CLAIM)
+  })
 
   it("skips the question on Skip, and Escape does not answer it", async () => {
     // Given

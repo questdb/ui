@@ -20,6 +20,10 @@ import {
 } from "../../../utils/localAgent/questionDisplay"
 import { isImeKeyEvent } from "../../../utils/isImeKeyEvent"
 import { focusWithinChat } from "./focusWithinChat"
+import {
+  escapeClaimOf,
+  useDrawerEscape,
+} from "../../../components/Drawer/escapeClaim"
 
 type Answers = Record<string, string | string[]>
 
@@ -119,8 +123,7 @@ const SendError = styled.p`
 
 export const AnswerSendError = () => (
   <SendError role="alert">
-    Could not send the answer. Check the connection to your coding agent and try
-    again.
+    Could not send the answer. Check the connection to your agent and try again.
   </SendError>
 )
 
@@ -283,7 +286,8 @@ type QuestionCardProps = {
 // answer, like the question prompts of Codex, Claude Code and OpenCode: one
 // question at a time with tabs between them, a pick moves on by itself, the
 // user's own answer is the last option, and several questions end in a
-// review. Escape never answers.
+// review. Escape in the chat skips the question; inside the user's own
+// answer it closes that answer first.
 export const QuestionCard = ({
   agentLabel,
   question,
@@ -350,6 +354,10 @@ export const QuestionCard = ({
     setAnswered(sent)
     setSendFailed(!sent)
   }
+
+  // Escape in the chat skips the question, as Skip does; the chat stays open.
+  const cardRef = useRef<HTMLElement>(null)
+  useDrawerEscape(cardRef, () => finish(null))
 
   const goTo = (next: number, focus = false) => {
     const destination = Math.max(0, Math.min(single ? 0 : reviewTab, next))
@@ -573,6 +581,8 @@ export const QuestionCard = ({
 
   return (
     <Card
+      ref={cardRef}
+      {...escapeClaimOf(!answered)}
       role="alertdialog"
       aria-labelledby={`question-${question.requestId}`}
       onKeyDown={handleKeyDown}

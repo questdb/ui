@@ -949,7 +949,7 @@ const AIChatWindow: React.FC = () => {
     const userMessage = messages[userMessageIndex]
     const usesLocalAgent = currentModel === LOCAL_AGENT_MODEL
     if (userMessage.agentCommand && !usesLocalAgent) {
-      toast.error("Select the local agent before retrying this command.")
+      toast.error("Select your agent before retrying this command.")
       return
     }
     if (!canUse) return
@@ -958,7 +958,7 @@ const AIChatWindow: React.FC = () => {
     const agent = channel?.getSnapshot() ?? null
     const agentModel = queuedAgentModel(agent, aiAssistantSettings)
     if (userMessage.images?.length && !agent?.acceptsImages) {
-      toast.error("Select a local agent that reads images before retrying.")
+      toast.error("Select an agent that reads images before retrying.")
       return
     }
     if (
@@ -1298,10 +1298,9 @@ const AIChatWindow: React.FC = () => {
                     Leverage AI directly in your database
                   </BlankChatHeading>
                   <BlankChatSubheading>
-                    Our AI Assistant is a specialized programming and support
-                    agent that makes you more effective and helps you solve
-                    problems as you interface with your QuestDB database. Start
-                    a conversation.
+                    {currentModel === LOCAL_AGENT_MODEL && localAgentChannel
+                      ? `Ask ${localAgentChannel.info.label} to analyze your data, monitor your instance or build a dashboard.`
+                      : "Our AI Assistant is a specialized programming and support agent that makes you more effective and helps you solve problems as you interface with your QuestDB database. Start a conversation."}
                   </BlankChatSubheading>
                 </BlankChatContainer>
               )}

@@ -69,6 +69,7 @@ import {
   projectConversationTurns,
   type VisibleEntry,
 } from "../../../utils/ai/turnView"
+import { ChatErrorText } from "./ChatErrorText"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
@@ -1376,7 +1377,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               color={theme.color.statusDanger}
               style={{ flexShrink: 0 }}
             />
-            {message.error}
+            <ChatErrorText error={message.error ?? ""} />
             {showRetry && onRetry && (
               <RetryButton
                 size="sm"
@@ -1391,9 +1392,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   }
                 }}
                 disabled={retryDisabled}
-                title={
-                  retryDisabled ? "Waiting for your coding agent" : undefined
-                }
+                title={retryDisabled ? "Waiting for your agent" : undefined}
                 data-hook="retry-button"
               >
                 Retry

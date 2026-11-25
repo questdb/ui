@@ -43,7 +43,7 @@ const groups: ModelGroup[] = [
   {
     key: "agent:pi",
     label: "Pi",
-    caption: "Local agent",
+    caption: "Agent",
     provider: null,
     options: [
       option("Claude Opus 5.5", "anthropic/opus", "agent"),

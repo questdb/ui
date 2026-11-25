@@ -14,6 +14,7 @@ import { useOpenConnectCodingAgent } from "../../../../components/ConnectCodingA
 import { getValue, setValue } from "../../../../utils/localStorage"
 import { StoreKey } from "../../../../utils/localStorage/types"
 import type { ContextUsage as ContextUsageCounts } from "../../../../utils/ai/aiAssistant"
+import { useMCPBridge } from "../../../../providers/MCPBridgeProvider"
 
 const Row = styled.div`
   display: flex;
@@ -63,6 +64,8 @@ export const ComposerControls = ({
   )
   const model = useComposerModel()
   const openConnectCodingAgent = useOpenConnectCodingAgent()
+  // A terminal-mode agent is the one to suggest for the AI Assistant.
+  const { mcpClient } = useMCPBridge()
 
   const dismissInvite = () => {
     void trackEvent(ConsoleEvent.LOCAL_AGENT_INVITE_DISMISS)
@@ -88,7 +91,11 @@ export const ComposerControls = ({
             model.agent || inviteDismissed
               ? null
               : {
-                  onConnect: () => openConnectCodingAgent("model_picker"),
+                  onConnect: () =>
+                    openConnectCodingAgent(
+                      "model_picker",
+                      mcpClient?.chatAgent ?? null,
+                    ),
                   onDismiss: dismissInvite,
                 }
           }

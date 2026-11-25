@@ -1,11 +1,32 @@
 import React from "react"
 import styled from "styled-components"
-import { CaretDownIcon, CaretRightIcon, XIcon } from "@phosphor-icons/react"
-import { McpSetupCommand } from "../../../../components/McpSetupCommand"
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  ChatsCircleIcon,
+  TerminalWindowIcon,
+  XIcon,
+} from "@phosphor-icons/react"
+import {
+  McpSetupCommand,
+  TerminalCommand,
+} from "../../../../components/McpSetupCommand"
+import {
+  connectCommandOf,
+  consoleUrlOf,
+} from "../../../../components/ConnectCodingAgent/connectCommand"
+import {
+  FROM_TERMINAL,
+  IN_AI_ASSISTANT,
+  AGENT_VALUE,
+} from "../../../../components/ConnectCodingAgent/copy"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
   Badge,
+  Separator,
   TitleRow,
-} from "../../../../components/NotebookOnboardingModal/shared"
+} from "../../../../components/ConnectCodingAgent/parts"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import {
   isMcpPromoCollapsed,
@@ -62,7 +83,40 @@ const Description = styled.p`
 const Actions = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 1.6rem;
+`
+
+const Option = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+`
+
+// The promo is wide; the "or" between the two ways stays the width of a
+// command box.
+const OrRow = styled.div`
+  max-width: 60rem;
+`
+
+const OptionTitle = styled.span`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: ${color("contentPrimary")};
+
+  svg {
+    flex-shrink: 0;
+    color: ${color("contentSecondary")};
+  }
+`
+
+const Hint = styled.p`
+  margin: 0;
+  font-size: 1.28rem;
+  line-height: 1.5;
+  color: ${color("contentMuted")};
 `
 
 const CommandBox = styled.div`
@@ -78,13 +132,6 @@ const CommandBox = styled.div`
   box-shadow: 0 1px 1px ${({ theme }) => theme.color.shadowSubtle};
 `
 
-const FootNote = styled.p`
-  margin: 0;
-  font-size: 1.28rem;
-  line-height: 1.5;
-  color: ${color("contentMuted")};
-`
-
 export const NotebookMcpPromo = () => {
   const { notebookOnboarding, updateNotebookOnboarding } = useLocalStorage()
 
@@ -97,7 +144,7 @@ export const NotebookMcpPromo = () => {
 
   const title = (
     <TitleRow>
-      <Title>Work with your coding agent via MCP</Title>
+      <Title>Work on notebooks with your agent</Title>
       <Badge>New</Badge>
     </TitleRow>
   )
@@ -141,20 +188,39 @@ export const NotebookMcpPromo = () => {
       <Content>
         <Header>
           {title}
-          <Description>
-            A shared notebook your AI agent can drive over MCP. You keep control
-            of the data. Hand analysis back and forth with your agent – queries,
-            charts, and dashboards in one surface.
-          </Description>
+          <Description>{AGENT_VALUE}</Description>
         </Header>
         <Actions>
-          <CommandBox>
-            <McpSetupCommand iconSize={18} source="promo" />
-          </CommandBox>
-          <FootNote>
-            Install the MCP using your terminal and use it in any coding agent
-            seamlessly
-          </FootNote>
+          <Option data-hook="notebook-promo-ai-assistant-option">
+            <OptionTitle>
+              <ChatsCircleIcon size={18} weight="duotone" />
+              {IN_AI_ASSISTANT.title}
+            </OptionTitle>
+            <CommandBox>
+              <TerminalCommand
+                command={connectCommandOf(consoleUrlOf(window.location), "npx")}
+                iconSize={18}
+                onCopy={() =>
+                  void trackEvent(ConsoleEvent.LOCAL_AGENT_COMMAND_COPY, {
+                    source: "promo",
+                  })
+                }
+              />
+            </CommandBox>
+          </Option>
+          <OrRow>
+            <Separator label="or" />
+          </OrRow>
+          <Option data-hook="notebook-promo-terminal-option">
+            <OptionTitle>
+              <TerminalWindowIcon size={18} weight="duotone" />
+              {FROM_TERMINAL.title}
+            </OptionTitle>
+            <CommandBox>
+              <McpSetupCommand iconSize={18} source="promo" />
+            </CommandBox>
+            <Hint>{FROM_TERMINAL.then}</Hint>
+          </Option>
         </Actions>
       </Content>
       <PromoIconButton

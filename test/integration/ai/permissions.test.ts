@@ -269,7 +269,7 @@ describe.each(levels)("AI permission flow: $name", (level) => {
           : level.write)
     if (!granted) {
       const suffix =
-        "Ask the user to grant it in the QuestDB console (footer → MCP popover or AI Assistant settings)."
+        "Ask the user to grant it in the QuestDB Web Console (click the agent status at the bottom of the screen, then Permissions)."
       const denied =
         probe.scope === "schema"
           ? `PERMISSION_DENIED: tool '${probe.name}' requires the 'grantSchemaAccess' permission. ${suffix}`
