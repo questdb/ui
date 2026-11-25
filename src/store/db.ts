@@ -30,6 +30,8 @@ import { StoreKey } from "../utils/localStorage/types"
 import { getValue } from "../utils/localStorage"
 import type { AIConversation } from "../providers/AIConversationProvider/types"
 import type { NotebookResultSnapshot } from "./notebookResults"
+import type { NotebookGlobals } from "./notebookGlobals"
+import type { StoredVariableOptions } from "./notebookOptions"
 
 type EditorSettings = {
   key: string
@@ -56,6 +58,8 @@ export class Storage extends Dexie {
     number
   >
   notebook_results!: Table<NotebookResultSnapshot, [number, string]>
+  notebook_globals!: Table<NotebookGlobals, string>
+  notebook_options!: Table<StoredVariableOptions, [string, string]>
   ready: boolean = false
 
   constructor() {
@@ -118,6 +122,12 @@ export class Storage extends Dexie {
     // import/export buffer compatibility below is unaffected.
     this.version(9).stores({
       notebook_results: "[bufferId+cellId], bufferId, savedAt",
+    })
+    this.version(10).stores({
+      notebook_globals: "id",
+    })
+    this.version(11).stores({
+      notebook_options: "[owner+name], owner",
     })
     // ──────────────────────────────────────────────────────────────────
     // ⚠️ IMPORTANT — Import/Export compatibility (https://github.com/dexie/Dexie.js/issues/1337)

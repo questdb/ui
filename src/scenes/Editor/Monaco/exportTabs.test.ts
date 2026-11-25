@@ -21,12 +21,16 @@ const { exportDB } = vi.hoisted(() => ({
   ),
 }))
 vi.mock("dexie-export-import", () => ({ exportDB }))
+vi.mock("../../../store/notebookGlobals", () => ({
+  getNotebookGlobals: () => Promise.resolve(null),
+}))
 
 import {
   shouldExportBuffer,
   buildExportFileName,
   reconcileRowCounts,
   exportBuffers,
+  withInlinedGlobals,
 } from "./exportTabs"
 
 describe("shouldExportBuffer", () => {
@@ -183,5 +187,44 @@ describe("exportBuffers wiring", () => {
       data: { tables: Array<{ rowCount: number }> }
     }
     expect(parsed.data.tables[0].rowCount).toBe(1)
+  })
+})
+
+describe("withInlinedGlobals", () => {
+  it("adds the referenced globals to a notebook row and leaves other rows alone", () => {
+    // Given
+    const venue = { name: "venue", kind: "text" as const, value: "'LSE'" }
+    const json = {
+      data: {
+        data: [
+          {
+            tableName: "buffers",
+            rows: [
+              { id: 1, label: "SQL", value: "SELECT @venue" },
+              {
+                id: 2,
+                label: "Notebook",
+                value: "",
+                notebookViewState: {
+                  cells: [{ id: "a", position: 0, value: "SELECT @venue" }],
+                  settings: { variables: [] },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    }
+
+    // When
+    const out = withInlinedGlobals(json, [venue])
+
+    // Then
+    const rows = out.data?.data?.[0].rows as Array<Record<string, unknown>>
+    expect(rows[0]).toEqual({ id: 1, label: "SQL", value: "SELECT @venue" })
+    expect(rows[1].notebookViewState).toEqual({
+      cells: [{ id: "a", position: 0, value: "SELECT @venue" }],
+      settings: { variables: [], globals: [venue] },
+    })
   })
 })

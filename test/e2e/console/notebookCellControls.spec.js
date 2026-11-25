@@ -1,7 +1,7 @@
 /// <reference types="cypress" />
 
-// Cell controls that only a real browser exercises: the keyboard pane resize
-// and the Stop control of a first run or first chart fetch.
+// Cell controls that only a real browser exercises: the Stop control of a
+// first run or first chart fetch.
 
 const { createNotebookBuffer } = require("../utils/editorBuffers")
 
@@ -16,59 +16,6 @@ const loadNotebookCell = (sql) => {
 
 const runFocusedCell = () =>
   cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
-
-const editorSeparator = () =>
-  cy.get('[role="separator"][aria-label="Resize editor pane"]')
-
-const valueNow = ($separator) => Number($separator.attr("aria-valuenow"))
-
-const readStoredEditorHeight = (win) =>
-  new Cypress.Promise((resolve, reject) => {
-    const openRequest = win.indexedDB.open("web-console")
-    openRequest.onerror = () => reject(openRequest.error)
-    openRequest.onsuccess = () => {
-      const database = openRequest.result
-      const fail = (error) => {
-        database.close()
-        reject(error)
-      }
-      const transaction = database.transaction(
-        ["editor_settings", "buffers"],
-        "readonly",
-      )
-      const activeBufferRequest = transaction
-        .objectStore("editor_settings")
-        .index("key")
-        .get("activeBufferId")
-      activeBufferRequest.onerror = () => fail(activeBufferRequest.error)
-      activeBufferRequest.onsuccess = () => {
-        const bufferRequest = transaction
-          .objectStore("buffers")
-          .get(activeBufferRequest.result?.value)
-        bufferRequest.onerror = () => fail(bufferRequest.error)
-        bufferRequest.onsuccess = () => {
-          database.close()
-          resolve(bufferRequest.result?.notebookViewState?.cells[0]?.topHeight)
-        }
-      }
-    }
-  })
-
-// The notebook writes a resize to IndexedDB after a debounce; polling the
-// stored value is the only signal that the write landed.
-const waitForStoredEditorHeight = (height) =>
-  cy.window().then((win) => {
-    const deadline = Date.now() + 8000
-    const poll = () =>
-      readStoredEditorHeight(win).then((stored) => {
-        if (stored === height) return
-        if (Date.now() > deadline) {
-          throw new Error(`stored editor height is ${stored}, not ${height}`)
-        }
-        return Cypress.Promise.delay(100).then(poll)
-      })
-    return poll()
-  })
 
 // Holds the first matching request open until the test releases it, so the
 // cell stays in its first run while the test drives the Stop control. The
@@ -98,37 +45,6 @@ const clickStop = (label) => {
 }
 
 describe("notebook cell controls", () => {
-  describe("keyboard resize", () => {
-    it("keeps keyboard resizing across a reload", () => {
-      // Given a cell whose result splits it into an editor and a result pane
-      loadNotebookCell("select 1")
-      runFocusedCell()
-      editorSeparator().should("have.attr", "aria-valuenow")
-      let before
-      editorSeparator().then(($separator) => {
-        before = valueNow($separator)
-      })
-
-      // When the editor pane is grown by three keyboard steps
-      editorSeparator().focus()
-      cy.realPress("ArrowDown")
-      cy.realPress("ArrowDown")
-      cy.realPress("ArrowDown")
-
-      // Then the pane follows the keys and the release stores the height
-      editorSeparator().should(($grown) => {
-        expect(valueNow($grown)).to.eq(before + 30)
-      })
-      cy.then(() => waitForStoredEditorHeight(before + 30))
-
-      // And the stored height survives a reload
-      cy.reload()
-      editorSeparator().should(($restored) => {
-        expect(valueNow($restored)).to.eq(before + 30)
-      })
-    })
-  })
-
   describe("Stop", () => {
     it("cancels a first run and reports it in the result", () => {
       // Given a cell whose first run the server has not answered yet

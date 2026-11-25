@@ -33,6 +33,8 @@ export const deriveRunStatusFromResults = (
 // Read order: live execution first (pending slots), then the RECORDED run
 // history (stamped by run commits only — refresh settles never touch it),
 // then result derivation as the fallback for records that predate stamping.
+// A draw cell's result is the chart frame the refresh engine loads while the
+// cell is on screen, never run output, so it never stands in for a run.
 export const getCellRunStatus = (
   cell:
     | {
@@ -41,6 +43,7 @@ export const getCellRunStatus = (
         } | null
         lastRunStatus?: RunStatus
         lastRunError?: string
+        mode?: "draw"
       }
     | null
     | undefined,
@@ -55,7 +58,8 @@ export const getCellRunStatus = (
       ...(cell.lastRunError ? { error: cell.lastRunError } : {}),
     }
   }
-  if (cell?.result) return deriveRunStatusFromResults(cell.result.results)
+  if (cell?.result && cell.mode !== "draw")
+    return deriveRunStatusFromResults(cell.result.results)
   return { status: "none" }
 }
 

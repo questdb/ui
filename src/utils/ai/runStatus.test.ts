@@ -225,4 +225,28 @@ describe("cellRunStatus", () => {
       }),
     ).toEqual({ status: "error", error: "x" })
   })
+
+  it("never derives a draw cell's status from its chart frame", () => {
+    // Given a draw cell whose chart loaded (or failed) but was never run
+    expect(
+      getCellRunStatus({
+        mode: "draw",
+        result: { results: [{ type: "dql" }] },
+      }),
+    ).toEqual({ status: "none" })
+    expect(
+      getCellRunStatus({
+        mode: "draw",
+        result: { results: [{ type: "error", error: "x" }] },
+      }),
+    ).toEqual({ status: "none" })
+    // And a draw cell that was run keeps its recorded outcome
+    expect(
+      getCellRunStatus({
+        mode: "draw",
+        result: { results: [{ type: "error", error: "poll" }] },
+        lastRunStatus: "success",
+      }),
+    ).toEqual({ status: "success" })
+  })
 })

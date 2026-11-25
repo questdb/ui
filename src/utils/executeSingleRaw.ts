@@ -2,7 +2,7 @@ import * as QuestDB from "./questdb"
 import type { Client } from "./questdb/client"
 import type { ColumnDefinition, Timings } from "./questdb/types"
 import { expandGlobals } from "../scenes/Editor/Notebook/declareUtils"
-import type { NotebookVariable } from "../store/notebook"
+import type { DeclareEntry } from "../store/notebook"
 import {
   sessionFailureOf,
   type SessionFailure,
@@ -30,7 +30,7 @@ export type QueryExecResult = SessionFailure & {
 export const executeSingleRaw = async (
   quest: Client,
   sql: string,
-  globals: NotebookVariable[] | undefined,
+  globals: DeclareEntry[] | undefined,
   signal?: AbortSignal,
   limit: number = RESULT_DISPLAY_LIMIT,
   options: { background?: boolean } = {},

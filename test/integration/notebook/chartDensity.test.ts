@@ -4,6 +4,7 @@ import type { EChartsOption } from "echarts"
 import {
   buildEchartsOption,
   withZoomDensity,
+  type ChartGlobals,
   type ResolvedQuery,
 } from "../../../src/scenes/Editor/Notebook/CellChart/buildEchartsOption"
 import {
@@ -21,6 +22,11 @@ const needsWheelZoom = (option: EChartsOption, widthPx: number) =>
 
 const withMeasuredZoom = (option: EChartsOption, widthPx: number) =>
   withZoomDensity(option, chartZoomDensity(option, widthPx))
+
+const PALETTE = { up: "#0f0", down: "#f00", neutral: "#888" }
+const VIEWPORT = { height: 400 }
+const build = (chart: ChartGlobals, queries: ResolvedQuery[]) =>
+  buildEchartsOption(chart, queries, PALETTE, VIEWPORT)
 
 const col = (name: string, type: string): ColumnDefinition => ({ name, type })
 
@@ -55,7 +61,7 @@ const rows = (count: number, valuesPerRow: number): number[][] =>
 
 const bars = (count: number, seriesCount: number) => {
   const yColumns = Array.from({ length: seriesCount }, (_, j) => `y${j}`)
-  return buildEchartsOption({ xColumn: "ts" }, [
+  return build({ xColumn: "ts" }, [
     resolved({
       columns: [
         col("ts", "TIMESTAMP"),
@@ -70,7 +76,7 @@ const bars = (count: number, seriesCount: number) => {
 }
 
 const candles = (count: number) =>
-  buildEchartsOption({ xColumn: "ts" }, [
+  build({ xColumn: "ts" }, [
     resolved({
       columns: [
         col("ts", "TIMESTAMP"),
@@ -88,7 +94,7 @@ const candles = (count: number) =>
   ])
 
 const line = (count: number) =>
-  buildEchartsOption({ xColumn: "ts" }, [
+  build({ xColumn: "ts" }, [
     resolved({
       columns: [col("ts", "TIMESTAMP"), col("v", "DOUBLE")],
       dataset: rows(count, 1),

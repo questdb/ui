@@ -1,3 +1,4 @@
+import type { CapturedExecution } from "./variables/captureExecution"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Dispatch, MutableRefObject, SetStateAction } from "react"
 import type {
@@ -9,7 +10,6 @@ import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { getQueriesFromText } from "../Monaco/utils"
-import type { ValidateQueryResult } from "../../../utils/questdb/types"
 import {
   hasWriteStatement,
   requireAllDQL,
@@ -144,17 +144,12 @@ export const launchStatement = async (
 }
 
 type Options = {
+  captureExecution: (
+    cellId: string,
+    signal?: AbortSignal,
+  ) => Promise<CapturedExecution>
   bufferId: number
   cellsRef: MutableRefObject<NotebookCell[]>
-  executeSingle: (
-    sql: string,
-    signal?: AbortSignal,
-    limit?: number,
-  ) => Promise<QueryExecResult>
-  validateWithGlobals: (
-    sql: string,
-    signal?: AbortSignal,
-  ) => Promise<ValidateQueryResult>
   updateCellResult: (
     cellId: string,
     index: number,
@@ -171,10 +166,9 @@ type Options = {
 }
 
 export const useCellExecution = ({
+  captureExecution,
   bufferId,
   cellsRef,
-  executeSingle,
-  validateWithGlobals,
   updateCellResult,
   updateCell,
   updateCells,
@@ -237,6 +231,7 @@ export const useCellExecution = ({
       externalSignal: AbortSignal | undefined,
       expectFullValue: boolean,
       valueAtRunStart: string,
+      executeSingle: CapturedExecution["executeSingle"],
     ): Promise<CellRunOutcome> => {
       if (queries.length === 0) return { ok: false, superseded: false }
 
@@ -414,7 +409,6 @@ export const useCellExecution = ({
     },
     [
       cellsRef,
-      executeSingle,
       updateCell,
       updateCellResult,
       setScriptSummary,
@@ -472,6 +466,7 @@ export const useCellExecution = ({
       externalSignal: AbortSignal | undefined,
       expectFullValue: boolean,
       valueAtRunStart: string,
+      executeSingle: CapturedExecution["executeSingle"],
     ): Promise<CellRunOutcome> => {
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
@@ -630,7 +625,6 @@ export const useCellExecution = ({
     },
     [
       cellsRef,
-      executeSingle,
       updateCell,
       updateCellResult,
       setScriptSummary,
@@ -679,21 +673,37 @@ export const useCellExecution = ({
         return outcome
       }
 
+      // Variables settle and are captured once, so validation and the run
+      // see the same values.
       let barrier: RunBarrierOutcome
+      let captured: CapturedExecution
       try {
+        captured = await captureExecution(cellId, claim.signal)
         barrier = await resolveRunBarrier(
           queryText,
           queries.length,
           gate,
           (stmt) =>
             statementRequestLimiter(
-              () => validateWithGlobals(stmt, claim.signal),
+              () => captured.validateWithGlobals(stmt, claim.signal),
               claim.signal,
             ),
         )
-      } finally {
+      } catch (error) {
+        // Released here, not in a finally: a second release could drop a
+        // newer claim's entry.
         claim.release()
+        if (claim.signal.aborted || externalSignal?.aborted) {
+          return bail({
+            ...notRun,
+            notStarted: true,
+            cancelled: runCancellationOf(claim.signal),
+          })
+        }
+        releaseIdleCell(cellId)
+        throw error
       }
+      claim.release()
 
       // Re-check the claim after the barrier await: a cancel, delete, or
       // mode change that landed during validation would otherwise launch —
@@ -725,6 +735,7 @@ export const useCellExecution = ({
           externalSignal,
           expectFullValue,
           valueAtRunStart,
+          captured.executeSingle,
         )
       }
       if (queries.length > 1) {
@@ -734,6 +745,7 @@ export const useCellExecution = ({
           externalSignal,
           expectFullValue,
           valueAtRunStart,
+          captured.executeSingle,
         )
       }
 
@@ -765,7 +777,7 @@ export const useCellExecution = ({
       setRunningCellIds((prev) => new Set(prev).add(cellId))
       try {
         const launch = await launchStatement(
-          () => executeSingle(queryText, ac.signal, NOTEBOOK_ROW_CAP),
+          () => captured.executeSingle(queryText, ac.signal, NOTEBOOK_ROW_CAP),
           ac.signal,
           queryText,
         )
@@ -823,8 +835,7 @@ export const useCellExecution = ({
     },
     [
       cellsRef,
-      executeSingle,
-      validateWithGlobals,
+      captureExecution,
       updateCell,
       runScript,
       runParallel,
@@ -862,8 +873,9 @@ export const useCellExecution = ({
       try {
         let execResult: QueryExecResult
         try {
+          const captured = await captureExecution(cellId, ac.signal)
           execResult = await statementRequestLimiter(
-            () => executeSingle(sql, ac.signal, NOTEBOOK_ROW_CAP),
+            () => captured.executeSingle(sql, ac.signal, NOTEBOOK_ROW_CAP),
             ac.signal,
           )
         } catch {
@@ -897,7 +909,7 @@ export const useCellExecution = ({
     },
     [
       cellsRef,
-      executeSingle,
+      captureExecution,
       updateCellResult,
       stampRunHistory,
       persistSnapshot,
@@ -920,12 +932,19 @@ export const useCellExecution = ({
       const claim = claimBarrier(cellId, externalSignal)
       let decision: PermissionDecision
       try {
+        // The cell's own entries, so a per-cell time range validates too.
+        const captured = await captureExecution(cellId, claim.signal)
         decision = await requireAllDQL(valueAtStart, (stmt) =>
           statementRequestLimiter(
-            () => validateWithGlobals(stmt, claim.signal),
+            () => captured.validateWithGlobals(stmt, claim.signal),
             claim.signal,
           ),
         )
+      } catch (error) {
+        if (claim.signal.aborted || externalSignal?.aborted) {
+          return { granted: false }
+        }
+        throw error
       } finally {
         claim.release()
         releaseIdleCell(cellId)
@@ -940,7 +959,7 @@ export const useCellExecution = ({
       }
       return { granted: true }
     },
-    [cellsRef, claimBarrier, releaseIdleCell, validateWithGlobals],
+    [cellsRef, claimBarrier, releaseIdleCell, captureExecution],
   )
 
   // Silently discard an in-flight run: no cancelled markers, no snapshot

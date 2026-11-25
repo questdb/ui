@@ -15,6 +15,12 @@ import {
   getParserQuoteAtCursor,
   maskParserBlockComments,
 } from "../../../../utils/parserSql"
+import {
+  substitutionItems,
+  variableItems,
+  variableReferenceRange,
+  variableSuggestionsFor,
+} from "./variableCompletion"
 
 /**
  * Map parser's SuggestionKind to Monaco's CompletionItemKind
@@ -144,7 +150,7 @@ export const createSchemaCompletionProvider = (
 
   const completionProvider: languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .":('.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .":(@'.split(""),
 
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
@@ -158,6 +164,15 @@ export const createSchemaCompletionProvider = (
 
       const quoteContext = getParserQuoteAtCursor(fullText, cursorOffset)
       if (quoteContext?.quote === "'") return null
+
+      // A variable reference is never inside a quoted identifier.
+      const variables = variableSuggestionsFor(model)
+      const referenceRange = quoteContext
+        ? null
+        : variableReferenceRange(model, position)
+      if (referenceRange && variables.length > 0) {
+        return { suggestions: variableItems(variables, referenceRange) }
+      }
 
       const charBeforeCursor =
         cursorOffset > 0 ? fullText[cursorOffset - 1] : ""
@@ -329,7 +344,7 @@ export const createSchemaCompletionProvider = (
 
       return {
         incomplete: true,
-        suggestions: filtered.map((suggestion) => {
+        suggestions: filtered.flatMap((suggestion) => {
           const isQuotedFunction =
             isQuotedNamespace && suggestion.kind === SuggestionKind.Function
           const replacesNamespace =
@@ -350,7 +365,17 @@ export const createSchemaCompletionProvider = (
           if (isQuotedFunction) {
             item.filterText = openQuote + suggestion.insertText
           }
-          return item
+          return isInsideQuotedIdentifier
+            ? [item]
+            : [
+                item,
+                ...substitutionItems(
+                  variables,
+                  suggestion,
+                  item.sortText ?? "",
+                  range,
+                ),
+              ]
         }),
       }
     },

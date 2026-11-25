@@ -16,10 +16,19 @@ import type {
   CellLayoutItem,
   NotebookCell,
   NotebookSettings,
+  NotebookVariable,
+  TimeRange,
 } from "../../store/notebook"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import type { WorkspaceInfo } from "./executeAIFlow"
-import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { isQueryList } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
+import {
+  loadStoredOptions,
+  notebookOptionsOwner,
+  type StoredVariableOptions,
+} from "../../store/notebookOptions"
+import { getNotebookGlobals } from "../../store/notebookGlobals"
 import {
   agentCellPaneDimensions,
   agentCellPresentation,
@@ -33,6 +42,7 @@ type ChartQueryWire = {
   type: string
   y_columns: string[]
   ohlc?: { open: string; high: string; low: string; close: string }
+  volume?: string
   partition_by_column?: string
   axis?: "left" | "right"
   enabled?: boolean
@@ -42,12 +52,17 @@ import {
   toHighlightConfigWire,
   type HighlightConfigWire,
 } from "../tools/highlightConfigWire"
+import {
+  storedVariableToWire,
+  type NotebookVariableWire,
+} from "../tools/variablesWire"
 
 export type { HighlightConfigWire }
 
 export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
+  left_axis?: { name?: string; min?: number; max?: number }
   right_axis?: { name?: string; min?: number; max?: number }
 }
 
@@ -66,6 +81,9 @@ export type NotebookContextCell = {
   type?: "sql" | "markdown"
   mode: "run" | "draw" | null
   auto_refresh?: AutoRefresh
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   editor_height: number | "auto"
   result_height: number | "auto" | null
   view: AgentCellView | null
@@ -78,6 +96,9 @@ export type NotebookContextCell = {
   refreshing?: true
   last_refresh_error?: string
   auto_refresh_blocked?: "contains_write"
+  // Live-only, draw cells: when the data the chart currently shows was
+  // fetched (epoch ms). Absent while no chart data is loaded.
+  refreshed_at?: number
   grid?: { x: number; y: number; w: number }
 }
 
@@ -90,7 +111,11 @@ export type NotebookContextSnapshot =
       // Absent when the notebook has no configured default.
       auto_refresh_default?: AutoRefresh
       maximized_cell_id: string | null
-      variables?: Array<{ name: string; value: string }>
+      // Same wire shape apply_notebook_state / apply_global_variables accept.
+      variables?: NotebookVariableWire[]
+      global_variables?: NotebookVariableWire[]
+      variable_values?: VariableValuesStatus[]
+      time_range?: TimeRange
       cells: NotebookContextCell[]
     }
   | {
@@ -98,6 +123,10 @@ export type NotebookContextSnapshot =
       buffer_id: number
       label?: string
     }
+
+export type VariableValuesStatus =
+  | { name: string; count: number; fetched_at: number }
+  | { name: string; fetched: false }
 
 const PREVIEW_MAX = 120
 const ERROR_MAX = 200
@@ -129,6 +158,7 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           type: q.type,
           y_columns: q.yColumns,
           ...(q.ohlc ? { ohlc: q.ohlc } : {}),
+          ...(q.volume ? { volume: q.volume } : {}),
           ...(q.partitionByColumn
             ? { partition_by_column: q.partitionByColumn }
             : {}),
@@ -137,6 +167,7 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.name != null ? { name: q.name } : {}),
         },
   ),
+  ...(cfg.leftAxis ? { left_axis: cfg.leftAxis } : {}),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
 })
 
@@ -144,6 +175,21 @@ const highlightConfigWire = (
   cell: NotebookCell,
 ): HighlightConfigWire | undefined =>
   cell.highlightConfig ? toHighlightConfigWire(cell.highlightConfig) : undefined
+
+// A draw cell's result is the chart frame loaded while the cell is on screen
+// (the live view keeps it; stored cells never carry one). Reporting when its
+// data was fetched lets an agent tell a drawn chart from one never loaded.
+const drawFrameFields = (
+  cell: NotebookCell,
+): Pick<NotebookContextCell, "refreshed_at"> => {
+  if (cell.mode !== "draw" || !cell.result) return {}
+  let fetchedAt: number | undefined
+  for (const result of cell.result.results) {
+    if (result.type !== "dql" || result.fetchedAt === undefined) continue
+    fetchedAt = Math.max(fetchedAt ?? 0, result.fetchedAt)
+  }
+  return fetchedAt === undefined ? {} : { refreshed_at: fetchedAt }
+}
 
 // Forwards ONLY status + trimmed error — no columns, rows, or counts.
 const lastRunSummary = (
@@ -186,6 +232,21 @@ const refreshFields = (
   }
 }
 
+type CellTimeWire = {
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
+}
+
+const cellTimeWire = (cell: NotebookCell): CellTimeWire => {
+  if (cell.type === "markdown") return {}
+  const out: CellTimeWire = {}
+  if (cell.timeRange) out.time_range = cell.timeRange
+  if (cell.timeShift) out.time_shift = cell.timeShift
+  if (cell.showTimeRange) out.show_time_range = true
+  return out
+}
+
 const buildCell = (
   cell: NotebookCell,
   gridByCellId: Map<string, CellLayoutItem>,
@@ -203,6 +264,7 @@ const buildCell = (
     ...presentation,
     ...lastRunSummary(cell),
     ...refreshFields(refreshState?.get(cell.id)),
+    ...drawFrameFields(cell),
   }
   if (cell.value.length > PREVIEW_MAX) {
     out.preview_truncated = true
@@ -211,6 +273,7 @@ const buildCell = (
   if (cell.name != null) out.name = cell.name
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
+  Object.assign(out, cellTimeWire(cell))
   const chartConfig = cell.chartConfig
   if (chartConfig && Array.isArray(chartConfig.queries)) {
     out.chart_config = toChartConfigWire(chartConfig)
@@ -281,9 +344,50 @@ export const buildSnapshot = async (
   }
   const variables = normalizeVariables(settings.variables)
   if (variables.length > 0) {
-    out.variables = variables
+    out.variables = variables.map(storedVariableToWire)
+  }
+  const globals = normalizeVariables((await getNotebookGlobals())?.variables)
+  if (globals.length > 0) {
+    out.global_variables = globals.map(storedVariableToWire)
+  }
+  const values = variableValuesStatus(
+    variables,
+    await loadStoredOptions(notebookOptionsOwner(bufferId)),
+  )
+  if (values.length > 0) {
+    out.variable_values = values
+  }
+  if (settings.timeRange) {
+    out.time_range = settings.timeRange
   }
   return out
+}
+
+const variableValuesStatus = (
+  variables: NotebookVariable[],
+  rows: StoredVariableOptions[],
+): VariableValuesStatus[] =>
+  variables.filter(isQueryList).map(({ name }) => {
+    const row = rows.find((r) => r.name === name)
+    return row
+      ? { name, count: row.options.length, fetched_at: row.fetchedAt }
+      : { name, fetched: false }
+  })
+
+const describeVariable = (variable: NotebookVariableWire): string => {
+  if (variable.kind === "list") {
+    const selected =
+      variable.selected === "all"
+        ? "all"
+        : JSON.stringify(
+            (variable.selected ?? []).map((o) =>
+              sanitizeForPromptContext(o.value),
+            ),
+          )
+    return `list ${selected}${variable.multi ? " (multi)" : ""}`
+  }
+  const value = JSON.stringify(sanitizeForPromptContext(variable.value ?? ""))
+  return variable.kind === "text" ? `text ${value}` : value
 }
 
 // YAML-ish shape — stable regardless of escape characters in cell values.
@@ -317,12 +421,35 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
     }`,
   )
+  if (snap.time_range) {
+    lines.push(
+      `  time_range: ${JSON.stringify(snap.time_range.from)} .. ${JSON.stringify(snap.time_range.to)}`,
+    )
+  }
+  const values = new Map(
+    (snap.variable_values ?? []).map((status) => [status.name, status]),
+  )
+  const describeWithValues = (variable: NotebookVariableWire): string => {
+    const status = values.get(variable.name)
+    if (!status) return describeVariable(variable)
+    const suffix =
+      "fetched" in status
+        ? "values not fetched yet"
+        : `${status.count} values fetched at ${new Date(status.fetched_at).toISOString()}`
+    return `${describeVariable(variable)} [${suffix}]`
+  }
   if (snap.variables && snap.variables.length > 0) {
     lines.push("  variables:")
-    for (const { name, value } of snap.variables) {
-      lines.push(
-        `    ${name}: ${JSON.stringify(sanitizeForPromptContext(value))}`,
-      )
+    for (const variable of snap.variables) {
+      lines.push(`    ${variable.name}: ${describeWithValues(variable)}`)
+    }
+  }
+  if (snap.global_variables && snap.global_variables.length > 0) {
+    lines.push(
+      "  global_variables (shared by every notebook; use get_global_variables / apply_global_variables to edit):",
+    )
+    for (const variable of snap.global_variables) {
+      lines.push(`    ${variable.name}: ${describeWithValues(variable)}`)
     }
   }
   lines.push("  cells:")
@@ -343,6 +470,10 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
     lines.push(`      mode: ${c.mode}`)
     if (c.auto_refresh !== undefined)
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
+    if (c.time_range)
+      lines.push(`      time_range: ${JSON.stringify(c.time_range)}`)
+    if (c.time_shift) lines.push(`      time_shift: ${c.time_shift}`)
+    if (c.show_time_range) lines.push(`      show_time_range: true`)
     lines.push(`      editor_height: ${c.editor_height}`)
     lines.push(`      result_height: ${c.result_height}`)
     lines.push(`      view: ${c.view}`)
@@ -371,6 +502,8 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       )
     if (c.auto_refresh_blocked)
       lines.push(`      auto_refresh_blocked: ${c.auto_refresh_blocked}`)
+    if (c.refreshed_at !== undefined)
+      lines.push(`      refreshed_at: ${c.refreshed_at}`)
     if (c.grid) {
       lines.push(
         `      grid: { x: ${c.grid.x}, y: ${c.grid.y}, w: ${c.grid.w} }`,
@@ -471,11 +604,15 @@ export type NotebookCellSummary = {
   position: number
   type?: "sql" | "markdown"
   mode: "run" | "draw" | null
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   last_run_status?: RunStatus
   // Live-only (mounted notebook); see NotebookContextCell.
   refreshing?: true
   last_refresh_error?: string
   auto_refresh_blocked?: "contains_write"
+  refreshed_at?: number
 }
 
 export type NotebookCellDetails = {
@@ -488,6 +625,9 @@ export type NotebookCellDetails = {
   type?: "sql" | "markdown"
   mode: "run" | "draw" | null
   auto_refresh?: AutoRefresh
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   editor_height: number | "auto"
   result_height: number | "auto" | null
   view: AgentCellView | null
@@ -499,6 +639,7 @@ export type NotebookCellDetails = {
   refreshing?: true
   last_refresh_error?: string
   auto_refresh_blocked?: "contains_write"
+  refreshed_at?: number
 }
 
 export const summarizeCells = (
@@ -517,9 +658,11 @@ export const summarizeCells = (
       mode: agentCellPresentation(cell, resultStatusOf(cell.id)).mode,
       last_run_status: runStatusOf(cell).status,
       ...refreshFields(refreshState?.get(cell.id)),
+      ...drawFrameFields(cell),
     }
     if (cell.name) summary.name = cell.name
     if (cell.type === "markdown") summary.type = "markdown"
+    Object.assign(summary, cellTimeWire(cell))
     return summary
   })
 
@@ -559,6 +702,7 @@ export const serializeCell = (
     result_height: dimensions.resultHeight,
     ...presentation,
     ...refreshFields(refreshState?.get(cell.id)),
+    ...drawFrameFields(cell),
   }
   if (truncated) {
     out.truncated = true
@@ -567,6 +711,7 @@ export const serializeCell = (
   if (cell.name != null) out.name = cell.name
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
+  Object.assign(out, cellTimeWire(cell))
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
     out.chart_config = toChartConfigWire(cell.chartConfig)
   const highlightConfig = highlightConfigWire(cell)

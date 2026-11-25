@@ -65,6 +65,7 @@ type Props = {
   toolbarTier?: CellToolbarTier
   paneLayout?: CellPaneLayout
   chartZoomed?: boolean
+  onOpenTimeRange?: () => void
 }
 
 export const CellDragHeader: React.FC<Props> = ({
@@ -82,6 +83,7 @@ export const CellDragHeader: React.FC<Props> = ({
   toolbarTier,
   paneLayout,
   chartZoomed,
+  onOpenTimeRange,
 }) => (
   <HeaderBar
     ref={headerRef}
@@ -116,6 +118,7 @@ export const CellDragHeader: React.FC<Props> = ({
         toolbarTier={toolbarTier}
         paneLayout={paneLayout}
         chartZoomed={chartZoomed}
+        onOpenTimeRange={onOpenTimeRange}
       />
     </RightSide>
   </HeaderBar>

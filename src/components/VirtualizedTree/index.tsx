@@ -24,6 +24,7 @@ export type NavigationOptions =
 export type VirtualizedTreeHandle = {
   navigateInTree: (options: NavigationOptions) => void
   scrollToIndex: (index: number) => void
+  focus: () => void
 }
 
 type VirtualizedTreeProps<T extends VirtualizedTreeItem> = {
@@ -37,6 +38,12 @@ type VirtualizedTreeProps<T extends VirtualizedTreeItem> = {
   setFocusedIndex: (index: number | null) => void
   className?: string
   style?: React.CSSProperties
+  initialTopMostItemIndex?: number
+  navigateWithTab?: boolean
+  accessibilityProps?: Pick<
+    React.HTMLAttributes<HTMLDivElement>,
+    "role" | "aria-label" | "aria-activedescendant" | "aria-multiselectable"
+  >
 }
 
 const Wrapper = styled.div`
@@ -63,6 +70,9 @@ function VirtualizedTreeComponent<T extends VirtualizedTreeItem>(
     setFocusedIndex,
     className,
     style,
+    initialTopMostItemIndex,
+    navigateWithTab = true,
+    accessibilityProps,
   } = props
 
   const virtuosoRef = useRef<VirtuosoHandle>(null)
@@ -78,7 +88,7 @@ function VirtualizedTreeComponent<T extends VirtualizedTreeItem>(
 
   const navigateInTree = useCallback(
     (options: NavigationOptions) => {
-      if (!virtuosoRef.current) {
+      if (!virtuosoRef.current || items.length === 0) {
         return
       }
       const { to } = options
@@ -182,12 +192,14 @@ function VirtualizedTreeComponent<T extends VirtualizedTreeItem>(
     () => ({
       navigateInTree,
       scrollToIndex,
+      focus: () => wrapperRef.current?.focus(),
     }),
     [navigateInTree, scrollToIndex],
   )
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Tab" && !navigateWithTab) return
       if (focusedIndex === null && items.length > 0) {
         if (
           [
@@ -254,11 +266,12 @@ function VirtualizedTreeComponent<T extends VirtualizedTreeItem>(
           break
       }
     },
-    [focusedIndex, items, onItemKeyDown, navigateInTree],
+    [focusedIndex, items, onItemKeyDown, navigateInTree, navigateWithTab],
   )
 
   return (
     <Wrapper
+      {...accessibilityProps}
       ref={wrapperRef}
       className={className}
       style={style}
@@ -273,6 +286,9 @@ function VirtualizedTreeComponent<T extends VirtualizedTreeItem>(
     >
       <Virtuoso
         totalCount={items.length}
+        {...(initialTopMostItemIndex !== undefined && {
+          initialTopMostItemIndex,
+        })}
         ref={virtuosoRef}
         rangeChanged={(newRange) => {
           rangeRef.current = newRange

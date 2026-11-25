@@ -2122,7 +2122,7 @@ describe("cloneNotebookViewState", () => {
         { i: "a", x: 0, y: 0, w: 6, h: 4 },
         { i: "b", x: 6, y: 0, w: 6, h: 4 },
       ],
-      variables: [{ name: "x", value: "1" }],
+      variables: [{ name: "x", kind: "expression", value: "1" }],
     },
   })
 
@@ -2204,7 +2204,9 @@ describe("cloneNotebookViewState", () => {
   it("copies variables by value, not by reference", () => {
     const src = source()
     const out = cloneNotebookViewState(src, seqIds())
-    expect(out.settings?.variables).toEqual([{ name: "x", value: "1" }])
+    expect(out.settings?.variables).toMatchObject([
+      { name: "x", kind: "expression", value: "1" },
+    ])
     expect(out.settings?.variables).not.toBe(src.settings?.variables)
   })
 
@@ -2229,11 +2231,13 @@ describe("cloneNotebookViewState", () => {
   it("handles settings without a layout", () => {
     const src: NotebookViewState = {
       cells: [{ id: "a", position: 0, value: "x" }],
-      settings: { variables: [{ name: "v", value: "1" }] },
+      settings: { variables: [{ name: "v", kind: "expression", value: "1" }] },
     }
     const out = cloneNotebookViewState(src, seqIds())
     expect(out.settings?.layout).toBeUndefined()
-    expect(out.settings?.variables).toEqual([{ name: "v", value: "1" }])
+    expect(out.settings?.variables).toMatchObject([
+      { name: "v", kind: "expression", value: "1" },
+    ])
   })
 })
 
@@ -3043,7 +3047,9 @@ describe("buildAppliedNotebookState", () => {
   it("variables: set when provided, cleared on null, untouched when omitted", () => {
     const current = {
       cells: [cell("a", "SELECT 1")],
-      settings: { variables: [{ name: "x", value: "1" }] },
+      settings: {
+        variables: [{ name: "x", kind: "expression" as const, value: "1" }],
+      },
       maximizedCellId: null,
     }
     const request = { cells: [{ id: "a", preserveValue: true as const }] }
@@ -3051,7 +3057,7 @@ describe("buildAppliedNotebookState", () => {
     expect(
       buildAppliedNotebookState(current, request, unrequested).settings
         .variables,
-    ).toEqual([{ name: "x", value: "1" }])
+    ).toEqual([{ name: "x", kind: "expression", value: "1" }])
     // When variables are null → cleared
     expect(
       buildAppliedNotebookState(
@@ -3066,11 +3072,11 @@ describe("buildAppliedNotebookState", () => {
         current,
         {
           ...request,
-          variables: [{ name: "y", value: "2" }],
+          variables: [{ name: "y", kind: "expression", value: "2" }],
         },
         unrequested,
       ).settings.variables,
-    ).toEqual([{ name: "y", value: "2" }])
+    ).toEqual([{ name: "y", kind: "expression", value: "2" }])
   })
 })
 

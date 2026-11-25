@@ -50,6 +50,11 @@ import {
   deleteNotebookSnapshots,
   pruneToRecentNotebooks,
 } from "../../store/notebookResults"
+import {
+  copyStoredOptions,
+  deleteAllStoredOptions,
+  notebookOptionsOwner,
+} from "../../store/notebookOptions"
 import { removeNotebookBufferLayouts } from "../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -131,6 +136,10 @@ export type EditorContext = {
   ) => Promise<Buffer | undefined>
   deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
   archiveBuffer: (id: number, initiator?: "user" | "agent") => Promise<void>
+  restoreBuffer: (
+    buffer: Buffer,
+    options?: { focus?: boolean; fromSearch?: boolean },
+  ) => Promise<void>
   duplicateNotebook: (
     id: number,
     options?: { activate?: boolean; signal?: AbortSignal },
@@ -169,6 +178,7 @@ const defaultValues = {
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => Promise.resolve(),
   archiveBuffer: () => Promise.resolve(),
+  restoreBuffer: () => Promise.resolve(),
   duplicateNotebook: () => Promise.resolve(undefined),
   updateBuffer: () => Promise.resolve(),
   updateBuffersPositions: () => Promise.resolve(),
@@ -645,6 +655,28 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
+  // Unarchives a buffer and activates it with the restored fields. Activating
+  // the record read before the write would leave the active buffer archived, so
+  // a notebook would stay in its read-only preview, unclaimed, and agent changes
+  // would never reach the screen.
+  const restoreBuffer: EditorContext["restoreBuffer"] = async (
+    buffer,
+    options,
+  ) => {
+    const id = buffer.id as number
+    const restored: Partial<Buffer> =
+      id === temporaryBufferId
+        ? { archived: false, archivedAt: undefined, isTemporary: false }
+        : {
+            archived: false,
+            archivedAt: undefined,
+            position: buffers.filter((b) => !b.archived || b.isTemporary)
+              .length,
+          }
+    await updateBuffer(id, restored)
+    await setActiveBuffer({ ...buffer, ...restored }, options)
+  }
+
   const duplicateNotebook: EditorContext["duplicateNotebook"] = async (
     id,
     { activate = true, signal } = {},
@@ -684,6 +716,10 @@ export const EditorProvider: React.FC = ({ children }) => {
     const duplicateId = duplicate.id
 
     const resultsCopied = enqueueBufferTask(duplicateId, async () => {
+      await copyStoredOptions(
+        notebookOptionsOwner(id),
+        notebookOptionsOwner(duplicateId),
+      ).catch(() => undefined)
       try {
         await copyNotebookSnapshots(id, duplicateId, cellIdMap, (snapshot) => {
           const queries = sourceQueries.get(snapshot.cellId)
@@ -722,6 +758,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     })
     if (wasNotebook) {
       void deleteNotebookSnapshots(id)
+      void deleteAllStoredOptions(notebookOptionsOwner(id))
       removeNotebookBufferLayouts(id)
       emitUserAction({ kind: "user_deleted_notebook", bufferId: id })
     }
@@ -983,6 +1020,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         addBuffer,
         deleteBuffer,
         archiveBuffer,
+        restoreBuffer,
         duplicateNotebook,
         updateBuffer,
         updateBuffersPositions,
