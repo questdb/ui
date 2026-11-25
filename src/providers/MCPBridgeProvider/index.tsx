@@ -57,7 +57,6 @@ import {
   LocalAgentContext,
   LocalAgentSchemaAccessContext,
 } from "../../utils/localAgent/LocalAgentContext"
-import { useSettings } from "../SettingsProvider"
 import { emitLocalAgentPairedViaLink } from "../../utils/localAgent/localAgentPairing"
 import { mcpClientOf, type McpClient } from "../../utils/mcp/mcpClients"
 
@@ -140,8 +139,6 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const { quest } = useContext(QuestContext)
   const { notebookOnboarding, updateNotebookOnboarding, aiAssistantSettings } =
     useLocalStorage()
-  const { consoleConfig } = useSettings()
-  const localAgentsEnabled = consoleConfig.localAgents !== false
   const [url, setUrl] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [pairedAgent, setPairedAgent] = useState<PendingPairAgent | null>(null)
@@ -176,10 +173,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     channel: localAgentChannel,
     attachClient: attachLocalAgent,
     freshnessFor: agentFreshnessFor,
-  } = useLocalAgentConnection({
-    isEnabled: localAgentsEnabled,
-    aiAssistantSettings,
-  })
+  } = useLocalAgentConnection({ aiAssistantSettings })
 
   // User actions reach the agent with tool results. They count as told only
   // once a result carrying them is sent, not when a stopped call drops it.
@@ -401,7 +395,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     const offAgentPaired = client.on("helloAck", (ack) => {
       if (!opensAgentChatOnPairRef.current) return
       opensAgentChatOnPairRef.current = false
-      if (ack.agent && localAgentsEnabled) emitLocalAgentPairedViaLink()
+      if (ack.agent) emitLocalAgentPairedViaLink()
     })
     client.connect()
 
@@ -423,14 +417,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       client.disconnect()
       if (clientRef.current === client) clientRef.current = null
     }
-  }, [
-    url,
-    token,
-    connectAttempt,
-    attachLocalAgent,
-    agentFreshnessFor,
-    localAgentsEnabled,
-  ])
+  }, [url, token, connectAttempt, attachLocalAgent, agentFreshnessFor])
 
   const connect = useCallback((nextUrl: string, nextToken: string) => {
     setRetryAttempt(0)

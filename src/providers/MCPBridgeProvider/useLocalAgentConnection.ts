@@ -15,7 +15,6 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import type { AiAssistantSettings } from "../LocalStorageProvider/types"
 
 type LocalAgentConnectionOptions = {
-  isEnabled: boolean
   aiAssistantSettings: AiAssistantSettings
 }
 
@@ -23,7 +22,6 @@ type LocalAgentConnectionOptions = {
 // bridge is connected and announces an agent, and it keeps the bridge in sync
 // with the user's agent preferences.
 export const useLocalAgentConnection = ({
-  isEnabled,
   aiAssistantSettings,
 }: LocalAgentConnectionOptions) => {
   const [channel, setChannel] = useState<LocalAgentChannel | null>(null)
@@ -62,7 +60,7 @@ export const useLocalAgentConnection = ({
           return
         }
         release()
-        if (!ack.agent || !isEnabled) return
+        if (!ack.agent) return
         current = new LocalAgentChannel(client, {
           info: ack.agent,
           onNotebookRead: (conversationId, read) =>
@@ -89,7 +87,7 @@ export const useLocalAgentConnection = ({
         release()
       }
     },
-    [isEnabled, freshnessFor],
+    [freshnessFor],
   )
 
   const agentId = channel?.info.id

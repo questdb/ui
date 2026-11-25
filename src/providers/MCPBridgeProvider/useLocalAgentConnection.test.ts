@@ -21,11 +21,7 @@ const attachBridge = () => {
     { model: "model-a" },
   )
   const hook = renderHook(
-    (settings) =>
-      useLocalAgentConnection({
-        isEnabled: true,
-        aiAssistantSettings: settings,
-      }),
+    (settings) => useLocalAgentConnection({ aiAssistantSettings: settings }),
     { initialProps: initial },
   )
   const sent: AgentInboundMessage[] = []
