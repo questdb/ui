@@ -4858,6 +4858,67 @@ describe("dispatchTool — query-list variable values", () => {
     { name: "pair", count: 3, fetched_at: 1_700_000_000_000 },
   ]
 
+  it("apply_notebook_state reports a list whose query returns no rows on that list, not on its dependent", async () => {
+    // Given a mounted notebook and a server where the list query returns no rows
+    mountLive(1, [])
+    registerNotebookAgentDeps({
+      getQuest: () =>
+        ({
+          validateQuery: (query: string) =>
+            Promise.resolve({ query, columns: [], timestamp: -1 }),
+          queryRaw: () => ({
+            queryId: "q",
+            promise: Promise.resolve({
+              type: "dql",
+              columns: [{ name: "symbol", type: "SYMBOL" }],
+              dataset: [],
+              count: 0,
+            }),
+          }),
+          abort: () => undefined,
+        }) as unknown as Client,
+    })
+
+    // When the agent defines the list and a list that depends on it
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [
+          { ...pairList, name: "sym" },
+          {
+            ...pairList,
+            name: "ecn",
+            source: {
+              type: "query",
+              query: "SELECT DISTINCT ecn FROM fx_trades WHERE symbol IN @sym",
+            },
+          },
+        ],
+        cells: [{ value: "SELECT 1" }],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the empty list carries the explanation and the dependent names it
+    const parsed = JSON.parse(res.content) as {
+      variable_values: VariableValuesEntry[]
+    }
+    expect(parsed.variable_values).toEqual([
+      {
+        name: "sym",
+        error:
+          "The query returned no values. Cells that use @sym fail until it has values.",
+      },
+      { name: "ecn", error: "Cannot validate because @sym failed." },
+    ])
+  })
+
   it("apply_notebook_state syncs the values of the changed lists and reports them", async () => {
     // Given a mounted notebook that reports one fetched list
     const nb = mountLive(1, [], { variableValues: fetched })

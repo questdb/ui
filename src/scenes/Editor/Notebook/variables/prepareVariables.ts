@@ -3,7 +3,7 @@ import type { DeclareEntry, NotebookSettings } from "../../../../store/notebook"
 import type { Client } from "../../../../utils/questdb/client"
 import type { ValidateQueryResult } from "../../../../utils/questdb/types"
 import { renderDeclareValidationQuery } from "../declareUtils"
-import { variableToDeclareEntry } from "./declareEntries"
+import { listValueProblem, variableToDeclareEntry } from "./declareEntries"
 import {
   fetchedValuesEntry,
   fetchVariableOptions,
@@ -146,6 +146,9 @@ export const prepareVariables = async ({
           ? PROBLEM_MESSAGES[problem]
           : variablePrecheck(variable, {
               declaredAbove: entries.map((entry) => entry.name),
+              definedAbove: variables
+                .slice(0, index)
+                .map((above) => above.name),
               hasTimeRange: settings.timeRange !== undefined,
             })) ?? undefined
       if (
@@ -181,6 +184,9 @@ export const prepareVariables = async ({
             if (result.kind === "error") error = result.error
             else options[name] = result.fetched
           }
+        }
+        if (!error && variable.kind === "list") {
+          error = listValueProblem(variable, options) ?? undefined
         }
         if (!error) {
           const entry = variableToDeclareEntry(variable, options)

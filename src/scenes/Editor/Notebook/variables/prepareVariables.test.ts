@@ -410,6 +410,97 @@ describe("prepareVariables", () => {
     ])
   })
 
+  it("reports a list whose query returns no rows on the list, not on its dependents", async () => {
+    // Given
+    const empty = {
+      type: "dql",
+      columns: [{ name: "symbol", type: "SYMBOL" }],
+      dataset: [],
+      count: 0,
+    }
+    const quest = client([empty])
+    const variables = [
+      list("sym", "SELECT DISTINCT symbol FROM trades"),
+      list("ecn", "SELECT DISTINCT ecn FROM trades WHERE symbol IN @sym"),
+    ]
+    // When
+    const prepared = await prepareVariables({
+      quest: quest as unknown as Client,
+      settings: { variables },
+      prefixEntries: [],
+      options: {},
+      errors: {},
+      changed: ["sym"],
+      refresh: ["sym"],
+      signal: new AbortController().signal,
+    })
+    // Then
+    expect(prepared.errors.sym).toContain("The query returned no values")
+    expect(prepared.errors.ecn).toBe("Cannot validate because @sym failed.")
+    expect(prepared.errors.ecn).not.toContain("not declared")
+    expect(prepared.entries).toEqual([])
+    expect(prepared.report).toEqual([
+      { name: "sym", error: prepared.errors.sym },
+      { name: "ecn", error: prepared.errors.ecn },
+    ])
+    expect(quest.queryRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it("reports a list with nothing selected", async () => {
+    // Given
+    const quest = client([])
+    const variable = list("a", "SELECT n FROM numbers")
+    variable.selected = []
+    const options = {
+      a: {
+        options: [{ value: "1", label: "1" }],
+        columns: ["n"],
+        truncated: false,
+        warnings: [],
+        fetchedAt: 1,
+      },
+    }
+    // When
+    const prepared = await prepareVariables({
+      quest: quest as unknown as Client,
+      settings: { variables: [variable] },
+      prefixEntries: [],
+      options,
+      errors: {},
+      changed: ["a"],
+      refresh: [],
+      signal: new AbortController().signal,
+    })
+    // Then
+    expect(prepared.errors.a).toBe("Select at least one value.")
+    expect(prepared.entries).toEqual([])
+  })
+
+  it("says a text variable above has no value instead of calling it undeclared", async () => {
+    // Given
+    const quest = client([])
+    // When
+    const prepared = await prepareVariables({
+      quest: quest as unknown as Client,
+      settings: {
+        variables: [
+          { name: "tag", kind: "text", value: "" },
+          { name: "label", kind: "expression", value: "@tag || '!'" },
+        ],
+      },
+      prefixEntries: [],
+      options: {},
+      errors: {},
+      changed: ["tag", "label"],
+      refresh: [],
+      signal: new AbortController().signal,
+    })
+    // Then
+    expect(prepared.errors.label).toBe(
+      "@tag has no value yet. Give it a value first.",
+    )
+  })
+
   it("discards a late response after cancellation", async () => {
     // Given
     const controller = new AbortController()

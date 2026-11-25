@@ -21,6 +21,16 @@ describe("queryPrecheck", () => {
     ).toContain("@missing is not declared")
   })
 
+  it("says a variable defined above has no value rather than calling it undeclared", () => {
+    expect(
+      queryPrecheck("SELECT x FROM t WHERE s IN @sym", {
+        declaredAbove: [],
+        definedAbove: ["sym"],
+        hasTimeRange: true,
+      }),
+    ).toBe("@sym has no value yet. Give it a value first.")
+  })
+
   it("asks for a time range when a time variable is used without one", () => {
     expect(
       queryPrecheck("SELECT x FROM t WHERE ts IN @timeFilter", {

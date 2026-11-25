@@ -49,6 +49,22 @@ const listValue = (
   return renderValues(variable.selected.map((option) => option.value))
 }
 
+// QuestDB has no empty list: `DECLARE @x := ()` and `x IN ()` are both
+// rejected. A list left without a value is therefore not declared at all, and
+// this explains why on the variable itself, instead of leaving cells and
+// dependent lists to report it as undeclared.
+export const listValueProblem = (
+  variable: ListVariable,
+  listOptions: ListOptionsByName,
+): string | null => {
+  if (listValue(variable, listOptions) !== null) return null
+  if (variable.selected !== "all") return "Select at least one value."
+  if (variable.all.mode === "custom") return 'Give "All" a value.'
+  return variable.source.type === "query"
+    ? `The query returned no values. Cells that use @${variable.name} fail until it has values.`
+    : "Add at least one value."
+}
+
 export const variableToDeclareEntry = (
   variable: NotebookVariable,
   listOptions: ListOptionsByName,
