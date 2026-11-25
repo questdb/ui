@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest"
 import { darkTheme, lightTheme } from "../../../theme"
+import { createQuestdbTheme } from "../../../scenes/Editor/Notebook/CellChart/questdbTheme"
 import { scenePaletteOf } from "./palette"
 import { createScene, type Flow } from "./scene"
 
@@ -75,5 +76,32 @@ describe("the agent promo's demo scene", () => {
     expect(light.eur).toBe(lightTheme.color.chartSeries1)
     expect(dark.userBubble).toBe(darkTheme.color.authBackdrop)
     expect(light.userBubble).toBe(lightTheme.color.surfaceValue)
+    expect(dark.shadow).toBe(darkTheme.color.shadowStrong)
+    expect(light.shadow).toBe(lightTheme.color.shadowStrong)
+    for (const [palette, { color }] of [
+      [dark, darkTheme],
+      [light, lightTheme],
+    ] as const) {
+      expect(palette.inverse).toBe(color.contentInverse)
+      expect(palette.aiStart).toBe(color.aiPinkStart)
+      expect(palette.aiEnd).toBe(color.aiPinkEnd)
+      expect(palette.pointer).toBe(color.contentInverse)
+      expect(palette.pointerEdge).toBe(color.neutralInk)
+    }
+  })
+
+  it.each([
+    ["dark", darkTheme],
+    ["light", lightTheme],
+  ])("draws its candles as the notebook charts fill them, %s", (_, theme) => {
+    // Given the notebook chart's candlestick style in this theme
+    const candle = createQuestdbTheme(theme.color).candlestick.itemStyle
+
+    // When
+    const palette = scenePaletteOf(theme)
+
+    // Then rising and falling candles take its fill colours
+    expect(palette.up).toBe(candle.color)
+    expect(palette.down).toBe(candle.color0)
   })
 })

@@ -24,6 +24,8 @@ export type ScenePalette = {
   disabled: string
   accent: string
   action: string
+  // Content on the action colour, as the primary button draws it.
+  inverse: string
   info: string
   success: string
   danger: string
@@ -34,6 +36,13 @@ export type ScenePalette = {
   gridHeader: string
   userBubble: string
   tick: string
+  aiStart: string
+  aiEnd: string
+  shadow: string
+  // The pointer: a light arrow with a dark edge in both themes, as the
+  // system draws it.
+  pointer: string
+  pointerEdge: string
   // Charts
   up: string
   down: string
@@ -68,6 +77,7 @@ export const scenePaletteOf = (theme: DefaultTheme): ScenePalette => {
     disabled: c.contentDisabled,
     accent: c.contentAccent,
     action: c.actionPrimary,
+    inverse: c.contentInverse,
     info: c.statusInfo,
     success: c.statusSuccess,
     danger: c.statusDanger,
@@ -79,9 +89,15 @@ export const scenePaletteOf = (theme: DefaultTheme): ScenePalette => {
     // The chat's own message bubble, as MessageBubble draws it.
     userBubble: dark ? c.authBackdrop : c.surfaceValue,
     tick: c.aiPinkStart,
-    // Candles: the chart up/down colours of the notebook charts.
-    up: dark ? "#2ebd85" : "#0f9f7a",
-    down: dark ? "#f6465d" : "#e0364a",
+    aiStart: c.aiPinkStart,
+    aiEnd: c.aiPinkEnd,
+    shadow: c.shadowStrong,
+    pointer: c.contentInverse,
+    pointerEdge: c.neutralInk,
+    // Candles: the fills of the notebook charts' candlesticks
+    // (CellChart/questdbTheme.ts).
+    up: c.statusSuccess,
+    down: c.statusDanger,
     eur: c.chartSeries1,
     gbp: c.chartSeries2,
     vwap: c.chartSeries3,
@@ -125,6 +141,13 @@ export const sceneVarsOf = (p: ScenePalette): string => `
   --grid-header: ${p.gridHeader};
   --user: ${p.userBubble};
   --tick: ${p.tick};
+  --ai-start: ${p.aiStart};
+  --ai-end: ${p.aiEnd};
+  --inverse: ${p.inverse};
+  --shadow: ${p.shadow};
+  --pointer: ${p.pointer};
+  --pointer-edge: ${p.pointerEdge};
+  --pointer-shadow: ${withAlpha(p.pointerEdge, 0.6)};
   --spin-track: ${withAlpha(p.primary, 0.18)};
   --up: ${p.up};
   --down: ${p.down};

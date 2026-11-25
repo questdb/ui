@@ -269,7 +269,6 @@ const CloseButton = styled(IconButton).attrs({
   top: 1rem;
   right: 1rem;
   z-index: 2;
-  color: #9da1ad;
 `
 
 // The way that works in the AI Assistant: `connect`, naming the agent shown.

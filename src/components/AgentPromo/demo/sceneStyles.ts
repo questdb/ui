@@ -449,7 +449,11 @@ export const sceneStyles = css`
   .cursor svg {
     width: 100%;
     height: 100%;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+    filter: drop-shadow(0 1px 2px var(--pointer-shadow));
+  }
+  .cursor path {
+    fill: var(--pointer);
+    stroke: var(--pointer-edge);
   }
   .tip {
     position: absolute;
@@ -463,7 +467,7 @@ export const sceneStyles = css`
     line-height: 1.5;
     color: var(--secondary);
     white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 12px var(--shadow);
   }
   .tip b {
     color: var(--primary);
@@ -821,7 +825,7 @@ export const sceneStyles = css`
   }
   .send {
     background: var(--action);
-    color: #fff;
+    color: var(--inverse);
     border: 1px solid var(--action);
   }
   .send.off {
