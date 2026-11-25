@@ -220,6 +220,39 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn()
 })
 
+it("joins messages sent during a reply into the queued one, text and images in order", async () => {
+  // Given a reply in progress and a queued text message
+  configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
+  const view = renderInput(fakeChannel("agent"))
+  const user = userEvent.setup()
+  const input = getHook("chat-input-textarea")
+  const attach = async (name: string, count: number) => {
+    await user.upload(
+      getHook("chat-attach-image-input"),
+      new File([name], `${name}.png`, { type: "image/png" }),
+    )
+    await screen.findByRole("img", { name: `Attachment ${count}` })
+  }
+  await user.type(input, "first{Enter}")
+
+  // When a message with an image follows, then an image-only one
+  await attach("chart", 1)
+  await user.type(input, "second{Enter}")
+  await attach("table", 1)
+  await user.click(screen.getByRole("button", { name: "Queue message" }))
+
+  // Then one queued message holds both texts and both images, oldest first
+  expect(view.submitted()).toMatchObject({
+    text: "first\n\nsecond",
+    images: [
+      { mimeType: "image/png", data: btoa("chart") },
+      { mimeType: "image/png", data: btoa("table") },
+    ],
+  })
+  expect(getHook("chat-queued-message")).toHaveTextContent("2 images")
+  expect(input).toHaveValue("")
+})
+
 it("keeps a native slash command as a draft while an earlier message is queued", async () => {
   configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
   const view = renderInput(fakeChannel("agent"))
