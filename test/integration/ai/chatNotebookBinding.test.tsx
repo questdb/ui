@@ -12,6 +12,7 @@ import {
 } from "./support/chatHarness"
 import { Button } from "../../../src/components/Button"
 import { useMCPBridge } from "../../../src/providers/MCPBridgeProvider"
+import type { AiAssistantSettings } from "../../../src/providers/LocalStorageProvider/types"
 import { db } from "../../../src/store/db"
 import { aiConversationStore } from "../../../src/store/aiConversations"
 import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
@@ -70,9 +71,9 @@ const createWithChatAgent = async () => {
     "openai",
     <ConnectBridge />,
     {
-      ...JSON.parse(
+      ...(JSON.parse(
         fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
-      ),
+      ) as AiAssistantSettings),
       selectedModel: LOCAL_AGENT_MODEL,
     },
     { bridge: true },
