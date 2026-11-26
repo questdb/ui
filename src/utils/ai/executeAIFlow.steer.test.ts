@@ -63,8 +63,12 @@ const startFlow = (
   conversationId = CONVERSATION_ID,
 ) => {
   const callbacks = {
-    addMessage: vi.fn(),
+    addMessage: vi.fn<Parameters<AIFlowCallbacks["addMessage"]>, void>(),
     updateMessage: vi.fn<Parameters<AIFlowCallbacks["updateMessage"]>, void>(),
+    markHistorySeen: vi.fn<
+      Parameters<NonNullable<AIFlowCallbacks["markHistorySeen"]>>,
+      void
+    >(),
     setStatus: vi.fn(),
     setIsStreaming: vi.fn(),
     persistMessages: vi.fn(() => Promise.resolve()),
@@ -155,11 +159,13 @@ describe("an answer replaced by a new message", () => {
     expect(first.callbacks.setIsStreaming.mock.calls).toEqual([[false]])
     // The agent ran the stopped turn, so it has read the turn's history. The
     // notice and the rest of what it reports are dropped.
-    expect(
-      first.callbacks.updateMessage.mock.calls
-        .slice(savedChanges)
-        .map((call) => (call as unknown[])[2]),
-    ).toEqual([{ localAgentSessionId: agent.channel.sessionId }])
+    expect(first.callbacks.updateMessage).toHaveBeenCalledTimes(savedChanges)
+    const anchor = first.callbacks.addMessage.mock.calls.find(
+      ([message]) => message.role === "assistant",
+    )?.[0]
+    expect(first.callbacks.markHistorySeen.mock.calls).toEqual([
+      [CONVERSATION_ID, anchor?.id, agent.channel.sessionId],
+    ])
     expect(first.callbacks.persistMessages).toHaveBeenCalledTimes(1)
   })
 

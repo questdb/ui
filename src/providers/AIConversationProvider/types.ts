@@ -58,7 +58,12 @@ export type ConversationMessage = Message & {
   turnDurationMs?: number
   // Legacy agent type marker; it does not identify a session.
   localAgentId?: string
-  // Set on regular chat turns that handed their earlier history to this session.
+  // The agent session a turn was addressed to, set on its request and answer
+  // when the turn starts. The turn is never handed to that session as earlier
+  // history, whether or not the bridge accepted it.
+  addressedToLocalAgentSessionId?: string
+  // Set on a regular chat turn's answer once the bridge accepted the turn:
+  // the session has seen the history before it.
   localAgentSessionId?: string
   displayType?: UserMessageDisplayType
   displayUserMessage?: string

@@ -327,6 +327,83 @@ it("sends only the turns after the agent's last answer when the chat switched aw
   expect(prior).not.toContain("Show trades")
 })
 
+// Turns another model answered: the agent has not read them.
+const apiTurns = [
+  message({ role: "user", content: "Which tables hold trades?" }),
+  message({ role: "assistant", content: "The trades table." }),
+]
+const apiHandOver = handOver(
+  "User: Which tables hold trades?",
+  "Assistant: The trades table.",
+)
+
+// A turn addressed to an agent session, and whether the bridge accepted it:
+// only then did the session read the history the turn carried.
+const turnTo = (sessionId: string, request: string, accepted: boolean) => [
+  message({
+    role: "user",
+    content: request,
+    addressedToLocalAgentSessionId: sessionId,
+  }),
+  message({
+    role: "assistant",
+    content: `Answered ${request}`,
+    addressedToLocalAgentSessionId: sessionId,
+    ...(accepted && { localAgentSessionId: sessionId }),
+  }),
+]
+
+it.each([
+  {
+    name: "an accepted turn",
+    history: [...apiTurns, ...turnTo("session-a", "Count trades", true)],
+    prior: null,
+  },
+  {
+    name: "a turn the bridge refused or has not accepted",
+    history: [...apiTurns, ...turnTo("session-a", "Count trades", false)],
+    prior: apiHandOver,
+  },
+  {
+    name: "an accepted turn, then one not accepted",
+    history: [
+      ...apiTurns,
+      ...turnTo("session-a", "Count trades", true),
+      ...turnTo("session-a", "Chart trades", false),
+    ],
+    prior: null,
+  },
+  {
+    name: "an accepted turn, another model's turns, then a turn not accepted",
+    history: [
+      ...turnTo("session-a", "Count trades", true),
+      ...apiTurns,
+      ...turnTo("session-a", "Chart trades", false),
+    ],
+    prior: apiHandOver,
+  },
+  {
+    name: "another session's accepted turn",
+    history: [...apiTurns, ...turnTo("session-b", "Count trades", true)],
+    prior: handOver(
+      "User: Which tables hold trades?",
+      "Assistant: The trades table.",
+      "User: Count trades",
+      "Assistant: Answered Count trades",
+    ),
+  },
+])(
+  "hands a session neither its own turns nor what it read, after $name",
+  ({ history, prior }) => {
+    // Given the chat's history
+    // When the session's next prompt is built
+    const handoff = priorConversationFor(history, "session-a")
+
+    // Then
+    expect(handoff).toBe(prior)
+  },
+)
+
 describe("titleFromMessage", () => {
   it("keeps short messages and cuts long ones at a word", () => {
     expect(titleFromMessage("  Chart   trades\nby hour ")).toBe(

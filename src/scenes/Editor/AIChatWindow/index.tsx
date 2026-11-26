@@ -249,6 +249,7 @@ const AIChatWindow: React.FC = () => {
     addMessage,
     removeMessages,
     updateMessage,
+    markHistorySeen,
     updateMessagesWithCompaction,
     updateConversationName,
     acceptSuggestion,
@@ -654,6 +655,7 @@ const AIChatWindow: React.FC = () => {
           addMessage,
           removeMessages,
           updateMessage,
+          markHistorySeen,
           setStatus,
           setIsStreaming,
           persistMessages,
@@ -1078,6 +1080,7 @@ const AIChatWindow: React.FC = () => {
       void executeAIFlow(config, {
         addMessage,
         updateMessage,
+        markHistorySeen,
         removeMessages,
         setStatus,
         setIsStreaming,

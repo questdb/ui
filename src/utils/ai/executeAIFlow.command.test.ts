@@ -89,6 +89,10 @@ const runFlow = async (
     void
   >()
   const addMessage = vi.fn<Parameters<AIFlowCallbacks["addMessage"]>, void>()
+  const markHistorySeen = vi.fn<
+    Parameters<NonNullable<AIFlowCallbacks["markHistorySeen"]>>,
+    void
+  >()
   const persistMessages = vi.fn(() => Promise.resolve())
   const captureUserActionDigest = vi.fn()
   const result = await executeAIFlow(
@@ -103,6 +107,7 @@ const runFlow = async (
     {
       addMessage,
       updateMessage,
+      markHistorySeen,
       setStatus: vi.fn(),
       setIsStreaming: vi.fn(),
       persistMessages,
@@ -113,6 +118,7 @@ const runFlow = async (
   return {
     prompt: prompt?.type === "agent_prompt" ? prompt.prompt : [],
     updateMessage,
+    markHistorySeen,
     addMessage,
     persistMessages,
     captureUserActionDigest,
@@ -185,10 +191,10 @@ it("does not mark earlier chat turns as seen after a local schema explanation", 
   expect(prompt?.type === "text" && prompt.text).toContain(
     "User: List the tables\nAssistant: trades, quotes",
   )
-  expect(followUp.updateMessage).toHaveBeenCalledWith(
+  expect(followUp.markHistorySeen).toHaveBeenCalledWith(
     CONVERSATION_ID,
     expect.any(String),
-    { localAgentSessionId: channel?.sessionId },
+    channel?.sessionId,
   )
 })
 
@@ -240,7 +246,7 @@ it("keeps empty display text when sending only an image", async () => {
 describe("an agent's command", () => {
   it("goes to the agent as the user wrote it, so the agent reads it as a command", async () => {
     // When
-    const { prompt, updateMessage } = await runTurn(
+    const { prompt, markHistorySeen } = await runTurn(
       "/review the last edit",
       true,
     )
@@ -248,9 +254,7 @@ describe("an agent's command", () => {
     // Then
     expect(prompt[0]).toEqual({ type: "text", text: "/review the last edit" })
     // The earlier turns still go with the agent's next message.
-    expect(
-      updateMessage.mock.calls.some(([, , patch]) => patch.localAgentSessionId),
-    ).toBe(false)
+    expect(markHistorySeen).not.toHaveBeenCalled()
   })
 
   it("is saved as a command, so a retry sends it as one again", async () => {

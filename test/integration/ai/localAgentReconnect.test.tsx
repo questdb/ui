@@ -831,6 +831,126 @@ it("does not resend a stopped turn to the agent that already received it", async
   expect(fetch).not.toHaveBeenCalled()
 })
 
+const promptText = (prompt: AgentPromptMessage | undefined) => {
+  const block = prompt?.prompt[0]
+  return block?.type === "text" ? block.text : ""
+}
+
+const endCancelled = (socket: MemorySocket, prompt: AgentPromptMessage) =>
+  act(() => {
+    socket.receive({
+      v,
+      type: "agent_turn_end",
+      conversationId: prompt.conversationId,
+      turnId: prompt.turnId,
+      result: { outcome: "completed", stopReason: "cancelled", usage: null },
+    })
+    return Promise.resolve()
+  })
+
+it("does not repeat a request replaced before the agent's first update in the message sent now", async () => {
+  // Given an answered message, and a request the agent has not started on
+  const { first } = await openNotebookChat()
+  await sendMessage("Show a sample query.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(1))
+  act(() => answer(first, "Here is a sample query."))
+  await screen.findByText("Here is a sample query.")
+  await sendMessage("Count from 1 to 3000.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(2))
+  const replaced = first.prompts()[1]
+
+  // When the user sends the next message now, and the agent then ends the
+  // replaced turn
+  await sendMessage("Explain the sample query.")
+  await userEvent.click(getByHook("chat-queued-send-now"))
+  await waitFor(() =>
+    expect(first.frames).toContainEqual({
+      v,
+      type: "agent_cancel",
+      conversationId: replaced.conversationId,
+    }),
+  )
+  await endCancelled(first, replaced)
+
+  // Then the message goes to the agent without the replaced request, which
+  // the agent already has
+  await waitFor(() => expect(first.prompts()).toHaveLength(3))
+  const text = promptText(first.prompts()[2])
+  expect(text).toContain("Explain the sample query.")
+  expect(text).not.toContain("<earlier_conversation>")
+  expect(text).not.toContain("Count from 1 to 3000.")
+  act(() => answer(first, "It selects one row."))
+  expect(await screen.findByText("It selects one row.")).toBeVisible()
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it("keeps that the agent read the earlier history when it ends a stopped request after the user left the chat", async () => {
+  // Given a chat another model answered, open on the agent
+  const { first, channel } = await openNotebookChat()
+  const earlier = await seedChat("Earlier sample chat", {
+    messages: [
+      {
+        id: "api-question",
+        role: "user",
+        content: "Which tables hold trades?",
+        timestamp: Date.now(),
+      },
+      {
+        id: "api-answer",
+        role: "assistant",
+        content: "The trades table.",
+        timestamp: Date.now(),
+      },
+    ],
+  })
+  const other = await seedChat("Other sample chat")
+  const openChat = async (name: string) => {
+    await userEvent.click(getByHook("chat-window-history"))
+    await userEvent.click(await screen.findByText(name))
+    await waitFor(() => expect(getByHook("chat-input-textarea")).toBeVisible())
+  }
+  await openChat(earlier.conversationName)
+  await screen.findByText("The trades table.")
+
+  // When the user sends a request that carries that history, stops it before
+  // the agent's first update, and opens another chat, where the agent ends
+  // the stopped turn
+  await sendMessage("Count the trades.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(1))
+  const stopped = first.prompts()[0]
+  expect(promptText(stopped)).toContain(
+    "User: Which tables hold trades?\nAssistant: The trades table.",
+  )
+  await userEvent.click(
+    screen.getByRole("button", { name: "Stop AI generation" }),
+  )
+  await openChat(other.conversationName)
+  await endCancelled(first, stopped)
+
+  // Then the chat's saved transcript keeps that the agent read the history
+  await waitFor(async () => {
+    const saved = await aiConversationStore.getMessages(earlier.id)
+    expect(
+      saved
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.localAgentSessionId),
+    ).toEqual([undefined, channel?.sessionId])
+  })
+
+  // And the next message in the chat repeats neither that history nor the
+  // stopped request
+  await openChat(earlier.conversationName)
+  await sendMessage("Chart the trades.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(2))
+  const text = promptText(first.prompts()[1])
+  expect(text).toContain("Chart the trades.")
+  expect(text).not.toContain("<earlier_conversation>")
+  expect(text).not.toContain("Count the trades.")
+  act(() => answer(first, "Here is a chart query."))
+  expect(await screen.findByText("Here is a chart query.")).toBeVisible()
+  expect(fetch).not.toHaveBeenCalled()
+})
+
 it("keeps the original failed turn if a reconnect starts while Retry prepares", async () => {
   const { bufferId, first, channel, reconnect } = await openNotebookChat()
   await sendMessage("Show a sample query")
@@ -1127,8 +1247,9 @@ it.each(["Retry", "a new message"])(
     )
     expect(getByHook("retry-button")).toBeEnabled()
 
-    // And once the agent ends the stopped turn, the next prompt still carries
-    // the refused message and the deleted cell
+    // And once the agent ends the stopped turn, the next prompt carries the
+    // deleted cell. The agent never read the refused message: Retry sends it
+    // again, and a new message does not repeat it.
     act(() =>
       first.receive({
         v,
@@ -1141,11 +1262,12 @@ it.each(["Retry", "a new message"])(
     if (next === "Retry") await userEvent.click(getByHook("retry-button"))
     else await sendMessage("So, the chart?")
     await waitFor(() => expect(first.prompts()).toHaveLength(3))
-    const block = first.prompts()[2].prompt[0]
-    const text = block?.type === "text" ? block.text : ""
+    const text = promptText(first.prompts()[2])
     expect(text).toContain("sample-cell")
-    expect(text).toContain("Explain the result.")
+    expect(text).not.toContain("<earlier_conversation>")
     expect(text).not.toContain("Show a sample query.")
+    if (next === "Retry") expect(text).toContain("Explain the result.")
+    else expect(text).not.toContain("Explain the result.")
     act(() => answer(first, "Sample explanation."))
     expect(await screen.findByText("Sample explanation.")).toBeVisible()
     expect(fetch).not.toHaveBeenCalled()

@@ -231,6 +231,13 @@ export type AIFlowCallbacks = {
     messageId: string,
     updates: Partial<ConversationMessage>,
   ) => void
+  // Marks that the agent session has seen the history before this turn, also
+  // in a chat the user has left since.
+  markHistorySeen?: (
+    conversationId: ConversationId,
+    anchorMessageId: string,
+    localAgentSessionId: string,
+  ) => void
   setStatus: (
     status: AIOperationStatus | null,
     args?: StatusArgs,
@@ -631,10 +638,19 @@ export async function executeAIFlow(
 
   const flow = ++latestFlow
   const ownsLiveFlow = () => flow === latestFlow && !abortSignal?.aborted
+  const localAgentSessionId = localAgentChannel?.sessionId
+  // The turn is part of the agent session's own conversation from the start,
+  // whether or not the bridge accepts it: it is never handed to the session
+  // as earlier history.
+  const addressedTo: Partial<ConversationMessage> =
+    localAgentSessionId === undefined
+      ? {}
+      : { addressedToLocalAgentSessionId: localAgentSessionId }
   callbacks.addMessage({
     role: "user",
     content: userMsg.content,
     timestamp: Date.now(),
+    ...addressedTo,
     ...(config.type === "chat" &&
       config.images?.length && { images: config.images }),
     ...(isAgentCommand && { agentCommand: true }),
@@ -658,7 +674,6 @@ export async function executeAIFlow(
     : (getAllModelOptions(config.aiAssistantSettings).find(
         (m) => m.value === settings.model,
       )?.label ?? settings.model)
-  const localAgentSessionId = localAgentChannel?.sessionId
   const turnStartedAt = performance.now()
   callbacks.addMessage({
     id: anchorMessageId,
@@ -666,6 +681,7 @@ export async function executeAIFlow(
     content: null,
     timestamp: Date.now(),
     model: modelLabel,
+    ...addressedTo,
   })
 
   if (config.type !== "schema_explain") {
@@ -1185,11 +1201,14 @@ export async function executeAIFlow(
               capturedDigest?.finish(true)
               // The agent has read this turn's history once the bridge runs
               // the prompt, even if the turn is then stopped or fails. The
-              // bridge refuses a prompt while a stopped turn still runs.
+              // bridge refuses a prompt while a stopped turn still runs, and
+              // may run a stopped turn after the user left the chat.
               if (marksHistorySeen) {
-                callbacks.updateMessage(conversationId, anchorMessageId, {
+                callbacks.markHistorySeen?.(
+                  conversationId,
+                  anchorMessageId,
                   localAgentSessionId,
-                })
+                )
               }
             },
             abortSignal,

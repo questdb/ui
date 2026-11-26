@@ -122,6 +122,14 @@ type AIConversationContextType = {
     messageId: string,
     updates: Partial<ConversationMessage>,
   ) => void
+  // The agent session has seen the history before this turn. The bridge may
+  // accept a stopped turn after the user left its chat: the mark then goes
+  // to the chat's saved transcript.
+  markHistorySeen: (
+    conversationId: ConversationId,
+    anchorMessageId: string,
+    localAgentSessionId: string,
+  ) => Promise<void>
   updateMessagesWithCompaction: (
     newMessages: Array<ConversationMessage>,
   ) => void
@@ -640,6 +648,34 @@ export const AIConversationProvider: React.FC<{
       })
     },
     [conversationMetas],
+  )
+
+  const markHistorySeen = useCallback(
+    async (
+      conversationId: ConversationId,
+      anchorMessageId: string,
+      localAgentSessionId: string,
+    ) => {
+      const mark = (messages: ConversationMessage[]) =>
+        messages.map((message) =>
+          message.id === anchorMessageId
+            ? { ...message, localAgentSessionId }
+            : message,
+        )
+      if (conversationId === activeMessagesConversationIdRef.current) {
+        setActiveConversationMessages(mark)
+        return
+      }
+      try {
+        const saved = await aiConversationStore.getMessages(conversationId)
+        // The chat was deleted, or Retry replaced the turn.
+        if (!saved.some((message) => message.id === anchorMessageId)) return
+        await aiConversationStore.saveMessages(conversationId, mark(saved))
+      } catch (e) {
+        console.error("Failed to save the agent's history mark:", e)
+      }
+    },
+    [setActiveConversationMessages],
   )
 
   const updateMessagesWithCompaction = useCallback(
@@ -1230,6 +1266,7 @@ export const AIConversationProvider: React.FC<{
       addMessage,
       removeMessages,
       updateMessage,
+      markHistorySeen,
       updateMessagesWithCompaction,
       updateConversationName,
       acceptSuggestion,
@@ -1265,6 +1302,7 @@ export const AIConversationProvider: React.FC<{
       addMessage,
       removeMessages,
       updateMessage,
+      markHistorySeen,
       updateMessagesWithCompaction,
       updateConversationName,
       acceptSuggestion,
@@ -1308,6 +1346,7 @@ export const AIConversationProvider: React.FC<{
       addMessage,
       removeMessages,
       updateMessage,
+      markHistorySeen,
       updateMessagesWithCompaction,
       updateConversationName,
       acceptSuggestion,
@@ -1348,6 +1387,7 @@ export const AIConversationProvider: React.FC<{
       addMessage,
       removeMessages,
       updateMessage,
+      markHistorySeen,
       updateMessagesWithCompaction,
       updateConversationName,
       acceptSuggestion,

@@ -84,9 +84,11 @@ const visibleText = (message: ConversationMessage): string | null => {
   return null
 }
 
-// A transcript covers everything since the last answer on this channel, not
-// answers from another bridge advertising the same agent ID. Legacy markers
-// lack that distinction and cannot suppress history.
+// A transcript covers everything since the session last saw the history,
+// except the turns addressed to the session: they are its own conversation,
+// and one the bridge refused is not sent again. A session is this channel's,
+// not another bridge's advertising the same agent ID. Legacy markers lack
+// that distinction and cannot suppress history.
 export const priorConversationFor = (
   history: ConversationMessage[],
   sessionId: string,
@@ -96,7 +98,9 @@ export const priorConversationFor = (
     (message) =>
       message.role === "assistant" && message.localAgentSessionId === sessionId,
   )
-  const unseen = history.slice(lastSeenTurn + 1)
+  const unseen = history
+    .slice(lastSeenTurn + 1)
+    .filter((message) => message.addressedToLocalAgentSessionId !== sessionId)
   const lines: string[] = []
   // Compaction already keeps the old turns out of the live context. Carry
   // their summary separately so a busy recent tail cannot crowd it out.
