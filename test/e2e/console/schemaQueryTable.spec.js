@@ -261,7 +261,7 @@ describe("schema tree: Query action", () => {
     cy.getEditorTabByTitle("query_action_trades").should("have.attr", "active")
   })
 
-  it("keeps the details button clickable while the Query tooltip shows", () => {
+  it("shows both shortcuts and keeps the details button clickable", () => {
     cy.loadConsoleWithAuth()
     cy.getEditorContent().should("be.visible")
     cy.refreshSchema()
@@ -287,6 +287,15 @@ describe("schema tree: Query action", () => {
           true,
         )
       })
+
+    cy.hoverForTooltip(() =>
+      tableRow("query_action_trades").find('[data-hook="table-menu-button"]'),
+    )
+    cy.getByDataHook("tooltip").should("contain.text", "Table details (Enter)")
+
+    tableRow("query_action_trades").click().should("be.focused")
+    cy.realPress("Enter")
+    cy.getByDataHook("table-details-drawer").should("be.visible")
   })
 
   for (const existing of [false, true]) {

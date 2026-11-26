@@ -54,7 +54,7 @@ import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { color, copyToClipboard, ctrlCmd } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
-import { Tooltip } from "../../../components/Tooltip"
+import { Tooltip, TooltipProvider } from "../../../components/Tooltip"
 import {
   isTimestamp,
   mapColumnTypeToUI,
@@ -741,46 +741,52 @@ const Row = ({
           )}
         </FlexRow>
       </Box>
-      {!selectOpen && onQuery && (
-        <Tooltip
-          content={`Query in a notebook (${ctrlCmd}+Enter)`}
-          placement="bottom"
-        >
-          <QueryButton
-            aria-label={`Query ${name}`}
-            aria-keyshortcuts="Control+Enter Meta+Enter"
-            size="sm"
-            className="table-menu-button"
-            data-hook="table-query-button"
-            disabled={queryDisabled}
-            onClick={(e: React.MouseEvent) => {
-              e.stopPropagation()
-              onQuery()
-            }}
-            onDoubleClick={(e: React.MouseEvent) => e.stopPropagation()}
-          >
-            <PlayIcon
-              size={16}
-              color={
-                queryDisabled
-                  ? theme.color.contentDisabled
-                  : theme.color.statusInfo
-              }
-            />
-          </QueryButton>
-        </Tooltip>
-      )}
-      {!selectOpen && onOpenDetailsDrawer && (
-        <DetailsDrawerButton
-          aria-label="Open table details"
-          size="sm"
-          className="table-menu-button"
-          data-hook="table-menu-button"
-          onClick={onOpenDetailsDrawer}
-          onDoubleClick={(e) => e.stopPropagation()}
-        >
-          <InfoIcon size={18} color={theme.color.statusInfo} />
-        </DetailsDrawerButton>
+      {!selectOpen && (onQuery || onOpenDetailsDrawer) && (
+        <TooltipProvider delayDuration={200} disableHoverableContent>
+          {onQuery && (
+            <Tooltip
+              content={`Query in a notebook (${ctrlCmd}+Enter)`}
+              placement="bottom"
+            >
+              <QueryButton
+                aria-label={`Query ${name}`}
+                aria-keyshortcuts="Control+Enter Meta+Enter"
+                size="sm"
+                className="table-menu-button"
+                data-hook="table-query-button"
+                disabled={queryDisabled}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation()
+                  onQuery()
+                }}
+                onDoubleClick={(e: React.MouseEvent) => e.stopPropagation()}
+              >
+                <PlayIcon
+                  size={16}
+                  color={
+                    queryDisabled
+                      ? theme.color.contentDisabled
+                      : theme.color.statusInfo
+                  }
+                />
+              </QueryButton>
+            </Tooltip>
+          )}
+          {onOpenDetailsDrawer && (
+            <Tooltip content="Table details (Enter)" placement="bottom">
+              <DetailsDrawerButton
+                aria-label="Open table details"
+                size="sm"
+                className="table-menu-button"
+                data-hook="table-menu-button"
+                onClick={onOpenDetailsDrawer}
+                onDoubleClick={(e) => e.stopPropagation()}
+              >
+                <InfoIcon size={18} color={theme.color.statusInfo} />
+              </DetailsDrawerButton>
+            </Tooltip>
+          )}
+        </TooltipProvider>
       )}
     </Wrapper>
   )
