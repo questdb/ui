@@ -29,7 +29,7 @@ import { makeBuffer, fallbackBuffer } from "./buffers"
 import { StoreKey } from "../utils/localStorage/types"
 import { getValue } from "../utils/localStorage"
 import type { AIConversation } from "../providers/AIConversationProvider/types"
-import type { AgentPromptImage } from "../utils/localAgent/protocol"
+import type { MessagePayloads } from "./messagePayloads"
 import type { NotebookResultSnapshot } from "./notebookResults"
 
 type EditorSettings = {
@@ -46,10 +46,9 @@ export type PersistedMessages = {
   data: Uint8Array
 }
 
-export type PersistedMessageImages = {
+export type PersistedMessagePayloads = MessagePayloads & {
   conversationId: string
   messageId: string
-  images: AgentPromptImage[]
 }
 
 export class Storage extends Dexie {
@@ -58,7 +57,7 @@ export class Storage extends Dexie {
   read_notifications!: Table<{ newsId: string }, number>
   ai_conversations!: Table<ConversationMeta, string>
   ai_conversation_messages!: Table<PersistedMessages, string>
-  ai_message_images!: Table<PersistedMessageImages, [string, string]>
+  ai_message_images!: Table<PersistedMessagePayloads, [string, string]>
   events!: Table<
     { id?: number; created: number; name: string; props?: string },
     number
@@ -127,8 +126,11 @@ export class Storage extends Dexie {
     this.version(9).stores({
       notebook_results: "[bufferId+cellId], bufferId, savedAt",
     })
-    // The images a chat message carries, outside its compressed transcript,
-    // so that saving the chat does not recompress every image in it.
+    // A chat message's large payloads (the images the user attached, the
+    // images an agent sent, what its tools printed and changed), outside its
+    // compressed transcript, so that saving the chat does not recompress
+    // them. It keeps the name it had when it held only images: a new name
+    // would leave the images chats already stored there behind.
     this.version(10).stores({
       ai_message_images: "[conversationId+messageId], conversationId",
     })
