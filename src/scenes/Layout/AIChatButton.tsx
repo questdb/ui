@@ -10,6 +10,7 @@ import { SIDEBAR_ICON_SIZE } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useLocalAgent } from "../../utils/localAgent/LocalAgentContext"
 import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
+import { withLocalAgentSelected } from "../../utils/localAgent/localAgentSettings"
 import { getApiKey, providerForModel } from "../../utils/ai/settings"
 import { StoreKey } from "../../utils/localStorage/types"
 
@@ -55,10 +56,10 @@ export const AIChatButton = () => {
       closeChatWindow()
     } else {
       if (!canUse && localAgent) {
-        updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
-          ...aiAssistantSettings,
-          selectedModel: LOCAL_AGENT_MODEL,
-        })
+        updateSettings(
+          StoreKey.AI_ASSISTANT_SETTINGS,
+          withLocalAgentSelected(aiAssistantSettings),
+        )
       }
       void openOrCreateBlankChatWindow()
     }

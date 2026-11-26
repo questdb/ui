@@ -45,10 +45,15 @@ const selectedModel = () =>
 
 // The console as a pairing link opens it, with an API model selected and the
 // chat closed, as Layout mounts the launcher.
-const openPairingLink = async (linkParams: string) => {
+const openPairingLink = async (linkParams: string, apiModel = API_MODEL) => {
   localStorage.setItem(
     "ai.assistant.settings",
-    fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
+    JSON.stringify({
+      ...JSON.parse(
+        fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
+      ),
+      selectedModel: apiModel,
+    }),
   )
   const original = window.WebSocket
   installFakeWebSocket(window)
@@ -136,6 +141,29 @@ it("opens a blank chat with the agent selected once the agent of an accepted lin
   // Then only the accepted link chose the agent
   expect(selectedModel()).toBe(API_MODEL)
   expect(getByHook("chat-model-picker")).toHaveTextContent(API_MODEL_LABEL)
+})
+
+it("answers on the API model selected before an accepted link once the link's agent is offline", async () => {
+  // Given a link from the connect command, with GPT 5, the second enabled
+  // API model, selected
+  await openPairingLink(
+    new URLSearchParams({
+      "mcp-agent": AGENT.label,
+      "mcp-agent-cwd": AGENT.cwd,
+    }).toString(),
+    "openai:gpt-5",
+  )
+
+  // When the user accepts, the agent says hello, and the bridge then says
+  // hello without it, as after the agent stopped
+  await acceptWith({ agent: AGENT })
+  await waitFor(() => expect(getByHook("ai-chat-window")).toBeVisible())
+  expect(selectedModel()).toBe(LOCAL_AGENT_MODEL)
+  act(() => win.__mcpFakeWS.helloAck({}))
+
+  // Then GPT 5 answers in the agent's place
+  await waitFor(() => expect(getLocalAgentChannel()).toBeNull())
+  expect(getByHook("chat-model-picker")).toHaveAccessibleName("Model: GPT 5")
 })
 
 it("keeps the chat closed and the API model selected when a terminal agent's link is accepted", async () => {

@@ -318,6 +318,7 @@ export const chatServer = (
 ) => {
   const server = {
     requests: [] as Array<{ request: Request; body: Record<string, unknown> }>,
+    titleRequests: [] as Array<Record<string, unknown>>,
     otherRequests: [] as Request[],
     other: (request: Request): Response | Promise<Response> => {
       throw new Error(`Unexpected HTTP request: ${request.url}`)
@@ -340,8 +341,10 @@ export const chatServer = (
         return server.other(request)
       }
       const body = (await request.json()) as Record<string, unknown>
-      if (fixtures.isTitleRequest(provider, body))
+      if (fixtures.isTitleRequest(provider, body)) {
+        server.titleRequests.push(body)
         return httpResponse(fixtures.createChatTitleResponse(provider))
+      }
       server.requests.push({ request, body })
       const reply = replies.shift()
       if (!reply)

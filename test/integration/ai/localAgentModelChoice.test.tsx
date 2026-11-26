@@ -4,10 +4,13 @@ import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, it, vi } from "vitest"
 import {
+  chatServer,
+  fixtures,
   getAllByHook,
   getByHook,
   openChat,
   renderChat,
+  sendMessage,
 } from "./support/chatHarness"
 import { Button } from "../../../src/components/Button"
 import { useMCPBridge } from "../../../src/providers/MCPBridgeProvider"
@@ -16,6 +19,7 @@ import type {
   AgentConfig,
   AgentConfigChoice,
 } from "../../../src/utils/localAgent/protocol"
+import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
 import { EXPECTED_MCP_VERSION as v } from "../../../src/utils/mcp/protocolVersion"
 import {
   installFakeWebSocket,
@@ -72,14 +76,18 @@ const ConnectBridge = () => {
   )
 }
 
-// The chat on the fixture's API model, with an agent paired and ready.
-const openChatWithAgent = async (config: AgentConfig) => {
+// The chat on the fixture's API model, or the one the settings select, with an
+// agent paired and ready.
+const openChatWithAgent = async (
+  config: AgentConfig,
+  settings?: AiAssistantSettings,
+) => {
   const original = window.WebSocket
   installFakeWebSocket(window)
   const transport = window.WebSocket
   window.WebSocket = original
   vi.stubGlobal("WebSocket", transport)
-  renderChat("openai", <ConnectBridge />, undefined, { bridge: true })
+  renderChat("openai", <ConnectBridge />, settings, { bridge: true })
   await userEvent.click(
     screen.getByRole("button", { name: "Connect fake bridge" }),
   )
@@ -209,4 +217,114 @@ it("selects an agent that lists no models on its own default model", async () =>
   expect(storedSettings().selectedModel).toBe("local-agent")
   expect(storedSettings().localAgent?.preferences).toEqual({ [AGENT.id]: {} })
   expect(sentPreferences()).toEqual([{ model: null, effort: null }])
+})
+
+// The OpenAI fixture on GPT 5, its second enabled model.
+const gpt5Selected = (): AiAssistantSettings => ({
+  ...(JSON.parse(
+    fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
+  ) as AiAssistantSettings),
+  selectedModel: "openai:gpt-5",
+})
+
+it.each([
+  {
+    route: "the model picker",
+    chooseAgent: () => pickFromModelPicker("Sonnet"),
+  },
+  { route: "/model", chooseAgent: () => runCommand("/model sonnet") },
+])(
+  "answers on the API model chosen before the agent once the agent chosen through $route is offline",
+  async ({ chooseAgent }) => {
+    // Given the chat on GPT 5, the second enabled API model, with an agent
+    const server = chatServer("openai", [
+      fixtures.createFinalResponse("openai", "Answer from GPT 5."),
+    ])
+    await openChatWithAgent(AGENT_CONFIG, gpt5Selected())
+    expect(getByHook("chat-model-picker")).toHaveAccessibleName("Model: GPT 5")
+
+    // When the user chooses the agent, and the bridge then says hello
+    // without it, as after the agent stopped
+    await chooseAgent()
+    await waitFor(() =>
+      expect(getByHook("chat-model-picker")).toHaveAccessibleName(
+        "Model: Sonnet · Claude Code",
+      ),
+    )
+    act(() => win.__mcpFakeWS.helloAck({}))
+
+    // Then GPT 5 answers in the agent's place
+    await waitFor(() =>
+      expect(getByHook("chat-model-picker")).toHaveAccessibleName(
+        "Model: GPT 5",
+      ),
+    )
+    await sendMessage("How many trades are there?")
+    await waitFor(() =>
+      expect(getByHook("chat-response-content")).toHaveTextContent(
+        "Answer from GPT 5.",
+      ),
+    )
+    expect(server.requests.map(({ body }) => body.model)).toEqual(["gpt-5"])
+  },
+)
+
+it("names a new chat with the custom model that answers while the selected agent is offline", async () => {
+  // Given the agent selected before any API model was chosen, a custom
+  // provider's model enabled since, and the agent offline
+  const server = chatServer("openai-chat-completions", [
+    fixtures.createFinalResponse(
+      "openai-chat-completions",
+      "Answer from llama3.",
+    ),
+  ])
+  renderChat("openai-chat-completions", undefined, {
+    modelValueFormat: 2,
+    selectedModel: LOCAL_AGENT_MODEL,
+    providers: {},
+    customProviders: {
+      local: {
+        type: "openai-chat-completions",
+        name: "Local provider",
+        baseURL: "http://localhost:11434/v1",
+        contextWindow: 200000,
+        models: ["llama3"],
+      },
+    },
+  })
+  await openChat()
+
+  // When the user asks the first question of the chat
+  await sendMessage("Show me the trades table")
+
+  // Then llama3 answers it and names the chat
+  await waitFor(() =>
+    expect(getByHook("chat-response-content")).toHaveTextContent(
+      "Answer from llama3.",
+    ),
+  )
+  await waitFor(() =>
+    expect(getByHook("chat-window-title")).toHaveTextContent("Test Chat"),
+  )
+  expect(server.requests.map(({ body }) => body.model)).toEqual(["llama3"])
+  expect(server.titleRequests.map(({ model }) => model)).toEqual(["llama3"])
+})
+
+it("selects the agent from the chat button when no API model can answer, keeping the API model selected before it", async () => {
+  // Given GPT 5 selected but its API key removed, with an agent
+  const settings = gpt5Selected()
+  settings.providers.openai = { ...settings.providers.openai!, apiKey: "" }
+
+  // When the user opens the chat from the chat button
+  await openChatWithAgent(AGENT_CONFIG, settings)
+
+  // Then the chat goes to the agent, and GPT 5 stays the API model that
+  // answers while the agent is offline
+  expect(getByHook("chat-model-picker")).toHaveAccessibleName(
+    "Model: Opus · Claude Code",
+  )
+  expect(storedSettings()).toMatchObject({
+    selectedModel: LOCAL_AGENT_MODEL,
+    localAgent: { apiModel: "openai:gpt-5" },
+  })
 })

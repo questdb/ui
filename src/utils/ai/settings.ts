@@ -6,6 +6,7 @@ import type {
 import type { Permissions } from "../tools/permissions"
 import { getValue } from "../localStorage"
 import { StoreKey } from "../localStorage/types"
+import { LOCAL_AGENT_MODEL } from "../localAgent/localAgentModel"
 import {
   filterOpenAiChatModels,
   formatModelLabel,
@@ -138,11 +139,17 @@ export const getAllProviders = (
   ...Object.keys(settings?.customProviders ?? {}),
 ]
 
+// The API model that answers: the selected one or, while the local agent is
+// selected, the one selected before it. Read it here, never from
+// `selectedModel`, which holds the agent's marker while the agent is selected.
 export const getSelectedModel = (
   settings: AiAssistantSettings,
 ): string | null => {
   const enabledModels = getAllEnabledModels(settings)
-  const selectedModel = settings.selectedModel
+  const selectedModel =
+    settings.selectedModel === LOCAL_AGENT_MODEL
+      ? settings.localAgent?.apiModel
+      : settings.selectedModel
   if (
     selectedModel &&
     typeof selectedModel === "string" &&
@@ -220,7 +227,7 @@ export const getUtilityModel = (
 ): string | null => {
   if (!settings) return null
   if (settings.customProviders?.[providerId]) {
-    return settings.selectedModel ?? null
+    return getSelectedModel(settings)
   }
   return (
     settings.providers?.[providerId]?.utilityModel ?? getSelectedModel(settings)

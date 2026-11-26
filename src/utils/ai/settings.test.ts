@@ -6,6 +6,7 @@ import {
   getNextModel,
   getSelectedModel,
   getUtilityModel,
+  hasSchemaAccess,
   makeModelValue,
   parseModelValue,
   providerForModel,
@@ -16,6 +17,8 @@ import {
   AI_MODEL_VALUE_FORMAT,
   type AiAssistantSettings,
 } from "../../providers/LocalStorageProvider/types"
+import { LOCAL_AGENT_MODEL } from "../localAgent/localAgentModel"
+import { withLocalAgentSelected } from "../localAgent/localAgentSettings"
 
 const makeSettings = (
   overrides: Partial<AiAssistantSettings> = {},
@@ -57,6 +60,101 @@ describe("getSelectedModel", () => {
     const settings = makeSettings({ providers: {} })
     expect(getSelectedModel(settings)).toBeNull()
   })
+
+  it.each([
+    { case: "no API model was chosen before it", localAgent: undefined },
+    {
+      case: "the API model chosen before it is no longer enabled",
+      localAgent: { apiModel: "openai:gpt-5" },
+    },
+  ])(
+    "falls back to the first enabled model while the agent is selected and $case",
+    ({ localAgent }) => {
+      // Given
+      const settings = makeSettings({
+        selectedModel: LOCAL_AGENT_MODEL,
+        localAgent,
+        providers: {
+          openai: {
+            apiKey: "sk-test",
+            enabledModels: ["openai:gpt-5-mini"],
+            grantSchemaAccess: false,
+          },
+        },
+      })
+
+      // When
+      const model = getSelectedModel(settings)
+
+      // Then
+      expect(model).toBe("openai:gpt-5-mini")
+    },
+  )
+})
+
+describe("API model readers while the local agent is selected", () => {
+  // The user's API choice is a custom model listed after a built-in one with
+  // other permissions, so a reader that loses the choice answers otherwise.
+  const apiChoice = makeSettings({
+    selectedModel: "local:llama3",
+    providers: {
+      openai: {
+        apiKey: "sk-test",
+        enabledModels: ["openai:gpt-5-mini"],
+        grantSchemaAccess: false,
+      },
+    },
+    customProviders: {
+      local: {
+        type: "openai-chat-completions",
+        name: "Local",
+        baseURL: "http://localhost:11434/v1",
+        contextWindow: 100_000,
+        models: ["llama3"],
+        grantSchemaAccess: true,
+        read: true,
+      },
+    },
+  })
+
+  // Every reader of the API model that answers.
+  it.each<{
+    reader: string
+    read: (settings: AiAssistantSettings) => unknown
+    expected: unknown
+  }>([
+    {
+      reader: "getSelectedModel",
+      read: getSelectedModel,
+      expected: "local:llama3",
+    },
+    {
+      reader: "getUtilityModel",
+      read: (settings) => getUtilityModel("local", settings),
+      expected: "local:llama3",
+    },
+    { reader: "hasSchemaAccess", read: hasSchemaAccess, expected: true },
+    {
+      reader: "getAiPermissions",
+      read: getAiPermissions,
+      expected: { grantSchemaAccess: true, read: true, write: false },
+    },
+  ])(
+    "$reader keeps answering for the API model chosen before the agent",
+    ({ read, expected }) => {
+      // Given the user's API choice
+      expect(read(apiChoice)).toEqual(expected)
+
+      // When the user selects the agent, and then the agent once more
+      const agentSelected = withLocalAgentSelected(apiChoice)
+      const agentSelectedAgain = withLocalAgentSelected(agentSelected)
+
+      // Then
+      expect(agentSelected.selectedModel).toBe(LOCAL_AGENT_MODEL)
+      expect(read(agentSelected)).toEqual(expected)
+      expect(read(agentSelectedAgain)).toEqual(expected)
+    },
+  )
 })
 
 describe("getAllModelOptions", () => {
@@ -332,6 +430,28 @@ describe("getUtilityModel", () => {
       },
     })
     expect(getUtilityModel("custom-1", settings)).toBe("custom-1:llm-a")
+  })
+
+  it("uses the custom model that answers while the local agent is selected", () => {
+    // Given the agent selected, with only a custom provider's model enabled
+    const settings = makeSettings({
+      selectedModel: LOCAL_AGENT_MODEL,
+      customProviders: {
+        "custom-1": {
+          type: "openai-chat-completions",
+          name: "Test",
+          baseURL: "http://localhost:11434/v1",
+          contextWindow: 100_000,
+          models: ["llm-a"],
+        },
+      },
+    })
+
+    // When
+    const model = getUtilityModel("custom-1", settings)
+
+    // Then
+    expect(model).toBe("custom-1:llm-a")
   })
 })
 

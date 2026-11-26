@@ -13,6 +13,7 @@ import { LOCAL_AGENT_MODEL } from "../../../../utils/localAgent/localAgentModel"
 import {
   localAgentPreferencesOf,
   withLocalAgentPreferences,
+  withLocalAgentSelected,
 } from "../../../../utils/localAgent/localAgentSettings"
 import {
   buildModelGroups,
@@ -71,7 +72,7 @@ export const useComposerModel = () => {
     updateSettings(
       StoreKey.AI_ASSISTANT_SETTINGS,
       withLocalAgentPreferences(
-        { ...aiAssistantSettings, selectedModel: LOCAL_AGENT_MODEL },
+        withLocalAgentSelected(aiAssistantSettings),
         selection.agentId,
         selection.model === null ? {} : { model: selection.model },
       ),

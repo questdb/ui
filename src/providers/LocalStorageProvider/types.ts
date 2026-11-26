@@ -34,6 +34,9 @@ export type LocalAgentPreferences = {
 export type LocalAgentSettings = {
   // Keyed by agent id (claude, codex, pi, …).
   preferences?: Record<string, LocalAgentPreferences>
+  // The API model selected before the agent; it answers while the agent is
+  // offline.
+  apiModel?: string
 }
 
 export type AiAssistantSettings = {
