@@ -131,6 +131,31 @@ describe("LinkRequestCard", () => {
     expect(open).not.toHaveBeenCalled()
   })
 
+  it("shows a long address in full, wrapped instead of cut", () => {
+    // Given a sign-in page with a long OAuth address
+    const url =
+      "https://auth.example.com/oauth/authorize?client_id=questdb-console" +
+      "&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback" +
+      `&scope=openid%20profile%20email&state=${"f".repeat(64)}`
+
+    // When
+    renderComponent(
+      <LinkRequestCard
+        agentLabel="Codex"
+        question={{ ...question, url }}
+        onAnswer={vi.fn(() => true)}
+        onStop={vi.fn()}
+      />,
+    )
+
+    // Then the whole address breaks onto more lines, as its host does
+    const address = getComputedStyle(screen.getByText(url))
+    expect(address.whiteSpace).not.toBe("nowrap")
+    expect(address.textOverflow).not.toBe("ellipsis")
+    expect(address.overflow).not.toBe("hidden")
+    expect(address.getPropertyValue("overflow-wrap")).toBe("anywhere")
+  })
+
   it("declines without opening anything", async () => {
     // Given
     const open = vi.spyOn(window, "open").mockReturnValue(null)

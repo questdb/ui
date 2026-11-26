@@ -41,9 +41,7 @@ const Url = styled.span`
   font-size: 1.1rem;
   line-height: 1.6rem;
   color: ${({ theme }) => theme.color.contentSecondary};
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 `
 
 const Note = styled.p`
