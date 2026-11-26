@@ -9,7 +9,10 @@ import { AssistantMarkdown } from "./AssistantMarkdown"
 import { QuestionRecord } from "./QuestionRecord"
 import { NoticeRecord } from "./NoticeRecord"
 import type { OpenInEditorContent } from "./ChatMessages"
-import { buildInterleavedTimeline } from "../../../utils/ai/turnView"
+import {
+  buildInterleavedTimeline,
+  withResponseTexts,
+} from "../../../utils/ai/turnView"
 import {
   WORKING_AFTER_MS,
   WorkingIndicator,
@@ -89,8 +92,12 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
       lastStep.endedAt === undefined
     const mayShowWorking = isLiveOperation && !hasActiveStep
 
+    const fullHistory = useMemo(
+      () =>
+        withResponseTexts(anchorMessage.operationHistory ?? [], turnMessages),
+      [anchorMessage.operationHistory, turnMessages],
+    )
     const { operationHistory, endTimestamp, timeline } = useMemo(() => {
-      const fullHistory = anchorMessage.operationHistory ?? []
       const filteredHistory = fullHistory.filter(
         (op) => op.type !== AIOperationStatus.Aborted,
       )
@@ -112,7 +119,7 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
           ? buildInterleavedTimeline(filteredHistory)
           : null,
       }
-    }, [anchorMessage.operationHistory])
+    }, [fullHistory])
 
     const fallbackContent = useMemo(() => {
       return turnMessages
@@ -128,9 +135,8 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
 
     const hasContent = !!fallbackContent
 
-    const history = anchorMessage.operationHistory ?? []
-    const activity = `${fallbackContent.length}:${history.length}:${
-      history[history.length - 1]?.content?.length ?? 0
+    const activity = `${fallbackContent.length}:${fullHistory.length}:${
+      fullHistory[fullHistory.length - 1]?.content?.length ?? 0
     }`
     const showWorking = useQuietFor(activity, mayShowWorking, WORKING_AFTER_MS)
     const showStreamingCursor =

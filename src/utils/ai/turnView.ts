@@ -1,6 +1,8 @@
 import type { ConversationMessage } from "../../providers/AIConversationProvider/types"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import type {
+  ContentSlice,
+  OperationHistory,
   StatusEntry,
   TranscriptBlock,
 } from "../../providers/AIStatusProvider"
@@ -157,6 +159,41 @@ export type TimelineItem =
   | TimelineOperations
   | TimelineContent
   | { type: "record"; block: TranscriptBlock; timestamp: number }
+
+// Adds a streamed chunk to a response step's slices: it continues the last
+// slice when it follows it in the same message.
+export const extendContentSlices = (
+  slices: ContentSlice[] | undefined,
+  next: ContentSlice,
+): ContentSlice[] => {
+  const last = slices?.at(-1)
+  if (!slices || !last) return [next]
+  return last.messageId === next.messageId && last.end === next.start
+    ? [...slices.slice(0, -1), { ...last, end: next.end }]
+    : [...slices, next]
+}
+
+// The history with each response step's text read from the turn's messages
+// its slices point into.
+export const withResponseTexts = (
+  history: OperationHistory,
+  messages: ConversationMessage[],
+): OperationHistory => {
+  if (!history.some((entry) => entry.contentSlices)) return history
+  const contentById = new Map(
+    messages.map((message) => [message.id, message.content ?? ""]),
+  )
+  return history.map((entry) => {
+    if (!entry.contentSlices) return entry
+    const { contentSlices, ...step } = entry
+    const content = contentSlices
+      .map(({ messageId, start, end }) =>
+        (contentById.get(messageId) ?? "").slice(start, end),
+      )
+      .join("")
+    return { ...step, content }
+  })
+}
 
 export function buildInterleavedTimeline(
   operationHistory: StatusEntry[],

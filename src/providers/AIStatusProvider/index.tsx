@@ -141,13 +141,21 @@ export type TranscriptBlock =
   | { kind: "question"; record: QuestionRecord }
   | { kind: "notice"; notice: NoticeRecord }
 
+// Characters start to end of the content of the turn's message with this id.
+export type ContentSlice = { messageId: string; start: number; end: number }
+
 export type StatusEntry = {
   type: AIOperationStatus
   args?: StatusArgs
   timestamp: number
   // When the step's tool finished, if the step reported it.
   endedAt?: number
+  // A thinking step's thoughts, a query step's SQL, and the text of a
+  // response step a chat saved before contentSlices.
   content?: string
+  // The text a response step streamed, in its messages' content, so that
+  // the reply is stored once.
+  contentSlices?: ContentSlice[]
   // Only typed in-app events populate this; it is never parsed from Markdown.
   transcriptBlock?: TranscriptBlock
 }

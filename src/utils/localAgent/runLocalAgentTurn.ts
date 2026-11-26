@@ -150,8 +150,9 @@ const createUpdateHandler = (
     const chunk = newMessage && reply ? `\n\n${text}` : text
     isThinking = false
     lastMessageId = messageId
+    const at = reply.length
     reply += chunk
-    if (followsRecord) streaming.onTextChunk(chunk, { startSection: true })
+    if (followsRecord) streaming.onTextChunk(chunk, { startSection: true, at })
     else streaming.onTextChunk(chunk)
   }
 

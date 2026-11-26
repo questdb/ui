@@ -111,7 +111,16 @@ export type StatusCallback = (
 ) => void
 
 export type StreamingCallback = {
-  onTextChunk: (chunk: string, options?: { startSection?: boolean }) => void
+  onTextChunk: (
+    chunk: string,
+    options?: {
+      startSection?: boolean
+      // Where the chunk starts in the message's content, when that is not
+      // where the previous chunk ended: a new section after the agent's
+      // answered questions.
+      at?: number
+    },
+  ) => void
   onQuestionRecord?: (
     record: import("../localAgent/questionTranscript").QuestionRecord,
     getTranscript: () => string,

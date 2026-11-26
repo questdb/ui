@@ -25,6 +25,7 @@ import {
   dropTransientTail,
 } from "../../providers/AIStatusProvider"
 import { toolStatusOf } from "../tools/toolStatus"
+import { extendContentSlices } from "./turnView"
 import {
   createNotebookFreshness,
   type NotebookFreshness,
@@ -765,6 +766,9 @@ export async function executeAIFlow(
   let reasoningTimestamp = 0
   let accumulatedToolCalls: ToolCall[] = []
   let accumulatedText = ""
+  // Where the streamed text ends in the message's content, which also holds
+  // the agent's answered questions.
+  let streamedTextEnd = 0
   let contentTimestamp = 0
   let getQuestionTranscript: (() => string) | undefined
 
@@ -906,6 +910,7 @@ export async function executeAIFlow(
       reasoningTimestamp = 0
       accumulatedToolCalls = []
       accumulatedText = ""
+      streamedTextEnd = 0
       contentTimestamp = 0
 
       // Reset status flags
@@ -927,7 +932,7 @@ export async function executeAIFlow(
       hasPendingStreamingUpdate = true
       scheduleUpdate()
     },
-    onTextChunk: (chunk, { startSection = false } = {}) => {
+    onTextChunk: (chunk, { startSection = false, at } = {}) => {
       if (!ownsLiveFlow()) return
       if (contentTimestamp === 0) contentTimestamp = Date.now()
       if (startSection || !generatingResponseEmitted) {
@@ -941,6 +946,8 @@ export async function executeAIFlow(
         )
       }
       accumulatedText += chunk
+      const start = at ?? streamedTextEnd
+      streamedTextEnd = start + chunk.length
       callbacks.setIsStreaming(true)
       hasPendingStreamingUpdate = true
       scheduleUpdate()
@@ -951,7 +958,12 @@ export async function executeAIFlow(
         !lastEntry.args?.transient &&
         lastEntry.type === AIOperationStatus.GeneratingResponse
       ) {
-        lastEntry.content = (lastEntry.content ?? "") + chunk
+        // The step shows its part of the message's content, not a copy.
+        lastEntry.contentSlices = extendContentSlices(lastEntry.contentSlices, {
+          messageId: streamingAssistantMessageId,
+          start,
+          end: streamedTextEnd,
+        })
         hasPendingOperationHistoryUpdate = true
         scheduleUpdate()
       }
@@ -1065,6 +1077,7 @@ export async function executeAIFlow(
       reasoningTimestamp = 0
       accumulatedToolCalls = []
       accumulatedText = ""
+      streamedTextEnd = 0
       contentTimestamp = 0
       // The new round's text and thinking are new steps.
       thinkingStatusEmitted = false
