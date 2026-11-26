@@ -9,12 +9,29 @@ export const MCP_RELEASES_URL =
 
 export type CommandChannel = "npx" | "standalone"
 
-// The console's own address: a console can be served under a path.
+const percentEscapesOf = (char: string): string =>
+  Array.from(
+    new TextEncoder().encode(char),
+    (byte) => `%${byte.toString(16).toUpperCase().padStart(2, "0")}`,
+  ).join("")
+
+// The console's own address: a console can be served under a path. The
+// path comes from the link the user opened, and the command is pasted
+// into a shell, so the path keeps only letters, digits, `/ . _ -` and the
+// `%` of the escapes the browser made; every other character (a
+// surrogate pair is one) is written as the escapes of its UTF-8 bytes.
+// The same page opens, and no shell reads the address as more than one
+// plain word.
 export const consoleUrlOf = ({
   origin,
   pathname,
 }: Pick<Location, "origin" | "pathname">): string =>
-  `${origin}${pathname.replace(/\/(index\.html)?$/, "")}`
+  `${origin}${pathname
+    .replace(/\/(index\.html)?$/, "")
+    .replace(
+      /[\uD800-\uDBFF][\uDC00-\uDFFF]|[^A-Za-z0-9/._%-]/g,
+      percentEscapesOf,
+    )}`
 
 // `agentId` names the agent to run, when the console knows it. Without it,
 // `connect` asks in the terminal. Ids `connect` does not know (a custom
