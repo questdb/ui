@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest"
+import type {
+  AgentConfig,
+  AgentConfigSetting,
+} from "../../../utils/localAgent/protocol"
 import type { ModelGroup } from "./ComposerControls/modelOptions"
 import {
   availableCommands,
@@ -52,16 +56,135 @@ const groups: ModelGroup[] = [
   },
 ]
 
+const setting = (id: string, values: string[]): AgentConfigSetting => ({
+  id,
+  current: values[0],
+  choices: values.map((value) => ({
+    value,
+    name: value,
+    description: null,
+    group: null,
+  })),
+})
+
 describe("availableCommands", () => {
   it("puts the console's commands first, in place of the agent's of the same name", () => {
-    expect(availableCommands(agentCommands, true).map((c) => c.name)).toEqual([
+    expect(
+      availableCommands(agentCommands, true, null).map((c) => c.name),
+    ).toEqual(["model", "effort", "review", "compact"])
+    expect(availableCommands([], false, null).map((c) => c.name)).toEqual([
       "model",
-      "effort",
-      "review",
-      "compact",
     ])
-    expect(availableCommands([], false).map((c) => c.name)).toEqual(["model"])
   })
+})
+
+// Commands Pi lists, its /thinking among them; its thinking level is the
+// option the bridge reads as the effort.
+const piCommands = [
+  { name: "compact", description: "Compact the context", hint: "[focus]" },
+  { name: "thinking", description: "Set the thinking level", hint: "[level]" },
+  { name: "session", description: "Show session info", hint: null },
+  { name: "export", description: "Export the session", hint: "[path]" },
+]
+const piLevels = ["off", "minimal", "low", "medium", "high", "xhigh"]
+
+describe("Pi's commands", () => {
+  it.each(["thought_level", "thinkingLevel"])(
+    "leave out /thinking, which the console's effort undoes, and run it as /effort (effort option %s)",
+    (effortId) => {
+      // Given
+      const config: AgentConfig = {
+        model: setting("model", ["anthropic/opus"]),
+        effort: setting(effortId, piLevels),
+      }
+
+      // When
+      const commands = availableCommands(piCommands, true, config)
+
+      // Then
+      expect(commands.map((c) => `${c.source} /${c.name}`)).toEqual([
+        "console /model",
+        "console /effort",
+        "agent /compact",
+        "agent /session",
+        "agent /export",
+      ])
+      expect(parseCommand("/thinking high", commands)).toMatchObject({
+        command: { name: "effort", source: "console" },
+        args: "high",
+      })
+      expect(parseCommand("/Thinking", commands)).toMatchObject({
+        command: { name: "effort", source: "console" },
+        args: "",
+      })
+    },
+  )
+
+  it("keep /thinking as Pi's own when Pi reports no effort option", () => {
+    // Given
+    const config: AgentConfig = { model: null, effort: null }
+
+    // When
+    const runnable = availableCommands(piCommands, true, config)
+
+    // Then
+    expect(runnable.map((c) => c.name)).toContain("thinking")
+    expect(parseCommand("/thinking high", runnable)).toMatchObject({
+      command: { name: "thinking", source: "agent" },
+      args: "high",
+    })
+  })
+})
+
+// For each setting of the agent the console controls (every key of
+// AgentConfig), the names an agent's own command for it can have: the
+// console command's, the option's id, and a known alias.
+const agentSettingCommands: Record<
+  keyof AgentConfig,
+  { optionId: string; agentCommand: string }[]
+> = {
+  model: [
+    { optionId: "model", agentCommand: "model" },
+    { optionId: "llm", agentCommand: "llm" },
+  ],
+  effort: [
+    { optionId: "thought_level", agentCommand: "effort" },
+    { optionId: "reasoning", agentCommand: "Reasoning" },
+    { optionId: "thinkingLevel", agentCommand: "thinking" },
+  ],
+}
+
+describe("an agent's own command for a setting the console controls", () => {
+  it.each(
+    Object.entries(agentSettingCommands).flatMap(([name, cases]) =>
+      cases.map((names) => ({ setting: name as keyof AgentConfig, ...names })),
+    ),
+  )(
+    "runs the agent's $agentCommand (option $optionId) as the console's $setting",
+    ({ setting: name, optionId, agentCommand }) => {
+      // Given
+      const config: AgentConfig = { model: null, effort: null }
+      config[name] = setting(optionId, ["a", "b"])
+      const commands = [
+        { name: agentCommand, description: "The agent's", hint: null },
+        { name: "review", description: "Review changes", hint: null },
+      ]
+
+      // When
+      const runnable = availableCommands(commands, true, config)
+
+      // Then
+      expect(runnable.map((c) => `${c.source} /${c.name}`)).toEqual([
+        "console /model",
+        "console /effort",
+        "agent /review",
+      ])
+      expect(parseCommand(`/${agentCommand} b`, runnable)).toMatchObject({
+        command: { name, source: "console" },
+        args: "b",
+      })
+    },
+  )
 })
 
 describe("the command being typed", () => {
@@ -70,7 +193,7 @@ describe("the command being typed", () => {
     expect(typedCommandQuery("/re")).toBe("re")
     expect(typedCommandQuery("/review now")).toBeNull()
     expect(typedCommandQuery("hello /re")).toBeNull()
-    const commands = availableCommands(agentCommands, true)
+    const commands = availableCommands(agentCommands, true, null)
     expect(matchingCommands(commands, "e").map((c) => c.name)).toEqual([
       "effort",
       "model",
@@ -79,7 +202,7 @@ describe("the command being typed", () => {
   })
 
   it("runs only as a known command, so a path is still a message", () => {
-    const commands = availableCommands(agentCommands, true)
+    const commands = availableCommands(agentCommands, true, null)
     expect(parseCommand("/model gpt-5 mini", commands)).toMatchObject({
       command: { name: "model", source: "console" },
       args: "gpt-5 mini",

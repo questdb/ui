@@ -1,4 +1,7 @@
-import type { AgentCommand } from "../../../utils/localAgent/protocol"
+import type {
+  AgentCommand,
+  AgentConfig,
+} from "../../../utils/localAgent/protocol"
 import {
   filterModelGroups,
   type EffortControl,
@@ -11,6 +14,9 @@ export type SlashCommand = AgentCommand & {
   // The console's own commands run in the console; an agent's go to it as
   // the message.
   source: "console" | "agent"
+  // The agent's own commands for the setting a console command changes,
+  // which run as the console's.
+  aliases?: string[]
 }
 
 const MODEL_COMMAND: SlashCommand = {
@@ -27,14 +33,52 @@ const EFFORT_COMMAND: SlashCommand = {
   source: "console",
 }
 
+// The console's command for each setting of the agent it controls.
+const SETTING_COMMANDS: Record<keyof AgentConfig, SlashCommand> = {
+  model: MODEL_COMMAND,
+  effort: EFFORT_COMMAND,
+}
+
+// An agent's own command for a setting, where the command is not named like
+// the setting's option: Pi's /thinking sets its thinking level, the option
+// the bridge reads as the effort.
+const SETTING_ALIASES: Record<keyof AgentConfig, string[]> = {
+  model: [],
+  effort: ["thinking"],
+}
+
+// The console sets the agent's model and effort before every turn, which
+// undoes what the agent's own command for either did: that command runs as
+// the console's, under the name of the agent's option or a known alias.
+const settingCommand = (
+  setting: keyof AgentConfig,
+  agentConfig: AgentConfig | null,
+): SlashCommand => {
+  const command = SETTING_COMMANDS[setting]
+  const option = agentConfig?.[setting]
+  if (!option) return command
+  const aliases = [option.id, ...SETTING_ALIASES[setting]]
+    .map((name) => name.toLowerCase())
+    .filter((name) => name !== command.name)
+  return { ...command, aliases }
+}
+
 // The commands the composer offers: the console's own first, then the
 // agent's, without those the console's replace or that have no use here.
 export const availableCommands = (
   agentCommands: AgentCommand[],
   hasEffort: boolean,
+  agentConfig: AgentConfig | null,
 ): SlashCommand[] => {
-  const own = hasEffort ? [MODEL_COMMAND, EFFORT_COMMAND] : [MODEL_COMMAND]
-  const hidden = new Set([MODEL_COMMAND.name, EFFORT_COMMAND.name])
+  const model = settingCommand("model", agentConfig)
+  const effort = settingCommand("effort", agentConfig)
+  const own = hasEffort ? [model, effort] : [model]
+  const hidden = new Set(
+    [model, effort].flatMap((command) => [
+      command.name,
+      ...(command.aliases ?? []),
+    ]),
+  )
   return [
     ...own,
     ...agentCommands
@@ -70,8 +114,11 @@ export const parseCommand = (
 ): { command: SlashCommand; args: string } | null => {
   const match = /^\/([\w:.-]+)(?:\s+([\s\S]*))?$/.exec(input.trim())
   if (!match) return null
+  const typed = match[1].toLowerCase()
   const command = commands.find(
-    (candidate) => candidate.name.toLowerCase() === match[1].toLowerCase(),
+    (candidate) =>
+      candidate.name.toLowerCase() === typed ||
+      candidate.aliases?.includes(typed),
   )
   return command ? { command, args: (match[2] ?? "").trim() } : null
 }

@@ -505,16 +505,23 @@ const ConversationInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const agentCommands = composerModel.usesAgent
       ? (localAgent?.commands ?? [])
       : null
+    const agentConfig = composerModel.usesAgent
+      ? (localAgent?.config ?? null)
+      : null
     const commands = useMemo(
       () =>
-        availableCommands(agentCommands ?? [], composerModel.effort !== null),
-      [agentCommands, composerModel.effort],
+        availableCommands(
+          agentCommands ?? [],
+          composerModel.effort !== null,
+          agentConfig,
+        ),
+      [agentCommands, composerModel.effort, agentConfig],
     )
     // /effort runs in the console even for a model without effort, which the
     // menu leaves it out for: it says so rather than reaching the model.
     const runnableCommands = useMemo(
-      () => availableCommands(agentCommands ?? [], true),
-      [agentCommands],
+      () => availableCommands(agentCommands ?? [], true, agentConfig),
+      [agentCommands, agentConfig],
     )
     const commandQuery = typedCommandQuery(input)
     // The argument a command just added takes, until the user types it.

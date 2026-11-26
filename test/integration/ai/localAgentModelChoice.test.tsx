@@ -211,6 +211,70 @@ it.each([
   },
 )
 
+// An agent like Pi: its thinking level is the option the bridge reads as
+// the effort, and its own /thinking command sets it.
+const PI_CONFIG: AgentConfig = {
+  model: AGENT_CONFIG.model,
+  effort: { ...AGENT_CONFIG.effort!, id: "thinkingLevel" },
+}
+const PI_COMMANDS = [
+  { name: "compact", description: "Compact the context", hint: "[focus]" },
+  { name: "thinking", description: "Set the thinking level", hint: "[level]" },
+]
+
+it("runs the agent's /thinking as /effort, which the console keeps, and offers only /effort", async () => {
+  // Given the chat on an agent that lists its own /thinking command
+  await openChatWithAgent(PI_CONFIG)
+  act(() =>
+    win.__mcpFakeWS.receive({
+      v,
+      type: "agent_status",
+      state: "ready",
+      config: PI_CONFIG,
+      error: null,
+      commands: PI_COMMANDS,
+    }),
+  )
+  await runCommand("/model sonnet")
+  await waitFor(() =>
+    expect(getByHook("chat-effort-picker")).toHaveAccessibleName(
+      "Effort: Medium",
+    ),
+  )
+
+  // When the user types a slash
+  await userEvent.click(getByHook("chat-input-textarea"))
+  await userEvent.keyboard("/")
+
+  // Then the menu offers the console's /effort, not the agent's /thinking
+  expect(
+    getAllByHook("chat-command-option").map((option) => option.textContent),
+  ).toEqual([
+    expect.stringMatching(/^\/model/),
+    expect.stringMatching(/^\/effort/),
+    expect.stringMatching(/^\/compact/),
+  ])
+
+  // When the user sends the agent's /thinking with a level
+  await userEvent.keyboard("thinking high{Enter}")
+
+  // Then the console sets that effort and tells the agent, as /effort does,
+  // and nothing reaches the agent as a message
+  await waitFor(() =>
+    expect(getByHook("chat-effort-picker")).toHaveAccessibleName(
+      "Effort: High",
+    ),
+  )
+  expect(getAllByHook("chat-command-done").at(-1)).toHaveTextContent(
+    "Effort set to High",
+  )
+  expect(sentPreferences().at(-1)).toEqual({ model: "sonnet", effort: "high" })
+  expect(storedSettings().localAgent?.preferences).toEqual({
+    [AGENT.id]: { model: "sonnet", effort: "high" },
+  })
+  expect(win.__mcpFakeWS.framesOfType("agent_prompt")).toHaveLength(0)
+})
+
 it("selects an agent that lists no models on its own default model", async () => {
   // Given the chat on an API model, with an agent that lists no models
   await openChatWithAgent({ model: null, effort: null })

@@ -53,7 +53,11 @@ const configure = (
 
 const fakeChannel = (
   id: string,
-  model?: { current: string; choices: { value: string; name: string }[] },
+  model?: {
+    id: string
+    current: string
+    choices: { value: string; name: string }[]
+  },
 ) => {
   const snapshot = {
     info: { id, label: id },
@@ -247,6 +251,7 @@ it("keeps the same queue when no message is for a replaced channel of the agent"
 it("keeps the queue for its original model on the same agent channel", async () => {
   configure(AIOperationStatus.Processing, LOCAL_AGENT_MODEL)
   const model = {
+    id: "model",
     current: "fast",
     choices: [
       { value: "fast", name: "Fast" },
