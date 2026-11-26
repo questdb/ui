@@ -106,7 +106,7 @@ describe("MCP consent and live permissions", () => {
     cy.getByDataHook("mcp-status-pill").click()
     cy.getByDataHook("permissions-trigger").click()
     cy.getByDataHook("permission-level-write").click()
-    cy.getByDataHook("mcp-pair-submit").should("contain", "Connect").click()
+    cy.getByDataHook("mcp-pair-submit").should("contain", "Save").click()
     cy.window().then((win) => {
       expect(
         JSON.parse(win.localStorage.getItem("mcp:permissions")),
