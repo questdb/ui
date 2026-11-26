@@ -132,6 +132,13 @@ const flush = async () => {
   for (let i = 0; i < 50; i++) await Promise.resolve()
 }
 
+// The chat harness already fakes Date, and Vitest keeps the first fake-timer
+// setup, so faking the timeouts needs the real timers back first.
+const fakeTimeouts = () => {
+  vi.useRealTimers()
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+}
+
 const connectLocalAgent = async () => {
   sockets.length = 0
   vi.stubGlobal("WebSocket", MemorySocket)
@@ -259,7 +266,7 @@ it("stops the queries of a stopped local-agent turn", async () => {
   }) as unknown as typeof questClient.queryRaw)
   const abortQuery = vi.spyOn(questClient, "abort").mockImplementation(() => {})
   const socket = await connectLocalAgent()
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+  fakeTimeouts()
   const stop = new AbortController()
   void getLocalAgentChannel()!.prompt({
     conversationId: "conv-1",
@@ -293,6 +300,108 @@ it("stops the queries of a stopped local-agent turn", async () => {
   expect(abortQuery).toHaveBeenCalledWith(41)
   expect(executedSql).toEqual(["SELECT * FROM trades"])
 })
+
+it.each([
+  ["before the bridge answers it", false],
+  ["after the bridge rejects it", true],
+])(
+  "keeps a stopped turn's late edits and queries out of the next message's turn %s",
+  async (_, rejectNext) => {
+    // Given a stopped local-agent turn whose agent did not confirm the cancel
+    // within the local grace
+    vi.spyOn(questClient, "validateQuery").mockResolvedValue({
+      query: "",
+      columns: [],
+      timestamp: -1,
+    })
+    const executedSql: string[] = []
+    vi.spyOn(questClient, "queryRaw").mockImplementation(((sql: string) => {
+      executedSql.push(sql)
+      return { promise: new Promise(() => undefined), queryId: 43 }
+    }) as unknown as typeof questClient.queryRaw)
+    const socket = await connectLocalAgent()
+    const live = mountLive()
+    fakeTimeouts()
+    try {
+      const channel = getLocalAgentChannel()!
+      const stop = new AbortController()
+      const stopped = channel.prompt({
+        conversationId: "conv-1",
+        text: "edit the cell",
+        notebookRead: {
+          bufferId: BUFFER,
+          readSeq: getBufferActionSeq(BUFFER),
+        },
+        signal: stop.signal,
+        onUpdate: () => undefined,
+        onToolStatus: () => undefined,
+      })
+      act(() => stop.abort())
+      await act(() => vi.advanceTimersByTimeAsync(5000))
+      await expect(stopped).resolves.toMatchObject({ stopReason: "cancelled" })
+
+      // When the user sends the next message, and the stopped turn's agent
+      // still edits the cell and runs a query
+      void channel.prompt({
+        conversationId: "conv-1",
+        text: "next message",
+        notebookRead: null,
+        onUpdate: () => undefined,
+        onToolStatus: () => undefined,
+      })
+      const [stoppedPrompt, nextPrompt] = socket.frames.filter(
+        (f) => f.type === "agent_prompt",
+      )
+      expect(nextPrompt).toBeDefined()
+      act(() => {
+        if (rejectNext) {
+          socket.receive({
+            v,
+            type: "agent_turn_end",
+            conversationId: "conv-1",
+            turnId: nextPrompt.turnId,
+            result: {
+              outcome: "failed",
+              error: "The agent is still answering the previous message.",
+            },
+          })
+        }
+        socket.receive(toolCall("stopped-edit", "STOPPED-TURN-EDIT"))
+        socket.receive(
+          runQueryCall("stopped-query", "SELECT count() FROM trades"),
+        )
+      })
+      await act(flush)
+
+      // Then neither the edit nor the query runs
+      expect(resultOf(socket, "stopped-edit")).toBeUndefined()
+      expect(live.value()).toBe("ORIGINAL")
+      expect(executedSql).toEqual([])
+
+      // And once the agent ends the stopped turn, edits commit again
+      act(() => {
+        socket.receive({
+          v,
+          type: "agent_turn_end",
+          conversationId: "conv-1",
+          turnId: stoppedPrompt.turnId,
+          result: {
+            outcome: "completed",
+            stopReason: "cancelled",
+            usage: null,
+          },
+        })
+        socket.receive(toolCall("after-end", "AFTER-END"))
+      })
+      await act(flush)
+      expect(resultOf(socket, "after-end")?.isError).toBe(false)
+      expect(live.value()).toBe("AFTER-END")
+    } finally {
+      vi.useRealTimers()
+      live.release()
+    }
+  },
+)
 
 it("keeps the user's actions for the next result when a stopped call drops its own", async () => {
   // Given the user added a cell while a local-agent turn runs

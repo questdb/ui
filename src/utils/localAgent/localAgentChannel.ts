@@ -86,6 +86,9 @@ type StoppedTurn = {
   turnId: string
   // Already aborted: whatever the stopped turn still asks for is cancelled.
   toolSignal: AbortSignal
+  // A reconnect sends the cancel again until the next prompt is written:
+  // cancels on the wire target the conversation, not the turn.
+  replayCancel: boolean
 }
 
 type PendingTurn = {
@@ -105,8 +108,10 @@ export class LocalAgentChannel {
   // An opaque history marker for this channel's lifetime, including reconnects.
   readonly sessionId = crypto.randomUUID()
   private turns = new Map<string, PendingTurn>()
-  // The local Stop grace can expire before the bridge sees the cancel.
-  private pendingCancels = new Map<string, StoppedTurn>()
+  // Turns the user stopped that the agent has not ended yet. The local Stop
+  // grace can expire before the bridge sees the cancel, and the bridge keeps
+  // running the stopped turn, rejecting the next prompt, until it ends.
+  private stoppedTurns = new Map<string, StoppedTurn>()
   private disposed = false
   private preferences: LocalAgentPreferencesWire | null = null
   private snapshot: LocalAgentSnapshot
@@ -198,9 +203,11 @@ export class LocalAgentChannel {
     if (!sent) return Promise.resolve(connectionLost(this.options.info.label))
     onSent?.()
     if (notebookRead) this.options.onNotebookRead(conversationId, notebookRead)
-    // Cancels on the wire target the conversation. Once the new prompt is
-    // written, no subsequent reconnect may send its predecessor's cancel.
-    this.pendingCancels.delete(conversationId)
+    // Once the new prompt is written, no subsequent reconnect may send its
+    // predecessor's cancel. Messages without a turn ID stay the stopped
+    // predecessor's until the agent ends it.
+    const stopped = this.stoppedTurns.get(conversationId)
+    if (stopped) stopped.replayCancel = false
 
     return new Promise((resolve) => {
       let cancelTimer: ReturnType<typeof setTimeout> | undefined
@@ -211,9 +218,10 @@ export class LocalAgentChannel {
           stopped = resolve
         })
         toolAborter.abort(signal?.reason)
-        this.pendingCancels.set(conversationId, {
+        this.stoppedTurns.set(conversationId, {
           turnId,
           toolSignal: toolAborter.signal,
+          replayCancel: true,
         })
         this.clearQuestions(conversationId)
         this.sendCancel(conversationId, turnId)
@@ -249,9 +257,10 @@ export class LocalAgentChannel {
   // progress. Ownership is for status and cancellation, not authorization.
   captureToolRequest(client: MCPBridgeClient, conversationId: string) {
     if (this.disposed || client !== this.client) return undefined
-    // A request that arrives after Stop still belongs to the stopped turn,
-    // also once the local grace ended before the agent confirmed the cancel.
-    const stopped = this.pendingCancels.get(conversationId)
+    // A request that arrives after Stop still belongs to the stopped turn
+    // until the agent ends it: also once the local grace ended, and once the
+    // next prompt is written.
+    const stopped = this.stoppedTurns.get(conversationId)
     if (stopped) return { setStatus: ignoreStatus, signal: stopped.toolSignal }
     const turn = this.liveTurnOf(conversationId)
     if (!turn) return undefined
@@ -272,8 +281,8 @@ export class LocalAgentChannel {
   resume(): void {
     if (this.disposed) return
     if (this.preferences) this.sendPreferences(this.preferences)
-    for (const [conversationId, { turnId }] of this.pendingCancels) {
-      this.sendCancel(conversationId, turnId)
+    for (const [conversationId, stopped] of this.stoppedTurns) {
+      if (stopped.replayCancel) this.sendCancel(conversationId, stopped.turnId)
     }
   }
 
@@ -327,7 +336,7 @@ export class LocalAgentChannel {
 
   unfinishedTurns(): Map<string, string> {
     const unfinished = new Map<string, string>()
-    for (const [conversationId, { turnId }] of this.pendingCancels) {
+    for (const [conversationId, { turnId }] of this.stoppedTurns) {
       unfinished.set(conversationId, turnId)
     }
     for (const [conversationId, { turnId }] of this.turns) {
@@ -340,9 +349,10 @@ export class LocalAgentChannel {
   // left: nothing shows them anymore, and the bridge still runs them.
   stopTurnsLeftBy(previous: Map<string, string>): void {
     for (const [conversationId, turnId] of previous) {
-      this.pendingCancels.set(conversationId, {
+      this.stoppedTurns.set(conversationId, {
         turnId,
         toolSignal: AbortSignal.abort(),
+        replayCancel: true,
       })
       this.sendCancel(conversationId, turnId)
     }
@@ -351,7 +361,7 @@ export class LocalAgentChannel {
   dispose(): void {
     this.disposed = true
     this.unsubscribe()
-    this.pendingCancels.clear()
+    this.stoppedTurns.clear()
     for (const [conversationId, turn] of Array.from(this.turns)) {
       this.settleTurn(
         conversationId,
@@ -401,19 +411,26 @@ export class LocalAgentChannel {
         })
         return
       }
-      case "agent_update":
-        this.turnOf(msg.conversationId, msg.turnId)?.onUpdate(msg.update)
-        return
-      case "agent_turn_end":
+      case "agent_update": {
+        const turn = this.turnOf(msg.conversationId, msg.turnId)
+        // The bridge runs a later turn only once the stopped one has ended.
         if (
-          this.pendingCancels.get(msg.conversationId)?.turnId === msg.turnId
+          turn &&
+          this.stoppedTurns.get(msg.conversationId)?.turnId !== msg.turnId
         ) {
-          this.pendingCancels.delete(msg.conversationId)
+          this.stoppedTurns.delete(msg.conversationId)
+        }
+        turn?.onUpdate(msg.update)
+        return
+      }
+      case "agent_turn_end":
+        if (this.stoppedTurns.get(msg.conversationId)?.turnId === msg.turnId) {
+          this.stoppedTurns.delete(msg.conversationId)
         }
         this.settleTurn(msg.conversationId, msg.turnId, msg.result)
         return
       case "agent_question": {
-        // Questions have no wire turn ID. A stopping turn can no longer ask.
+        // Questions have no wire turn ID. A stopped turn can no longer ask.
         if (!this.liveTurnOf(msg.conversationId)) return
         this.update({
           questions: [
@@ -431,10 +448,11 @@ export class LocalAgentChannel {
     }
   }
 
-  // The conversation's running turn, unless the user stopped it.
+  // The turn that owns the conversation's messages without a turn ID: its
+  // running turn, unless the agent has not yet ended a turn the user stopped.
   private liveTurnOf(conversationId: string) {
-    const turn = this.turns.get(conversationId)
-    return turn?.stopping ? undefined : turn
+    if (this.stoppedTurns.has(conversationId)) return undefined
+    return this.turns.get(conversationId)
   }
 
   private turnOf(conversationId: string, turnId: string) {

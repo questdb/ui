@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import type { MCPBridgeClient } from "../mcp/MCPBridgeClient"
+import type { ToolCallMessage } from "../mcp/types"
 import type {
   AgentInboundMessage,
   AgentOutboundMessage,
@@ -273,6 +274,15 @@ it.each([false, true])(
         "agent_prompt",
       ])
 
+      // Until the bridge reports the next turn running, a question is the
+      // stopped turn's: the bridge rejects the next prompt while that runs.
+      deliver({
+        v: first.v,
+        type: "agent_update",
+        conversationId: "c1",
+        turnId: second.turnId,
+        update: { kind: "thought_chunk", text: "Reading" },
+      })
       const nextQuestion = question("next-question")
       deliver(nextQuestion)
       deliver(turnEnd(first.turnId))
@@ -296,6 +306,204 @@ it.each([false, true])(
     }
   },
 )
+
+// The bridge sends these with the conversation ID and no turn ID. A new such
+// message in the protocol must be added to `refusesUntagged`.
+type UntaggedMessageType<M> = M extends { type: infer T }
+  ? "conversationId" extends keyof M
+    ? "turnId" extends keyof M
+      ? never
+      : T
+    : never
+  : never
+
+let lateQuestions = 0
+// Whether the channel keeps the message from the conversation's next turn:
+// a tool call gets an aborted signal, a question is not shown.
+const refusesUntagged: Record<
+  UntaggedMessageType<AgentOutboundMessage | ToolCallMessage>,
+  (bridge: ReturnType<typeof connect>) => boolean
+> = {
+  tool_call: ({ channel, client }) =>
+    channel.captureToolRequest(client, "c1")?.signal.aborted === true,
+  agent_question: ({ channel, deliver }) => {
+    const asked = question(`late-${++lateQuestions}`)
+    deliver(asked)
+    return !channel.getSnapshot().questions.includes(asked)
+  },
+}
+
+const thought = (turnId: string): AgentOutboundMessage => ({
+  v: "0.6.0",
+  type: "agent_update",
+  conversationId: "c1",
+  turnId,
+  update: { kind: "thought_chunk", text: "Reading" },
+})
+
+// Stops a turn, lets the local grace end it, and writes the next prompt
+// before the agent has ended the stopped turn.
+const sendAfterUnconfirmedStop = async (
+  bridge: ReturnType<typeof connect>,
+  whileStopping?: (stoppedTurnId: string) => void,
+) => {
+  const controller = new AbortController()
+  const stopped = startTurn(bridge.channel, controller.signal)
+  const stoppedPrompt = bridge.sent.at(-1)
+  controller.abort()
+  if (stoppedPrompt?.type === "agent_prompt") {
+    whileStopping?.(stoppedPrompt.turnId)
+  }
+  await vi.advanceTimersByTimeAsync(5000)
+  await expect(stopped.turn).resolves.toMatchObject({ stopReason: "cancelled" })
+  const next = startTurn(bridge.channel)
+  const nextPrompt = bridge.sent.at(-1)
+  if (
+    stoppedPrompt?.type !== "agent_prompt" ||
+    nextPrompt?.type !== "agent_prompt" ||
+    nextPrompt === stoppedPrompt
+  ) {
+    throw new Error("Expected two prompts")
+  }
+  return {
+    stoppedTurnId: stoppedPrompt.turnId,
+    nextTurnId: nextPrompt.turnId,
+    next,
+  }
+}
+
+describe.each(
+  Object.keys(refusesUntagged) as Array<keyof typeof refusesUntagged>,
+)("a stopped turn's %s, which names no turn", (type) => {
+  it("is refused after the next prompt until the agent ends the stopped turn", async () => {
+    vi.useFakeTimers()
+    const bridge = connect()
+    try {
+      // Given the next prompt went out before the agent ended the stopped turn
+      const { stoppedTurnId } = await sendAfterUnconfirmedStop(bridge)
+
+      // When the agent still sends the message, then ends the stopped turn
+      const refusedBeforeEnd = refusesUntagged[type](bridge)
+      bridge.deliver(turnEnd(stoppedTurnId))
+
+      // Then only the message sent after the end reaches the next turn
+      expect(refusedBeforeEnd).toBe(true)
+      expect(refusesUntagged[type](bridge)).toBe(false)
+    } finally {
+      bridge.channel.dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it("is refused after the bridge rejects the next prompt", async () => {
+    vi.useFakeTimers()
+    const bridge = connect()
+    try {
+      // Given the next prompt went out before the agent ended the stopped turn
+      const { nextTurnId, next } = await sendAfterUnconfirmedStop(bridge)
+
+      // When the bridge rejects it, and the stopped turn sends the message
+      bridge.deliver({
+        v: "0.6.0",
+        type: "agent_turn_end",
+        conversationId: "c1",
+        turnId: nextTurnId,
+        result: {
+          outcome: "failed",
+          error: "The agent is still answering the previous message.",
+        },
+      })
+      await expect(next.turn).resolves.toMatchObject({ outcome: "failed" })
+
+      // Then the channel refuses it
+      expect(refusesUntagged[type](bridge)).toBe(true)
+    } finally {
+      bridge.channel.dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it("reaches the next turn once the bridge sends that turn's first update", async () => {
+    vi.useFakeTimers()
+    const bridge = connect()
+    try {
+      // Given the next prompt went out before the agent ended the stopped turn
+      const { nextTurnId, next } = await sendAfterUnconfirmedStop(bridge)
+
+      // When the bridge reports the next turn running
+      bridge.deliver(thought(nextTurnId))
+
+      // Then the stopped turn has ended, and the message is the next turn's
+      expect(next.onUpdate).toHaveBeenCalledWith({
+        kind: "thought_chunk",
+        text: "Reading",
+      })
+      expect(refusesUntagged[type](bridge)).toBe(false)
+    } finally {
+      bridge.channel.dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it("stays refused after a late update of the stopped turn itself", async () => {
+    vi.useFakeTimers()
+    const bridge = connect()
+    try {
+      // Given the stopped turn streamed once more before the grace ended
+      await sendAfterUnconfirmedStop(bridge, (stoppedTurnId) =>
+        bridge.deliver(thought(stoppedTurnId)),
+      )
+
+      // When it sends the message after the next prompt
+      const refused = refusesUntagged[type](bridge)
+
+      // Then the channel refuses it: the stopped turn has not ended
+      expect(refused).toBe(true)
+    } finally {
+      bridge.channel.dispose()
+      vi.useRealTimers()
+    }
+  })
+})
+
+it("hands a stopped turn the agent has not ended to the channel that replaces it", async () => {
+  vi.useFakeTimers()
+  const bridge = connect()
+  const replacement = connect()
+  try {
+    // Given the bridge rejected the next prompt: the stopped turn still runs
+    const { stoppedTurnId, nextTurnId, next } =
+      await sendAfterUnconfirmedStop(bridge)
+    bridge.deliver({
+      v: "0.6.0",
+      type: "agent_turn_end",
+      conversationId: "c1",
+      turnId: nextTurnId,
+      result: { outcome: "failed", error: "Still answering" },
+    })
+    await next.turn
+
+    // When a new channel replaces it, and the bridge reconnects
+    const left = bridge.channel.unfinishedTurns()
+    bridge.channel.dispose()
+    replacement.channel.stopTurnsLeftBy(left)
+    replacement.channel.resume()
+
+    // Then the new channel cancels the stopped turn, also on reconnect, and
+    // refuses its tool calls until the agent ends it
+    expect(left).toEqual(new Map([["c1", stoppedTurnId]]))
+    const cancel = { v: "0.6.0", type: "agent_cancel", conversationId: "c1" }
+    expect(replacement.sent).toEqual([cancel, cancel])
+    const { channel, client } = replacement
+    expect(channel.captureToolRequest(client, "c1")?.signal.aborted).toBe(true)
+    replacement.deliver(turnEnd(stoppedTurnId))
+    expect(channel.captureToolRequest(client, "c1")).toBeUndefined()
+  } finally {
+    bridge.channel.dispose()
+    replacement.channel.dispose()
+    vi.useRealTimers()
+  }
+})
 
 it("does not replay a Stop after the channel is disposed", async () => {
   vi.useFakeTimers()
