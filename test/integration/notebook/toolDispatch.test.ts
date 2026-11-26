@@ -47,7 +47,6 @@ import { EXPECTED_MCP_VERSION } from "../../../src/utils/mcp/protocolVersion"
 import type { ToolExecutionContext } from "../../../src/utils/ai/shared"
 import { createNotebookFreshness } from "../../../src/utils/notebooks/notebookFreshness"
 import { computeAgentCellGridH } from "../../../src/scenes/Editor/Notebook/cellSizing"
-import { ALL_DEFINITIONS } from "../../../src/utils/tools/tools"
 
 const cell = (
   id: string,
