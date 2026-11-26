@@ -36,6 +36,7 @@ type UserActionDigestState = ReturnType<typeof createUserActionDigestState>
 // bridge cancel, a deadline, a revoked permission) settles false and commits
 // none of it. The next result that is sent then carries the notice and the
 // actions, and the stale-edit guard does not trust a read the agent never got.
+// Likewise a suggested query shows only once the agent is told it does.
 export const deferUntilSent = (
   ctx: Omit<DispatchContext, "permissions"> & {
     getPermissions: () => Permissions
@@ -45,11 +46,18 @@ export const deferUntilSent = (
     userActions: UserActionDigestState
   },
 ): { ctx: DispatchContext; settle: (sent: boolean) => void } => {
-  const { getPermissions, ...dispatch } = ctx
+  const { getPermissions, onSuggestedQuery, ...dispatch } = ctx
   const pending: Told[] = []
   return {
     ctx: {
       ...dispatch,
+      ...(onSuggestedQuery && {
+        onSuggestedQuery: (sql: string) => {
+          pending.push((sent) => {
+            if (sent) onSuggestedQuery(sql)
+          })
+        },
+      }),
       freshness: {
         ...ctx.freshness,
         recordRead: (bufferId, seq, readAtGeneration) => {

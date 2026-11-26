@@ -15,7 +15,7 @@ import {
   deferUntilSent,
 } from "../../utils/mcp/deferUntilSent"
 import { createNotebookFreshness } from "../../utils/notebooks/notebookFreshness"
-import { mcpTools } from "../../utils/tools/tools"
+import { bridgeTools } from "../../utils/tools/tools"
 import {
   EXPECTED_MCP_VERSION,
   type BridgeVersionMismatch,
@@ -120,14 +120,15 @@ const MCPBridgeContext = createContext<MCPBridgeContextValue>(defaultContext)
 
 export const useMCPBridge = () => useContext(MCPBridgeContext)
 
-// Sent in `hello` so the bridge can detect drift against its bundled
-// tool list (Codex caches the initial tools/list and never refetches).
+// Sent in `hello`: chat agents list these tools, and the bridge checks every
+// call's arguments against them (Codex caches the initial tools/list and
+// never refetches).
 const toWireSchema = (t: ToolDefinition) => ({
   name: t.name,
   description: t.description ?? "",
   inputSchema: t.inputSchema as Record<string, unknown>,
 })
-const buildToolListForHello = () => mcpTools.map(toWireSchema)
+const buildToolListForHello = () => bridgeTools.map(toWireSchema)
 
 const consoleOrigin =
   typeof window !== "undefined" ? window.location.origin : "unknown"
@@ -328,6 +329,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
           ...(conversationId !== undefined && {
             freshness: agentFreshnessFor(conversationId),
             setStatus: turn?.setStatus,
+            onSuggestedQuery: turn?.onSuggestedQuery,
           }),
           signal: aborter.signal,
         },

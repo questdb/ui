@@ -534,6 +534,36 @@ describe("runLocalAgentTurn", () => {
     ])
   })
 
+  it("returns the query the agent last suggested as the answer's SQL", async () => {
+    // Given a running turn
+    const bridge = createFakeBridge()
+    const { channel } = connectChannel(bridge.client)
+    activeChannel = channel
+    const { turn } = startTurn()
+    const call = channel.captureToolRequest(bridge.client, CONVERSATION_ID)
+    const suggest = call?.stopped === false ? call.onSuggestedQuery : undefined
+
+    // When the agent suggests a query, then a better one, and ends the turn
+    suggest?.("SELECT * FROM trade")
+    suggest?.("SELECT * FROM trades")
+    bridge.update({
+      kind: "message_chunk",
+      messageId: "m1",
+      text: "The table is trades.",
+    })
+    bridge.endTurn({
+      outcome: "completed",
+      stopReason: "end_turn",
+      usage: null,
+    })
+
+    // Then the answer suggests the last one
+    await expect(turn).resolves.toEqual({
+      sql: "SELECT * FROM trades",
+      explanation: "The table is trades.",
+    })
+  })
+
   it("sends a cancel to the bridge and resolves as aborted when the user stops the turn", async () => {
     // Given
     const bridge = createFakeBridge()

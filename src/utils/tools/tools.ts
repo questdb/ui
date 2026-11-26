@@ -24,6 +24,12 @@ export const aiTools: ToolDefinition[] = ALL_DEFINITIONS.filter((d) =>
 export const mcpTools: ToolDefinition[] = ALL_DEFINITIONS.filter((d) =>
   d.surfaces.includes("mcp"),
 )
+// The tools the console lists in its hello to the bridge. Chat agents get
+// exactly this list, so they get every AI Assistant tool; terminal agents
+// list the bridge's own copy of mcpTools.
+export const bridgeTools: ToolDefinition[] = ALL_DEFINITIONS.filter(
+  (d) => d.surfaces.includes("ai") || d.surfaces.includes("mcp"),
+)
 
 export const categoryFor = (name: string): ToolCategory =>
   _DEF_BY_NAME.get(name)?.category ?? "free"

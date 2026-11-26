@@ -312,6 +312,8 @@ export const runLocalAgentTurn = async ({
   const startedAt = Date.now()
   const { handleUpdate, handleStatus, reply, contextUsage } =
     createUpdateHandler(setStatus, streaming, abortSignal, channel.sessionId)
+  // The answer shows the agent's last suggest_query as its suggested change.
+  let suggestedSql: string | null = null
   const result = await channel.prompt({
     conversationId,
     text: userMessage,
@@ -321,6 +323,9 @@ export const runLocalAgentTurn = async ({
     onAccepted: onPromptAccepted,
     onUpdate: handleUpdate,
     onToolStatus: handleStatus,
+    onSuggestedQuery: (sql) => {
+      suggestedSql = sql
+    },
   })
 
   void trackEvent(ConsoleEvent.LOCAL_AGENT_TURN, {
@@ -348,7 +353,7 @@ export const runLocalAgentTurn = async ({
   // each their own way, so those are not shown.
   const usage = contextUsage()
   return {
-    sql: null,
+    sql: suggestedSql,
     explanation: reply(),
     ...(usage && { contextUsage: usage }),
   }

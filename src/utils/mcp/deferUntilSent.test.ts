@@ -171,3 +171,55 @@ it("keeps a permission change made while a result was in flight for the next one
   expect(inFlight.due).toBe(true)
   expect(notice.capture().due).toBe(true)
 })
+
+// A call's context, for a turn whose chat answer takes suggested queries
+// when onSuggestedQuery is given.
+const deferSuggestion = (onSuggestedQuery?: (sql: string) => void) =>
+  deferUntilSent(
+    {
+      modelToolsClient: {} as ModelToolsClient,
+      freshness: createNotebookFreshness(),
+      metaToolContext: {
+        getActiveBufferId: () => null,
+        getWorkspace: () => null,
+        getDigest: () => null,
+      },
+      getPermissions: () => WRITE,
+      validateSql: () =>
+        Promise.resolve({ query: "", columns: [], timestamp: 0 }),
+      onSuggestedQuery,
+    },
+    {
+      permissionsNotice: createPermissionsNoticeState(),
+      userActions: createUserActionDigestState(),
+    },
+  )
+
+it.each([
+  ["sent", true, [["SELECT 1"]]],
+  ["dropped", false, []],
+] as const)(
+  "shows a suggested query whose result is %s only if the agent got it",
+  (_, sent, shown) => {
+    // Given a call of a chat answer that takes a suggested query
+    const onSuggestedQuery = vi.fn()
+    const deferred = deferSuggestion(onSuggestedQuery)
+
+    // When the call suggests a query, and its result is then sent or dropped
+    deferred.ctx.onSuggestedQuery?.("SELECT 1")
+    const shownBeforeResult = onSuggestedQuery.mock.calls.length
+    deferred.settle(sent)
+
+    // Then the answer shows the query only once the agent was told it does
+    expect(shownBeforeResult).toBe(0)
+    expect(onSuggestedQuery.mock.calls).toEqual(shown)
+  },
+)
+
+it("offers no suggestion to a call whose turn takes none", () => {
+  // Given a call that no chat answer takes, like one from the terminal
+  const deferred = deferSuggestion()
+
+  // Then its context has nowhere to show a suggestion
+  expect(deferred.ctx.onSuggestedQuery).toBeUndefined()
+})

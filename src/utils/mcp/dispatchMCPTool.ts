@@ -1,4 +1,5 @@
 import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
+import type { ToolExecutionContext } from "../ai/shared"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { dispatchTool } from "../tools/dispatch"
 import {
@@ -44,8 +45,14 @@ export type DispatchContext = {
   validateSql: (sql: string) => Promise<ValidateQueryResult>
   // Receives the tool's progress status, as the in-app assistant shows it.
   setStatus?: StatusCallback
+  // Shows a suggest_query as the suggested change of the chat answer the call
+  // belongs to. Only a chat agent's running turn has one.
+  onSuggestedQuery?: (sql: string) => void
   signal?: AbortSignal
 }
+
+const SUGGEST_QUERY_WITHOUT_CHAT_ANSWER_MESSAGE =
+  "suggest_query works only during an AI Assistant chat answer; nothing was shown to the user."
 
 const bufferIdOf = (args: unknown): number | null => {
   const id = (args as { buffer_id?: unknown } | null | undefined)?.buffer_id
@@ -219,6 +226,8 @@ const dispatchInner = async (
     }
   }
 
+  if (call.name === "suggest_query") return suggestQuery(call, ctx, setStatus)
+
   const perms = ctx.permissions.get()
   const fullReadTarget =
     call.name === "get_notebook_state" ? bufferIdOf(call.arguments) : null
@@ -250,6 +259,35 @@ const dispatchInner = async (
         )
       }
     }
+  }
+  return wrapDispatchToolOutput(out)
+}
+
+// The suggestion goes to the chat answer of the call's turn, as an API
+// model's does. With no such answer nothing would show it, so the agent is
+// told so rather than that the suggestion was registered.
+const suggestQuery = async (
+  call: ToolCallMessage,
+  ctx: DispatchContext,
+  setStatus: StatusCallback,
+): Promise<ToolResultPayload> => {
+  const { onSuggestedQuery } = ctx
+  if (!onSuggestedQuery) {
+    return errorPayload(SUGGEST_QUERY_WITHOUT_CHAT_ANSWER_MESSAGE)
+  }
+  const toolContext: ToolExecutionContext = {}
+  const out = await dispatchTool(
+    call.name,
+    call.arguments,
+    ctx.modelToolsClient,
+    setStatus,
+    ctx.permissions.get(),
+    ctx.validateSql,
+    ctx.signal,
+    toolContext,
+  )
+  if (toolContext.suggestedSQL !== undefined) {
+    onSuggestedQuery(toolContext.suggestedSQL)
   }
   return wrapDispatchToolOutput(out)
 }

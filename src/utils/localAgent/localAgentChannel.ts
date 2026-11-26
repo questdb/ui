@@ -64,6 +64,9 @@ export type LocalAgentPrompt = {
   onAccepted?: () => void
   onUpdate: (update: LocalAgentUpdate) => void
   onToolStatus: StatusCallback
+  // The query the agent suggests with suggest_query, for the chat answer to
+  // show as its suggested change. Without it, the turn takes no suggestion.
+  onSuggestedQuery?: (sql: string) => void
 }
 
 export type LocalAgentPreferencesWire = {
@@ -96,7 +99,12 @@ export type LocalAgentChannelOptions = {
 // runs: a tool that ignores an aborted signal would still act.
 export type ToolRequestTurn =
   | { stopped: true }
-  | { stopped: false; setStatus: StatusCallback; signal: AbortSignal }
+  | {
+      stopped: false
+      setStatus: StatusCallback
+      signal: AbortSignal
+      onSuggestedQuery?: (sql: string) => void
+    }
 
 type StoppedTurn = {
   turnId: string
@@ -111,6 +119,7 @@ type PendingTurn = {
   accept: () => void
   onUpdate: LocalAgentPrompt["onUpdate"]
   onToolStatus: StatusCallback
+  onSuggestedQuery: LocalAgentPrompt["onSuggestedQuery"]
   toolSignal: AbortSignal
   settle: (result: AgentTurnResult) => void
   // Set once the user stops the turn; resolves when the turn has ended.
@@ -184,6 +193,7 @@ export class LocalAgentChannel {
     onAccepted,
     onUpdate,
     onToolStatus,
+    onSuggestedQuery,
   }: LocalAgentPrompt): Promise<AgentTurnResult> {
     if (signal?.aborted) return Promise.resolve(CANCELLED)
     if (this.disposed) {
@@ -207,6 +217,7 @@ export class LocalAgentChannel {
             onAccepted,
             onUpdate,
             onToolStatus,
+            onSuggestedQuery,
           }),
         )
     }
@@ -258,6 +269,7 @@ export class LocalAgentChannel {
         accept,
         onUpdate,
         onToolStatus,
+        onSuggestedQuery,
         toolSignal: toolAborter.signal,
         stopping: null,
         startCancelGrace: () => {
@@ -330,9 +342,19 @@ export class LocalAgentChannel {
       }
       turn.onToolStatus(status, args)
     }
+    const { onSuggestedQuery } = turn
     // Aborts when the user stops the turn: a call already running stops, and
     // later calls of the turn are refused above.
-    return { stopped: false, setStatus, signal: turn.toolSignal }
+    return {
+      stopped: false,
+      setStatus,
+      signal: turn.toolSignal,
+      ...(onSuggestedQuery && {
+        onSuggestedQuery: (sql: string) => {
+          if (this.liveTurnOf(conversationId) === turn) onSuggestedQuery(sql)
+        },
+      }),
+    }
   }
 
   resume(): void {

@@ -33,7 +33,7 @@ import {
 } from "../../../src/utils/notebooks/notebookAIBridge"
 import { questClient } from "../../../src/utils/questdb/queryClient"
 import { db } from "../../../src/store/db"
-import { mcpTools } from "../../../src/utils/tools/tools"
+import { bridgeTools } from "../../../src/utils/tools/tools"
 import { dispatchMCPTool } from "../../../src/utils/mcp/dispatchMCPTool"
 import { STATE_STALE_MESSAGE } from "../../../src/utils/notebooks/notebookToolMessages"
 import {
@@ -575,7 +575,7 @@ const startStoppableTurn = (
   return { stop: () => stop.abort(), end }
 }
 
-describe.each(mcpTools.map(({ name }) => name))(
+describe.each(bridgeTools.map(({ name }) => name))(
   "a stopped turn's %s call",
   (name) => {
     it("is answered as cancelled and never dispatched", async () => {
@@ -708,7 +708,7 @@ const stubQueries = () => {
   })) as unknown as typeof questClient.queryRaw)
 }
 
-describe.each(mcpTools.map(({ name }) => name))(
+describe.each(bridgeTools.map(({ name }) => name))(
   "a %s call in flight when the user stops its turn",
   (name) => {
     it("leaves the permission notice for the next result that is sent", async () => {

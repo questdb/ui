@@ -188,6 +188,7 @@ export enum ConsoleEvent {
   MCP_GET_QUESTDB_DOCUMENTATION = "mcp.get_questdb_documentation",
   MCP_GET_WORKSPACE_STATE = "mcp.get_workspace_state",
   MCP_GET_RECENT_USER_ACTIONS = "mcp.get_recent_user_actions",
+  MCP_SUGGEST_QUERY = "mcp.suggest_query",
   MCP_UNKNOWN_TOOL = "mcp.unknown_tool",
 
   MCP_PAIRING_PROMPTED = "mcp.pairing_prompted",

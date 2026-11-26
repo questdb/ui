@@ -302,6 +302,85 @@ it("refuses notebook requests that reach a stopped turn until the agent ends it"
   }
 })
 
+// A turn whose answer shows the agent's suggest_query.
+const startSuggestingTurn = (
+  channel: LocalAgentChannel,
+  signal?: AbortSignal,
+) => {
+  const onSuggestedQuery = vi.fn()
+  const turn = channel.prompt({
+    conversationId: "c1",
+    text: "Fix the query",
+    notebookRead: null,
+    signal,
+    onUpdate: vi.fn(),
+    onToolStatus: vi.fn(),
+    onSuggestedQuery,
+  })
+  return { turn, onSuggestedQuery }
+}
+
+it("shows a suggested query only in the answer of the turn its call belongs to, while that turn runs", async () => {
+  // Given a call captured for a running turn whose answer takes suggestions
+  const { channel, client, sent, deliver } = connect()
+  const controller = new AbortController()
+  const first = startSuggestingTurn(channel, controller.signal)
+  const [prompt] = sent
+  if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+  const suggest = runningTurnOf(
+    channel.captureToolRequest(client, "c1"),
+  ).onSuggestedQuery
+
+  // When the call suggests a query, again once the user stopped the turn,
+  // and again while the next turn runs
+  suggest?.("SELECT 1")
+  controller.abort()
+  suggest?.("SELECT 2")
+  deliver(turnEnd(prompt.turnId))
+  await first.turn
+  const next = startSuggestingTurn(channel)
+  suggest?.("SELECT 3")
+
+  // Then only the query suggested while its turn ran shows, in its answer
+  expect(first.onSuggestedQuery.mock.calls).toEqual([["SELECT 1"]])
+  expect(next.onSuggestedQuery).not.toHaveBeenCalled()
+})
+
+it("offers no suggestion to a call whose turn takes none", () => {
+  // Given a running turn whose prompt takes no suggestions
+  const { channel, client } = connect()
+  startTurn(channel)
+
+  // Then a call captured for it has nowhere to show one
+  expect(
+    runningTurnOf(channel.captureToolRequest(client, "c1")).onSuggestedQuery,
+  ).toBeUndefined()
+})
+
+it("shows the suggestion of a message that waited for a stopped turn in that message's answer", async () => {
+  // Given a message sent right after Stop, while the agent ends that turn
+  const { channel, client, sent, deliver } = connect()
+  const controller = new AbortController()
+  startTurn(channel, controller.signal)
+  const [stopped] = sent
+  if (stopped?.type !== "agent_prompt") throw new Error("Expected a prompt")
+  controller.abort()
+  const waiting = startSuggestingTurn(channel)
+
+  // When the agent ends the stopped turn, and a call of the message's turn
+  // suggests a query
+  deliver(turnEnd(stopped.turnId))
+  await vi.waitFor(() =>
+    expect(sent.filter(({ type }) => type === "agent_prompt")).toHaveLength(2),
+  )
+  runningTurnOf(channel.captureToolRequest(client, "c1")).onSuggestedQuery?.(
+    "SELECT 1",
+  )
+
+  // Then the message's answer shows it
+  expect(waiting.onSuggestedQuery.mock.calls).toEqual([["SELECT 1"]])
+})
+
 it.each([1000, 6000])(
   "replays Stop on reconnect at %i ms and clears it on matching end",
   async (reconnectAt) => {

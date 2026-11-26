@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { ALL_DEFINITIONS, aiTools } from "./tools"
+import { ALL_DEFINITIONS, aiTools, bridgeTools } from "./tools"
 
 type SchemaNode = {
   type?: unknown
@@ -84,4 +84,20 @@ describe("reference_lines descriptions", () => {
     )
     for (const [, node] of found) expect(node.description).toContain(AXIS_RULE)
   })
+})
+
+// A chat agent lists the tools the console sends the bridge in its hello. No
+// AI Assistant tool needs what only an API model's answer has: suggest_query
+// goes to the chat agent's answer.
+describe("the tools the console offers chat agents", () => {
+  it.each(aiTools.map(({ name }) => name))(
+    "include the AI Assistant's %s",
+    (name) => {
+      // Given the AI Assistant's tool
+      const tool = aiTools.find((t) => t.name === name)
+
+      // Then chat agents get it, as the AI Assistant has it
+      expect(bridgeTools.find((t) => t.name === name)).toEqual(tool)
+    },
+  )
 })
