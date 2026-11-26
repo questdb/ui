@@ -63,7 +63,7 @@ describe("ReferenceLinesEditor", () => {
     expect(screen.getByLabelText("Line 1 axis: Left")).toBeInTheDocument()
   })
 
-  it("keeps the axis of a right line the chart cannot draw, and says why", async () => {
+  it("keeps the axis of a right line the chart cannot draw, and says it is removed on save", async () => {
     // Given a line on the right axis, which no query draws
     const latest = renderEditor([{ value: 30 }, { value: 70, axis: "right" }])
 
@@ -74,7 +74,7 @@ describe("ReferenceLinesEditor", () => {
     const right = screen.getByRole("button", { name: "Line 2 axis: Right" })
     expect(right).toHaveAttribute("aria-invalid", "true")
     expect(right).toHaveAccessibleDescription(
-      "No enabled query is on the right axis, so a right-axis line cannot be drawn. Put a query on the right axis, or draw the line on the left.",
+      "No enabled query is on the right axis, so right-axis lines are removed on save. To keep a line, put a query on the right axis or draw the line on the left.",
     )
 
     // When the user moves it to the left

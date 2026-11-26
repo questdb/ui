@@ -9,9 +9,18 @@ import { hasRightAxisLineWithoutQuery } from "../../../../utils/tools/chartConfi
 import { resolveDraw } from "../DrawCanvas/drawCanvasUtils"
 import { buildEchartsOption } from "./buildEchartsOption"
 import { ChartSettingsPanel } from "./ChartSettingsDrawer"
-import type { ChartConfig, ReferenceLine, SeriesAxis } from "./chartTypes"
+import {
+  CHART_TYPES,
+  type ChartConfig,
+  type ChartType,
+  type ReferenceLine,
+  type SeriesAxis,
+} from "./chartTypes"
 
 const statements = ["SELECT ts, price FROM t", "SELECT ts, rsi FROM t"]
+
+const REMOVED_ON_SAVE =
+  "No enabled query is on the right axis, so right-axis lines are removed on save. To keep a line, put a query on the right axis or draw the line on the left."
 
 const result = (index: number, rows: number): QueryExecResult => {
   const y = index === 0 ? "price" : "rsi"
@@ -97,32 +106,51 @@ const choose = async (select: string, option: string) => {
 }
 
 describe("ChartSettingsPanel — reference lines", () => {
-  it("keeps a right-axis line movable and refuses to apply it once its query moves left", async () => {
-    // Given price on the left, RSI on the right, and an overbought line on RSI
-    const overbought = {
-      value: 70,
-      axis: "right" as const,
-      label: "Overbought",
-    }
+  const overbought = {
+    value: 70,
+    axis: "right" as const,
+    label: "Overbought",
+  }
+
+  it("says a right-axis line is removed on save once its query moves left, and Apply saves without it", async () => {
+    // Given price on the left with a target line, RSI on the right, and an
+    // overbought line on RSI
+    const target = { value: 120, label: "Target" }
     const { onSave, onSaveBlocked } = renderPanel(
+      chartConfig([{ axis: "left" }, { axis: "right" }], [overbought, target]),
+    )
+
+    // When RSI moves to the left axis
+    await userEvent.click(screen.getByRole("tab", { name: "Q2" }))
+    await choose("Y-axis: Right", "Left")
+
+    // Then the line keeps its axis control, which says it is removed on save
+    const axis = screen.getByRole("button", { name: "Line 1 axis: Right" })
+    expect(axis).toHaveAttribute("aria-invalid", "true")
+    expect(axis).toHaveAccessibleDescription(REMOVED_ON_SAVE)
+
+    // When the user applies
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }))
+
+    // Then the settings are saved without the right-axis line, and the chart
+    // draws the target line on the left
+    expect(onSaveBlocked).not.toHaveBeenCalled()
+    expect(onSave).toHaveBeenCalledTimes(1)
+    const saved = onSave.mock.calls[0][0]
+    expect(saved.referenceLines).toEqual([target])
+    expect(saved.queries[1]?.axis).toBe("left")
+    expect(drawnLines(resolve(saved))).toEqual([{ value: 120, axis: 0 }])
+  })
+
+  it("saves a right-axis line on the left once the user moves it there after its query", async () => {
+    // Given price on the left, RSI on the right, and an overbought line on RSI
+    const { onSave } = renderPanel(
       chartConfig([{ axis: "left" }, { axis: "right" }], [overbought]),
     )
 
-    // When RSI moves to the left axis and the user applies
+    // When RSI and then the line move to the left axis, and the user applies
     await userEvent.click(screen.getByRole("tab", { name: "Q2" }))
     await choose("Y-axis: Right", "Left")
-    await userEvent.click(screen.getByRole("button", { name: "Apply" }))
-
-    // Then nothing is saved, and the line keeps its axis control and says why
-    expect(onSave).not.toHaveBeenCalled()
-    expect(onSaveBlocked).toHaveBeenCalledWith("right_axis_line_without_query")
-    const axis = screen.getByRole("button", { name: "Line 1 axis: Right" })
-    expect(axis).toHaveAttribute("aria-invalid", "true")
-    expect(axis).toHaveAccessibleDescription(
-      "No enabled query is on the right axis, so a right-axis line cannot be drawn. Put a query on the right axis, or draw the line on the left.",
-    )
-
-    // When the user moves the line to the left and applies again
     await choose("Line 1 axis: Right", "Left")
     await userEvent.click(screen.getByRole("button", { name: "Apply" }))
 
@@ -147,12 +175,13 @@ describe("ChartSettingsPanel — reference lines", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("applies a pie that keeps a right line, since a pie draws no line and hides the editor", async () => {
-    // Given a pie, which has no value axis, keeping a right line from before
+  it("drops on Apply a pie's right line that no right query backs, though a pie hides the editor", async () => {
+    // Given a pie, which has no value axis, keeping a left line and a right
+    // line from before, with no query on the right axis
     const config: ChartConfig = {
       ...chartConfig(
         [{ axis: "left" }, { axis: "left" }],
-        [{ value: 70, axis: "right" }],
+        [{ value: 70, axis: "right" }, { value: 30 }],
       ),
       queries: [{ type: "pie", yColumns: ["price"] }, null],
     }
@@ -162,11 +191,11 @@ describe("ChartSettingsPanel — reference lines", () => {
     // When
     await userEvent.click(screen.getByRole("button", { name: "Apply" }))
 
-    // Then
+    // Then the right line is dropped, so the agent tools accept the config
     expect(onSave).toHaveBeenCalledTimes(1)
-    expect(onSave.mock.calls[0][0].referenceLines).toEqual([
-      { value: 70, axis: "right" },
-    ])
+    const saved = onSave.mock.calls[0][0]
+    expect(saved.referenceLines).toEqual([{ value: 30 }])
+    expect(hasRightAxisLineWithoutQuery(saved)).toBe(false)
   })
 
   it("ignores an emptied right-axis line, which applying drops", async () => {
@@ -189,7 +218,9 @@ describe("ChartSettingsPanel — reference lines", () => {
 
 // One rule for where a reference line goes, which the settings panel, the
 // agent tools' validation, the chart and the tools' reference_lines
-// description (tools.test.ts) all follow; each case is one clause of it.
+// description (tools.test.ts) all follow; each case is one clause of it. The
+// tools refuse a right line no enabled right query backs; the settings drop
+// it on save, so the tools accept every config the settings save.
 describe("reference line axes — settings, agent tools and chart agree", () => {
   it.each<{
     rule: string
@@ -206,14 +237,14 @@ describe("reference line axes — settings, agent tools and chart agree", () => 
       drawnOn: 1,
     },
     {
-      rule: "a right line with no query on the right is refused",
+      rule: "a right line with no query on the right is refused by the tools and dropped by the settings",
       placements: [{ axis: "left" }, { axis: "left" }],
       line: "right",
       accepted: false,
       drawnOn: null,
     },
     {
-      rule: "a right line whose right query is disabled is refused",
+      rule: "a right line whose right query is disabled is refused by the tools and dropped by the settings",
       placements: [{ axis: "left" }, { axis: "right", enabled: false }],
       line: "right",
       accepted: false,
@@ -249,9 +280,11 @@ describe("reference line axes — settings, agent tools and chart agree", () => 
     },
   ])("$rule", async ({ placements, line, accepted, drawnOn }) => {
     // Given
-    const config = chartConfig(placements, [
-      { value: 50, ...(line === "right" && { axis: "right" as const }) },
-    ])
+    const referenceLine: ReferenceLine = {
+      value: 50,
+      ...(line === "right" && { axis: "right" as const }),
+    }
+    const config = chartConfig(placements, [referenceLine])
     const resolution = resolve(config, [
       placements[0].rows ?? 2,
       placements[1].rows ?? 2,
@@ -261,14 +294,122 @@ describe("reference line axes — settings, agent tools and chart agree", () => 
     // When
     await userEvent.click(screen.getByRole("button", { name: "Apply" }))
 
-    // Then the settings refuse exactly what the tools refuse, and say why
-    expect(onSave).toHaveBeenCalledTimes(accepted ? 1 : 0)
-    expect(
-      screen.queryByText(/^No enabled query is on the right axis/),
-    ).toEqual(accepted ? null : expect.any(HTMLElement))
+    // Then the settings save, dropping exactly the line the tools refuse and
+    // saying so beforehand; the tools accept what the settings save
     expect(hasRightAxisLineWithoutQuery(config)).toBe(!accepted)
+    expect(screen.queryByText(REMOVED_ON_SAVE)).toEqual(
+      accepted ? null : expect.any(HTMLElement),
+    )
+    expect(onSave).toHaveBeenCalledTimes(1)
+    const saved = onSave.mock.calls[0][0]
+    expect(saved.referenceLines).toEqual(accepted ? [referenceLine] : undefined)
+    expect(hasRightAxisLineWithoutQuery(saved)).toBe(false)
     expect(drawnLines(resolution)).toEqual(
       drawnOn === null ? [] : [{ value: 50, axis: drawnOn }],
     )
   })
+})
+
+// Q1 returns a time, a category and OHLC prices, so it can be drawn as any
+// chart type; Q2 is RSI.
+const anyTypeResult = (): QueryExecResult => {
+  const dataset = [
+    ["2024-01-01T00:00:00.000000Z", "BTC", 100, 110, 95, 105],
+    ["2024-01-02T00:00:00.000000Z", "ETH", 105, 115, 100, 112],
+  ]
+  return {
+    type: "dql",
+    query: "SELECT ts, sym, open, high, low, close FROM t",
+    columns: [
+      { name: "ts", type: "TIMESTAMP" },
+      { name: "sym", type: "SYMBOL" },
+      { name: "open", type: "DOUBLE" },
+      { name: "high", type: "DOUBLE" },
+      { name: "low", type: "DOUBLE" },
+      { name: "close", type: "DOUBLE" },
+    ],
+    dataset,
+    count: dataset.length,
+  }
+}
+
+const anyTypeConfig = (type: ChartType, rsi: Placement): ChartConfig => ({
+  xColumn: "ts",
+  queries: [
+    {
+      type,
+      yColumns: ["close"],
+      ...(type === "candlestick" && {
+        ohlc: { open: "open", high: "high", low: "low", close: "close" },
+      }),
+    },
+    {
+      type: "line",
+      yColumns: ["rsi"],
+      axis: rsi.axis,
+      ...(rsi.enabled === false && { enabled: false }),
+    },
+  ],
+  referenceLines: [
+    { value: 70, axis: "right", label: "Overbought" },
+    { value: 30 },
+  ],
+})
+
+// The chart settings drop, on save, every right-axis line that no enabled
+// right-axis query backs, whatever the chart type: Apply is never refused for
+// it, and the agent tools accept every config the settings save.
+describe("right-axis lines on save — every chart type", () => {
+  it.each(
+    CHART_TYPES.flatMap((type) => [
+      {
+        type,
+        placement: "RSI on the left",
+        rsi: { axis: "left" as const },
+        kept: false,
+      },
+      {
+        type,
+        placement: "RSI excluded on the right",
+        rsi: { axis: "right" as const, enabled: false },
+        kept: false,
+      },
+      {
+        type,
+        placement: "RSI on the right",
+        rsi: { axis: "right" as const },
+        kept: true,
+      },
+    ]),
+  )(
+    "$type chart, $placement: the right line is kept ($kept)",
+    async ({ type, rsi, kept }) => {
+      // Given
+      const config = anyTypeConfig(type, rsi)
+      const resolution = resolveDraw(
+        ["SELECT ts, sym, open, high, low, close FROM t", statements[1]],
+        [
+          { ...anyTypeResult(), statementIndex: 0 },
+          { ...result(1, 2), statementIndex: 1 },
+        ],
+        config,
+      )
+      const { onSave, onSaveBlocked } = renderPanel(config, resolution)
+
+      // When
+      await userEvent.click(screen.getByRole("button", { name: "Apply" }))
+
+      // Then
+      expect(onSaveBlocked).not.toHaveBeenCalled()
+      expect(onSave).toHaveBeenCalledTimes(1)
+      const saved = onSave.mock.calls[0][0]
+      expect(saved.queries[0]?.type).toBe(type)
+      expect(saved.referenceLines).toEqual(
+        kept
+          ? [{ value: 70, axis: "right", label: "Overbought" }, { value: 30 }]
+          : [{ value: 30 }],
+      )
+      expect(hasRightAxisLineWithoutQuery(saved)).toBe(false)
+    },
+  )
 })

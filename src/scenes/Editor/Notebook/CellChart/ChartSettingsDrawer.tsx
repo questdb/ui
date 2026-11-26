@@ -10,8 +10,8 @@ import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
 import { resolveQueryAxes, type QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
+  dropRightAxisLinesWithoutQuery,
   hasEnabledRightAxisQuery,
-  hasRightAxisLineWithoutQuery,
 } from "../../../../utils/tools/chartConfigWire"
 import {
   Field,
@@ -200,17 +200,12 @@ const ChartSettings: React.FC<SettingsProps> = ({
       setActiveIndex(badIdx)
       return
     }
-    const referenceLines = savedReferenceLines(draft.referenceLines)
-    // The same rule as the agent tools: a right line needs a right query. The
-    // lines editor shows why; with no value axis it is hidden, and no line is
-    // drawn anyway.
-    if (
-      hasValueAxis &&
-      hasRightAxisLineWithoutQuery({ queries: draft.queries, referenceLines })
-    ) {
-      telemetry?.onSaveBlocked?.("right_axis_line_without_query")
-      return
-    }
+    // The agent tools' rule, for every chart type: a right line needs an
+    // enabled right query, so one without is dropped. The lines editor says
+    // so; a pie hides it, and draws no line anyway.
+    const referenceLines = savedReferenceLines(
+      dropRightAxisLinesWithoutQuery(draft),
+    )
     telemetry?.onSave?.({
       chartType: primary?.type,
       seriesCount: primary?.yColumns.length ?? 0,

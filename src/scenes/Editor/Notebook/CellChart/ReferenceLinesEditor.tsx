@@ -57,7 +57,8 @@ export const ReferenceLinesEditor: React.FC<Props> = ({
 }) => {
   const undrawnNoteId = useId()
   // A right line outlives its axis' query: its axis stays editable, flagged
-  // until the line moves left or a query returns to the right.
+  // as removed on save until the line moves left or a query returns to the
+  // right.
   const hasRightLine = lines.some((line) => line.axis === "right")
   const showAxis = hasRightAxis || hasRightLine
   const undrawn = (line: ReferenceLine) =>
@@ -136,8 +137,9 @@ export const ReferenceLinesEditor: React.FC<Props> = ({
       {hasRightLine && !hasRightAxis && (
         <StatusLine id={undrawnNoteId}>
           <IncompatibleIcon size={14} weight="fill" />
-          No enabled query is on the right axis, so a right-axis line cannot be
-          drawn. Put a query on the right axis, or draw the line on the left.
+          No enabled query is on the right axis, so right-axis lines are removed
+          on save. To keep a line, put a query on the right axis or draw the
+          line on the left.
         </StatusLine>
       )}
       <AddRow>
