@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import styled from "styled-components"
 import { Input, SelectMenuControl, TabButton } from "../../../../components"
 import type { ChartConfig, QueryChart } from "./chartTypes"
 import {
   ReferenceLinesEditor,
+  referenceLineNeedsValue,
   savedReferenceLines,
+  type ReferenceLinesEditorHandle,
 } from "./ReferenceLinesEditor"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
@@ -100,6 +103,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
   const [draft, setDraft] = useState<ChartConfig>(initialDraft ?? config)
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
+  const linesEditorRef = useRef<ReferenceLinesEditorHandle>(null)
   // Mounting already open means a remount mid-session: keep the draft.
   const drawerWasOpenRef = useRef(open)
 
@@ -203,9 +207,19 @@ const ChartSettings: React.FC<SettingsProps> = ({
     // The agent tools' rule, for every chart type: a right line needs an
     // enabled right query, so one without is dropped. The lines editor says
     // so; a pie hides it, and draws no line anyway.
-    const referenceLines = savedReferenceLines(
-      dropRightAxisLinesWithoutQuery(draft),
-    )
+    const keptLines = dropRightAxisLinesWithoutQuery(draft)
+    // A kept line with a label or typed text but no number would lose what
+    // the user typed, so Save is refused and its Value field says why. A pie
+    // hides the lines editor, so its lines without a number are dropped.
+    if (hasValueAxis && keptLines?.some(referenceLineNeedsValue)) {
+      telemetry?.onSaveBlocked?.("reference_line_without_value")
+      // The error is shown before focus lands, so it is announced with the
+      // field.
+      flushSync(() => setSaveAttempted(true))
+      linesEditorRef.current?.focusValueError()
+      return
+    }
+    const referenceLines = savedReferenceLines(keptLines)
     telemetry?.onSave?.({
       chartType: primary?.type,
       seriesCount: primary?.yColumns.length ?? 0,
@@ -296,8 +310,10 @@ const ChartSettings: React.FC<SettingsProps> = ({
 
       {hasValueAxis && (
         <ReferenceLinesEditor
+          ref={linesEditorRef}
           lines={draft.referenceLines ?? []}
           hasRightAxis={rightAxisDrawn}
+          showErrors={saveAttempted}
           onChange={(referenceLines) =>
             updateDraft({ ...draft, referenceLines })
           }

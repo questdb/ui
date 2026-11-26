@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
-import React from "react"
-import { screen } from "@testing-library/react"
+import React, { useState } from "react"
+import { fireEvent, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../../test/component"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import { hasRightAxisLineWithoutQuery } from "../../../../utils/tools/chartConfigWire"
 import { resolveDraw } from "../DrawCanvas/drawCanvasUtils"
 import { buildEchartsOption } from "./buildEchartsOption"
-import { ChartSettingsPanel } from "./ChartSettingsDrawer"
+import { Button } from "../../../../components/Button"
+import {
+  CellOverlayProvider,
+  CellOverlaySlot,
+} from "../settingsDrawer/CellOverlayContext"
+import { ChartSettingsDrawer, ChartSettingsPanel } from "./ChartSettingsDrawer"
 import {
   CHART_TYPES,
   type ChartConfig,
@@ -213,6 +218,273 @@ describe("ChartSettingsPanel — reference lines", () => {
     // Then
     expect(onSave).toHaveBeenCalledTimes(1)
     expect(onSave.mock.calls[0][0].referenceLines).toBeUndefined()
+  })
+})
+
+// A number field holding text that is not a number reads as empty and
+// reports badInput; jsdom keeps no such text, so the field reports it here.
+const typeTextThatIsNotANumber = (field: HTMLElement) => {
+  Object.defineProperty(field, "validity", {
+    configurable: true,
+    value: { badInput: true },
+  })
+  fireEvent.input(field, { target: { value: "" } })
+  Reflect.deleteProperty(field, "validity")
+}
+
+const NOT_A_NUMBER = "Should be a number"
+
+// Save refuses a line with a label or typed text but no number, and its Value
+// field says why; an entirely empty row is dropped on save, silently, and so
+// is a line save drops anyway: a right line no right query backs, or a line
+// of a pie, which hides the lines.
+describe("ChartSettingsPanel — a reference line without a number", () => {
+  const lineChart = chartConfig([{ axis: "left" }, { axis: "left" }], [])
+
+  it.each<{
+    row: string
+    config: ChartConfig
+    edit: () => Promise<void>
+    refused: boolean
+  }>([
+    {
+      row: "a label and an empty value",
+      config: lineChart,
+      edit: async () => {
+        await userEvent.click(
+          screen.getByRole("button", { name: "+ Add line" }),
+        )
+        await userEvent.type(screen.getByLabelText("Line 1 label"), "Target")
+      },
+      refused: true,
+    },
+    {
+      row: "a value that is not a number and no label",
+      config: lineChart,
+      edit: async () => {
+        await userEvent.click(
+          screen.getByRole("button", { name: "+ Add line" }),
+        )
+        typeTextThatIsNotANumber(screen.getByLabelText("Line 1 value"))
+      },
+      refused: true,
+    },
+    {
+      row: "a label and an emptied value",
+      config: {
+        ...lineChart,
+        referenceLines: [{ value: 120, label: "Target" }],
+      },
+      edit: () => userEvent.clear(screen.getByLabelText("Line 1 value")),
+      refused: true,
+    },
+    {
+      row: "a label typed and cleared, and an empty value",
+      config: lineChart,
+      edit: async () => {
+        await userEvent.click(
+          screen.getByRole("button", { name: "+ Add line" }),
+        )
+        await userEvent.type(screen.getByLabelText("Line 1 label"), "Target")
+        await userEvent.clear(screen.getByLabelText("Line 1 label"))
+      },
+      refused: false,
+    },
+    {
+      row: "a value that was not a number, then was one, and was emptied",
+      config: lineChart,
+      edit: async () => {
+        await userEvent.click(
+          screen.getByRole("button", { name: "+ Add line" }),
+        )
+        const field = screen.getByLabelText("Line 1 value")
+        typeTextThatIsNotANumber(field)
+        await userEvent.type(field, "70")
+        await userEvent.clear(field)
+      },
+      refused: false,
+    },
+    {
+      row: "nothing",
+      config: lineChart,
+      edit: () =>
+        userEvent.click(screen.getByRole("button", { name: "+ Add line" })),
+      refused: false,
+    },
+    {
+      row: "a label and an empty value, on a right axis no query backs",
+      config: chartConfig(
+        [{ axis: "left" }, { axis: "left" }],
+        [{ value: NaN, axis: "right", label: "Overbought" }],
+      ),
+      edit: () => Promise.resolve(),
+      refused: false,
+    },
+    {
+      row: "a label and an empty value, on a pie",
+      config: {
+        ...chartConfig(
+          [{ axis: "left" }, { axis: "left" }],
+          [{ value: NaN, label: "Target" }],
+        ),
+        queries: [{ type: "pie", yColumns: ["price"] }, null],
+      },
+      edit: () => Promise.resolve(),
+      refused: false,
+    },
+  ])(
+    "a row with $row: Apply refused ($refused)",
+    async ({ config, edit, refused }) => {
+      // Given
+      const { onSave, onSaveBlocked } = renderPanel(config)
+      await edit()
+
+      // When
+      await userEvent.click(screen.getByRole("button", { name: "Apply" }))
+
+      // Then
+      if (refused) {
+        expect(onSave).not.toHaveBeenCalled()
+        expect(onSaveBlocked).toHaveBeenCalledWith(
+          "reference_line_without_value",
+        )
+        const field = screen.getByLabelText("Line 1 value")
+        expect(field).toHaveAttribute("aria-invalid", "true")
+        expect(field).toHaveAccessibleDescription(NOT_A_NUMBER)
+        expect(field).toHaveFocus()
+      } else {
+        expect(onSaveBlocked).not.toHaveBeenCalled()
+        expect(onSave).toHaveBeenCalledTimes(1)
+        expect(onSave.mock.calls[0][0].referenceLines).toBeUndefined()
+        expect(screen.queryByText(NOT_A_NUMBER)).not.toBeInTheDocument()
+      }
+    },
+  )
+
+  it("shows the error only on the line without a number, and saves once it has one", async () => {
+    // Given a kept line and a labelled line without a number
+    const { onSave } = renderPanel({
+      ...lineChart,
+      referenceLines: [{ value: 30, label: "Oversold" }],
+    })
+    await userEvent.click(screen.getByRole("button", { name: "+ Add line" }))
+    await userEvent.type(screen.getByLabelText("Line 2 label"), "Overbought")
+
+    // When
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }))
+
+    // Then
+    expect(onSave).not.toHaveBeenCalled()
+    expect(screen.getByLabelText("Line 1 value")).not.toHaveAttribute(
+      "aria-invalid",
+    )
+    expect(screen.getAllByText(NOT_A_NUMBER)).toHaveLength(1)
+    const field = screen.getByLabelText("Line 2 value")
+    expect(field).toHaveFocus()
+
+    // When the user types its number
+    await userEvent.type(field, "70")
+
+    // Then the error is gone, and Apply saves both lines
+    expect(screen.queryByText(NOT_A_NUMBER)).not.toBeInTheDocument()
+    expect(field).not.toHaveAttribute("aria-invalid")
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }))
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onSave.mock.calls[0][0].referenceLines).toEqual([
+      { value: 30, label: "Oversold" },
+      { value: 70, label: "Overbought" },
+    ])
+  })
+})
+
+// Like DrawCanvas: the drawer saves into the cell's config and closes.
+const DrawerFixture = ({
+  initial,
+  onSave,
+}: {
+  initial: ChartConfig
+  onSave: (config: ChartConfig) => void
+}) => {
+  const [overlay, setOverlay] = useState<HTMLDivElement | null>(null)
+  const [open, setOpen] = useState(false)
+  const [config, setConfig] = useState(initial)
+  const resolution = resolve(config)
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>Chart settings</Button>
+      <CellOverlaySlot ref={setOverlay} />
+      <CellOverlayProvider value={overlay}>
+        <ChartSettingsDrawer
+          open={open}
+          appearInPlace
+          initialDraft={null}
+          onDraftChange={() => undefined}
+          tabs={resolution.tabs}
+          config={resolution.effectiveConfig}
+          onSave={(next) => {
+            onSave(next)
+            setConfig(next)
+          }}
+          onClose={() => setOpen(false)}
+        />
+      </CellOverlayProvider>
+    </>
+  )
+}
+
+describe("ChartSettingsDrawer — a reference line without a number", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true })),
+    )
+  })
+
+  it("stays open on Save while a labelled line has no number, and saves it once it has one", async () => {
+    // Given a line chart, and a line with a label but no value
+    const onSave = vi.fn<[ChartConfig], void>()
+    renderComponent(
+      <DrawerFixture
+        initial={chartConfig([{ axis: "left" }, { axis: "left" }], [])}
+        onSave={onSave}
+      />,
+    )
+    await userEvent.click(
+      screen.getByRole("button", { name: "Chart settings" }),
+    )
+    await userEvent.click(screen.getByRole("button", { name: "+ Add line" }))
+    await userEvent.type(screen.getByLabelText("Line 1 label"), "Overbought")
+    const field = screen.getByLabelText("Line 1 value")
+    const describedOnFocus: string[] = []
+    field.addEventListener("focus", () =>
+      describedOnFocus.push(field.getAttribute("aria-describedby") ?? ""),
+    )
+
+    // When
+    await userEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    // Then the drawer stays open, and focus lands on the Value field once it
+    // says why
+    expect(onSave).not.toHaveBeenCalled()
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument()
+    expect(field).toHaveAccessibleDescription(NOT_A_NUMBER)
+    expect(field).toHaveFocus()
+    expect(describedOnFocus).toEqual([
+      screen.getByText(NOT_A_NUMBER).getAttribute("id"),
+    ])
+
+    // When the user types the number and saves
+    await userEvent.type(field, "70")
+    await userEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    // Then the line is saved, and the drawer closes
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onSave.mock.calls[0][0].referenceLines).toEqual([
+      { value: 70, label: "Overbought" },
+    ])
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument()
   })
 })
 

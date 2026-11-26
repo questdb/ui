@@ -1,4 +1,4 @@
-import React, { useId, useRef } from "react"
+import React, { useId, useImperativeHandle, useRef } from "react"
 import styled from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import { Button, IconButton, SelectMenuControl } from "../../../../components"
@@ -7,6 +7,7 @@ import { FieldGroup, FieldLabel, IncompatibleIcon } from "./chartSettingsStyles"
 import {
   AddRow,
   CompactInput,
+  FieldError,
   StatusLine,
 } from "../CellHighlight/highlightSettingsStyles"
 
@@ -36,26 +37,49 @@ const AxisSelect = styled.div`
   flex: 0 0 8rem;
 `
 
+// A line as the editor holds it. A Value field holding text that is not a
+// number reads as empty, so the line keeps value NaN and this mark: Save
+// refuses it, where it drops an empty row.
+export type ReferenceLineDraft = ReferenceLine & { unparsedValue?: true }
+
+// Save refuses a line with a label or typed text but no number, instead of
+// dropping it with what the user typed; an entirely empty row is dropped.
+export const referenceLineNeedsValue = (line: ReferenceLineDraft): boolean =>
+  !Number.isFinite(line.value) && (!!line.label || !!line.unparsedValue)
+
+const VALUE_ERROR = "Should be a number"
+
 // An emptied value is kept as NaN while editing; saving drops the line.
 const parseValue = (raw: string): number =>
   raw.trim() === "" ? NaN : Number(raw)
 
 const valueField = (value: number) => (Number.isNaN(value) ? "" : value)
 
+export type ReferenceLinesEditorHandle = {
+  // Moves focus to the first Value field that shows an error.
+  focusValueError: () => void
+}
+
 type Props = {
-  lines: ReferenceLine[]
+  lines: ReferenceLineDraft[]
   // An enabled query draws on the right axis.
   hasRightAxis: boolean
-  onChange: (lines: ReferenceLine[]) => void
+  // Save was refused: each line that needs a value says so.
+  showErrors: boolean
+  onChange: (lines: ReferenceLineDraft[]) => void
+  ref?: React.Ref<ReferenceLinesEditorHandle>
 }
 
 // Horizontal lines at fixed values, like RSI's 30 and 70.
 export const ReferenceLinesEditor: React.FC<Props> = ({
   lines,
   hasRightAxis,
+  showErrors,
   onChange,
+  ref,
 }) => {
   const undrawnNoteId = useId()
+  const valueErrorId = useId()
   // A right line outlives its axis' query: its axis stays editable, flagged
   // as removed on save until the line moves left or a query returns to the
   // right.
@@ -63,6 +87,9 @@ export const ReferenceLinesEditor: React.FC<Props> = ({
   const showAxis = hasRightAxis || hasRightLine
   const undrawn = (line: ReferenceLine) =>
     line.axis === "right" && !hasRightAxis
+  // Save drops an undrawn line, so it never refuses one.
+  const needsValue = (line: ReferenceLineDraft) =>
+    !undrawn(line) && referenceLineNeedsValue(line)
 
   // Lines carry no id of their own; the rows keep theirs while edited.
   const nextId = useRef(0)
@@ -70,70 +97,103 @@ export const ReferenceLinesEditor: React.FC<Props> = ({
   while (ids.current.length < lines.length) ids.current.push(nextId.current++)
   ids.current.length = lines.length
 
+  const valueFields = useRef<(HTMLInputElement | null)[]>([])
+  useImperativeHandle(ref, () => ({
+    focusValueError: () =>
+      valueFields.current[lines.findIndex(needsValue)]?.focus(),
+  }))
+
   const remove = (index: number) => {
     ids.current.splice(index, 1)
     onChange(lines.filter((_, i) => i !== index))
   }
 
+  const replace = (index: number, next: ReferenceLineDraft) =>
+    onChange(lines.map((line, i) => (i === index ? next : line)))
+
   const update = (index: number, patch: Partial<ReferenceLine>) =>
-    onChange(
-      lines.map((line, i) => (i === index ? { ...line, ...patch } : line)),
+    replace(index, { ...lines[index], ...patch })
+
+  // A number field reads as "" both when empty and when its text is not a
+  // number, and onChange skips an edit that leaves it "": onInput sees every
+  // edit, and badInput tells the two apart.
+  const updateValue = (index: number, field: HTMLInputElement) => {
+    const { unparsedValue: _unparsed, ...line } = lines[index]
+    const value = parseValue(field.value)
+    replace(
+      index,
+      field.validity.badInput
+        ? { ...line, value, unparsedValue: true }
+        : { ...line, value },
     )
+  }
 
   return (
     <FieldGroup data-hook="chart-reference-lines">
       <FieldLabel>Reference lines</FieldLabel>
-      {lines.map((line, index) => (
-        <LineRow key={ids.current[index]}>
-          <ValueInput
-            type="number"
-            step="any"
-            name={`reference-line-value-${index}`}
-            aria-label={`Line ${index + 1} value`}
-            placeholder="Value"
-            value={valueField(line.value)}
-            onChange={(e) =>
-              update(index, { value: parseValue(e.target.value) })
-            }
-          />
-          <LabelInput
-            name={`reference-line-label-${index}`}
-            aria-label={`Line ${index + 1} label`}
-            placeholder="Label (optional)"
-            value={line.label ?? ""}
-            onChange={(e) =>
-              update(index, { label: e.target.value || undefined })
-            }
-          />
-          {showAxis && (
-            <AxisSelect>
-              <SelectMenuControl
-                name={`reference-line-axis-${index}`}
-                ariaLabel={`Line ${index + 1} axis`}
-                ariaInvalid={undrawn(line) || undefined}
-                ariaDescribedBy={undrawn(line) ? undrawnNoteId : undefined}
-                value={line.axis ?? "left"}
-                onValueChange={(value) =>
-                  update(index, {
-                    axis: value === "right" ? (value as SeriesAxis) : undefined,
-                  })
-                }
-                options={[
-                  { label: "Left", value: "left" },
-                  { label: "Right", value: "right" },
-                ]}
+      {lines.map((line, index) => {
+        const valueError = showErrors && needsValue(line)
+        const errorId = `${valueErrorId}-${ids.current[index]}`
+        return (
+          <React.Fragment key={ids.current[index]}>
+            <LineRow>
+              <ValueInput
+                ref={(field: HTMLInputElement | null) => {
+                  valueFields.current[index] = field
+                }}
+                type="number"
+                step="any"
+                name={`reference-line-value-${index}`}
+                aria-label={`Line ${index + 1} value`}
+                aria-invalid={valueError || undefined}
+                aria-describedby={valueError ? errorId : undefined}
+                variant={valueError ? "error" : undefined}
+                placeholder="Value"
+                value={valueField(line.value)}
+                onInput={(e) => updateValue(index, e.currentTarget)}
               />
-            </AxisSelect>
-          )}
-          <IconButton
-            label={`Remove line ${index + 1}`}
-            size="sm"
-            onClick={() => remove(index)}
-          >
-            <XIcon size={14} />
-          </IconButton>
-        </LineRow>
-      ))}
+              <LabelInput
+                name={`reference-line-label-${index}`}
+                aria-label={`Line ${index + 1} label`}
+                placeholder="Label (optional)"
+                value={line.label ?? ""}
+                onChange={(e) =>
+                  update(index, { label: e.target.value || undefined })
+                }
+              />
+              {showAxis && (
+                <AxisSelect>
+                  <SelectMenuControl
+                    name={`reference-line-axis-${index}`}
+                    ariaLabel={`Line ${index + 1} axis`}
+                    ariaInvalid={undrawn(line) || undefined}
+                    ariaDescribedBy={undrawn(line) ? undrawnNoteId : undefined}
+                    value={line.axis ?? "left"}
+                    onValueChange={(value) =>
+                      update(index, {
+                        axis:
+                          value === "right" ? (value as SeriesAxis) : undefined,
+                      })
+                    }
+                    options={[
+                      { label: "Left", value: "left" },
+                      { label: "Right", value: "right" },
+                    ]}
+                  />
+                </AxisSelect>
+              )}
+              <IconButton
+                label={`Remove line ${index + 1}`}
+                size="sm"
+                onClick={() => remove(index)}
+              >
+                <XIcon size={14} />
+              </IconButton>
+            </LineRow>
+            {valueError && <FieldError id={errorId}>{VALUE_ERROR}</FieldError>}
+          </React.Fragment>
+        )
+      })}
       {hasRightLine && !hasRightAxis && (
         <StatusLine id={undrawnNoteId}>
           <IncompatibleIcon size={14} weight="fill" />

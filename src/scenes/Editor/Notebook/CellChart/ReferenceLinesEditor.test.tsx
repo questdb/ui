@@ -7,17 +7,20 @@ import { renderComponent } from "../../../../test/component"
 import type { ReferenceLine } from "./chartTypes"
 import {
   ReferenceLinesEditor,
+  referenceLineNeedsValue,
   savedReferenceLines,
+  type ReferenceLineDraft,
 } from "./ReferenceLinesEditor"
 
 const renderEditor = (initial: ReferenceLine[], hasRightAxis = false) => {
-  const latest: { lines: ReferenceLine[] } = { lines: initial }
+  const latest: { lines: ReferenceLineDraft[] } = { lines: initial }
   const Editor = () => {
     const [lines, setLines] = useState(initial)
     return (
       <ReferenceLinesEditor
         lines={lines}
         hasRightAxis={hasRightAxis}
+        showErrors={false}
         onChange={(next) => {
           latest.lines = next
           setLines(next)
@@ -63,6 +66,20 @@ describe("ReferenceLinesEditor", () => {
     expect(screen.getByLabelText("Line 1 axis: Left")).toBeInTheDocument()
   })
 
+  it("moves a line to the right axis", async () => {
+    // Given
+    const latest = renderEditor([{ value: 30, label: "Oversold" }], true)
+
+    // When
+    await userEvent.click(screen.getByLabelText("Line 1 axis: Left"))
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Right" }))
+
+    // Then
+    expect(latest.lines).toEqual([
+      { value: 30, label: "Oversold", axis: "right" },
+    ])
+  })
+
   it("keeps the axis of a right line the chart cannot draw, and says it is removed on save", async () => {
     // Given a line on the right axis, which no query draws
     const latest = renderEditor([{ value: 30 }, { value: 70, axis: "right" }])
@@ -86,6 +103,19 @@ describe("ReferenceLinesEditor", () => {
     expect(
       screen.queryByRole("button", { name: /axis/ }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe("referenceLineNeedsValue", () => {
+  it.each<{ line: ReferenceLineDraft; needsValue: boolean }>([
+    { line: { value: 70, label: "Overbought" }, needsValue: false },
+    { line: { value: 0 }, needsValue: false },
+    { line: { value: NaN }, needsValue: false },
+    { line: { value: NaN, axis: "right" }, needsValue: false },
+    { line: { value: NaN, label: "Overbought" }, needsValue: true },
+    { line: { value: NaN, unparsedValue: true }, needsValue: true },
+  ])("$line needs a value: $needsValue", ({ line, needsValue }) => {
+    expect(referenceLineNeedsValue(line)).toBe(needsValue)
   })
 })
 
