@@ -312,9 +312,8 @@ export const createNotebookOpeners = ({
 
     const target = candidates[0]
     const bufferId = target.id as number
-    // The table query's own name, refresh and colouring ride on the new cell.
-    // It refreshes on Auto; only a notebook whose default is something else
-    // gets that as a cell override.
+    // The table query refreshes on Auto. It needs a cell override only when
+    // the notebook has a different default.
     const inheritsRefresh =
       resolveAutoRefresh(undefined, views[0].settings?.autoRefreshDefault) ===
       TABLE_PREVIEW_AUTO_REFRESH
@@ -322,7 +321,6 @@ export const createNotebookOpeners = ({
       name: cell.name,
       ...(inheritsRefresh ? {} : { autoRefresh: TABLE_PREVIEW_AUTO_REFRESH }),
       paneView: cell.paneView,
-      highlightConfig: cell.highlightConfig,
     }
     const cellId = await addCellOrFallBack(
       () =>

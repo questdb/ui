@@ -42,33 +42,4 @@ export const buildTablePreviewCell = (
   ...createCell(0, tablePreviewSql(name, designatedTimestamp)),
   name: `Latest rows of ${name}`,
   paneView: "editor_result",
-  // Fixed-value colouring only: rows by `side` (the one convention column in
-  // the demo tables, harmless when a table has no such column). Rules that
-  // depend on the data's range (heat scales, flashing new rows) look fine on
-  // one day and wrong on another, so none of those here.
-  highlightConfig: {
-    identityColumns: designatedTimestamp ? [designatedTimestamp] : [],
-    rules: [
-      {
-        id: "side-buy",
-        kind: "value",
-        enabled: true,
-        display: "always",
-        target: { kind: "column", name: "side" },
-        appliesTo: "row",
-        condition: { op: "eq", value: "buy" },
-        color: "dataPositive",
-      },
-      {
-        id: "side-sell",
-        kind: "value",
-        enabled: true,
-        display: "always",
-        target: { kind: "column", name: "side" },
-        appliesTo: "row",
-        condition: { op: "eq", value: "sell" },
-        color: "dataNegative",
-      },
-    ],
-  },
 })
