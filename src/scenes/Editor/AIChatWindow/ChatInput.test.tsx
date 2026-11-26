@@ -16,7 +16,12 @@ import type {
   LocalAgentSnapshot,
 } from "../../../utils/localAgent/localAgentChannel"
 import type { AgentQuestionMessage } from "../../../utils/localAgent/protocol"
-import { ChatInput, type ChatQueue } from "./ChatInput"
+import {
+  ChatInput,
+  retargetQueueToChannel,
+  type ChatQueue,
+  type QueuedEntry,
+} from "./ChatInput"
 
 vi.mock("react-redux", () => ({ useSelector: () => [] }))
 vi.mock("../../../providers/AIStatusProvider", async (importOriginal) => ({
@@ -185,6 +190,58 @@ it("cannot steer or append a new draft to a queue for a replaced local connectio
   expect(getHook("chat-queued-send-now")).toBeEnabled()
   await userEvent.click(getHook("chat-queued-send-now"))
   expect(steerOperation).toHaveBeenCalledOnce()
+})
+
+const agentChannel = (id: string) =>
+  ({ info: { id, label: id, cwd: "/tmp" } }) as unknown as LocalAgentChannel
+const queuedFor = (channel: LocalAgentChannel | null): QueuedEntry => ({
+  text: "Follow-up",
+  images: [],
+  agentCommand: false,
+  model: channel ? LOCAL_AGENT_MODEL : "openai:gpt-5-mini",
+  channel,
+  agentModel: "fast",
+  agentModelPreference: null,
+  awaitingInitialAgentModel: false,
+  heldByStop: true,
+})
+
+it("moves only messages queued for the same agent to its new channel", () => {
+  // Given messages queued for the agent's replaced channel, for another
+  // agent, for the agent's new channel, and for an API model
+  const replaced = agentChannel("agent")
+  const next = agentChannel("agent")
+  const queue: ChatQueue = {
+    replaced: queuedFor(replaced),
+    other: queuedFor(agentChannel("other")),
+    current: queuedFor(next),
+    api: queuedFor(null),
+  }
+
+  // When the agent's new channel arrives
+  const retargeted = retargetQueueToChannel(queue, next)
+
+  // Then only the replaced channel's message moves, keeping all else
+  expect(retargeted.replaced).toEqual({ ...queue.replaced, channel: next })
+  expect(retargeted.replaced.channel).toBe(next)
+  expect(retargeted.other).toBe(queue.other)
+  expect(retargeted.current).toBe(queue.current)
+  expect(retargeted.api).toBe(queue.api)
+  expect(queue.replaced.channel).toBe(replaced)
+})
+
+it("keeps the same queue when no message is for a replaced channel of the agent", () => {
+  // Given messages for another agent, the new channel and an API model
+  const next = agentChannel("agent")
+  const queue: ChatQueue = {
+    other: queuedFor(agentChannel("other")),
+    current: queuedFor(next),
+    api: queuedFor(null),
+  }
+
+  // When the agent's new channel arrives
+  // Then the queue is unchanged, so nothing re-renders
+  expect(retargetQueueToChannel(queue, next)).toBe(queue)
 })
 
 it("keeps the queue for its original model on the same agent channel", async () => {

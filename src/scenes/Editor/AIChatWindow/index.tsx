@@ -51,6 +51,7 @@ import type { QuestionDrafts } from "./QuestionCard"
 import {
   ChatInput,
   matchesQueuedDestination,
+  retargetQueueToChannel,
   sendDestination,
   wasQueueCancelled,
   queuedAgentModel,
@@ -318,6 +319,12 @@ const AIChatWindow: React.FC = () => {
     },
     [setHasPendingSubmission],
   )
+  useEffect(() => {
+    if (localAgentChannel)
+      setChatQueue((current) =>
+        retargetQueueToChannel(current, localAgentChannel),
+      )
+  }, [localAgentChannel, setChatQueue])
   const hasAutoFocusedRef = useRef(false)
   const notificationTimeoutRef = useRef<number | null>(null)
 

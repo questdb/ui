@@ -221,6 +221,27 @@ export const matchesQueuedDestination = (
         : entry.agentModel) === destination.agentModel)) &&
   (entry.images.length === 0 || destination.acceptsImages)
 
+// A full reconnect replaces the channel, and the replaced one never comes
+// back. Messages queued for the same agent move to the new channel; those
+// for another agent stay where they were.
+export const retargetQueueToChannel = (
+  queue: ChatQueue,
+  channel: NonNullable<QueuedEntry["channel"]>,
+): ChatQueue => {
+  let retargeted: ChatQueue | undefined
+  for (const [id, entry] of Object.entries(queue)) {
+    if (
+      !entry.channel ||
+      entry.channel === channel ||
+      entry.channel.info.id !== channel.info.id
+    )
+      continue
+    retargeted ??= { ...queue }
+    retargeted[id] = { ...entry, channel }
+  }
+  return retargeted ?? queue
+}
+
 export const wasQueueCancelled = (entry: QueuedEntry) =>
   entry.waitingFor?.aborted === true &&
   entry.waitingFor.reason !== STEERED_ABORT_REASON

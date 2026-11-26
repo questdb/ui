@@ -85,14 +85,19 @@ class MemorySocket extends EventTarget {
   }
 }
 
-const ack = (socket: MemorySocket, resumed = false) =>
+const mockAgent = {
+  id: "mock-local",
+  label: "Mock local agent",
+  cwd: "/tmp/mock",
+}
+const ack = (socket: MemorySocket, resumed = false, agent = mockAgent) =>
   socket.receive({
     v,
     type: "hello_ack",
     sessionId: "memory-session",
     seenToolCount: 0,
     resumed,
-    agent: { id: "mock-local", label: "Mock local agent", cwd: "/tmp/mock" },
+    agent,
   })
 const answer = (
   socket: MemorySocket,
@@ -246,14 +251,14 @@ const openLocalChat = async (
     expect(second.frames.map(({ type }) => type)).toEqual(["hello"])
     return second
   }
-  const replace = async () => {
+  const replace = async (agent = mockAgent) => {
     await userEvent.click(
       screen.getByRole("button", { name: "Connect fake bridge" }),
     )
     const replacement = sockets.at(-1)!
     act(() => {
       replacement.open()
-      ack(replacement)
+      ack(replacement, false, agent)
       replacement.receive({
         v,
         type: "agent_status",
@@ -734,6 +739,55 @@ it("resends seen history to a new channel advertising the same agent ID, but not
   )
   act(() => answer(replacement, "The chart shows daily totals."))
   await screen.findByText("The chart shows daily totals.")
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+// A message queued during an answer, then a full reconnect: the old channel
+// is gone for good, and the agent that answers is `agent`.
+const queueThenReplace = async (agent: typeof mockAgent) => {
+  const { first, replace } = await openNotebookChat()
+  await sendMessage("Show a sample query.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(1))
+  const [{ conversationId }] = first.prompts()
+  await sendMessage("Keep this follow-up.")
+  expect(getByHook("chat-queued-message-text")).toHaveTextContent(
+    "Keep this follow-up.",
+  )
+  const replacement = await replace(agent)
+  await screen.findByText("The connection to Mock local agent was lost.")
+  return { conversationId, replacement }
+}
+
+it("sends a queued message to the same agent after a full reconnect", async () => {
+  // Given a follow-up queued while the agent answers
+  // When the connection is replaced and the same agent comes back
+  const { conversationId, replacement } = await queueThenReplace(mockAgent)
+
+  // Then the follow-up goes to the new connection, in its chat
+  await waitFor(() => expect(replacement.prompts()).toHaveLength(1))
+  expect(replacement.prompts()[0].conversationId).toBe(conversationId)
+  const sent = replacement.prompts()[0].prompt[0]
+  expect(sent?.type === "text" && sent.text).toContain("Keep this follow-up.")
+  expect(queryByHook("chat-queued-message")).not.toBeInTheDocument()
+  act(() => answer(replacement, "Here is the follow-up."))
+  await screen.findByText("Here is the follow-up.")
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it("keeps a queued message for its agent when another agent connects", async () => {
+  // Given a follow-up queued while the agent answers
+  // When the connection is replaced and another agent answers
+  const { replacement } = await queueThenReplace({
+    id: "other-local",
+    label: "Other local agent",
+    cwd: "/tmp/other",
+  })
+
+  // Then the follow-up is not sent to it, and waits for the user
+  expect(replacement.prompts()).toHaveLength(0)
+  expect(getByHook("chat-queued-message")).toHaveTextContent(
+    "Restore the original destination or edit the queued message.",
+  )
   expect(fetch).not.toHaveBeenCalled()
 })
 
