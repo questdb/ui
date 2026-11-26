@@ -490,6 +490,9 @@ const Editor = ({
               )}
               <Notifications
                 onClearNotifications={handleClearNotifications}
+                showScriptResultAction={
+                  !isMonacoHidden && !isPreviewingClosedTab
+                }
                 targetBufferId={targetNotificationsBufferId}
               />
             </ReadOnlyGuard>

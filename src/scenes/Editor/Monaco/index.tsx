@@ -34,7 +34,7 @@ import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import type { RunWithSelectionMode } from "../../../providers/LocalStorageProvider/types"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
-import { MAX_CELL_LINES } from "../../../store/notebook"
+import { MAX_CELL_LINES, type ErrorQueryResult } from "../../../store/notebook"
 import type { NotificationShape } from "../../../store/Query/types"
 import { NotificationType } from "../../../types"
 import type { ErrorResult } from "../../../utils"
@@ -93,6 +93,7 @@ import {
   isAuthFailure,
   isSessionEnded,
   sessionEndedQueryMessage,
+  sessionFailureOf,
 } from "../../../modules/OAuth2/session"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
@@ -109,6 +110,7 @@ type IndividualQueryResult = {
   success: boolean
   fetchedAt?: number
   result?: QuestDB.QueryRawResult
+  error?: ErrorQueryResult
   notification:
     | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
     | null
@@ -1637,6 +1639,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     } catch (_error: unknown) {
       const error = _error as ErrorResult
+      const message = isSessionEnded(error)
+        ? sessionEndedQueryMessage(error)
+        : error.error || "Query failed"
 
       // A session end or failed renewal is no SQL error: it has no position
       // to mark in the query.
@@ -1658,18 +1663,19 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       notification = {
         query: queryKey,
-        content: (
-          <Text color="statusDanger">
-            {isSessionEnded(error)
-              ? sessionEndedQueryMessage(error)
-              : error.error}
-          </Text>
-        ),
+        content: <Text color="statusDanger">{message}</Text>,
         sideContent: <QueryInNotification query={query.query} />,
         type: NotificationType.ERROR,
       }
       return {
         success: false,
+        error: {
+          type: "error",
+          query: effectiveQueryText,
+          error: message,
+          fetchedAt: Date.now(),
+          ...sessionFailureOf(error),
+        },
         notification,
         result: undefined,
       }
@@ -1908,17 +1914,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (position) editor.revealPositionInCenterIfOutsideViewport(position)
 
     const completedGracefully = queries.length === individualQueryResults.length
-    dispatch(
-      actions.query.setBatchTransfer(
-        !scriptStopRef.current
-          ? buildBatchTransfer(
-              activeBufferId,
-              individualQueryResults,
-              queries.length,
-            )
-          : undefined,
-      ),
+    const notificationAt = new Date()
+    const batch = buildBatchTransfer(
+      activeBufferId,
+      queries.map((query, index) => ({
+        ...individualQueryResults[index],
+        sql: query.selection?.queryText ?? query.query,
+      })),
     )
+    dispatch(actions.query.setBatchTransfer({ ...batch, notificationAt }))
     if (
       completedGracefully ||
       (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries) ||
@@ -1940,6 +1944,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       actions.query.addNotification(
         {
           query: `${activeBuffer.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
+          createdAt: notificationAt,
           content: (
             <Text color="contentPrimary">
               {!completedGracefully && individualQueryResults.length === 0 ? (

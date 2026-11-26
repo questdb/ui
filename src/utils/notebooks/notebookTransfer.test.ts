@@ -79,19 +79,18 @@ describe("notebook transfer", () => {
   })
 
   it("captures only read results from a successful mixed batch, including empty results", () => {
-    const batch = buildBatchTransfer(
-      3,
-      [
-        { success: true, result: { type: Type.DDL } as QueryRawResult },
-        { success: true, result: raw("select 1"), fetchedAt: 123 },
-        {
-          success: true,
-          result: raw("select 2 where false", []),
-          fetchedAt: 456,
-        },
-      ],
-      3,
-    )!
+    const batch = buildBatchTransfer(3, [
+      {
+        sql: "create table x (a int)",
+        result: { type: Type.DDL } as QueryRawResult,
+      },
+      { sql: "select 1", result: raw("select 1"), fetchedAt: 123 },
+      {
+        sql: "select 2 where false",
+        result: raw("select 2 where false", []),
+        fetchedAt: 456,
+      },
+    ])
     expect(batch.writeCount).toBe(1)
     expect(batch.hasAllResults).toBe(true)
     expect(batch.queries.map((q) => q.sql)).toEqual([
@@ -99,43 +98,57 @@ describe("notebook transfer", () => {
       "select 2 where false",
     ])
     expect(batch.queries[0].result?.fetchedAt).toBe(123)
-    expect(batch.queries[1].result?.dataset).toEqual([])
+    expect(batch.queries[1].result).toMatchObject({ dataset: [] })
   })
 
-  it("does not offer partial, failed, single-result or write-only batches", () => {
-    const results = [{ success: true, result: raw("select 1") }]
-    expect(buildBatchTransfer(1, results, 2)).toBeUndefined()
-    expect(buildBatchTransfer(1, results, 1)).toBeUndefined()
-    expect(
-      buildBatchTransfer(1, [...results, { success: false }], 2),
-    ).toBeUndefined()
-    expect(
-      buildBatchTransfer(
-        1,
-        [{ success: true, result: { type: Type.DDL } as QueryRawResult }],
-        1,
-      ),
-    ).toBeUndefined()
+  it("carries failed results from a stopped run without adding unexecuted queries", () => {
+    const error = {
+      type: "error" as const,
+      query: "select missing",
+      error: "Invalid column",
+    }
+    const batch = buildBatchTransfer(1, [
+      { sql: error.query, error },
+      { sql: "select 2" },
+    ])
+    expect(batch.hasAllResults).toBe(true)
+    expect(batch.queries).toEqual([{ sql: error.query, result: error }])
+    const [cell] = createTransferCells(batch.queries)
+    expect(cell.lastRunStatus).toBe("error")
+    expect(cell.result?.results).toEqual([error])
+    expect(cell.autoRefresh).toBe(false)
+  })
+
+  it("offers SQL when a script has no read or error results", () => {
+    const sql = "create table x (a int)"
+    const batch = buildBatchTransfer(1, [
+      { sql, result: { type: Type.DDL, query: sql } },
+    ])
+    expect(batch.queries).toEqual([{ sql }])
+    expect(batch.hasAllResults).toBe(false)
+    expect(batch.writeCount).toBe(0)
   })
 
   it("does not serialize results it is going to discard", () => {
     const stringify = vi.spyOn(JSON, "stringify")
     const many = Array.from({ length: MAX_NOTEBOOK_CELLS + 1 }, (_, i) => ({
-      success: true,
+      sql: `select ${i}`,
       result: raw(`select ${i}`),
     }))
-    expect(buildBatchTransfer(1, many, many.length)).toBeUndefined()
-    expect(stringify).not.toHaveBeenCalled()
+    const capped = buildBatchTransfer(1, many)
+    expect(capped.queries).toHaveLength(MAX_NOTEBOOK_CELLS)
+    expect(capped.omittedCount).toBe(1)
+    expect(stringify).toHaveBeenCalledTimes(MAX_NOTEBOOK_CELLS)
+    stringify.mockClear()
 
     const large = { ...raw("select huge"), dataset: [["x".repeat(2_000_001)]] }
     const batch = buildBatchTransfer(
       1,
       [large, raw("select 2"), raw("select 3")].map((result) => ({
-        success: true,
+        sql: result.query,
         result,
       })),
-      3,
-    )!
+    )
     expect(batch.hasAllResults).toBe(false)
     expect(stringify).toHaveBeenCalledTimes(1)
     stringify.mockRestore()
@@ -143,14 +156,10 @@ describe("notebook transfer", () => {
 
   it("keeps oversized batch SQL without pretending its results were captured", () => {
     const large = { ...raw("select huge"), dataset: [["x".repeat(2_000_001)]] }
-    const batch = buildBatchTransfer(
-      1,
-      [
-        { success: true, result: large },
-        { success: true, result: raw("select 2") },
-      ],
-      2,
-    )!
+    const batch = buildBatchTransfer(1, [
+      { sql: large.query, result: large },
+      { sql: "select 2", result: raw("select 2") },
+    ])
     expect(batch.hasAllResults).toBe(false)
     expect(batch.queries).toEqual([{ sql: "select huge" }, { sql: "select 2" }])
   })

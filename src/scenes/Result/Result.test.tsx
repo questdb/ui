@@ -212,18 +212,26 @@ describe("result toolbar notebook action", () => {
     })
     const action = () =>
       document.querySelector('[data-hook="result-add-notebook"]')!
+    const parquet = screen.getByRole("button", { name: "Download as Parquet" })
 
     resize(1000)
     expect(action()).toHaveTextContent("Add query to notebook")
+    expect(parquet).toHaveTextContent("Download as Parquet")
     const rendersAtFullWidth = renders.result
     for (const width of [1010, 990, 950, 900, 850]) resize(width)
     expect(renders.result).toBe(rendersAtFullWidth)
 
     resize(700)
     expect(action()).toHaveTextContent(/^Add query$/)
+    expect(parquet).toHaveTextContent(/^Parquet$/)
     resize(600)
     expect(action()).toHaveTextContent("")
     expect(action()).toHaveAccessibleName("Add query to notebook")
+    expect(parquet).toHaveTextContent(/^$/)
+    expect(parquet.querySelector("svg")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Download as Parquet" })).toBe(
+      parquet,
+    )
   })
   it("keeps the label tooltip controlled across breakpoints", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})

@@ -44,8 +44,12 @@ import { ScreenSize, useScreenSize } from "../../hooks"
 import { selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "../../components/icons"
 import Notification from "./Notification"
+import { BatchNotebookAction } from "./BatchNotebookAction"
 import { NotificationType } from "../../store/Query/types"
-import type { NotificationNamespaceKey } from "../../store/Query/types"
+import type {
+  NotificationNamespaceKey,
+  NotificationShape,
+} from "../../store/Query/types"
 import { useEditor } from "../../providers"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
@@ -94,7 +98,7 @@ const LatestNotification = styled.div`
   display: flex;
   cursor: text;
   align-items: stretch;
-  width: calc(100% - 10rem);
+  min-width: 0;
 `
 
 const TerminalBoxIcon = styled(TerminalBox)`
@@ -114,13 +118,16 @@ const ClearAllNotifications = styled.div`
 
 const Notifications = ({
   onClearNotifications,
+  showScriptResultAction = false,
   targetBufferId: targetBufferIdOverride,
 }: {
   onClearNotifications: (bufferId: NotificationNamespaceKey) => void
+  showScriptResultAction?: boolean
   targetBufferId?: NotificationNamespaceKey
 }) => {
   const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
+  const batch = useSelector(selectors.query.getBatchTransfer)
 
   const bufferIdKey = activeBuffer.id as number
   const bufferQueryNotifications =
@@ -136,6 +143,17 @@ const Notifications = ({
   const isSmallScreen = useScreenSize() === ScreenSize.SM
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
+
+  // Match the exact completion entry so another run in the same tab never
+  // puts its results on an older entry in the log.
+  const sideContentFor = (notification: NotificationShape) =>
+    showScriptResultAction &&
+    batch?.notificationAt === notification.createdAt &&
+    batch.bufferId === bufferIdKey ? (
+      <BatchNotebookAction batch={batch} />
+    ) : (
+      notification.sideContent
+    )
 
   // Show notifications that match either the buffer or override namespace,
   // or match the activeNotification (covers in-flight queries)
@@ -197,12 +215,16 @@ const Notifications = ({
         </Header>
         <LatestNotification data-hook="notifications-collapsed">
           {isMinimized && activeNotification && (
-            <Notification isMinimized {...activeNotification} />
+            <Notification
+              isMinimized
+              {...activeNotification}
+              sideContent={sideContentFor(activeNotification)}
+            />
           )}
         </LatestNotification>
         {(bufferNotifications.length > 0 || !isMinimized) && (
           <Button
-            variant={isMinimized ? "secondary" : "ghost"}
+            variant="ghost"
             onClick={toggleMinimized}
             aria-label={isMinimized ? "Expand log" : "Collapse log"}
             aria-expanded={!isMinimized}
@@ -229,6 +251,7 @@ const Notifications = ({
                   notification.createdAt ? notification.createdAt.getTime() : 0
                 }
                 {...notification}
+                sideContent={sideContentFor(notification)}
               />
             ))}
           {!isMinimized && (

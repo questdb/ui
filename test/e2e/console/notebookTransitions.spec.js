@@ -259,7 +259,7 @@ describe("SQL work → notebook", () => {
   it("opens a mixed script's read results side by side without replaying them", () => {
     cy.viewport(1600, 900)
     const executions = load(
-      `${SQL}\n${SQL_TWO}\nCREATE TABLE transfer_test(x int);`,
+      `CREATE TABLE transfer_test(x int);\n${SQL}\n${SQL_TWO}`,
       [],
       0,
       "dark",
@@ -268,12 +268,25 @@ describe("SQL work → notebook", () => {
     cy.getByDataHook("button-run-query-dropdown").click()
     cy.getByDataHook("button-run-script").click()
     cy.getByDataHook("run-all-queries-confirm").click()
-    cy.getByDataHook("batch-notebook-action").should(
+    cy.getByDataHook("run-all-queries-confirm").should("not.exist")
+    cy.getByDataHook("notifications-collapsed")
+      .contains('[data-hook="success-notification"]', "Running completed")
+      .find('[data-hook="batch-open-notebook"]')
+      .should("have.text", "Open 2 query results")
+    cy.getByDataHook("expand-notifications").click()
+    cy.getByDataHook("notifications-expanded")
+      .contains('[data-hook="success-notification"]', "Running completed")
+      .find('[data-hook="batch-open-notebook"]')
+      .should("be.visible")
+    cy.getByDataHook("collapse-notifications").click()
+    cy.getByDataHook("batch-open-notebook").focus()
+    cy.getByDataHook("tooltip").should(
       "contain.text",
       "Write statements aren’t included",
     )
     cy.getByDataHook("batch-open-notebook").click()
     cy.get("[data-notebook-cell]").should("have.length", 2)
+    cy.getByDataHook("batch-open-notebook").should("not.exist")
     // The captured rows render without another query.
     cy.get("[data-notebook-cell]").eq(0).should("contain.text", "probe_one")
     cy.get("[data-notebook-cell]").eq(1).should("contain.text", "probe_two")
@@ -289,5 +302,36 @@ describe("SQL work → notebook", () => {
       expect(executions).to.have.length(3)
     })
     cy.screenshot("notebook-transfer-comparison", { scale: true })
+  })
+
+  it("opens failed script outcomes in a notebook without re-running them", () => {
+    load(`${SQL}\n${SQL_TWO}`)
+    const executions = []
+    cy.intercept(
+      { method: "GET", pathname: "/exec", query: { query: /probe_/ } },
+      (req) => {
+        const query = String(req.query.query)
+        executions.push(query)
+        req.reply({
+          statusCode: 400,
+          body: { query, position: 0, error: "Invalid test query" },
+        })
+      },
+    )
+    cy.getByDataHook("button-run-query-dropdown").click()
+    cy.getByDataHook("button-run-script").click()
+    cy.getByDataHook("stop-after-failure-checkbox").uncheck()
+    cy.getByDataHook("run-all-queries-confirm").click()
+    cy.getByDataHook("notifications-collapsed")
+      .contains('[data-hook="success-notification"]', "2 failed queries")
+      .find('[data-hook="batch-open-notebook"]')
+      .should("have.text", "Open 2 query results")
+      .click()
+    cy.get("[data-notebook-cell]").should("have.length", 2)
+    cy.get("[data-notebook-cell]").each(($cell) => {
+      cy.wrap($cell).should("contain.text", "Invalid test query")
+    })
+    cy.getByDataHook("batch-open-notebook").should("not.exist")
+    cy.then(() => expect(executions).to.have.length(2))
   })
 })

@@ -76,12 +76,12 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { ResultGridAdapter } from "./ResultGridAdapter"
 import { type PaginationFn } from "./usePagedDataSource"
 import { ResultChart, type ResultChartTransfer } from "./ResultChart"
+import { NotebookTransferActions } from "./NotebookTransferActions"
 import {
-  NotebookTransferActions,
-  TRANSFER_ACTION_BREAKPOINTS,
-  transferActionDensity,
-} from "./NotebookTransferActions"
-import { BatchNotebookAction } from "./BatchNotebookAction"
+  ResultToolbarAction,
+  resultActionDensity,
+  type ResultActionDensity,
+} from "./ResultToolbarAction"
 import { toTransferResult } from "../../utils/notebooks/notebookTransfer"
 import type { NotebookTransferRequest } from "../../hooks/useNotebookTransfer"
 
@@ -156,11 +156,7 @@ const StyledPrimaryToggleButton = styled(PrimaryToggleButton).attrs({
   }
 `
 
-const DownloadButton = styled(Button)`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0 1rem;
+const DownloadButton = styled(ResultToolbarAction)`
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 `
@@ -199,19 +195,17 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | null>(null)
   const resultActionsRef = useRef<HTMLDivElement | null>(null)
-  // The widest breakpoint the toolbar reaches, in rem. Storing the raw width would
-  // re-render the whole result view on every frame of a splitter drag.
-  const [toolbarWidth, setToolbarWidth] = useState(0)
+  // Store only the density so a splitter drag updates the result view at breakpoints.
+  const [actionDensity, setActionDensity] =
+    useState<ResultActionDensity>("icon")
   useLayoutEffect(() => {
     const toolbar = resultActionsRef.current
     if (!toolbar) return
     const rootFontSize =
       parseFloat(getComputedStyle(document.documentElement).fontSize) || 10
     const measure = (width: number) =>
-      setToolbarWidth(
-        TRANSFER_ACTION_BREAKPOINTS.filter(
-          (step) => width / rootFontSize >= step,
-        ).pop() ?? 0,
+      setActionDensity(
+        resultActionDensity(viewMode === "chart", width / rootFontSize),
       )
     // Size the action before the first paint, so it doesn't swap its
     // element when the observer reports.
@@ -226,7 +220,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     )
     observer.observe(toolbar)
     return () => observer.disconnect()
-  }, [])
+  }, [viewMode])
   const runningRef = useRef(running)
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
@@ -486,8 +480,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   return (
     <Root>
       <Wrapper>
-        <BatchNotebookAction />
-        <Actions ref={resultActionsRef}>
+        <Actions ref={resultActionsRef} data-hook="result-toolbar">
           {count !== undefined && (
             <ResultCountBadge
               aria-label={`${count.toLocaleString()} ${count === 1 ? "row" : "rows"}`}
@@ -516,23 +509,18 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               request={transferRequest}
               chart={viewMode === "chart"}
               showMonitor={showMonitor}
-              density={transferActionDensity(
-                viewMode === "chart",
-                toolbarWidth,
-              )}
+              density={actionDensity}
             />
           )}
           <Box gap="0">
             <DownloadButton
-              variant="secondary"
+              density={actionDensity}
+              label="Download as Parquet"
+              compactLabel="Parquet"
+              icon={<Download2 height="18px" width="18px" />}
               data-hook="download-parquet-button"
               onClick={() => handleDownload("parquet")}
-            >
-              <Box align="center" gap="0.5rem" style={{ lineHeight: "1.285" }}>
-                <Download2 height="18px" width="18px" />
-                Download as Parquet
-              </Box>
-            </DownloadButton>
+            />
             <PopperToggle
               active={downloadMenuActive}
               onToggle={setDownloadMenuActive}

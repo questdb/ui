@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import type { ReactNode } from "react"
-import type { EditorBatchTransfer } from "../../utils/notebooks/notebookTransfer"
+import type { ScriptBatchTransfer } from "./types"
 import { queryExecutionKey } from "../../utils/queryExecutionKey"
 
 import type {
@@ -103,9 +103,10 @@ const setResult = (
   type: QueryAT.SET_RESULT,
 })
 
-const setBatchTransfer = (
-  payload: EditorBatchTransfer | undefined,
-): QueryAction => ({ type: QueryAT.SET_BATCH_TRANSFER, payload })
+const setBatchTransfer = (payload: ScriptBatchTransfer): QueryAction => ({
+  type: QueryAT.SET_BATCH_TRANSFER,
+  payload,
+})
 
 const recordQueryExecution = (sql: string): QueryAction => ({
   type: QueryAT.RECORD_QUERY_EXECUTION,

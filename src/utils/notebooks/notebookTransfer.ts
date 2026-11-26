@@ -12,6 +12,7 @@ import {
   exceedsCellLineLimit,
   MAX_NOTEBOOK_CELLS,
   type DqlQueryResult,
+  type ErrorQueryResult,
   type NotebookCell,
   type NotebookViewState,
 } from "../../store/notebook"
@@ -28,7 +29,7 @@ export type NotebookTransferSource =
 
 export type TransferQuery = {
   sql: string
-  result?: DqlQueryResult
+  result?: DqlQueryResult | ErrorQueryResult
   chartConfig?: ChartConfig
 }
 
@@ -37,6 +38,7 @@ export type EditorBatchTransfer = {
   queries: TransferQuery[]
   writeCount: number
   hasAllResults: boolean
+  omittedCount: number
 }
 
 // Keep only the last batch, with bounded rows, not a growing query history.
@@ -63,49 +65,49 @@ export const toTransferResult = (
 
 export const buildBatchTransfer = (
   bufferId: number,
-  results: Array<{
-    success: boolean
+  outcomes: ReadonlyArray<{
+    sql: string
     result?: QueryRawResult
+    error?: ErrorQueryResult
     fetchedAt?: number
   }>,
-  expectedCount: number,
-): EditorBatchTransfer | undefined => {
-  if (results.length !== expectedCount || results.some((r) => !r.success))
-    return undefined
-  const reads: Array<{
-    result: Extract<QueryRawResult, { type: Type.DQL }>
-    fetchedAt?: number
-  }> = []
+): EditorBatchTransfer => {
+  const results: Array<
+    TransferQuery & { result: NonNullable<TransferQuery["result"]> }
+  > = []
   let writeCount = 0
-  for (const item of results) {
-    if (item.result?.type === Type.DDL || item.result?.type === Type.DML)
+  for (const { sql, result, error, fetchedAt } of outcomes) {
+    if (error) results.push({ sql, result: error })
+    else if (result?.type === Type.DQL)
+      results.push({
+        sql: result.query,
+        result: toTransferResult(result, fetchedAt ?? Date.now()),
+      })
+    else if (result?.type === Type.DDL || result?.type === Type.DML)
       writeCount++
-    else if (item.result?.type === Type.DQL)
-      reads.push({ result: item.result, fetchedAt: item.fetchedAt })
   }
-  if (reads.length < 2 || reads.length > MAX_NOTEBOOK_CELLS) return undefined
-  // Size results only while all of them can still be kept. The fallback is an
-  // unexecuted script, not a mixture of populated and empty cells that would
-  // imply a complete side-by-side comparison, so the first result over budget
-  // ends the measuring: this runs on the main thread when a script finishes.
+  const candidates = results.length > 0 ? results : outcomes
+  const included = candidates.slice(0, MAX_NOTEBOOK_CELLS)
+  // Measure only the results the notebook can hold, stopping at the first
+  // oversized result. A batch that exceeds the budget opens as SQL cells.
   let bytes = 0
-  const withResults: TransferQuery[] = []
-  for (const { result: raw, fetchedAt } of reads) {
-    const result = toTransferResult(raw, fetchedAt ?? Date.now())
-    const size = new TextEncoder().encode(JSON.stringify(result)).byteLength
-    if (size > TRANSFER_RESULT_BYTES || bytes + size > BATCH_TRANSFER_BYTES)
-      break
-    bytes += size
-    withResults.push({ sql: result.query, result })
-  }
-  const hasAllResults = withResults.length === reads.length
+  const encoder = new TextEncoder()
+  const includedResults = results.slice(0, MAX_NOTEBOOK_CELLS)
+  const hasAllResults =
+    includedResults.length > 0 &&
+    includedResults.every(({ result }) => {
+      const size = encoder.encode(JSON.stringify(result)).byteLength
+      bytes += size
+      return size <= TRANSFER_RESULT_BYTES && bytes <= BATCH_TRANSFER_BYTES
+    })
   return {
     bufferId,
     queries: hasAllResults
-      ? withResults
-      : reads.map(({ result }) => ({ sql: result.query })),
-    writeCount,
+      ? includedResults
+      : included.map(({ sql }) => ({ sql })),
+    writeCount: results.length > 0 ? writeCount : 0,
     hasAllResults,
+    omittedCount: candidates.length - included.length,
   }
 }
 
@@ -160,7 +162,10 @@ export const createTransferCells = (
               activeResultIndex: 0,
               timestamp: result.fetchedAt ?? Date.now(),
             },
-            lastRunStatus: "success" as const,
+            lastRunStatus:
+              result.type === "error"
+                ? ("error" as const)
+                : ("success" as const),
           }
         : {}),
       ...(chartConfig

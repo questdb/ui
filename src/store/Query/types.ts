@@ -55,13 +55,15 @@ export type QueryNotifications = Readonly<{
   explain?: NotificationShape
 }>
 
+export type ScriptBatchTransfer = EditorBatchTransfer & { notificationAt: Date }
+
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
   columns: Record<string, InformationSchemaColumn[]>
   result?: QueryRawResult
   resultSource?: { bufferId?: number; fetchedAt: number }
-  batchTransfer?: EditorBatchTransfer
+  batchTransfer?: ScriptBatchTransfer
   executionCounts?: Record<string, number>
   running: RunningType
   queryNotifications: Record<
@@ -185,7 +187,7 @@ export type QueryAction =
   | { type: QueryAT.CLEAR_QUERY_EXECUTIONS }
   | {
       type: QueryAT.SET_BATCH_TRANSFER
-      payload: EditorBatchTransfer | undefined
+      payload: ScriptBatchTransfer
     }
   | AddNotificationAction
   | CleanupNotificationsAction

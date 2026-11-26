@@ -29,8 +29,10 @@ it("ties transfer metadata to the displayed result and clears it with the result
     fromEditor,
     actions.setBatchTransfer({
       bufferId: 7,
+      notificationAt: new Date(42),
       queries: [{ sql: "select 1" }, { sql: "select 2" }],
       writeCount: 0,
+      omittedCount: 0,
       hasAllResults: false,
     }),
   )
@@ -53,8 +55,10 @@ it("clears a script's batch transfer when the next run starts", () => {
     initialState,
     actions.setBatchTransfer({
       bufferId: 7,
+      notificationAt: new Date(42),
       queries: [{ sql: "select 1" }, { sql: "select 2" }],
       writeCount: 0,
+      omittedCount: 0,
       hasAllResults: false,
     }),
   )
