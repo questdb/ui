@@ -66,6 +66,10 @@ import {
   useLocalAgentChannel,
 } from "../../utils/localAgent/LocalAgentContext"
 import { LOCAL_AGENT_MODEL } from "../../utils/localAgent/localAgentModel"
+import {
+  selectedApiModelOf,
+  withApiModelSelected,
+} from "../../utils/localAgent/localAgentSettings"
 import { ConnectAgentSettingsPanel } from "./ConnectAgentSettingsPanel"
 
 const ModalContent = styled.div`
@@ -866,15 +870,15 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       customProviders: updatedCustomProviders,
     }
 
-    const keepsLocalAgent = updatedSettings.selectedModel === LOCAL_AGENT_MODEL
-    const nextModel = keepsLocalAgent
-      ? LOCAL_AGENT_MODEL
-      : getNextModel(
-          updatedSettings.selectedModel,
-          enabledModels,
-          updatedSettings,
-        )
-    updatedSettings.selectedModel = nextModel || undefined
+    const nextModel = getNextModel(
+      selectedApiModelOf(updatedSettings),
+      enabledModels,
+      updatedSettings,
+    )
+    const savedSettings = withApiModelSelected(
+      updatedSettings,
+      nextModel || undefined,
+    )
 
     if (localAgent && draftAgentPermissions) {
       const level = permissionLevelOf(draftAgentPermissions)
@@ -883,7 +887,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         void trackEvent(ConsoleEvent.MCP_PERMISSIONS_CHANGE, { level })
       }
     }
-    updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, updatedSettings)
+    updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, savedSettings)
     toast.success("Settings saved successfully")
     onOpenChange?.(false)
   }, [
@@ -1167,16 +1171,17 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           ],
         ),
       )
-      if (updatedSettings.selectedModel !== LOCAL_AGENT_MODEL) {
-        updatedSettings.selectedModel =
-          getNextModel(
-            updatedSettings.selectedModel,
-            persistedEnabledModels,
-            updatedSettings,
-          ) || undefined
-      }
+      const nextModel = getNextModel(
+        selectedApiModelOf(updatedSettings),
+        persistedEnabledModels,
+        updatedSettings,
+      )
+      const savedSettings = withApiModelSelected(
+        updatedSettings,
+        nextModel || undefined,
+      )
 
-      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, updatedSettings)
+      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, savedSettings)
       toast.success("Model preferences updated")
     },
     [aiAssistantSettings, apiKeys, updateSettings],

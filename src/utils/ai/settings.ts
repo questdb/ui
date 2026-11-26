@@ -6,7 +6,7 @@ import type {
 import type { Permissions } from "../tools/permissions"
 import { getValue } from "../localStorage"
 import { StoreKey } from "../localStorage/types"
-import { LOCAL_AGENT_MODEL } from "../localAgent/localAgentModel"
+import { selectedApiModelOf } from "../localAgent/localAgentSettings"
 import {
   filterOpenAiChatModels,
   formatModelLabel,
@@ -146,10 +146,7 @@ export const getSelectedModel = (
   settings: AiAssistantSettings,
 ): string | null => {
   const enabledModels = getAllEnabledModels(settings)
-  const selectedModel =
-    settings.selectedModel === LOCAL_AGENT_MODEL
-      ? settings.localAgent?.apiModel
-      : settings.selectedModel
+  const selectedModel = selectedApiModelOf(settings)
   if (
     selectedModel &&
     typeof selectedModel === "string" &&

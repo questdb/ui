@@ -25,6 +25,8 @@ vi.mock("../../../providers/AIConversationProvider", () => ({
   useAIConversation: () => ({
     isStreaming: false,
     conversationMetas: new Map(),
+    openOrCreateBlankChatWindow: vi.fn(),
+    closeChatWindow: vi.fn(),
   }),
   useAIConversationActions: () => ({
     openOrCreateBlankChatWindow: vi.fn(),

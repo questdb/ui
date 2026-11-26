@@ -24,6 +24,7 @@ import {
   getProviderName,
 } from "../../utils/ai"
 import { createProvider } from "../../utils/ai/registry"
+import { withApiModelSelected } from "../../utils/localAgent/localAgentSettings"
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
 import type { Permissions } from "../../utils/tools/permissions"
 import { useModalNavigation } from "../MultiStepModal"
@@ -575,9 +576,8 @@ export const ConfigurationModal = ({
       ? buildListingMetadata(selectedProvider, providerListing, models)
       : null
 
-    const newSettings = {
+    const configured = {
       ...aiAssistantSettings,
-      selectedModel: modelValues[0],
       providers: {
         ...aiAssistantSettings.providers,
         [selectedProvider]: buildProviderSettings({
@@ -590,6 +590,7 @@ export const ConfigurationModal = ({
         }),
       },
     }
+    const newSettings = withApiModelSelected(configured, modelValues[0])
 
     updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
     toast.success("AI Assistant activated successfully")
@@ -677,9 +678,8 @@ export const ConfigurationModal = ({
         makeModelValue(providerId, m),
       )
 
-      const newSettings = {
+      const configured = {
         ...aiAssistantSettings,
-        selectedModel: newEnabledModels[0],
         customProviders: {
           ...(aiAssistantSettings.customProviders ?? {}),
           [providerId]: definition,
@@ -695,6 +695,7 @@ export const ConfigurationModal = ({
           },
         },
       }
+      const newSettings = withApiModelSelected(configured, newEnabledModels[0])
 
       void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
         name: "custom",

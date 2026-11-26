@@ -4,6 +4,27 @@ import type {
 } from "../../providers/LocalStorageProvider/types"
 import { LOCAL_AGENT_MODEL } from "./localAgentModel"
 
+// The API model the user selected: while the local agent is selected, the
+// one selected before it, which answers while the agent is offline.
+export const selectedApiModelOf = (
+  settings: AiAssistantSettings,
+): string | undefined =>
+  settings.selectedModel === LOCAL_AGENT_MODEL
+    ? settings.localAgent?.apiModel
+    : settings.selectedModel
+
+// Selects an API model, as provider setup does, without deselecting the local
+// agent: while the agent is selected, the model is the one that answers while
+// the agent is offline. Only choosing an API model in the model picker
+// replaces the agent's marker.
+export const withApiModelSelected = (
+  settings: AiAssistantSettings,
+  model: string | undefined,
+): AiAssistantSettings =>
+  settings.selectedModel === LOCAL_AGENT_MODEL
+    ? { ...settings, localAgent: { ...settings.localAgent, apiModel: model } }
+    : { ...settings, selectedModel: model }
+
 // Selects the local agent. The API model selected so far is kept: it answers
 // while the agent is offline (see getSelectedModel).
 export const withLocalAgentSelected = (
