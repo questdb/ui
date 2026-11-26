@@ -1,4 +1,5 @@
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
+import { ownValue } from "../ownValue"
 
 // The status each tool shows while it runs; dispatchTool sets the same ones
 // with the call's details. Shown as soon as the model starts a call, before
@@ -44,7 +45,7 @@ const buildToolStatuses = (): Record<string, AIOperationStatus> => ({
 
 export const toolStatusOf = (toolName: string): AIOperationStatus | null => {
   toolStatuses ??= buildToolStatuses()
-  return toolStatuses[toolName] ?? null
+  return ownValue(toolStatuses, toolName) ?? null
 }
 
 const ERROR_DETAIL_LIMIT = 300

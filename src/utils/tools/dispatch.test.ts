@@ -233,6 +233,28 @@ describe("dispatch — failed steps", () => {
     )
     expect(res.content).toMatch(/^PERMISSION_DENIED: .+ Ask the user to grant/)
   })
+
+  it.each(Object.getOwnPropertyNames(Object.prototype))(
+    "tells the model a tool named %s does not exist, and shows no step for it",
+    async (name) => {
+      // Given
+      const setStatus = vi.fn()
+
+      // When
+      const res = await dispatchTool(
+        name,
+        {},
+        {} as Parameters<typeof dispatchTool>[2],
+        setStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+
+      // Then
+      expect(res).toEqual({ content: `Unknown tool: ${name}`, is_error: true })
+      expect(setStatus).not.toHaveBeenCalled()
+    },
+  )
 })
 
 describe("dispatch — validate_query", () => {

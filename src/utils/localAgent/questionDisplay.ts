@@ -1,4 +1,5 @@
 import type { AgentQuestionField, AgentQuestionMessage } from "./protocol"
+import { ownValue } from "../ownValue"
 
 export type QuestionView = {
   // The question to show.
@@ -46,7 +47,7 @@ export const answerSummary = (
 ): string | null => {
   const listOf = (id: string | null) => {
     if (!id) return []
-    const answer = answers[id]
+    const answer = ownValue(answers, id)
     return (Array.isArray(answer) ? answer : [answer ?? ""]).filter(
       (value) => value.trim() !== "",
     )

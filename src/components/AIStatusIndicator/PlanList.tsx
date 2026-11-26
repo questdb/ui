@@ -6,6 +6,7 @@ import {
   CircleIcon,
 } from "@phosphor-icons/react"
 import type { PlanEntry } from "../../providers/AIStatusProvider"
+import { ownValue } from "../../utils/ownValue"
 
 const List = styled.ol`
   display: flex;
@@ -51,7 +52,10 @@ export const PlanList = ({ entries }: { entries: PlanEntry[] }) => {
       {entries.map((entry, index) => (
         // eslint-disable-next-line react/no-array-index-key -- entries have no id; the list is replaced whole
         <Entry key={index} $status={entry.status}>
-          <Icon aria-label={STATUS_LABELS[entry.status] ?? "To do"} role="img">
+          <Icon
+            aria-label={ownValue(STATUS_LABELS, entry.status) ?? "To do"}
+            role="img"
+          >
             {entry.status === "completed" ? (
               <CheckCircleIcon size={14} color={theme.color.contentMuted} />
             ) : entry.status === "in_progress" ? (

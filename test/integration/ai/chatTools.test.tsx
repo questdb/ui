@@ -14,6 +14,8 @@ import { describe, expect, it } from "vitest"
 import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { actions } from "../../../src/store"
+import { aiConversationStore } from "../../../src/store/aiConversations"
+import { AIOperationStatus } from "../../../src/providers/AIStatusProvider"
 import type { Table } from "../../../src/utils/questdb/types"
 
 describe("chat tools", () => {
@@ -443,4 +445,56 @@ describe("interleaved tool conversation", () => {
     expect(getByHook("assistant-mode-investigating-table")).toBeInTheDocument()
     expect(getByHook("assistant-mode-validating-query")).toBeInTheDocument()
   })
+})
+
+describe("a tool the console does not have", () => {
+  it.each(["openai", "anthropic"] as const)(
+    "answers after the %s model calls a tool named constructor, and the chat opens again after a reload",
+    async (provider) => {
+      // Given a model that calls a tool named after an Object member, then answers
+      const server = chatServer(provider, [
+        fixtures.createToolCallResponse(provider, "constructor", {}),
+        fixtures.createFinalResponse(provider, "All done here."),
+      ])
+      const mounted = renderChat(provider)
+      await openChat()
+
+      // When
+      await sendMessage("List my tables")
+
+      // Then the model hears the tool does not exist, and the answer shows
+      await waitFor(() =>
+        expect(getByHook("chat-message-assistant")).toHaveTextContent(
+          "All done here.",
+        ),
+      )
+      expect(JSON.stringify(server.requests[1].body)).toContain(
+        "Unknown tool: constructor",
+      )
+      // And the saved answer holds no step for the call
+      await waitFor(async () => {
+        const [conversation] = await aiConversationStore.getAllMetas()
+        const saved = (
+          await aiConversationStore.getMessages(conversation.id)
+        ).find((message) => message.role === "assistant")
+        expect(saved?.operationHistory?.map((step) => step.type)).toEqual([
+          AIOperationStatus.Processing,
+          AIOperationStatus.GeneratingResponse,
+        ])
+      })
+
+      // When the page reloads and the user opens the chat again
+      await userEvent.click(getByHook("chat-window-close"))
+      mounted.unmount()
+      renderChat(provider)
+      await openChat()
+
+      // Then
+      await waitFor(() =>
+        expect(getByHook("chat-message-assistant")).toHaveTextContent(
+          "All done here.",
+        ),
+      )
+    },
+  )
 })

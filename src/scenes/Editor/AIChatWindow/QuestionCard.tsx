@@ -19,12 +19,15 @@ import {
   questionViews,
 } from "../../../utils/localAgent/questionDisplay"
 import { isImeKeyEvent } from "../../../utils/isImeKeyEvent"
+import { ownValue } from "../../../utils/ownValue"
 import { focusWithinChat } from "./focusWithinChat"
 import {
   escapeClaimOf,
   useDrawerEscape,
 } from "../../../components/Drawer/escapeClaim"
 
+// By the agent's field ids, which may be any name, like "constructor": read
+// with ownValue and set with withAnswer.
 type Answers = Record<string, string | string[]>
 
 type QuestionDraft = {
@@ -269,6 +272,19 @@ const valuesOf = (answer: string | string[] | undefined): string[] =>
     (value) => value.trim() !== "",
   )
 
+// The answers with one set, or removed for null. The computed key keeps an id
+// like "__proto__" an own property; assigning it would set the prototype.
+const withAnswer = (
+  answers: Answers,
+  id: string,
+  value: string | string[] | null,
+): Answers => {
+  if (value !== null) return { ...answers, [id]: value }
+  const next = { ...answers }
+  delete next[id]
+  return next
+}
+
 const isAnswered = (field: AgentQuestionField, answers: Answers): boolean =>
   answerSummary(field, answers) !== null
 
@@ -326,7 +342,7 @@ export const QuestionCard = ({
   const draft =
     field?.kind === "choice" && field.otherFieldId
       ? (customDrafts.get(field.id) ??
-        valuesOf(answers[field.otherFieldId])[0] ??
+        valuesOf(ownValue(answers, field.otherFieldId))[0] ??
         "")
       : ""
   const canSend = fields.every(
@@ -378,12 +394,7 @@ export const QuestionCard = ({
   }
 
   const setAnswer = (id: string, value: string | string[] | null) =>
-    setAnswers((current) => {
-      const next = { ...current }
-      if (value === null) delete next[id]
-      else next[id] = value
-      return next
-    })
+    setAnswers((current) => withAnswer(current, id, value))
 
   const clearCustomDraft = (id: string) =>
     setCustomDrafts((current) => {
@@ -396,7 +407,7 @@ export const QuestionCard = ({
   const pick = (target: AgentQuestionField, value: string) => {
     if (target.kind !== "choice") return
     if (target.multiple) {
-      const picked = valuesOf(answers[target.id])
+      const picked = valuesOf(ownValue(answers, target.id))
       setAnswer(
         target.id,
         picked.includes(value)
@@ -423,9 +434,7 @@ export const QuestionCard = ({
   const commitOwnAnswer = (target: AgentQuestionField): Answers => {
     if (target.kind !== "choice" || !target.otherFieldId) return answers
     const text = draft.trim()
-    const next = { ...answers }
-    if (text) next[target.otherFieldId] = text
-    else delete next[target.otherFieldId]
+    const next = withAnswer(answers, target.otherFieldId, text || null)
     // A single choice has one answer: the user's own replaces the pick.
     if (text && !target.multiple) delete next[target.id]
     setAnswers(next)
@@ -471,9 +480,9 @@ export const QuestionCard = ({
   const renderChoice = (
     target: Extract<AgentQuestionField, { kind: "choice" }>,
   ) => {
-    const picked = valuesOf(answers[target.id])
+    const picked = valuesOf(ownValue(answers, target.id))
     const own = target.otherFieldId
-      ? (valuesOf(answers[target.otherFieldId])[0] ?? "")
+      ? (valuesOf(ownValue(answers, target.otherFieldId))[0] ?? "")
       : ""
     return (
       <Options
@@ -673,7 +682,7 @@ export const QuestionCard = ({
               ) : (
                 <Input
                   ref={textAnswerRef}
-                  value={valuesOf(answers[field.id])[0] ?? ""}
+                  value={valuesOf(ownValue(answers, field.id))[0] ?? ""}
                   onChange={(event) =>
                     setAnswer(field.id, event.target.value || null)
                   }

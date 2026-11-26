@@ -398,4 +398,94 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith(null)
     expect(onStop).toHaveBeenCalledTimes(1)
   })
+
+  // Field ids are the agent's own, so a form may name one after a member
+  // every plain object has.
+  describe.each(Object.getOwnPropertyNames(Object.prototype))(
+    "a field the agent names %s",
+    (name) => {
+      it("takes a typed answer", async () => {
+        // Given
+        const { onAnswer } = renderCard(question([{ ...label, id: name }]))
+
+        // When
+        await userEvent.type(
+          screen.getByRole("textbox", { name: "Label?" }),
+          "Trades{Enter}",
+        )
+
+        // Then
+        expect(onAnswer).toHaveBeenCalledWith({ [name]: "Trades" })
+      })
+
+      it("drops a typed answer the user clears", async () => {
+        // Given
+        const { onAnswer } = renderCard(
+          question([{ ...label, id: name, required: false }]),
+        )
+        const answer = screen.getByRole("textbox", { name: "Label?" })
+        await userEvent.type(answer, "Trades")
+
+        // When
+        await userEvent.clear(answer)
+        await userEvent.type(answer, "{Enter}")
+
+        // Then
+        expect(onAnswer).toHaveBeenCalledWith({})
+      })
+
+      it("takes the options picked in a multiple choice", async () => {
+        // Given
+        const { onAnswer } = renderCard(question([{ ...features, id: name }]))
+
+        // When
+        await userEvent.click(screen.getByRole("checkbox", { name: /SQL/ }))
+        await userEvent.click(screen.getByRole("checkbox", { name: /ILP/ }))
+        await userEvent.click(screen.getByRole("checkbox", { name: /SQL/ }))
+        await userEvent.click(screen.getByRole("button", { name: "Send" }))
+
+        // Then
+        expect(onAnswer).toHaveBeenCalledWith({ [name]: ["ILP"] })
+      })
+
+      it("takes the user's own answer to a choice under it", async () => {
+        // Given
+        const { onAnswer } = renderCard(
+          question([{ ...database, otherFieldId: name }]),
+        )
+
+        // When
+        await userEvent.click(
+          screen.getByRole("radio", { name: /Type your own answer/ }),
+        )
+        await userEvent.type(
+          screen.getByRole("textbox", { name: "Your own answer" }),
+          "SQLite{Enter}",
+        )
+
+        // Then
+        expect(onAnswer).toHaveBeenCalledWith({ [name]: "SQLite" })
+      })
+
+      it("drops the user's own answer they clear", async () => {
+        // Given
+        const { onAnswer } = renderCard(
+          question([{ ...features, otherFieldId: name }]),
+        )
+        await userEvent.click(screen.getByRole("checkbox", { name: /SQL/ }))
+        await userEvent.click(
+          screen.getByRole("checkbox", { name: /Type your own answer/ }),
+        )
+        const own = screen.getByRole("textbox", { name: "Your own answer" })
+        await userEvent.type(own, "Charts")
+
+        // When
+        await userEvent.clear(own)
+        await userEvent.click(screen.getByRole("button", { name: "Send" }))
+
+        // Then
+        expect(onAnswer).toHaveBeenCalledWith({ question_1: ["SQL"] })
+      })
+    },
+  )
 })

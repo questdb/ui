@@ -185,6 +185,29 @@ describe("runLocalAgentTurn", () => {
     ])
   })
 
+  it.each(Object.getOwnPropertyNames(Object.prototype))(
+    "shows no status while the agent prepares a QuestDB tool named %s, which the console does not have",
+    async (name) => {
+      // Given
+      const bridge = createFakeBridge()
+      const { channel } = connectChannel(bridge.client)
+      activeChannel = channel
+
+      // When
+      const { turn, setStatus } = startTurn()
+      bridge.update(toolCall("t1", `mcp__questdb_console__${name}`))
+      bridge.endTurn({
+        outcome: "completed",
+        stopReason: "end_turn",
+        usage: null,
+      })
+      await turn
+
+      // Then
+      expect(setStatus.mock.calls).toEqual([[null]])
+    },
+  )
+
   it("marks the agent's own tool call failed with what it reported", async () => {
     // Given
     const bridge = createFakeBridge()

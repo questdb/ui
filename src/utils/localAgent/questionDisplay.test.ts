@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AgentQuestionField, AgentQuestionMessage } from "./protocol"
-import { questionViews } from "./questionDisplay"
+import { answerSummary, questionViews } from "./questionDisplay"
 
 const field = (
   title: string | null,
@@ -57,4 +57,38 @@ describe("questionViews", () => {
       ).map((view) => view.label),
     ).toEqual(["Database", "Features"])
   })
+})
+
+describe("answerSummary", () => {
+  it.each(Object.getOwnPropertyNames(Object.prototype))(
+    "reads only the user's answers for a field the agent names %s",
+    (name) => {
+      // Given a text field and a choice's own-answer field with that id
+      const text: AgentQuestionField = {
+        id: name,
+        kind: "text",
+        title: null,
+        prompt: "Label?",
+        required: true,
+      }
+      const choice: AgentQuestionField = {
+        id: "question_0",
+        kind: "choice",
+        title: "Database",
+        prompt: null,
+        options: [{ value: "QuestDB", label: "QuestDB", description: null }],
+        multiple: false,
+        required: false,
+        otherFieldId: name,
+      }
+
+      // Then: not answered yet
+      expect(answerSummary(text, {})).toBeNull()
+      expect(answerSummary(choice, {})).toBeNull()
+
+      // Then: answered
+      expect(answerSummary(text, { [name]: "Trades" })).toBe("Trades")
+      expect(answerSummary(choice, { [name]: "SQLite" })).toBe("SQLite")
+    },
+  )
 })

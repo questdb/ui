@@ -48,4 +48,15 @@ describe("mcpClientOf", () => {
     expect(mcpClientOf("")).toBeNull()
     expect(mcpClientOf(null)).toBeNull()
   })
+
+  it.each(Object.getOwnPropertyNames(Object.prototype))(
+    "knows nothing of a client named %s",
+    (name) => {
+      // When
+      const client = mcpClientOf(name)
+
+      // Then
+      expect(client).toBeNull()
+    },
+  )
 })

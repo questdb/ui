@@ -4,6 +4,7 @@
 // ones it knows and "your coding agent" for the rest.
 
 import { CHAT_AGENTS, type ChatAgent } from "../localAgent/chatAgents"
+import { ownValue } from "../ownValue"
 
 export type McpClient = {
   label: string
@@ -58,7 +59,7 @@ export const mcpClientOf = (
 ): McpClient | null => {
   if (!name) return null
   const key = name.trim().toLowerCase()
-  const known = KNOWN_CLIENTS[key]
+  const known = ownValue(KNOWN_CLIENTS, key)
   if (known) return known
   const prefixed = KNOWN_PREFIXES.find(([prefix]) => key.startsWith(prefix))
   return prefixed ? prefixed[1] : null
