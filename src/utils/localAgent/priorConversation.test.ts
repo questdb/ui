@@ -11,6 +11,14 @@ const message = (
   ...overrides,
 })
 
+const handOver = (...turns: string[]) =>
+  [
+    "<earlier_conversation>",
+    "The user talked to another assistant in this chat before switching to you. Earlier messages, oldest first:",
+    ...turns,
+    "</earlier_conversation>",
+  ].join("\n")
+
 describe("priorConversationFor", () => {
   it("carries the active compaction summary alongside the recent transcript", () => {
     const history = [
@@ -235,6 +243,43 @@ describe("priorConversationFor", () => {
       "User: Show trades",
     )
   })
+
+  it.each([
+    {
+      displayType: "ask_request",
+      sql: "SELECT 1",
+      shown: "Attached SQL:\nSELECT 1",
+    },
+    {
+      displayType: "schema_explain_request",
+      shown:
+        "Explain the schema of a table: an overview, detailed column descriptions and storage details.",
+    },
+    {
+      displayType: "health_issue_request",
+      shown: "Analyze a table health issue and provide steps for resolution.",
+    },
+  ] as const)(
+    "hands over a $displayType stored without its display data as the chat shows it, without its prompt",
+    ({ displayType, shown, ...stored }) => {
+      // Given a request stored with its prompt but without its display data
+      const history = [
+        message({
+          role: "user",
+          content: "Hidden prompt",
+          displayType,
+          ...stored,
+        }),
+      ]
+
+      // When an agent takes the chat over
+      const prior = priorConversationFor(history, "agent-session")
+
+      // Then it reads only what the chat could show of the request
+      expect(prior).toBe(handOver(`User: ${shown}`))
+    },
+  )
+
   it("carries bounded canonical SQL even when same-channel history has nothing to replay", () => {
     const history = [
       message({

@@ -23,12 +23,16 @@ export type HealthIssueDisplayData = {
   severity: "critical" | "warning"
 }
 
-export type UserMessageDisplayType =
-  | "fix_request"
-  | "explain_request"
-  | "ask_request"
-  | "schema_explain_request"
-  | "health_issue_request"
+// Requests the chat shows from their display data, not from their content.
+export const USER_MESSAGE_DISPLAY_TYPES = [
+  "fix_request",
+  "explain_request",
+  "ask_request",
+  "schema_explain_request",
+  "health_issue_request",
+] as const
+
+export type UserMessageDisplayType = (typeof USER_MESSAGE_DISPLAY_TYPES)[number]
 
 export type ConversationMessage = Message & {
   id: string

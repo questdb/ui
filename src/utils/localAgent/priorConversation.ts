@@ -1,5 +1,9 @@
 import { withoutInlineImages } from "../ai/inlineImages"
-import type { ConversationMessage } from "../../providers/AIConversationProvider/types"
+import { getTableKindLabel } from "../questdb/types"
+import type {
+  ConversationMessage,
+  UserMessageDisplayType,
+} from "../../providers/AIConversationProvider/types"
 
 const MAX_MESSAGES = 20
 const MAX_MESSAGE_CHARS = 2_000
@@ -24,12 +28,33 @@ const withAttachedSql = (text: string, sql: string): string => {
   return `${request}${heading}${truncateWithin(sql, budget - request.length)}`
 }
 
+// What the chat shows of a request it renders from display data. The
+// request's content is the prompt its model read: DDL, tables() details,
+// trend samples and instructions the user never saw, which the agent's
+// permissions may withhold from it.
+const shownRequestText: Record<
+  UserMessageDisplayType,
+  (message: ConversationMessage) => string
+> = {
+  ask_request: (message) => message.displayUserMessage ?? "",
+  explain_request: () => "Explain this query in detail.",
+  fix_request: () =>
+    "Help me debug and fix the error with the attached SQL query.",
+  schema_explain_request: ({ displaySchemaData: schema }) =>
+    `Explain the schema of ${schema ? `${getTableKindLabel(schema.kind).toLowerCase()} ${schema.tableName}` : "a table"}: an overview, detailed column descriptions and storage details.`,
+  health_issue_request: ({ displayHealthIssueData: issue }) =>
+    issue
+      ? `Analyze the ${issue.severity} health issue of table ${issue.tableName} and provide steps for resolution: ${issue.issueMessage}`
+      : "Analyze a table health issue and provide steps for resolution.",
+}
+
 const visibleText = (message: ConversationMessage): string | null => {
   if (message.hideFromUI || message.isCompacted) return null
   if (message.role === "user") {
-    const text =
-      message.displayUserMessage ??
-      (typeof message.content === "string" ? message.content : "")
+    const text = message.displayType
+      ? shownRequestText[message.displayType](message)
+      : (message.displayUserMessage ??
+        (typeof message.content === "string" ? message.content : ""))
     // Another agent's command means nothing to this one; say what it was.
     if (message.agentCommand)
       return `(ran the previous agent's command ${text})`

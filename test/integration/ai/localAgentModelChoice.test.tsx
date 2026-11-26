@@ -13,11 +13,13 @@ import {
   sendMessage,
 } from "./support/chatHarness"
 import { Button } from "../../../src/components/Button"
+import { useAIQuickActions } from "../../../src/hooks/useAIQuickActions"
 import { useMCPBridge } from "../../../src/providers/MCPBridgeProvider"
 import type { AiAssistantSettings } from "../../../src/providers/LocalStorageProvider/types"
 import type {
   AgentConfig,
   AgentConfigChoice,
+  AgentPromptMessage,
 } from "../../../src/utils/localAgent/protocol"
 import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
 import { EXPECTED_MCP_VERSION as v } from "../../../src/utils/mcp/protocolVersion"
@@ -77,17 +79,26 @@ const ConnectBridge = () => {
 }
 
 // The chat on the fixture's API model, or the one the settings select, with an
-// agent paired and ready.
+// agent paired and ready, beside the given console actions.
 const openChatWithAgent = async (
   config: AgentConfig,
   settings?: AiAssistantSettings,
+  actions?: React.ReactNode,
 ) => {
   const original = window.WebSocket
   installFakeWebSocket(window)
   const transport = window.WebSocket
   window.WebSocket = original
   vi.stubGlobal("WebSocket", transport)
-  renderChat("openai", <ConnectBridge />, settings, { bridge: true })
+  renderChat(
+    "openai",
+    <>
+      <ConnectBridge />
+      {actions}
+    </>,
+    settings,
+    { bridge: true },
+  )
   await userEvent.click(
     screen.getByRole("button", { name: "Connect fake bridge" }),
   )
@@ -327,4 +338,70 @@ it("selects the agent from the chat button when no API model can answer, keeping
     selectedModel: LOCAL_AGENT_MODEL,
     localAgent: { apiModel: "openai:gpt-5" },
   })
+})
+
+it("hands the agent the table an API model explained, not its DDL", async () => {
+  // Given the chat on an API model with schema access, which explained a
+  // table's schema from its DDL
+  const ddl =
+    "CREATE TABLE test_trades (secret_margin DOUBLE, ts TIMESTAMP) timestamp(ts) PARTITION BY DAY WAL;"
+  const server = chatServer("openai", [
+    fixtures.createFinalResponse("openai", "This table stores trades."),
+  ])
+  server.other = () =>
+    Response.json({
+      columns: [{ name: "ddl", type: "STRING" }],
+      dataset: [[ddl]],
+      count: 1,
+    })
+  const ExplainSchema = () => {
+    const { handleExplainSchema } = useAIQuickActions()
+    return (
+      <Button
+        onClick={() => void handleExplainSchema(1, "test_trades", "table")}
+      >
+        Explain schema
+      </Button>
+    )
+  }
+  await openChatWithAgent(
+    { model: null, effort: null },
+    undefined,
+    <ExplainSchema />,
+  )
+  await userEvent.click(screen.getByRole("button", { name: "Explain schema" }))
+  await waitFor(() =>
+    expect(getByHook("chat-response-content")).toHaveTextContent(
+      "This table stores trades.",
+    ),
+  )
+  expect(JSON.stringify(server.requests[0].body)).toContain(ddl)
+  await waitFor(() => expect(getByHook("chat-model-picker")).toBeEnabled())
+
+  // When the user continues the chat on the agent
+  await pickFromModelPicker("Default model")
+  await sendMessage("Which column is the timestamp?")
+
+  // Then the agent reads the request as the chat showed it, without the DDL
+  await waitFor(() =>
+    expect(win.__mcpFakeWS.framesOfType("agent_prompt")).toHaveLength(1),
+  )
+  const [{ prompt }] = win.__mcpFakeWS.framesOfType(
+    "agent_prompt",
+  ) as unknown as AgentPromptMessage[]
+  const text = prompt.map((part) => (part.type === "text" ? part.text : ""))
+  expect(text).toHaveLength(1)
+  const [handOver, ...rest] = text[0].split("\n\n")
+  expect(handOver).toBe(
+    [
+      "<earlier_conversation>",
+      "The user talked to another assistant in this chat before switching to you. Earlier messages, oldest first:",
+      "User: Explain the schema of table test_trades: an overview, detailed column descriptions and storage details.",
+      "Assistant: This table stores trades.",
+      "There is no current canonical SQL query.",
+      "</earlier_conversation>",
+    ].join("\n"),
+  )
+  expect(rest.at(-1)).toBe("Which column is the timestamp?")
+  expect(text[0]).not.toContain("secret_margin")
 })
