@@ -132,6 +132,33 @@ describe("AssistantModesCompact", () => {
     expect(stepState("assistant-mode-plan")).toBe("done")
   })
 
+  it("opens a saved answer that holds a step without a type, as an earlier build saved a tool it did not have", () => {
+    // Given the steps saved after the model called a tool named "constructor"
+    const saved = [
+      { type: AIOperationStatus.Processing, timestamp: 1 },
+      {
+        args: { failed: "Unknown tool: constructor" },
+        timestamp: 2,
+        endedAt: 2,
+      },
+      { type: AIOperationStatus.RetrievingTables, timestamp: 3, endedAt: 4 },
+    ] as OperationHistory
+
+    // When
+    renderComponent(
+      <AssistantModesCompact
+        operationHistory={saved}
+        status={null}
+        isLive={false}
+      />,
+    )
+
+    // Then the steps it can name show, and the one it cannot does not
+    expect(stepState("assistant-mode-processing-request")).toBe("done")
+    expect(stepState("assistant-mode-reviewing-tables")).toBe("done")
+    expect(screen.queryByText(/Unknown tool/)).not.toBeInTheDocument()
+  })
+
   it("shows how long each step's own tool took, and how long the answer worked in all", async () => {
     // Given a query that ran for 300ms, then the model worked for 9.7s
     const history: OperationHistory = [

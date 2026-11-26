@@ -14,6 +14,10 @@ import { describe, expect, it } from "vitest"
 import { fireEvent, waitFor, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { db } from "../../../src/store/db"
+import {
+  AIOperationStatus,
+  type OperationHistory,
+} from "../../../src/providers/AIStatusProvider"
 
 describe("chat history", () => {
   it("deletes an unsent conversation on close and opens a fresh conversation", async () => {
@@ -76,6 +80,51 @@ describe("chat history", () => {
     ).toMatchObject({ selectedModel: "local-agent" })
     expect(fetch).not.toHaveBeenCalled()
     mounted.unmount()
+  })
+
+  it("opens a saved chat whose answer holds a step without a type, as an earlier build saved a tool it did not have", async () => {
+    // Given
+    await seedChat("Saved chat", {
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: "List my tables",
+          timestamp: 1,
+        },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "All done here.",
+          timestamp: 2,
+          operationHistory: [
+            { type: AIOperationStatus.Processing, timestamp: 3 },
+            {
+              args: { failed: "Unknown tool: constructor" },
+              timestamp: 4,
+              endedAt: 5,
+            },
+            {
+              type: AIOperationStatus.GeneratingResponse,
+              timestamp: 6,
+              content: "All done here.",
+            },
+          ] as OperationHistory,
+        },
+      ],
+    })
+    renderChat()
+
+    // When
+    await openChat()
+
+    // Then
+    await waitFor(() =>
+      expect(getByHook("chat-message-assistant")).toHaveTextContent(
+        "All done here.",
+      ),
+    )
+    expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument()
   })
 
   it("shows an image-only message without displaying the agent's workspace context", async () => {

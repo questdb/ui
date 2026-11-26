@@ -110,6 +110,10 @@ export const buildOperationSections = (
   let currentSection: OperationSection | null = null
 
   for (const op of operationHistory) {
+    // A saved step can lack its type: an earlier build saved a failed call
+    // to a tool named after an Object member, like "constructor", with the
+    // inherited function as its type, which saving dropped.
+    if (typeof op.type !== "string") continue
     const sectionType = op.type
     if (!currentSection || currentSection.type !== sectionType) {
       currentSection = {
