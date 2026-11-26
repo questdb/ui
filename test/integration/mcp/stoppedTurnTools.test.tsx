@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import React from "react"
-import { act, render, screen } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { Provider } from "react-redux"
 import { createStore } from "redux"
 import { ThemeProvider } from "styled-components"
@@ -32,6 +32,37 @@ import {
   getBufferActionSeq,
 } from "../../../src/utils/notebooks/notebookAIBridge"
 import { questClient } from "../../../src/utils/questdb/queryClient"
+import { db } from "../../../src/store/db"
+import { mcpTools } from "../../../src/utils/tools/tools"
+import { dispatchMCPTool } from "../../../src/utils/mcp/dispatchMCPTool"
+import { STATE_STALE_MESSAGE } from "../../../src/utils/notebooks/notebookToolMessages"
+import {
+  registerWorkspace,
+  signalUserEdit,
+  unregisterWorkspace,
+} from "../../../src/utils/notebooks/notebookAIBridge"
+
+// Observes whether a call reaches the dispatcher; it still runs for real.
+vi.mock("../../../src/utils/mcp/dispatchMCPTool", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../../src/utils/mcp/dispatchMCPTool")
+    >()
+  return { ...actual, dispatchMCPTool: vi.fn(actual.dispatchMCPTool) }
+})
+
+// The answer to a call of a turn the user stopped.
+const STOPPED_CALL_RESULT = {
+  v,
+  type: "tool_result",
+  content: [
+    {
+      type: "text",
+      text: "CANCELLED: the user stopped this turn, so the call did not run.",
+    },
+  ],
+  isError: true,
+}
 
 const sockets: MemorySocket[] = []
 class MemorySocket extends EventTarget {
@@ -99,6 +130,14 @@ const mountLive = () => {
   registerController(controller)
   return {
     value: () => state.parts.cells[0].value,
+    // The user types in the cell, which stales the agent's earlier reads.
+    userEdit: (value: string) => {
+      state.parts = {
+        ...state.parts,
+        cells: [{ ...state.parts.cells[0], value }],
+      }
+      signalUserEdit(BUFFER)
+    },
     release: () => unregisterController(BUFFER),
   }
 }
@@ -119,6 +158,20 @@ const runQueryCall = (requestId: string, sql: string) => ({
   requestId,
   name: "run_query",
   arguments: { sql, limit: null },
+  deadlineMs: null,
+  conversationId: "conv-1",
+})
+
+const callOf = (
+  name: string,
+  requestId: string,
+  args: Record<string, unknown> = { buffer_id: BUFFER },
+) => ({
+  v,
+  type: "tool_call",
+  requestId,
+  name,
+  arguments: args,
   deadlineMs: null,
   conversationId: "conv-1",
 })
@@ -153,11 +206,20 @@ const connectLocalAgent = async () => {
     }),
   )
   const Probe = () => {
-    const { connect } = useMCPBridge()
+    const { connect, setPermissions } = useMCPBridge()
     return (
-      <Button onClick={() => connect("ws://mock.invalid", "mock-token")}>
-        Connect fake bridge
-      </Button>
+      <>
+        <Button onClick={() => connect("ws://mock.invalid", "mock-token")}>
+          Connect fake bridge
+        </Button>
+        <Button
+          onClick={() =>
+            setPermissions({ grantSchemaAccess: true, read: true, write: true })
+          }
+        >
+          Grant write
+        </Button>
+      </>
     )
   }
   render(
@@ -227,9 +289,14 @@ it("keeps notebook tool calls of a stopped local-agent turn from changing the no
     })
     await act(flush)
 
-    // Then neither edit lands, and none is answered
+    // Then neither edit lands: the one in flight is dropped, and the late one
+    // is answered as cancelled
     expect(socket.frames.some((f) => f.type === "agent_cancel")).toBe(true)
-    expect(resultOf(socket, "while-stopping")).toBeUndefined()
+    expect(resultOf(socket, "before-stop")).toBeUndefined()
+    expect(resultOf(socket, "while-stopping")).toEqual({
+      ...STOPPED_CALL_RESULT,
+      requestId: "while-stopping",
+    })
     expect(live.value()).toBe("ORIGINAL")
 
     // And once the agent ends the stopped turn, edits commit again
@@ -373,8 +440,16 @@ it.each([
       })
       await act(flush)
 
-      // Then neither the edit nor the query runs
-      expect(resultOf(socket, "stopped-edit")).toBeUndefined()
+      // Then neither the edit nor the query runs, and both are answered as
+      // cancelled
+      expect(resultOf(socket, "stopped-edit")).toEqual({
+        ...STOPPED_CALL_RESULT,
+        requestId: "stopped-edit",
+      })
+      expect(resultOf(socket, "stopped-query")).toEqual({
+        ...STOPPED_CALL_RESULT,
+        requestId: "stopped-query",
+      })
       expect(live.value()).toBe("ORIGINAL")
       expect(executedSql).toEqual([])
 
@@ -403,8 +478,220 @@ it.each([
   },
 )
 
-it("keeps the user's actions for the next result when a stopped call drops its own", async () => {
-  // Given the user added a cell while a local-agent turn runs
+it.each([
+  ["arrives after Stop", STOPPED_CALL_RESULT],
+  ["is in flight at Stop", undefined],
+])(
+  "keeps the user's actions for the next result when a stopped turn's call %s",
+  async (when, stoppedResult) => {
+    // Given the user added a cell while a local-agent turn runs
+    vi.spyOn(questClient, "validateQuery").mockResolvedValue({
+      query: "",
+      columns: [],
+      timestamp: -1,
+    })
+    vi.spyOn(questClient, "queryRaw").mockImplementation((() => ({
+      promise: Promise.resolve({
+        type: "dql",
+        columns: [],
+        dataset: [],
+        count: 0,
+      }),
+      queryId: 42,
+    })) as unknown as typeof questClient.queryRaw)
+    const socket = await connectLocalAgent()
+    const stop = new AbortController()
+    void getLocalAgentChannel()!.prompt({
+      conversationId: "conv-1",
+      text: "inspect trades",
+      notebookRead: null,
+      signal: stop.signal,
+      onUpdate: () => undefined,
+      onToolStatus: () => undefined,
+    })
+    emitUserAction({ kind: "user_added_cell", bufferId: BUFFER, cellId: "c2" })
+
+    // When the stopped turn's call gets no result with the actions, and the
+    // agent then asks again
+    const call = () => socket.receive(runQueryCall("stopped", "SELECT 1"))
+    act(() => {
+      if (when === "arrives after Stop") {
+        stop.abort()
+        call()
+      } else {
+        call()
+        stop.abort()
+      }
+    })
+    await act(flush)
+    const prompt = socket.frames.find((f) => f.type === "agent_prompt")
+    act(() => {
+      socket.receive({
+        v,
+        type: "agent_turn_end",
+        conversationId: "conv-1",
+        turnId: prompt?.turnId,
+        result: { outcome: "completed", stopReason: "cancelled", usage: null },
+      })
+      socket.receive(runQueryCall("delivered", "SELECT 2"))
+    })
+    await act(flush)
+
+    // Then the delivered result still tells the agent about the new cell
+    expect(resultOf(socket, "stopped")).toEqual(
+      stoppedResult && { ...stoppedResult, requestId: "stopped" },
+    )
+    expect(resultOf(socket, "delivered")?.content[0].text).toContain(
+      "added: [c2]",
+    )
+  },
+)
+
+// Starts a local-agent turn on conv-1 that the user can stop.
+const startStoppableTurn = (
+  socket: MemorySocket,
+  notebookRead: { bufferId: number; readSeq: number } | null = null,
+) => {
+  const stop = new AbortController()
+  void getLocalAgentChannel()!.prompt({
+    conversationId: "conv-1",
+    text: "work on the notebook",
+    notebookRead,
+    signal: stop.signal,
+    onUpdate: () => undefined,
+    onToolStatus: () => undefined,
+  })
+  const prompt = socket.frames.filter((f) => f.type === "agent_prompt").at(-1)
+  const end = () =>
+    act(() => {
+      socket.receive({
+        v,
+        type: "agent_turn_end",
+        conversationId: "conv-1",
+        turnId: prompt?.turnId,
+        result: { outcome: "completed", stopReason: "cancelled", usage: null },
+      })
+    })
+  return { stop: () => stop.abort(), end }
+}
+
+describe.each(mcpTools.map(({ name }) => name))(
+  "a stopped turn's %s call",
+  (name) => {
+    it("is answered as cancelled and never dispatched", async () => {
+      // Given a turn the user stopped, which the agent has not ended yet
+      const socket = await connectLocalAgent()
+      const turn = startStoppableTurn(socket, {
+        bufferId: BUFFER,
+        readSeq: getBufferActionSeq(BUFFER),
+      })
+      act(() => turn.stop())
+      vi.mocked(dispatchMCPTool).mockClear()
+
+      // When the agent still calls the tool
+      act(() => socket.receive(callOf(name, "late")))
+      await act(flush)
+
+      // Then the call is answered as cancelled, and nothing of it runs
+      expect(resultOf(socket, "late")).toEqual({
+        ...STOPPED_CALL_RESULT,
+        requestId: "late",
+      })
+      expect(dispatchMCPTool).not.toHaveBeenCalled()
+    })
+  },
+)
+
+it.each([
+  ["delete_notebook", "deleteNotebook"],
+  ["activate_notebook", "activateNotebook"],
+] as const)(
+  "keeps a stopped turn's %s from changing the workspace",
+  async (name, method) => {
+    // Given a turn the user stopped, which read the notebook it works on
+    const workspace = {
+      createNotebook: vi.fn(),
+      duplicateNotebook: vi.fn(),
+      deleteNotebook: vi.fn(() => Promise.resolve()),
+      activateNotebook: vi.fn(() => Promise.resolve(true)),
+      listNotebookBuffers: () => [],
+    }
+    registerWorkspace(workspace)
+    try {
+      const socket = await connectLocalAgent()
+      const turn = startStoppableTurn(socket, {
+        bufferId: BUFFER,
+        readSeq: getBufferActionSeq(BUFFER),
+      })
+      act(() => turn.stop())
+
+      // When the agent still calls the tool, then ends the stopped turn
+      act(() => socket.receive(callOf(name, "late")))
+      await act(flush)
+      const calledBeforeEnd = workspace[method].mock.calls.length
+      turn.end()
+      act(() => socket.receive(callOf(name, "after-end")))
+      await act(flush)
+
+      // Then only the call after the end reaches the workspace
+      expect(calledBeforeEnd).toBe(0)
+      expect(workspace[method]).toHaveBeenCalledOnce()
+      expect(resultOf(socket, "after-end")?.isError).toBe(false)
+    } finally {
+      unregisterWorkspace()
+    }
+  },
+)
+
+it("keeps a read in flight at Stop from vouching for the next turn's edit", async () => {
+  // Given the agent read a notebook its chat is not bound to, and the user
+  // then edited the cell
+  await db.buffers.put({
+    id: BUFFER,
+    label: "Sample notebook",
+    value: "",
+    position: 0,
+    notebookViewState: { cells: [{ id: "c", position: 0, value: "ORIGINAL" }] },
+  })
+  const socket = await connectLocalAgent()
+  const live = mountLive()
+  try {
+    const turn = startStoppableTurn(socket)
+    act(() => socket.receive(callOf("get_notebook_state", "read")))
+    await waitFor(() => expect(resultOf(socket, "read")?.isError).toBe(false))
+    live.userEdit("USER-EDIT")
+
+    // When the agent reads it again as the user stops the turn, and edits the
+    // cell in the next turn without reading it
+    act(() => {
+      socket.receive(callOf("get_notebook_state", "stopped-read"))
+      turn.stop()
+    })
+    const stoppedRead = vi.mocked(dispatchMCPTool).mock.results.at(-1)
+      ?.value as ReturnType<typeof dispatchMCPTool>
+    await act(() => stoppedRead)
+    turn.end()
+    startStoppableTurn(socket)
+    act(() => socket.receive(toolCall("edit", "AGENT-FROM-ORIGINAL")))
+    await act(flush)
+
+    // Then the read never reached the agent, the edit is refused as stale, and
+    // the user's edit stays
+    expect(resultOf(socket, "stopped-read")).toBeUndefined()
+    expect(resultOf(socket, "edit")).toMatchObject({ isError: true })
+    expect(resultOf(socket, "edit")?.content[0].text).toContain(
+      STATE_STALE_MESSAGE,
+    )
+    expect(live.value()).toBe("USER-EDIT")
+  } finally {
+    live.release()
+  }
+})
+
+const PERMISSIONS_NOTICE =
+  /^\[Permissions updated since last call: read=true, write=true\./
+
+const stubQueries = () => {
   vi.spyOn(questClient, "validateQuery").mockResolvedValue({
     query: "",
     columns: [],
@@ -417,42 +704,65 @@ it("keeps the user's actions for the next result when a stopped call drops its o
       dataset: [],
       count: 0,
     }),
-    queryId: 42,
+    queryId: 44,
   })) as unknown as typeof questClient.queryRaw)
-  const socket = await connectLocalAgent()
-  const stop = new AbortController()
-  void getLocalAgentChannel()!.prompt({
-    conversationId: "conv-1",
-    text: "inspect trades",
-    notebookRead: null,
-    signal: stop.signal,
-    onUpdate: () => undefined,
-    onToolStatus: () => undefined,
-  })
-  emitUserAction({ kind: "user_added_cell", bufferId: BUFFER, cellId: "c2" })
+}
 
-  // When the stopped turn's call is dropped, and the agent then asks again
-  act(() => stop.abort())
-  act(() => {
-    socket.receive(runQueryCall("dropped", "SELECT 1"))
-  })
-  await act(flush)
-  const prompt = socket.frames.find((f) => f.type === "agent_prompt")
-  act(() => {
-    socket.receive({
-      v,
-      type: "agent_turn_end",
-      conversationId: "conv-1",
-      turnId: prompt?.turnId,
-      result: { outcome: "completed", stopReason: "cancelled", usage: null },
+describe.each(mcpTools.map(({ name }) => name))(
+  "a %s call in flight when the user stops its turn",
+  (name) => {
+    it("leaves the permission notice for the next result that is sent", async () => {
+      // Given the user granted write while a turn runs
+      stubQueries()
+      const socket = await connectLocalAgent()
+      const turn = startStoppableTurn(socket)
+      await userEvent.click(screen.getByRole("button", { name: "Grant write" }))
+
+      // When a call of the turn is in flight as the user stops it, and the
+      // next turn calls a tool
+      act(() => {
+        socket.receive(callOf(name, "in-flight"))
+        turn.stop()
+      })
+      await act(flush)
+      turn.end()
+      startStoppableTurn(socket)
+      act(() => socket.receive(runQueryCall("delivered", "SELECT 2")))
+      await act(flush)
+
+      // Then the stopped call gets no result, and the next one tells the
+      // agent about the change
+      expect(resultOf(socket, "in-flight")).toBeUndefined()
+      expect(resultOf(socket, "delivered")?.content[0].text).toMatch(
+        PERMISSIONS_NOTICE,
+      )
     })
-    socket.receive(runQueryCall("delivered", "SELECT 2"))
+  },
+)
+
+it("leaves the permission notice for the next result when the bridge cancels a call", async () => {
+  // Given the user granted write while the agent's call runs
+  stubQueries()
+  const socket = await connectLocalAgent()
+  await userEvent.click(screen.getByRole("button", { name: "Grant write" }))
+  // An agent working from the terminal names no conversation.
+  const terminalCall = (requestId: string, sql: string) => {
+    const { conversationId: _, ...call } = runQueryCall(requestId, sql)
+    return call
+  }
+
+  // When the bridge cancels that call, and the agent calls again
+  act(() => {
+    socket.receive(terminalCall("cancelled", "SELECT 1"))
+    socket.receive({ v, type: "cancel", requestId: "cancelled" })
   })
   await act(flush)
+  act(() => socket.receive(terminalCall("delivered", "SELECT 2")))
+  await act(flush)
 
-  // Then the delivered result still tells the agent about the new cell
-  expect(resultOf(socket, "dropped")).toBeUndefined()
-  expect(resultOf(socket, "delivered")?.content[0].text).toContain(
-    "added: [c2]",
+  // Then the cancelled call gets no result, and the next one carries the notice
+  expect(resultOf(socket, "cancelled")).toBeUndefined()
+  expect(resultOf(socket, "delivered")?.content[0].text).toMatch(
+    PERMISSIONS_NOTICE,
   )
 })

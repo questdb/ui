@@ -35,8 +35,6 @@ const CANCELLED: AgentTurnResult = {
   usage: null,
 }
 
-const ignoreStatus: StatusCallback = () => undefined
-
 export type NotebookRead = {
   bufferId: number
   readSeq: number
@@ -82,10 +80,15 @@ export type LocalAgentChannelOptions = {
   onNotebookRead: (conversationId: string, read: NotebookRead) => void
 }
 
+// The turn a tool call that names a conversation belongs to, captured when
+// the call arrives. A call of a turn the user stopped is refused before it
+// runs: a tool that ignores an aborted signal would still act.
+export type ToolRequestTurn =
+  | { stopped: true }
+  | { stopped: false; setStatus: StatusCallback; signal: AbortSignal }
+
 type StoppedTurn = {
   turnId: string
-  // Already aborted: whatever the stopped turn still asks for is cancelled.
-  toolSignal: AbortSignal
   // A reconnect sends the cancel again until the next prompt is written:
   // cancels on the wire target the conversation, not the turn.
   replayCancel: boolean
@@ -218,11 +221,7 @@ export class LocalAgentChannel {
           stopped = resolve
         })
         toolAborter.abort(signal?.reason)
-        this.stoppedTurns.set(conversationId, {
-          turnId,
-          toolSignal: toolAborter.signal,
-          replayCancel: true,
-        })
+        this.stoppedTurns.set(conversationId, { turnId, replayCancel: true })
         this.clearQuestions(conversationId)
         this.sendCancel(conversationId, turnId)
       }
@@ -255,13 +254,15 @@ export class LocalAgentChannel {
 
   // Capture the exact turn at receipt, not when the tool eventually reports
   // progress. Ownership is for status and cancellation, not authorization.
-  captureToolRequest(client: MCPBridgeClient, conversationId: string) {
+  captureToolRequest(
+    client: MCPBridgeClient,
+    conversationId: string,
+  ): ToolRequestTurn | undefined {
     if (this.disposed || client !== this.client) return undefined
     // A request that arrives after Stop still belongs to the stopped turn
     // until the agent ends it: also once the local grace ended, and once the
     // next prompt is written.
-    const stopped = this.stoppedTurns.get(conversationId)
-    if (stopped) return { setStatus: ignoreStatus, signal: stopped.toolSignal }
+    if (this.stoppedTurns.has(conversationId)) return { stopped: true }
     const turn = this.liveTurnOf(conversationId)
     if (!turn) return undefined
     let queryId: string | undefined
@@ -275,7 +276,9 @@ export class LocalAgentChannel {
       }
       turn.onToolStatus(status, args)
     }
-    return { setStatus, signal: turn.toolSignal }
+    // Aborts when the user stops the turn: a call already running stops, and
+    // later calls of the turn are refused above.
+    return { stopped: false, setStatus, signal: turn.toolSignal }
   }
 
   resume(): void {
@@ -349,11 +352,7 @@ export class LocalAgentChannel {
   // left: nothing shows them anymore, and the bridge still runs them.
   stopTurnsLeftBy(previous: Map<string, string>): void {
     for (const [conversationId, turnId] of previous) {
-      this.stoppedTurns.set(conversationId, {
-        turnId,
-        toolSignal: AbortSignal.abort(),
-        replayCancel: true,
-      })
+      this.stoppedTurns.set(conversationId, { turnId, replayCancel: true })
       this.sendCancel(conversationId, turnId)
     }
   }

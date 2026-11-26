@@ -12,6 +12,7 @@ import {
   isCurrentLocalAgentChannel,
   registerLocalAgentChannel,
   unregisterLocalAgentChannel,
+  type ToolRequestTurn,
 } from "./localAgentChannel"
 
 vi.mock("../../modules/ConsoleEventTracker", () => ({
@@ -124,6 +125,11 @@ it("records a notebook baseline only when the prompt is written", async () => {
   ])
 })
 
+const runningTurnOf = (captured: ToolRequestTurn | undefined) => {
+  if (captured?.stopped !== false) throw new Error("Expected a running turn")
+  return captured
+}
+
 it("binds a progress reporter to the channel's current turn", async () => {
   const { channel, client, sent, deliver } = connect()
   const { client: otherClient } = connect()
@@ -132,9 +138,11 @@ it("binds a progress reporter to the channel's current turn", async () => {
   const [firstPrompt] = sent
   if (firstPrompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
   expect(channel.captureToolRequest(otherClient, "c1")).toBeUndefined()
-  const reportFirst = channel.captureToolRequest(client, "c1")?.setStatus
+  const reportFirst = runningTurnOf(
+    channel.captureToolRequest(client, "c1"),
+  ).setStatus
   const status = AIOperationStatus.InspectingNotebook
-  reportFirst?.(status)
+  reportFirst(status)
   expect(first.onToolStatus).toHaveBeenCalledOnce()
   deliver(turnEnd(firstPrompt.turnId))
   await first.turn
@@ -143,10 +151,10 @@ it("binds a progress reporter to the channel's current turn", async () => {
   const secondPrompt = sent.at(-1)
   if (secondPrompt?.type !== "agent_prompt")
     throw new Error("Expected a prompt")
-  reportFirst?.(status)
+  reportFirst(status)
   expect(next.onToolStatus).not.toHaveBeenCalled()
   expect(first.onToolStatus).toHaveBeenCalledOnce()
-  channel.captureToolRequest(client, "c1")?.setStatus(status)
+  runningTurnOf(channel.captureToolRequest(client, "c1")).setStatus(status)
   expect(next.onToolStatus).toHaveBeenCalledWith(status, undefined)
   deliver(turnEnd(secondPrompt.turnId))
   await next.turn
@@ -155,17 +163,20 @@ it("binds a progress reporter to the channel's current turn", async () => {
 it("cancels a notebook request captured for the stopped turn", async () => {
   const { channel, client, deliver, sent } = connect()
   const controller = new AbortController()
-  const { turn } = startTurn(channel, controller.signal)
+  const { turn, onToolStatus } = startTurn(channel, controller.signal)
   const [prompt] = sent
   if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
 
-  const owned = channel.captureToolRequest(client, "c1")
-  expect(owned?.signal.aborted).toBe(false)
+  const owned = runningTurnOf(channel.captureToolRequest(client, "c1"))
+  expect(owned.signal.aborted).toBe(false)
   const onAbort = vi.fn()
-  owned?.signal.addEventListener("abort", onAbort)
+  owned.signal.addEventListener("abort", onAbort)
   controller.abort()
-  expect(owned?.signal.aborted).toBe(true)
+  expect(owned.signal.aborted).toBe(true)
   expect(onAbort).toHaveBeenCalledOnce()
+  // Its progress no longer shows: the user stopped the turn.
+  owned.setStatus(AIOperationStatus.InspectingNotebook)
+  expect(onToolStatus).not.toHaveBeenCalled()
   deliver(turnEnd(prompt.turnId))
   await turn
 })
@@ -175,21 +186,18 @@ it("refuses notebook requests that reach a stopped turn until the agent ends it"
   const { channel, client, deliver, sent } = connect()
   try {
     const controller = new AbortController()
-    const { turn, onToolStatus } = startTurn(channel, controller.signal)
+    const { turn } = startTurn(channel, controller.signal)
     const [prompt] = sent
     if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
     controller.abort()
 
     // In transit when Stop was sent.
-    const stopping = channel.captureToolRequest(client, "c1")
-    expect(stopping?.signal.aborted).toBe(true)
-    stopping?.setStatus(AIOperationStatus.InspectingNotebook)
-    expect(onToolStatus).not.toHaveBeenCalled()
+    expect(channel.captureToolRequest(client, "c1")).toEqual({ stopped: true })
 
     // The local grace ended before the agent confirmed the cancel.
     await vi.advanceTimersByTimeAsync(5000)
     await turn
-    expect(channel.captureToolRequest(client, "c1")?.signal.aborted).toBe(true)
+    expect(channel.captureToolRequest(client, "c1")).toEqual({ stopped: true })
 
     deliver(turnEnd(prompt.turnId))
     expect(channel.captureToolRequest(client, "c1")).toBeUndefined()
@@ -319,13 +327,13 @@ type UntaggedMessageType<M> = M extends { type: infer T }
 
 let lateQuestions = 0
 // Whether the channel keeps the message from the conversation's next turn:
-// a tool call gets an aborted signal, a question is not shown.
+// a tool call is refused, a question is not shown.
 const refusesUntagged: Record<
   UntaggedMessageType<AgentOutboundMessage | ToolCallMessage>,
   (bridge: ReturnType<typeof connect>) => boolean
 > = {
   tool_call: ({ channel, client }) =>
-    channel.captureToolRequest(client, "c1")?.signal.aborted === true,
+    channel.captureToolRequest(client, "c1")?.stopped === true,
   agent_question: ({ channel, deliver }) => {
     const asked = question(`late-${++lateQuestions}`)
     deliver(asked)
@@ -495,7 +503,7 @@ it("hands a stopped turn the agent has not ended to the channel that replaces it
     const cancel = { v: "0.6.0", type: "agent_cancel", conversationId: "c1" }
     expect(replacement.sent).toEqual([cancel, cancel])
     const { channel, client } = replacement
-    expect(channel.captureToolRequest(client, "c1")?.signal.aborted).toBe(true)
+    expect(channel.captureToolRequest(client, "c1")).toEqual({ stopped: true })
     replacement.deliver(turnEnd(stoppedTurnId))
     expect(channel.captureToolRequest(client, "c1")).toBeUndefined()
   } finally {

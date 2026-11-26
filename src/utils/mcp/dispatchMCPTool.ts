@@ -30,8 +30,9 @@ import {
 
 export type PermissionsRefs = {
   get: () => Permissions
-  // True when permissions changed since the last dispatch; the wrapper
-  // prepends a notice on the next call so the model learns mid-session.
+  // True when permissions changed since the agent was last told; the wrapper
+  // prepends a notice to this result so the model learns mid-session. The
+  // caller counts it as told only once it sends the result (deferUntilSent).
   consumeDirty: () => boolean
 }
 

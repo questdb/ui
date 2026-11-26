@@ -214,14 +214,12 @@ describe("AIStatusProvider", () => {
     try {
       const query = AIOperationStatus.RunningQuery
       const args = { content: "SELECT 1" }
-      const reportFirst = channel.captureToolRequest(
-        client,
-        conversationId,
-      )?.setStatus
-      const reportSecond = channel.captureToolRequest(
-        client,
-        conversationId,
-      )?.setStatus
+      const captureReporter = () => {
+        const turn = channel.captureToolRequest(client, conversationId)
+        return turn?.stopped === false ? turn.setStatus : undefined
+      }
+      const reportFirst = captureReporter()
+      const reportSecond = captureReporter()
       act(() => {
         reportFirst?.(query, args)
         reportFirst?.(query, { ...args, ended: true })

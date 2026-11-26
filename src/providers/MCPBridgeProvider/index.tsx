@@ -10,6 +10,10 @@ import React, {
 import { MCPBridgeClient } from "../../utils/mcp/MCPBridgeClient"
 import type { MCPBridgeClientStatus } from "../../utils/mcp/MCPBridgeClient"
 import { dispatchMCPTool } from "../../utils/mcp/dispatchMCPTool"
+import {
+  createPermissionsNoticeState,
+  deferUntilSent,
+} from "../../utils/mcp/deferUntilSent"
 import { createNotebookFreshness } from "../../utils/notebooks/notebookFreshness"
 import { mcpTools } from "../../utils/tools/tools"
 import {
@@ -45,10 +49,7 @@ import { QuestContext } from "../QuestProvider"
 import { useLocalStorage } from "../LocalStorageProvider"
 import { on as onUserAction } from "../../utils/notebooks/notebookAIBridge"
 import type { ToolDefinition } from "../../utils/ai/types"
-import {
-  createUserActionDigestState,
-  type UserActionDigestCapture,
-} from "../AIConversationProvider/userActionDigest"
+import { createUserActionDigestState } from "../AIConversationProvider/userActionDigest"
 import { useBridgeToolRunner } from "./useBridgeToolRunner"
 import { PairingConsentModal } from "./PairingConsentModal"
 import { useLocalAgentConnection } from "./useLocalAgentConnection"
@@ -133,6 +134,10 @@ const consoleOrigin =
 
 const CONSENT_SUCCESS_AUTOCLOSE_MS = 3_000
 
+// The answer to a tool call of an agent turn the user stopped.
+const STOPPED_TURN_CALL_RESULT =
+  "CANCELLED: the user stopped this turn, so the call did not run."
+
 export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -153,7 +158,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   )
   const permissionsRef = useRef<Permissions>(permissions)
   permissionsRef.current = permissions
-  const permissionsDirtyRef = useRef<boolean>(false)
+  // The agent learns of a permission change from the next tool result sent.
+  const permissionsNoticeRef = useRef(createPermissionsNoticeState())
   const [retryAttempt, setRetryAttempt] = useState(0)
   const [pendingConsent, setPendingConsent] = useState<{
     url: string
@@ -175,8 +181,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     freshnessFor: agentFreshnessFor,
   } = useLocalAgentConnection({ aiAssistantSettings })
 
-  // User actions reach the agent with tool results. They count as told only
-  // once a result carrying them is sent, not when a stopped call drops it.
+  // User actions reach the agent with tool results (see deferUntilSent).
   const digestRef = useRef(createUserActionDigestState())
   const getDigest = useCallback(() => digestRef.current.peek(), [])
 
@@ -189,30 +194,20 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   )
 
   // Refs let the dispatcher read live values outside React's render flow.
-  const permissionsRefs = useMemo(
-    () => ({
-      get: () => permissionsRef.current,
-      consumeDirty: (): boolean => {
-        const wasDirty = permissionsDirtyRef.current
-        permissionsDirtyRef.current = false
-        return wasDirty
-      },
-    }),
-    [],
-  )
+  const getPermissions = useCallback(() => permissionsRef.current, [])
 
   const dispatchCtxRef = useRef({
     modelToolsClientFor,
     freshness: freshnessRef.current,
     metaToolContext,
-    permissions: permissionsRefs,
+    getPermissions,
     validateSql,
   })
   dispatchCtxRef.current = {
     modelToolsClientFor,
     freshness: freshnessRef.current,
     metaToolContext,
-    permissions: permissionsRefs,
+    getPermissions,
     validateSql,
   }
 
@@ -272,6 +267,29 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         })
       }
       const startedAt = Date.now()
+      const { conversationId } = call
+      const turn =
+        conversationId === undefined
+          ? undefined
+          : getLocalAgentChannel()?.captureToolRequest(client, conversationId)
+      // A stopped turn's call never runs: a tool that ignores the aborted
+      // signal would still act, and what it reads would count as told.
+      if (turn?.stopped) {
+        client.sendToolResult({
+          v: EXPECTED_MCP_VERSION,
+          type: "tool_result",
+          requestId: call.requestId,
+          content: [{ type: "text", text: STOPPED_TURN_CALL_RESULT }],
+          isError: true,
+        })
+        if (toolEvent) {
+          void trackEvent(toolEvent, {
+            outcome: "aborted",
+            durationMs: Date.now() - startedAt,
+          })
+        }
+        return
+      }
       const aborter = new AbortController()
       inflightAbortersRef.current.set(call.requestId, aborter)
       const deadlineTimer =
@@ -299,36 +317,28 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         return true
       }
-      const { conversationId } = call
-      const ownedTool =
-        conversationId === undefined
-          ? undefined
-          : getLocalAgentChannel()?.captureToolRequest(client, conversationId)
-      const turnSignal = ownedTool?.signal
+      const turnSignal = turn?.signal
       const abortWithTurn = () => aborter.abort(turnSignal?.reason)
-      if (turnSignal?.aborted) abortWithTurn()
-      else turnSignal?.addEventListener("abort", abortWithTurn, { once: true })
-      let digestCapture: UserActionDigestCapture | undefined
-      const consumeDigest = () => {
-        digestCapture = digestRef.current.capture()
-        return digestCapture?.digest ?? null
-      }
+      turnSignal?.addEventListener("abort", abortWithTurn, { once: true })
+      const { modelToolsClientFor, ...dispatchCtx } = dispatchCtxRef.current
+      const toldOnSend = deferUntilSent(
+        {
+          ...dispatchCtx,
+          modelToolsClient: modelToolsClientFor(conversationId),
+          ...(conversationId !== undefined && {
+            freshness: agentFreshnessFor(conversationId),
+            setStatus: turn?.setStatus,
+          }),
+          signal: aborter.signal,
+        },
+        {
+          permissionsNotice: permissionsNoticeRef.current,
+          userActions: digestRef.current,
+        },
+      )
       void (async () => {
         try {
-          const result = await dispatchMCPTool(call, {
-            ...dispatchCtxRef.current,
-            modelToolsClient:
-              dispatchCtxRef.current.modelToolsClientFor(conversationId),
-            metaToolContext: {
-              ...dispatchCtxRef.current.metaToolContext,
-              consumeDigest,
-            },
-            ...(conversationId !== undefined && {
-              freshness: agentFreshnessFor(conversationId),
-              setStatus: ownedTool?.setStatus,
-            }),
-            signal: aborter.signal,
-          })
+          const result = await dispatchMCPTool(call, toldOnSend.ctx)
           if (sendRevokedErrorIfNeeded()) {
             if (toolEvent) {
               void trackEvent(toolEvent, {
@@ -354,7 +364,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             content: result.content,
             isError: result.isError ?? false,
           })
-          digestCapture?.finish(true)
+          toldOnSend.settle(true)
         } catch (err) {
           if (sendRevokedErrorIfNeeded()) {
             if (toolEvent) {
@@ -381,7 +391,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             isError: true,
           })
         } finally {
-          digestCapture?.finish(false)
+          toldOnSend.settle(false)
           turnSignal?.removeEventListener("abort", abortWithTurn)
           if (deadlineTimer !== null) window.clearTimeout(deadlineTimer)
           inflightAbortersRef.current.delete(call.requestId)
@@ -446,7 +456,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       (prev.read && !next.read) ||
       (prev.write && !next.write)
     writePermissions(next)
-    permissionsDirtyRef.current = true
+    permissionsNoticeRef.current.markChanged()
     setPermissionsState(next)
     clientRef.current?.setPermissions(next)
     // Calls already past the dispatcher gate keep running; abort them so a

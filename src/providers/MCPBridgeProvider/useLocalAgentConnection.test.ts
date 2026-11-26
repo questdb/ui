@@ -140,9 +140,9 @@ it("stops the turn a channel left running when its bridge comes back after the c
     expect(
       bridge.sent.filter((frame) => frame.type === "agent_cancel"),
     ).toEqual([expect.objectContaining({ conversationId: "c1" })])
-    expect(
-      channel?.captureToolRequest(bridge.client, "c1")?.signal.aborted,
-    ).toBe(true)
+    expect(channel?.captureToolRequest(bridge.client, "c1")).toEqual({
+      stopped: true,
+    })
     bridge.receive({
       v: EXPECTED_MCP_VERSION,
       type: "agent_turn_end",
