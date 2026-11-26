@@ -1047,8 +1047,19 @@ const runTool = async (
           patch.queries = queries.map((q) => (q ? mapQueryChart(q) : null))
         if (right_axis !== undefined && right_axis !== null)
           patch.rightAxis = mapRightAxis(right_axis)
-        if (reference_lines !== undefined && reference_lines !== null)
-          patch.referenceLines = mapReferenceLines(reference_lines)
+        if (reference_lines !== undefined && reference_lines !== null) {
+          const mapped = mapReferenceLines(reference_lines, "reference_lines")
+          if (!mapped.ok) {
+            return {
+              content: JSON.stringify({
+                error_code: "validation",
+                message: `VALIDATION_ERROR: ${mapped.error}`,
+              }),
+              is_error: true,
+            }
+          }
+          patch.referenceLines = mapped.lines
+        }
         if (
           patch.queries?.some(
             (q) => q != null && q.type === "candlestick" && !q.ohlc,

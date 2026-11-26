@@ -46,6 +46,7 @@ import { EXPECTED_MCP_VERSION } from "../../../src/utils/mcp/protocolVersion"
 import type { ToolExecutionContext } from "../../../src/utils/ai/shared"
 import { createNotebookFreshness } from "../../../src/utils/notebooks/notebookFreshness"
 import { computeAgentCellGridH } from "../../../src/scenes/Editor/Notebook/cellSizing"
+import { ALL_DEFINITIONS } from "../../../src/utils/tools/tools"
 
 const cell = (
   id: string,
@@ -3897,6 +3898,174 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       results: ["success", "ERROR: boom", "cancelled"],
     })
   })
+})
+
+// Every tool that takes reference_lines refuses a line whose value is not a
+// finite number, naming the line, instead of dropping it and reporting
+// success: the array replaces the saved lines, so a dropped line is lost.
+describe("dispatchTool — reference line values", () => {
+  type ReferenceLinesTool = {
+    // The tool's input, with these lines as the chart's reference_lines.
+    input: (lines: unknown[]) => Record<string, unknown>
+    // Where the lines sit in that input, as an error names them.
+    path: string
+  }
+  const TOOLS: Record<string, ReferenceLinesTool> = {
+    set_cell_chart_config: {
+      input: (lines) => ({
+        cell_id: "c",
+        x_column: null,
+        queries: null,
+        right_axis: null,
+        reference_lines: lines,
+      }),
+      path: "reference_lines",
+    },
+    apply_notebook_state: {
+      input: (lines) => ({
+        cells: [
+          {
+            id: "c",
+            preserve_value: true,
+            chart_config: {
+              x_column: null,
+              queries: null,
+              right_axis: null,
+              reference_lines: lines,
+            },
+          },
+        ],
+      }),
+      path: "cells[0].chart_config.reference_lines",
+    },
+  }
+
+  const takesReferenceLines = (node: unknown): boolean => {
+    if (!node || typeof node !== "object") return false
+    const { properties, items } = node as {
+      properties?: Record<string, unknown>
+      items?: unknown
+    }
+    return (
+      (properties !== undefined && "reference_lines" in properties) ||
+      Object.values(properties ?? {}).some(takesReferenceLines) ||
+      takesReferenceLines(items)
+    )
+  }
+
+  const savedLines = [
+    { value: 30, label: "Oversold" },
+    { value: 70, label: "Overbought" },
+  ]
+  const mountChart = () =>
+    mountLive(1, [
+      cell("c", "SELECT ts, rsi FROM t", {
+        mode: "draw",
+        chartConfig: { xColumn: null, queries: [], referenceLines: savedLines },
+      }),
+    ])
+  const send = (tool: string, lines: unknown[]) =>
+    dispatchTool(
+      tool,
+      { buffer_id: 1, ...TOOLS[tool].input(lines) },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+  it("covers every tool whose schema takes reference_lines", () => {
+    // When
+    const tools = ALL_DEFINITIONS.filter((tool) =>
+      takesReferenceLines(tool.inputSchema),
+    ).map((tool) => tool.name)
+
+    // Then
+    expect(tools.sort()).toEqual(Object.keys(TOOLS).sort())
+  })
+
+  it.each(Object.keys(TOOLS))(
+    "%s saves lines whose values are numbers",
+    async (tool) => {
+      // Given
+      const { state } = mountChart()
+
+      // When
+      const res = await send(tool, [
+        { value: 30, axis: null, label: "Oversold" },
+        { value: 50, axis: null, label: null },
+      ])
+
+      // Then
+      expect(res.is_error, res.content).toBeFalsy()
+      expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual([
+        { value: 30, label: "Oversold" },
+        { value: 50 },
+      ])
+    },
+  )
+
+  it.each(
+    Object.keys(TOOLS).flatMap((tool) => [
+      {
+        tool,
+        value: "a string",
+        sent: { value: "70", axis: null, label: "Overbought" },
+        named: ' (label "Overbought")',
+        got: '"70"',
+      },
+      {
+        tool,
+        value: "a string, on the right axis",
+        sent: { value: "70", axis: "right", label: "Overbought" },
+        named: ' (label "Overbought")',
+        got: '"70"',
+      },
+      {
+        tool,
+        value: "null, with no label",
+        sent: { value: null, axis: null, label: null },
+        named: "",
+        got: "null",
+      },
+      {
+        tool,
+        value: "missing",
+        sent: { axis: null, label: "Mid" },
+        named: ' (label "Mid")',
+        got: "none",
+      },
+      {
+        tool,
+        value: "missing, in a null line",
+        sent: null,
+        named: "",
+        got: "none",
+      },
+    ]),
+  )(
+    "$tool refuses a line whose value is $value, naming it, and keeps the saved lines",
+    async ({ tool, sent, named, got }) => {
+      // Given a chart with the lines 30 and 70
+      const { state } = mountChart()
+
+      // When the agent re-sends 30 with a line whose value is not a number
+      const res = await send(tool, [
+        { value: 30, axis: null, label: "Oversold" },
+        sent,
+      ])
+
+      // Then the call is refused with the line named, and nothing changes
+      expect(res.is_error).toBe(true)
+      expect(JSON.parse(res.content)).toEqual({
+        error_code: "validation",
+        message: `VALIDATION_ERROR: ${TOOLS[tool].path}[1]${named}: value must be a finite number, got ${got}.`,
+      })
+      expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual(
+        savedLines,
+      )
+    },
+  )
 })
 
 describe("dispatchTool — NotebookToolError envelope", () => {

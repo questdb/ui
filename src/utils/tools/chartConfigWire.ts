@@ -29,16 +29,36 @@ export type ToolReferenceLine = {
   label?: string | null
 }
 
+export type ReferenceLinesMapping =
+  | { ok: true; lines: ReferenceLine[] }
+  | { ok: false; error: string }
+
+// Every tool that takes reference lines maps them here. The array replaces the
+// saved lines, so a line whose value is not a finite number is refused, named
+// by its index and label, instead of dropped while the call reports success.
+// `path` is where the lines sit in the tool's input.
 export const mapReferenceLines = (
   lines: ToolReferenceLine[],
-): ReferenceLine[] =>
-  lines
-    .filter((line) => Number.isFinite(line.value))
-    .map((line) => ({
+  path: string,
+): ReferenceLinesMapping => {
+  const index = lines.findIndex((line) => !Number.isFinite(line?.value))
+  if (index >= 0) {
+    const { value, label } = (lines[index] ?? {}) as Partial<ToolReferenceLine>
+    const named = label ? ` (label ${JSON.stringify(label)})` : ""
+    return {
+      ok: false,
+      error: `${path}[${index}]${named}: value must be a finite number, got ${JSON.stringify(value) ?? "none"}.`,
+    }
+  }
+  return {
+    ok: true,
+    lines: lines.map((line) => ({
       value: line.value,
       ...(line.axis === "right" && { axis: "right" as const }),
       ...(line.label && { label: line.label }),
-    }))
+    })),
+  }
+}
 
 // A right-axis line is drawn in the units of the queries on that axis, so a
 // chart without an enabled one hides it. This one rule decides such lines for
