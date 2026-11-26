@@ -125,6 +125,93 @@ it("records a notebook baseline only when the prompt is written", async () => {
   ])
 })
 
+const update = (turnId: string): AgentOutboundMessage => ({
+  v: "0.6.0",
+  type: "agent_update",
+  conversationId: "c1",
+  turnId,
+  update: { kind: "thought_chunk", text: "Reading" },
+})
+
+const failedEnd = (turnId: string): AgentOutboundMessage => ({
+  v: "0.6.0",
+  type: "agent_turn_end",
+  conversationId: "c1",
+  turnId,
+  result: {
+    outcome: "failed",
+    error: "The agent is still answering the previous message.",
+  },
+})
+
+it.each([
+  ["its first update", [update], 1],
+  ["a completed end", [turnEnd], 1],
+  ["a refusal", [failedEnd], 0],
+  ["an update and its end", [update, update, turnEnd], 1],
+])(
+  "counts a prompt as delivered once the bridge accepts its turn: %s",
+  async (_, replies, accepted) => {
+    // Given a prompt written to the bridge
+    const { channel, sent, deliver } = connect()
+    const onAccepted = vi.fn()
+    const turn = channel.prompt({
+      conversationId: "c1",
+      text: "Show trades",
+      notebookRead: null,
+      onAccepted,
+      onUpdate: vi.fn(),
+      onToolStatus: vi.fn(),
+    })
+    const [prompt] = sent
+    if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+    const acceptedOnWrite = onAccepted.mock.calls.length
+
+    // When the bridge replies
+    for (const reply of replies) deliver(reply(prompt.turnId))
+    if (replies.at(-1) !== update) await turn
+
+    // Then
+    expect(acceptedOnWrite).toBe(0)
+    expect(onAccepted).toHaveBeenCalledTimes(accepted)
+  },
+)
+
+it("counts a stopped prompt as delivered when the agent ends its turn after the grace", async () => {
+  vi.useFakeTimers()
+  const { channel, sent, deliver } = connect()
+  try {
+    // Given a prompt the user stopped before the bridge reported its turn
+    const controller = new AbortController()
+    const onAccepted = vi.fn()
+    const turn = channel.prompt({
+      conversationId: "c1",
+      text: "Show trades",
+      notebookRead: null,
+      signal: controller.signal,
+      onAccepted,
+      onUpdate: vi.fn(),
+      onToolStatus: vi.fn(),
+    })
+    const [prompt] = sent
+    if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(5000)
+    await expect(turn).resolves.toMatchObject({ stopReason: "cancelled" })
+    const acceptedByGrace = onAccepted.mock.calls.length
+
+    // When the agent ends the stopped turn
+    deliver(turnEnd(prompt.turnId))
+
+    // Then the agent ran it: the local grace alone did not count
+    expect(acceptedByGrace).toBe(0)
+    expect(onAccepted).toHaveBeenCalledOnce()
+  } finally {
+    channel.dispose()
+    vi.useRealTimers()
+  }
+})
+
 const runningTurnOf = (captured: ToolRequestTurn | undefined) => {
   if (captured?.stopped !== false) throw new Error("Expected a running turn")
   return captured
@@ -473,6 +560,42 @@ describe.each(
     }
   })
 })
+
+it.each([
+  [
+    "the agent still runs a stopped turn",
+    true,
+    "Claude Code is still stopping the previous answer. Send your message again in a moment.",
+  ],
+  [
+    "no stopped turn runs",
+    false,
+    "The agent is still answering the previous message.",
+  ],
+])(
+  "explains a prompt the bridge refuses when %s",
+  async (_, stopFirst, error) => {
+    vi.useFakeTimers()
+    const bridge = connect()
+    try {
+      // Given a prompt written to the bridge
+      const next = stopFirst
+        ? (await sendAfterUnconfirmedStop(bridge)).next
+        : startTurn(bridge.channel)
+      const prompt = bridge.sent.at(-1)
+      if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+
+      // When the bridge refuses it
+      bridge.deliver(failedEnd(prompt.turnId))
+
+      // Then
+      await expect(next.turn).resolves.toEqual({ outcome: "failed", error })
+    } finally {
+      bridge.channel.dispose()
+      vi.useRealTimers()
+    }
+  },
+)
 
 it("hands a stopped turn the agent has not ended to the channel that replaces it", async () => {
   vi.useFakeTimers()

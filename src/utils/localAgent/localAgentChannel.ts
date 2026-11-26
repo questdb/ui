@@ -16,6 +16,7 @@ import type {
   AgentUpdate,
 } from "./protocol"
 import { buildQuestionRecord, type QuestionRecord } from "./questionTranscript"
+import { chatAgentNames } from "./chatAgents"
 
 const CANCEL_GRACE_MS = 5_000
 
@@ -28,6 +29,13 @@ const TURN_IN_PROGRESS: AgentTurnResult = {
   outcome: "failed",
   error: "The agent is still answering the previous message.",
 }
+
+// The bridge refuses a prompt while the agent still runs a turn the user
+// stopped. The user may simply send the message again.
+const stillStopping = (agentLabel: string): AgentTurnResult => ({
+  outcome: "failed",
+  error: `${chatAgentNames(agentLabel).subject} is still stopping the previous answer. Send your message again in a moment.`,
+})
 
 const CANCELLED: AgentTurnResult = {
   outcome: "completed",
@@ -50,7 +58,10 @@ export type LocalAgentPrompt = {
   images?: AgentPromptImage[]
   notebookRead: NotebookRead | null
   signal?: AbortSignal
-  onSent?: () => void
+  // The bridge accepted the turn: it reported the turn running, or ended it
+  // completed. Writing the prompt is not enough: the bridge refuses a prompt
+  // while the agent still runs a stopped turn.
+  onAccepted?: () => void
   onUpdate: (update: LocalAgentUpdate) => void
   onToolStatus: StatusCallback
 }
@@ -92,10 +103,12 @@ type StoppedTurn = {
   // A reconnect sends the cancel again until the next prompt is written:
   // cancels on the wire target the conversation, not the turn.
   replayCancel: boolean
+  accept: () => void
 }
 
 type PendingTurn = {
   turnId: string
+  accept: () => void
   onUpdate: LocalAgentPrompt["onUpdate"]
   onToolStatus: StatusCallback
   toolSignal: AbortSignal
@@ -166,7 +179,7 @@ export class LocalAgentChannel {
     images = [],
     notebookRead,
     signal,
-    onSent,
+    onAccepted,
     onUpdate,
     onToolStatus,
   }: LocalAgentPrompt): Promise<AgentTurnResult> {
@@ -186,7 +199,7 @@ export class LocalAgentChannel {
           images,
           notebookRead,
           signal,
-          onSent,
+          onAccepted,
           onUpdate,
           onToolStatus,
         }),
@@ -204,13 +217,19 @@ export class LocalAgentChannel {
       ],
     })
     if (!sent) return Promise.resolve(connectionLost(this.options.info.label))
-    onSent?.()
     if (notebookRead) this.options.onNotebookRead(conversationId, notebookRead)
     // Once the new prompt is written, no subsequent reconnect may send its
     // predecessor's cancel. Messages without a turn ID stay the stopped
     // predecessor's until the agent ends it.
     const stopped = this.stoppedTurns.get(conversationId)
     if (stopped) stopped.replayCancel = false
+
+    let accepted = false
+    const accept = () => {
+      if (accepted) return
+      accepted = true
+      onAccepted?.()
+    }
 
     return new Promise((resolve) => {
       let cancelTimer: ReturnType<typeof setTimeout> | undefined
@@ -221,12 +240,17 @@ export class LocalAgentChannel {
           stopped = resolve
         })
         toolAborter.abort(signal?.reason)
-        this.stoppedTurns.set(conversationId, { turnId, replayCancel: true })
+        this.stoppedTurns.set(conversationId, {
+          turnId,
+          replayCancel: true,
+          accept,
+        })
         this.clearQuestions(conversationId)
         this.sendCancel(conversationId, turnId)
       }
       const turn: PendingTurn = {
         turnId,
+        accept,
         onUpdate,
         onToolStatus,
         toolSignal: toolAborter.signal,
@@ -352,7 +376,11 @@ export class LocalAgentChannel {
   // left: nothing shows them anymore, and the bridge still runs them.
   stopTurnsLeftBy(previous: Map<string, string>): void {
     for (const [conversationId, turnId] of previous) {
-      this.stoppedTurns.set(conversationId, { turnId, replayCancel: true })
+      this.stoppedTurns.set(conversationId, {
+        turnId,
+        replayCancel: true,
+        accept: () => undefined,
+      })
       this.sendCancel(conversationId, turnId)
     }
   }
@@ -412,22 +440,40 @@ export class LocalAgentChannel {
       }
       case "agent_update": {
         const turn = this.turnOf(msg.conversationId, msg.turnId)
-        // The bridge runs a later turn only once the stopped one has ended.
-        if (
-          turn &&
-          this.stoppedTurns.get(msg.conversationId)?.turnId !== msg.turnId
-        ) {
+        const stopped = this.stoppedTurns.get(msg.conversationId)
+        if (stopped?.turnId === msg.turnId) {
+          stopped.accept()
+        } else if (turn) {
+          // The bridge runs a later turn only once the stopped one has ended.
           this.stoppedTurns.delete(msg.conversationId)
         }
+        turn?.accept()
         turn?.onUpdate(msg.update)
         return
       }
-      case "agent_turn_end":
-        if (this.stoppedTurns.get(msg.conversationId)?.turnId === msg.turnId) {
+      case "agent_turn_end": {
+        const stopped = this.stoppedTurns.get(msg.conversationId)
+        // Until the agent ends a stopped turn, the bridge refuses the next.
+        const refusedWhileStopping =
+          stopped !== undefined &&
+          stopped.turnId !== msg.turnId &&
+          msg.result.outcome === "failed"
+        if (stopped?.turnId === msg.turnId) {
           this.stoppedTurns.delete(msg.conversationId)
+          if (msg.result.outcome === "completed") stopped.accept()
         }
-        this.settleTurn(msg.conversationId, msg.turnId, msg.result)
+        if (msg.result.outcome === "completed") {
+          this.turnOf(msg.conversationId, msg.turnId)?.accept()
+        }
+        this.settleTurn(
+          msg.conversationId,
+          msg.turnId,
+          refusedWhileStopping
+            ? stillStopping(this.options.info.label)
+            : msg.result,
+        )
         return
+      }
       case "agent_question": {
         // Questions have no wire turn ID. A stopped turn can no longer ask.
         if (!this.liveTurnOf(msg.conversationId)) return

@@ -1177,10 +1177,11 @@ export async function executeAIFlow(
               : notebookReadOf(config.notebookContext),
             setStatus: setStatusWithHistoryAndResetFlags,
             streaming: streamingCallback,
-            onPromptSent: () => {
+            onPromptAccepted: () => {
               capturedDigest?.finish(true)
-              // The agent has read this turn's history once the prompt is
-              // written, even if the turn is then stopped or fails.
+              // The agent has read this turn's history once the bridge runs
+              // the prompt, even if the turn is then stopped or fails. The
+              // bridge refuses a prompt while a stopped turn still runs.
               if (marksHistorySeen) {
                 callbacks.updateMessage(conversationId, anchorMessageId, {
                   localAgentSessionId,

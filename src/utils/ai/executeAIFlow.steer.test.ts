@@ -153,7 +153,13 @@ describe("an answer replaced by a new message", () => {
     agent.endTurn(CONVERSATION_ID, "max_tokens")
     await first.flow
     expect(first.callbacks.setIsStreaming.mock.calls).toEqual([[false]])
-    expect(first.callbacks.updateMessage).toHaveBeenCalledTimes(savedChanges)
+    // The agent ran the stopped turn, so it has read the turn's history. The
+    // notice and the rest of what it reports are dropped.
+    expect(
+      first.callbacks.updateMessage.mock.calls
+        .slice(savedChanges)
+        .map((call) => (call as unknown[])[2]),
+    ).toEqual([{ localAgentSessionId: agent.channel.sessionId }])
     expect(first.callbacks.persistMessages).toHaveBeenCalledTimes(1)
   })
 

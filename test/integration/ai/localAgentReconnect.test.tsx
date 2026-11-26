@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react"
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, it, vi } from "vitest"
 import { Provider } from "react-redux"
@@ -1042,6 +1042,112 @@ it.each(["written", "stopped", "failed write"])(
     }
     act(() => answer(first, "Completed sample answer."))
     expect(await screen.findByText("Completed sample answer.")).toBeVisible()
+    expect(fetch).not.toHaveBeenCalled()
+  },
+)
+
+// The chat harness fakes only Date; the Stop grace needs setTimeout too. User
+// events wait on timers, so these steps click and type through the DOM, and
+// let the app settle on real immediates.
+const fakeStopGrace = () => {
+  const now = Date.now()
+  vi.useRealTimers()
+  vi.useFakeTimers({ now, toFake: ["Date", "setTimeout", "clearTimeout"] })
+  const settle = async (done: () => boolean) => {
+    for (let i = 0; i < 200 && !done(); i++) {
+      await act(() => new Promise<void>((resolve) => setImmediate(resolve)))
+    }
+    expect(done()).toBe(true)
+  }
+  const send = async (text: string) => {
+    fireEvent.change(getByHook("chat-input-textarea"), {
+      target: { value: text },
+    })
+    await settle(
+      () => !(getByHook("chat-send-button") as HTMLButtonElement).disabled,
+    )
+    act(() => getByHook("chat-send-button").click())
+  }
+  const endGrace = () => act(() => vi.advanceTimersByTimeAsync(5000))
+  return { settle, send, endGrace }
+}
+
+it.each(["Retry", "a new message"])(
+  "keeps a message the bridge refuses while the agent stops, and its notebook events, for %s",
+  async (next) => {
+    // Given a running agent turn
+    const { bufferId, first } = await openNotebookChat()
+    await sendMessage("Show a sample query.")
+    await waitFor(() => expect(first.prompts()).toHaveLength(1))
+    const stopped = first.prompts()[0]
+    const grace = fakeStopGrace()
+    try {
+      // When the user stops it, deletes a cell and sends a message, which the
+      // bridge refuses: the agent did not end the stopped turn within the grace
+      act(() => getByHook("chat-stop-button").click())
+      emitUserAction({
+        kind: "user_deleted_cell",
+        bufferId,
+        cellId: "sample-cell",
+      })
+      await grace.send("Explain the result.")
+      await grace.settle(
+        () => screen.queryByText("Explain the result.") !== null,
+      )
+      await grace.endGrace()
+      await grace.settle(() => first.prompts().length === 2)
+      const refused = first.prompts()[1]
+      act(() =>
+        first.receive({
+          v,
+          type: "agent_turn_end",
+          conversationId: refused.conversationId,
+          turnId: refused.turnId,
+          result: {
+            outcome: "failed",
+            error: "The agent is still answering the previous message.",
+          },
+        }),
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+
+    // Then the chat says the agent is still stopping, and offers Retry
+    await waitFor(() =>
+      expect(
+        Array.from(
+          document.querySelectorAll('[data-hook="chat-message-error"]'),
+          (error) => error.textContent,
+        ),
+      ).toEqual([
+        "Operation has been cancelled",
+        "Mock local agent is still stopping the previous answer. Send your message again in a moment.Retry",
+      ]),
+    )
+    expect(getByHook("retry-button")).toBeEnabled()
+
+    // And once the agent ends the stopped turn, the next prompt still carries
+    // the refused message and the deleted cell
+    act(() =>
+      first.receive({
+        v,
+        type: "agent_turn_end",
+        conversationId: stopped.conversationId,
+        turnId: stopped.turnId,
+        result: { outcome: "completed", stopReason: "cancelled", usage: null },
+      }),
+    )
+    if (next === "Retry") await userEvent.click(getByHook("retry-button"))
+    else await sendMessage("So, the chart?")
+    await waitFor(() => expect(first.prompts()).toHaveLength(3))
+    const block = first.prompts()[2].prompt[0]
+    const text = block?.type === "text" ? block.text : ""
+    expect(text).toContain("sample-cell")
+    expect(text).toContain("Explain the result.")
+    expect(text).not.toContain("Show a sample query.")
+    act(() => answer(first, "Sample explanation."))
+    expect(await screen.findByText("Sample explanation.")).toBeVisible()
     expect(fetch).not.toHaveBeenCalled()
   },
 )

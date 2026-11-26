@@ -40,7 +40,7 @@ type LocalAgentTurnParams = {
   notebookRead: NotebookRead | null
   setStatus: StatusCallback
   streaming: StreamingCallback
-  onPromptSent?: () => void
+  onPromptAccepted?: () => void
   abortSignal?: AbortSignal
 }
 
@@ -302,7 +302,7 @@ export const runLocalAgentTurn = async ({
   notebookRead,
   setStatus,
   streaming,
-  onPromptSent,
+  onPromptAccepted,
   abortSignal,
 }: LocalAgentTurnParams): Promise<GeneratedSQL | AiAssistantAPIError> => {
   // A stale channel still names the agent to start again.
@@ -318,7 +318,7 @@ export const runLocalAgentTurn = async ({
     images,
     notebookRead,
     signal: abortSignal,
-    onSent: onPromptSent,
+    onAccepted: onPromptAccepted,
     onUpdate: handleUpdate,
     onToolStatus: handleStatus,
   })
