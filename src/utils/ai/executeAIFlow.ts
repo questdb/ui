@@ -363,17 +363,21 @@ function buildFlowSpecificUserMessage(config: AIFlowConfig): AIFlowUserMessage {
     case "fix": {
       const { queryText, errorMessage, errorWord } = config
       const hasErrorInfo = errorMessage || errorWord
+      // An API model reads this in its system prompt; an agent does not get it.
+      const suggestion = isLocalAgentModel(config.settings.model)
+        ? "\n\nPropose the fixed query with the suggest_query tool, so that the user can accept or reject it."
+        : ""
       if (hasErrorInfo) {
         return {
           displayType: "fix_request",
           sql: queryText,
-          content: `Fix this SQL query that has an error:\n\n\`\`\`sql\n${queryText}\n\`\`\`\n\nError: ${errorMessage}${errorWord ? `\n\nError near: "${errorWord}"` : ""}`,
+          content: `Fix this SQL query that has an error:\n\n\`\`\`sql\n${queryText}\n\`\`\`\n\nError: ${errorMessage}${errorWord ? `\n\nError near: "${errorWord}"` : ""}${suggestion}`,
         }
       }
       return {
         displayType: "fix_request",
         sql: queryText,
-        content: `Fix this SQL query:\n\n\`\`\`sql\n${queryText}\n\`\`\`\n\n. Use validate_query tool for getting the error message and position.`,
+        content: `Fix this SQL query:\n\n\`\`\`sql\n${queryText}\n\`\`\`\n\n. Use validate_query tool for getting the error message and position.${suggestion}`,
       }
     }
 

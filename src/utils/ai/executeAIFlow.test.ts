@@ -5,6 +5,7 @@ import {
 } from "../../providers/AIConversationProvider/types"
 import { createEmptyDigest } from "../../providers/AIConversationProvider/userActionDigest"
 import { priorConversationFor } from "../localAgent/priorConversation"
+import { LOCAL_AGENT_MODEL } from "../localAgent/localAgentModel"
 import {
   buildUserMessage,
   createChatFlowConfig,
@@ -238,6 +239,18 @@ const requests: Record<AIFlowConfig["type"], RequestCase[]> = {
         "Help me debug and fix the error with the attached SQL query.\nAttached SQL:\nSELEC 1",
       hidden: ["Hidden notebook", "validate_query"],
     },
+    {
+      name: "Fix query on an agent",
+      config: createFixFlowConfig({
+        ...flowBase,
+        settings: { model: LOCAL_AGENT_MODEL, apiKey: "" },
+        queryText: "SELEC 1",
+        errorMessage: "unexpected token [SELEC]",
+      }),
+      shown:
+        "Help me debug and fix the error with the attached SQL query.\nAttached SQL:\nSELEC 1",
+      hidden: ["Hidden notebook", "suggest_query"],
+    },
   ],
   schema_explain: [
     {
@@ -309,6 +322,36 @@ const requests: Record<AIFlowConfig["type"], RequestCase[]> = {
     },
   ],
 }
+
+describe("buildUserMessage — Fix query", () => {
+  it.each([
+    [
+      "with its error",
+      { errorMessage: "unexpected token [SELEC]", errorWord: "SELEC" },
+    ],
+    ["without its error", {}],
+  ])(
+    "asks an agent, which reads no system prompt, to propose the fix with suggest_query (%s)",
+    (_, error) => {
+      // Given Fix query on a failed query, on an agent and on an API model
+      const requestOn = (model: string) =>
+        buildUserMessage(
+          createFixFlowConfig({
+            ...baseChatConfig,
+            settings: { model, apiKey: "" },
+            queryText: "SELEC 1",
+            ...error,
+          }),
+        ).content
+
+      // Then only the agent's request asks for the fix as a suggestion
+      expect(requestOn(LOCAL_AGENT_MODEL)).toMatch(
+        /\n\nPropose the fixed query with the suggest_query tool, so that the user can accept or reject it\.$/,
+      )
+      expect(requestOn("openai:gpt-5-mini")).not.toContain("suggest_query")
+    },
+  )
+})
 
 describe("buildUserMessage — what an agent taking the chat over reads", () => {
   const cases = Object.values(requests).flat()
