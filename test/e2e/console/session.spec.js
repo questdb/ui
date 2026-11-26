@@ -4,6 +4,10 @@ const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl =
   Cypress.config("baseUrl") || `http://localhost:9999${contextPath}`
 
+// These tests stub or inspect `/exec` requests, which carry the console's SQL
+// only over HTTP.
+Cypress.expose("sqlTransport", "http")
+
 const assertCookieAccess = (status) => {
   cy.window().then(async (win) => {
     const response = await win.fetch(`${baseUrl}/exec?query=select%207`, {

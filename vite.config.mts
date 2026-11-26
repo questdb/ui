@@ -44,6 +44,14 @@ export default defineConfig(({ mode }) => {
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
+    // QWP query connections. QuestDB accepts a browser's WebSocket upgrade
+    // only when its Origin matches the Host, so the Host is kept.
+    '/read/v1': {
+      target: 'ws://127.0.0.1:9000',
+      ws: true,
+      changeOrigin: false,
+      rewrite: (path: string) => `${contextPath}${path}`,
+    },
     '/chk': {
       target: 'http://127.0.0.1:9000',
       changeOrigin: true,

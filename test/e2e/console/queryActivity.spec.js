@@ -2,6 +2,11 @@
 
 const query = "sleep(30.0) /* query_activity_cancel_journey */"
 const baseUrl = Cypress.config("baseUrl")
+
+// These tests stub or inspect `/exec` requests, which carry the console's SQL
+// only over HTTP.
+Cypress.expose("sqlTransport", "http")
+
 let queryId
 
 const activeRow = () =>

@@ -19,9 +19,15 @@ const seedNotebookOnboarding = (win) => {
   }
 }
 
+// Runs the console's SQL over HTTP only, never over QWP.
+const seedSqlOverHttp = (win) => {
+  win.localStorage.setItem("feature.qwp", "false")
+}
+
 module.exports = {
   ctrlOrCmd,
   escapeRegExp,
   NOTEBOOK_ONBOARDING_KEY,
   seedNotebookOnboarding,
+  seedSqlOverHttp,
 }

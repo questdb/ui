@@ -49,6 +49,8 @@ export enum StoreKey {
   CLIENT_ID = "client.id",
   USE_NEW_GRID = "feature.new.grid",
   USE_QUICK_VIS = "feature.quickVis",
+  // "false" sends the console's SQL over HTTP only, never over QWP.
+  USE_QWP = "feature.qwp",
   NOTEBOOK_ONBOARDING = "notebook.onboarding",
   RUN_WITH_SELECTION = "editor.runWithSelection",
   CAPITALIZE_KEYWORDS_ON_FORMAT = "editor.capitalizeKeywordsOnFormat",

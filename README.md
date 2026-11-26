@@ -77,12 +77,34 @@ not decide its category. Do not add Cypress mount tests.
 `yarn test` runs all Vitest tests once. The separate Vitest workflow needs no
 app build or QuestDB server. Each category also has its own command above.
 
+### SQL over QWP
+
+The console runs SQL over QWP, QuestDB's binary WebSocket protocol, through
+`@questdb/browser-client`. The connections use the `/read/v1` endpoint beside
+`exec`, and authenticate with the cookie session that sign-in opens.
+
+Until a connection has worked, queries go to `exec` while the console opens
+one in the background. A query also goes to `exec` when QWP cannot serve it,
+such as a result with an `INTERVAL` column. When QWP connections keep failing
+while `exec` works, for example behind a proxy without WebSocket support, the
+console uses `exec` until the page reloads. To use `exec` only, run
+`localStorage.setItem("feature.qwp", "false")` in the browser and reload.
+
+The development and preview servers forward `/read/v1` to QuestDB too.
+
 ### Running E2E Tests
 
 E2E tests use the preview server at `localhost:9999`, which forwards API requests
 to QuestDB at `localhost:9000`. The E2E workflow builds both once and runs the
 auth and console suites. It then restarts QuestDB with a context path and runs
 only `contextPath.spec.js`.
+
+Tests wait for a query with `cy.markSqlRequests()` and `cy.waitForSqlRequest()`,
+which count answers over both QWP and `exec`. `cy.intercept()` sees `exec`
+requests only, so a test that stubs or inspects them calls `cy.useSqlOverHttp()`
+before it loads the console, and a spec of such tests sets
+`Cypress.expose("sqlTransport", "http")`. Pass `--expose sqlTransport=http` to
+run a whole suite over HTTP.
 
 ### QuestDB Submodule
 

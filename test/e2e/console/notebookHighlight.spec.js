@@ -88,6 +88,7 @@ const openChartDrawer = () => {
 
 describe("notebook highlight rules", () => {
   it("flashes changed values with a direction glyph after up and down rules are saved", () => {
+    cy.useSqlOverHttp()
     // Given a cell whose value grows on every run
     loadNotebookCell(RISING_VALUE_QUERY)
     runCell()
@@ -177,6 +178,7 @@ describe("notebook highlight rules", () => {
   })
 
   it("does not bring the drawer back after a run that failed while it was open", () => {
+    cy.useSqlOverHttp()
     // Given the drawer is open with an unsaved rule
     loadNotebookCell("select 'A' as k, 5 as v")
     runCell()
@@ -225,6 +227,7 @@ describe("notebook highlight rules", () => {
   })
 
   it("flashes a changed cell on an auto-refresh tick", () => {
+    cy.useSqlOverHttp()
     // Given a saved "changed" rule on a value that grows on every run
     loadNotebookCell(RISING_VALUE_QUERY)
     runCell()

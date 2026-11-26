@@ -293,6 +293,7 @@ describe("TableDetailsDrawer", () => {
     })
 
     beforeEach(() => {
+      cy.useSqlOverHttp()
       cy.loadConsoleWithAuth()
       cy.refreshSchema()
       cy.collapseTables()
@@ -579,6 +580,7 @@ describe("TableDetailsDrawer", () => {
     })
 
     beforeEach(() => {
+      cy.useSqlOverHttp()
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
       cy.expandTables()
     })

@@ -131,6 +131,7 @@ describe("notebook cell controls", () => {
 
   describe("Stop", () => {
     it("cancels a first run and reports it in the result", () => {
+      cy.useSqlOverHttp()
       // Given a cell whose first run the server has not answered yet
       loadNotebookCell("select x from long_sequence(100)")
       const held = holdFirstExec()
@@ -160,6 +161,7 @@ describe("notebook cell controls", () => {
     })
 
     it("cancels a first chart fetch and retries it", () => {
+      cy.useSqlOverHttp()
       // Given a draw cell whose first fetch the server has not answered yet
       loadNotebookCell(CHART_SQL)
       const held = holdFirstExec()

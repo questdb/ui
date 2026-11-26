@@ -1,10 +1,18 @@
 /// <reference types="cypress" />
 
-const { ctrlOrCmd, seedNotebookOnboarding } = require("../utils")
+const {
+  ctrlOrCmd,
+  seedNotebookOnboarding,
+  seedSqlOverHttp,
+} = require("../utils")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl =
   Cypress.config("baseUrl") || `http://localhost:9999${contextPath}`
+
+// These tests stub or inspect `/exec` requests, which carry the console's SQL
+// only over HTTP.
+Cypress.expose("sqlTransport", "http")
 
 const interceptSettings = (payload) => {
   cy.intercept({ method: "GET", url: `${baseUrl}/settings` }, payload).as(
@@ -44,6 +52,7 @@ const visitCallback = (query, flow, credentials = {}) =>
       win.localStorage.clear()
       win.sessionStorage.clear()
       seedNotebookOnboarding(win)
+      seedSqlOverHttp(win)
       Object.entries(credentials).forEach(([key, value]) => {
         win.localStorage.setItem(key, value)
       })
@@ -179,6 +188,7 @@ describe("Auth - OIDC sign-in errors", () => {
       onBeforeLoad(win) {
         win.localStorage.clear()
         win.sessionStorage.clear()
+        seedSqlOverHttp(win)
         win.sessionStorage.setItem("oauth.return.params", returnParams)
       },
     })

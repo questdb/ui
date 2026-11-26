@@ -77,6 +77,7 @@ describe("ai assistant permissions", () => {
   })
 
   it("saved Read blocks writes until the user grants Write", () => {
+    cy.useSqlOverHttp()
     // Given a real table and Read permission saved through Settings
     const executedSQL = []
     const validatedSQL = []

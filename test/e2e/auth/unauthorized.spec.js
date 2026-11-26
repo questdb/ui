@@ -1,10 +1,14 @@
 /// <reference types="cypress" />
 
-const { seedNotebookOnboarding } = require("../utils")
+const { seedNotebookOnboarding, seedSqlOverHttp } = require("../utils")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl =
   Cypress.config("baseUrl") || `http://localhost:9999${contextPath}`
+
+// These tests stub or inspect `/exec` requests, which carry the console's SQL
+// only over HTTP.
+Cypress.expose("sqlTransport", "http")
 
 describe("401 recovery with a stored REST token and OIDC enabled", () => {
   it("shows Login after SQL rejection even when the saved credential was removed", () => {
@@ -30,6 +34,7 @@ describe("401 recovery with a stored REST token and OIDC enabled", () => {
         win.sessionStorage.clear()
         win.indexedDB.deleteDatabase("web-console")
         seedNotebookOnboarding(win)
+        seedSqlOverHttp(win)
         win.localStorage.setItem("rest.token", "rest-token")
       },
     })

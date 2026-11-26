@@ -8,6 +8,10 @@ const editorExecution = { url: "**/exec*", query: { explain: "true" } }
 const { ctrlOrCmd } = require("../utils")
 const { createNotebookBuffer } = require("../utils/editorBuffers")
 
+// These tests stub or inspect `/exec` requests, which carry the console's SQL
+// only over HTTP.
+Cypress.expose("sqlTransport", "http")
+
 const loadEditorWithQuery = (value) =>
   cy.loadConsoleWithAuth(false, {}, { buffers: [{ value }] })
 
