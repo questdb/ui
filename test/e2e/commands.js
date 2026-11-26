@@ -2,7 +2,12 @@ require("cypress-real-events")
 
 require("@4tw/cypress-drag-drop")
 
-const { ctrlOrCmd, escapeRegExp, seedNotebookOnboarding } = require("./utils")
+const {
+  ctrlOrCmd,
+  escapeRegExp,
+  seedNotebookOnboarding,
+  seedSqlOverHttp,
+} = require("./utils")
 const { seedConsoleStorage } = require("./utils/consoleStorage")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
@@ -59,8 +64,72 @@ Cypress.on("uncaught:exception", (err) => {
   }
 })
 
+// Tests that stub or inspect `/exec` requests run the console's SQL over
+// HTTP: cy.intercept() does not see SQL sent over QWP. A spec opts in with
+// Cypress.expose("sqlTransport", "http"), a test with cy.useSqlOverHttp()
+// before it loads the console.
+let sqlOverHttp = false
+
+beforeEach(() => {
+  sqlOverHttp = false
+})
+
+Cypress.Commands.add("useSqlOverHttp", () => {
+  sqlOverHttp = true
+})
+
+const seedSqlTransport = (win) => {
+  if (sqlOverHttp || Cypress.expose("sqlTransport") === "http") {
+    seedSqlOverHttp(win)
+  }
+}
+
+// QWP messages that end a query: RESULT_END, QUERY_ERROR and EXEC_DONE.
+const QWP_TERMINAL_MESSAGES = new Set([0x12, 0x13, 0x16])
+const QWP_HEADER_SIZE = 12
+
+// Counts the console's SQL requests answered over either transport, for
+// tests to wait for one. cy.intercept() sees only the `/exec` ones.
+const countSqlRequests = (win) => {
+  const requests = { completed: 0, qwp: 0, http: 0 }
+  win.__sqlRequests = requests
+  const NativeWebSocket = win.WebSocket
+  win.WebSocket = class extends NativeWebSocket {
+    constructor(url, protocols) {
+      super(url, protocols)
+      if (!String(url).includes("/read/v1")) return
+      this.addEventListener("message", ({ data }) => {
+        // The page's ArrayBuffer, not the spec's.
+        if (
+          data instanceof win.ArrayBuffer &&
+          data.byteLength > QWP_HEADER_SIZE &&
+          QWP_TERMINAL_MESSAGES.has(new win.Uint8Array(data)[QWP_HEADER_SIZE])
+        ) {
+          requests.completed++
+          requests.qwp++
+        }
+      })
+    }
+  }
+  const nativeFetch = win.fetch
+  win.fetch = (input, init) => {
+    const response = nativeFetch.call(win, input, init)
+    const url = typeof input === "string" ? input : String(input.url ?? input)
+    if (/(^|\/)exec\?/.test(url)) {
+      const count = () => {
+        requests.completed++
+        requests.http++
+      }
+      response.then(count, count)
+    }
+    return response
+  }
+}
+
 Cypress.on("window:before:load", (win) => {
   seedNotebookOnboarding(win)
+  seedSqlTransport(win)
+  countSqlRequests(win)
 
   const OriginalRO = win.ResizeObserver
   win.ResizeObserver = class extends OriginalRO {
@@ -383,12 +452,30 @@ Cypress.Commands.add("waitForActiveBufferValue", (expectedValue) => {
   })
 })
 
+let sqlRequestsBefore = 0
+
+// Marks the SQL requests answered so far; waitForSqlRequest() then waits for
+// the next one, over QWP or HTTP.
+Cypress.Commands.add("markSqlRequests", () =>
+  cy.window().then((win) => {
+    sqlRequestsBefore = win.__sqlRequests.completed
+  }),
+)
+
+Cypress.Commands.add("waitForSqlRequest", () =>
+  cy
+    .window()
+    .its("__sqlRequests.completed")
+    .should((completed) => expect(completed).to.be.above(sqlRequestsBefore)),
+)
+
 Cypress.Commands.add("runLine", () => {
-  cy.intercept("/exec*").as("exec")
+  cy.markSqlRequests()
   cy.typeQuery(`${ctrlOrCmd}{enter}`)
-  cy.wait("@exec")
+  cy.waitForSqlRequest()
 })
 
+// Stubs an `/exec` response: the spec must run its SQL over HTTP.
 Cypress.Commands.add("runLineWithResponse", (response) => {
   cy.intercept("/exec*", response).as("exec")
   cy.typeQuery(`${ctrlOrCmd}{enter}`)
@@ -496,21 +583,21 @@ Cypress.Commands.add("clickRunIconInLine", (lineNumber) => {
 })
 
 Cypress.Commands.add("clickDropdownRunQuery", () => {
-  cy.intercept("/exec*").as("exec")
-  return cy.getByDataHook("dropdown-item-run-query").click().wait("@exec")
+  cy.markSqlRequests()
+  cy.getByDataHook("dropdown-item-run-query").click()
+  return cy.waitForSqlRequest()
 })
 
 Cypress.Commands.add("clickDropdownGetQueryPlan", () => {
-  cy.intercept("/exec*").as("exec")
-  return cy.getByDataHook("dropdown-item-get-query-plan").click().wait("@exec")
+  cy.markSqlRequests()
+  cy.getByDataHook("dropdown-item-get-query-plan").click()
+  return cy.waitForSqlRequest()
 })
 
 Cypress.Commands.add("clickRunQuery", () => {
-  cy.intercept("/exec*").as("exec")
-  cy.getByDataHook("button-run-query")
-    .should("not.be.disabled")
-    .click()
-    .wait("@exec")
+  cy.markSqlRequests()
+  cy.getByDataHook("button-run-query").should("not.be.disabled").click()
+  cy.waitForSqlRequest()
 })
 
 Cypress.Commands.add("clickRunScript", (continueOnFailure = false) => {
@@ -544,8 +631,9 @@ Cypress.Commands.add("matchErrorMarkerPosition", ({ left, width }) =>
 )
 
 Cypress.Commands.add("F9", () => {
-  cy.intercept("/exec*").as("exec")
-  return cy.getEditor().realPress("F9").wait("@exec").wait(501)
+  cy.markSqlRequests()
+  cy.getEditor().realPress("F9")
+  return cy.waitForSqlRequest().wait(501)
 })
 
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"))
@@ -719,6 +807,7 @@ Cypress.Commands.add(
           win.localStorage.setItem(key, value)
         }
         seedNotebookOnboarding(win)
+        seedSqlTransport(win)
         win.indexedDB.deleteDatabase("web-console")
         onBeforeLoad?.(win)
       },
@@ -815,9 +904,9 @@ Cypress.Commands.add("logout", () => {
 
 Cypress.Commands.add("executeSQL", (sql) => {
   cy.typeQueryDirectly(sql)
-  cy.intercept("/exec*").as("exec")
+  cy.markSqlRequests()
   cy.clickRunIconInLine(1)
-  cy.wait("@exec")
+  cy.waitForSqlRequest()
 })
 
 Cypress.Commands.add("refreshSchema", () => {

@@ -36,6 +36,7 @@ const expectColumnWidth = (name, width) =>
 
 describe("questdb grid", () => {
   it("keeps loaded rows after a server page fails and can run another query", () => {
+    cy.useSqlOverHttp()
     // Given
     const query =
       "select case when x > 1000 then simulate_crash('0') else false end crash from long_sequence(1200)"
@@ -73,6 +74,7 @@ describe("questdb grid", () => {
   })
 
   it("loads deep pages into the correct cells through the server", () => {
+    cy.useSqlOverHttp()
     // Given
     const query = "select x a, x * 10 b from long_sequence(5000)"
     loadGridConsole(query)
@@ -211,6 +213,7 @@ describe("questdb grid", () => {
     afterEach(() => cy.execAdminQuery(`drop table if exists ${table}`))
 
     it("colors only the timestamp designated by the server", () => {
+      cy.useSqlOverHttp()
       // Given
       cy.execAdminQuery(`drop table if exists ${table}`)
       cy.execAdminQuery(
@@ -258,6 +261,7 @@ describe("questdb grid", () => {
     afterEach(() => cy.execAdminQuery(`drop table if exists ${table}`))
 
     it("refreshes the displayed SQL and replaces old values with changed server data", () => {
+      cy.useSqlOverHttp()
       // Given
       const query = `select value from ${table}`
       cy.execAdminQuery(`drop table if exists ${table}`)
@@ -412,6 +416,7 @@ describe("questdb grid", () => {
   })
 
   it("delays a clipped cell preview and clears it when results are replaced", () => {
+    cy.useSqlOverHttp()
     // Given
     const query = "select rpad('a', 500, 'b') wide from long_sequence(1)"
     loadGridConsole(query)

@@ -373,6 +373,7 @@ describe("ai assistant", () => {
 
   describe("query - chat integration", () => {
     it("repairs a failed query through its AI glyph and runs the accepted SQL", () => {
+      cy.useSqlOverHttp()
       // Given
       let queryError
       loadConsoleWithQuery("SELECT a;")
@@ -1304,6 +1305,7 @@ describe("ai assistant", () => {
     })
 
     it("should show abort dialog when running chat query while editor query is in flight", () => {
+      cy.useSqlOverHttp()
       // Given
       loadConsoleWithChats(
         [createChat({ sql: "SELECT * FROM btc_trades LIMIT 10;" })],
@@ -1369,6 +1371,7 @@ describe("ai assistant", () => {
     })
 
     it("should show abort dialog when running editor query while chat query is in flight", () => {
+      cy.useSqlOverHttp()
       // Given
       loadConsoleWithChats(
         [createChat({ sql: "SELECT * FROM btc_trades LIMIT 10;" })],

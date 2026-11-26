@@ -1,5 +1,10 @@
 /// <reference types="cypress" />
 const baseUrl = Cypress.config("baseUrl")
+
+// These tests stub or inspect `/exec` requests, which carry the console's SQL
+// only over HTTP.
+Cypress.expose("sqlTransport", "http")
+
 const headers = { Authorization: `Basic ${btoa("admin:quest")}` }
 let user
 let originalPreferences

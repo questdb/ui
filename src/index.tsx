@@ -52,6 +52,8 @@ import { ScreenSizeProvider } from "./hooks"
 import { rootEpic, rootReducer } from "./store"
 import { clearLoginDataOnSessionEnd } from "./store/clearLoginDataOnSessionEnd"
 import { StoreAction, StoreShape } from "./types"
+import { questClient } from "./utils/questdb/queryClient"
+import { createBrowserQwpTransport, isQwpEnabled } from "./utils/questdb/qwp"
 
 import Layout from "./scenes/Layout"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
@@ -62,6 +64,9 @@ import {
   PosthogProviderWrapper,
   ThemeModeProvider,
 } from "./providers"
+
+// Console SQL runs over QWP, and over HTTP where QWP is not available.
+if (isQwpEnabled()) questClient.setQwpTransport(createBrowserQwpTransport())
 
 const epicMiddleware = createEpicMiddleware<
   StoreAction,

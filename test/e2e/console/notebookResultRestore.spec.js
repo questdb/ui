@@ -95,6 +95,7 @@ const probeGridCell = (options = {}) =>
 
 describe("notebook result restore (e2e)", () => {
   it("restores a run cell's grid after a far scroll round-trip and after a reload", () => {
+    cy.useSqlOverHttp()
     const executions = []
     cy.intercept("GET", "**/exec?*", (req) => {
       if (

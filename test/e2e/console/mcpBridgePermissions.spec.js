@@ -60,6 +60,7 @@ describe("MCP consent and live permissions", () => {
   afterEach(() => cy.execAdminQuery(`DROP TABLE IF EXISTS ${table}`))
 
   it("denies writes under Read, then executes them after Write is committed without reconnecting", () => {
+    cy.useSqlOverHttp()
     // Given
     cy.execAdminQuery(`DROP TABLE IF EXISTS ${table}`)
     cy.execAdminQuery(`CREATE TABLE ${table} (a INT)`)

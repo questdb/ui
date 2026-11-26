@@ -2574,6 +2574,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@questdb/browser-client@file:./vendor/questdb-browser-client-5.1.0-pr81.c031a21.tgz::locator=%40questdb%2Fweb-console%40workspace%3A.":
+  version: 5.1.0-pr81.c031a21
+  resolution: "@questdb/browser-client@file:./vendor/questdb-browser-client-5.1.0-pr81.c031a21.tgz#./vendor/questdb-browser-client-5.1.0-pr81.c031a21.tgz::hash=63b7d3&locator=%40questdb%2Fweb-console%40workspace%3A."
+  checksum: 10/1006ba5c2f16a2ffd2fdbb436b0ee649acfb8dae0e236b9b872b9e75451341e7a104c14bbd884027b9bf077e3e5287efa9dadadc0ff833bd8e70559be36723aa
+  languageName: node
+  linkType: hard
+
 "@questdb/sql-parser@npm:0.1.22":
   version: 0.1.22
   resolution: "@questdb/sql-parser@npm:0.1.22"
@@ -2601,6 +2608,7 @@ __metadata:
     "@monaco-editor/react": "npm:^4.7.0"
     "@phosphor-icons/react": "npm:^2.1.10"
     "@popperjs/core": "npm:2.4.2"
+    "@questdb/browser-client": "file:./vendor/questdb-browser-client-5.1.0-pr81.c031a21.tgz"
     "@questdb/sql-parser": "npm:0.1.22"
     "@radix-ui/react-alert-dialog": "npm:^1.1.15"
     "@radix-ui/react-context-menu": "npm:^2.2.16"

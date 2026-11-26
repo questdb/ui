@@ -5,6 +5,10 @@ const table = `zz_console_parser_${Date.now()}`
 const spacedTable = `${table} spaced table`
 const editorExecution = { url: "**/exec*", query: { explain: "true" } }
 
+// These tests inspect `/exec` requests, which carry the console's SQL only
+// over HTTP.
+Cypress.expose("sqlTransport", "http")
+
 const setEditor = (input) =>
   cy.window().then((win) => {
     const editor = win.monaco.editor.getEditors()[0]

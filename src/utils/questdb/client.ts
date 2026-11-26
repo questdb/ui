@@ -50,10 +50,30 @@ import {
   REFRESH_WAIT_TIMEOUT_MS,
   tokenRefresh,
 } from "./tokenRefresh"
+import { QWP_STATUS } from "@questdb/browser-client"
+import {
+  QwpConnectionLostError,
+  QwpQueryFailure,
+  type QwpQueryTransport,
+} from "./qwp/transport"
+import { parseLimit, timingsFromStats } from "./qwp/result"
 
 export type QueryId = number
 
 type RequestExecution = { requestNotSent: boolean }
+
+// The outcome of a request over QWP, or the HTTP request to run instead.
+type QwpExecution =
+  | { sent: true; result: QueryRawResult }
+  | { sent: false; reopenSession: boolean }
+
+// CompiledQuery types that `/exec` confirms with `dml`, or as an empty query.
+const DML_OPERATIONS = new Set([
+  2, // INSERT
+  10, // INSERT_AS_SELECT
+  14, // UPDATE
+])
+const EMPTY_OPERATION = 40
 
 // Catalog lookups read metadata only. Interrupting them needs no outcome check.
 const BACKGROUND_READ: Options = { background: true }
@@ -84,6 +104,27 @@ const toErrorResult = (
     type: Type.ERROR,
     ...(status === undefined ? {} : { status }),
   }
+}
+
+// How `/exec` confirms a statement: `dml` for writes, a notice for an empty
+// query, and `ddl` for everything else.
+const statementResult = (
+  query: string,
+  operationType: number,
+): QueryRawResult => {
+  if (operationType === EMPTY_OPERATION) {
+    return {
+      ddl: undefined,
+      dml: undefined,
+      error: undefined,
+      position: undefined,
+      notice: "empty query",
+      query,
+      type: Type.NOTICE,
+    }
+  }
+  if (DML_OPERATIONS.has(operationType)) return { query, type: Type.DML }
+  return { query, type: Type.DDL }
 }
 
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
@@ -128,10 +169,17 @@ export class Client {
   // other.
   private _lostCookieSession?: { sessionId: number; reopening: boolean }
   private commonHeaders: Record<string, string> = {}
+  // SQL runs over QWP when set, and over `/exec` where QWP cannot serve it.
+  private qwp?: QwpQueryTransport
   refreshTokenMethod?: RefreshTokenMethod
 
   setCommonHeaders(headers: Record<string, string>) {
     this.commonHeaders = headers
+  }
+
+  setQwpTransport(transport: QwpQueryTransport | undefined) {
+    this.qwp?.reset()
+    this.qwp = transport
   }
 
   resetCredentials() {
@@ -209,6 +257,8 @@ export class Client {
   abortForSessionEnd = () => {
     this._controllers.forEach(({ controller }) => controller.abort())
     this._controllers.clear()
+    // QWP connections stay authenticated as the user who opened them.
+    this.qwp?.reset()
     const endedSessionWrites = this._endedSessionWrites.size
     this._writeControllers.forEach((sent, controller) => {
       if (sent) this._endedSessionWrites.add(controller)
@@ -458,15 +508,19 @@ export class Client {
     this.noteCookieSessionLost(session)
   }
 
+  private canReopenCookieSession() {
+    const lost = this._lostCookieSession
+    return (
+      !!lost &&
+      !lost.reopening &&
+      lost.sessionId === authSessionState.getSessionId() &&
+      authSessionState.isSSOAuthenticated()
+    )
+  }
+
   private claimCookieSessionReopen() {
     const lost = this._lostCookieSession
-    if (
-      !lost ||
-      lost.reopening ||
-      lost.sessionId !== authSessionState.getSessionId() ||
-      !authSessionState.isSSOAuthenticated()
-    )
-      return undefined
+    if (!lost || !this.canReopenCookieSession()) return undefined
     lost.reopening = true
     return lost
   }
@@ -599,6 +653,143 @@ export class Client {
     return { response, authorizationAtFetch, fetchStartedAt }
   }
 
+  // Runs a query over QWP and resolves it as `/exec` would have answered, or
+  // reports that nothing was sent, for HTTP to run it instead.
+  private async _executeQwp(
+    qwp: QwpQueryTransport,
+    query: string,
+    queryOptions: Pick<Options, "limit" | "count" | "explain">,
+    controller: AbortController,
+    queryId: QueryId,
+    execution: RequestExecution,
+    session: AuthSession,
+    sessionEndedResult: () => ErrorResult,
+    {
+      refreshAuth,
+      background,
+      lifecycle,
+    }: {
+      refreshAuth: boolean
+      background: boolean
+      lifecycle?: QueryLifecycle
+    },
+  ): Promise<QwpExecution> {
+    const { signal } = controller
+    const ensureCurrentSession = () => {
+      if (!session.isCurrent()) throw new SessionEndedError()
+    }
+    let fallback = false
+    let sentAt = 0
+    try {
+      // QWP sends no bearer, but renewal and the login's end gate every
+      // request alike.
+      if (!refreshAuth && !tokenRefresh.canSendWithoutRefresh())
+        throw new AuthRefreshUnavailableError()
+      const refresh = refreshAuth
+        ? this.refreshBeforeRequest(signal, lifecycle, !background)
+        : { waited: false as const }
+      if (refresh.waited) await refresh.ready
+      this.ensureRequestAllowed(session, signal)
+      const outcome = await qwp.execute({
+        sql: query,
+        window: parseLimit(queryOptions.limit),
+        countRows: queryOptions.count !== false,
+        signal,
+        onSend: () => {
+          this.ensureRequestAllowed(session, signal)
+          lifecycle?.onRequestStart?.()
+          execution.requestNotSent = false
+          sentAt = Date.now()
+        },
+      })
+      if (outcome.kind === "unavailable") {
+        fallback = true
+        execution.requestNotSent = true
+        return { sent: false, reopenSession: outcome.reopenSession }
+      }
+      ensureCurrentSession()
+      eventBus.publish(EventType.MSG_CONNECTION_OK)
+      ensureCurrentSession()
+      if (outcome.kind === "statement") {
+        return {
+          sent: true,
+          result: statementResult(query, outcome.operationType),
+        }
+      }
+      return {
+        sent: true,
+        result: {
+          query,
+          columns: outcome.columns,
+          // QWP does not say which column is the designated timestamp.
+          timestamp: -1,
+          dataset: outcome.dataset,
+          count: outcome.rowCount,
+          timings: timingsFromStats(outcome.stats, (Date.now() - sentAt) * 1e6),
+          ...(queryOptions.explain
+            ? { explain: { jitCompiled: outcome.stats?.jitCompiled ?? false } }
+            : {}),
+          notice: undefined,
+          error: undefined,
+          type: Type.DQL,
+        },
+      }
+    } catch (error) {
+      const err = { position: -1, query, type: Type.ERROR }
+      if (endedFor(session, error)) {
+        return Promise.reject(sessionEndedResult())
+      }
+      if (error instanceof AuthRefreshUnavailableError) {
+        return Promise.reject({
+          ...err,
+          error: error.message,
+          authRefreshUnavailable: true,
+          requestNotSent: true,
+        })
+      }
+      if (error instanceof DOMException) {
+        return Promise.reject({
+          ...err,
+          error:
+            error.code === 20
+              ? CANCELLED_BY_USER
+              : JSON.stringify(error).toString(),
+          ...sessionFailureOf(execution),
+        })
+      }
+      if (error instanceof QwpQueryFailure) {
+        eventBus.publish(EventType.MSG_CONNECTION_OK)
+        if (!session.isCurrent()) return Promise.reject(sessionEndedResult())
+        // `/exec` answers an authorization failure with HTTP 403.
+        if (error.status === QWP_STATUS.SECURITY_ERROR) {
+          const forbidden = { status: 403, error: error.message }
+          eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, forbidden)
+          return Promise.reject(forbidden)
+        }
+        return Promise.reject(
+          toErrorResult(
+            { error: error.message, position: error.position },
+            query,
+            "Query failed",
+          ),
+        )
+      }
+      // The connection was lost after the request was sent: it may have run.
+      const connectionError = {
+        ...err,
+        error: "An error occurred, please try again",
+        connectionError: true,
+      }
+      if (!(error instanceof QwpConnectionLostError)) {
+        console.error("QWP query failed", error)
+      }
+      eventBus.publish(EventType.MSG_CONNECTION_ERROR, connectionError)
+      return Promise.reject(connectionError)
+    } finally {
+      if (!fallback) this.removeController(queryId)
+    }
+  }
+
   private async _executeQueryRaw(
     query: string,
     options: Options | undefined,
@@ -613,22 +804,7 @@ export class Client {
       refreshAuth = true,
       ...queryOptions
     } = options ?? {}
-    const payload = {
-      count: true,
-      src: "con",
-      query,
-      timings: true,
-      version: API_VERSION,
-      ...queryOptions,
-    }
-
-    let response: Response
-    let fetchStartedAt = 0
-    let authorizationAtFetch: string | undefined
     const session = authSessionState.capture()
-    const ensureCurrentSession = () => {
-      if (!session.isCurrent()) throw new SessionEndedError()
-    }
     const sessionEndedResult = (): ErrorResult => ({
       position: -1,
       query,
@@ -637,6 +813,50 @@ export class Client {
       sessionEnded: true,
       ...sessionFailureOf(execution),
     })
+
+    let reopenSession = false
+    // A column projection is an `/exec` feature. A lost cookie session is
+    // reopened by the next SQL request over HTTP; downloads depend on it.
+    if (
+      this.qwp &&
+      queryOptions.cols === undefined &&
+      !this.canReopenCookieSession()
+    ) {
+      const qwp = await this._executeQwp(
+        this.qwp,
+        query,
+        queryOptions,
+        controller,
+        queryId,
+        execution,
+        session,
+        sessionEndedResult,
+        { refreshAuth, background, lifecycle },
+      )
+      if (qwp.sent) return qwp.result
+      reopenSession = qwp.reopenSession
+    }
+
+    const payload = {
+      count: true,
+      src: "con",
+      query,
+      timings: true,
+      version: API_VERSION,
+      ...queryOptions,
+      // QWP connections authenticate with the cookie session; a failed
+      // connection may have found it gone.
+      ...(reopenSession && authSessionState.isAuthenticated()
+        ? { session: true }
+        : {}),
+    }
+
+    let response: Response
+    let fetchStartedAt = 0
+    let authorizationAtFetch: string | undefined
+    const ensureCurrentSession = () => {
+      if (!session.isCurrent()) throw new SessionEndedError()
+    }
 
     try {
       const sent = await this.sendQuery(
@@ -723,6 +943,8 @@ export class Client {
         }
         ensureCurrentSession()
         const fetchTime = (Date.now() - fetchStartedAt) * 1e6
+        // HTTP works, with the cookie session reopened: QWP can try again.
+        if (reopenSession) this.qwp?.noteHttpSuccess()
         if (response.status === 400) {
           let errorData: Record<string, unknown> = {}
           try {

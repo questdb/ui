@@ -1,5 +1,9 @@
 /// <reference types="cypress" />
 
+// These tests stub or inspect `/exec` requests, which carry the console's SQL
+// only over HTTP.
+Cypress.expose("sqlTransport", "http")
+
 const TEST_TABLE = "btc_trades"
 
 describe("TableDetailsDrawer in enterprise", () => {
