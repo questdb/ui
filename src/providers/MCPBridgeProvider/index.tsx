@@ -180,7 +180,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const digestRef = useRef(createUserActionDigestState())
   const getDigest = useCallback(() => digestRef.current.peek(), [])
 
-  const { modelToolsClient, metaToolContext } = useBridgeToolRunner(getDigest)
+  const { modelToolsClientFor, metaToolContext } =
+    useBridgeToolRunner(getDigest)
 
   const validateSql = useCallback(
     (sql: string) => quest.validateQuery(sql),
@@ -201,14 +202,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   )
 
   const dispatchCtxRef = useRef({
-    modelToolsClient,
+    modelToolsClientFor,
     freshness: freshnessRef.current,
     metaToolContext,
     permissions: permissionsRefs,
     validateSql,
   })
   dispatchCtxRef.current = {
-    modelToolsClient,
+    modelToolsClientFor,
     freshness: freshnessRef.current,
     metaToolContext,
     permissions: permissionsRefs,
@@ -316,6 +317,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         try {
           const result = await dispatchMCPTool(call, {
             ...dispatchCtxRef.current,
+            modelToolsClient:
+              dispatchCtxRef.current.modelToolsClientFor(conversationId),
             metaToolContext: {
               ...dispatchCtxRef.current.metaToolContext,
               consumeDigest,

@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest"
 import { Provider } from "react-redux"
 import { createStore } from "redux"
 import { LocalStorageProvider } from "../../../src/providers/LocalStorageProvider"
+import { AIConversationProvider } from "../../../src/providers/AIConversationProvider"
 import { MCPBridgeProvider } from "../../../src/providers/MCPBridgeProvider"
 import { MCPBridgeStatus } from "../../../src/scenes/Footer/MCPBridgeStatus"
 import rootReducer from "../../../src/store/reducers"
@@ -66,9 +67,11 @@ const mountBridge = async (permissions?: typeof read) => {
   renderComponent(
     <Provider store={store}>
       <LocalStorageProvider>
-        <MCPBridgeProvider>
-          <MCPBridgeStatus />
-        </MCPBridgeProvider>
+        <AIConversationProvider>
+          <MCPBridgeProvider>
+            <MCPBridgeStatus />
+          </MCPBridgeProvider>
+        </AIConversationProvider>
       </LocalStorageProvider>
     </Provider>,
   )
