@@ -30,6 +30,7 @@ const createFakeBridge = () => {
       deliver = handler
       return () => undefined
     },
+    canSendAgentMessage: () => true,
     sendAgentMessage: (msg: AgentInboundMessage) => {
       sent.push(msg)
       return true
