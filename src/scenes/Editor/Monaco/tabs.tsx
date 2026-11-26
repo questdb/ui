@@ -44,6 +44,7 @@ import {
   IconButton,
   Text,
 } from "../../../components"
+import { MenuItemBody, MenuItemSubtitle } from "../../../components/menuStyles"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
 import {
@@ -121,16 +122,8 @@ const ArchivedBuffersList = styled.div`
   overflow-y: auto;
 `
 
-const ArchivedBufferRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding-right: 0.4rem;
-
-  > [role="menuitem"] {
-    flex: 1;
-    min-width: 0;
-  }
+const ArchivedBufferBody = styled(MenuItemBody)`
+  flex: 1;
 `
 
 // Invisible trigger we reposition to anchor Radix's menu at the chrome-tabs "+".
@@ -458,17 +451,6 @@ export const Tabs = () => {
 
   const close = (id: string) => closeBuffer(parseInt(id))
 
-  // `keepFocus`: the keyboard path keeps focus in the menu, so the editor
-  // must not take it back. Only a previewed (active) entry needs a new
-  // active tab.
-  const deleteFromHistory = (buffer: Buffer, keepFocus = false) => {
-    void trackEvent(ConsoleEvent.TAB_HISTORY_DELETE)
-    void deleteBuffer(buffer.id as number, {
-      activateNext: keepFocus ? buffer.isTemporary === true : true,
-      focus: !keepFocus,
-    })
-  }
-
   // The dialog keeps the count it opened with: the tabs are deleted one by one
   // while it fades out.
   const openClearHistory = () => {
@@ -476,24 +458,29 @@ export const Tabs = () => {
     setClearHistoryOpen(true)
   }
 
-  // Keyboard users delete a history entry with Delete/Backspace on the entry
-  // itself (the menu's arrow keys never reach the trash button). Focus moves
-  // to the next entry, or the previous one, or "Clear history", before the
-  // deleted entry unmounts, so the menu keeps keyboard focus.
-  const focusNeighbourHistoryItem = (item: HTMLElement) => {
-    const menu = item.closest('[role="menu"]')
-    if (!menu) return
-    const items = Array.from(
-      menu.querySelectorAll<HTMLElement>(
-        '[data-hook="editor-tabs-history-item"]',
-      ),
-    )
-    const index = items.indexOf(item)
-    const neighbour =
-      items[index + 1] ??
-      items[index - 1] ??
-      menu.querySelector<HTMLElement>('[data-hook="editor-tabs-history-clear"]')
-    neighbour?.focus()
+  const deleteFromHistory = (buffer: Buffer, item: HTMLElement | null) => {
+    // Move focus before the row unmounts so the history menu stays open.
+    const menu = item?.closest('[role="menu"]')
+    if (item && menu) {
+      const items = Array.from(
+        menu.querySelectorAll<HTMLElement>(
+          '[data-hook="editor-tabs-history-item"]',
+        ),
+      )
+      const index = items.indexOf(item)
+      const neighbour =
+        items[index + 1] ??
+        items[index - 1] ??
+        menu.querySelector<HTMLElement>(
+          '[data-hook="editor-tabs-history-clear"]',
+        )
+      neighbour?.focus()
+    }
+    void trackEvent(ConsoleEvent.TAB_HISTORY_DELETE)
+    void deleteBuffer(buffer.id as number, {
+      activateNext: buffer.isTemporary === true,
+      focus: false,
+    })
   }
 
   const reorder = (tabId: string, _fromIndex: number, toIndex: number) =>
@@ -614,80 +601,82 @@ export const Tabs = () => {
             ) : (
               <ArchivedBuffersList>
                 {closedBuffers.map((buffer) => (
-                  <ArchivedBufferRow key={buffer.id}>
-                    <DropdownMenu.Item
-                      data-hook="editor-tabs-history-item"
-                      title={buffer.label}
-                      aria-keyshortcuts="Delete"
-                      onClick={() => {
-                        void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
-                        void restoreBuffer(buffer.id as number)
-                      }}
-                      onKeyDown={(event: React.KeyboardEvent<HTMLElement>) => {
-                        if (event.key !== "Delete" && event.key !== "Backspace")
-                          return
-                        event.preventDefault()
-                        // A held key repeats on the entry that takes focus
-                        // next: one key press deletes one entry.
-                        if (event.repeat) return
-                        focusNeighbourHistoryItem(event.currentTarget)
-                        deleteFromHistory(buffer, true)
-                      }}
-                      icon={
-                        buffer.metricsViewState ? (
-                          <LineChart size="16px" />
-                        ) : buffer.notebookViewState ? (
-                          <NotebookIcon size="16px" />
-                        ) : (
-                          <FileTextIcon size="16px" />
-                        )
-                      }
-                      subtitle={
-                        buffer.archivedAt ? (
-                          <span
-                            title={format(
-                              new Date(buffer.archivedAt),
-                              "P pppp",
-                              {
-                                locale: getLocaleFromLanguage(userLocale),
-                              },
-                            )}
-                          >
-                            {formatDistance(
-                              buffer.archivedAt,
-                              new Date().getTime(),
-                              {
-                                locale: getLocaleFromLanguage(userLocale),
-                              },
-                            )}
-                            {" ago"}
-                          </span>
-                        ) : undefined
-                      }
-                    >
+                  <DropdownMenu.Item
+                    key={buffer.id}
+                    data-hook="editor-tabs-history-item"
+                    title={buffer.label}
+                    aria-keyshortcuts="Delete"
+                    onClick={() => {
+                      void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
+                      void restoreBuffer(buffer.id as number)
+                    }}
+                    onKeyDown={(event: React.KeyboardEvent<HTMLElement>) => {
+                      if (event.key !== "Delete" && event.key !== "Backspace")
+                        return
+                      event.preventDefault()
+                      // A held key repeats on the entry that takes focus
+                      // next: one key press deletes one entry.
+                      if (event.repeat) return
+                      deleteFromHistory(buffer, event.currentTarget)
+                    }}
+                    icon={
+                      buffer.metricsViewState ? (
+                        <LineChart size="16px" />
+                      ) : buffer.notebookViewState ? (
+                        <NotebookIcon size="16px" />
+                      ) : (
+                        <FileTextIcon size="16px" />
+                      )
+                    }
+                  >
+                    <ArchivedBufferBody>
                       <Text color="contentPrimary" ellipsis>
                         {buffer.label.substring(0, 30)}
                         {buffer.label.length > 30 ? "..." : ""}
                       </Text>
-                    </DropdownMenu.Item>
-                    {/* Mouse only: Delete on the entry is the keyboard path,
-                        and a menu cannot own a plain button. */}
-                    <IconButton
-                      label="Delete from history"
-                      size="sm"
-                      variant="dangerQuiet"
-                      tabIndex={-1}
-                      aria-hidden="true"
-                      data-hook="editor-tabs-history-item-delete"
-                      onClick={(event: React.MouseEvent) => {
-                        event.stopPropagation()
-                        if (!acceptRowActionClick()) return
-                        deleteFromHistory(buffer)
-                      }}
-                    >
-                      <Trash size="14px" />
-                    </IconButton>
-                  </ArchivedBufferRow>
+                      {buffer.archivedAt && (
+                        <MenuItemSubtitle
+                          title={format(new Date(buffer.archivedAt), "P pppp", {
+                            locale: getLocaleFromLanguage(userLocale),
+                          })}
+                        >
+                          {formatDistance(
+                            buffer.archivedAt,
+                            new Date().getTime(),
+                            {
+                              locale: getLocaleFromLanguage(userLocale),
+                            },
+                          )}
+                          {" ago"}
+                        </MenuItemSubtitle>
+                      )}
+                    </ArchivedBufferBody>
+                    {/* Keep keyboard focus on the menu item and prevent Radix
+                        from selecting the item on pointer release. */}
+                    <span onPointerUp={(event) => event.stopPropagation()}>
+                      <IconButton
+                        label="Delete from history"
+                        size="sm"
+                        variant="dangerQuiet"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        data-hook="editor-tabs-history-item-delete"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={(event: React.MouseEvent) => {
+                          event.stopPropagation()
+                          if (!acceptRowActionClick()) return
+                          deleteFromHistory(
+                            buffer,
+                            event.currentTarget.closest<HTMLElement>(
+                              '[role="menuitem"]',
+                            ),
+                          )
+                        }}
+                      >
+                        <Trash size="14px" />
+                      </IconButton>
+                    </span>
+                  </DropdownMenu.Item>
                 ))}
               </ArchivedBuffersList>
             )}
