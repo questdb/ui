@@ -1151,3 +1151,56 @@ it.each(["Retry", "a new message"])(
     expect(fetch).not.toHaveBeenCalled()
   },
 )
+
+it("sends a message waiting on a stopped turn once the bridge reconnects", async () => {
+  // Given a running agent turn, and a message queued behind it
+  const { first, reconnect } = await openNotebookChat()
+  await sendMessage("Show a sample query.")
+  await waitFor(() => expect(first.prompts()).toHaveLength(1))
+  const stopped = first.prompts()[0]
+  await sendMessage("Explain the result.")
+  const grace = fakeStopGrace()
+  let second: MemorySocket
+  try {
+    // When the user sends it now, and the bridge socket drops until after the
+    // stopped turn's grace
+    act(() => getByHook("chat-queued-send-now").click())
+    await grace.settle(
+      () =>
+        screen.queryByText("Explain the result.") !== null &&
+        queryByHook("chat-queued-message-text") === null,
+    )
+    second = reconnect()
+    await grace.endGrace()
+    expect(queryByHook("chat-message-error")).not.toBeInTheDocument()
+    act(() => ack(second, true))
+    await grace.settle(() => second.prompts().length === 1)
+  } finally {
+    vi.useRealTimers()
+  }
+
+  // Then the message goes out on the new socket, after the replayed Stop
+  expect(first.prompts()).toHaveLength(1)
+  expect(second.frames.map(({ type }) => type)).toEqual([
+    "hello",
+    "agent_settings",
+    "agent_cancel",
+    "agent_prompt",
+  ])
+  expect(JSON.stringify(second.prompts()[0].prompt)).toContain(
+    "Explain the result.",
+  )
+  act(() =>
+    second.receive({
+      v,
+      type: "agent_turn_end",
+      conversationId: stopped.conversationId,
+      turnId: stopped.turnId,
+      result: { outcome: "completed", stopReason: "cancelled", usage: null },
+    }),
+  )
+  act(() => answer(second, "Sample explanation."))
+  expect(await screen.findByText("Sample explanation.")).toBeVisible()
+  expect(queryByHook("chat-message-error")).not.toBeInTheDocument()
+  expect(fetch).not.toHaveBeenCalled()
+})

@@ -23,11 +23,18 @@ const connect = () => {
   const sent: AgentInboundMessage[] = []
   let connected = true
   let deliver: (msg: AgentOutboundMessage) => void = () => undefined
+  const statusListeners = new Set<() => void>()
   const client = {
-    on: (_event: "agentMessage", handler: typeof deliver) => {
+    on: (event: "agentMessage" | "status", handler: typeof deliver) => {
+      if (event === "status") {
+        const listener = handler as unknown as () => void
+        statusListeners.add(listener)
+        return () => statusListeners.delete(listener)
+      }
       deliver = handler
       return () => undefined
     },
+    canSendAgentMessage: () => connected,
     sendAgentMessage: (msg: AgentInboundMessage) => {
       if (!connected) return false
       sent.push(msg)
@@ -47,7 +54,9 @@ const connect = () => {
     deliver: (msg: AgentOutboundMessage) => deliver(msg),
     setConnected: (value: boolean) => {
       connected = value
+      for (const listener of Array.from(statusListeners)) listener()
     },
+    statusListeners,
   }
 }
 
@@ -672,6 +681,89 @@ it("does not send a deferred follow-up through a disposed channel", async () => 
     "agent_cancel",
   ])
   await expect(next.turn).resolves.toMatchObject({ outcome: "failed" })
+})
+
+describe("a follow-up waiting on a stopped turn while the bridge reconnects", () => {
+  // Stops a turn, sends a follow-up, and drops the transport before the
+  // local grace ends.
+  const waitThroughReconnect = async () => {
+    const bridge = connect()
+    const controller = new AbortController()
+    const stopped = startTurn(bridge.channel, controller.signal)
+    controller.abort()
+    const followUpController = new AbortController()
+    const followUp = startTurn(bridge.channel, followUpController.signal)
+    const settled = vi.fn()
+    void followUp.turn.then(settled)
+    bridge.setConnected(false)
+    await vi.advanceTimersByTimeAsync(5000)
+    await expect(stopped.turn).resolves.toMatchObject({
+      stopReason: "cancelled",
+    })
+    return { bridge, followUp, settled, stopFollowUp: followUpController }
+  }
+
+  it("is sent once the transport is back", async () => {
+    vi.useFakeTimers()
+    const { bridge, followUp, settled } = await waitThroughReconnect()
+    try {
+      // When the grace has ended while the bridge reconnects, then it is back
+      const sentWhileReconnecting = bridge.sent.map(({ type }) => type)
+      const settledWhileReconnecting = settled.mock.calls.length
+      bridge.setConnected(true)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Then the follow-up waited for the transport, and goes out on it
+      expect(sentWhileReconnecting).toEqual(["agent_prompt", "agent_cancel"])
+      expect(settledWhileReconnecting).toBe(0)
+      expect(bridge.sent.map(({ type }) => type)).toEqual([
+        "agent_prompt",
+        "agent_cancel",
+        "agent_prompt",
+      ])
+      const prompt = bridge.sent.at(-1)
+      if (prompt?.type !== "agent_prompt") throw new Error("Expected a prompt")
+      bridge.deliver(turnEnd(prompt.turnId))
+      await expect(followUp.turn).resolves.toMatchObject({
+        stopReason: "end_turn",
+      })
+      expect(bridge.statusListeners.size).toBe(0)
+    } finally {
+      bridge.channel.dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(["the user stops it", "the channel is released"])(
+    "ends without being sent when %s",
+    async (ending) => {
+      vi.useFakeTimers()
+      const { bridge, followUp, stopFollowUp } = await waitThroughReconnect()
+      try {
+        // When
+        if (ending === "the user stops it") stopFollowUp.abort()
+        else bridge.channel.dispose()
+
+        // Then
+        await expect(followUp.turn).resolves.toEqual(
+          ending === "the user stops it"
+            ? { outcome: "completed", stopReason: "cancelled", usage: null }
+            : {
+                outcome: "failed",
+                error: "The connection to Claude Code was lost.",
+              },
+        )
+        expect(bridge.sent.map(({ type }) => type)).toEqual([
+          "agent_prompt",
+          "agent_cancel",
+        ])
+        expect(bridge.statusListeners.size).toBe(0)
+      } finally {
+        bridge.channel.dispose()
+        vi.useRealTimers()
+      }
+    },
+  )
 })
 
 describe("LocalAgentChannel questions", () => {

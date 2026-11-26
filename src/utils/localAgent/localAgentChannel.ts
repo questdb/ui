@@ -129,6 +129,8 @@ export class LocalAgentChannel {
   // running the stopped turn, rejecting the next prompt, until it ends.
   private stoppedTurns = new Map<string, StoppedTurn>()
   private disposed = false
+  // Prompts that wait for the bridge to reconnect; dispose ends the wait.
+  private transportWaits = new Set<() => void>()
   private preferences: LocalAgentPreferencesWire | null = null
   private snapshot: LocalAgentSnapshot
   private listeners = new Set<() => void>()
@@ -191,19 +193,22 @@ export class LocalAgentChannel {
     if (previous) {
       // A message sent right after Stop waits for the agent to end the
       // stopped turn: the agent answers one prompt at a time per session.
+      // The bridge may be reconnecting by then; the message waits for it.
       if (!previous.stopping) return Promise.resolve(TURN_IN_PROGRESS)
-      return previous.stopping.then(() =>
-        this.prompt({
-          conversationId,
-          text,
-          images,
-          notebookRead,
-          signal,
-          onAccepted,
-          onUpdate,
-          onToolStatus,
-        }),
-      )
+      return previous.stopping
+        .then(() => this.transportReady(signal))
+        .then(() =>
+          this.prompt({
+            conversationId,
+            text,
+            images,
+            notebookRead,
+            signal,
+            onAccepted,
+            onUpdate,
+            onToolStatus,
+          }),
+        )
     }
     const turnId = crypto.randomUUID()
     const sent = this.client.sendAgentMessage({
@@ -273,6 +278,31 @@ export class LocalAgentChannel {
       this.turns.set(conversationId, turn)
       if (signal?.aborted) cancel()
       else signal?.addEventListener("abort", cancel, { once: true })
+    })
+  }
+
+  // Resolves once a prompt can be written, the user stops it, or the channel
+  // is released. The status turns connected just before the hello
+  // acknowledgement resumes or replaces this channel, so the check runs
+  // after that.
+  private transportReady(signal: AbortSignal | undefined): Promise<void> {
+    if (this.isTransportReady() || this.disposed || signal?.aborted) {
+      return Promise.resolve()
+    }
+    return new Promise((resolve) => {
+      const done = () => {
+        offStatus()
+        signal?.removeEventListener("abort", done)
+        this.transportWaits.delete(done)
+        resolve()
+      }
+      const offStatus = this.client.on("status", () =>
+        queueMicrotask(() => {
+          if (this.isTransportReady()) done()
+        }),
+      )
+      signal?.addEventListener("abort", done, { once: true })
+      this.transportWaits.add(done)
     })
   }
 
@@ -389,6 +419,7 @@ export class LocalAgentChannel {
     this.disposed = true
     this.unsubscribe()
     this.stoppedTurns.clear()
+    for (const done of Array.from(this.transportWaits)) done()
     for (const [conversationId, turn] of Array.from(this.turns)) {
       this.settleTurn(
         conversationId,
