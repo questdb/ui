@@ -18,6 +18,7 @@ import {
   type CellRunOutcome,
   CELL_CHANGED_BEFORE_RUN_NOTE,
   CELL_CHANGED_MID_RUN_NOTE,
+  cellPlacementsOf,
   summarizeCellResults,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
@@ -54,7 +55,10 @@ import {
 } from "../notebookHeadlessRun"
 import type { RunCellGate } from "../../tools/permissions"
 import type { NotebookTransitionResult } from "./notebookTransitions"
-import { clearNotebookUndoHistory } from "../../../scenes/Editor/Notebook/undo/notebookUndoHistory"
+import {
+  clearNotebookUndoHistory,
+  recordUndoEntry,
+} from "../../../scenes/Editor/Notebook/undo/notebookUndoHistory"
 
 // The two NotebookController implementations, side by side. Both expose the same
 // tiny interface — `mutate` runs a transition, `readView` reads the document,
@@ -227,6 +231,19 @@ const snapshotsOutdatedBy = async (
   return outdated
 }
 
+const recordCommittedInsertion = (
+  bufferId: number,
+  { parts, undoInsertCellId }: NotebookTransitionResult<unknown>,
+) => {
+  if (undoInsertCellId === undefined) return
+  recordUndoEntry(bufferId, {
+    change: "insert",
+    placements: cellPlacementsOf(parts.cells, parts.settings.layout, [
+      undoInsertCellId,
+    ]),
+  })
+}
+
 export const createNotebookController = (
   bufferId: number,
   liveActionsRef: { current: NotebookControllerActions },
@@ -239,6 +256,7 @@ export const createNotebookController = (
     run: (parts: ViewParts) => NotebookTransitionResult<T>,
   ): Promise<T> => {
     let snapshotEdits: SqlEdit[] = []
+    let pendingUndo: NotebookTransitionResult<T> | undefined
     let withSnapshotsCleared: ((cellIds: string[]) => T) | undefined
     const result = await liveActionsRef.current.applyTransition((parts) => {
       const out = run(parts)
@@ -246,8 +264,10 @@ export const createNotebookController = (
         (edit) => !edit.heldResult,
       )
       withSnapshotsCleared = out.withSnapshotsCleared
+      if (out.undoInsertCellId !== undefined) pendingUndo = out
       return out
     })
+    if (pendingUndo) recordCommittedInsertion(bufferId, pendingUndo)
     if (!withSnapshotsCleared) return result
     const outdatedSnapshots = await snapshotsOutdatedBy(bufferId, snapshotEdits)
     for (const cellId of outdatedSnapshots) {
@@ -418,6 +438,7 @@ export const createDexieNotebookController = (
           throw notebookArchivedMidEdit(bufferId)
         }
         if (out.clearUndoHistory) clearNotebookUndoHistory(bufferId)
+        recordCommittedInsertion(bufferId, out)
         // Invalidate only after the document commit succeeds. Because this is
         // still inside the per-buffer queue, a completed headless request
         // cannot interleave its result commit between this mutation and the

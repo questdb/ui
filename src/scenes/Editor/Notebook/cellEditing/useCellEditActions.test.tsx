@@ -76,7 +76,7 @@ describe("useCellEditActions paste", () => {
       undefined,
       undefined,
       false,
-      { kind: "autoRun" },
+      { kind: "autoRun", initiator: "user" },
     )
   })
 
@@ -110,6 +110,26 @@ describe("useCellEditActions paste", () => {
     )
   })
 
+  it("leaves a chart with missing variables in the editor with its config", () => {
+    const chartConfig = { xColumn: null, queries: [] }
+    paste(
+      payloadOf({
+        mode: "draw",
+        paneView: "result",
+        value: "SELECT @absent",
+        chartConfig,
+      }),
+    )
+    const [, pasted] = notebook.pasteCells.mock.calls[0] as [
+      string | undefined,
+      CellClipboardPayload["cells"],
+    ]
+    expect(pasted[0].cell.mode).toBeUndefined()
+    expect(pasted[0].cell.paneView).toBe("editor_result")
+    expect(pasted[0].cell.chartConfig).toEqual(chartConfig)
+    expect(notebook.runCell).not.toHaveBeenCalled()
+  })
+
   it("matches destination variables ignoring case and keeps local declarations", () => {
     notebook.variables = [{ name: "Since", value: "1" }]
     paste(
@@ -139,7 +159,7 @@ describe("useCellEditActions paste", () => {
       undefined,
       undefined,
       false,
-      { kind: "autoRun" },
+      { kind: "autoRun", initiator: "user" },
     )
   })
 

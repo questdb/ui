@@ -20,7 +20,12 @@ export type CellClipboardPayload = {
 // The run history stays, as in a page reload: it tells the paste to fetch
 // the rows again.
 const toCopiedCell = (cell: NotebookCell): NotebookCell => {
-  const { result: _result, editorViewState: _editorViewState, ...copied } = cell
+  const {
+    result: _result,
+    editorViewState: _editorViewState,
+    deferInitialDraw: _deferInitialDraw,
+    ...copied
+  } = cell
   return {
     ...copied,
     lastRunStatus: carriedRunStatus(cell),

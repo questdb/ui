@@ -5,31 +5,49 @@ import {
   peekUndoEntry,
   recordUndoEntry,
 } from "../../scenes/Editor/Notebook/undo/notebookUndoHistory"
-import type { ViewParts } from "./notebookController"
+import type {
+  NotebookController,
+  NotebookControllerActions,
+  ViewParts,
+} from "./notebookController"
 import { appendCellToNotebook } from "./appendCellToNotebook"
 
 const notebook = vi.hoisted(() => ({ parts: null as ViewParts | null }))
 
-// A bound notebook whose controller applies the transition to `notebook.parts`,
-// as the live controller does to the mounted notebook.
-vi.mock("./notebookController", async (importActual) => ({
-  ...(await importActual<typeof import("./notebookController")>()),
-  withBoundNotebook: <T>(
-    _bufferId: number,
-    fn: (controller: {
-      mutate: (
-        transition: (parts: ViewParts) => { parts: ViewParts; result: T },
-      ) => Promise<T>
-    }) => Promise<T>,
-  ) =>
-    fn({
-      mutate: (transition) => {
-        const applied = transition(notebook.parts as ViewParts)
-        notebook.parts = applied.parts
-        return Promise.resolve(applied.result)
-      },
-    }),
-}))
+// Use the live controller for undo registration. Only the mounted notebook's
+// state and persistence are simulated.
+vi.mock("./notebookController", async (importActual) => {
+  const actual = await importActual<typeof import("./notebookController")>()
+  const applyTransition: NotebookControllerActions["applyTransition"] = async (
+    transition,
+  ) => {
+    const applied = transition(notebook.parts as ViewParts)
+    notebook.parts = applied.parts
+    return applied.result
+  }
+  return {
+    ...actual,
+    withBoundNotebook: <T>(
+      bufferId: number,
+      fn: (controller: NotebookController) => Promise<T>,
+    ) =>
+      fn(
+        actual.createNotebookController(bufferId, {
+          current: {
+            applyTransition,
+            readRefreshState: () => new Map(),
+            readResultStatus: () => "unrequested",
+            noteResultMissing: () => undefined,
+            runCell: vi.fn(),
+            getCellsSnapshot: () => notebook.parts?.cells ?? [],
+            getSettings: () => notebook.parts?.settings ?? {},
+            getMaximizedCellId: () => null,
+            flushChartSnapshots: async () => undefined,
+          },
+        }),
+      ),
+  }
+})
 
 const BUFFER_ID = 7
 

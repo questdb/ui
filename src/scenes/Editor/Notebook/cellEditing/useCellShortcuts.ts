@@ -64,11 +64,10 @@ export const useCellShortcuts = (
   const preview = useNotebookPreview()
 
   useEffect(() => {
+    if (preview) return
     const onKeyDown = (event: KeyboardEvent) => {
       const shortcut = unhandledCellShortcutOf(event)
       if (!shortcut || !lastInteractionInNotebookRef.current) return
-      // A preview is never saved: only a copy, which changes nothing, works.
-      if (preview && shortcut !== "copy") return
       if (isBlockedByDrawer(shortcut, focusedCellId)) return
       if (shortcut === "undo" || shortcut === "redo") {
         event.preventDefault()

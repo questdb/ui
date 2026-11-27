@@ -74,8 +74,8 @@ const clampPaneHeights = (cell: NotebookCell): NotebookCell => ({
 })
 
 // Whitelists notebook content fields; session/display state (results,
-// editorViewState) is intentionally dropped so an imported notebook starts
-// fresh and malformed payloads can't crash the renderers.
+// editorViewState and deferInitialDraw) is dropped. An imported or pasted
+// chart has no source snapshot to wait for, so it uses normal auto-run.
 export const sanitizeNotebookCell = (
   item: Record<string, unknown>,
   index: number,

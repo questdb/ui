@@ -11,7 +11,7 @@ import {
   CELL_CLIPBOARD_MIME,
   serializeCellClipboardPayload,
 } from "./cellClipboardPayload"
-import { getCopiedCells } from "./copiedCellsStore"
+import { getCopiedCells, setCopiedCells } from "./copiedCellsStore"
 import { CellEditMenuItems } from "./CellEditMenuItems"
 import { useCellShortcuts } from "./useCellShortcuts"
 import { ToastContainer, toast } from "../../../../components/Toast"
@@ -505,13 +505,13 @@ describe("useCellShortcuts", () => {
     )
 
     it("neither duplicates, pastes nor undoes", () => {
-      // Given a preview with cell "a" selected and a copied cell
+      // Given a preview with cell "a" selected and an existing clipboard
       const onPaste = vi.fn()
       const onUndo = vi.fn(nothingToStep)
+      setCopiedCells({ cells: [{ cell: cell("previous") }] })
       renderComponent(
         <FakeNotebook selectedCellId="a" onPaste={onPaste} onUndo={onUndo} />,
       )
-      fireEvent.keyDown(document.body, { key: "c", metaKey: true })
 
       // When the user presses Cmd+D, Cmd+V and Cmd+Z
       fireEvent.keyDown(document.body, { key: "d", metaKey: true })
@@ -525,42 +525,25 @@ describe("useCellShortcuts", () => {
       expect(onUndo).not.toHaveBeenCalled()
     })
 
-    it("still copies the selected cell", () => {
-      // Given a preview with cell "b" selected
+    it("leaves the clipboard alone even when the saved cell has focus", () => {
+      const existing = { cells: [{ cell: cell("already-copied") }] }
+      setCopiedCells(existing)
       renderComponent(<FakeNotebook selectedCellId="b" />)
 
-      // When the user presses Cmd+C
-      fireEvent.keyDown(document.body, { key: "c", metaKey: true })
+      const notHandled = fireEvent.keyDown(document.body, {
+        key: "c",
+        metaKey: true,
+      })
 
-      // Then cell "b" is copied
-      expect(getCopiedCells()?.cells[0].cell.id).toBe("b")
+      expect(notHandled).toBe(true)
+      expect(getCopiedCells()).toBe(existing)
     })
 
-    it("offers only the copy in the cell menu, also by shortcut", async () => {
-      // Given a copied cell, and the menu of cell "a" open in a preview
-      const onPaste = vi.fn()
-      renderComponent(<FakeNotebook selectedCellId="b" onPaste={onPaste} />)
-      fireEvent.keyDown(document.body, { key: "c", metaKey: true })
+    it("offers no clipboard or editing actions in a preview menu", async () => {
+      renderComponent(<FakeNotebook selectedCellId="b" />)
       await userEvent.click(screen.getByText("More actions a"))
 
-      // Then the menu has no item that changes the cells
-      expect(
-        screen.getAllByRole("menuitem").map((item) => item.textContent),
-      ).toEqual([expect.stringMatching(/^Copy cell/)])
-
-      // And when the user presses Cmd+Backspace or Cmd+V in the menu
-      fireEvent.keyDown(document.activeElement ?? document.body, {
-        key: "Backspace",
-        metaKey: true,
-      })
-      fireEvent.keyDown(document.activeElement ?? document.body, {
-        key: "v",
-        metaKey: true,
-      })
-
-      // Then cell "a" stays and nothing is pasted
-      expect(screen.getByText("More actions a")).toBeInTheDocument()
-      expect(onPaste).not.toHaveBeenCalled()
+      expect(screen.queryAllByRole("menuitem")).toEqual([])
     })
   })
 })

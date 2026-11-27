@@ -777,8 +777,10 @@ export const duplicateCellAt = (
   const idx = cells.findIndex((c) => c.id === cellId)
   if (idx < 0) return cells
   const original = cells[idx]
+  // Snapshot deferral belongs to the transferred cell's original id.
+  const { deferInitialDraw: _deferInitialDraw, ...definition } = original
   const copy: NotebookCell = {
-    ...original,
+    ...definition,
     id: newId,
     position: idx + 1,
     result: null,
@@ -893,8 +895,9 @@ export const cloneNotebookViewStateWithCellIdMap = (
   const cells: NotebookCell[] = source.cells.map((cell) => {
     const id = newId()
     idMap.set(cell.id, id)
+    const { deferInitialDraw: _deferInitialDraw, ...definition } = cell
     return {
-      ...cell,
+      ...definition,
       id,
       result: undefined,
       lastRunStatus: carriedRunStatus(cell),

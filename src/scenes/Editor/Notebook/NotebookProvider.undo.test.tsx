@@ -143,6 +143,32 @@ describe("NotebookProvider undo wiring", () => {
     expect(probe.cellIds).toEqual(["a", "b", "c"])
   })
 
+  it("restores a Schema-added cell with its presentation on redo", async () => {
+    mountNotebook([cell("a")])
+    let added!: string
+    await act(async () => {
+      added = await appendCellToNotebook(BUFFER_ID, "SELECT 42", {
+        name: "Trades",
+        autoRefresh: "1s",
+        paneView: "editor_result",
+      })
+    })
+    expect(probe.cellIds).toEqual(["a", added])
+    act(() => {
+      probe.actions?.undo()
+    })
+    expect(probe.cellIds).toEqual(["a"])
+    act(() => {
+      probe.actions?.redo()
+    })
+    expect(probe.cells?.[1]).toMatchObject({
+      id: added,
+      name: "Trades",
+      autoRefresh: "1s",
+      paneView: "editor_result",
+    })
+  })
+
   it("lets the delete toast undo its change after keyboard undo and redo", () => {
     mountNotebook([cell("a"), cell("b"), cell("c")])
     act(() => probe.edits?.deleteCell("b", "shortcut"))

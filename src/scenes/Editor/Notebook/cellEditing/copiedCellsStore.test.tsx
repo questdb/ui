@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import React, { Profiler } from "react"
+import { act, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
+import { authSessionState } from "../../../../modules/OAuth2/authSessionState"
 import { renderComponent } from "../../../../test/component"
 import type { CellClipboardPayload } from "./cellClipboardPayload"
 import { setCopiedCells, useCopiedCells } from "./copiedCellsStore"
@@ -31,5 +33,20 @@ describe("copiedCellsStore", () => {
 
     // Then the buttons update together, in one commit
     expect(commits).toBe(1)
+  })
+
+  it("clears the in-app clipboard when the session ends without a reload", () => {
+    authSessionState.markNonSSOAuthenticated()
+    act(() =>
+      setCopiedCells({
+        cells: [{ cell: { id: "copied", position: 0, value: "select 1" } }],
+      }),
+    )
+    renderComponent(<PasteButton />)
+    expect(screen.getByText("can paste")).toBeInTheDocument()
+
+    act(() => authSessionState.endSession())
+
+    expect(screen.getByText("nothing copied")).toBeInTheDocument()
   })
 })

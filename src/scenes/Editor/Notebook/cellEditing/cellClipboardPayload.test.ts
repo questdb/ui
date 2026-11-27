@@ -52,6 +52,19 @@ describe("cell clipboard payload", () => {
     expect(pasted).not.toHaveProperty("result")
   })
 
+  it("lets an in-app pasted chart load without the source transfer result", () => {
+    const cell = sqlCell({
+      mode: "draw",
+      autoRefresh: false,
+      deferInitialDraw: true,
+    })
+    const pasted = buildCellClipboardPayload([cell], {}).cells[0].cell
+
+    expect(pasted.mode).toBe("draw")
+    expect(pasted.autoRefresh).toBe(false)
+    expect(pasted).not.toHaveProperty("deferInitialDraw")
+  })
+
   it("derives the run history of a cell that only holds a result", () => {
     // Given a table cell whose result predates run history stamping
     const cell = sqlCell({

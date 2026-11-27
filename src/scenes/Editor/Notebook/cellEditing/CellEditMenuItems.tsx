@@ -37,11 +37,10 @@ const useMenuShortcuts = (
   const { pasteCells, runCellShortcut } = useCellEditActions()
 
   useEffect(() => {
+    if (preview) return
     const onKeyDown = (event: KeyboardEvent) => {
       const shortcut = unhandledCellShortcutOf(event)
       if (!shortcut) return
-      // A preview is never saved: only a copy, which changes nothing, works.
-      if (preview && shortcut !== "copy") return
       if (shortcut === "paste") {
         const copiedCells = getCopiedCells()
         if (!copiedCells) return
@@ -70,13 +69,13 @@ export const CellEditMenuItems: React.FC<Props> = ({
   const copiedCells = useCopiedCells()
   const { copyCell, cutCell, duplicateCell, deleteCell, pasteCells } =
     useCellEditActions()
-  // A preview is never saved, so it offers only the copy.
   const preview = useNotebookPreview()
   useMenuShortcuts(cellId, onClose, preview)
+  if (preview) return null
 
   return (
     <>
-      {showDuplicate && !preview && (
+      {showDuplicate && (
         <DropdownMenu.Item
           onSelect={() => void duplicateCell(cellId, "menu")}
           icon={<SelectionBackgroundIcon size={16} />}
@@ -90,15 +89,13 @@ export const CellEditMenuItems: React.FC<Props> = ({
       >
         {`Copy cell (${CELL_SHORTCUT_LABELS.copy})`}
       </DropdownMenu.Item>
-      {!preview && (
-        <DropdownMenu.Item
-          onSelect={() => cutCell(cellId, "menu")}
-          icon={<ScissorsIcon size={16} />}
-        >
-          {`Cut cell (${CELL_SHORTCUT_LABELS.cut})`}
-        </DropdownMenu.Item>
-      )}
-      {copiedCells && !preview && (
+      <DropdownMenu.Item
+        onSelect={() => cutCell(cellId, "menu")}
+        icon={<ScissorsIcon size={16} />}
+      >
+        {`Cut cell (${CELL_SHORTCUT_LABELS.cut})`}
+      </DropdownMenu.Item>
+      {copiedCells && (
         <DropdownMenu.Item
           onSelect={() => pasteCells(copiedCells, cellId, "menu")}
           icon={<ClipboardTextIcon size={16} />}
@@ -106,7 +103,7 @@ export const CellEditMenuItems: React.FC<Props> = ({
           {`Paste cell below (${CELL_SHORTCUT_LABELS.paste})`}
         </DropdownMenu.Item>
       )}
-      {showDelete && !preview && (
+      {showDelete && (
         <DropdownMenu.Item
           tone="danger"
           onSelect={() => deleteCell(cellId, "menu")}

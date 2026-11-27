@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
 import { toast } from "../../../../components/Toast"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
   emitUserAction,
@@ -58,6 +58,7 @@ export const useCellEditActions = () => {
     setFocusedCell,
   } = useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry()
 
   // DOM focus keeps the shortcuts in the notebook: a menu action leaves it on
   // the page body, and a removed cell takes it with it. A cell that moved is
@@ -132,6 +133,7 @@ export const useCellEditActions = () => {
       } else announceArranged(step.cellIds, step.arrangement)
     },
     [
+      trackEvent,
       undoInNotebook,
       redoInNotebook,
       announceInserted,
@@ -197,6 +199,7 @@ export const useCellEditActions = () => {
       const payload = putOnClipboard(cellId)
       if (!payload) return
       void trackEvent(ConsoleEvent.NOTEBOOK_CELL_COPY, {
+        cellId,
         cellType: payload.cells[0].cell.type ?? "sql",
         method,
       })
@@ -205,7 +208,7 @@ export const useCellEditActions = () => {
         autoClose: BRIEF_TOAST_MS,
       })
     },
-    [putOnClipboard],
+    [putOnClipboard, trackEvent],
   )
 
   const cutCell = useCallback(
@@ -220,12 +223,13 @@ export const useCellEditActions = () => {
         return
       }
       void trackEvent(ConsoleEvent.NOTEBOOK_CELL_CUT, {
+        cellId,
         cellType: payload.cells[0].cell.type ?? "sql",
         method,
       })
       offerUndo(`Cell cut. ${PASTE_HINT}`)
     },
-    [putOnClipboard, removeCell, offerUndo],
+    [putOnClipboard, removeCell, offerUndo, trackEvent],
   )
 
   const warnCellLimit = useCallback(() => {
@@ -233,7 +237,7 @@ export const useCellEditActions = () => {
     toast.warning(`Notebook limit of ${MAX_NOTEBOOK_CELLS} cells reached`, {
       autoClose: BRIEF_TOAST_MS,
     })
-  }, [])
+  }, [trackEvent])
 
   // The copy lands right below the original and becomes the selected cell.
   const duplicateCell = useCallback(
@@ -245,12 +249,15 @@ export const useCellEditActions = () => {
         warnCellLimit()
         return
       }
+      const newCellId = await duplicateInNotebook(cellId)
       void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DUPLICATE, {
+        cellId,
         cellType: cell.type ?? "sql",
         view: resolveCellView(cell),
+        newCellId,
+        outcome: newCellId ? "success" : "not_created",
         method,
       })
-      const newCellId = await duplicateInNotebook(cellId)
       if (!newCellId) return
       emitUserAction({
         kind: "user_duplicated_cell",
@@ -266,6 +273,7 @@ export const useCellEditActions = () => {
       bufferId,
       selectCell,
       warnCellLimit,
+      trackEvent,
     ],
   )
 
@@ -281,12 +289,13 @@ export const useCellEditActions = () => {
         return
       }
       void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DELETE, {
+        cellId,
         cellType: cell.type ?? "sql",
         method,
       })
       offerUndo("Cell deleted.")
     },
-    [getCellsSnapshot, removeCell, offerUndo],
+    [getCellsSnapshot, removeCell, offerUndo, trackEvent],
   )
 
   // The auto-run gate never executes DDL/DML; those cells wait for the user.
@@ -294,6 +303,7 @@ export const useCellEditActions = () => {
     (cellId: string) =>
       void runCell(cellId, undefined, undefined, false, {
         kind: "autoRun",
+        initiator: "user",
       }).then((outcome) => {
         if (outcome.skipped !== undefined) {
           toast.info(
@@ -329,25 +339,41 @@ export const useCellEditActions = () => {
         warnCellLimit()
         return
       }
-      const pastedIds = pasteCellsAt(afterCellId, payload.cells)
+      const availableNames = (getSettings().variables ?? []).map(
+        ({ name }) => name,
+      )
+      const missing = new Set<string>()
+      const missingByCell = payload.cells.map(({ cell }) => {
+        const names =
+          cell.type === "markdown"
+            ? []
+            : findMissingVariables(cell.value, availableNames)
+        names.forEach((name) => missing.add(name))
+        return names.length > 0
+      })
+      // Draw cells start on mount, independent of the explicit paste auto-run.
+      // Keep the config, but show the SQL editor if a chart cannot run yet.
+      const cells = payload.cells.map((item, index) =>
+        missingByCell[index] && item.cell.mode === "draw"
+          ? {
+              ...item,
+              cell: {
+                ...item.cell,
+                mode: undefined,
+                paneView: "editor_result" as const,
+              },
+            }
+          : item,
+      )
+      const pastedIds = pasteCellsAt(afterCellId, cells)
       if (pastedIds.length === 0) return
       void trackEvent(ConsoleEvent.NOTEBOOK_CELL_PASTE, {
         count: pastedIds.length,
         method,
       })
       announceInserted(pastedIds)
-      const availableNames = (getSettings().variables ?? []).map(
-        ({ name }) => name,
-      )
-      const missing = new Set<string>()
       pastedIds.forEach((cellId, index) => {
-        const cell = payload.cells[index].cell
-        const missingNames =
-          cell.type === "markdown"
-            ? []
-            : findMissingVariables(cell.value, availableNames)
-        missingNames.forEach((name) => missing.add(name))
-        if (missingNames.length === 0 && shouldRunAfterPaste(cell)) {
+        if (!missingByCell[index] && shouldRunAfterPaste(cells[index].cell)) {
           fetchPastedCell(cellId)
         }
       })
@@ -365,6 +391,8 @@ export const useCellEditActions = () => {
       pasteCellsAt,
       announceInserted,
       fetchPastedCell,
+      trackEvent,
+      warnCellLimit,
     ],
   )
 

@@ -55,7 +55,7 @@ export const CellRunDrawToggles: React.FC<Props> = ({
   onRun,
   onDraw,
 }) => {
-  const runLocked = isCellBusy || (!runActive && !canRun)
+  const runLocked = isCellBusy || !canRun
   const drawLocked = isCellBusy || !canRun
   return (
     <NotebookViewToggle role="group" aria-label="Cell execution mode">
