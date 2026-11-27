@@ -1,8 +1,16 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react"
 import styled from "styled-components"
 import { Box, Button, IconButton, Spinner, Tooltip } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import {
+  ArrowUUpLeftIcon,
+  ArrowUUpRightIcon,
   DownloadSimpleIcon,
   NotebookIcon,
   PencilSimpleLineIcon,
@@ -13,7 +21,12 @@ import { toast } from "../../../components/Toast"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { exportBuffers } from "../Monaco/exportTabs"
-import { useNotebookActions, useNotebookState } from "./NotebookProvider"
+import {
+  useNotebookActions,
+  useNotebookBufferId,
+  useNotebookPreview,
+  useNotebookState,
+} from "./NotebookProvider"
 import type { NotebookLayoutMode } from "../../../store/notebook"
 import { BufferType, MAX_BUFFER_NAME_LENGTH } from "../../../store/buffers"
 import { useEditor } from "../../../providers/EditorProvider"
@@ -27,6 +40,16 @@ import { VariablesPopover } from "./globals/VariablesPopover"
 import { NotebookRefreshControl } from "./NotebookRefreshControl"
 import { NotebookLayoutToggle } from "./NotebookViewToggle"
 import { NotebookRenameInput } from "./NotebookRenameInput"
+import { useCellEditActions } from "./cellEditing/useCellEditActions"
+import {
+  CELL_SHORTCUT_LABELS,
+  hasOpenModalIn,
+} from "./cellEditing/cellShortcut"
+import {
+  peekRedoEntry,
+  peekUndoEntry,
+  subscribeUndoHistory,
+} from "./undo/notebookUndoHistory"
 
 const Toolbar = styled(Box).attrs({
   align: "center",
@@ -135,6 +158,52 @@ const TooltipButton: React.FC<{
     <span style={{ display: "inline-flex" }}>{children}</span>
   </Tooltip>
 )
+
+const HistoryButtons = () => {
+  const bufferId = useNotebookBufferId()
+  const preview = useNotebookPreview()
+  const { undo, redo } = useCellEditActions()
+  const [, refresh] = useReducer((version: number) => version + 1, 0)
+
+  useLayoutEffect(() => {
+    const unsubscribe = subscribeUndoHistory(bufferId, refresh)
+    refresh()
+    return unsubscribe
+  }, [bufferId])
+
+  const stepHistory =
+    (step: typeof undo) => (event: React.MouseEvent<Element>) => {
+      if (hasOpenModalIn(event.currentTarget.closest("[data-notebook-root]"))) {
+        return
+      }
+      step("button")
+    }
+
+  return (
+    <Box align="center" gap="0.4rem" role="group" aria-label="Notebook history">
+      <TooltipButton tooltip={`Undo (${CELL_SHORTCUT_LABELS.undo})`}>
+        <IconButton
+          label="Undo"
+          variant="secondary"
+          disabled={preview || !peekUndoEntry(bufferId)}
+          onClick={stepHistory(undo)}
+        >
+          <ArrowUUpLeftIcon size={18} />
+        </IconButton>
+      </TooltipButton>
+      <TooltipButton tooltip={`Redo (${CELL_SHORTCUT_LABELS.redo})`}>
+        <IconButton
+          label="Redo"
+          variant="secondary"
+          disabled={preview || !peekRedoEntry(bufferId)}
+          onClick={stepHistory(redo)}
+        >
+          <ArrowUUpRightIcon size={18} />
+        </IconButton>
+      </TooltipButton>
+    </Box>
+  )
+}
 
 export const NotebookToolbar: React.FC = () => {
   const { cells, settings } = useNotebookState()
@@ -336,6 +405,7 @@ export const NotebookToolbar: React.FC = () => {
         </TooltipButton>
         <VariablesPopover />
         <NotebookRefreshControl />
+        <HistoryButtons />
         <NotebookLayoutToggle
           mode={mode}
           onChange={handleModeChange}

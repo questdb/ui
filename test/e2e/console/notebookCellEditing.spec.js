@@ -21,8 +21,7 @@ describe("notebook cell edit menu focus", () => {
         ],
       },
     )
-    menuOf("source").click()
-    cy.contains('[role="menuitem"]', "Copy cell").click()
+    cy.get('[data-cell-id="source"] button[aria-label="Copy cell"]').click()
   })
 
   for (const method of ["menu", "shortcut"]) {
@@ -66,5 +65,34 @@ describe("notebook cell edit menu focus", () => {
     menuOf("target").click()
     cy.realPress("Escape")
     menuOf("target").should("have.focus")
+  })
+
+  it("offers Copy in the menu when the cell is narrow", () => {
+    cy.viewport(680, 820)
+    cy.get('[data-cell-id="source"] button[aria-label="Copy cell"]').should(
+      "not.exist",
+    )
+    menuOf("source").click()
+    cy.contains('[role="menuitem"]', "Copy cell").click()
+    cy.contains("Cell copied.").should("be.visible")
+  })
+
+  it("steps the notebook history from the toolbar and updates availability", () => {
+    const undo = () => cy.get('button[aria-label="Undo"]')
+    const redo = () => cy.get('button[aria-label="Redo"]')
+
+    undo().should("be.disabled")
+    redo().should("be.disabled")
+
+    menuOf("target").click()
+    cy.contains('[role="menuitem"]', "Duplicate").click()
+    cy.get("[data-notebook-cell]").should("have.length", 3)
+
+    undo().should("be.enabled").click()
+    cy.get("[data-notebook-cell]").should("have.length", 2)
+    undo().should("be.disabled")
+    redo().should("be.enabled").click()
+    cy.get("[data-notebook-cell]").should("have.length", 3)
+    redo().should("be.disabled")
   })
 })

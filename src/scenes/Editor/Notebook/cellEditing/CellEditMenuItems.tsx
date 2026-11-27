@@ -18,6 +18,7 @@ import { useNotebookPreview } from "../NotebookProvider"
 
 type Props = {
   cellId: string
+  showCopy?: boolean
   showDuplicate: boolean
   showDelete: boolean
   onClose: () => void
@@ -62,6 +63,7 @@ const useMenuShortcuts = (
 
 export const CellEditMenuItems: React.FC<Props> = ({
   cellId,
+  showCopy = true,
   showDuplicate,
   showDelete,
   onClose,
@@ -83,12 +85,14 @@ export const CellEditMenuItems: React.FC<Props> = ({
           {`Duplicate (${CELL_SHORTCUT_LABELS.duplicate})`}
         </DropdownMenu.Item>
       )}
-      <DropdownMenu.Item
-        onSelect={() => copyCell(cellId, "menu")}
-        icon={<CopyIcon size={16} />}
-      >
-        {`Copy cell (${CELL_SHORTCUT_LABELS.copy})`}
-      </DropdownMenu.Item>
+      {showCopy && (
+        <DropdownMenu.Item
+          onSelect={() => copyCell(cellId, "menu")}
+          icon={<CopyIcon size={16} />}
+        >
+          {`Copy cell (${CELL_SHORTCUT_LABELS.copy})`}
+        </DropdownMenu.Item>
+      )}
       <DropdownMenu.Item
         onSelect={() => cutCell(cellId, "menu")}
         icon={<ScissorsIcon size={16} />}

@@ -17,6 +17,7 @@ import {
 } from "../../../../utils/notebooks/notebookAIBridge"
 import { CellWrapper } from "./CellWrapper"
 import { CellDragHeader } from "./CellDragHeader"
+import { useCellToolbarTier } from "./useCellToolbarTier"
 import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
 import { useCellResize } from "./useCellResize"
 import { ResizeHandle } from "../resize"
@@ -241,6 +242,8 @@ const MarkdownCellInner: React.FC<Props> = ({
   // added (empty) cell opens in edit mode; a reloaded non-empty cell renders.
   const [editing, setEditing] = useState(() => cell.value.trim() === "")
 
+  const headerRef = useRef<HTMLDivElement>(null)
+  const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const measureRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
@@ -377,6 +380,8 @@ const MarkdownCellInner: React.FC<Props> = ({
         totalCells={totalCells}
         layoutMode={layoutMode}
         isMaximized={isMaximized}
+        headerRef={headerRef}
+        toolbarTier={toolbarTier}
         right={
           editing ? (
             <Tooltip content={`Apply (${ctrlCmd}+Enter)`}>

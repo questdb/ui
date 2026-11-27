@@ -5,6 +5,7 @@ import {
   DotsThreeVerticalIcon,
   CornersOutIcon,
   CornersInIcon,
+  CopyIcon,
   ArrowClockwiseIcon,
   GearIcon,
   TableIcon,
@@ -26,7 +27,11 @@ import type { SettingsDrawerRequest } from "../settingsDrawer/settingsDrawerSess
 import type { CellToolbarTier } from "../notebookUtils"
 import type { CellPaneLayout } from "../cellSizing"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
-import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import {
+  useNotebookActions,
+  useNotebookBufferId,
+  useNotebookPreview,
+} from "../NotebookProvider"
 import {
   selectWriteBlocked,
   useCellFetchSelector,
@@ -41,6 +46,8 @@ import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useCellViewActions } from "./useCellViewActions"
 import { CellEditMenuItems } from "../cellEditing/CellEditMenuItems"
+import { CELL_SHORTCUT_LABELS } from "../cellEditing/cellShortcut"
+import { useCellEditActions } from "../cellEditing/useCellEditActions"
 
 const ToolbarWrapper = styled.div<{
   $inline?: boolean
@@ -72,6 +79,21 @@ const CellIconButton = styled(IconButton)`
         : theme.color.surfaceRaised};
   }
 `
+
+const CopyCellButton = ({ cellId }: { cellId: string }) => {
+  const { copyCell } = useCellEditActions()
+  return (
+    <Tooltip content={`Copy cell (${CELL_SHORTCUT_LABELS.copy})`}>
+      <CellIconButton
+        label="Copy cell"
+        variant="ghost"
+        onClick={() => copyCell(cellId, "button")}
+      >
+        <CopyIcon size={20} />
+      </CellIconButton>
+    </Tooltip>
+  )
+}
 
 type Props = {
   cellId: string
@@ -105,6 +127,8 @@ export const CellToolbar: React.FC<Props> = ({
   const { moveCellUp, moveCellDown, setMaximizedCellId, setCellRefresh } =
     useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const preview = useNotebookPreview()
+  const showInlineCopy = isMaximized || toolbarTier === "expanded"
 
   // Grid positions cells via settings.layout, so swapping array order doesn't
   // move them visually — hide move up/down there.
@@ -239,6 +263,7 @@ export const CellToolbar: React.FC<Props> = ({
           </CellIconButton>
         </Tooltip>
       )}
+      {!preview && showInlineCopy && <CopyCellButton cellId={cellId} />}
       <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
         <CellIconButton
           label={isMaximized ? "Restore" : "Maximize"}
@@ -404,6 +429,7 @@ export const CellToolbar: React.FC<Props> = ({
               )}
               <CellEditMenuItems
                 cellId={cellId}
+                showCopy={!showInlineCopy}
                 showDuplicate={showDuplicate}
                 showDelete={showDelete}
                 onClose={() => handleMenuOpenChange(false)}

@@ -40,6 +40,24 @@ type History = {
 // One history per notebook, for the life of the page: a reload clears it, and
 // the snapshot cleanup on mount then drops the results it held.
 const histories = new Map<number, History>()
+const changeListeners = new Map<number, Set<() => void>>()
+
+const notifyHistoryChanged = (bufferId: number) => {
+  changeListeners.get(bufferId)?.forEach((listener) => listener())
+}
+
+export const subscribeUndoHistory = (
+  bufferId: number,
+  listener: () => void,
+): (() => void) => {
+  const listeners = changeListeners.get(bufferId) ?? new Set()
+  listeners.add(listener)
+  changeListeners.set(bufferId, listeners)
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) changeListeners.delete(bufferId)
+  }
+}
 
 const historyOf = (bufferId: number): History => {
   const existing = histories.get(bufferId)
@@ -173,16 +191,18 @@ export const recordUndoEntry = (
 ): void => {
   const history = historyOf(bufferId)
   const now = Date.now()
-  if (mergeWithTop(history, entry, mergeKey, now)) return
-  history.lastRecord = mergeKey ? { mergeKey, at: now } : undefined
-  dropEntries(bufferId, history, history.redo, "redo")
-  history.redo = []
-  history.undo.push(entry)
-  const overflow = history.undo.length - MAX_UNDO_ENTRIES
-  if (overflow > 0) {
-    dropEntries(bufferId, history, history.undo.splice(0, overflow), "undo")
+  if (!mergeWithTop(history, entry, mergeKey, now)) {
+    history.lastRecord = mergeKey ? { mergeKey, at: now } : undefined
+    dropEntries(bufferId, history, history.redo, "redo")
+    history.redo = []
+    history.undo.push(entry)
+    const overflow = history.undo.length - MAX_UNDO_ENTRIES
+    if (overflow > 0) {
+      dropEntries(bufferId, history, history.undo.splice(0, overflow), "undo")
+    }
+    capRetainedCells(bufferId, history)
   }
-  capRetainedCells(bufferId, history)
+  notifyHistoryChanged(bufferId)
 }
 
 const topOf = (entries: UndoEntry[] | undefined): UndoEntry | undefined =>
@@ -201,13 +221,19 @@ export const settleUndo = (
   bufferId: number,
   applied: UndoEntry | undefined,
   presentCellIds: ReadonlySet<string>,
-): void => settle(bufferId, "undo", applied, presentCellIds)
+): void => {
+  settle(bufferId, "undo", applied, presentCellIds)
+  notifyHistoryChanged(bufferId)
+}
 
 export const settleRedo = (
   bufferId: number,
   applied: UndoEntry | undefined,
   presentCellIds: ReadonlySet<string>,
-): void => settle(bufferId, "redo", applied, presentCellIds)
+): void => {
+  settle(bufferId, "redo", applied, presentCellIds)
+  notifyHistoryChanged(bufferId)
+}
 
 const clearListeners = new Map<number, Set<() => void>>()
 
@@ -232,6 +258,7 @@ export const clearNotebookUndoHistory = (bufferId: number): void => {
     dropEntries(bufferId, history, history.undo, "undo")
     dropEntries(bufferId, history, history.redo, "redo")
     histories.delete(bufferId)
+    notifyHistoryChanged(bufferId)
   }
   clearListeners.get(bufferId)?.forEach((listener) => listener())
 }
@@ -249,4 +276,5 @@ export const isCellHeldByUndo = (bufferId: number, cellId: string): boolean => {
 export const __resetNotebookUndoHistoryForTests = (): void => {
   histories.clear()
   clearListeners.clear()
+  changeListeners.clear()
 }
