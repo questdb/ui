@@ -99,7 +99,7 @@ export const Tab = ({
             if (event.key === "Enter" && draft !== "") {
               event.preventDefault()
               commitRename()
-            } else if (event.key === "Escape") {
+            } else if (event.key === "Escape" && !event.defaultPrevented) {
               event.preventDefault()
               cancelRename()
             }

@@ -1268,13 +1268,22 @@ describe("tab history dropdown", () => {
 
     // When the user double-clicks the first row's Delete
     doubleClickLikeAPerson(() =>
-      cy.getByDataHook("editor-tabs-history-item-delete").first(),
+      cy
+        .getByDataHook("editor-tabs-history-item")
+        .first()
+        .find('[data-hook="editor-tabs-history-item-delete"]'),
     )
 
     // Then one tab is deleted, not two
     cy.getByDataHook("editor-tabs-history-item").should("have.length", 1)
     cy.wait(700)
-    cy.getByDataHook("editor-tabs-history-item").should("have.length", 1)
+    cy.getByDataHook("editor-tabs-history-item")
+      .should("have.length", 1)
+      .and("contain", "Alpha")
+    cy.getEditorTabByTitle("Beta").should("not.exist")
+
+    cy.getByDataHook("editor-tabs-history-item").click()
+    cy.getEditorTabByTitle("Alpha").should("have.attr", "active")
   })
   it("deletes a history entry from the keyboard and keeps focus in the menu", () => {
     // Given three closed tabs

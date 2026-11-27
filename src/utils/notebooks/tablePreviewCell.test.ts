@@ -59,30 +59,13 @@ describe("tablePreviewSql", () => {
 })
 
 describe("buildTablePreviewCell", () => {
-  it("leaves refresh to the notebook, shows the SQL, and colours rows by side", () => {
+  it("shows the SQL and starts without cell refresh overrides or highlight rules", () => {
     const cell = buildTablePreviewCell("trades", "timestamp")
     // Auto comes from the notebook default, so the cell is no override
     expect(cell.autoRefresh).toBeUndefined()
     expect(TABLE_PREVIEW_AUTO_REFRESH).toBe(true)
     expect(cell.paneView).toBe("editor_result")
     expect(cell.name).toBe("Latest rows of trades")
-    expect(cell.highlightConfig?.identityColumns).toEqual(["timestamp"])
-    expect(cell.highlightConfig?.rules.map((r) => r.kind)).toEqual([
-      "value",
-      "value",
-    ])
-    expect(cell.highlightConfig?.rules[0]).toMatchObject({
-      target: { kind: "column", name: "side" },
-      appliesTo: "row",
-      condition: { op: "eq", value: "buy" },
-    })
-  })
-
-  it("uses no range-relative rules (no gradients, no new-row flash)", () => {
-    const rules = buildTablePreviewCell("lookup").highlightConfig?.rules ?? []
-    expect(rules.every((r) => r.kind === "value")).toBe(true)
-    expect(
-      rules.some((r) => r.kind === "value" && r.condition.op === "between"),
-    ).toBe(false)
+    expect(cell.highlightConfig).toBeUndefined()
   })
 })

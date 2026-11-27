@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import React from "react"
 import { fireEvent } from "@testing-library/react"
+import { Button } from "../../components/Button"
+import { Tooltip } from "../../components/Tooltip"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../test/component"
 
@@ -238,5 +240,46 @@ describe("TabsPanel active tab reveal", () => {
     expect(scrollIntoView).not.toHaveBeenCalled()
     fireEvent.change(filter, { target: { value: "" } })
     expectRevealed("tabs-panel-group-sql", '[data-buffer-id="2"]')
+  })
+})
+
+describe("Escape overlay integration", () => {
+  it("lets a Radix overlay close before clearing the focused tab filter", () => {
+    const onOpenChange = vi.fn()
+    const TooltipWithOpenState = () => {
+      const [open, setOpen] = React.useState(true)
+      return (
+        <Tooltip
+          content="Navigation hint"
+          open={open}
+          onOpenChange={(next) => {
+            onOpenChange(next)
+            setOpen(next)
+          }}
+        >
+          <Button>Show navigation hint</Button>
+        </Tooltip>
+      )
+    }
+    renderComponent(
+      <>
+        <TabsPanel open />
+        <TooltipWithOpenState />
+      </>,
+    )
+    const input = document.querySelector<HTMLInputElement>(
+      '[data-hook="tabs-panel-filter"]',
+    )!
+    input.focus()
+    fireEvent.change(input, { target: { value: "SQL 1" } })
+    expect(input.value).toBe("SQL 1")
+
+    fireEvent.keyDown(input, { key: "Escape" })
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(input.value).toBe("SQL 1")
+
+    fireEvent.keyDown(input, { key: "Escape" })
+    expect(input.value).toBe("")
   })
 })

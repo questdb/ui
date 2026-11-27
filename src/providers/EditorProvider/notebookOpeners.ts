@@ -10,15 +10,12 @@ import { EventType } from "../../modules/EventBus/types"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { requestCellReveal } from "../../scenes/Editor/Notebook/cellReveal"
-import {
-  generateId,
-  resolveAutoRefresh,
-} from "../../scenes/Editor/Notebook/notebookUtils"
+import { resolveAutoRefresh } from "../../scenes/Editor/Notebook/notebookUtils"
 import { fetchExampleDashboard } from "../../utils/examples/exampleDashboards"
 import { exampleAutoRunCellIds } from "../../utils/examples/exampleAutoRun"
+import { appendCellToNotebook } from "../../utils/notebooks/appendCellToNotebook"
 import { emitUserAction } from "../../utils/notebooks/notebookAIBridge"
 import {
-  addCellTransition,
   withBoundNotebook,
   withBoundNotebookReadOnly,
 } from "../../utils/notebooks/notebookController"
@@ -187,12 +184,7 @@ export const createNotebookOpeners = ({
   // the query.
   const appendNotebookCell = async (bufferId: number, value: string) => {
     const cellId = await addCellOrFallBack(
-      () =>
-        withBoundNotebook(bufferId, (controller) =>
-          controller.mutate((parts) =>
-            addCellTransition(parts, bufferId, { id: generateId(), value }),
-          ),
-        ),
+      () => appendCellToNotebook(bufferId, value),
       () => openNotebookWithCell(value),
     )
     if (cellId === undefined) return
@@ -312,37 +304,21 @@ export const createNotebookOpeners = ({
 
     const target = candidates[0]
     const bufferId = target.id as number
-    // The table query's own name, refresh and colouring ride on the new cell.
-    // It refreshes on Auto; only a notebook whose default is something else
-    // gets that as a cell override.
+    // The table query refreshes on Auto. It needs a cell override only when
+    // the notebook has a different default.
     const inheritsRefresh =
       resolveAutoRefresh(undefined, views[0].settings?.autoRefreshDefault) ===
       TABLE_PREVIEW_AUTO_REFRESH
-    const presentation: Partial<NotebookCell> = {
-      name: cell.name,
-      ...(inheritsRefresh ? {} : { autoRefresh: TABLE_PREVIEW_AUTO_REFRESH }),
-      paneView: cell.paneView,
-      highlightConfig: cell.highlightConfig,
-    }
     const cellId = await addCellOrFallBack(
       () =>
-        withBoundNotebook(bufferId, (controller) =>
-          controller.mutate((parts) => {
-            const added = addCellTransition(parts, bufferId, {
-              id: cell.id,
-              value: cell.value,
-            })
-            return {
-              ...added,
-              parts: {
-                ...added.parts,
-                cells: added.parts.cells.map((c) =>
-                  c.id === cell.id ? { ...c, ...presentation } : c,
-                ),
-              },
-            }
-          }),
-        ),
+        appendCellToNotebook(bufferId, cell.value, {
+          id: cell.id,
+          name: cell.name,
+          ...(inheritsRefresh
+            ? {}
+            : { autoRefresh: TABLE_PREVIEW_AUTO_REFRESH }),
+          paneView: cell.paneView,
+        }),
       createTableNotebook,
     )
     if (cellId === undefined) return
