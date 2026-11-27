@@ -80,6 +80,8 @@ export type NotebookTransitionResult<T = void> = {
   parts: ViewParts
   result: T
   touchedCellId?: string
+  // A user insertion to record after the controller commits the document.
+  undoInsertCellId?: string
   cleanup?: { cellIds: string[] }
   cancelRuns?: { cellIds: string[]; reason: RunCancelReason }
   deleteSnapshots?: { cellIds: string[] }

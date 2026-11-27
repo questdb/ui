@@ -4,6 +4,8 @@ import { act, fireEvent } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../test/component"
 import { TabBar } from "./TabBar"
+import { Button } from "../Button"
+import { Tooltip } from "../Tooltip"
 
 // jsdom has no layout: every tab gets the minimum width, so slot i starts
 // at i * 150px.
@@ -185,4 +187,44 @@ describe("TabBar rename", () => {
     // Then its whole title is selected
     expectWholeTitleSelected(renameInput(container, "3"))
   })
+})
+
+it("lets a Radix overlay close before cancelling the tab rename", () => {
+  const onOpenChange = vi.fn()
+  const TooltipWithOpenState = () => {
+    const [open, setOpen] = React.useState(true)
+    return (
+      <Tooltip
+        content="Navigation hint"
+        open={open}
+        onOpenChange={(next) => {
+          onOpenChange(next)
+          setOpen(next)
+        }}
+      >
+        <Button>Show navigation hint</Button>
+      </Tooltip>
+    )
+  }
+
+  const { container } = renderComponent(
+    <>
+      <Bar />
+      <TooltipWithOpenState />
+    </>,
+  )
+  const tab = container.querySelector('.chrome-tab[data-tab-id="2"]')!
+  const input = tab.querySelector<HTMLInputElement>(".chrome-tab-rename")!
+  fireEvent.doubleClick(tab.querySelector(".chrome-tab-drag-handle")!)
+  fireEvent.change(input, { target: { value: "Draft tab name" } })
+  expect(document.activeElement).toBe(input)
+
+  fireEvent.keyDown(input, { key: "Escape" })
+
+  expect(onOpenChange).toHaveBeenCalledWith(false)
+  expect(tab).toHaveAttribute("is-renaming")
+  expect(input.value).toBe("Draft tab name")
+
+  fireEvent.keyDown(input, { key: "Escape" })
+  expect(tab).not.toHaveAttribute("is-renaming")
 })

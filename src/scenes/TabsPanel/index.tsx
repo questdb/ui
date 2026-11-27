@@ -139,7 +139,14 @@ export const TabsPanel = ({ open }: Props) => {
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Escape") setFilter("")
+                if (
+                  filter &&
+                  event.key === "Escape" &&
+                  !event.defaultPrevented
+                ) {
+                  event.preventDefault()
+                  setFilter("")
+                }
               }}
               aria-label="Filter tabs"
               data-hook="tabs-panel-filter"
