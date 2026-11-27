@@ -82,6 +82,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: './',
+    cacheDir: process.env.QDB_VITE_CACHE_DIR || undefined,
     plugins: [
       react({
         babel: {

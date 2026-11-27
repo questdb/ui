@@ -1,0 +1,3 @@
+# Root review-cycle -> fresh review runner -> evidence roles.
+[agents]
+max_depth = 2
