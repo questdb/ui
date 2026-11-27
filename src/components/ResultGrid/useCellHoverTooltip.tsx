@@ -184,6 +184,7 @@ export const useCellHoverTooltip = (
 
   const overlay = hovered ? (
     <Tooltip
+      hoverableContent
       open
       onOpenChange={(nextOpen) => {
         if (!nextOpen) hideTooltip()

@@ -35,9 +35,9 @@ const resolved = (over: Partial<ResolvedQuery>): ResolvedQuery => ({
   ...over,
 })
 
-// 800px container, 24 + 36 grid padding, 48px of y-axis labels: 692px plot.
+// 800px container, 24 + 46 grid padding, 48px of y-axis labels: 682px plot.
 const CONTAINER_PX = 800
-const PLOT_PX = 692
+const PLOT_PX = 682
 const WIDE_CONTAINER_PX = 1600
 
 // The most marks the plot can show at the readable floor, per mark type.

@@ -248,6 +248,7 @@ export const Dialog = ({
                       name="partitionBy"
                       label={
                         <Tooltip
+                          hoverableContent
                           placement="bottom"
                           content="Splits data into smaller chunks by intervals of time in order to improve the performance and scalability of the database system."
                         >
@@ -278,6 +279,7 @@ export const Dialog = ({
                         name="walEnabled"
                         label={
                           <Tooltip
+                            hoverableContent
                             placement="bottom"
                             content={
                               <>

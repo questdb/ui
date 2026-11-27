@@ -170,6 +170,7 @@ export const TableIcon: FC<TableIconProps> = ({
   if (kind === "matview") {
     return (
       <Tooltip
+        hoverableContent
         content={
           <>
             {QuestDB.getTableKindLabel(kind)}. {partitionText}, {timestampText}.
@@ -188,6 +189,7 @@ export const TableIcon: FC<TableIconProps> = ({
   if (kind === "liveview") {
     return (
       <Tooltip
+        hoverableContent
         content={
           <>
             {QuestDB.getTableKindLabel(kind)}. {partitionText}, {timestampText}.
@@ -205,6 +207,7 @@ export const TableIcon: FC<TableIconProps> = ({
 
   return (
     <Tooltip
+      hoverableContent
       content={
         <>
           {fullHeader}

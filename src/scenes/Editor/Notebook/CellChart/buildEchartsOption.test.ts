@@ -417,4 +417,31 @@ describe("buildEchartsOption — right-axis bounds", () => {
     expect(rightAxis).toHaveProperty("min", undefined)
     expect(rightAxis).toHaveProperty("max", undefined)
   })
+
+  it("ends the right axis name at the axis line", () => {
+    // Given a chart with a series on the right axis
+    const columns = [
+      col("ts", "TIMESTAMP"),
+      col("a", "DOUBLE"),
+      col("traded_amount_usd", "DOUBLE"),
+    ]
+    const dataset = [[1000, 1, 100]]
+    // When the option builds
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({ columns, dataset, xColumn: "ts", yColumns: ["a"] }),
+      resolved({
+        index: 1,
+        columns,
+        dataset,
+        xColumn: "ts",
+        yColumns: ["traded_amount_usd"],
+        axis: "right",
+      }),
+    ])
+    // Then the name grows to the left of the axis, away from the chart's
+    // top-right corner where the Close results button floats
+    const rightAxis = (opt.yAxis as Record<string, unknown>[])[1]
+    expect(rightAxis).toHaveProperty("name", "traded_amount_usd")
+    expect(rightAxis).toHaveProperty("nameTextStyle.align", "right")
+  })
 })

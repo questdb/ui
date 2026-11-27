@@ -690,6 +690,7 @@ const Row = ({
           {errors && errors.length > 0 && (
             <TableActions>
               <Tooltip
+                hoverableContent
                 placement="top"
                 content={
                   errors.length > 1 ? (

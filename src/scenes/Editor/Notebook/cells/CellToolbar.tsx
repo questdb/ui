@@ -1,16 +1,11 @@
 import React, { useMemo, useState } from "react"
 import styled, { css } from "styled-components"
-import {
-  ChevronUp,
-  ChevronDown,
-  CopyAlt,
-  Trash,
-  Reset,
-} from "../../../../components/icons"
+import { ChevronUp, ChevronDown, Reset } from "../../../../components/icons"
 import {
   DotsThreeVerticalIcon,
   CornersOutIcon,
   CornersInIcon,
+  CopyIcon,
   ArrowClockwiseIcon,
   GearIcon,
   TableIcon,
@@ -32,7 +27,11 @@ import type { SettingsDrawerRequest } from "../settingsDrawer/settingsDrawerSess
 import type { CellToolbarTier } from "../notebookUtils"
 import type { CellPaneLayout } from "../cellSizing"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
-import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import {
+  useNotebookActions,
+  useNotebookBufferId,
+  useNotebookPreview,
+} from "../NotebookProvider"
 import {
   selectWriteBlocked,
   useCellFetchSelector,
@@ -46,6 +45,9 @@ import { EventType } from "../../../../modules/EventBus/types"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useCellViewActions } from "./useCellViewActions"
+import { CellEditMenuItems } from "../cellEditing/CellEditMenuItems"
+import { CELL_SHORTCUT_LABELS } from "../cellEditing/cellShortcut"
+import { useCellEditActions } from "../cellEditing/useCellEditActions"
 
 const ToolbarWrapper = styled.div<{
   $inline?: boolean
@@ -78,6 +80,21 @@ const CellIconButton = styled(IconButton)`
   }
 `
 
+const CopyCellButton = ({ cellId }: { cellId: string }) => {
+  const { copyCell } = useCellEditActions()
+  return (
+    <Tooltip content={`Copy cell (${CELL_SHORTCUT_LABELS.copy})`}>
+      <CellIconButton
+        label="Copy cell"
+        variant="ghost"
+        onClick={() => copyCell(cellId, "button")}
+      >
+        <CopyIcon size={20} />
+      </CellIconButton>
+    </Tooltip>
+  )
+}
+
 type Props = {
   cellId: string
   cell: NotebookCell
@@ -107,16 +124,12 @@ export const CellToolbar: React.FC<Props> = ({
   paneLayout,
   chartZoomed = false,
 }) => {
-  const {
-    moveCellUp,
-    moveCellDown,
-    duplicateCell,
-    deleteCell,
-    setFocusedCell,
-    setMaximizedCellId,
-    setCellRefresh,
-  } = useNotebookActions()
+  const { moveCellUp, moveCellDown, setMaximizedCellId, setCellRefresh } =
+    useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const preview = useNotebookPreview()
+  const tier = toolbarTier ?? "compact"
+  const showInlineCopy = isMaximized || tier !== "compact"
 
   // Grid positions cells via settings.layout, so swapping array order doesn't
   // move them visually — hide move up/down there.
@@ -164,7 +177,7 @@ export const CellToolbar: React.FC<Props> = ({
     groupAHasItems,
     groupBHasItems,
   } = cellToolbarMenuFlags({
-    tier: toolbarTier ?? "compact",
+    tier,
     view,
     isMarkdown,
     chartZoomed,
@@ -228,29 +241,6 @@ export const CellToolbar: React.FC<Props> = ({
     moveCellDown(cellId)
     emitUserAction({ kind: "user_moved_cell", bufferId, cellId })
   }
-  const handleDuplicate = async () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DUPLICATE, {
-      cellType: cell.type ?? "sql",
-      view,
-    })
-    const newCellId = await duplicateCell(cellId)
-    if (newCellId) {
-      setFocusedCell(newCellId)
-      emitUserAction({
-        kind: "user_duplicated_cell",
-        bufferId,
-        cellId,
-        newCellId,
-      })
-    }
-  }
-  const handleDelete = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DELETE, {
-      cellType: cell.type ?? "sql",
-    })
-    deleteCell(cellId)
-    emitUserAction({ kind: "user_deleted_cell", bufferId, cellId })
-  }
 
   return (
     <ToolbarWrapper
@@ -274,6 +264,7 @@ export const CellToolbar: React.FC<Props> = ({
           </CellIconButton>
         </Tooltip>
       )}
+      {!preview && showInlineCopy && <CopyCellButton cellId={cellId} />}
       <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
         <CellIconButton
           label={isMaximized ? "Restore" : "Maximize"}
@@ -297,7 +288,23 @@ export const CellToolbar: React.FC<Props> = ({
             </DropdownMenu.Trigger>
           </Tooltip>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" sideOffset={4}>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={4}
+              onCloseAutoFocus={(event) => {
+                // Paste, duplicate and undo can focus another cell before
+                // Radix's deferred trigger restore. Keep that selection.
+                const focusedCell = document.activeElement?.closest(
+                  "[data-notebook-cell]",
+                )
+                if (
+                  focusedCell &&
+                  focusedCell.getAttribute("data-cell-id") !== cellId
+                ) {
+                  event.preventDefault()
+                }
+              }}
+            >
               {showViewTable &&
                 (isNoneView ? (
                   <DropdownMenu.Item
@@ -421,23 +428,13 @@ export const CellToolbar: React.FC<Props> = ({
                   Move down
                 </DropdownMenu.Item>
               )}
-              {showDuplicate && (
-                <DropdownMenu.Item
-                  onSelect={handleDuplicate}
-                  icon={<CopyAlt size={16} />}
-                >
-                  Duplicate
-                </DropdownMenu.Item>
-              )}
-              {showDelete && (
-                <DropdownMenu.Item
-                  tone="danger"
-                  onSelect={handleDelete}
-                  icon={<Trash size={16} />}
-                >
-                  Delete
-                </DropdownMenu.Item>
-              )}
+              <CellEditMenuItems
+                cellId={cellId}
+                showCopy={!showInlineCopy}
+                showDuplicate={showDuplicate}
+                showDelete={showDelete}
+                onClose={() => handleMenuOpenChange(false)}
+              />
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>

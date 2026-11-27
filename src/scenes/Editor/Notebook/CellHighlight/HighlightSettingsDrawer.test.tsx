@@ -10,6 +10,7 @@ import {
   CellOverlayProvider,
   CellOverlaySlot,
 } from "../settingsDrawer/CellOverlayContext"
+import { hasOpenModalIn } from "../cellEditing/cellShortcut"
 
 const configuration: HighlightConfig = {
   identityColumns: ["k"],
@@ -106,5 +107,22 @@ describe("highlight settings validation", () => {
     // Then
     expect(onClear).toHaveBeenCalledOnce()
     expect(onSave).not.toHaveBeenCalled()
+  })
+})
+
+describe("highlight settings drawer", () => {
+  it("is a modal of its cell, which stops the cell's shortcuts", async () => {
+    // Given
+    const { container } = renderComponent(
+      <Fixture onSave={vi.fn()} onClear={vi.fn()} />,
+    )
+    expect(hasOpenModalIn(container)).toBe(false)
+
+    // When
+    fireEvent.click(screen.getByRole("button", { name: "Highlight rules" }))
+    await screen.findByRole("dialog")
+
+    // Then
+    expect(hasOpenModalIn(container)).toBe(true)
   })
 })

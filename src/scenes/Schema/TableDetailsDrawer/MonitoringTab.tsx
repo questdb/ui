@@ -152,7 +152,7 @@ const HelperTooltip = ({
   const { tooltipProps, triggerProps } = useToggletip()
 
   return (
-    <Tooltip content={content} {...tooltipProps}>
+    <Tooltip hoverableContent content={content} {...tooltipProps}>
       <HelperIconButton label={`About ${label}`} {...triggerProps}>
         <InfoIcon size={12} color={theme.color.contentPrimary} />
       </HelperIconButton>
@@ -451,7 +451,7 @@ const ConfigItemWithHealth = ({
       </Box>
       {showTrend ? (
         trend && trend.message ? (
-          <Tooltip placement="left" content={trend.message}>
+          <Tooltip hoverableContent placement="left" content={trend.message}>
             {trendValue}
           </Tooltip>
         ) : (
@@ -557,6 +557,7 @@ export const MonitoringTab = ({
             <Box gap="0.5rem" color="contentSecondary">
               <Text color="contentSecondary">{"(updated "}</Text>
               <Tooltip
+                hoverableContent
                 content={
                   <Box gap="1rem" align="center">
                     {lastWriteTimestamp}

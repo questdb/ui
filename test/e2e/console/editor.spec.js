@@ -2840,9 +2840,8 @@ const dragTabOnto = (source, target) => {
   cy.get(".chrome-tabs-ready").should("be.visible")
   cy.get(getTabDragHandleByTitle(source)).click(10, 10)
   cy.getEditorTabByTitle(source).should("have.attr", "active")
-  cy.get(getTabDragHandleByTitle(target)).then(($target) => {
-    const { x, y, width, height } = $target[0].getBoundingClientRect()
-    const destination = { x: x + width / 2, y: y + height / 2 }
+  cy.getEditorTabByTitle(target).then(($target) => {
+    const targetIndex = $target.prevAll(".chrome-tab").length
 
     cy.get(getTabDragHandleByTitle(source)).realMouseDown({
       position: "center",
@@ -2854,13 +2853,16 @@ const dragTabOnto = (source, target) => {
       scrollBehavior: false,
     })
     cy.get(".chrome-tab-is-dragging").should("exist")
-    cy.get("body").realMouseMove(destination.x, destination.y, {
-      position: "topLeft",
+    cy.get(getTabDragHandleByTitle(target)).realMouseMove(0, 0, {
+      position: "center",
       keepMouseDownButton: "left",
       scrollBehavior: false,
     })
-    cy.get("body").realMouseUp({
-      ...destination,
+    cy.getEditorTabByTitle(source).should(($source) =>
+      expect($source.prevAll(".chrome-tab").length).to.eq(targetIndex),
+    )
+    cy.get(getTabDragHandleByTitle(source)).realMouseUp({
+      position: "center",
       scrollBehavior: false,
     })
   })

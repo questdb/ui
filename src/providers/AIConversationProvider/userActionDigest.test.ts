@@ -65,6 +65,20 @@ describe("user_added_cell", () => {
     ])
     expect(d.added.size).toBe(1)
   })
+
+  it("reports a deleted cell that an undo brought back as edited", () => {
+    // Given an existing cell deleted in this turn
+    // When an undo adds it back with the same id
+    const d = apply([
+      { kind: "user_deleted_cell", bufferId: 1, cellId: "a" },
+      { kind: "user_added_cell", bufferId: 1, cellId: "a" },
+    ])
+
+    // Then it is neither added nor deleted, only possibly changed
+    expect([...d.added]).toEqual([])
+    expect([...d.deleted]).toEqual([])
+    expect([...d.edited]).toEqual(["a"])
+  })
 })
 
 describe("user_deleted_cell", () => {

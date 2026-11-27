@@ -2,12 +2,21 @@ import styled from "styled-components"
 import { color } from "../../../../utils"
 import { Button, PrimaryToggleButton, TabButton } from "../../../../components"
 
+// The cell's Close results button floats over the end of the top row (the
+// statement tabs, the status line or the "OK" line). The row keeps that end
+// free with padding, which changes no height.
+export const CLOSE_RESULTS_RESERVED_WIDTH = "4.8rem"
+
 export const ResultWrapper = styled.div`
   overflow: hidden;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+
+  > :first-child {
+    padding-right: ${CLOSE_RESULTS_RESERVED_WIDTH};
+  }
 `
 
 export const SuccessMessage = styled.div`

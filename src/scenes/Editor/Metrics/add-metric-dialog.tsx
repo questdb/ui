@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useRef } from "react"
 import {
   Dialog,
   ForwardRef,
@@ -162,10 +162,16 @@ const CloseButton = styled(IconButton)`
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onMetricAdded: (position: number) => void
 }
 
-export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
+export const AddMetricDialog = ({
+  open,
+  onOpenChange,
+  onMetricAdded,
+}: Props) => {
   const { activeBuffer, buffers, updateBuffer } = useEditor()
+  const metricAddedRef = useRef(false)
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
@@ -185,20 +191,19 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
       count: metrics.length + 1,
     })
     if (buffer?.id) {
+      const position = buffer.metricsViewState?.metrics?.length ?? 0
       const newBuffer = merge(buffer, {
         metricsViewState: {
           metrics: [
             ...(buffer.metricsViewState?.metrics ?? []),
-            {
-              metricType,
-              position: buffer.metricsViewState?.metrics?.length ?? 0,
-              color,
-            },
+            { metricType, position, color },
           ],
         },
       })
-      await updateBuffer(buffer.id, newBuffer)
+      metricAddedRef.current = true
+      onMetricAdded(position)
       onOpenChange(false)
+      await updateBuffer(buffer.id, newBuffer)
     }
   }
 
@@ -217,7 +222,13 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
           <Overlay primitive={Dialog.Overlay} />
         </ForwardRef>
 
-        <Dialog.Content maxwidth="52rem">
+        <Dialog.Content
+          maxwidth="52rem"
+          onCloseAutoFocus={(e) => {
+            if (metricAddedRef.current) e.preventDefault()
+            metricAddedRef.current = false
+          }}
+        >
           <Header>
             <Title>
               <TitleGroup>Add widget</TitleGroup>

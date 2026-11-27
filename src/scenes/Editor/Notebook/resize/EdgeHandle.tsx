@@ -15,8 +15,7 @@ const Handle = styled.div<{ $axis: string }>`
   outline: none;
   color: ${color("contentAccentStrong")};
 
-  /* Visuals are hidden until the handle is hovered; corner handles are also
-     revealed when the cell is selected (rule lives on the grid container). */
+  /* Visuals are hidden until the handle is hovered. */
   opacity: 0;
   transition: opacity 0.1s;
 

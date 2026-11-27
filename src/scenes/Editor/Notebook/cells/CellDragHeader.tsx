@@ -59,8 +59,6 @@ type Props = {
   isCellBusy?: boolean
   left?: React.ReactNode
   right?: React.ReactNode
-  // SQL cells pass this so the toolbar can adapt to the header's width; markdown
-  // cells omit it (no width-driven tiering).
   headerRef?: RefObject<HTMLDivElement>
   toolbarTier?: CellToolbarTier
   paneLayout?: CellPaneLayout

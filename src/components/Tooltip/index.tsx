@@ -42,6 +42,12 @@ type Props = {
   collisionBoundary?: Element | null | Array<Element | null>
   collisionPadding?: number
   hoverBridge?: boolean
+  // By default a tooltip closes as soon as the pointer leaves its trigger,
+  // also when the pointer moves onto the tooltip: an action name or a
+  // disabled reason has nothing to read twice or copy. Set this for a tooltip
+  // that shows data or an explanation, or holds a control (a copy button, a
+  // link): it then stays open while the pointer is on it.
+  hoverableContent?: boolean
   children: React.ReactNode
 }
 
@@ -234,11 +240,13 @@ export const Tooltip = ({
   collisionBoundary,
   collisionPadding,
   hoverBridge,
+  hoverableContent = false,
   children,
 }: Props): JSX.Element => {
   if (!content) return <>{children}</>
   return (
     <RadixTooltip.Root
+      disableHoverableContent={!hoverableContent}
       delayDuration={delay}
       open={open}
       onOpenChange={onOpenChange}

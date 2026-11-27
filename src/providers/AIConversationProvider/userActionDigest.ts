@@ -10,6 +10,8 @@ export const createEmptyDigest = (): UserActionDigest => ({
 
 // Coalesces user-action events into the digest. Notes:
 // - delete after add in same digest cancels both (add wins → erased).
+// - add after delete is an undo that brought the cell back with its id. The
+//   delete dropped the cell's edits and runs, so it counts as edited.
 // - edit on an added cell folds into the creation (no-op).
 // - move/duplicate/cell-mode/grid-layout aren't tracked here; they ride on the snapshot.
 export const applyUserActionToDigest = (
@@ -18,7 +20,12 @@ export const applyUserActionToDigest = (
 ): UserActionDigest => {
   switch (evt.kind) {
     case "user_added_cell":
-      digest.added.add(evt.cellId)
+      if (digest.deleted.has(evt.cellId)) {
+        digest.deleted.delete(evt.cellId)
+        digest.edited.add(evt.cellId)
+      } else {
+        digest.added.add(evt.cellId)
+      }
       return digest
     case "user_deleted_cell":
       if (digest.added.has(evt.cellId)) {

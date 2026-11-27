@@ -1,6 +1,10 @@
 import React from "react"
 import styled, { css } from "styled-components"
-import { MarkdownLogoIcon, PlusSquareIcon } from "@phosphor-icons/react"
+import {
+  ClipboardTextIcon,
+  MarkdownLogoIcon,
+  PlusSquareIcon,
+} from "@phosphor-icons/react"
 import { color } from "../../../../utils"
 import { ButtonBase, Tooltip } from "../../../../components"
 import type { CellType } from "../../../../store/notebook"
@@ -8,11 +12,14 @@ import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
 import {
   useNotebookActions,
   useNotebookBufferId,
+  useNotebookPreview,
   useNotebookState,
 } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import { useCopiedCells } from "../cellEditing/copiedCellsStore"
+import { useCellEditActions } from "../cellEditing/useCellEditActions"
 
 type AddVariant = "primary" | "secondary"
 type AddTier = "between" | "bottom"
@@ -26,9 +33,9 @@ const BottomButton = styled.div<{ $alignCenter?: boolean }>`
   margin-top: 1rem;
 `
 
-// Add Cell is the primary (pink) action; Add Markdown stays the secondary
-// (gray) one. The "bottom" tier fills half the row each (full-width click
-// target); the "between" tier is compact and centered on the divider line.
+// Add Cell is the primary (pink) action; Add Markdown and Paste Cell stay
+// secondary (gray). The "bottom" tier buttons share the row equally (full-width
+// click target); the "between" tier is compact and centered on the divider line.
 const AddButton = styled(ButtonBase)<{
   $variant: AddVariant
   $tier: AddTier
@@ -116,7 +123,7 @@ const BetweenLine = styled.div`
   border-top: 1px dashed ${color("borderAccent")};
 `
 
-// Groups the two add buttons and masks the divider line behind them (matching
+// Groups the add buttons and masks the divider line behind them (matching
 // the notebook content background).
 const BetweenButtons = styled.div`
   position: relative;
@@ -185,7 +192,7 @@ const AddAction: React.FC<AddActionProps> = ({
   )
   if (!atLimit) return button
   // The span lets the tooltip fire on a disabled button, which gets no pointer
-  // events; it also carries the flex so the bottom tier keeps its 50% width.
+  // events; it also carries the flex so the bottom tier keeps its equal share.
   return (
     <Tooltip content={CELL_LIMIT_TITLE}>
       <span
@@ -197,6 +204,35 @@ const AddAction: React.FC<AddActionProps> = ({
         {button}
       </span>
     </Tooltip>
+  )
+}
+
+type PasteCellActionProps = {
+  afterCellId?: string
+  tier: AddTier
+  atLimit: boolean
+}
+
+const PasteCellAction: React.FC<PasteCellActionProps> = ({
+  afterCellId,
+  tier,
+  atLimit,
+}) => {
+  const copiedCells = useCopiedCells()
+  const { pasteCells } = useCellEditActions()
+  const preview = useNotebookPreview()
+
+  if (!copiedCells || preview) return null
+
+  return (
+    <AddAction
+      icon={<ClipboardTextIcon />}
+      label="Paste Cell"
+      variant="secondary"
+      tier={tier}
+      atLimit={atLimit}
+      onClick={() => pasteCells(copiedCells, afterCellId, "button")}
+    />
   )
 }
 
@@ -229,6 +265,7 @@ export const AddCellBottom: React.FC<AddCellBottomProps> = ({
         atLimit={atLimit}
         onClick={() => add(afterCellId, "markdown")}
       />
+      <PasteCellAction tier="bottom" atLimit={atLimit} />
     </BottomButton>
   )
 }
@@ -261,6 +298,11 @@ export const AddCellBetween: React.FC<AddCellBetweenProps> = ({
           tier="between"
           atLimit={atLimit}
           onClick={() => add(afterCellId, "markdown")}
+        />
+        <PasteCellAction
+          afterCellId={afterCellId}
+          tier="between"
+          atLimit={atLimit}
         />
       </BetweenButtons>
     </BetweenWrapper>

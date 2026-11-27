@@ -1,11 +1,13 @@
 import "../../../test/stubBrowserGlobals"
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 
 import { __resetNotebookAIBridgeForTests } from "../notebookAIBridge"
 import { NotebookToolError } from "../notebookToolError"
 import {
   __resetNotebookControllerForTests,
   getController,
+  forgetBuffer,
+  releaseArchivedBuffer,
   registerController,
   unregisterController,
   waitForController,
@@ -15,6 +17,28 @@ import { __resetNotebookBufferQueuesForTests } from "../notebookBufferQueue"
 import { __resetNotebookDexieControllerForTests } from "./"
 import { db } from "../../../store/db"
 import { type NotebookViewState } from "../../../store/notebook"
+import {
+  __resetNotebookUndoHistoryForTests,
+  isCellHeldByUndo,
+  peekUndoEntry,
+  recordUndoEntry,
+} from "../../../scenes/Editor/Notebook/undo/notebookUndoHistory"
+import { deleteCellSnapshot } from "../../../store/notebookResults"
+import { removeNotebookCellLayouts } from "../../../scenes/Editor/Notebook/notebookColumnLayoutStore"
+
+vi.mock("../../../store/notebookResults", async (importActual) => ({
+  ...(await importActual<typeof import("../../../store/notebookResults")>()),
+  deleteCellSnapshot: vi.fn(() => Promise.resolve()),
+}))
+vi.mock(
+  "../../../scenes/Editor/Notebook/notebookColumnLayoutStore",
+  async (importActual) => ({
+    ...(await importActual<
+      typeof import("../../../scenes/Editor/Notebook/notebookColumnLayoutStore")
+    >()),
+    removeNotebookCellLayouts: vi.fn(),
+  }),
+)
 
 const emptyState: NotebookViewState = { cells: [] }
 
@@ -52,7 +76,9 @@ const makeController = (
 })
 
 beforeEach(async () => {
+  vi.clearAllMocks()
   __resetNotebookControllerForTests()
+  __resetNotebookUndoHistoryForTests()
   __resetNotebookAIBridgeForTests()
   __resetNotebookBufferQueuesForTests()
   __resetNotebookDexieControllerForTests()
@@ -60,6 +86,28 @@ beforeEach(async () => {
 })
 
 describe("controller registry", () => {
+  it.each([
+    ["forgetBuffer", forgetBuffer],
+    ["releaseArchivedBuffer", releaseArchivedBuffer],
+  ] as const)("%s clears held undo rows and layouts", (_name, release) => {
+    recordUndoEntry(42, {
+      change: "remove",
+      placements: [
+        {
+          cell: { id: "held", position: 0, value: "SELECT 1" },
+          index: 1,
+          afterCellId: "a",
+        },
+      ],
+    })
+    expect(isCellHeldByUndo(42, "held")).toBe(true)
+    release(42)
+    expect(peekUndoEntry(42)).toBeUndefined()
+    expect(isCellHeldByUndo(42, "held")).toBe(false)
+    expect(deleteCellSnapshot).toHaveBeenCalledWith(42, "held")
+    expect(removeNotebookCellLayouts).toHaveBeenCalledWith(42, "held")
+  })
+
   it("get returns the registered controller", () => {
     const c = makeController(42)
     registerController(c)

@@ -9,6 +9,7 @@ import { CellDragHeader } from "./CellDragHeader"
 import { CellRunDrawToggles } from "./CellRunDrawToggles"
 import { CellWideActions } from "./CellWideActions"
 import { CellViewToggle } from "./CellViewToggle"
+import { CloseResultsButton } from "./CloseResultsButton"
 import { CellStopButton } from "./CellStopButton"
 import { CellNameLabel } from "./CellNameLabel"
 import { useChartLoading } from "./useChartLoading"
@@ -89,6 +90,7 @@ const EditorContainer = styled.div<{ $spotlight: boolean }>`
 `
 
 const BottomSlot = styled.div<{ $spotlight: boolean }>`
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -139,7 +141,7 @@ const CellInner: React.FC<Props> = ({
   isMaximized,
   isRunning,
 }) => {
-  const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
+  const { setCellChartConfig, updateCell, setFocusedCell } =
     useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
@@ -483,10 +485,6 @@ const CellInner: React.FC<Props> = ({
                 autoRefreshOn={effectiveAutoRefresh !== false}
                 showLabels={toolbarTier === "expanded"}
                 onRun={runAll}
-                onHideResult={() => {
-                  signalUserEdit(bufferIdForEvents)
-                  clearCellResult(cell.id)
-                }}
                 onDraw={() => {
                   void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_TOGGLE, {
                     mode: isDrawMode ? "run" : "draw",
@@ -639,6 +637,15 @@ const CellInner: React.FC<Props> = ({
               onYieldFocus={() => editorRef.current?.focus()}
             />
           </CellOverlayProvider>
+          {view !== "none" && contentMode === "full" && (
+            <CloseResultsButton
+              cellId={cell.id}
+              view={view}
+              paneLayout={paneLayout}
+              isCellBusy={isCellBusy}
+              onClosedWhileFocused={focusCellToolbar}
+            />
+          )}
         </BottomSlot>
       )}
     </CellWrapper>

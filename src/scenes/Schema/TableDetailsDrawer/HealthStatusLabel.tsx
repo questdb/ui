@@ -111,7 +111,7 @@ export const HealthStatusLabel = ({ severity }: Props) => {
           : "Healthy"
 
   return (
-    <Tooltip content={statusText}>
+    <Tooltip hoverableContent content={statusText}>
       <LabelContainer
         $severity={severity}
         aria-label={statusText}

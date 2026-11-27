@@ -135,7 +135,10 @@ const runTransition = <T>(
     bufferId,
     (ctrl) => {
       requireUnchangedSince(bufferId, expectedActionSeq)
-      return ctrl.mutate(transition)
+      return ctrl.mutate((parts) => ({
+        ...transition(parts),
+        clearUndoHistory: true,
+      }))
     },
     signal,
   )
@@ -150,7 +153,11 @@ const runTransitionWithResultStatus = <T>(
 ): Promise<T> =>
   withBoundNotebook(
     bufferId,
-    (ctrl) => ctrl.mutateWithResultStatus(transition),
+    (ctrl) =>
+      ctrl.mutateWithResultStatus((parts, resultStatusOf) => ({
+        ...transition(parts, resultStatusOf),
+        clearUndoHistory: true,
+      })),
     signal,
   )
 

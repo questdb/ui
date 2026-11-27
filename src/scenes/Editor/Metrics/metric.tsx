@@ -55,24 +55,17 @@ const MetricInfoRoot = styled(Box).attrs({
   background-color: ${({ theme }) => theme.color.surfaceRaised};
 `
 
-const StyledTableSelector = styled(TableSelector)`
-  width: 100%;
-  min-width: 0;
-
-  input {
-    width: 100%;
-  }
-`
-
 export const Metric = ({
   dateFrom,
   dateTo,
   metric,
+  isNewlyAdded,
   onRemove,
   onTableChange,
   onColorChange,
 }: DateRange & {
   metric: MetricItem
+  isNewlyAdded: boolean
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
@@ -238,12 +231,14 @@ export const Metric = ({
       tableId={metric.tableId}
       tableName={tableName}
       widgetConfig={widgetConfig}
+      scrollIntoViewOnMount={isNewlyAdded}
       beforeLabel={
-        <StyledTableSelector
+        <TableSelector
           options={tableOptions}
           onSelect={(value) => onTableChange(metric, parseInt(value))}
           value={tableNameRef.current || ""}
           placeholder="Select table"
+          defaultOpen={isNewlyAdded}
           prefix={
             selectedTable ? (
               <TableIcon

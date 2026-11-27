@@ -24,13 +24,13 @@ import {
 import { useSchemaCompletionProvider } from "../../scenes/Editor/Monaco/questdb-sql/useSchemaCompletionProvider"
 import {
   cloneNotebookViewStateWithCellIdMap,
-  generateId,
   nextCopyLabel,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
 import { createCell } from "../../store/notebook"
 import { NotebookToolError } from "../../utils/notebooks/notebookToolError"
 import { requestCellReveal } from "../../scenes/Editor/Notebook/cellReveal"
+import { appendCellToNotebook } from "../../utils/notebooks/appendCellToNotebook"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/formatSql"
 import type { Buffer, PreviewContent } from "../../store/buffers"
@@ -55,10 +55,8 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { emitUserAction } from "../../utils/notebooks/notebookAIBridge"
 import {
-  addCellTransition,
   forgetBuffer,
   releaseArchivedBuffer,
-  withBoundNotebook,
   withBoundNotebookReadOnly,
 } from "../../utils/notebooks/notebookController"
 import { enqueueBufferTask } from "../../utils/notebooks/notebookBufferQueue"
@@ -921,17 +919,12 @@ export const EditorProvider: React.FC = ({ children }) => {
     revealCellForEditing(notebook.id, cell.id)
   }
 
-  // Mirrors the notebook's "Add cell" button: the new cell lands at the end,
-  // full width in grid mode, then takes focus with the cursor in its editor.
-  // A notebook at its cell limit gets a fresh notebook whose first cell holds
-  // the query.
+  // Adds the query as a new cell at the end of the notebook, on its undo
+  // history, then puts the cursor in the cell's editor. A notebook at its cell
+  // limit gets a fresh notebook whose first cell holds the query.
   const appendNotebookCell = async (bufferId: number, value: string) => {
     try {
-      const cellId = await withBoundNotebook(bufferId, (controller) =>
-        controller.mutate((parts) =>
-          addCellTransition(parts, bufferId, { id: generateId(), value }),
-        ),
-      )
+      const cellId = await appendCellToNotebook(bufferId, value)
       emitUserAction({ kind: "user_added_cell", bufferId, cellId })
       revealCellForEditing(bufferId, cellId)
     } catch (error) {

@@ -116,11 +116,15 @@ export { migratePersistedNotebookView } from "../notebookDexieView"
 export {
   addCellTransition,
   applyNotebookStateTransition,
+  arrangeCellsTransition,
+  attachCellsTransition,
   clearCellAutoRefreshTransition,
   deleteCellTransition,
+  detachCellsTransition,
   duplicateCellTransition,
   moveCellDownTransition,
   moveCellUpTransition,
+  pasteCellsTransition,
   setCellChartConfigTransition,
   setCellHighlightConfigTransition,
   setCellDimensionsTransition,
@@ -133,4 +137,5 @@ export {
   updateCellTransition,
   type AppliedNotebookState,
   type NotebookTransitionResult,
+  type PastedCell,
 } from "./notebookTransitions"
