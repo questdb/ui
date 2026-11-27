@@ -17,12 +17,11 @@ import {
 
 // Keep only DQL results that actually returned rows. The chart can't render
 // empty datasets, and non-DQL results (error/ddl/dml) have no columns.
-export const successResults = (
-  results: (QueryExecResult | null)[],
-): QueryExecResult[] =>
+export const successResults = <T extends QueryExecResult>(
+  results: (T | null)[],
+): T[] =>
   results.filter(
-    (r): r is QueryExecResult =>
-      r !== null && r.type === "dql" && r.dataset.length > 0,
+    (r): r is T => r !== null && r.type === "dql" && r.dataset.length > 0,
   )
 
 // Rehydrate a persisted snapshot entry into the QueryExecResult shape DrawCanvas
@@ -76,13 +75,16 @@ export const resultMatchesQueries = (
       normalizeQueryText(r.query) === normalizeQueryText(queries[i]),
   )
 
+// Retain statement position across filtering; SQL text alone is ambiguous.
+export type PositionedResult = QueryExecResult & { statementIndex: number }
+
 export type ChartResult =
   | { kind: "missing" }
   | { kind: "stale" }
   | { kind: "pending" }
   | {
       kind: "settled"
-      results: QueryExecResult[]
+      results: PositionedResult[]
       hadError: boolean
     }
 
@@ -93,9 +95,12 @@ export const toChartResult = (
   if (result == null) return { kind: "missing" }
   if (!resultMatchesQueries(result, queries)) return { kind: "stale" }
   if (hasPendingResult(result)) return { kind: "pending" }
+  const dqlResults = result.results.flatMap((entry, statementIndex) =>
+    entry.type === "dql" ? [{ ...toExecResult(entry), statementIndex }] : [],
+  )
   return {
     kind: "settled",
-    results: successResults(result.results.map(toExecResult)),
+    results: successResults(dqlResults),
     hadError: result.results.some((r) => r.type === "error"),
   }
 }
@@ -152,13 +157,15 @@ export const resultsEquivalent = (
   return true
 }
 
-export type QueryTab = {
+type QueryAxisCandidate = {
   index: number
+  columns: ColumnDefinition[]
+  inferredXColumn: string | null
+}
+
+export type QueryTab = QueryAxisCandidate & {
   label: string
   query: string
-  columns: ColumnDefinition[]
-  xColumn: string | null
-  compatible: boolean
   inferredChart: QueryChart
 }
 
@@ -172,6 +179,55 @@ export type DrawResolution = {
 const xRoleOf = (columns: ColumnDefinition[], name: string | null) => {
   const col = name != null ? columns.find((c) => c.name === name) : undefined
   return col ? classifyColumn(col) : "other"
+}
+
+const canCombineXAxis = (
+  anchorColumns: ColumnDefinition[],
+  anchorX: string | null,
+  otherColumns: ColumnDefinition[],
+  otherX: string | null,
+) => {
+  const anchorRole = xRoleOf(anchorColumns, anchorX)
+  return (
+    (anchorRole === "temporal" || anchorRole === "categorical") &&
+    xRoleOf(otherColumns, otherX) === anchorRole
+  )
+}
+
+// A saved X the query no longer returns falls back to inference.
+export const chartXAxisOf = (
+  query: QueryAxisCandidate,
+  savedX: string | null | undefined,
+): string | null =>
+  savedX != null && query.columns.some((c) => c.name === savedX)
+    ? savedX
+    : query.inferredXColumn
+
+// The first result anchors the X-axis and always draws; the others draw when
+// enabled and their X can share the anchor's axis.
+export const resolveQueryAxes = <T extends QueryAxisCandidate>(
+  items: T[],
+  config: ChartConfig | undefined,
+) => {
+  const enabled = (item: T) => config?.queries[item.index]?.enabled !== false
+  const anchor = items[0]
+  const xColumn = anchor
+    ? chartXAxisOf(anchor, config?.xColumn)
+    : (config?.xColumn ?? null)
+  const placements = items.map((item) => {
+    const isAnchor = item === anchor
+    const ownX = isAnchor ? xColumn : item.inferredXColumn
+    const compatible =
+      isAnchor ||
+      canCombineXAxis(anchor?.columns ?? [], xColumn, item.columns, ownX)
+    return {
+      item,
+      ownX,
+      compatible,
+      included: compatible && (isAnchor || enabled(item)),
+    }
+  })
+  return { anchor, xColumn, placements }
 }
 
 const resolveOhlc = (
@@ -226,71 +282,63 @@ const dropPartitionOnX = (
 // flags x-incompatible queries. Pure so it can be memoized and tested.
 export const resolveDraw = (
   statements: string[],
-  results: QueryExecResult[],
+  results: (QueryExecResult &
+    Partial<Pick<PositionedResult, "statementIndex">>)[],
   config: ChartConfig | undefined,
 ): DrawResolution => {
-  const used = new Set<number>()
+  const used = new Set(results.flatMap((r) => r.statementIndex ?? []))
   const items = results.map((r) => {
-    let idx = statements.indexOf(r.query)
-    if (idx >= 0 && used.has(idx)) {
-      idx = statements.findIndex((s, i) => s === r.query && !used.has(i))
-    }
+    // Standalone callers (such as Editor Result) can still pass unindexed rows.
+    const idx =
+      r.statementIndex ??
+      statements.findIndex(
+        (statement, index) => statement === r.query && !used.has(index),
+      )
     if (idx >= 0) used.add(idx)
     const inferred = inferChartConfig(r.columns, r.dataset, r.query)
     const saved = idx >= 0 ? config?.queries[idx] : undefined
     return {
-      idx,
-      r,
-      inferred,
+      index: idx,
+      columns: r.columns,
+      dataset: r.dataset,
+      query: r.query,
+      inferredXColumn: inferred.xColumn,
+      inferredChart: inferred.chart,
       qc: pruneQuery(saved ?? inferred.chart, r.columns),
     }
   })
 
-  const anchor = items[0]
-  // Drop a stale x-axis (a removed column) by falling back to inference.
-  const savedX = config?.xColumn
-  const anchorX: string | null =
-    savedX != null &&
-    anchor != null &&
-    anchor.r.columns.some((c) => c.name === savedX)
-      ? savedX
-      : (anchor?.inferred.xColumn ?? null)
-  const anchorRole = anchor ? xRoleOf(anchor.r.columns, anchorX) : "other"
-  const canCombine = anchorRole === "temporal" || anchorRole === "categorical"
-
-  const placedItems = items.map((it, i) => {
-    const ownX = i === 0 ? anchorX : it.inferred.xColumn
-    return { ...it, ownX, qc: dropPartitionOnX(it.qc, ownX) }
-  })
+  const { xColumn, placements } = resolveQueryAxes(items, config)
+  const placedItems = placements.map(({ item, ownX, included }) => ({
+    ...item,
+    ownX,
+    included,
+    qc: dropPartitionOnX(item.qc, ownX),
+  }))
 
   const tabs: QueryTab[] = []
   const renderQueries: ResolvedQuery[] = []
-  placedItems.forEach((it, i) => {
-    const isAnchor = i === 0
-    const { ownX } = it
-    const role = xRoleOf(it.r.columns, ownX)
-    const compatible = isAnchor || (canCombine && role === anchorRole)
-    const enabled = isAnchor ? true : (it.qc.enabled ?? true)
-    if (it.idx >= 0) {
+  placedItems.forEach((it) => {
+    const { index, columns, ownX } = it
+    if (index >= 0) {
       tabs.push({
-        index: it.idx,
-        label: `Q${it.idx + 1}`,
-        query: it.r.query,
-        columns: it.r.columns,
-        xColumn: ownX,
-        compatible,
-        inferredChart: it.inferred.chart,
+        index,
+        label: `Q${index + 1}`,
+        query: it.query,
+        columns,
+        inferredXColumn: it.inferredXColumn,
+        inferredChart: it.inferredChart,
       })
     }
-    if (!compatible || !enabled) return
+    if (!it.included) return
     renderQueries.push({
-      index: it.idx,
-      columns: it.r.columns,
-      dataset: it.r.dataset,
+      index,
+      columns,
+      dataset: it.dataset,
       xColumn: ownX,
       type: it.qc.type,
       yColumns: it.qc.yColumns ?? [],
-      ohlc: resolveOhlc(it.qc, it.r.columns),
+      ohlc: resolveOhlc(it.qc, columns),
       partitionByColumn: it.qc.partitionByColumn,
       axis: it.qc.axis ?? "left",
       name: it.qc.name,
@@ -300,25 +348,38 @@ export const resolveDraw = (
   // Dense, statement-aligned config for the drawer: a concrete QueryChart per
   // statement that ran, else the saved override, else `null` for unresolved statements.
   const denseQueries: (QueryChart | null)[] = statements.map((_stmt, i) => {
-    const it = placedItems.find((x) => x.idx === i)
+    const it = placedItems.find((x) => x.index === i)
     if (it) {
       const qc: QueryChart = { ...it.qc }
-      const oh = resolveOhlc(qc, it.r.columns)
+      const oh = resolveOhlc(qc, it.columns)
       if (oh) qc.ohlc = oh
       return qc
     }
     return config?.queries[i] ?? null
   })
 
+  // A left query with no rows must not move left-axis lines onto the right.
+  const leftAxisConfigured = denseQueries.some(
+    (q) =>
+      q != null &&
+      q.enabled !== false &&
+      q.axis !== "right" &&
+      q.type !== "pie",
+  )
+
   return {
     chart: {
-      xColumn: anchorX,
+      xColumn,
       rightAxis: config?.rightAxis,
+      referenceLines: config?.referenceLines,
+      leftAxisConfigured,
     },
     renderQueries,
     effectiveConfig: {
-      xColumn: anchorX,
+      // Keep the saved override separate from the current anchor's fallback.
+      xColumn: config?.xColumn ?? null,
       rightAxis: config?.rightAxis,
+      ...(config?.referenceLines && { referenceLines: config.referenceLines }),
       queries: denseQueries,
     },
     tabs,

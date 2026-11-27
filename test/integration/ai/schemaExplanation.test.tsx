@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
-import { renderChat, getByHook, queryByHook } from "./support/chatHarness"
+import {
+  renderChat,
+  chatServer,
+  fixtures,
+  getByHook,
+  getAllByHook,
+  queryByHook,
+} from "./support/chatHarness"
 import { describe, expect, it, vi } from "vitest"
 import React from "react"
+import userEvent from "@testing-library/user-event"
 import { Button } from "../../../src/components/Button"
 import { useAIQuickActions } from "../../../src/hooks/useAIQuickActions"
 import { act, fireEvent, screen, waitFor } from "@testing-library/react"
+import {
+  raw,
+  table,
+} from "../../../src/scenes/Schema/TableDetailsDrawer/test/catalogFixtures"
+import type { HealthIssue } from "../../../src/scenes/Schema/TableDetailsDrawer/healthCheck"
 
 const finishRetries = async (releaseFirstResponse: () => void) => {
   const retryTime = Date.now()
@@ -22,14 +35,6 @@ const finishRetries = async (releaseFirstResponse: () => void) => {
   await act(async () => {
     releaseFirstResponse()
     await vi.advanceTimersByTimeAsync(20000)
-  })
-}
-
-const finishScroll = async () => {
-  await act(async () => {
-    const scrolled = new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await vi.advanceTimersByTimeAsync(0)
-    await scrolled
   })
 }
 
@@ -86,7 +91,9 @@ describe("chat recovery", () => {
     await waitFor(() => expect(providerBodies).toHaveLength(1))
     await finishRetries(releaseFirstResponse)
 
-    // Then the chat shows a retryable error with the actual schema request preserved
+    // Then the chat shows a retryable error once the failed turn is saved.
+    vi.useRealTimers()
+    await waitFor(() => expect(getByHook("retry-button")).toBeEnabled())
     expect(sqlRequests).toEqual(["SHOW CREATE TABLE 'test_trades';"])
     expect(providerBodies).toHaveLength(9)
     expect(
@@ -94,8 +101,83 @@ describe("chat recovery", () => {
     ).toBe(true)
     expect(getByHook("ai-chat-window")).toBeVisible()
     expect(getByHook("chat-message-error")).toBeVisible()
-    expect(getByHook("retry-button")).toBeVisible()
     expect(queryByHook("chat-stop-button")).not.toBeInTheDocument()
-    await finishScroll()
   })
 })
+
+const suspended: HealthIssue = {
+  id: "R1",
+  severity: "critical",
+  field: "table_suspended",
+  message: "WAL is suspended",
+  currentValue: "true",
+}
+
+const TableQuickActions = () => {
+  const { handleExplainSchema, handleAskAIForHealthIssue } = useAIQuickActions()
+  return (
+    <>
+      <Button onClick={() => void handleExplainSchema(1, "trades", "table")}>
+        Explain schema
+      </Button>
+      <Button
+        onClick={() => void handleAskAIForHealthIssue(1, "trades", suspended)}
+      >
+        Ask AI about the warning
+      </Button>
+    </>
+  )
+}
+
+it.each(["Explain schema", "Ask AI about the warning"])(
+  "reuses the table's chat and its answer when %s runs again",
+  async (action) => {
+    // Given the quick action answered once for the table
+    const server = chatServer("openai", [
+      fixtures.createFinalResponse("openai", "The table answer."),
+    ])
+    server.other = (request) => {
+      const url = new URL(request.url)
+      if (url.pathname.endsWith(".md"))
+        return new Response("## Detect suspended tables\nResume the WAL.")
+      const query = url.searchParams.get("query") ?? ""
+      if (query.startsWith("tables()")) return Response.json(raw([table()]))
+      if (query.startsWith("SHOW CREATE"))
+        return Response.json(
+          raw([{ ddl: "CREATE TABLE trades (price DOUBLE);" }]),
+        )
+      throw new Error(`Unexpected request: ${url}`)
+    }
+    renderChat("openai", <TableQuickActions />)
+    const run = () =>
+      userEvent.click(screen.getByRole("button", { name: action }))
+    await run()
+    await waitFor(() =>
+      expect(getByHook("chat-message-assistant")).toHaveTextContent(
+        "The table answer.",
+      ),
+    )
+    await waitFor(() =>
+      expect(queryByHook("chat-stop-button")).not.toBeInTheDocument(),
+    )
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+
+    // When the user runs it again on the same table
+    await run()
+
+    // Then the chat scrolls to the earlier question instead of asking again
+    await waitFor(() =>
+      expect(scrollIntoView.mock.instances).toContain(
+        getByHook("chat-message-user"),
+      ),
+    )
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "start",
+    })
+    expect(server.requests).toHaveLength(1)
+    expect(getAllByHook("chat-message-user")).toHaveLength(1)
+    expect(getAllByHook("chat-message-assistant")).toHaveLength(1)
+  },
+)

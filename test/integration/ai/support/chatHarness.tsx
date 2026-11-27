@@ -19,7 +19,14 @@ import { LocalStorageProvider } from "../../../../src/providers/LocalStorageProv
 import { AIStatusProvider } from "../../../../src/providers/AIStatusProvider"
 import { AIConversationProvider } from "../../../../src/providers/AIConversationProvider"
 import { AIChatButton } from "../../../../src/scenes/Layout/AIChatButton"
-import AIChatWindow from "../../../../src/scenes/Editor/AIChatWindow"
+// Preload the drawer with the harness's mocked dependencies before React.lazy.
+import "../../../../src/scenes/Editor/AIChatWindow"
+import { AIChatWindowLazy } from "../../../../src/scenes/Editor/AIChatWindow/AIChatWindowLazy"
+// After the drawer: loaded first, the bridge's import cycle leaves
+// QuestContext undefined in ExplainQueryButton.
+import { MCPBridgeProvider } from "../../../../src/providers/MCPBridgeProvider"
+import { createQueryKey } from "../../../../src/scenes/Editor/Monaco/utils"
+import * as QuestDB from "../../../../src/utils/questdb"
 import type { AiAssistantSettings } from "../../../../src/providers/LocalStorageProvider/types"
 import type { AIConversation } from "../../../../src/providers/AIConversationProvider/types"
 import type { EditorContext } from "../../../../src/providers/EditorProvider"
@@ -107,10 +114,56 @@ export const seedChat = async (
   return conversation
 }
 
+// The editor's record of a failed run, as Fix query reads it: the error from
+// executionRefs and the word at the error position from the Monaco model.
+export const failQuery = (
+  bufferId: number,
+  sql: string,
+  error: { message: string; position: number },
+) => {
+  const queryKey = createQueryKey(sql, 0)
+  const model = {
+    getPositionAt: (offset: number) => ({ lineNumber: 1, column: offset + 1 }),
+    getWordAtPosition: ({ column }: { column: number }) => {
+      const word = /^\w+/.exec(sql.slice(column - 1))?.[0]
+      return word
+        ? { word, startColumn: column, endColumn: column + word.length }
+        : null
+    },
+  }
+  editorAdapter.overrides = {
+    ...editorAdapter.overrides,
+    editorRef: {
+      current: { getModel: () => model },
+    } as unknown as EditorContext["editorRef"],
+    executionRefs: {
+      current: {
+        [bufferId]: {
+          [queryKey]: {
+            error: {
+              type: QuestDB.Type.ERROR,
+              error: error.message,
+              position: error.position,
+              query: sql,
+            },
+            queryText: sql,
+            startOffset: 0,
+            endOffset: sql.length,
+          },
+        },
+      },
+    },
+  }
+  return queryKey
+}
+
 export const renderChat = (
   provider: ProviderName = "openai",
   children?: React.ReactNode,
   settings?: AiAssistantSettings,
+  // With the MCP bridge mounted, children can pair a local agent through
+  // useMCPBridge().connect.
+  { bridge = false }: { bridge?: boolean } = {},
 ) => {
   const configured =
     provider === "anthropic"
@@ -121,18 +174,22 @@ export const renderChat = (
     settings ? JSON.stringify(settings) : configured["ai.assistant.settings"],
   )
   const store = createStore(rootReducer)
+  const chat = (
+    <AIStatusProvider>
+      <AIChatButton />
+      <div id="side-panel-right" />
+      <AIChatWindowLazy />
+      <ToastContainer />
+      {children}
+    </AIStatusProvider>
+  )
   const result = render(
     <ThemeProvider theme={darkTheme}>
       <TooltipProvider>
         <Provider store={store}>
           <LocalStorageProvider>
             <AIConversationProvider>
-              <AIStatusProvider>
-                <AIChatButton />
-                <AIChatWindow />
-                <ToastContainer />
-                {children}
-              </AIStatusProvider>
+              {bridge ? <MCPBridgeProvider>{chat}</MCPBridgeProvider> : chat}
             </AIConversationProvider>
           </LocalStorageProvider>
         </Provider>
@@ -165,6 +222,7 @@ beforeEach(async () => {
   sessionStorage.clear()
   await db.ai_conversations.clear()
   await db.ai_conversation_messages.clear()
+  await db.ai_message_images.clear()
   Element.prototype.scrollIntoView = vi.fn()
   vi.stubGlobal(
     "ResizeObserver",
@@ -260,6 +318,7 @@ export const chatServer = (
 ) => {
   const server = {
     requests: [] as Array<{ request: Request; body: Record<string, unknown> }>,
+    titleRequests: [] as Array<Record<string, unknown>>,
     otherRequests: [] as Request[],
     other: (request: Request): Response | Promise<Response> => {
       throw new Error(`Unexpected HTTP request: ${request.url}`)
@@ -282,8 +341,10 @@ export const chatServer = (
         return server.other(request)
       }
       const body = (await request.json()) as Record<string, unknown>
-      if (fixtures.isTitleRequest(provider, body))
+      if (fixtures.isTitleRequest(provider, body)) {
+        server.titleRequests.push(body)
         return httpResponse(fixtures.createChatTitleResponse(provider))
+      }
       server.requests.push({ request, body })
       const reply = replies.shift()
       if (!reply)

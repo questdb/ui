@@ -43,7 +43,7 @@ const waitForPaired = () => {
   cy.window().then((win) => win.__mcpFakeWS.helloAck())
   cy.getByDataHook("mcp-status-pill", { timeout: 10000 }).should(
     "contain",
-    "MCP connected",
+    "Agent connected",
   )
 }
 

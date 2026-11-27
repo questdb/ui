@@ -2,6 +2,7 @@ import "../../../src/test/stubBrowserGlobals"
 import type { Permissions } from "../../../src/utils/tools/permissions"
 import { beforeEach, describe, it, expect, vi } from "vitest"
 import { dispatchTool } from "../../../src/utils/tools/dispatch"
+import { ALL_DEFINITIONS } from "../../../src/utils/tools/tools"
 import type {
   ModelToolsClient,
   StatusCallback,
@@ -1808,6 +1809,180 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
     expect(parsed.error_code).toBe("validation")
+  })
+
+  it("sets reference lines, keeps them on null, and clears them on []", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    const send = (reference_lines: unknown, queries: unknown = null) =>
+      dispatchTool(
+        "set_cell_chart_config",
+        {
+          buffer_id: 1,
+          cell_id: "c",
+          x_column: null,
+          queries,
+          right_axis: null,
+          reference_lines,
+        },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+
+    // When
+    await send(
+      [
+        { value: 30, axis: "right", label: "Oversold" },
+        { value: 70, axis: null, label: null },
+      ],
+      [{ type: "line", axis: "right" }],
+    )
+
+    // Then
+    expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual([
+      { value: 30, axis: "right", label: "Oversold" },
+      { value: 70 },
+    ])
+
+    // When
+    await send(null)
+
+    // Then
+    expect(cellById(state, "c")?.chartConfig?.referenceLines).toHaveLength(2)
+
+    // When
+    await send([])
+
+    // Then
+    expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual([])
+  })
+
+  it("round-trips an inferred reference-line chart from patch through full apply", async () => {
+    const { state } = mountLive(1, [cell("c", "SELECT 1", { mode: "draw" })])
+    const tool = (name: string, input: object = {}) =>
+      dispatchTool(
+        name,
+        { buffer_id: 1, ...input },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+    const referenceLines = [{ value: 30, label: "Threshold" }]
+    expect(
+      (
+        await tool("set_cell_chart_config", {
+          cell_id: "c",
+          reference_lines: referenceLines,
+        })
+      ).is_error,
+    ).toBeFalsy()
+    const saved = cellById(state, "c")?.chartConfig
+    const snapshot = await tool("get_notebook_state")
+    expect(snapshot.is_error).toBeFalsy()
+    const { cells } = JSON.parse(snapshot.content) as {
+      cells: { chart_config: object }[]
+    }
+    expect(cells[0].chart_config).toMatchObject({
+      queries: [],
+      reference_lines: referenceLines,
+    })
+    const response = await tool("apply_notebook_state", {
+      cells: [
+        {
+          id: "c",
+          preserve_value: true,
+          name: "Renamed",
+          chart_config: { right_axis: null, ...cells[0].chart_config },
+        },
+      ],
+    })
+    expect(response.is_error, response.content).toBeFalsy()
+    expect(cellById(state, "c")).toMatchObject({
+      name: "Renamed",
+      chartConfig: saved,
+    })
+
+    expect(
+      (
+        await tool("set_cell_chart_config", {
+          cell_id: "c",
+          reference_lines: [],
+        })
+      ).is_error,
+    ).toBeFalsy()
+    const cleared = await tool("get_notebook_state")
+    expect(cleared.is_error).toBeFalsy()
+    const { cells: clearedCells } = JSON.parse(cleared.content) as {
+      cells: { chart_config: object }[]
+    }
+    expect(clearedCells[0].chart_config).toEqual({
+      x_column: null,
+      queries: [],
+    })
+    const replay = await tool("apply_notebook_state", {
+      cells: [
+        {
+          id: "c",
+          preserve_value: true,
+          name: "Renamed after clear",
+          chart_config: { right_axis: null, ...clearedCells[0].chart_config },
+        },
+      ],
+    })
+    expect(replay.is_error, replay.content).toBeFalsy()
+    expect(cellById(state, "c")).toMatchObject({
+      name: "Renamed after clear",
+      chartConfig: { xColumn: null, queries: [] },
+    })
+  })
+
+  it("refuses a right-axis reference line on a chart with no right-axis query", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    const tool = (name: string, input: object) =>
+      dispatchTool(
+        name,
+        { buffer_id: 1, ...input },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+    const rightLine = [{ value: 30, axis: "right", label: null }]
+
+    // When
+    const patched = await tool("set_cell_chart_config", {
+      cell_id: "c",
+      reference_lines: rightLine,
+    })
+    const applied = await tool("apply_notebook_state", {
+      cells: [
+        {
+          id: "c",
+          preserve_value: true,
+          chart_config: {
+            x_column: null,
+            queries: [{ type: "line", axis: "left" }],
+            reference_lines: rightLine,
+          },
+        },
+      ],
+    })
+
+    // Then
+    for (const res of [patched, applied]) {
+      expect(res.is_error).toBe(true)
+      const parsed = JSON.parse(res.content) as {
+        error_code: string
+        message: string
+      }
+      expect(parsed.error_code).toBe("validation")
+      expect(parsed.message).toContain("no enabled query is on the right axis")
+    }
+    expect(cellById(state, "c")?.chartConfig?.referenceLines).toBeUndefined()
   })
 
   it("treats null fields on set_cell_chart_config as 'omit' (not overwrite)", async () => {
@@ -3725,6 +3900,174 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 })
 
+// Every tool that takes reference_lines refuses a line whose value is not a
+// finite number, naming the line, instead of dropping it and reporting
+// success: the array replaces the saved lines, so a dropped line is lost.
+describe("dispatchTool — reference line values", () => {
+  type ReferenceLinesTool = {
+    // The tool's input, with these lines as the chart's reference_lines.
+    input: (lines: unknown[]) => Record<string, unknown>
+    // Where the lines sit in that input, as an error names them.
+    path: string
+  }
+  const TOOLS: Record<string, ReferenceLinesTool> = {
+    set_cell_chart_config: {
+      input: (lines) => ({
+        cell_id: "c",
+        x_column: null,
+        queries: null,
+        right_axis: null,
+        reference_lines: lines,
+      }),
+      path: "reference_lines",
+    },
+    apply_notebook_state: {
+      input: (lines) => ({
+        cells: [
+          {
+            id: "c",
+            preserve_value: true,
+            chart_config: {
+              x_column: null,
+              queries: null,
+              right_axis: null,
+              reference_lines: lines,
+            },
+          },
+        ],
+      }),
+      path: "cells[0].chart_config.reference_lines",
+    },
+  }
+
+  const takesReferenceLines = (node: unknown): boolean => {
+    if (!node || typeof node !== "object") return false
+    const { properties, items } = node as {
+      properties?: Record<string, unknown>
+      items?: unknown
+    }
+    return (
+      (properties !== undefined && "reference_lines" in properties) ||
+      Object.values(properties ?? {}).some(takesReferenceLines) ||
+      takesReferenceLines(items)
+    )
+  }
+
+  const savedLines = [
+    { value: 30, label: "Oversold" },
+    { value: 70, label: "Overbought" },
+  ]
+  const mountChart = () =>
+    mountLive(1, [
+      cell("c", "SELECT ts, rsi FROM t", {
+        mode: "draw",
+        chartConfig: { xColumn: null, queries: [], referenceLines: savedLines },
+      }),
+    ])
+  const send = (tool: string, lines: unknown[]) =>
+    dispatchTool(
+      tool,
+      { buffer_id: 1, ...TOOLS[tool].input(lines) },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+  it("covers every tool whose schema takes reference_lines", () => {
+    // When
+    const tools = ALL_DEFINITIONS.filter((tool) =>
+      takesReferenceLines(tool.inputSchema),
+    ).map((tool) => tool.name)
+
+    // Then
+    expect(tools.sort()).toEqual(Object.keys(TOOLS).sort())
+  })
+
+  it.each(Object.keys(TOOLS))(
+    "%s saves lines whose values are numbers",
+    async (tool) => {
+      // Given
+      const { state } = mountChart()
+
+      // When
+      const res = await send(tool, [
+        { value: 30, axis: null, label: "Oversold" },
+        { value: 50, axis: null, label: null },
+      ])
+
+      // Then
+      expect(res.is_error, res.content).toBeFalsy()
+      expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual([
+        { value: 30, label: "Oversold" },
+        { value: 50 },
+      ])
+    },
+  )
+
+  it.each(
+    Object.keys(TOOLS).flatMap((tool) => [
+      {
+        tool,
+        value: "a string",
+        sent: { value: "70", axis: null, label: "Overbought" },
+        named: ' (label "Overbought")',
+        got: '"70"',
+      },
+      {
+        tool,
+        value: "a string, on the right axis",
+        sent: { value: "70", axis: "right", label: "Overbought" },
+        named: ' (label "Overbought")',
+        got: '"70"',
+      },
+      {
+        tool,
+        value: "null, with no label",
+        sent: { value: null, axis: null, label: null },
+        named: "",
+        got: "null",
+      },
+      {
+        tool,
+        value: "missing",
+        sent: { axis: null, label: "Mid" },
+        named: ' (label "Mid")',
+        got: "none",
+      },
+      {
+        tool,
+        value: "missing, in a null line",
+        sent: null,
+        named: "",
+        got: "none",
+      },
+    ]),
+  )(
+    "$tool refuses a line whose value is $value, naming it, and keeps the saved lines",
+    async ({ tool, sent, named, got }) => {
+      // Given a chart with the lines 30 and 70
+      const { state } = mountChart()
+
+      // When the agent re-sends 30 with a line whose value is not a number
+      const res = await send(tool, [
+        { value: 30, axis: null, label: "Oversold" },
+        sent,
+      ])
+
+      // Then the call is refused with the line named, and nothing changes
+      expect(res.is_error).toBe(true)
+      expect(JSON.parse(res.content)).toEqual({
+        error_code: "validation",
+        message: `VALIDATION_ERROR: ${TOOLS[tool].path}[1]${named}: value must be a finite number, got ${got}.`,
+      })
+      expect(cellById(state, "c")?.chartConfig?.referenceLines).toEqual(
+        savedLines,
+      )
+    },
+  )
+})
+
 describe("dispatchTool — NotebookToolError envelope", () => {
   it("archived → { error_code: 'archived', hint, message }", async () => {
     // Given a runner that throws archived
@@ -4114,6 +4457,211 @@ describe("dispatchTool — apply_notebook_state dimensions", () => {
     expect(res.is_error).toBe(true)
     expect(res.content).toContain("has an invalid editor_height")
     expect(cellById(state, "a")?.topHeight).toBeUndefined()
+  })
+})
+
+type ToolSchemaNode = {
+  properties?: Record<string, ToolSchemaNode>
+  items?: ToolSchemaNode
+}
+
+// The leaf properties of a tool input schema, as paths like
+// "queries[].ohlc.open".
+const schemaLeafPaths = (node: ToolSchemaNode, path = ""): string[] => {
+  if (node.properties)
+    return Object.entries(node.properties).flatMap(([key, child]) =>
+      schemaLeafPaths(child, path ? `${path}.${key}` : key),
+    )
+  if (node.items?.properties) return schemaLeafPaths(node.items, `${path}[]`)
+  return [path]
+}
+
+// The paths, in the notation of schemaLeafPaths, a tool input sets to
+// something other than null or an empty array.
+const setInputPaths = (value: unknown, path = ""): string[] => {
+  if (value == null) return []
+  if (Array.isArray(value))
+    return value.some((item) => typeof item === "object" && item !== null)
+      ? value.flatMap((item) => setInputPaths(item, `${path}[]`))
+      : value.length > 0
+        ? [path]
+        : []
+  if (typeof value === "object")
+    return Object.entries(value).flatMap(([key, item]) =>
+      setInputPaths(item, path ? `${path}.${key}` : key),
+    )
+  return [path]
+}
+
+describe("dispatchTool — apply_notebook_state saved chart_config", () => {
+  const apply = (cells: object[]) =>
+    dispatchTool(
+      "apply_notebook_state",
+      { buffer_id: 1, cells },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+  it("saves every chart_config field the agent sends", async () => {
+    // Given an empty notebook, and a chart_config that sets every field of
+    // the tool's schema; its right_axis is the system prompt's RSI example
+    const { state } = mountLive(1)
+    const chartConfigSchema = (
+      ALL_DEFINITIONS.find(({ name }) => name === "apply_notebook_state")
+        ?.inputSchema.properties.cells as ToolSchemaNode | undefined
+    )?.items?.properties?.chart_config
+    const chartConfig = {
+      x_column: "ts",
+      queries: [
+        {
+          type: "candlestick",
+          y_columns: null,
+          ohlc: { open: "open", high: "high", low: "low", close: "close" },
+          partition_by_column: null,
+          axis: null,
+          enabled: null,
+          name: "Price",
+        },
+        {
+          type: "line",
+          y_columns: ["rsi"],
+          ohlc: null,
+          partition_by_column: "symbol",
+          axis: "right",
+          enabled: null,
+          name: null,
+        },
+        {
+          type: "bar",
+          y_columns: ["volume"],
+          ohlc: null,
+          partition_by_column: null,
+          axis: null,
+          enabled: false,
+          name: null,
+        },
+      ],
+      right_axis: { name: "RSI", min: 0, max: 100 },
+      reference_lines: [
+        { value: 30, axis: "right", label: "Oversold" },
+        { value: 0, axis: null, label: null },
+      ],
+    }
+    expect(chartConfigSchema).toBeDefined()
+    const unset = schemaLeafPaths(chartConfigSchema ?? {}).filter(
+      (path) => !setInputPaths(chartConfig).includes(path),
+    )
+    expect(unset).toEqual([])
+
+    // When the agent adds a draw cell with that chart
+    const res = await apply([
+      {
+        value:
+          "SELECT ts, open, high, low, close FROM t; SELECT ts, symbol, rsi FROM t; SELECT ts, volume FROM t",
+        mode: "draw",
+        chart_config: chartConfig,
+      },
+    ])
+
+    // Then the saved chart keeps every value, a bound or line at 0 included
+    expect(res.is_error, res.content).toBeFalsy()
+    expect(state.parts.cells[0]?.chartConfig).toEqual({
+      xColumn: "ts",
+      queries: [
+        {
+          type: "candlestick",
+          yColumns: [],
+          ohlc: { open: "open", high: "high", low: "low", close: "close" },
+          name: "Price",
+        },
+        {
+          type: "line",
+          yColumns: ["rsi"],
+          partitionByColumn: "symbol",
+          axis: "right",
+        },
+        { type: "bar", yColumns: ["volume"], enabled: false },
+      ],
+      rightAxis: { name: "RSI", min: 0, max: 100 },
+      referenceLines: [
+        { value: 30, axis: "right", label: "Oversold" },
+        { value: 0 },
+      ],
+    })
+  })
+
+  it("pins a right axis whose max is 0", async () => {
+    // Given an empty notebook
+    const { state } = mountLive(1)
+
+    // When the agent adds a chart whose right axis ends at 0
+    const res = await apply([
+      {
+        value: "SELECT ts, close FROM t; SELECT ts, drawdown FROM t",
+        mode: "draw",
+        chart_config: {
+          x_column: "ts",
+          queries: [{ type: "line" }, { type: "line", axis: "right" }],
+          right_axis: { name: null, min: -100, max: 0 },
+          reference_lines: null,
+        },
+      },
+    ])
+
+    // Then the saved axis keeps the max of 0 rather than scaling to the data
+    expect(res.is_error, res.content).toBeFalsy()
+    expect(state.parts.cells[0]?.chartConfig?.rightAxis).toEqual({
+      min: -100,
+      max: 0,
+    })
+  })
+
+  it("accepts an unchanged replay of an inference-only chart with a cleared axis name and min", async () => {
+    // Given an inference-only chart with the right axis chart settings save
+    // once its name and min are cleared ("" and undefined)
+    const { state } = mountLive(1, [
+      cell("c", "SELECT 1", {
+        mode: "draw",
+        chartConfig: {
+          xColumn: null,
+          queries: [],
+          rightAxis: { name: "", min: undefined, max: 100 },
+        },
+      }),
+    ])
+    const snapshot = await dispatchTool(
+      "get_notebook_state",
+      { buffer_id: 1 },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    expect(snapshot.is_error).toBeFalsy()
+    const { cells } = JSON.parse(snapshot.content) as {
+      cells: { chart_config: object }[]
+    }
+
+    // When the agent renames the cell and re-sends its chart_config unchanged
+    const res = await apply([
+      {
+        id: "c",
+        preserve_value: true,
+        name: "RSI",
+        chart_config: { reference_lines: null, ...cells[0].chart_config },
+      },
+    ])
+
+    // Then the apply is accepted and the chart keeps its max
+    expect(res.is_error, res.content).toBeFalsy()
+    expect(cellById(state, "c")?.name).toBe("RSI")
+    expect(cellById(state, "c")?.chartConfig).toEqual({
+      xColumn: null,
+      queries: [],
+      rightAxis: { max: 100 },
+    })
   })
 })
 

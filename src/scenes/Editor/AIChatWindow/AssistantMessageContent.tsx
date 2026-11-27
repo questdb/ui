@@ -1,66 +1,43 @@
 import React, { memo, useMemo } from "react"
-import styled, { keyframes, useTheme } from "styled-components"
-import { Box, Text } from "../../../components"
-import { AISparkle } from "../../../components/AISparkle"
+import styled, { keyframes } from "styled-components"
+import { CopyButton } from "../../../components"
 import { AssistantModesCompact } from "../../../components/AIStatusIndicator/AssistantModesCompact"
 import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
 import { AIOperationStatus } from "../../../providers/AIStatusProvider"
-import { GaugeIcon } from "@phosphor-icons/react"
 import { color } from "../../../utils"
-import { withAlpha } from "../../../theme"
 import { AssistantMarkdown } from "./AssistantMarkdown"
+import { QuestionRecord } from "./QuestionRecord"
+import { NoticeRecord } from "./NoticeRecord"
 import type { OpenInEditorContent } from "./ChatMessages"
-import { buildInterleavedTimeline } from "../../../utils/ai/turnView"
-
-function formatTokenCount(count: number): string {
-  if (count >= 1000) {
-    return `${(count / 1000).toFixed(1)}K`
-  }
-  return count.toString()
-}
-
-const Divider = styled.div`
-  width: 100%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    ${({ theme }) => withAlpha(theme.color.aiPinkStart, 0.42)} 0%,
-    ${({ theme }) => theme.color.transparent} 100%
-  );
-  margin-bottom: 1rem;
-`
+import {
+  buildInterleavedTimeline,
+  withResponseTexts,
+} from "../../../utils/ai/turnView"
+import {
+  WORKING_AFTER_MS,
+  WorkingIndicator,
+  useQuietFor,
+} from "./WorkingIndicator"
 
 const OperationHistoryContainer = styled.div`
   width: 100%;
 `
 
-const AssistantHeader = styled(Box).attrs({
-  alignItems: "center",
-  gap: "1rem",
-})`
-  width: 100%;
-  padding: 1.2rem 0.4rem;
-  flex: 1 0 auto;
-`
-
-const AssistantLabel = styled(Text).attrs({ className: "assistant-label" })`
-  font-size: 1.4rem;
-  color: ${color("contentPrimary")};
-`
-
-const TokenDisplay = styled(Box).attrs({ className: "token-display" })`
-  align-items: center;
-  gap: 0.9rem;
-  margin: 0 0 0 auto;
-`
-
-const ExplanationContent = styled(Box)`
+const ExplanationContent = styled.div<{ $withCopyGutter: boolean }>`
+  position: relative;
   display: flex;
   flex-direction: column;
-  border-radius: 0.6rem;
-  padding: 0 0.8rem;
+  padding-inline: 0.8rem
+    ${({ $withCopyGutter }) => ($withCopyGutter ? "3.6rem" : "0.8rem")};
   flex-shrink: 0;
   width: 100%;
+`
+
+// Keep Copy beside the first line without making a short reply taller.
+const ResponseActions = styled.div.attrs({ className: "response-actions" })`
+  position: absolute;
+  inset-block-start: -0.4rem;
+  inset-inline-end: 0.4rem;
 `
 
 const cursorBlink = keyframes`
@@ -102,10 +79,25 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
     onScrollNeeded,
     onOpenInEditor,
   }) => {
-    const theme = useTheme()
+    // A live answer shows a spinning step, or its text as it streams. When
+    // neither moves for a moment, like after a failed step, between tool
+    // rounds or after the user answered a question, "Working" shows.
+    const lastStep = anchorMessage.operationHistory?.at(-1)
+    const hasActiveStep =
+      !!status &&
+      status !== AIOperationStatus.GeneratingResponse &&
+      status !== AIOperationStatus.Aborted &&
+      lastStep?.type === status &&
+      lastStep.args?.failed === undefined &&
+      lastStep.endedAt === undefined
+    const mayShowWorking = isLiveOperation && !hasActiveStep
 
+    const fullHistory = useMemo(
+      () =>
+        withResponseTexts(anchorMessage.operationHistory ?? [], turnMessages),
+      [anchorMessage.operationHistory, turnMessages],
+    )
     const { operationHistory, endTimestamp, timeline } = useMemo(() => {
-      const fullHistory = anchorMessage.operationHistory ?? []
       const filteredHistory = fullHistory.filter(
         (op) => op.type !== AIOperationStatus.Aborted,
       )
@@ -116,7 +108,7 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
       const hasGeneratingResponseContent = filteredHistory.some(
         (op) =>
           op.type === AIOperationStatus.GeneratingResponse &&
-          !!op.content?.trim(),
+          (!!op.transcriptBlock || !!op.content?.trim()),
       )
       return {
         operationHistory: filteredHistory.filter(
@@ -127,7 +119,7 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
           ? buildInterleavedTimeline(filteredHistory)
           : null,
       }
-    }, [anchorMessage.operationHistory])
+    }, [fullHistory])
 
     const fallbackContent = useMemo(() => {
       return turnMessages
@@ -143,48 +135,36 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
 
     const hasContent = !!fallbackContent
 
-    const tokenDisplay = useMemo(() => {
-      const tokenUsage = anchorMessage.tokenUsage as
-        | { inputTokens: number; outputTokens: number }
-        | undefined
-      if (
-        !tokenUsage ||
-        typeof tokenUsage.inputTokens !== "number" ||
-        typeof tokenUsage.outputTokens !== "number"
-      ) {
-        return null
-      }
-      return (
-        <>
-          <span style={{ fontWeight: 600 }}>
-            {formatTokenCount(tokenUsage.inputTokens)}
-          </span>{" "}
-          input /{" "}
-          <span style={{ fontWeight: 600 }}>
-            {formatTokenCount(tokenUsage.outputTokens)}
-          </span>{" "}
-          output tokens
-        </>
-      )
-    }, [anchorMessage.tokenUsage])
+    const activity = `${fallbackContent.length}:${fullHistory.length}:${
+      fullHistory[fullHistory.length - 1]?.content?.length ?? 0
+    }`
+    const showWorking = useQuietFor(activity, mayShowWorking, WORKING_AFTER_MS)
+    const showStreamingCursor =
+      isMessageStreaming &&
+      status === AIOperationStatus.GeneratingResponse &&
+      !showWorking
 
-    const header = (
-      <AssistantHeader data-hook="assistant-header">
-        <AISparkle size={20} variant="filled" />
-        <AssistantLabel>{anchorMessage.model || "Assistant"}</AssistantLabel>
-        {tokenDisplay && (
-          <TokenDisplay className="token-display">
-            <GaugeIcon size="16px" color={theme.color.contentSecondary} />
-            <Text size="sm" color="contentSecondary">
-              {tokenDisplay}
-            </Text>
-          </TokenDisplay>
-        )}
-      </AssistantHeader>
-    )
+    // Copies the answer as Markdown, once it has finished.
+    const responseActions =
+      hasContent && !isMessageStreaming && !isLiveOperation ? (
+        <ResponseActions>
+          <CopyButton
+            text={fallbackContent}
+            iconOnly
+            size="sm"
+            variant="ghost"
+            copiedMode="replace"
+            aria-label="Copy response"
+            title="Copy response"
+            data-hook="chat-response-copy"
+          />
+        </ResponseActions>
+      ) : null
 
     if (timeline && timeline.length > 0) {
-      let headerRendered = false
+      const firstContentIndex = timeline.findIndex(
+        (item) => item.type !== "operations",
+      )
 
       return (
         <>
@@ -192,39 +172,48 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
             const isLast = index === timeline.length - 1
             if (item.type === "operations") {
               return (
-                <React.Fragment key={`ops-${item.timestamp}`}>
-                  {index === 0 && <Divider />}
-                  <OperationHistoryContainer>
-                    <AssistantModesCompact
-                      operationHistory={item.operations}
-                      status={status}
-                      isLive={isLiveOperation && isLast}
-                      onScrollNeeded={onScrollNeeded}
-                      collapsed={!isLast}
-                      endTimestamp={item.endTimestamp}
-                    />
-                  </OperationHistoryContainer>
-                </React.Fragment>
+                <OperationHistoryContainer key={`ops-${item.timestamp}`}>
+                  <AssistantModesCompact
+                    operationHistory={item.operations}
+                    status={status}
+                    isLive={isLiveOperation && isLast}
+                    onScrollNeeded={onScrollNeeded}
+                    collapsed={!isLast}
+                    endTimestamp={
+                      item.endTimestamp ?? (isLast ? endTimestamp : undefined)
+                    }
+                  />
+                </OperationHistoryContainer>
               )
             }
-            const showHeader = !headerRendered
-            headerRendered = true
+            const isFirstContent = index === firstContentIndex
             return (
-              <React.Fragment key={`content-${item.timestamp}`}>
-                {showHeader && header}
-                <ExplanationContent>
+              <ExplanationContent
+                // Ordered stream segments can share a timestamp within one websocket tick.
+                // eslint-disable-next-line react/no-array-index-key
+                key={`content-${item.timestamp}-${index}`}
+                $withCopyGutter={isFirstContent}
+                data-hook="chat-response-content"
+              >
+                {item.type === "content" ? (
                   <AssistantMarkdown
                     content={item.content}
                     messageId={anchorMessage.id}
                     onOpenInEditor={onOpenInEditor}
                   />
-                </ExplanationContent>
-              </React.Fragment>
+                ) : item.block.kind === "question" ? (
+                  <QuestionRecord record={item.block.record} />
+                ) : (
+                  <NoticeRecord notice={item.block.notice} />
+                )}
+                {isFirstContent && responseActions}
+              </ExplanationContent>
             )
           })}
-          {isMessageStreaming && (
+          {showStreamingCursor && (
             <StreamingCursor data-hook="streaming-cursor" />
           )}
+          {showWorking && <WorkingIndicator />}
         </>
       )
     }
@@ -232,35 +221,31 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
     return (
       <>
         {operationHistory.length > 0 && (
-          <>
-            <Divider />
-            <OperationHistoryContainer>
-              <AssistantModesCompact
-                operationHistory={operationHistory}
-                status={status}
-                isLive={isLiveOperation}
-                onScrollNeeded={onScrollNeeded}
-                collapsed={hasContent || !!anchorMessage.error}
-                endTimestamp={endTimestamp}
-              />
-            </OperationHistoryContainer>
-          </>
+          <OperationHistoryContainer>
+            <AssistantModesCompact
+              operationHistory={operationHistory}
+              status={status}
+              isLive={isLiveOperation}
+              onScrollNeeded={onScrollNeeded}
+              collapsed={hasContent || !!anchorMessage.error}
+              endTimestamp={endTimestamp}
+            />
+          </OperationHistoryContainer>
         )}
         {hasContent && (
-          <>
-            {header}
-            <ExplanationContent>
-              <AssistantMarkdown
-                content={fallbackContent}
-                messageId={anchorMessage.id}
-                onOpenInEditor={onOpenInEditor}
-              />
-              {isMessageStreaming && (
-                <StreamingCursor data-hook="streaming-cursor" />
-              )}
-            </ExplanationContent>
-          </>
+          <ExplanationContent $withCopyGutter data-hook="chat-response-content">
+            <AssistantMarkdown
+              content={fallbackContent}
+              messageId={anchorMessage.id}
+              onOpenInEditor={onOpenInEditor}
+            />
+            {showStreamingCursor && (
+              <StreamingCursor data-hook="streaming-cursor" />
+            )}
+            {responseActions}
+          </ExplanationContent>
         )}
+        {showWorking && <WorkingIndicator />}
       </>
     )
   },

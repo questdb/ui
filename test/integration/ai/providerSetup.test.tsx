@@ -12,11 +12,13 @@ import {
   storedSettings,
   getAllByHook,
   openSettings,
+  openModelPicker,
   deferredResponse,
 } from "../../../src/components/SetupAIAssistant/test/setupHarness"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, it } from "vitest"
+import { LOCAL_AGENT_MODEL } from "../../../src/utils/localAgent/localAgentModel"
 
 const checkbox = (id: string, prefix = "manage-models") => {
   const row = getAllByHook(`${prefix}-model-row`).find(
@@ -110,7 +112,7 @@ it("preserves delisted and manual models, removes only the chosen chip, and relo
   await userEvent.click(getByHook("ai-settings-cancel"))
   view.unmount()
   renderAISettings()
-  await userEvent.click(getByHook("ai-settings-model-dropdown"))
+  await openModelPicker()
 
   // Then
   expect(storedSettings().providers?.openai?.enabledModels).toEqual([
@@ -118,12 +120,34 @@ it("preserves delisted and manual models, removes only the chosen chip, and relo
     "openai:my-proxy-model",
     "openai:gpt-5",
   ])
-  const labels = getAllByHook("ai-settings-model-item-label").map(
+  const labels = getAllByHook("chat-model-picker-option-label").map(
     (item) => item.textContent,
   )
   expect(labels).toContain("GPT 5.4")
   expect(labels).toContain("my-proxy-model")
   expect(labels).not.toContain("My-proxy-model")
+})
+
+it("keeps the saved local agent selected when cloud model preferences change", async () => {
+  // Given
+  modelServer()
+  renderAISettings(undefined, {
+    ...configuredOpenAI,
+    selectedModel: LOCAL_AGENT_MODEL,
+  })
+
+  // When
+  await openSettings()
+  await userEvent.click(getByHook("ai-settings-manage-models"))
+  await waitForModels()
+  await userEvent.click(checkbox("gpt-5-mini"))
+  await userEvent.click(getByHook("manage-models-save"))
+
+  // Then
+  expect(storedSettings().selectedModel).toBe(LOCAL_AGENT_MODEL)
+  expect(storedSettings().providers?.openai?.enabledModels).toContain(
+    "openai:gpt-5-mini",
+  )
 })
 
 it("locks the model picker when the provider rate-limits listing without changing saved models", async () => {
@@ -346,17 +370,17 @@ it("activates two listed models with no data access, switches them, then removes
     "AI Settings",
   )
   expect(getByHook("ai-chat-button")).toBeVisible()
-  expect(getByHook("ai-settings-model-dropdown")).toBeVisible()
+  expect(getByHook("chat-model-picker")).toBeVisible()
 
   // When
   for (const label of ["GPT 5 Mini", "GPT 5.4"]) {
-    await userEvent.click(getByHook("ai-settings-model-dropdown"))
-    const item = getAllByHook("ai-settings-model-item").find((item) =>
+    await openModelPicker()
+    const item = getAllByHook("chat-model-picker-option").find((item) =>
       item.textContent?.includes(label),
     )!
     await userEvent.click(item)
-    expect(getByHook("ai-settings-model-dropdown")).toHaveTextContent(label)
-    expect(queryByHook("ai-settings-model-item")).not.toBeInTheDocument()
+    expect(getByHook("chat-model-picker")).toHaveTextContent(label)
+    expect(queryByHook("chat-model-picker-option")).not.toBeInTheDocument()
   }
   await openSettings()
 
@@ -380,7 +404,7 @@ it("activates two listed models with no data access, switches them, then removes
   await userEvent.click(getByHook("ai-settings-save"))
 
   // Then
-  expect(queryByHook("ai-settings-model-dropdown")).not.toBeInTheDocument()
+  expect(queryByHook("chat-model-picker")).not.toBeInTheDocument()
   expect(queryByHook("ai-chat-button")).not.toBeInTheDocument()
   expect(getByHook("ai-assistant-settings-button")).toHaveTextContent(
     "Configure",

@@ -798,16 +798,13 @@ describe("ai assistant", () => {
         .should("be.visible")
         .should("contain", assistantResponse)
 
-      // Hover on assistant header to reveal token display
-      cy.getByDataHook("assistant-header").realHover()
-
-      // Then both validations and the suggestion contribute to token usage
-      cy.get(".token-display")
+      // Then both validations and the suggestion contribute to the tokens
+      // the chat spent, beside the assistant settings
+      cy.getByDataHook("chat-token-usage")
         .should("be.visible")
-        .should("contain", "500")
-        .should("contain", "250")
-        .should("contain", "input")
-        .should("contain", "output")
+        .should("contain", "500/250")
+        .realHover()
+      cy.contains("Input/output tokens spent").should("be.visible")
     })
   })
 
@@ -1673,8 +1670,8 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-save").click()
 
     // Then
-    cy.getByDataHook("ai-settings-model-dropdown").click()
-    cy.getByDataHook("ai-settings-model-item").should("have.length", 4)
+    cy.openModelPicker()
+    cy.getByDataHook("chat-model-picker-option").should("have.length", 4)
     cy.get("body").type("{esc}")
 
     // When
@@ -1688,8 +1685,8 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-save").click()
 
     // Then
-    cy.getByDataHook("ai-settings-model-dropdown").click()
-    cy.getByDataHook("ai-settings-model-item")
+    cy.openModelPicker()
+    cy.getByDataHook("chat-model-picker-option")
       .should("have.length", 1)
       .should("contain", "gpt-4o")
     cy.get("body").type("{esc}")
@@ -1704,7 +1701,7 @@ describe("custom providers", () => {
     })
 
     // When
-    cy.getByDataHook("ai-chat-button").click()
+    cy.openChat()
     cy.getByDataHook("chat-input-textarea").type("Use the replacement provider")
     cy.getByDataHook("chat-send-button").click()
     cy.wait("@survivingProviderChat")
@@ -1785,8 +1782,8 @@ describe("custom providers", () => {
       .should("be.visible")
       .should("contain", "Response from Ollama")
 
-    cy.getByDataHook("ai-settings-model-dropdown").click()
-    cy.getByDataHook("ai-settings-model-item-label")
+    cy.openModelPicker()
+    cy.getByDataHook("chat-model-picker-option-label")
       .contains("GPT 5 Mini")
       .click()
 

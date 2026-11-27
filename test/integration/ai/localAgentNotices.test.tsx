@@ -1,0 +1,254 @@
+// @vitest-environment jsdom
+import { act, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { expect, it, vi } from "vitest"
+import {
+  fixtures,
+  getByHook,
+  openChat,
+  queryByHook,
+  renderChat,
+  sendMessage,
+} from "./support/chatHarness"
+import { aiConversationStore } from "../../../src/store/aiConversations"
+import {
+  LocalAgentChannel,
+  registerLocalAgentChannel,
+  unregisterLocalAgentChannel,
+} from "../../../src/utils/localAgent/localAgentChannel"
+import type {
+  AgentInboundMessage,
+  AgentOutboundMessage,
+} from "../../../src/utils/localAgent/protocol"
+import type { MCPBridgeClient } from "../../../src/utils/mcp/MCPBridgeClient"
+
+const bridge = vi.hoisted(() => ({ channel: null as LocalAgentChannel | null }))
+vi.mock("../../../src/utils/localAgent/LocalAgentContext", async (load) => ({
+  ...(await load<
+    typeof import("../../../src/utils/localAgent/LocalAgentContext")
+  >()),
+  useLocalAgent: () => bridge.channel?.getSnapshot() ?? null,
+  useLocalAgentChannel: () => bridge.channel,
+}))
+
+const partialSQL = "```sql\nSELECT 42;"
+const markdownExample = "```markdown\n**Sample formatting**\n```"
+
+it.each([
+  { name: "before any answer text", partial: "", stopReason: "max_tokens" },
+  {
+    name: "inside an ongoing SQL reply",
+    partial: "```sql\nSELECT 42 AS",
+    suffix: " answer;\n```",
+    midstreamNotice: true,
+    stopReason: "end_turn",
+  },
+  {
+    name: "after truncated SQL",
+    partial: partialSQL,
+    stopReason: "max_tokens",
+  },
+  {
+    name: "with an ordinary Markdown example",
+    partial: markdownExample,
+    stopReason: "end_turn",
+  },
+  {
+    name: "after a delayed housekeeping completion",
+    partial: "The sample is ready.",
+    suffix: " The preview is included.",
+    stopReason: "max_tokens",
+  },
+])(
+  "renders persisted local-agent history $name",
+  async ({ partial, stopReason, suffix, midstreamNotice }) => {
+    const settings = {
+      ...(JSON.parse(
+        fixtures.getOpenAIConfiguredSettings()["ai.assistant.settings"],
+      ) as import("../../../src/providers/LocalStorageProvider/types").AiAssistantSettings),
+      selectedModel: "local-agent",
+    }
+    const sent: AgentInboundMessage[] = []
+    let deliver!: (message: AgentOutboundMessage) => void
+    const client = {
+      canSendAgentMessage: () => true,
+      on: (event: string, handler: typeof deliver) => {
+        if (event === "agentMessage") deliver = handler
+        return () => undefined
+      },
+      sendAgentMessage: (message: AgentInboundMessage) => {
+        sent.push(message)
+        return true
+      },
+    } as unknown as MCPBridgeClient
+    const channel = new LocalAgentChannel(client, {
+      info: { id: "claude", label: "Mock local agent", cwd: "/tmp" },
+      onNotebookRead: vi.fn(),
+    })
+    bridge.channel = channel
+    registerLocalAgentChannel(channel)
+    try {
+      deliver({
+        v: "0.6.0",
+        type: "agent_status",
+        state: "ready",
+        config: null,
+        error: null,
+      })
+      const mounted = renderChat("openai", undefined, settings)
+      await openChat()
+      await sendMessage("Show a sample query")
+      const prompt = sent.find((message) => message.type === "agent_prompt")
+      if (!prompt) throw new Error("Expected a local agent prompt")
+      const { v, conversationId, turnId } = prompt
+      const ids = { v, conversationId, turnId }
+      act(() => {
+        deliver({
+          ...ids,
+          type: "agent_update",
+          update: { kind: "thought_chunk", text: "Preparing a sample." },
+        })
+      })
+      expect(getByHook("assistant-mode-thinking")).toBeVisible()
+      await act(async () => {
+        await Promise.resolve()
+        if (suffix && !midstreamNotice) {
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: {
+              kind: "tool_call",
+              toolCallId: "lookup",
+              title: "tool_search",
+              name: "tool_search",
+              toolKind: null,
+              status: "pending",
+              content: null,
+            },
+          })
+        }
+        if (partial) {
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: {
+              kind: "message_chunk",
+              messageId: "reply",
+              text: partial,
+            },
+          })
+        }
+        if (midstreamNotice) {
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: {
+              kind: "notice",
+              severity: "warning",
+              title: "Sample warning",
+              description: null,
+            },
+          })
+        } else if (suffix) {
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: {
+              kind: "tool_call_update",
+              toolCallId: "lookup",
+              status: "completed",
+              title: null,
+              error: null,
+              content: null,
+            },
+          })
+        }
+      })
+      if (midstreamNotice) {
+        expect(getByHook("chat-notice")).toHaveTextContent("Sample warning")
+        expect(queryByHook("chat-response-copy")).not.toBeInTheDocument()
+      }
+      await act(() => {
+        if (suffix) {
+          deliver({
+            ...ids,
+            type: "agent_update",
+            update: { kind: "message_chunk", messageId: "reply", text: suffix },
+          })
+        }
+        deliver({
+          ...ids,
+          type: "agent_turn_end",
+          result: { outcome: "completed", stopReason, usage: null },
+        })
+        return Promise.resolve()
+      })
+
+      if (partial) {
+        await waitFor(() =>
+          expect(getByHook("chat-response-copy")).toBeInTheDocument(),
+        )
+      } else {
+        await waitFor(() => expect(getByHook("chat-notice")).toBeVisible())
+        expect(queryByHook("chat-response-copy")).not.toBeInTheDocument()
+      }
+      await userEvent.click(getByHook("chat-window-close"))
+      mounted.unmount()
+      const saved = (
+        await aiConversationStore.getMessages(conversationId)
+      ).find((message) => message.role === "assistant")
+      expect(saved?.content).toBe(partial ? partial + (suffix ?? "") : null)
+      if (midstreamNotice || stopReason === "max_tokens") {
+        expect(
+          saved?.operationHistory?.filter(
+            (entry) => entry.transcriptBlock?.kind === "notice",
+          ),
+        ).toHaveLength(1)
+      }
+      renderChat("openai", undefined, settings)
+      await openChat()
+      if (partial)
+        await waitFor(() =>
+          expect(getByHook("chat-response-copy")).toBeInTheDocument(),
+        )
+
+      if (midstreamNotice) {
+        expect(getByHook("chat-notice")).toHaveTextContent("Sample warning")
+        expect(
+          getByHook("chat-message-code-block").querySelector("pre")
+            ?.textContent,
+        ).toBe("SELECT 42 AS answer;")
+        vi.stubGlobal("isSecureContext", true)
+        const user = userEvent.setup()
+        await user.click(getByHook("chat-response-copy"))
+        await waitFor(async () =>
+          expect(await navigator.clipboard.readText()).toBe(partial + suffix),
+        )
+      } else if (stopReason === "max_tokens") {
+        await waitFor(() => expect(getByHook("chat-notice")).toBeVisible())
+        const notice = queryByHook("chat-notice")
+        expect(notice).toHaveAttribute("role", "alert")
+        expect(notice).toHaveTextContent("The agent reached its output limit")
+      } else {
+        expect(queryByHook("chat-notice")).toBeNull()
+      }
+      if (suffix && !midstreamNotice) {
+        expect(getByHook("chat-message-assistant")).toHaveTextContent(
+          partial + suffix,
+        )
+      } else if (partial && !midstreamNotice) {
+        const code = getByHook("chat-message-code-block").querySelector("pre")
+        expect(code?.textContent).toBe(
+          partial === partialSQL ? "SELECT 42;" : "**Sample formatting**",
+        )
+      }
+      await userEvent.click(getByHook("assistant-mode-processing-collapsed"))
+      expect(getByHook("assistant-mode-thinking")).toBeVisible()
+      expect(fetch).not.toHaveBeenCalled()
+    } finally {
+      unregisterLocalAgentChannel(channel)
+      bridge.channel = null
+      channel.dispose()
+    }
+  },
+)

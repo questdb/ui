@@ -11,6 +11,7 @@ import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig } from "../CellChart/chartTypes"
+import { buildEchartsOption } from "../CellChart/buildEchartsOption"
 
 const dql = (
   columns: ColumnDefinition[],
@@ -314,6 +315,61 @@ describe("resolveDraw — unresolved statements use a null slot, not an inert co
     expect(effectiveConfig.queries[1]).not.toBeNull()
   })
 
+  it("keeps a left line off the right axis while the left query has no rows", () => {
+    const statements = ["SELECT ts, price FROM a", "SELECT ts, rsi FROM b"]
+    const config: ChartConfig = {
+      xColumn: "ts",
+      queries: [
+        { type: "line", yColumns: ["price"] },
+        { type: "line", yColumns: ["rsi"], axis: "right" },
+      ],
+      referenceLines: [{ value: 150, label: "Price target" }],
+    }
+    const rsi = dql(
+      [
+        { name: "ts", type: "TIMESTAMP" },
+        { name: "rsi", type: "DOUBLE" },
+      ],
+      [[1000, 40]],
+      statements[1],
+    )
+    const resolution = resolveDraw(
+      statements,
+      [{ ...rsi, statementIndex: 1 }],
+      config,
+    )
+    expect(resolution.chart.leftAxisConfigured).toBe(true)
+    const series = buildEchartsOption(
+      resolution.chart,
+      resolution.renderQueries,
+    ).series as { id?: string }[]
+    expect(series.map(({ id }) => id)).not.toContain("reference-lines-1")
+  })
+
+  it("still plots the first legacy result when its saved line is disabled", () => {
+    const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
+    const saved: ChartConfig = {
+      xColumn: "ts",
+      queries: [
+        { type: "line", yColumns: ["price"], enabled: false },
+        { type: "line", yColumns: ["price"] },
+      ],
+    }
+    const first = tsPrice(statements[0])
+    const second = tsPrice(statements[1])
+    for (const results of [[first], [first, second]]) {
+      const { renderQueries, effectiveConfig } = resolveDraw(
+        statements,
+        results,
+        saved,
+      )
+      expect(renderQueries.map((q) => q.index)).toEqual(
+        results.map((_, i) => i),
+      )
+      expect(effectiveConfig.queries[0]?.enabled).toBe(false)
+    }
+  })
+
   it("a saved null does not suppress inference once the statement resolves", () => {
     const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
     // Config saved earlier while statement 0 was unresolved → its slot is null.
@@ -427,6 +483,49 @@ describe("toChartResult", () => {
       expect(settled.results).toHaveLength(1)
       expect(settled.hadError).toBe(false)
     }
+  })
+
+  it("keeps the second duplicate SQL result in Q2 when Q1 has no rows", () => {
+    const statement = "SELECT ts, site, price FROM samples"
+    const statements = [statement, statement]
+    const columns = [
+      { name: "ts", type: "TIMESTAMP" },
+      { name: "site", type: "SYMBOL" },
+      { name: "price", type: "DOUBLE" },
+    ]
+    const frame = toChartResult(
+      {
+        timestamp: 42,
+        activeResultIndex: 0,
+        results: [
+          { type: "dql", query: statement, columns, count: 0, dataset: [] },
+          {
+            type: "dql",
+            query: ` ${statement};`,
+            columns,
+            count: 1,
+            dataset: [[1000, "west", 21]],
+          },
+        ],
+      },
+      statements,
+    )
+    if (frame.kind !== "settled") throw new Error("expected a settled frame")
+    const resolved = resolveDraw(statements, frame.results, {
+      xColumn: "ts",
+      queries: [
+        { type: "line", yColumns: ["price"] },
+        { type: "bar", yColumns: ["price"] },
+      ],
+    })
+    expect(resolved.tabs.map((tab) => tab.label)).toEqual(["Q2"])
+    expect(resolved.renderQueries).toEqual([
+      expect.objectContaining({
+        index: 1,
+        type: "bar",
+        dataset: [[1000, "west", 21]],
+      }),
+    ])
   })
 
   it("settles a mixed frame with hadError and only the chartable statements", () => {

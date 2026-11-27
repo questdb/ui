@@ -1,10 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import styled from "styled-components"
 import { Input, SelectMenuControl, TabButton } from "../../../../components"
 import type { ChartConfig, QueryChart } from "./chartTypes"
+import {
+  ReferenceLinesEditor,
+  referenceLineNeedsValue,
+  savedReferenceLines,
+  type ReferenceLinesEditorHandle,
+} from "./ReferenceLinesEditor"
 import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
-import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
+import { resolveQueryAxes, type QueryTab } from "../DrawCanvas/drawCanvasUtils"
+import {
+  dropRightAxisLinesWithoutQuery,
+  hasEnabledRightAxisQuery,
+} from "../../../../utils/tools/chartConfigWire"
 import {
   Field,
   FieldGroup,
@@ -92,6 +103,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
   const [draft, setDraft] = useState<ChartConfig>(initialDraft ?? config)
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
+  const linesEditorRef = useRef<ReferenceLinesEditorHandle>(null)
   // Mounting already open means a remount mid-session: keep the draft.
   const drawerWasOpenRef = useRef(open)
 
@@ -140,24 +152,24 @@ const ChartSettings: React.FC<SettingsProps> = ({
     [telemetry, onClose],
   )
 
-  const anchorTab = tabs[0]
-  const anchorGroups = anchorTab
-    ? groupColumns(anchorTab.columns)
-    : { temporal: [], numeric: [], categorical: [], other: [] }
-  const xCandidates = [
-    ...anchorGroups.temporal,
-    ...anchorGroups.categorical,
-    ...anchorGroups.numeric,
-  ]
-
-  const activeTab = tabs.find((t) => t.index === activeIndex) ?? anchorTab
-  const isAnchorTab = activeTab != null && activeTab.index === anchorTab?.index
-  const query: QueryChart | undefined =
-    activeTab != null
-      ? (draft.queries[activeTab.index] ?? undefined)
-      : undefined
+  const { anchor, xColumn, placements } = resolveQueryAxes(tabs, draft)
+  const active =
+    placements.find(({ item }) => item.index === activeIndex) ?? placements[0]
+  const activeTab = active?.item
+  const xGroups = anchor ? groupColumns(anchor.columns) : null
+  const xCandidates = xGroups
+    ? [...xGroups.temporal, ...xGroups.categorical, ...xGroups.numeric]
+    : []
+  const isAnchorTab = activeTab != null && activeTab === anchor
+  const query = activeTab != null ? draft.queries[activeTab.index] : null
 
   const hasRight = draft.queries.some((q) => q?.axis === "right")
+  const primary = anchor
+    ? (draft.queries[anchor.index] ?? anchor.inferredChart)
+    : null
+  // A pie chart has no value axis to draw a line on.
+  const hasValueAxis = primary != null && primary.type !== "pie"
+  const rightAxisDrawn = hasEnabledRightAxisQuery(draft.queries)
 
   const updateQuery = (index: number, patch: Partial<QueryChart>) =>
     updateDraft({
@@ -172,7 +184,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ...draft,
       xColumn,
       queries: draft.queries.map((q, i) =>
-        i === anchorTab?.index && q?.partitionByColumn === xColumn
+        i === anchor?.index && q?.partitionByColumn === xColumn
           ? { ...q, partitionByColumn: undefined }
           : q,
       ),
@@ -192,7 +204,22 @@ const ChartSettings: React.FC<SettingsProps> = ({
       setActiveIndex(badIdx)
       return
     }
-    const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
+    // The agent tools' rule, for every chart type: a right line needs an
+    // enabled right query, so one without is dropped. The lines editor says
+    // so; a pie hides it, and draws no line anyway.
+    const keptLines = dropRightAxisLinesWithoutQuery(draft)
+    // A kept line with a label or typed text but no number would lose what
+    // the user typed, so Save is refused and its Value field says why. A pie
+    // hides the lines editor, so its lines without a number are dropped.
+    if (hasValueAxis && keptLines?.some(referenceLineNeedsValue)) {
+      telemetry?.onSaveBlocked?.("reference_line_without_value")
+      // The error is shown before focus lands, so it is announced with the
+      // field.
+      flushSync(() => setSaveAttempted(true))
+      linesEditorRef.current?.focusValueError()
+      return
+    }
+    const referenceLines = savedReferenceLines(keptLines)
     telemetry?.onSave?.({
       chartType: primary?.type,
       seriesCount: primary?.yColumns.length ?? 0,
@@ -200,7 +227,8 @@ const ChartSettings: React.FC<SettingsProps> = ({
       hasRightAxis: hasRight,
       partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
     })
-    onSave(draft)
+    const { referenceLines: _lines, ...rest } = draft
+    onSave({ ...rest, ...(referenceLines && { referenceLines }) })
     if (presentation === "drawer") onClose?.()
   }
 
@@ -221,7 +249,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
         <SelectMenuControl
           name="x-axis"
           ariaLabel="X-axis"
-          value={draft.xColumn ?? ""}
+          value={xColumn ?? ""}
           placeholder="Select column"
           onValueChange={(value) => changeXColumn(value || null)}
           options={xCandidates.map((c) => ({
@@ -280,42 +308,56 @@ const ChartSettings: React.FC<SettingsProps> = ({
         </FieldGroup>
       )}
 
+      {hasValueAxis && (
+        <ReferenceLinesEditor
+          ref={linesEditorRef}
+          lines={draft.referenceLines ?? []}
+          hasRightAxis={rightAxisDrawn}
+          showErrors={saveAttempted}
+          onChange={(referenceLines) =>
+            updateDraft({ ...draft, referenceLines })
+          }
+        />
+      )}
+
       {tabs.length > 1 && (
         <>
           <Divider />
           <FieldLabel>Queries</FieldLabel>
           <TabStrip role="tablist" aria-label="Chart queries">
-            {tabs.map((t) => (
+            {placements.map(({ item: t, compatible }) => (
               <Tab
                 key={t.index}
                 type="button"
-                $active={t.index === activeIndex}
+                $active={t.index === activeTab?.index}
                 role="tab"
+                aria-selected={t.index === activeTab?.index}
                 onClick={() => setActiveIndex(t.index)}
                 title={
-                  t.compatible
+                  compatible
                     ? t.query
                     : `${t.query}\n\n(x-axis incompatible — excluded)`
                 }
               >
                 {t.label}
-                {!t.compatible && <IncompatibleIcon size={14} weight="fill" />}
+                {!compatible && <IncompatibleIcon size={14} weight="fill" />}
               </Tab>
             ))}
           </TabStrip>
         </>
       )}
 
-      {activeTab && query && (
+      {active && query && (
         <QueryControls
-          activeTab={activeTab}
+          activeTab={active.item}
           query={query}
-          xColumn={isAnchorTab ? draft.xColumn : activeTab.xColumn}
-          anchorLabel={anchorTab?.label ?? "Q1"}
+          xColumn={active.ownX}
+          compatible={active.compatible}
+          anchorLabel={anchor?.label ?? "Q1"}
           isAnchorTab={isAnchorTab}
           ohlcError={saveAttempted && candlestickMissingOhlc(query)}
-          onUpdateQuery={(patch) => updateQuery(activeTab.index, patch)}
-          onSetQuery={(next) => setQuery(activeTab.index, next)}
+          onUpdateQuery={(patch) => updateQuery(active.item.index, patch)}
+          onSetQuery={(next) => setQuery(active.item.index, next)}
           telemetry={telemetry}
         />
       )}

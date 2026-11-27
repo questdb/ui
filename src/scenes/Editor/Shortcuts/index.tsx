@@ -4,6 +4,7 @@ import { color } from "../../../utils"
 import { Key } from "../../../components"
 import { menuContainerStyles } from "../../../components/menuStyles"
 import { ctrlCmd, altOption } from "../../../utils/platform"
+import { SCROLL_TO_END_KEYS } from "../AIChatWindow/scrollToEndShortcut"
 
 type ShortcutsList = { keys: string[][]; title: string }[]
 
@@ -132,6 +133,17 @@ const editorList: ShortcutsList = [
   },
 ]
 
+const assistantList: ShortcutsList = [
+  {
+    keys: [[ctrlCmd, "Enter"]],
+    title: "Send now, stopping the answer",
+  },
+  {
+    keys: [SCROLL_TO_END_KEYS],
+    title: "Scroll to the latest message",
+  },
+]
+
 const globalList: ShortcutsList = [
   {
     keys: [[ctrlCmd, "K"]],
@@ -173,5 +185,6 @@ export const Shortcuts = () => (
   <Wrapper>
     <ShortcutsGroup list={globalList} title="Global shortcuts" />
     <ShortcutsGroup list={editorList} title="SQL editor shortcuts" />
+    <ShortcutsGroup list={assistantList} title="AI assistant shortcuts" />
   </Wrapper>
 )

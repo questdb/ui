@@ -1,43 +1,13 @@
-import {
-  isMcpPromoCollapsed,
-  shouldShowMcpPromo,
-  shouldShowNotebookModal,
-} from "./notebookOnboarding"
+import { isMcpPromoCollapsed, shouldShowMcpPromo } from "./notebookOnboarding"
 import type { NotebookOnboarding } from "../providers/LocalStorageProvider/types"
 
 const freshInstall: NotebookOnboarding = {
   mcpEverConnected: false,
-  showNotebookPromo: true,
   showMcpPromo: true,
   collapseMcpPromo: false,
 }
 
 describe("notebook onboarding visibility", () => {
-  describe("onboarding modal", () => {
-    it("shows on a fresh install", () => {
-      // Given a fresh install
-      // When deciding whether to show the modal
-      // Then it shows
-      expect(shouldShowNotebookModal(freshInstall)).toBe(true)
-    })
-
-    it("stays hidden once it has been shown", () => {
-      // Given the modal was already shown (flag flipped to false)
-      const onboarding = { ...freshInstall, showNotebookPromo: false }
-      // When deciding whether to show the modal
-      // Then it stays hidden
-      expect(shouldShowNotebookModal(onboarding)).toBe(false)
-    })
-
-    it("stays hidden once an MCP server has ever connected", () => {
-      // Given the bridge has connected before, even if the flag is untouched
-      const onboarding = { ...freshInstall, mcpEverConnected: true }
-      // When deciding whether to show the modal
-      // Then it stays hidden
-      expect(shouldShowNotebookModal(onboarding)).toBe(false)
-    })
-  })
-
   describe("in-notebook promo section", () => {
     it("shows on a fresh install", () => {
       // Given a fresh install

@@ -17,7 +17,7 @@ import {
   denyReasonForSchemaTool,
   denyReasonForWriteSql,
 } from "../../utils/tools/permissions"
-import { mcpTools } from "../../utils/tools/tools"
+import { bridgeTools } from "../../utils/tools/tools"
 
 const textResult = (text: string, isError = true) => ({
   content: [{ type: "text", text }],
@@ -38,9 +38,9 @@ describe("mcpToolCallEvent", () => {
     )
   })
 
-  it("maps every advertised MCP tool", () => {
+  it("maps every tool the console offers the bridge", () => {
     expect(
-      mcpTools
+      bridgeTools
         .map((tool) => tool.name)
         .filter((name) => mcpToolCallEvent(name) === null),
     ).toEqual([])

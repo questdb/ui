@@ -1,6 +1,11 @@
 import type { ConversationMessage } from "../../providers/AIConversationProvider/types"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
-import type { StatusEntry } from "../../providers/AIStatusProvider"
+import type {
+  ContentSlice,
+  OperationHistory,
+  StatusEntry,
+  TranscriptBlock,
+} from "../../providers/AIStatusProvider"
 
 export type AssistantTurn = {
   anchorIndex: number
@@ -140,6 +145,7 @@ export type TimelineOperations = {
   type: "operations"
   operations: StatusEntry[]
   timestamp: number
+  // When the group's last step ended: the start of what came after it.
   endTimestamp?: number
 }
 
@@ -149,7 +155,45 @@ export type TimelineContent = {
   timestamp: number
 }
 
-export type TimelineItem = TimelineOperations | TimelineContent
+export type TimelineItem =
+  | TimelineOperations
+  | TimelineContent
+  | { type: "record"; block: TranscriptBlock; timestamp: number }
+
+// Adds a streamed chunk to a response step's slices: it continues the last
+// slice when it follows it in the same message.
+export const extendContentSlices = (
+  slices: ContentSlice[] | undefined,
+  next: ContentSlice,
+): ContentSlice[] => {
+  const last = slices?.at(-1)
+  if (!slices || !last) return [next]
+  return last.messageId === next.messageId && last.end === next.start
+    ? [...slices.slice(0, -1), { ...last, end: next.end }]
+    : [...slices, next]
+}
+
+// The history with each response step's text read from the turn's messages
+// its slices point into.
+export const withResponseTexts = (
+  history: OperationHistory,
+  messages: ConversationMessage[],
+): OperationHistory => {
+  if (!history.some((entry) => entry.contentSlices)) return history
+  const contentById = new Map(
+    messages.map((message) => [message.id, message.content ?? ""]),
+  )
+  return history.map((entry) => {
+    if (!entry.contentSlices) return entry
+    const { contentSlices, ...step } = entry
+    const content = contentSlices
+      .map(({ messageId, start, end }) =>
+        (contentById.get(messageId) ?? "").slice(start, end),
+      )
+      .join("")
+    return { ...step, content }
+  })
+}
 
 export function buildInterleavedTimeline(
   operationHistory: StatusEntry[],
@@ -159,10 +203,16 @@ export function buildInterleavedTimeline(
   for (const entry of operationHistory) {
     if (entry.type === AIOperationStatus.GeneratingResponse) {
       const last = timeline[timeline.length - 1]
-      if (last?.type === "operations" && !last.endTimestamp) {
+      if (last?.type === "operations" && last.endTimestamp === undefined) {
         last.endTimestamp = entry.timestamp
       }
-      if (entry.content?.trim()) {
+      if (entry.transcriptBlock) {
+        timeline.push({
+          type: "record",
+          block: entry.transcriptBlock,
+          timestamp: entry.timestamp,
+        })
+      } else if (entry.content?.trim()) {
         timeline.push({
           type: "content",
           content: entry.content,
@@ -174,7 +224,10 @@ export function buildInterleavedTimeline(
 
     const last = timeline[timeline.length - 1]
     if (last?.type === "operations") {
+      // A response without text does not end the group: its steps go on, and
+      // so does its time.
       last.operations.push(entry)
+      last.endTimestamp = undefined
     } else {
       timeline.push({
         type: "operations",

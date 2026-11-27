@@ -25,11 +25,11 @@ export const SchemaAIButton = ({
   disabledTooltip,
   ...props
 }: SchemaAIButtonProps) => {
-  const { hasSchemaAccess, canUse, status } = useAIStatus()
+  const { hasSchemaAccess, canUse, unavailableReason, status } = useAIStatus()
   const isOperationInProgress = isBlockingAIStatus(status)
   const aiDisabled = !canUse || !hasSchemaAccess || isOperationInProgress
   const aiDisabledTooltip = !canUse
-    ? "AI Assistant is not configured"
+    ? unavailableReason
     : !hasSchemaAccess
       ? "Schema access is not granted to this model"
       : isOperationInProgress

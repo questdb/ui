@@ -1,7 +1,12 @@
 import type { EChartsOption } from "echarts"
 import type { ChartZoomDensity } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import type { ChartConfig, ChartType, SeriesAxis } from "./chartTypes"
+import type {
+  ChartConfig,
+  ChartType,
+  ReferenceLine,
+  SeriesAxis,
+} from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
 
 type Dataset = (boolean | string | number | null)[][]
@@ -22,6 +27,9 @@ export type ResolvedQuery = {
 export type ChartGlobals = {
   xColumn: string | null
   rightAxis?: ChartConfig["rightAxis"]
+  referenceLines?: ReferenceLine[]
+  // Settings place a query on the left axis, even if it has no series now.
+  leftAxisConfigured?: boolean
 }
 
 type Series = Record<string, unknown>
@@ -309,8 +317,79 @@ const buildPieChartOption = (
   }
 }
 
+// Reference lines belong to the axes, not a selectable legend entry.
+const referenceLineSeries = (
+  series: Series[],
+  lines: ReferenceLine[],
+  leftAxisConfigured = false,
+) => {
+  const plottedAxes = new Set(series.map((s) => s.yAxisIndex ?? 0))
+  const markers = new Map<number, Series>()
+  for (const line of lines) {
+    // Never draw a threshold in the other axis' units. Preserve the
+    // default-left fallback for charts configured right-only; a left query
+    // that has no series right now hides its lines instead.
+    const axis =
+      line.axis === "right" || (!plottedAxes.has(0) && !leftAxisConfigured)
+        ? 1
+        : 0
+    if (!plottedAxes.has(axis)) continue
+    const target = markers.get(axis) ?? {
+      id: `reference-lines-${axis}`,
+      type: "line",
+      yAxisIndex: axis,
+      data: [],
+      silent: true,
+      animation: false,
+      tooltip: { show: false },
+    }
+    const markLine = (target.markLine as { data: unknown[] } | undefined) ?? {
+      precision: -1,
+      silent: true,
+      symbol: "none",
+      animation: false,
+      lineStyle: { type: "dashed", width: 1 },
+      label: { position: "insideEndTop" },
+      data: [] as unknown[],
+    }
+    markLine.data.push({
+      yAxis: line.value,
+      label: { formatter: line.label ?? String(line.value) },
+    })
+    target.markLine = markLine
+    markers.set(axis, target)
+  }
+  return [...markers.values()]
+}
+
+// The values of the reference lines drawn on the axis.
+const referenceValuesOn = (markers: Series[], axisIndex: number) =>
+  markers
+    .filter((s) => (s.yAxisIndex ?? 0) === axisIndex)
+    .flatMap(
+      (s) =>
+        (s.markLine as { data: { yAxis: number }[] } | undefined)?.data ?? [],
+    )
+    .map((d) => d.yAxis)
+
+// An axis that scales to its data keeps its reference lines in view. A bound
+// of null leaves the axis to scale itself; ECharts' types do not admit it.
+type AxisBound = (extent: { min: number; max: number }) => number
+const axisBoundsWith = (
+  values: number[],
+): { min?: AxisBound; max?: AxisBound } => {
+  if (values.length === 0) return { min: undefined, max: undefined }
+  const lowest = Math.min(...values)
+  const highest = Math.max(...values)
+  return {
+    min: ((v) => (lowest < v.min ? lowest : null)) as AxisBound,
+    max: ((v) => (highest > v.max ? highest : null)) as AxisBound,
+  }
+}
+
 const buildScatterChartOption = (
   q: ResolvedQuery,
+  referenceLines: ReferenceLine[],
   chartText: { fontSize: number },
   legend: object,
   axisLabel: { fontSize: number },
@@ -336,9 +415,16 @@ const buildScatterChartOption = (
       }
     })
     .filter((s): s is NonNullable<typeof s> => s !== null)
+  // A scatter has one value axis, in the units of its query's axis: lines on
+  // that axis are drawn on it, and the other axis' lines stay hidden.
+  const queryAxis = q.axis === "right" ? 1 : 0
+  const markers = referenceLineSeries(
+    series.map((s) => ({ ...s, yAxisIndex: queryAxis })),
+    referenceLines,
+  ).map((marker) => ({ ...marker, yAxisIndex: 0 }))
   return {
     tooltip: { trigger: "item", textStyle: chartText },
-    legend,
+    legend: { ...legend, data: [...new Set(series.map((s) => s.name))] },
     grid: {
       left: 24,
       right: 24,
@@ -353,8 +439,14 @@ const buildScatterChartOption = (
       axisLabel,
       nameTextStyle: axisName,
     },
-    yAxis: { type: "value", scale: true, axisLabel, nameTextStyle: axisName },
-    series,
+    yAxis: {
+      type: "value",
+      scale: true,
+      axisLabel,
+      nameTextStyle: axisName,
+      ...axisBoundsWith(referenceValuesOn(markers, 0)),
+    },
+    series: [...series, ...markers] as EChartsOption["series"],
   }
 }
 
@@ -383,6 +475,7 @@ export const buildEchartsOption = (
   if (single && anchor.type === "scatter" && anchorRole === "numeric")
     return buildScatterChartOption(
       anchor,
+      chart.referenceLines ?? [],
       chartText,
       baseLegend,
       axisLabel,
@@ -458,6 +551,12 @@ export const buildEchartsOption = (
   }
 
   const hasRight = queries.some((q) => q.axis === "right")
+  const referenceLines = chart.referenceLines ?? []
+  const markers = referenceLineSeries(
+    series,
+    referenceLines,
+    chart.leftAxisConfigured,
+  )
   const rightQueries = queries.filter((q) => q.axis === "right")
   const rightTitle =
     chart.rightAxis?.name ??
@@ -480,10 +579,16 @@ export const buildEchartsOption = (
     scale: true,
     axisLabel,
     nameTextStyle: axisName,
+    ...axisBoundsWith(referenceValuesOn(markers, 0)),
   }
+  const rightBounds = axisBoundsWith(referenceValuesOn(markers, 1))
+  // Grid lines follow the left axis, so the two axes' lines do not clash.
+  // With every series on the right, the left axis is empty and the right one
+  // draws them; otherwise the chart would have none.
+  const hasLeft = queries.some((q) => q.axis !== "right")
   const yAxis: EChartsOption["yAxis"] = hasRight
     ? [
-        leftAxis,
+        { ...leftAxis, show: hasLeft },
         {
           type: "value",
           scale: true,
@@ -491,11 +596,11 @@ export const buildEchartsOption = (
           name: rightTitle,
           nameTextStyle: axisName,
           axisLabel,
-          splitLine: { show: false },
+          splitLine: { show: !hasLeft },
           // Keep both keys even when unset: chart updates merge into the prior
           // option, and an omitted key would keep a cleared bound on screen.
-          min: chart.rightAxis?.min,
-          max: chart.rightAxis?.max,
+          min: chart.rightAxis?.min ?? rightBounds.min,
+          max: chart.rightAxis?.max ?? rightBounds.max,
         },
       ]
     : leftAxis
@@ -543,11 +648,14 @@ export const buildEchartsOption = (
     // axis and tooltip must not re-render those instants in the browser's zone.
     useUTC: true,
     tooltip,
-    legend: baseLegend,
+    legend: {
+      ...baseLegend,
+      data: [...new Set(series.map((s) => String(s.name)))],
+    },
     grid,
     xAxis,
     yAxis,
-    series: series as EChartsOption["series"],
+    series: [...series, ...markers] as EChartsOption["series"],
   }
 }
 

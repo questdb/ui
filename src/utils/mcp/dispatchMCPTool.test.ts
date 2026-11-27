@@ -164,3 +164,68 @@ describe("dispatchMCPTool — envelope shape", () => {
     expect(out.content[0].text).toMatch(/^boom/)
   })
 })
+
+describe("dispatchMCPTool — suggest_query", () => {
+  // The real suggest_query of the AI Assistant's dispatcher.
+  const useRealDispatchOnce = async () => {
+    const actual =
+      await vi.importActual<typeof import("../tools/dispatch")>(
+        "../tools/dispatch",
+      )
+    vi.mocked(mockedDispatchTool).mockImplementationOnce(actual.dispatchTool)
+  }
+
+  it("shows the query in the chat answer of the call's turn, and tells the agent", async () => {
+    // Given a call of a chat agent's running turn
+    await useRealDispatchOnce()
+    const onSuggestedQuery = vi.fn()
+
+    // When the agent suggests a query
+    const out = await dispatchMCPTool(
+      makeCall("suggest_query", { query: "SELECT 1" }),
+      { ...ctx("fresh"), onSuggestedQuery },
+    )
+
+    // Then the answer takes it, and the agent learns that it shows
+    expect(onSuggestedQuery.mock.calls).toEqual([["SELECT 1"]])
+    expect(out.isError).toBe(false)
+    expect(out.content[0].text).toMatch(
+      /^Query suggestion registered\. It will be shown to the user as a suggestion they can accept or reject\./,
+    )
+  })
+
+  it("tells the agent that nothing was shown when no chat answer takes it", async () => {
+    // Given a call that no running chat answer takes: from the terminal, or
+    // after its turn ended
+
+    // When the agent suggests a query
+    const out = await dispatchMCPTool(
+      makeCall("suggest_query", { query: "SELECT 1" }),
+      ctx("fresh"),
+    )
+
+    // Then the agent learns that the user saw nothing
+    expect(out.isError).toBe(true)
+    expect(out.content[0].text).toMatch(
+      /^suggest_query works only during an AI Assistant chat answer; nothing was shown to the user\./,
+    )
+    expect(mockedDispatchTool).not.toHaveBeenCalled()
+  })
+
+  it("shows nothing for a call without a query", async () => {
+    // Given a call of a chat agent's running turn
+    await useRealDispatchOnce()
+    const onSuggestedQuery = vi.fn()
+
+    // When the agent leaves out the query
+    const out = await dispatchMCPTool(makeCall("suggest_query", {}), {
+      ...ctx("fresh"),
+      onSuggestedQuery,
+    })
+
+    // Then the answer takes nothing, and the agent learns why
+    expect(onSuggestedQuery).not.toHaveBeenCalled()
+    expect(out.isError).toBe(true)
+    expect(out.content[0].text).toMatch(/^Error: query parameter is required/)
+  })
+})

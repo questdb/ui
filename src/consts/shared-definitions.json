@@ -580,7 +580,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query). `reference_lines` draws horizontal lines at fixed values, like RSI's 30 and 70.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -690,9 +690,37 @@
             }
           },
           "required": ["name", "min", "max"]
+        },
+        "reference_lines": {
+          "type": ["array", "null"],
+          "description": "Horizontal lines at fixed values, like RSI's 30 (oversold) and 70 (overbought), or a price target. A line goes on the left axis unless axis:'right'. A right line needs an enabled query on the right axis, or the call is refused. A line on an axis with no series (say, its query returned no rows) is not drawn; a left line moves to the right axis only when no enabled query is on the left. The axis grows to keep each line in view unless its min/max is pinned. Null preserves; [] removes them all; an array replaces them.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "value": { "type": "number" },
+              "axis": {
+                "type": ["string", "null"],
+                "enum": ["left", "right", null],
+                "description": "null = left."
+              },
+              "label": {
+                "type": ["string", "null"],
+                "description": "Shown on the line; null shows the value."
+              }
+            },
+            "required": ["value", "axis", "label"]
+          }
         }
       },
-      "required": ["buffer_id", "cell_id", "x_column", "queries", "right_axis"]
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "x_column",
+        "queries",
+        "right_axis",
+        "reference_lines"
+      ]
     }
   },
   {
@@ -1126,14 +1154,14 @@
               "chart_config": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
-                "description": "Chart configuration; required when mode='draw'. apply_notebook_state is a full PUT — this REPLACES the cell's chart entirely; null/omitted means NO chart (it is NOT preserved). To keep an existing chart unchanged, re-send its full config (shown as `chart_config` on the cell in <notebook_context> / get_notebook_state). The cell's `;`-separated SELECTs auto-combine into one chart sharing the first query's x-axis; `queries` holds one config per statement (each keeps its own type; axis:'right' for a second scale).",
+                "description": "Chart configuration; required when mode='draw'. apply_notebook_state is a full PUT — this REPLACES the cell's chart entirely; null/omitted means NO chart (it is NOT preserved). To keep an existing chart unchanged, re-send its full config (shown as `chart_config` on the cell in <notebook_context> / get_notebook_state). The cell's `;`-separated SELECTs auto-combine into one chart sharing the first query's x-axis; `queries` holds one config per statement (each keeps its own type; axis:'right' for a second scale). `reference_lines` draws horizontal lines at fixed values, like RSI's 30 and 70.",
                 "properties": {
                   "x_column": {
                     "type": ["string", "null"]
                   },
                   "queries": {
                     "type": ["array", "null"],
-                    "description": "One config per `;`-split query, index-aligned — send the FULL array, exactly one entry per statement (its length must equal the cell's `;`-split statement count, else REJECTED). These entries are the chart's per-query configs in full (apply is a PUT); a `null` entry infers that statement. To keep a chart unchanged, re-send its full config from <notebook_context>.",
+                    "description": "One config per `;`-split query, index-aligned — send the FULL array, exactly one entry per statement. A `null` entry infers that statement. With nonempty reference_lines, `[]` can infer all statements without any per-query overrides. To keep a chart unchanged, re-send its full config from <notebook_context>.",
                     "items": {
                       "type": ["object", "null"],
                       "additionalProperties": false,
@@ -1217,9 +1245,35 @@
                       }
                     },
                     "required": ["name", "min", "max"]
+                  },
+                  "reference_lines": {
+                    "type": ["array", "null"],
+                    "description": "Horizontal lines at fixed values, like RSI's 30 (oversold) and 70 (overbought), or a price target. A line goes on the left axis unless axis:'right'. A right line needs an enabled query on the right axis, or the call is refused. A line on an axis with no series (say, its query returned no rows) is not drawn; a left line moves to the right axis only when no enabled query is on the left. The axis grows to keep each line in view unless its min/max is pinned. Null = none.",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "value": { "type": "number" },
+                        "axis": {
+                          "type": ["string", "null"],
+                          "enum": ["left", "right", null],
+                          "description": "null = left."
+                        },
+                        "label": {
+                          "type": ["string", "null"],
+                          "description": "Shown on the line; null shows the value."
+                        }
+                      },
+                      "required": ["value", "axis", "label"]
+                    }
                   }
                 },
-                "required": ["x_column", "queries", "right_axis"]
+                "required": [
+                  "x_column",
+                  "queries",
+                  "right_axis",
+                  "reference_lines"
+                ]
               },
               "highlight_config": {
                 "type": ["object", "null"],
@@ -1514,7 +1568,7 @@
     "surfaces": ["mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. SQL/draw cells report their pane `view`: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Their `mode` matches that presentation: null for editor-only, `run` for a table result, and `draw` for a chart. Markdown reports `view`, `mode`, and `result_height` as null. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
+    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the MCP server never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. SQL/draw cells report their pane `view`: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Their `mode` matches that presentation: null for editor-only, `run` for a table result, and `draw` for a chart. Markdown reports `view`, `mode`, and `result_height` as null. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1531,7 +1585,7 @@
     "surfaces": ["mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the digest of user edits to the notebook since your last fetch (or session start). Use this to detect that the user changed something the agent might want to react to. Coalesced — multiple typing events on the same cell collapse to a single 'edited' entry.",
+    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the MCP server never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the digest of user edits to the notebook since your last fetch (or session start). Use this to detect that the user changed something the agent might want to react to. Coalesced — multiple typing events on the same cell collapse to a single 'edited' entry.",
     "inputSchema": {
       "type": "object",
       "properties": {},

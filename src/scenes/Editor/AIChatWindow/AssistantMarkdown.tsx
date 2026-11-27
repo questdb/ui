@@ -42,6 +42,13 @@ const MarkdownContent = styled.div`
     color: ${color("contentPrimary")};
   }
 
+  img {
+    max-width: 100%;
+    height: auto;
+    vertical-align: middle;
+    border-radius: 0.4rem;
+  }
+
   em {
     font-style: italic;
   }
@@ -54,6 +61,12 @@ const MarkdownContent = styled.div`
 
   li {
     margin-bottom: 0.3rem;
+  }
+
+  [data-hook="markdown-local-link"] {
+    text-decoration: underline dotted;
+    text-underline-offset: 0.3rem;
+    cursor: help;
   }
 
   a {
@@ -138,6 +151,8 @@ const createComponents = (
     ({ children, className }: React.ComponentProps<"code">) => {
       const isCodeBlock =
         typeof className === "string" && className.includes("language-")
+      // Older transcript records are plain fenced code: their saved
+      // Markdown does not distinguish application records from model text.
       if (isCodeBlock) {
         const codeContent = (
           Array.isArray(children)
@@ -184,7 +199,7 @@ export const AssistantMarkdown = memo(
 
     return (
       <MarkdownContent key={messageId}>
-        <SafeMarkdown allowImages components={components}>
+        <SafeMarkdown allowImages="inline" components={components}>
           {content}
         </SafeMarkdown>
       </MarkdownContent>

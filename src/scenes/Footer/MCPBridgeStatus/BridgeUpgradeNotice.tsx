@@ -3,9 +3,11 @@ import styled from "styled-components"
 import { WarningIcon } from "@phosphor-icons/react"
 import {
   MCP_UPGRADE_COMMAND,
-  MCP_VERSION_MISMATCH_COPY,
+  mcpVersionMismatchCopy,
   type BridgeVersionMismatch,
 } from "../../../utils/mcp/protocolVersion"
+import type { McpClient } from "../../../utils/mcp/mcpClients"
+import { mcpAgentNames } from "./agentStatus"
 import { CopyableCommand } from "./CopyableCommand"
 
 const Text = styled.div`
@@ -22,12 +24,16 @@ const Detail = styled.span`
   word-break: break-word;
 `
 
+// MCP mode: the coding agent's MCP server runs another version than this
+// console expects. Chat mode has AgentUpgradeNotice.
 export const BridgeUpgradeNotice = ({
   severity,
+  client,
 }: {
   severity: BridgeVersionMismatch
+  client: McpClient | null
 }) => {
-  const copy = MCP_VERSION_MISMATCH_COPY[severity]
+  const copy = mcpVersionMismatchCopy(severity, mcpAgentNames(client))
   return (
     <>
       <WarningIcon size={16} weight="duotone" />

@@ -47,12 +47,14 @@ const structuralKey = (option: EChartsOption): string => {
   const seriesTypes = series.map((s) => {
     const spec = s as {
       type?: string
+      id?: string
       areaStyle?: unknown
       step?: unknown
       stack?: unknown
     }
     return [
       spec.type ?? "",
+      spec.id ?? "",
       spec.areaStyle ? "a" : "",
       spec.step ? "s" : "",
       spec.stack ? "k" : "",

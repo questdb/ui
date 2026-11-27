@@ -7,6 +7,10 @@ import {
   type NotebookCell,
 } from "../../../store/notebook"
 import { NotebookToolError } from "../notebookToolError"
+import {
+  hasRightAxisLineWithoutQuery,
+  RIGHT_AXIS_LINE_WITHOUT_QUERY,
+} from "../../tools/chartConfigWire"
 import type { ViewParts } from "../notebookDexieView"
 import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
@@ -491,12 +495,19 @@ export const setCellChartConfigTransition = (
   patch: Partial<ChartConfig>,
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
+  const chartConfig = mergeCellChartConfig(cell, patch)
+  // Only a change to the lines or the queries can leave a line unseen; an
+  // unrelated change keeps working on a config saved before this check.
+  if (
+    (patch.referenceLines !== undefined || patch.queries !== undefined) &&
+    hasRightAxisLineWithoutQuery(chartConfig)
+  ) {
+    throw new NotebookToolError("validation", RIGHT_AXIS_LINE_WITHOUT_QUERY)
+  }
   return {
     parts: {
       ...parts,
-      cells: patchCellIn(parts.cells, cellId, {
-        chartConfig: mergeCellChartConfig(cell, patch),
-      }),
+      cells: patchCellIn(parts.cells, cellId, { chartConfig }),
     },
     result: undefined,
     touchedCellId: cellId,

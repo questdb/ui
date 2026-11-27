@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import {
+  ChatsCircleIcon,
   PlugsConnectedIcon,
   PlugsIcon,
   ShieldCheckIcon,
@@ -9,78 +10,50 @@ import {
 import { AlertDialog } from "../../components/AlertDialog"
 import { Overlay } from "../../components/Overlay"
 import { Button, LoadingSpinner } from "../../components"
+import { DisclosureToggle } from "../../scenes/Footer/MCPBridgeStatus/popoverParts"
 import { MAX_RECONNECT_ATTEMPTS } from "../../utils/mcp/MCPBridgeClient"
 import type { BridgeVersionMismatch } from "../../utils/mcp/protocolVersion"
 import type { Permissions } from "../../utils/tools/permissions"
+import type { PendingPairAgent } from "../../utils/mcp/mcpBridgeStorage"
 import { BridgeUpgradeNotice } from "../../scenes/Footer/MCPBridgeStatus/BridgeUpgradeNotice"
+import { AgentUpgradeNotice } from "../../scenes/Footer/MCPBridgeStatus/AgentUpgradeNotice"
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
+import {
+  chatAgentNames,
+  mcpAgentNames,
+} from "../../scenes/Footer/MCPBridgeStatus/agentStatus"
+import { mcpClientOf } from "../../utils/mcp/mcpClients"
+
+import {
+  Actions,
+  Body,
+  Hero,
+  IconBadge,
+  Lede,
+  StyledContent,
+  Title,
+} from "./consentDialogParts"
+import { PathText } from "../../components/PathText"
 
 const CONNECT_HOOK = "mcp-pair-consent-connect"
 
-const StyledContent = styled(AlertDialog.Content)`
-  padding: 0;
+const WorkspaceField = styled.div`
   display: flex;
   flex-direction: column;
+  gap: 0.4rem;
 `
 
-const Hero = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 2.4rem 2.4rem 1.6rem;
-  gap: 1.2rem;
-`
-
-const IconBadge = styled.div<{ $tone?: "neutral" | "success" }>`
-  width: 4.8rem;
-  height: 4.8rem;
-  border-radius: 0.8rem;
-  border: 1px solid
-    ${({ theme, $tone }) =>
-      $tone === "success"
-        ? theme.color.statusSuccess
-        : theme.color.contentAccentStrong};
-  color: ${({ theme, $tone }) =>
-    $tone === "success"
-      ? theme.color.statusSuccess
-      : theme.color.contentAccentStrong};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-`
-
-const Title = styled(AlertDialog.Title)`
-  margin: 0;
-  font-size: 1.8rem;
-  font-weight: 600;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
-
-const Lede = styled(AlertDialog.Description)`
-  margin: 0;
+const FieldLabel = styled.span`
+  font-size: 1.1rem;
   color: ${({ theme }) => theme.color.contentSecondary};
-  line-height: 1.5;
-  font-size: 1.4rem;
+  text-transform: uppercase;
+  font-weight: 600;
 `
 
-const Body = styled.div`
-  padding: 0 2.4rem 1.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.6rem;
-
-  [aria-haspopup="menu"] {
-    font-size: 1.4rem;
-    font-weight: 400;
-    background: ${({ theme }) => theme.color.surfaceInput};
-    border-color: ${({ theme }) => theme.color.interactionNeutral};
-
-    &:focus {
-      background: ${({ theme }) => theme.color.surfaceInput};
-    }
-  }
+const WorkspaceNote = styled.span`
+  font-size: 1.2rem;
+  line-height: 1.4;
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const Fields = styled.dl`
@@ -120,6 +93,8 @@ const TrustNote = styled.div`
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
+  font-size: 1.2rem;
+  line-height: 1.5;
   color: ${({ theme }) => theme.color.contentSecondary};
 
   svg {
@@ -188,23 +163,15 @@ const StatusDetail = styled.span`
   word-break: break-word;
 `
 
-const Actions = styled.div`
-  display: flex;
-  gap: 0.8rem;
-  justify-content: flex-end;
-  padding: 2rem 2.4rem 2.4rem;
-
-  @media (max-width: 28em) {
-    flex-direction: column-reverse;
-
-    > * {
-      width: 100%;
-    }
-  }
-`
-
 type Props = {
-  pending: { url: string; token: string } | null
+  pending: {
+    url: string
+    token: string
+    // Chat mode: the agent to chat with.
+    agent?: PendingPairAgent
+    // MCP mode: the coding agent's MCP client name.
+    mcpClient?: string
+  } | null
   isConnecting: boolean
   succeeded: boolean
   retryAttempt: number
@@ -215,23 +182,59 @@ type Props = {
   onCancel: () => void
 }
 
+// What the dialog shows. Radix keeps it on screen for its exit animation
+// after `pending` goes null, and the provider resets the rest at the same
+// moment; drawing the live props then would flash the dialog back to its
+// first state ("Connect …?") while it fades out.
+type View = Pick<
+  Props,
+  | "pending"
+  | "isConnecting"
+  | "succeeded"
+  | "retryAttempt"
+  | "error"
+  | "versionMismatch"
+>
+
 export const PairingConsentModal: React.FC<Props> = ({
-  pending,
-  isConnecting,
-  succeeded,
-  retryAttempt,
-  error,
-  versionMismatch,
   permissions,
   onConnect,
   onCancel,
+  ...live
 }) => {
+  const open = live.pending !== null
+  const lastOpenView = useRef<View>(live)
+  if (open) lastOpenView.current = live
+  const {
+    pending,
+    isConnecting,
+    succeeded,
+    retryAttempt,
+    error,
+    versionMismatch,
+  } = open ? live : lastOpenView.current
   const [pendingPermissions, setPendingPermissions] = useState<Permissions>(
     () => permissions,
   )
+  const [showDetails, setShowDetails] = useState(false)
   useEffect(() => {
-    if (pending) setPendingPermissions(permissions)
-  }, [pending])
+    if (!live.pending) return
+    setPendingPermissions(permissions)
+    setShowDetails(false)
+  }, [live.pending])
+  const agent = pending?.agent
+  // MCP mode names the agent when the console knows it.
+  const client = agent ? null : mcpClientOf(pending?.mcpClient)
+  const names = mcpAgentNames(client)
+  const connectionFields = (
+    <Fields>
+      <dt>Address:</dt>
+      <dd data-hook="mcp-pair-consent-ws">{pending?.url ?? ""}</dd>
+      <dt>Key:</dt>
+      <dd data-hook="mcp-pair-consent-token">{pending?.token ?? ""}</dd>
+    </Fields>
+  )
+
   const handleOpenAutoFocus = (e: Event) => {
     e.preventDefault()
     const root = e.currentTarget as HTMLElement | null
@@ -247,9 +250,17 @@ export const PairingConsentModal: React.FC<Props> = ({
   }
 
   return (
-    <AlertDialog.Root open={pending !== null}>
+    <AlertDialog.Root open={open}>
       <AlertDialog.Portal>
-        <Overlay primitive={AlertDialog.Overlay} />
+        {/* An outside click is Cancel (or Dismiss once connected), except
+            while connecting, like Escape. */}
+        <Overlay
+          primitive={AlertDialog.Overlay}
+          onClick={() => {
+            if (!isConnecting) onCancel()
+          }}
+          dataHook="mcp-pair-consent-overlay"
+        />
         <StyledContent
           onOpenAutoFocus={handleOpenAutoFocus}
           onEscapeKeyDown={(e) => {
@@ -263,47 +274,76 @@ export const PairingConsentModal: React.FC<Props> = ({
                 succeeded ? "mcp-pair-consent-success-badge" : undefined
               }
             >
-              {succeeded ? (
+              {agent ? (
+                <ChatsCircleIcon size={28} weight="duotone" />
+              ) : succeeded ? (
                 <PlugsConnectedIcon size={28} weight="duotone" />
               ) : (
                 <PlugsIcon size={28} weight="duotone" />
               )}
             </IconBadge>
             <Title>
-              {succeeded ? "MCP server connected" : "Connect to MCP server?"}
+              {agent
+                ? succeeded
+                  ? `${agent.label} connected`
+                  : `Connect ${agent.label}?`
+                : succeeded
+                  ? `${names.label} connected`
+                  : client
+                    ? `Connect ${client.label}?`
+                    : "Connect your agent?"}
             </Title>
             <Lede>
               {succeeded
-                ? "You can track the connection status from the bottom bar."
-                : "An external coding agent is asking to pair with this Web Console. Once connected, it can read and edit notebooks, run SQL, and inspect schemas on your behalf."}
+                ? agent
+                  ? `${chatAgentNames(agent.label).subject} works in the AI Assistant. Its status is at the bottom of the screen.`
+                  : `${names.subject} works from your terminal. Its status is at the bottom of the screen.`
+                : agent
+                  ? "It works in the AI Assistant: analyze your data, monitor your instance and build dashboards."
+                  : "It works from your terminal and can read and edit notebooks, run SQL and inspect schemas."}
             </Lede>
           </Hero>
 
           {!succeeded && (
             <Body>
-              <Fields>
-                <dt>WebSocket URL:</dt>
-                <dd data-hook="mcp-pair-consent-ws">{pending?.url ?? ""}</dd>
-                <dt>Token:</dt>
-                <dd data-hook="mcp-pair-consent-token">
-                  {pending?.token ?? ""}
-                </dd>
-              </Fields>
-
+              {agent?.cwd && (
+                <WorkspaceField>
+                  <FieldLabel>Workspace</FieldLabel>
+                  <PathText
+                    path={agent.cwd}
+                    dataHook="mcp-pair-consent-workspace"
+                  />
+                  <WorkspaceNote>
+                    It can edit files and run commands in this folder on your
+                    computer.
+                  </WorkspaceNote>
+                </WorkspaceField>
+              )}
               <PermissionsSection
                 value={pendingPermissions}
                 onChange={setPendingPermissions}
                 disabled={isConnecting}
               />
 
-              <TrustNote>
-                <ShieldCheckIcon size={16} weight="duotone" />
-                <span>
-                  <strong>Loopback only:</strong> The MCP server runs on your
-                  machine and never leaves it. Every action runs through your
-                  already-authenticated console session.
-                </span>
-              </TrustNote>
+              <DisclosureToggle
+                type="button"
+                aria-expanded={showDetails}
+                onClick={() => setShowDetails(!showDetails)}
+                data-hook="mcp-pair-consent-details"
+              >
+                {showDetails ? "Hide details" : "Details"}
+              </DisclosureToggle>
+              {showDetails && connectionFields}
+              {showDetails && !agent && (
+                <TrustNote>
+                  <ShieldCheckIcon size={16} weight="duotone" />
+                  <span>
+                    <strong>On this computer only:</strong> {names.subject}{" "}
+                    connects from this computer. Every action runs through your
+                    signed-in console session.
+                  </span>
+                </TrustNote>
+              )}
             </Body>
           )}
 
@@ -316,7 +356,11 @@ export const PairingConsentModal: React.FC<Props> = ({
             >
               <LoadingSpinner size="16px" />
               <StatusText>
-                <span>Establishing WebSocket connection...</span>
+                <span>
+                  {agent
+                    ? `Connecting to ${agent.label}…`
+                    : `Connecting to ${names.inline}…`}
+                </span>
                 {/* -1 on both sides so the counter shows retries-allowed,
                     not total attempts (the first attempt isn't a retry). */}
                 {retryAttempt > 1 && (
@@ -339,10 +383,16 @@ export const PairingConsentModal: React.FC<Props> = ({
               >
                 <WarningIcon size={16} weight="duotone" />
                 <StatusText>
-                  <strong>Could not connect to MCP server</strong>
+                  <strong>
+                    {agent
+                      ? `Could not connect to ${agent.label}`
+                      : `Could not connect to ${names.inline}`}
+                  </strong>
                   <StatusDetail>
                     {error ??
-                      `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
+                      (agent
+                        ? "It stopped responding. Try again, or run the connect command again in your terminal."
+                        : `${names.subject} stopped responding. Try again, or ask it to connect to the QuestDB Web Console again.`)}
                   </StatusDetail>
                 </StatusText>
               </StatusRow>
@@ -354,7 +404,18 @@ export const PairingConsentModal: React.FC<Props> = ({
               data-hook="mcp-pair-consent-version-mismatch"
               role="alert"
             >
-              <BridgeUpgradeNotice severity={versionMismatch} />
+              {agent ? (
+                <AgentUpgradeNotice
+                  severity={versionMismatch}
+                  agentLabel={agent.label}
+                  agentId={null}
+                />
+              ) : (
+                <BridgeUpgradeNotice
+                  severity={versionMismatch}
+                  client={client}
+                />
+              )}
             </StatusRow>
           )}
 

@@ -244,7 +244,7 @@ describe("Console served by QuestDB under a context path", () => {
       expect(win.__mcpFakeWS.framesOfType("hello")).to.have.length(1)
     })
     cy.window().then((win) => win.__mcpFakeWS.helloAck())
-    cy.getByDataHook("mcp-status-pill").should("contain", "MCP connected")
+    cy.getByDataHook("mcp-status-pill").should("contain", "Agent connected")
     cy.window().then((win) =>
       win.__mcpFakeWS.toolCall(
         "run_query",

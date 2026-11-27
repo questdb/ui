@@ -180,7 +180,8 @@ describe("ai provider setup flows", () => {
       "AI Settings",
     )
     cy.getByDataHook("ai-chat-button").should("be.visible")
-    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible")
+    cy.openModelPicker()
+    cy.get("body").type("{esc}")
     cy.typeQueryDirectly("SELECT 1;")
     cy.getAIIconInLine(1).should("be.visible")
 
@@ -220,7 +221,7 @@ describe("ai provider setup flows", () => {
         ),
       )
     })
-    cy.getByDataHook("ai-chat-button").click()
+    cy.openChat()
     cy.getByDataHook("chat-input-textarea").type("hello")
     cy.getByDataHook("chat-send-button").click()
 
@@ -313,24 +314,23 @@ describe("ai provider setup flows", () => {
     })
 
     // Both rows keep the raw model name as their visible label.
-    cy.getByDataHook("ai-settings-model-dropdown").click()
-    cy.getByDataHook("ai-settings-model-item")
+    cy.openModelPicker()
+    cy.getByDataHook("chat-model-picker-option")
       .should("have.length", 2)
-      .find("[data-hook='ai-settings-model-item-label']")
+      .find("[data-hook='chat-model-picker-option-label']")
       .each(($label) => {
         expect($label.text()).to.equal("Shared Model")
       })
 
     // Selecting the OpenAI row persists its provider-qualified identity.
-    cy.getByDataHook("ai-settings-model-item").eq(1).click()
+    cy.getByDataHook("chat-model-picker-option").eq(1).click()
     cy.window().then((win) => {
       expect(readAiSettings(win).selectedModel).to.equal("openai:shared-model")
     })
 
     // Execution uses that identity to select the OpenAI provider.
     interceptAIChatRequest("openai", "overlappingOpenAIModel")
-    cy.getByDataHook("ai-chat-button").click()
-    cy.getByDataHook("chat-input-textarea").type("hello")
+    cy.getByDataHook("chat-input-textarea").should("be.visible").type("hello")
     cy.getByDataHook("chat-send-button").click()
     // Then
     cy.wait("@overlappingOpenAIModel").then(({ request }) => {
@@ -367,9 +367,9 @@ describe("ai provider setup flows", () => {
     cy.getEditor().should("be.visible")
 
     // Then the picks survive and an OpenAI model can be selected
-    cy.getByDataHook("ai-settings-model-dropdown").click()
-    cy.getByDataHook("ai-settings-model-item").should("have.length", 4)
-    cy.getByDataHook("ai-settings-model-item").contains("GPT 5.4").click()
+    cy.openModelPicker()
+    cy.getByDataHook("chat-model-picker-option").should("have.length", 4)
+    cy.getByDataHook("chat-model-picker-option").contains("GPT 5.4").click()
 
     // When the picker reopens manually it refetches a fresh listing
     interceptOpenAIListing()
@@ -532,29 +532,28 @@ describe("ai provider setup flows", () => {
       .click({ multiple: true })
 
     // Then - Model dropdown should contain models from both providers
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.openModelPicker()
     cy.then(() => {
       const allEnabledModels = [
         ...openaiEnabledModels,
         ...anthropicEnabledModels,
       ]
-      cy.getByDataHook("ai-settings-model-item").should(
+      cy.getByDataHook("chat-model-picker-option").should(
         "have.length",
         allEnabledModels.length,
       )
       allEnabledModels.forEach((modelLabel) => {
-        cy.getByDataHook("ai-settings-model-item").contains(modelLabel)
+        cy.getByDataHook("chat-model-picker-option").contains(modelLabel)
       })
     })
 
-    // When - Select first OpenAI model and open chat
+    // When - Select first OpenAI model in the open chat
     cy.then(() => {
-      cy.getByDataHook("ai-settings-model-item")
+      cy.getByDataHook("chat-model-picker-option")
         .contains(openaiEnabledModels[0])
         .click()
     })
     interceptChatAnswer("openai", "openaiChat", "OpenAI answer")
-    cy.getByDataHook("ai-chat-button").click()
     cy.getByDataHook("ai-chat-window").should("be.visible")
     cy.getByDataHook("chat-input-textarea").type("Test message for OpenAI")
     cy.getByDataHook("chat-send-button").click()
@@ -571,9 +570,9 @@ describe("ai provider setup flows", () => {
     cy.getByDataHook("chat-stop-button").should("not.exist")
 
     // When - Select first Anthropic model from dropdown
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.openModelPicker()
     cy.then(() => {
-      cy.getByDataHook("ai-settings-model-item")
+      cy.getByDataHook("chat-model-picker-option")
         .contains(anthropicEnabledModels[0])
         .click()
     })

@@ -4,13 +4,16 @@ import type { DefaultTheme } from "styled-components"
 import { PlugsConnectedIcon, PlugsIcon } from "@phosphor-icons/react"
 import { ButtonBase, PopperToggle } from "../../../components"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
-import { MCPBridgePairPopover } from "./PairPopover"
+import { McpAgentPopover } from "./McpAgentPopover"
+import { ChatAgentPopover } from "./ChatAgentPopover"
+import { chatAgentStatusOf, mcpAgentStatusOf } from "./agentStatus"
 import { AgentChangesPopper } from "./AgentChangesPopper"
 import { useAgentChanges } from "./useAgentChanges"
-import { Tone, accentColor, deriveTone } from "./tone"
+import { Tone, accentColor, deriveTone, pillSuffix } from "./tone"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { statusInfoFocus } from "../../../theme"
+import { useLocalAgent } from "../../../utils/localAgent/LocalAgentContext"
 
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
@@ -157,35 +160,32 @@ const Announcer = styled.span`
 `
 
 export const MCPBridgeStatus: React.FC = () => {
-  const { status, url, token, versionMismatch } = useMCPBridge()
+  const { status, url, token, versionMismatch, pairedAgent, mcpClient } =
+    useMCPBridge()
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null)
   const agentChanges = useAgentChanges()
+  const localAgent = useLocalAgent()
   const paired = !!(url && token)
-  const tone = deriveTone(paired, status, versionMismatch)
+  const bridgeTone = deriveTone(paired, status, versionMismatch)
+  // Chat mode: a pairing that brought an agent to chat with.
+  const chatAgentLabel = paired
+    ? (localAgent?.info.label ?? pairedAgent?.label ?? null)
+    : null
+  const agentStatus = chatAgentLabel
+    ? chatAgentStatusOf({
+        agentLabel: chatAgentLabel,
+        agent: localAgent,
+        bridgeTone,
+        versionMismatch,
+      })
+    : mcpAgentStatusOf({ tone: bridgeTone, client: mcpClient, versionMismatch })
+  const tone = agentStatus.tone
 
-  let label: string
-  let title: string
-
-  if (tone === "idle") {
-    label = "MCP not connected"
-    title =
-      "Click to enter MCP credentials manually, or ask Claude / Codex to pair this console."
-  } else if (tone === "connected") {
-    label = "MCP connected"
-    title = "Paired with the MCP server. Click to manage."
-  } else if (tone === "warning") {
-    label = "MCP connected"
-    title =
-      "Connected, but the MCP server version differs from what this console expects. Click to see the upgrade command."
-  } else if (tone === "connecting") {
-    label = "MCP connecting…"
-    title = "Connecting to the MCP server. Click to manage."
-  } else {
-    label = "MCP disconnected"
-    title =
-      "Click to re-enter MCP credentials, or ask Claude for a fresh pairing link."
-  }
+  let label = agentStatus.label
+  let title = `${agentStatus.description} ${
+    tone === "idle" ? "Click to see how." : "Click to manage."
+  }`
 
   const closePopover = useCallback(() => setPopoverOpen(false), [])
 
@@ -203,12 +203,10 @@ export const MCPBridgeStatus: React.FC = () => {
     setPopoverOpen(false)
   }, [agentChanges])
 
-  if (agentChanges.unread) {
-    label = `${label} (new changes)`
+  const suffix = pillSuffix(agentChanges.unread, bridgeTone)
+  if (suffix) label = `${label} (${suffix})`
+  if (agentChanges.unread)
     title = `${title} New agent changes in ${agentChanges.label}.`
-  } else if (tone === "warning") {
-    label = `${label} (outdated)`
-  }
 
   return (
     <Container ref={setAnchorEl}>
@@ -227,11 +225,20 @@ export const MCPBridgeStatus: React.FC = () => {
           />
         }
       >
-        <MCPBridgePairPopover
-          open={popoverOpen}
-          onClose={closePopover}
-          agentChanges={agentChanges}
-        />
+        {chatAgentLabel ? (
+          <ChatAgentPopover
+            open={popoverOpen}
+            onClose={closePopover}
+            agentChanges={agentChanges}
+            agentLabel={chatAgentLabel}
+          />
+        ) : (
+          <McpAgentPopover
+            open={popoverOpen}
+            onClose={closePopover}
+            agentChanges={agentChanges}
+          />
+        )}
       </PopperToggle>
       <AgentChangesPopper
         open={agentChanges.showPopper && !popoverOpen}

@@ -1,6 +1,4 @@
 import {
-  MCP_UPGRADE_COMMAND,
-  MCP_VERSION_MISMATCH_COPY,
   EXPECTED_MCP_VERSION,
   isBridgeVersionMismatch,
   type BridgeVersionMismatch,
@@ -8,6 +6,10 @@ import {
 import type { Permissions } from "../tools/permissions"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import type {
+  AgentInboundMessage,
+  AgentOutboundMessage,
+} from "../localAgent/protocol"
 import {
   WS_CLOSE_CODES,
   type AnyMessage,
@@ -32,15 +34,15 @@ const TERMINAL_BRIDGE_CLOSE_CODES = new Set<number>([
 
 const terminalCloseMessage = (code: number, reason: string): string => {
   if (code === WS_CLOSE_CODES.superseded) {
-    return "Another browser tab is paired with this MCP server. Disconnect the other tab or pair this one via a fresh link."
+    return "Your agent is connected to another browser tab. Disconnect it there, or open a new link in this tab."
   }
   if (code === WS_CLOSE_CODES.token_invalid) {
-    return "Pairing token is no longer valid, the MCP server likely restarted. Re-pair via a fresh deep link."
+    return "This link no longer works, probably because your agent restarted. Open the new link it shows."
   }
   if (code === WS_CLOSE_CODES.major_version_mismatch) {
-    return `${MCP_VERSION_MISMATCH_COPY.major.message} ${MCP_UPGRADE_COMMAND}`
+    return `Your agent runs a version this console does not support. This console expects ${EXPECTED_MCP_VERSION}.`
   }
-  return reason || `MCP server closed with code ${code}.`
+  return reason || `The connection closed with code ${code}.`
 }
 
 export type MCPBridgeClientStatus =
@@ -60,8 +62,10 @@ type EventMap = {
   error: Error
   retryAttempt: number
   versionMismatch: BridgeVersionMismatch | null
+  agentMessage: AgentOutboundMessage
 }
 
+export const HELLO_TIMEOUT_MS = 10_000
 const HEARTBEAT_INTERVAL_MS = 5_000
 const PONG_TIMEOUT_MS = 10_000
 const RECONNECT_INTERVAL_MS = 3_000
@@ -115,6 +119,7 @@ export class MCPBridgeClient {
     Set<Listener<EventMap[keyof EventMap]>>
   >()
   private pendingResults: ToolResultMessage[] = []
+  private helloTimer: ReturnType<typeof setTimeout> | null = null
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private pongTimer: ReturnType<typeof setTimeout> | null = null
   private outstandingPing: { nonce: string; sentAt: number } | null = null
@@ -194,16 +199,19 @@ export class MCPBridgeClient {
   disconnect(reason: CloseReason = "user_disconnect"): void {
     this.explicitlyClosed = true
     this.cancelReconnect()
+    this.clearHelloTimer()
     this.stopHeartbeat()
     this.detachVisibilityListener()
-    if (this.ws && this.ws.readyState <= WebSocket.OPEN) {
+    const socket = this.ws
+    this.ws = null
+    this.hadSession = false
+    if (socket && socket.readyState <= WebSocket.OPEN) {
       try {
-        this.ws.close(1000, reason)
+        socket.close(1000, reason)
       } catch {
         // Some envs throw on double-close.
       }
     }
-    this.ws = null
     this.pendingResults = []
     this.setStatus("disconnected")
   }
@@ -214,6 +222,16 @@ export class MCPBridgeClient {
       return
     }
     this.pendingResults.push(msg)
+  }
+
+  canSendAgentMessage(): boolean {
+    return (
+      this._status === "connected" && this.ws?.readyState === WebSocket.OPEN
+    )
+  }
+
+  sendAgentMessage(msg: AgentInboundMessage): boolean {
+    return this.canSendAgentMessage() && this.send(msg)
   }
 
   private buildSocketUrl(): string {
@@ -230,10 +248,11 @@ export class MCPBridgeClient {
   }
 
   private openSocket(): void {
-    if (this.ws && this.ws.readyState <= WebSocket.OPEN) return
+    if (this.explicitlyClosed || this.ws) return
     this.setStatus(
       this._status === "reconnecting" ? "reconnecting" : "connecting",
     )
+    if (this.explicitlyClosed) return
     // Never log the URL — the query string carries the auth token.
     const fullUrl = this.buildSocketUrl()
     const factory =
@@ -245,19 +264,27 @@ export class MCPBridgeClient {
       console.error("[MCPBridgeClient] WebSocket constructor threw:", err)
       this.emit(
         "error",
-        err instanceof Error ? err : new Error("WebSocket constructor failed"),
+        new Error("Could not open the connection to your agent."),
       )
       this.scheduleReconnect()
       return
     }
     this.ws = socket
-    socket.addEventListener("open", this.onOpen)
-    socket.addEventListener("message", this.onMessage)
-    socket.addEventListener("close", this.onClose)
-    socket.addEventListener("error", this.onError)
+    socket.addEventListener("open", () => {
+      if (this.ws === socket) this.onOpen(socket)
+    })
+    socket.addEventListener("message", (ev) => {
+      if (this.ws === socket) this.onMessage(ev)
+    })
+    socket.addEventListener("close", (ev) => {
+      if (this.ws === socket) this.onClose(ev)
+    })
+    socket.addEventListener("error", (ev) => {
+      if (this.ws === socket) this.onError(ev)
+    })
   }
 
-  private onOpen = (): void => {
+  private onOpen(socket: WebSocket): void {
     // Never log the token, not even a prefix — 4 bytes is enough to
     // confirm an exfiltrated token if a leak appears elsewhere.
     const hello: HelloMessage = {
@@ -271,9 +298,29 @@ export class MCPBridgeClient {
       tools: this.opts.tools,
       permissions: this.permissions,
     }
+    // Stay in `connecting`/`reconnecting` until the bridge acks, but do not
+    // leave pending turns waiting forever on an open, silent socket.
+    this.clearHelloTimer()
+    this.helloTimer = setTimeout(() => {
+      if (this.ws !== socket) return
+      this.clearHelloTimer()
+      // Retire this socket before closing it. A late close or ack must not
+      // interfere with the next socket, and close might not arrive promptly.
+      this.ws = null
+      try {
+        socket.close(WS_CLOSE_CODES.protocol_violation, "hello_timeout")
+      } catch {
+        // Retry even if the socket could not be closed.
+      }
+      this.scheduleReconnect()
+    }, HELLO_TIMEOUT_MS)
     this.send(hello)
-    // Stay in `connecting`/`reconnecting` until the bridge acks — consumers
-    // must not treat the session as usable before hello_ack.
+  }
+
+  private clearHelloTimer(): void {
+    if (this.helloTimer === null) return
+    clearTimeout(this.helloTimer)
+    this.helloTimer = null
   }
 
   private onMessage = (ev: MessageEvent): void => {
@@ -311,6 +358,13 @@ export class MCPBridgeClient {
       case "pong":
         this.handlePong(parsed)
         return
+      case "agent_status":
+      case "agent_update":
+      case "agent_turn_end":
+      case "agent_question":
+      case "agent_question_closed":
+        this.emit("agentMessage", parsed)
+        return
       default:
         return
     }
@@ -333,6 +387,7 @@ export class MCPBridgeClient {
         terminal: TERMINAL_BRIDGE_CLOSE_CODES.has(code),
       })
     }
+    this.clearHelloTimer()
     this.stopHeartbeat()
     this.ws = null
     if (this.explicitlyClosed) {
@@ -362,6 +417,8 @@ export class MCPBridgeClient {
   }
 
   private handleHelloAck(msg: HelloAckMessage): void {
+    const socket = this.ws
+    this.clearHelloTimer()
     this.sessionId = msg.sessionId
     if (!this.everHadSession) {
       this.everHadSession = true
@@ -382,7 +439,9 @@ export class MCPBridgeClient {
       this.pendingResults = []
       for (const m of flushing) this.send(m)
     }
-    this.startHeartbeat(msg.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS)
+    if (this.ws === socket) {
+      this.startHeartbeat(msg.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS)
+    }
   }
 
   private handlePong(msg: PongMessage): void {
@@ -450,7 +509,10 @@ export class MCPBridgeClient {
 
   private scheduleReconnect(): void {
     if (this.explicitlyClosed) return
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
     this.consecutiveFailedAttempts += 1
     if (this.consecutiveFailedAttempts > MAX_CONSECUTIVE_FAILED_ATTEMPTS) {
       void trackEvent(ConsoleEvent.MCP_CONNECT_FAILED)
@@ -458,6 +520,7 @@ export class MCPBridgeClient {
       return
     }
     this.setStatus("reconnecting")
+    if (this.explicitlyClosed || this.ws) return
     const delay = jittered(RECONNECT_INTERVAL_MS)
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
@@ -482,6 +545,8 @@ export class MCPBridgeClient {
       if (document.visibilityState !== "visible") return
       if (this.explicitlyClosed) return
       if (this._status === "connected" || this._status === "connecting") return
+      // An open or opening retry already owns this attempt and its budget.
+      if (this.ws) return
       // Don't resurrect a gave-up session on tab focus — the user must
       // click "Try again" to opt back in.
       if (this.consecutiveFailedAttempts > MAX_CONSECUTIVE_FAILED_ATTEMPTS) {
@@ -491,8 +556,7 @@ export class MCPBridgeClient {
         clearTimeout(this.reconnectTimer)
         this.reconnectTimer = null
       }
-      // Wake-from-sleep deserves a fresh retry budget.
-      this.consecutiveFailedAttempts = 0
+      // Foregrounding can speed up a retry, not restart its budget.
       this.openSocket()
     }
     document.addEventListener("visibilitychange", handler)
@@ -505,7 +569,7 @@ export class MCPBridgeClient {
     this.onVisibilityChange = null
   }
 
-  private send(msg: AnyMessage): void {
+  private send(msg: AnyMessage): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn(
         "[MCPBridgeClient] send dropped — ws not OPEN, type =",
@@ -513,16 +577,15 @@ export class MCPBridgeClient {
         "readyState =",
         this.ws?.readyState,
       )
-      return
+      return false
     }
     try {
       this.ws.send(JSON.stringify(msg))
+      return true
     } catch (err) {
       console.error("[MCPBridgeClient] send threw:", err)
-      this.emit(
-        "error",
-        err instanceof Error ? err : new Error("WebSocket send failed"),
-      )
+      this.emit("error", new Error("Could not send to your agent."))
+      return false
     }
   }
 }

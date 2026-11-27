@@ -1,3 +1,5 @@
+import { CommandNote, type CommandNoteEntry } from "./CommandNote"
+import { ImageAttachments } from "./ImageAttachments"
 import React, {
   useEffect,
   useLayoutEffect,
@@ -32,6 +34,7 @@ import {
   ExpandUpDownIcon,
 } from "../Monaco/icons"
 import {
+  ArrowDownIcon,
   CodeIcon,
   KeyReturnIcon,
   ChatDotsIcon,
@@ -44,10 +47,17 @@ import {
   WarningIcon,
 } from "@phosphor-icons/react"
 import { CloseCircle } from "../../../components/icons"
+import {
+  SCROLL_TO_END_KEYS,
+  SCROLL_TO_END_LABEL,
+  isCaretAtEndOfText,
+  isScrollToEndShortcut,
+} from "./scrollToEndShortcut"
 import { Stop } from "../../../components/icons"
 import { CheckmarkOutline, CloseOutline } from "../../../components/icons"
 import { TableIcon } from "../../Schema/table-icon"
 import { AssistantMessageContent } from "./AssistantMessageContent"
+import { formatDurationMs } from "../../../components/AIStatusIndicator/AssistantModes"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
@@ -57,9 +67,48 @@ import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import {
   getScrollLength,
   projectConversationTurns,
+  type VisibleEntry,
 } from "../../../utils/ai/turnView"
+import { ChatErrorText } from "./ChatErrorText"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
+
+// How long the user stays at the end of the output before it is followed
+// again, and how close to the end counts as there.
+const FOLLOW_RESUME_DELAY_MS = 500
+const FOLLOW_RESUME_DISTANCE_PX = 8
+// How long without scrolling before a wheel scroll counts as settled.
+const SCROLL_SETTLE_MS = 150
+// How far from the end the output must be to offer scrolling to it.
+const SCROLL_TO_END_DISTANCE_PX = 120
+// Farther than this, scrolling to the end jumps instead of animating.
+const SMOOTH_SCROLL_MAX_DISTANCE_PX = 3000
+
+// A wheel event bubbles even when its default scroll stays inside the output.
+const wheelStaysInside = (event: WheelEvent, container: HTMLElement) => {
+  for (const target of event.composedPath()) {
+    if (target === container) break
+    if (!(target instanceof Element)) continue
+    const maxScrollTop = target.scrollHeight - target.clientHeight
+    if (maxScrollTop <= 0) continue
+    const { overflow, overflowY, overscrollBehaviorY } =
+      getComputedStyle(target)
+    if (!/^(auto|scroll)$/.test(overflowY || overflow)) continue
+    if (overscrollBehaviorY === "contain" || overscrollBehaviorY === "none") {
+      return true
+    }
+    // Round away subpixel differences at the bottom (scrollHeight and
+    // clientHeight are integers).
+    if (
+      event.deltaY < 0
+        ? target.scrollTop > 0
+        : Math.ceil(target.scrollTop) < maxScrollTop
+    ) {
+      return true
+    }
+  }
+  return false
+}
 
 const MessagesContainer = styled(Box)<{ $scrolled: boolean }>`
   display: flex;
@@ -241,19 +290,36 @@ const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
       padding-top: 0;
     `}
 
-  .assistant-label,
-  .token-display {
+  .response-actions,
+  .response-metadata {
     transition: opacity 0.2s;
     opacity: 0;
   }
 
   &:hover,
   &:focus-within {
-    .assistant-label,
-    .token-display {
+    .response-actions,
+    .response-metadata {
       opacity: 1;
     }
   }
+
+  @media (hover: none) {
+    .response-actions,
+    .response-metadata {
+      opacity: 1;
+    }
+  }
+`
+
+const ResponseMetadata = styled.div.attrs({ className: "response-metadata" })`
+  align-self: stretch;
+  padding-inline: 0.8rem;
+  font-size: 1.1rem;
+  line-height: 1.4rem;
+  text-align: start;
+  color: ${color("contentMuted")};
+  overflow-wrap: anywhere;
 `
 
 const ErrorContainer = styled.div`
@@ -275,6 +341,33 @@ const RetryButton = styled(Button)`
   flex-shrink: 0;
   padding: 0.5rem 0.8rem;
   height: auto;
+`
+
+const MessagesArea = styled.div`
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+`
+
+const ScrollToEndButton = styled(Button)`
+  position: absolute;
+  left: 50%;
+  bottom: 1.2rem;
+  transform: translateX(-50%);
+  z-index: 1;
+  width: auto;
+  padding: 0 1.2rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 0.4rem 1.2rem ${({ theme }) => theme.color.shadowMedium};
+`
+
+const ScrollToEndShortcut = styled.span`
+  margin-left: 0.4rem;
+  color: ${({ theme }) => theme.color.contentMuted};
 `
 
 const MessagesEnd = styled.div`
@@ -412,6 +505,8 @@ export type OpenInEditorContent =
 
 type ChatMessagesProps = {
   messages: ConversationMessage[]
+  // What the console commands the user ran did, like /model.
+  commandNotes?: CommandNoteEntry[]
   onAcceptChange?: (messageId: string) => void
   onRejectChange?: (messageId: string) => void
   onRunQuery?: (sql: string) => void
@@ -422,6 +517,7 @@ type ChatMessagesProps = {
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
   onRetry?: (userMessageId: string) => void
+  retryDisabled?: boolean
   onCancelQuery?: (queryKey: QueryKey) => void
   // Query execution status
   runningQueryKey?: QueryKey | null
@@ -490,14 +586,21 @@ const getQueryStatusIcon = (status: QueryRunStatus, theme: DefaultTheme) => {
   }
 }
 
+// Images the user attached, above what they wrote.
+const BubbleImages = styled.div`
+  margin-bottom: 0.8rem;
+`
+
 export const ChatMessages: React.FC<ChatMessagesProps> = ({
   messages,
+  commandNotes = [],
   onAcceptChange,
   onRejectChange,
   onRunQuery,
   onOpenInEditor,
   onApplyToEditor,
   onRetry,
+  retryDisabled,
   onCancelQuery,
   runningQueryKey,
   queryNotifications,
@@ -517,6 +620,66 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   const { status } = useAIStatus()
   const [scrolled, setScrolled] = useState(false)
   const userScrolledRef = useRef(false)
+  const [showScrollToEnd, setShowScrollToEnd] = useState(false)
+  const inProgressRef = useRef(isOperationInProgress)
+  // Set while scrolling to the end on request, so the offer does not
+  // reappear on the way there.
+  const scrollingToEndRef = useRef(false)
+
+  // Offers to scroll to the end when the output is out of view: while an
+  // answer runs, only once the user stopped following it.
+  const updateScrollToEnd = useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    const distanceToEnd =
+      container.scrollHeight - container.scrollTop - container.clientHeight
+    if (distanceToEnd <= FOLLOW_RESUME_DISTANCE_PX) {
+      scrollingToEndRef.current = false
+    }
+    setShowScrollToEnd(
+      !scrollingToEndRef.current &&
+        distanceToEnd > SCROLL_TO_END_DISTANCE_PX &&
+        (userScrolledRef.current || !inProgressRef.current),
+    )
+  }, [])
+
+  const scrollToEnd = useCallback(() => {
+    userScrolledRef.current = false
+    scrollingToEndRef.current = true
+    setShowScrollToEnd(false)
+    const container = messagesContainerRef.current
+    const distanceToEnd = container
+      ? container.scrollHeight - container.scrollTop - container.clientHeight
+      : 0
+    messagesEndRef.current?.scrollIntoView({
+      behavior:
+        distanceToEnd > SMOOTH_SCROLL_MAX_DISTANCE_PX ? "instant" : "smooth",
+    })
+  }, [])
+
+  useEffect(() => {
+    inProgressRef.current = isOperationInProgress
+    updateScrollToEnd()
+  }, [isOperationInProgress, updateScrollToEnd])
+
+  // Cmd+Down (Ctrl+End) scrolls to the end, from anywhere in the chat.
+  useEffect(() => {
+    if (!showScrollToEnd) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isScrollToEndShortcut(event) || !isCaretAtEndOfText(event.target)) {
+        return
+      }
+      const chatWindow = messagesContainerRef.current?.closest(
+        '[data-hook="ai-chat-window"]',
+      )
+      const target = event.target as Node | null
+      if (target !== document.body && !chatWindow?.contains(target)) return
+      event.preventDefault()
+      scrollToEnd()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [showScrollToEnd, scrollToEnd])
 
   const handleScrollNeeded = useCallback(() => {
     if (scrolled && userScrolledRef.current) return
@@ -550,21 +713,121 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     [tables],
   )
 
+  // Scrolling with the wheel stops following the output. Coming back to the
+  // end and staying there for a moment follows it again; only moving away
+  // from it cancels that wait.
+  //
+  // While an answer streams, the end moves as the user scrolls to it: steps
+  // above collapse, text grows. So a wheel scroll down that the end stopped
+  // short of where it was headed counts as reaching the end, wherever the
+  // end has moved since. Neither collapsing nor growing output fires a
+  // scroll event once the user stopped, so this is checked when the
+  // scrolling settles.
   useEffect(() => {
     const container = messagesContainerRef.current
     if (!container) return
+    let resumeTimer: ReturnType<typeof setTimeout> | undefined
+    let settleTimer: ReturnType<typeof setTimeout> | undefined
+    // Where the latest wheel scroll down was headed; null after scrolling up.
+    let wheelTarget: number | null = null
+    let lastScrollTop = container.scrollTop
 
-    const handleWheel = () => {
+    const distanceToEnd = () =>
+      container.scrollHeight - container.scrollTop - container.clientHeight
+
+    const cancelResume = () => {
+      clearTimeout(resumeTimer)
+      resumeTimer = undefined
+    }
+
+    const scheduleResume = () => {
+      if (resumeTimer) return
+      resumeTimer = setTimeout(() => {
+        resumeTimer = undefined
+        scrollToEnd()
+      }, FOLLOW_RESUME_DELAY_MS)
+    }
+
+    const checkSettled = () => {
+      settleTimer = undefined
+      if (!userScrolledRef.current || wheelTarget === null) return
+      const stoppedShort = wheelTarget > container.scrollTop + 1
+      // A scroll that stopped short far from the end was not stopped by it.
+      if (stoppedShort && distanceToEnd() <= container.clientHeight) {
+        scheduleResume()
+      }
+    }
+
+    const scheduleSettleCheck = () => {
+      clearTimeout(settleTimer)
+      settleTimer = setTimeout(checkSettled, SCROLL_SETTLE_MS)
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (
+        event.defaultPrevented ||
+        !event.deltaY ||
+        wheelStaysInside(event, container)
+      )
+        return
       userScrolledRef.current = true
+      scrollingToEndRef.current = false
+      if (event.deltaY < 0) {
+        cancelResume()
+        wheelTarget = null
+        return
+      }
+      const pixels =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? event.deltaY * 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? event.deltaY * container.clientHeight
+            : event.deltaY
+      wheelTarget = Math.max(wheelTarget ?? 0, container.scrollTop) + pixels
+      // Already at the end, a wheel scroll down moves nothing and fires no
+      // scroll event.
+      scheduleSettleCheck()
+    }
+
+    const handleScroll = () => {
+      const movedUp = container.scrollTop < lastScrollTop - 1
+      lastScrollTop = container.scrollTop
+      updateScrollToEnd()
+      if (!userScrolledRef.current) return
+      // Output that shrinks above moves the view up too, but keeps it at the
+      // end: that is no reason to cancel.
+      if (distanceToEnd() <= FOLLOW_RESUME_DISTANCE_PX) {
+        scheduleResume()
+        return
+      }
+      // Moving up, by any means, cancels the wait.
+      if (movedUp) {
+        cancelResume()
+        wheelTarget = null
+        return
+      }
+      scheduleSettleCheck()
     }
 
     container.addEventListener("wheel", handleWheel)
-    return () => container.removeEventListener("wheel", handleWheel)
-  }, [])
+    container.addEventListener("scroll", handleScroll)
+    return () => {
+      cancelResume()
+      clearTimeout(settleTimer)
+      container.removeEventListener("wheel", handleWheel)
+      container.removeEventListener("scroll", handleScroll)
+    }
+  }, [updateScrollToEnd, scrollToEnd])
 
+  // A new question follows its answer again. Messages the answer adds itself,
+  // like tool results and follow-ups, leave the user where they scrolled.
+  const userMessageCount = useMemo(
+    () => messages.filter((message) => message.role === "user").length,
+    [messages],
+  )
   useEffect(() => {
     userScrolledRef.current = false
-  }, [messages.length])
+  }, [userMessageCount])
 
   const latestDiffIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -605,7 +868,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
   useEffect(() => {
     handleScrollNeeded()
-  }, [scrollLength, handleScrollNeeded])
+    updateScrollToEnd()
+  }, [scrollLength, handleScrollNeeded, updateScrollToEnd])
+
+  // A command's note comes into view like a message does.
+  useEffect(() => {
+    if (commandNotes.length > 0) handleScrollNeeded()
+  }, [commandNotes.length])
 
   useLayoutEffect(() => {
     if (!scrollToMessageId || isLoadingMessages) return
@@ -637,504 +906,545 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
   const lastAssistantMessageIndex = lastAssistantAnchorIndex
 
-  return (
-    <MessagesContainer
-      ref={messagesContainerRef}
-      $scrolled={scrolled}
-      role="log"
-      data-hook="chat-messages-container"
-    >
-      {visibleEntries.map((entry) => {
-        if (entry.type === "user") {
-          const { message } = entry
-          const key = `${message.id}`
-          const severity = message.displayHealthIssueData?.severity
-          const isCurrentQuery =
-            normalizeQueryText(message.sql || "") ===
-            normalizeQueryText(editorSQL || "")
+  // Notes of console commands, like /model, after the message they follow.
+  const notesAfter = (messageId: string | null) =>
+    commandNotes
+      .filter((note) => note.afterMessageId === messageId)
+      .map((note) => <CommandNote key={note.id} note={note} />)
 
-          // Check if this is a special request type with inline SQL display
-          const displayType = message.displayType
-          const sql = message.sql
+  const renderEntry = (entry: VisibleEntry): React.ReactNode => {
+    if (entry.type === "user") {
+      const { message } = entry
+      const key = `${message.id}`
+      const severity = message.displayHealthIssueData?.severity
+      const isCurrentQuery =
+        normalizeQueryText(message.sql || "") ===
+        normalizeQueryText(editorSQL || "")
 
-          // Render badge/title/description types
-          if (displayType && displayType !== "ask_request") {
-            const badgeInfo = getOperationBadgeInfo(displayType)
+      // Check if this is a special request type with inline SQL display
+      const displayType = message.displayType
+      const sql = message.sql
 
-            // Determine content to render below badge/description
-            let content: React.ReactNode = null
+      // Render badge/title/description types
+      if (displayType && displayType !== "ask_request") {
+        const badgeInfo = getOperationBadgeInfo(displayType)
 
-            if (
-              displayType === "schema_explain_request" &&
-              message.displaySchemaData
-            ) {
-              const schemaData = message.displaySchemaData
-              content = (
-                <UserRequestContent>
-                  <SchemaNameDisplay
-                    onClick={() => handleSchemaNameDisplayClick(schemaData)}
-                  >
-                    <TableIcon
-                      kind={schemaData.kind}
-                      partitionBy={schemaData.partitionBy}
-                      walEnabled={schemaData.walEnabled}
-                      designatedTimestamp={schemaData.designatedTimestamp}
-                    />
-                    <SchemaName>{schemaData.tableName}</SchemaName>
-                  </SchemaNameDisplay>
-                </UserRequestContent>
-              )
-            } else if (
-              displayType === "health_issue_request" &&
-              message.displayHealthIssueData
-            ) {
-              const healthData = message.displayHealthIssueData
-              content = (
-                <UserRequestContent>
-                  <SchemaNameDisplay>
-                    <TableIcon kind="table" />
-                    <SchemaName>{healthData.tableName}</SchemaName>
-                  </SchemaNameDisplay>
-                </UserRequestContent>
-              )
-            } else if (sql) {
-              // fix_request and explain_request show SQL editor
-              content = (
-                <UserRequestContent>
-                  <InlineSQLEditor data-hook="user-request-sql-editor">
-                    <LiteEditor
-                      value={sql}
-                      maxHeight={216}
-                      onOpenInEditor={() =>
-                        onOpenInEditor(
-                          { type: "code", value: sql },
-                          isCurrentQuery,
-                        )
-                      }
-                    />
-                  </InlineSQLEditor>
-                </UserRequestContent>
-              )
-            }
+        // Determine content to render below badge/description
+        let content: React.ReactNode = null
 
-            return (
-              <UserRequestBox
-                key={key}
-                data-hook="chat-message-user"
-                ref={(el) => {
-                  if (el) messageRefs.current.set(message.id, el)
-                }}
+        if (
+          displayType === "schema_explain_request" &&
+          message.displaySchemaData
+        ) {
+          const schemaData = message.displaySchemaData
+          content = (
+            <UserRequestContent>
+              <SchemaNameDisplay
+                onClick={() => handleSchemaNameDisplayClick(schemaData)}
               >
-                <OperationBadge>
-                  <BadgeIconContainer>
-                    <BadgeIconWrapper>{badgeInfo?.icon}</BadgeIconWrapper>
-                  </BadgeIconContainer>
-                  <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
-                </OperationBadge>
-                {badgeInfo?.description && (
-                  <BadgeDescriptionContainer>
-                    <BadgeDescriptionText>
-                      {badgeInfo.description}
-                    </BadgeDescriptionText>
-                    {displayType === "health_issue_request" &&
-                      message.displayHealthIssueData?.issueMessage && (
-                        <IssueMessageRow>
-                          {severity === "critical" ? (
-                            <XSquareIcon
-                              size={14}
-                              weight="fill"
-                              color={theme.color.statusDanger}
-                            />
-                          ) : (
-                            <WarningIcon
-                              size={14}
-                              weight="fill"
-                              color={theme.color.statusWarning}
-                            />
-                          )}
-                          <BadgeDescriptionIssueText
-                            color={
-                              severity === "critical"
-                                ? "statusDanger"
-                                : "statusWarning"
-                            }
-                          >
-                            {message.displayHealthIssueData.issueMessage}
-                          </BadgeDescriptionIssueText>
-                        </IssueMessageRow>
-                      )}
-                  </BadgeDescriptionContainer>
-                )}
-                {content}
-              </UserRequestBox>
-            )
-          }
-
-          // Special handling for ask_request: show user's question above SQL
-          if (displayType === "ask_request" && sql) {
-            const userQuestion =
-              message.displayUserMessage || message.content || ""
-
-            return (
-              <UserRequestBox
-                key={key}
-                data-hook="chat-message-user"
-                ref={(el) => {
-                  if (el) messageRefs.current.set(message.id, el)
-                }}
-              >
-                <UserRequestHeader>
-                  <MessageContent>{userQuestion}</MessageContent>
-                </UserRequestHeader>
-                <UserRequestContent>
-                  <InlineSQLEditor data-hook="user-request-sql-editor">
-                    <LiteEditor
-                      value={sql}
-                      maxHeight={216}
-                      onOpenInEditor={() =>
-                        onOpenInEditor(
-                          { type: "code", value: sql },
-                          isCurrentQuery,
-                        )
-                      }
-                    />
-                  </InlineSQLEditor>
-                </UserRequestContent>
-              </UserRequestBox>
-            )
-          }
-
-          // Prefer `displayUserMessage` so wire-protocol prefixes don't show in the chat bubble.
-          return (
-            <MessageBubble
-              key={key}
-              data-hook="chat-message-user"
-              ref={(el) => {
-                if (el) messageRefs.current.set(message.id, el)
-              }}
-            >
-              <MessageContent>
-                {message.displayUserMessage || message.content}
-              </MessageContent>
-            </MessageBubble>
+                <TableIcon
+                  kind={schemaData.kind}
+                  partitionBy={schemaData.partitionBy}
+                  walEnabled={schemaData.walEnabled}
+                  designatedTimestamp={schemaData.designatedTimestamp}
+                />
+                <SchemaName>{schemaData.tableName}</SchemaName>
+              </SchemaNameDisplay>
+            </UserRequestContent>
+          )
+        } else if (
+          displayType === "health_issue_request" &&
+          message.displayHealthIssueData
+        ) {
+          const healthData = message.displayHealthIssueData
+          content = (
+            <UserRequestContent>
+              <SchemaNameDisplay>
+                <TableIcon kind="table" />
+                <SchemaName>{healthData.tableName}</SchemaName>
+              </SchemaNameDisplay>
+            </UserRequestContent>
+          )
+        } else if (sql) {
+          // fix_request and explain_request show SQL editor
+          content = (
+            <UserRequestContent>
+              <InlineSQLEditor data-hook="user-request-sql-editor">
+                <LiteEditor
+                  value={sql}
+                  maxHeight={216}
+                  onOpenInEditor={() =>
+                    onOpenInEditor({ type: "code", value: sql }, isCurrentQuery)
+                  }
+                />
+              </InlineSQLEditor>
+            </UserRequestContent>
           )
         }
 
-        const {
-          anchorMessage: message,
-          anchorIndex: originalIndex,
-          turnMessages,
-        } = entry
-        const key = `${message.id}`
-        const isCurrentQuery =
-          normalizeQueryText(message.sql || "") ===
-          normalizeQueryText(editorSQL || "")
-
-        // Assistant message - show as ExplanationBox (bundle entire turn under anchor)
-        const hasSQLChange = !!message.sql
-        const isSQLUnchanged =
-          hasSQLChange &&
-          message.previousSQL !== undefined &&
-          normalizeQueryText(message.sql || "") ===
-            normalizeQueryText(message.previousSQL || "")
-        const isExpanded = expandedDiffs.has(originalIndex)
-
-        // Read status from message, compute isRejectedWithFollowUp from message positions
-        const isAccepted = message.isAccepted === true
-        const isRejected = message.isRejected === true
-        // A message is "followed up" if it has SQL, isn't accepted/rejected, and has a visible user message after it
-        const isRejectedWithFollowUp =
-          hasSQLChange &&
-          !isAccepted &&
-          !isRejected &&
-          originalIndex < lastVisibleUserIndex
-
-        const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
-        const isMessageStreaming = isStreaming && isLastVisibleMessage
-        const showButtons =
-          hasSQLChange &&
-          !isSQLUnchanged &&
-          !isAccepted &&
-          !isRejected &&
-          !isRejectedWithFollowUp &&
-          isLastVisibleMessage
-
-        // Compute query run status for this message's SQL
-        let queryRunStatus: QueryRunStatus = "neutral"
-        if (message.sql) {
-          const normalizedMessageSQL = normalizeQueryText(message.sql)
-          const queryKey = createDetachedQueryKey(normalizedMessageSQL)
-          // Check if this query is currently running
-          if (runningQueryKey && queryKey === runningQueryKey) {
-            queryRunStatus = "loading"
-          }
-          // Check if we have a notification for this specific query in queryNotifications
-          // The query key is created from the normalized SQL and the conversation's queryStartOffset
-          else if (queryNotifications) {
-            const notification = queryNotifications[queryKey]?.latest
-            if (notification) {
-              if (notification.type === NotificationType.ERROR) {
-                queryRunStatus = "error"
-              } else if (
-                notification.type === NotificationType.SUCCESS ||
-                notification.type === NotificationType.INFO
-              ) {
-                queryRunStatus = "success"
-              }
-            }
-          }
-        }
-
-        const previousSQLForDiff = trimSemicolonForDisplay(message.previousSQL)
-        const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
-
-        const hasError = !!message.error
-        const showRetry =
-          hasError &&
-          !isStreaming &&
-          !isOperationInProgress &&
-          isLastVisibleMessage
-
-        const isLiveOperation =
-          originalIndex === lastAssistantMessageIndex &&
-          isOperationInProgress === true
-
-        const hasOperationHistory =
-          !!message.operationHistory && message.operationHistory.length > 0
-
         return (
-          <ExplanationBox
+          <UserRequestBox
             key={key}
-            $hasOperationHistory={hasOperationHistory}
-            data-hook="chat-message-assistant"
+            data-hook="chat-message-user"
             ref={(el) => {
               if (el) messageRefs.current.set(message.id, el)
             }}
           >
-            <AssistantMessageContent
-              turnMessages={turnMessages}
-              anchorMessage={message}
-              status={status}
-              isLiveOperation={isLiveOperation}
-              isMessageStreaming={isMessageStreaming}
-              onScrollNeeded={handleScrollNeeded}
-              onOpenInEditor={onOpenInEditor}
-            />
-            {hasSQLChange && !isMessageStreaming && (
-              <DiffContainer data-hook="inline-diff-container">
-                <DiffHeader $isExpanded={isExpanded}>
-                  <DiffHeaderLeft>
-                    <CodeIcon size={22} color={theme.color.contentSecondary} />
-                    <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
-                  </DiffHeaderLeft>
-                  {isSQLUnchanged && (
-                    <DiffHeaderStatus data-hook="diff-status-unchanged">
-                      <StatusIcon>
-                        <CheckmarkOutline size="14px" />
-                      </StatusIcon>
-                      Already accepted
-                    </DiffHeaderStatus>
-                  )}
-                  {!isSQLUnchanged &&
-                    (isAccepted || isRejected || isRejectedWithFollowUp) && (
-                      <DiffHeaderStatus
-                        $isAccepted={isAccepted}
-                        $isRejected={isRejected}
-                        $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                        data-hook={
-                          isRejected
-                            ? "diff-status-rejected"
-                            : isRejectedWithFollowUp
-                              ? "diff-status-followed-up"
-                              : "diff-status-accepted"
+            <OperationBadge>
+              <BadgeIconContainer>
+                <BadgeIconWrapper>{badgeInfo?.icon}</BadgeIconWrapper>
+              </BadgeIconContainer>
+              <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
+            </OperationBadge>
+            {badgeInfo?.description && (
+              <BadgeDescriptionContainer>
+                <BadgeDescriptionText>
+                  {badgeInfo.description}
+                </BadgeDescriptionText>
+                {displayType === "health_issue_request" &&
+                  message.displayHealthIssueData?.issueMessage && (
+                    <IssueMessageRow>
+                      {severity === "critical" ? (
+                        <XSquareIcon
+                          size={14}
+                          weight="fill"
+                          color={theme.color.statusDanger}
+                        />
+                      ) : (
+                        <WarningIcon
+                          size={14}
+                          weight="fill"
+                          color={theme.color.statusWarning}
+                        />
+                      )}
+                      <BadgeDescriptionIssueText
+                        color={
+                          severity === "critical"
+                            ? "statusDanger"
+                            : "statusWarning"
                         }
                       >
-                        <StatusIcon
-                          $isAccepted={isAccepted}
-                          $isRejected={isRejected}
-                          $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                        >
-                          {isRejected ? (
-                            <CloseOutline size="14px" />
-                          ) : isRejectedWithFollowUp ? (
-                            <ChatDotsIcon size="14px" />
-                          ) : (
-                            <CheckmarkOutline size="14px" />
-                          )}
-                        </StatusIcon>
-                        {isRejected
-                          ? "Rejected"
-                          : isRejectedWithFollowUp
-                            ? "Followed up"
-                            : "Accepted"}
-                      </DiffHeaderStatus>
-                    )}
-                  <DiffHeaderRight>
+                        {message.displayHealthIssueData.issueMessage}
+                      </BadgeDescriptionIssueText>
+                    </IssueMessageRow>
+                  )}
+              </BadgeDescriptionContainer>
+            )}
+            {content}
+          </UserRequestBox>
+        )
+      }
+
+      // An image-only message has an empty display string, not a missing one.
+      const userText = message.displayUserMessage ?? message.content
+      const images = message.images?.length ? (
+        <BubbleImages>
+          <ImageAttachments images={message.images} size={8} />
+        </BubbleImages>
+      ) : null
+
+      // Special handling for ask_request: show user's question above SQL
+      if (displayType === "ask_request" && sql) {
+        return (
+          <UserRequestBox
+            key={key}
+            data-hook="chat-message-user"
+            ref={(el) => {
+              if (el) messageRefs.current.set(message.id, el)
+            }}
+          >
+            {images}
+            {userText && (
+              <UserRequestHeader>
+                <MessageContent>{userText}</MessageContent>
+              </UserRequestHeader>
+            )}
+            <UserRequestContent>
+              <InlineSQLEditor data-hook="user-request-sql-editor">
+                <LiteEditor
+                  value={sql}
+                  maxHeight={216}
+                  onOpenInEditor={() =>
+                    onOpenInEditor({ type: "code", value: sql }, isCurrentQuery)
+                  }
+                />
+              </InlineSQLEditor>
+            </UserRequestContent>
+          </UserRequestBox>
+        )
+      }
+
+      return (
+        <MessageBubble
+          key={key}
+          data-hook="chat-message-user"
+          ref={(el) => {
+            if (el) messageRefs.current.set(message.id, el)
+          }}
+        >
+          {images}
+          {userText && <MessageContent>{userText}</MessageContent>}
+        </MessageBubble>
+      )
+    }
+
+    const {
+      anchorMessage: message,
+      anchorIndex: originalIndex,
+      turnMessages,
+    } = entry
+    const key = `${message.id}`
+    const isCurrentQuery =
+      normalizeQueryText(message.sql || "") ===
+      normalizeQueryText(editorSQL || "")
+
+    // Assistant message - show as ExplanationBox (bundle entire turn under anchor)
+    const hasSQLChange = !!message.sql
+    const isSQLUnchanged =
+      hasSQLChange &&
+      message.previousSQL !== undefined &&
+      normalizeQueryText(message.sql || "") ===
+        normalizeQueryText(message.previousSQL || "")
+    const isExpanded = expandedDiffs.has(originalIndex)
+
+    // Read status from message, compute isRejectedWithFollowUp from message positions
+    const isAccepted = message.isAccepted === true
+    const isRejected = message.isRejected === true
+    // A message is "followed up" if it has SQL, isn't accepted/rejected, and has a visible user message after it
+    const isRejectedWithFollowUp =
+      hasSQLChange &&
+      !isAccepted &&
+      !isRejected &&
+      originalIndex < lastVisibleUserIndex
+
+    const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
+    const isMessageStreaming = isStreaming && isLastVisibleMessage
+    const showButtons =
+      hasSQLChange &&
+      !isSQLUnchanged &&
+      !isAccepted &&
+      !isRejected &&
+      !isRejectedWithFollowUp &&
+      isLastVisibleMessage
+
+    // Compute query run status for this message's SQL
+    let queryRunStatus: QueryRunStatus = "neutral"
+    if (message.sql) {
+      const normalizedMessageSQL = normalizeQueryText(message.sql)
+      const queryKey = createDetachedQueryKey(normalizedMessageSQL)
+      // Check if this query is currently running
+      if (runningQueryKey && queryKey === runningQueryKey) {
+        queryRunStatus = "loading"
+      }
+      // Check if we have a notification for this specific query in queryNotifications
+      // The query key is created from the normalized SQL and the conversation's queryStartOffset
+      else if (queryNotifications) {
+        const notification = queryNotifications[queryKey]?.latest
+        if (notification) {
+          if (notification.type === NotificationType.ERROR) {
+            queryRunStatus = "error"
+          } else if (
+            notification.type === NotificationType.SUCCESS ||
+            notification.type === NotificationType.INFO
+          ) {
+            queryRunStatus = "success"
+          }
+        }
+      }
+    }
+
+    const previousSQLForDiff = trimSemicolonForDisplay(message.previousSQL)
+    const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
+
+    const hasError = !!message.error
+    const showRetry =
+      hasError && !isStreaming && !isOperationInProgress && isLastVisibleMessage
+
+    const isLiveOperation =
+      originalIndex === lastAssistantMessageIndex &&
+      isOperationInProgress === true
+
+    const hasOperationHistory =
+      !!message.operationHistory && message.operationHistory.length > 0
+    const responseMetadata =
+      !isLiveOperation && !isMessageStreaming
+        ? [message.model, formatDurationMs(message.turnDurationMs ?? 0)]
+            .filter(Boolean)
+            .join(" · ")
+        : ""
+
+    return (
+      <ExplanationBox
+        key={key}
+        $hasOperationHistory={hasOperationHistory}
+        data-hook="chat-message-assistant"
+        ref={(el) => {
+          if (el) messageRefs.current.set(message.id, el)
+        }}
+      >
+        <AssistantMessageContent
+          turnMessages={turnMessages}
+          anchorMessage={message}
+          status={status}
+          isLiveOperation={isLiveOperation}
+          isMessageStreaming={isMessageStreaming}
+          onScrollNeeded={handleScrollNeeded}
+          onOpenInEditor={onOpenInEditor}
+        />
+        {hasSQLChange && !isMessageStreaming && (
+          <DiffContainer data-hook="inline-diff-container">
+            <DiffHeader $isExpanded={isExpanded}>
+              <DiffHeaderLeft>
+                <CodeIcon size={22} color={theme.color.contentSecondary} />
+                <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
+              </DiffHeaderLeft>
+              {isSQLUnchanged && (
+                <DiffHeaderStatus data-hook="diff-status-unchanged">
+                  <StatusIcon>
+                    <CheckmarkOutline size="14px" />
+                  </StatusIcon>
+                  Already accepted
+                </DiffHeaderStatus>
+              )}
+              {!isSQLUnchanged &&
+                (isAccepted || isRejected || isRejectedWithFollowUp) && (
+                  <DiffHeaderStatus
+                    $isAccepted={isAccepted}
+                    $isRejected={isRejected}
+                    $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                    data-hook={
+                      isRejected
+                        ? "diff-status-rejected"
+                        : isRejectedWithFollowUp
+                          ? "diff-status-followed-up"
+                          : "diff-status-accepted"
+                    }
+                  >
+                    <StatusIcon
+                      $isAccepted={isAccepted}
+                      $isRejected={isRejected}
+                      $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                    >
+                      {isRejected ? (
+                        <CloseOutline size="14px" />
+                      ) : isRejectedWithFollowUp ? (
+                        <ChatDotsIcon size="14px" />
+                      ) : (
+                        <CheckmarkOutline size="14px" />
+                      )}
+                    </StatusIcon>
+                    {isRejected
+                      ? "Rejected"
+                      : isRejectedWithFollowUp
+                        ? "Followed up"
+                        : "Accepted"}
+                  </DiffHeaderStatus>
+                )}
+              <DiffHeaderRight>
+                <IconButton
+                  label={
+                    queryRunStatus === "loading"
+                      ? "Cancel query"
+                      : "Run this query"
+                  }
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (queryRunStatus === "loading" && message.sql) {
+                      onCancelQuery?.(
+                        createDetachedQueryKey(normalizeQueryText(message.sql)),
+                      )
+                    } else if (message.sql && onRunQuery) {
+                      onRunQuery(message.sql)
+                    }
+                  }}
+                  title={
+                    queryRunStatus === "loading"
+                      ? "Cancel query"
+                      : "Run this query"
+                  }
+                  aria-label={
+                    queryRunStatus === "loading"
+                      ? "Cancel query"
+                      : "Run this query"
+                  }
+                  data-hook="message-action-run-sql"
+                >
+                  {getQueryStatusIcon(queryRunStatus, theme)}
+                </IconButton>
+                {!showButtons &&
+                  onApplyToEditor &&
+                  !(originalIndex === latestDiffIndex && isAccepted) &&
+                  !isCurrentQuery && (
                     <IconButton
-                      label={
-                        queryRunStatus === "loading"
-                          ? "Cancel query"
-                          : "Run this query"
-                      }
+                      label="Apply to editor"
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (queryRunStatus === "loading" && message.sql) {
-                          onCancelQuery?.(
-                            createDetachedQueryKey(
-                              normalizeQueryText(message.sql),
-                            ),
+                        if (
+                          message.id &&
+                          message.sql &&
+                          !isOperationInProgress
+                        ) {
+                          void trackEvent(
+                            ConsoleEvent.AI_EDITOR_SUGGESTION_APPLY,
                           )
-                        } else if (message.sql && onRunQuery) {
-                          onRunQuery(message.sql)
+                          onApplyToEditor(message.id, message.sql)
                         }
                       }}
-                      title={
-                        queryRunStatus === "loading"
-                          ? "Cancel query"
-                          : "Run this query"
-                      }
-                      aria-label={
-                        queryRunStatus === "loading"
-                          ? "Cancel query"
-                          : "Run this query"
-                      }
-                      data-hook="message-action-run-sql"
+                      title="Apply to editor"
+                      aria-label="Apply to editor"
+                      disabled={isOperationInProgress}
+                      data-hook="message-action-apply"
                     >
-                      {getQueryStatusIcon(queryRunStatus, theme)}
-                    </IconButton>
-                    {!showButtons &&
-                      onApplyToEditor &&
-                      !(originalIndex === latestDiffIndex && isAccepted) &&
-                      !isCurrentQuery && (
-                        <IconButton
-                          label="Apply to editor"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (
-                              message.id &&
-                              message.sql &&
-                              !isOperationInProgress
-                            ) {
-                              void trackEvent(
-                                ConsoleEvent.AI_EDITOR_SUGGESTION_APPLY,
-                              )
-                              onApplyToEditor(message.id, message.sql)
-                            }
-                          }}
-                          title="Apply to editor"
-                          aria-label="Apply to editor"
-                          disabled={isOperationInProgress}
-                          data-hook="message-action-apply"
-                        >
-                          <KeyReturnIcon
-                            size={22}
-                            color={theme.color.contentSecondary}
-                          />
-                        </IconButton>
-                      )}
-                    <ExpandButton
-                      label={
-                        isExpanded ? "Collapse diff view" : "Expand diff view"
-                      }
-                      size="sm"
-                      title="Expand diff view"
-                      aria-label={
-                        isExpanded ? "Collapse diff view" : "Expand diff view"
-                      }
-                      aria-expanded={isExpanded}
-                      data-hook="diff-expand-button"
-                      onClick={() => {
-                        setExpandedDiffs((prev) => {
-                          const next = new Set(prev)
-                          if (next.has(originalIndex)) {
-                            next.delete(originalIndex)
-                          } else {
-                            next.add(originalIndex)
-                          }
-                          return next
-                        })
-                      }}
-                    >
-                      <ExpandUpDownIcon />
-                    </ExpandButton>
-                  </DiffHeaderRight>
-                </DiffHeader>
-                {isExpanded && (
-                  <>
-                    <DiffEditorWrapper>
-                      <LiteEditor
-                        diffEditor
-                        original={previousSQLForDiff}
-                        modified={currentSQLForDiff}
-                        maxHeight={300}
-                        onOpenInEditor={() =>
-                          onOpenInEditor({
-                            type: "diff",
-                            original: previousSQLForDiff ?? "",
-                            modified: currentSQLForDiff ?? "",
-                          })
-                        }
-                        handleScrollNeeded={handleScrollNeeded}
+                      <KeyReturnIcon
+                        size={22}
+                        color={theme.color.contentSecondary}
                       />
-                    </DiffEditorWrapper>
-                    {showButtons && (
-                      <ButtonBar align="center" justifyContent="center">
-                        {onRejectChange && message.id && (
-                          <RejectButton
-                            onClick={() => onRejectChange(message.id)}
-                            data-hook="message-action-reject"
-                          >
-                            Reject
-                          </RejectButton>
-                        )}
-                        {onAcceptChange && message.id && (
-                          <AcceptButton
-                            onClick={() => onAcceptChange(message.id)}
-                            data-hook="message-action-accept"
-                          >
-                            Accept
-                          </AcceptButton>
-                        )}
-                      </ButtonBar>
-                    )}
-                  </>
-                )}
-              </DiffContainer>
-            )}
-            {hasError && (
-              <ErrorContainer role="alert" data-hook="chat-message-error">
-                <CloseCircle
-                  size={16}
-                  color={theme.color.statusDanger}
-                  style={{ flexShrink: 0 }}
-                />
-                {message.error}
-                {showRetry && onRetry && (
-                  <RetryButton
-                    size="sm"
-                    variant="secondary"
-                    prefixIcon={<ArrowCounterClockwiseIcon size={12} />}
-                    onClick={() => {
-                      const userMessageIndex = messages
-                        .slice(0, originalIndex)
-                        .findLastIndex((m) => m.role === "user")
-                      if (userMessageIndex >= 0) {
-                        onRetry(messages[userMessageIndex].id)
+                    </IconButton>
+                  )}
+                <ExpandButton
+                  label={isExpanded ? "Collapse diff view" : "Expand diff view"}
+                  size="sm"
+                  title="Expand diff view"
+                  aria-label={
+                    isExpanded ? "Collapse diff view" : "Expand diff view"
+                  }
+                  aria-expanded={isExpanded}
+                  data-hook="diff-expand-button"
+                  onClick={() => {
+                    setExpandedDiffs((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(originalIndex)) {
+                        next.delete(originalIndex)
+                      } else {
+                        next.add(originalIndex)
                       }
-                    }}
-                    data-hook="retry-button"
-                  >
-                    Retry
-                  </RetryButton>
+                      return next
+                    })
+                  }}
+                >
+                  <ExpandUpDownIcon />
+                </ExpandButton>
+              </DiffHeaderRight>
+            </DiffHeader>
+            {isExpanded && (
+              <>
+                <DiffEditorWrapper>
+                  <LiteEditor
+                    diffEditor
+                    original={previousSQLForDiff}
+                    modified={currentSQLForDiff}
+                    maxHeight={300}
+                    onOpenInEditor={() =>
+                      onOpenInEditor({
+                        type: "diff",
+                        original: previousSQLForDiff ?? "",
+                        modified: currentSQLForDiff ?? "",
+                      })
+                    }
+                    handleScrollNeeded={handleScrollNeeded}
+                  />
+                </DiffEditorWrapper>
+                {showButtons && (
+                  <ButtonBar align="center" justifyContent="center">
+                    {onRejectChange && message.id && (
+                      <RejectButton
+                        onClick={() => onRejectChange(message.id)}
+                        data-hook="message-action-reject"
+                      >
+                        Reject
+                      </RejectButton>
+                    )}
+                    {onAcceptChange && message.id && (
+                      <AcceptButton
+                        onClick={() => onAcceptChange(message.id)}
+                        data-hook="message-action-accept"
+                      >
+                        Accept
+                      </AcceptButton>
+                    )}
+                  </ButtonBar>
                 )}
-              </ErrorContainer>
+              </>
             )}
-          </ExplanationBox>
-        )
-      })}
-      <MessagesEnd ref={messagesEndRef} data-hook="messages-end" />
-    </MessagesContainer>
+          </DiffContainer>
+        )}
+        {hasError && (
+          <ErrorContainer role="alert" data-hook="chat-message-error">
+            <CloseCircle
+              size={16}
+              color={theme.color.statusDanger}
+              style={{ flexShrink: 0 }}
+            />
+            <ChatErrorText error={message.error ?? ""} />
+            {showRetry && onRetry && (
+              <RetryButton
+                size="sm"
+                variant="secondary"
+                prefixIcon={<ArrowCounterClockwiseIcon size={12} />}
+                onClick={() => {
+                  const userMessageIndex = messages
+                    .slice(0, originalIndex)
+                    .findLastIndex((m) => m.role === "user")
+                  if (userMessageIndex >= 0) {
+                    onRetry(messages[userMessageIndex].id)
+                  }
+                }}
+                disabled={retryDisabled}
+                title={retryDisabled ? "Waiting for your agent" : undefined}
+                data-hook="retry-button"
+              >
+                Retry
+              </RetryButton>
+            )}
+          </ErrorContainer>
+        )}
+        {responseMetadata && (
+          <ResponseMetadata data-hook="chat-response-metadata">
+            {responseMetadata}
+          </ResponseMetadata>
+        )}
+      </ExplanationBox>
+    )
+  }
+
+  return (
+    <MessagesArea>
+      <MessagesContainer
+        ref={messagesContainerRef}
+        $scrolled={scrolled}
+        role="log"
+        data-hook="chat-messages-container"
+      >
+        {notesAfter(null)}
+        {visibleEntries.map((entry) => {
+          const id =
+            entry.type === "user" ? entry.message.id : entry.anchorMessage.id
+          return (
+            <React.Fragment key={`entry-${id}`}>
+              {renderEntry(entry)}
+              {notesAfter(id)}
+            </React.Fragment>
+          )
+        })}
+        <MessagesEnd ref={messagesEndRef} data-hook="messages-end" />
+      </MessagesContainer>
+      {showScrollToEnd && (
+        <ScrollToEndButton
+          variant="secondary"
+          size="sm"
+          prefixIcon={<ArrowDownIcon size={14} />}
+          onClick={scrollToEnd}
+          title={`Scroll to bottom (${SCROLL_TO_END_LABEL})`}
+          dataHook="chat-scroll-to-end"
+        >
+          Scroll to bottom
+          <ScrollToEndShortcut aria-hidden="true">
+            {SCROLL_TO_END_KEYS.join(" ")}
+          </ScrollToEndShortcut>
+        </ScrollToEndButton>
+      )}
+    </MessagesArea>
   )
 }

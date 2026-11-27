@@ -49,6 +49,7 @@ export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
   right_axis?: { name?: string; min?: number; max?: number }
+  reference_lines?: { value: number; axis?: "left" | "right"; label?: string }[]
 }
 
 // Structural data only — previews ≤ 120 chars, error summaries ≤ 200 chars.
@@ -138,6 +139,9 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
         },
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
+  ...(cfg.referenceLines?.length
+    ? { reference_lines: cfg.referenceLines }
+    : {}),
 })
 
 const highlightConfigWire = (

@@ -17,9 +17,11 @@ import type {
   ChatWindowState,
   ConversationId,
   AIConversation,
-  UserActionDigest,
 } from "./types"
-import { applyUserActionToDigest, createEmptyDigest } from "./userActionDigest"
+import {
+  createUserActionDigestState,
+  type UserActionDigestCapture,
+} from "./userActionDigest"
 import {
   on as onUserAction,
   type UserActionEvent,
@@ -51,6 +53,11 @@ type AIConversationContextType = {
   chatWindowState: ChatWindowState
   isLoadingMessages: boolean
   isStreaming: boolean
+  getChatDispatchState: (id: ConversationId) => {
+    owner: symbol
+    messages: ConversationMessage[]
+  } | null
+  setHasPendingSubmission: (id: ConversationId, pending: boolean) => void
   setIsStreaming: (streaming: boolean) => void
   scrollToMessageId: string | null
   setScrollToMessageId: (messageId: string | null) => void
@@ -81,12 +88,9 @@ type AIConversationContextType = {
     conversationId: ConversationId,
     notebookBufferId: number,
   ) => Promise<void>
-  readUserActionDigest: (
+  captureUserActionDigest: (
     conversationId: ConversationId,
-  ) => UserActionDigest | undefined
-  rotateUserActionDigest: (
-    conversationId: ConversationId,
-  ) => UserActionDigest | undefined
+  ) => UserActionDigestCapture | undefined
   handleGlyphClick: (options: {
     bufferId: number
     queryKey: QueryKey
@@ -118,6 +122,14 @@ type AIConversationContextType = {
     messageId: string,
     updates: Partial<ConversationMessage>,
   ) => void
+  // The agent session has seen the history before this turn. The bridge may
+  // accept a stopped turn after the user left its chat: the mark then goes
+  // to the chat's saved transcript.
+  markHistorySeen: (
+    conversationId: ConversationId,
+    anchorMessageId: string,
+    localAgentSessionId: string,
+  ) => Promise<void>
   updateMessagesWithCompaction: (
     newMessages: Array<ConversationMessage>,
   ) => void
@@ -206,8 +218,8 @@ export const AIConversationProvider: React.FC<{
     [conversationMetasArray],
   )
 
-  const userActionDigestsRef = useRef<Map<ConversationId, UserActionDigest>>(
-    new Map(),
+  const userActionDigestsRef = useRef(
+    new Map<ConversationId, ReturnType<typeof createUserActionDigestState>>(),
   )
   const conversationMetasRef = useRef(conversationMetas)
   useEffect(() => {
@@ -222,10 +234,10 @@ export const AIConversationProvider: React.FC<{
           if (meta.notebookBufferId !== evt.bufferId) continue
           let digest = userActionDigestsRef.current.get(meta.id)
           if (!digest) {
-            digest = createEmptyDigest()
+            digest = createUserActionDigestState()
             userActionDigestsRef.current.set(meta.id, digest)
           }
-          applyUserActionToDigest(digest, evt)
+          digest.apply(evt)
         }
       },
     )
@@ -279,7 +291,31 @@ export const AIConversationProvider: React.FC<{
 
   const activeConversationId = chatWindowState.activeConversationId
 
+  const activeConversationIdRef = useRef(activeConversationId)
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+  }, [activeConversationId])
+
   const isOpeningChatWindowRef = useRef(false)
+  const chatDispatchOwner = useRef(Symbol())
+  const pendingSubmissions = useRef(new Set<ConversationId>())
+  const setHasPendingSubmission = useCallback(
+    (id: ConversationId, pending: boolean) => {
+      if (pending) pendingSubmissions.current.add(id)
+      else pendingSubmissions.current.delete(id)
+    },
+    [],
+  )
+  const getChatDispatchState = useCallback(
+    (id: ConversationId) =>
+      !isOpeningChatWindowRef.current && activeConversationIdRef.current === id
+        ? {
+            owner: chatDispatchOwner.current,
+            messages: activeConversationMessagesRef.current,
+          }
+        : null,
+    [],
+  )
 
   const persistMessages = useCallback(
     async (conversationId: ConversationId, updateTimestamp: boolean = true) => {
@@ -462,19 +498,9 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
-  const readUserActionDigest = useCallback(
-    (conversationId: ConversationId): UserActionDigest | undefined =>
-      userActionDigestsRef.current.get(conversationId),
-    [],
-  )
-
-  const rotateUserActionDigest = useCallback(
-    (conversationId: ConversationId): UserActionDigest | undefined => {
-      const current = userActionDigestsRef.current.get(conversationId)
-      if (!current) return undefined
-      userActionDigestsRef.current.set(conversationId, createEmptyDigest())
-      return current
-    },
+  const captureUserActionDigest = useCallback(
+    (conversationId: ConversationId) =>
+      userActionDigestsRef.current.get(conversationId)?.capture(),
     [],
   )
 
@@ -624,6 +650,34 @@ export const AIConversationProvider: React.FC<{
     [conversationMetas],
   )
 
+  const markHistorySeen = useCallback(
+    async (
+      conversationId: ConversationId,
+      anchorMessageId: string,
+      localAgentSessionId: string,
+    ) => {
+      const mark = (messages: ConversationMessage[]) =>
+        messages.map((message) =>
+          message.id === anchorMessageId
+            ? { ...message, localAgentSessionId }
+            : message,
+        )
+      if (conversationId === activeMessagesConversationIdRef.current) {
+        setActiveConversationMessages(mark)
+        return
+      }
+      try {
+        const saved = await aiConversationStore.getMessages(conversationId)
+        // The chat was deleted, or Retry replaced the turn.
+        if (!saved.some((message) => message.id === anchorMessageId)) return
+        await aiConversationStore.saveMessages(conversationId, mark(saved))
+      } catch (e) {
+        console.error("Failed to save the agent's history mark:", e)
+      }
+    },
+    [setActiveConversationMessages],
+  )
+
   const updateMessagesWithCompaction = useCallback(
     (newMessages: Array<ConversationMessage>) => {
       setActiveConversationMessages((prev) => {
@@ -721,39 +775,40 @@ export const AIConversationProvider: React.FC<{
       const loadMessages = options?.loadMessages ?? true
 
       if (isOpeningChatWindowRef.current) return
+      const prevId = activeConversationIdRef.current
+      if (
+        prevId === conversationId &&
+        !chatWindowState.isHistoryOpen &&
+        activeSidebar?.type === "aiChat"
+      )
+        return
+
       isOpeningChatWindowRef.current = true
+      if (prevId !== conversationId) {
+        // Revoke dispatch ownership before the outgoing transcript is saved.
+        chatDispatchOwner.current = Symbol()
+        setIsLoadingMessages(true)
+      }
 
       try {
-        const prevId = chatWindowState.activeConversationId
-
         if (prevId && prevId !== conversationId) {
           const prevMeta = conversationMetas.get(prevId)
-          if (prevMeta && activeConversationMessagesRef.current.length === 0) {
+          const empty = activeConversationMessagesRef.current.length === 0
+          if (prevMeta && empty && !pendingSubmissions.current.has(prevId)) {
             await aiConversationStore.deleteConversation(prevId)
           } else {
             await persistMessages(prevId, false)
           }
-        } else if (
-          prevId === conversationId &&
-          !chatWindowState.isHistoryOpen &&
-          activeSidebar?.type === "aiChat"
-        ) {
-          return
-        }
-
-        if (!activeConversationId) {
-          showConversationMessages(null, [])
         }
 
         if (loadMessages && conversationId !== prevId) {
-          setIsLoadingMessages(true)
           const msgs = await aiConversationStore.getMessages(conversationId)
           showConversationMessages(conversationId, msgs)
-          setIsLoadingMessages(false)
         } else if (!loadMessages) {
           showConversationMessages(conversationId, [])
         }
 
+        activeConversationIdRef.current = conversationId
         setChatWindowState((prev) => ({
           ...prev,
           isHistoryOpen: false,
@@ -780,7 +835,10 @@ export const AIConversationProvider: React.FC<{
     void trackEvent(ConsoleEvent.AI_CHAT_CLOSE)
     dispatch(actions.console.closeSidebar())
     if (chatWindowState.activeConversationId) {
-      if (activeConversationMessagesRef.current.length === 0) {
+      if (
+        activeConversationMessagesRef.current.length === 0 &&
+        !pendingSubmissions.current.has(chatWindowState.activeConversationId)
+      ) {
         void aiConversationStore.deleteConversation(
           chatWindowState.activeConversationId,
         )
@@ -1182,6 +1240,8 @@ export const AIConversationProvider: React.FC<{
   const actionsValue = useMemo<AIConversationActionsContextType>(
     () => ({
       setIsStreaming,
+      getChatDispatchState,
+      setHasPendingSubmission,
       setScrollToMessageId,
       getConversationMeta,
       findConversationByQuery,
@@ -1193,8 +1253,7 @@ export const AIConversationProvider: React.FC<{
       findOrCreateNotebookChat,
       openNotebookChat,
       bindConversationToNotebook,
-      readUserActionDigest,
-      rotateUserActionDigest,
+      captureUserActionDigest,
       handleGlyphClick,
       shiftQueryKeysForBuffer,
       openChatWindow,
@@ -1207,6 +1266,7 @@ export const AIConversationProvider: React.FC<{
       addMessage,
       removeMessages,
       updateMessage,
+      markHistorySeen,
       updateMessagesWithCompaction,
       updateConversationName,
       acceptSuggestion,
@@ -1216,6 +1276,8 @@ export const AIConversationProvider: React.FC<{
     }),
     [
       setIsStreaming,
+      getChatDispatchState,
+      setHasPendingSubmission,
       setScrollToMessageId,
       getConversationMeta,
       findConversationByQuery,
@@ -1227,8 +1289,7 @@ export const AIConversationProvider: React.FC<{
       findOrCreateNotebookChat,
       openNotebookChat,
       bindConversationToNotebook,
-      readUserActionDigest,
-      rotateUserActionDigest,
+      captureUserActionDigest,
       handleGlyphClick,
       shiftQueryKeysForBuffer,
       openChatWindow,
@@ -1241,6 +1302,7 @@ export const AIConversationProvider: React.FC<{
       addMessage,
       removeMessages,
       updateMessage,
+      markHistorySeen,
       updateMessagesWithCompaction,
       updateConversationName,
       acceptSuggestion,
@@ -1257,6 +1319,8 @@ export const AIConversationProvider: React.FC<{
       isLoadingMessages,
       isStreaming,
       setIsStreaming,
+      getChatDispatchState,
+      setHasPendingSubmission,
       scrollToMessageId,
       setScrollToMessageId,
       getConversationMeta,
@@ -1274,8 +1338,7 @@ export const AIConversationProvider: React.FC<{
       findNotebookChat,
       findOrCreateNotebookChat,
       bindConversationToNotebook,
-      readUserActionDigest,
-      rotateUserActionDigest,
+      captureUserActionDigest,
       closeChatWindow,
       openHistoryView,
       closeHistoryView,
@@ -1283,6 +1346,7 @@ export const AIConversationProvider: React.FC<{
       addMessage,
       removeMessages,
       updateMessage,
+      markHistorySeen,
       updateMessagesWithCompaction,
       updateConversationName,
       acceptSuggestion,
@@ -1296,6 +1360,8 @@ export const AIConversationProvider: React.FC<{
       isLoadingMessages,
       isStreaming,
       setIsStreaming,
+      getChatDispatchState,
+      setHasPendingSubmission,
       scrollToMessageId,
       setScrollToMessageId,
       getConversationMeta,
@@ -1313,8 +1379,7 @@ export const AIConversationProvider: React.FC<{
       findNotebookChat,
       findOrCreateNotebookChat,
       bindConversationToNotebook,
-      readUserActionDigest,
-      rotateUserActionDigest,
+      captureUserActionDigest,
       closeChatWindow,
       openHistoryView,
       closeHistoryView,
@@ -1322,6 +1387,7 @@ export const AIConversationProvider: React.FC<{
       addMessage,
       removeMessages,
       updateMessage,
+      markHistorySeen,
       updateMessagesWithCompaction,
       updateConversationName,
       acceptSuggestion,

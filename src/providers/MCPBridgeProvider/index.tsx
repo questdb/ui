@@ -10,14 +10,19 @@ import React, {
 import { MCPBridgeClient } from "../../utils/mcp/MCPBridgeClient"
 import type { MCPBridgeClientStatus } from "../../utils/mcp/MCPBridgeClient"
 import { dispatchMCPTool } from "../../utils/mcp/dispatchMCPTool"
+import {
+  createPermissionsNoticeState,
+  deferUntilSent,
+} from "../../utils/mcp/deferUntilSent"
 import { createNotebookFreshness } from "../../utils/notebooks/notebookFreshness"
-import { mcpTools } from "../../utils/tools/tools"
+import { bridgeTools } from "../../utils/tools/tools"
 import {
   EXPECTED_MCP_VERSION,
   type BridgeVersionMismatch,
 } from "../../utils/mcp/protocolVersion"
 import type { ToolCallMessage } from "../../utils/mcp/types"
 import {
+  type PendingPairAgent,
   clearLegacyLocalStorage,
   clearPendingPair,
   markPendingPairConsented,
@@ -44,13 +49,37 @@ import { QuestContext } from "../QuestProvider"
 import { useLocalStorage } from "../LocalStorageProvider"
 import { on as onUserAction } from "../../utils/notebooks/notebookAIBridge"
 import type { ToolDefinition } from "../../utils/ai/types"
-import {
-  applyUserActionToDigest,
-  createEmptyDigest,
-} from "../AIConversationProvider/userActionDigest"
-import type { UserActionDigest } from "../AIConversationProvider/types"
+import { createUserActionDigestState } from "../AIConversationProvider/userActionDigest"
 import { useBridgeToolRunner } from "./useBridgeToolRunner"
 import { PairingConsentModal } from "./PairingConsentModal"
+import { useLocalAgentConnection } from "./useLocalAgentConnection"
+import { getLocalAgentChannel } from "../../utils/localAgent/localAgentChannel"
+import {
+  LocalAgentContext,
+  LocalAgentSchemaAccessContext,
+} from "../../utils/localAgent/LocalAgentContext"
+import { emitLocalAgentPairedViaLink } from "../../utils/localAgent/localAgentPairing"
+import { mcpClientOf, type McpClient } from "../../utils/mcp/mcpClients"
+
+// Glossary. Code names follow the protocols; the user only ever sees "your
+// coding agent" or the agent's name, never MCP, bridge, WebSocket or pairing.
+//
+// - bridge: the MCP server process on the user's computer. This provider
+//   keeps one WebSocket to it (MCPBridgeClient).
+// - pair / pairing: that WebSocket's handshake (link or address + key, then
+//   consent). The user sees it as "connect".
+// - MCP mode: the user talks to their coding agent in a terminal or IDE; the
+//   agent started the bridge and calls console tools. The agent's name comes
+//   as `mcpClient` (link `mcp-client`, hello_ack `mcpClient`). Footer UI:
+//   McpAgentPopover. Screens say "works from your terminal".
+// - Chat mode ("local agent"): `connect` runs the agent and the user chats
+//   with it in the AI Assistant. It comes as `agent` (link `mcp-agent`,
+//   hello_ack `agent`): pairedAgent, useLocalAgentConnection, localAgent*.
+//   Footer UI: ChatAgentPopover. "Local" names this mode only, though the MCP
+//   mode agent runs on the user's computer too.
+// - The bridge never sends `agent` and `mcpClient` together, so the field
+//   present tells the mode. Analytics events (mcp.*) and storage keys keep
+//   their old names.
 
 export type MCPBridgeContextValue = {
   status: MCPBridgeClientStatus
@@ -64,6 +93,11 @@ export type MCPBridgeContextValue = {
   disconnect: () => void
   permissions: Permissions
   setPermissions: (next: Permissions) => void
+  // Chat mode: the agent the pairing link announced, known before it says hello.
+  pairedAgent: PendingPairAgent | null
+  // MCP mode: the coding agent that runs the bridge, when the console knows
+  // its name. Kept after the bridge goes away, for "{name} disconnected".
+  mcpClient: McpClient | null
 }
 
 const defaultContext: MCPBridgeContextValue = {
@@ -78,33 +112,43 @@ const defaultContext: MCPBridgeContextValue = {
   disconnect: () => undefined,
   permissions: DEFAULT_GRANTED,
   setPermissions: () => undefined,
+  pairedAgent: null,
+  mcpClient: null,
 }
 
 const MCPBridgeContext = createContext<MCPBridgeContextValue>(defaultContext)
 
 export const useMCPBridge = () => useContext(MCPBridgeContext)
 
-// Sent in `hello` so the bridge can detect drift against its bundled
-// tool list (Codex caches the initial tools/list and never refetches).
+// Sent in `hello`: chat agents list these tools, and the bridge checks every
+// call's arguments against them (Codex caches the initial tools/list and
+// never refetches).
 const toWireSchema = (t: ToolDefinition) => ({
   name: t.name,
   description: t.description ?? "",
   inputSchema: t.inputSchema as Record<string, unknown>,
 })
-const buildToolListForHello = () => mcpTools.map(toWireSchema)
+const buildToolListForHello = () => bridgeTools.map(toWireSchema)
 
 const consoleOrigin =
   typeof window !== "undefined" ? window.location.origin : "unknown"
 
 const CONSENT_SUCCESS_AUTOCLOSE_MS = 3_000
 
+// The answer to a tool call of an agent turn the user stopped.
+const STOPPED_TURN_CALL_RESULT =
+  "CANCELLED: the user stopped this turn, so the call did not run."
+
 export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { quest } = useContext(QuestContext)
-  const { notebookOnboarding, updateNotebookOnboarding } = useLocalStorage()
+  const { notebookOnboarding, updateNotebookOnboarding, aiAssistantSettings } =
+    useLocalStorage()
   const [url, setUrl] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [pairedAgent, setPairedAgent] = useState<PendingPairAgent | null>(null)
+  const [mcpClientName, setMcpClientName] = useState<string | null>(null)
   const [status, setStatus] = useState<MCPBridgeClientStatus>("disconnected")
   const [latencyMs, setLatencyMs] = useState<number | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
@@ -115,11 +159,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   )
   const permissionsRef = useRef<Permissions>(permissions)
   permissionsRef.current = permissions
-  const permissionsDirtyRef = useRef<boolean>(false)
+  // The agent learns of a permission change from the next tool result sent.
+  const permissionsNoticeRef = useRef(createPermissionsNoticeState())
   const [retryAttempt, setRetryAttempt] = useState(0)
   const [pendingConsent, setPendingConsent] = useState<{
     url: string
     token: string
+    agent?: PendingPairAgent
+    mcpClient?: string
   } | null>(null)
   const [consentInFlight, setConsentInFlight] = useState(false)
   const [consentSucceeded, setConsentSucceeded] = useState(false)
@@ -129,21 +176,18 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [connectAttempt, setConnectAttempt] = useState(0)
 
   const freshnessRef = useRef(createNotebookFreshness())
+  const {
+    channel: localAgentChannel,
+    attachClient: attachLocalAgent,
+    freshnessFor: agentFreshnessFor,
+  } = useLocalAgentConnection({ aiAssistantSettings })
 
-  const digestRef = useRef<UserActionDigest>(createEmptyDigest())
-  const getDigest = useCallback(() => digestRef.current, [])
-  // Snapshot-and-reset so the same user actions aren't re-emitted across
-  // successive tool results.
-  const consumeDigest = useCallback(() => {
-    const snapshot = digestRef.current
-    digestRef.current = createEmptyDigest()
-    return snapshot
-  }, [])
+  // User actions reach the agent with tool results (see deferUntilSent).
+  const digestRef = useRef(createUserActionDigestState())
+  const getDigest = useCallback(() => digestRef.current.peek(), [])
 
-  const { modelToolsClient, metaToolContext } = useBridgeToolRunner(
-    getDigest,
-    consumeDigest,
-  )
+  const { modelToolsClientFor, metaToolContext } =
+    useBridgeToolRunner(getDigest)
 
   const validateSql = useCallback(
     (sql: string) => quest.validateQuery(sql),
@@ -151,30 +195,20 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   )
 
   // Refs let the dispatcher read live values outside React's render flow.
-  const permissionsRefs = useMemo(
-    () => ({
-      get: () => permissionsRef.current,
-      consumeDirty: (): boolean => {
-        const wasDirty = permissionsDirtyRef.current
-        permissionsDirtyRef.current = false
-        return wasDirty
-      },
-    }),
-    [],
-  )
+  const getPermissions = useCallback(() => permissionsRef.current, [])
 
   const dispatchCtxRef = useRef({
-    modelToolsClient,
+    modelToolsClientFor,
     freshness: freshnessRef.current,
     metaToolContext,
-    permissions: permissionsRefs,
+    getPermissions,
     validateSql,
   })
   dispatchCtxRef.current = {
-    modelToolsClient,
+    modelToolsClientFor,
     freshness: freshnessRef.current,
     metaToolContext,
-    permissions: permissionsRefs,
+    getPermissions,
     validateSql,
   }
 
@@ -186,10 +220,12 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const PERMISSIONS_REVOKED_REASON = "permissions_revoked"
 
   const clientRef = useRef<MCPBridgeClient | null>(null)
+  // Armed by accepting a pairing link; the first agent hello opens its chat.
+  const opensAgentChatOnPairRef = useRef(false)
 
   useEffect(() => {
     const cleanupUserActionListener = onUserAction("user-action", (evt) => {
-      digestRef.current = applyUserActionToDigest(digestRef.current, evt)
+      digestRef.current.apply(evt)
     })
     return () => {
       cleanupUserActionListener()
@@ -198,7 +234,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     if (!url || !token) return
-    digestRef.current = createEmptyDigest()
+    digestRef.current = createUserActionDigestState()
     freshnessRef.current.reset()
     const client = new MCPBridgeClient({
       url,
@@ -216,10 +252,12 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     const offVersionMismatch = client.on("versionMismatch", (m) =>
       setVersionMismatch(m),
     )
-    const offHelloAck = client.on("helloAck", () => {
+    const offHelloAck = client.on("helloAck", (ack) => {
       // Promote pending → consented so a same-tab refresh silently restores.
       markPendingPairConsented()
       setLastError(null)
+      const name = ack.mcpClient?.name
+      setMcpClientName(!ack.agent && typeof name === "string" ? name : null)
     })
 
     const offToolCall = client.on("toolCall", (call: ToolCallMessage) => {
@@ -230,6 +268,29 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         })
       }
       const startedAt = Date.now()
+      const { conversationId } = call
+      const turn =
+        conversationId === undefined
+          ? undefined
+          : getLocalAgentChannel()?.captureToolRequest(client, conversationId)
+      // A stopped turn's call never runs: a tool that ignores the aborted
+      // signal would still act, and what it reads would count as told.
+      if (turn?.stopped) {
+        client.sendToolResult({
+          v: EXPECTED_MCP_VERSION,
+          type: "tool_result",
+          requestId: call.requestId,
+          content: [{ type: "text", text: STOPPED_TURN_CALL_RESULT }],
+          isError: true,
+        })
+        if (toolEvent) {
+          void trackEvent(toolEvent, {
+            outcome: "aborted",
+            durationMs: Date.now() - startedAt,
+          })
+        }
+        return
+      }
       const aborter = new AbortController()
       inflightAbortersRef.current.set(call.requestId, aborter)
       const deadlineTimer =
@@ -257,12 +318,29 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         return true
       }
+      const turnSignal = turn?.signal
+      const abortWithTurn = () => aborter.abort(turnSignal?.reason)
+      turnSignal?.addEventListener("abort", abortWithTurn, { once: true })
+      const { modelToolsClientFor, ...dispatchCtx } = dispatchCtxRef.current
+      const toldOnSend = deferUntilSent(
+        {
+          ...dispatchCtx,
+          modelToolsClient: modelToolsClientFor(conversationId),
+          ...(conversationId !== undefined && {
+            freshness: agentFreshnessFor(conversationId),
+            setStatus: turn?.setStatus,
+            onSuggestedQuery: turn?.onSuggestedQuery,
+          }),
+          signal: aborter.signal,
+        },
+        {
+          permissionsNotice: permissionsNoticeRef.current,
+          userActions: digestRef.current,
+        },
+      )
       void (async () => {
         try {
-          const result = await dispatchMCPTool(call, {
-            ...dispatchCtxRef.current,
-            signal: aborter.signal,
-          })
+          const result = await dispatchMCPTool(call, toldOnSend.ctx)
           if (sendRevokedErrorIfNeeded()) {
             if (toolEvent) {
               void trackEvent(toolEvent, {
@@ -288,6 +366,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             content: result.content,
             isError: result.isError ?? false,
           })
+          toldOnSend.settle(true)
         } catch (err) {
           if (sendRevokedErrorIfNeeded()) {
             if (toolEvent) {
@@ -314,6 +393,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             isError: true,
           })
         } finally {
+          toldOnSend.settle(false)
+          turnSignal?.removeEventListener("abort", abortWithTurn)
           if (deadlineTimer !== null) window.clearTimeout(deadlineTimer)
           inflightAbortersRef.current.delete(call.requestId)
         }
@@ -325,9 +406,17 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       if (aborter) aborter.abort()
     })
 
+    const detachLocalAgent = attachLocalAgent(client)
+    const offAgentPaired = client.on("helloAck", (ack) => {
+      if (!opensAgentChatOnPairRef.current) return
+      opensAgentChatOnPairRef.current = false
+      if (ack.agent) emitLocalAgentPairedViaLink()
+    })
     client.connect()
 
     return () => {
+      detachLocalAgent()
+      offAgentPaired()
       offStatus()
       offLatency()
       offError()
@@ -343,7 +432,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       client.disconnect()
       if (clientRef.current === client) clientRef.current = null
     }
-  }, [url, token, connectAttempt])
+  }, [url, token, connectAttempt, attachLocalAgent, agentFreshnessFor])
 
   const connect = useCallback((nextUrl: string, nextToken: string) => {
     setRetryAttempt(0)
@@ -352,6 +441,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setConnectAttempt((n) => n + 1)
     setUrl(nextUrl)
     setToken(nextToken)
+    setPairedAgent(null)
+    setMcpClientName(null)
     writePendingPair({
       url: nextUrl,
       token: nextToken,
@@ -367,7 +458,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       (prev.read && !next.read) ||
       (prev.write && !next.write)
     writePermissions(next)
-    permissionsDirtyRef.current = true
+    permissionsNoticeRef.current.markChanged()
     setPermissionsState(next)
     clientRef.current?.setPermissions(next)
     // Calls already past the dispatcher gate keep running; abort them so a
@@ -386,12 +477,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     clearPendingPair()
     setUrl(null)
     setToken(null)
+    setPairedAgent(null)
+    setMcpClientName(null)
     setStatus("disconnected")
     setLatencyMs(null)
     setLastError(null)
     setRetryAttempt(0)
     setVersionMismatch(null)
-    digestRef.current = createEmptyDigest()
+    digestRef.current = createUserActionDigestState()
     freshnessRef.current.reset()
   }, [])
 
@@ -407,9 +500,16 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setConnectAttempt((n) => n + 1)
       setUrl(pair.url)
       setToken(pair.token)
+      setPairedAgent(pair.agent ?? null)
+      setMcpClientName(pair.mcpClient ?? null)
     } else {
       void trackEvent(ConsoleEvent.MCP_PAIRING_PROMPTED)
-      setPendingConsent({ url: pair.url, token: pair.token })
+      setPendingConsent({
+        url: pair.url,
+        token: pair.token,
+        agent: pair.agent,
+        mcpClient: pair.mcpClient,
+      })
     }
   }, [])
 
@@ -475,6 +575,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       // Order matters: the about-to-be-constructed client reads
       // permissionsRef.current in its initial hello.
       setPermissions(committedPermissions)
+      opensAgentChatOnPairRef.current = true
       attemptSawActiveRef.current = false
       setConsentInFlight(true)
       setConsentSucceeded(false)
@@ -484,6 +585,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setConnectAttempt((n) => n + 1)
       setUrl(pendingConsent.url)
       setToken(pendingConsent.token)
+      setPairedAgent(pendingConsent.agent ?? null)
+      setMcpClientName(pendingConsent.mcpClient ?? null)
     },
     [pendingConsent, consentInFlight, setPermissions],
   )
@@ -491,12 +594,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const declinePendingConsent = useCallback(() => {
     // In the success state, Dismiss should NOT disconnect — the user
     // just confirmed connection.
+    // consentSucceeded stays: the dialog keeps showing success while it
+    // closes, and the next accept resets it.
     if (consentSucceeded) {
       setPendingConsent(null)
-      setConsentSucceeded(false)
       return
     }
     void trackEvent(ConsoleEvent.MCP_PAIRING_DECLINED)
+    opensAgentChatOnPairRef.current = false
     setPendingConsent(null)
     setConsentInFlight(false)
     if (clientRef.current) {
@@ -505,11 +610,15 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     }
     setUrl(null)
     setToken(null)
+    setPairedAgent(null)
+    setMcpClientName(null)
     setRetryAttempt(0)
     setLastError(null)
     setVersionMismatch(null)
     clearPendingPair()
   }, [consentSucceeded])
+
+  const mcpClient = useMemo(() => mcpClientOf(mcpClientName), [mcpClientName])
 
   const value = useMemo<MCPBridgeContextValue>(
     () => ({
@@ -524,6 +633,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       disconnect,
       permissions,
       setPermissions,
+      pairedAgent,
+      mcpClient,
     }),
     [
       status,
@@ -537,12 +648,20 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       disconnect,
       permissions,
       setPermissions,
+      pairedAgent,
+      mcpClient,
     ],
   )
 
   return (
     <MCPBridgeContext.Provider value={value}>
-      {children}
+      <LocalAgentContext.Provider value={localAgentChannel}>
+        <LocalAgentSchemaAccessContext.Provider
+          value={permissions.grantSchemaAccess}
+        >
+          {children}
+        </LocalAgentSchemaAccessContext.Provider>
+      </LocalAgentContext.Provider>
       <PairingConsentModal
         pending={pendingConsent}
         isConnecting={consentInFlight}

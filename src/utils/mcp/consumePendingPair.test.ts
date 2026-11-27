@@ -111,4 +111,119 @@ describe("consumePendingPairFromUrl", () => {
     expect(replace).toHaveBeenCalledOnce()
     expect(replace).toHaveBeenCalledWith(null, "", "/console?keep=me#frag")
   })
+
+  it("keeps the agent name and workspace of an agent bridge and scrubs them from the URL", () => {
+    // Given
+    const replace = vi.fn()
+    const agent = new URLSearchParams({
+      "mcp-agent": "Claude Code",
+      "mcp-agent-cwd": "/Users/me/.questdb/mcp-bridge/workspace",
+    })
+
+    // When
+    consumePendingPairFromUrl(
+      {
+        search: `?mcp-pair=1&mcp-ws=ws://127.0.0.1:9876&mcp-token=${VALID_TOKEN}&${agent.toString()}`,
+        pathname: "/",
+        hash: "",
+      },
+      { replaceState: replace },
+    )
+
+    // Then
+    expect(readPendingPair()?.agent).toEqual({
+      label: "Claude Code",
+      cwd: "/Users/me/.questdb/mcp-bridge/workspace",
+    })
+    expect(replace).toHaveBeenCalledWith(null, "", "/")
+  })
+
+  const consumeAgent = (agent: Record<string, string>) =>
+    consumePendingPairFromUrl(
+      {
+        search: `?mcp-pair=1&mcp-ws=ws://127.0.0.1:9876&mcp-token=${VALID_TOKEN}&${new URLSearchParams(agent).toString()}`,
+        pathname: "/",
+        hash: "",
+      },
+      { replaceState: () => undefined },
+    )
+
+  it("keeps the name of the coding agent that works from the terminal, and scrubs it from the URL", () => {
+    // Given
+    const replace = vi.fn()
+
+    // When
+    consumePendingPairFromUrl(
+      {
+        search: `?mcp-pair=1&mcp-ws=ws://127.0.0.1:9876&mcp-token=${VALID_TOKEN}&mcp-client=claude-code`,
+        pathname: "/",
+        hash: "",
+      },
+      { replaceState: replace },
+    )
+
+    // Then
+    expect(readPendingPair()).toMatchObject({ mcpClient: "claude-code" })
+    expect(readPendingPair()?.agent).toBeUndefined()
+    expect(replace).toHaveBeenCalledWith(null, "", "/")
+  })
+
+  it("never reads an MCP client name next to a chat agent, and cuts a long one", () => {
+    // When
+    consumeAgent({ "mcp-agent": "Claude Code", "mcp-client": "claude-code" })
+    const chat = readPendingPair()
+    consumeAgent({ "mcp-client": "y".repeat(100) })
+    const long = readPendingPair()
+
+    // Then
+    expect(chat?.mcpClient).toBeUndefined()
+    expect(long?.mcpClient).toBe("y".repeat(64))
+  })
+
+  it("cuts an overlong agent name instead of dropping the agent", () => {
+    // When
+    consumeAgent({ "mcp-agent": "x".repeat(129), "mcp-agent-cwd": "/tmp" })
+
+    // Then
+    expect(readPendingPair()?.agent).toEqual({
+      label: `${"x".repeat(127)}…`,
+      cwd: "/tmp",
+    })
+  })
+
+  it("keeps a long workspace path up to the Linux path limit", () => {
+    // Given
+    const cwd = `/${"a".repeat(4095)}`
+
+    // When
+    consumeAgent({ "mcp-agent": "Claude Code", "mcp-agent-cwd": cwd })
+
+    // Then
+    expect(readPendingPair()?.agent?.cwd).toBe(cwd)
+  })
+
+  it("marks control and direction-override characters instead of showing them", () => {
+    // When
+    consumeAgent({
+      "mcp-agent": "Claude\u202eedoC",
+      "mcp-agent-cwd": "/tmp\nevil",
+    })
+
+    // Then
+    expect(readPendingPair()?.agent).toEqual({
+      label: "Claude\uFFFDedoC",
+      cwd: "/tmp\uFFFDevil",
+    })
+  })
+
+  it("treats a link with only one agent parameter as an agent bridge", () => {
+    // When
+    consumeAgent({ "mcp-agent-cwd": "/tmp" })
+
+    // Then
+    expect(readPendingPair()?.agent).toEqual({
+      label: "Agent",
+      cwd: "/tmp",
+    })
+  })
 })

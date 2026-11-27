@@ -7,6 +7,8 @@ import {
   getLastTurnWithUnactionedDiff,
   getScrollLength,
   buildInterleavedTimeline,
+  extendContentSlices,
+  withResponseTexts,
 } from "./turnView"
 
 function msg(
@@ -442,6 +444,35 @@ describe("buildInterleavedTimeline", () => {
     }
   })
 
+  it("ends the operations at the last of their steps when a response without text came between them", () => {
+    // Given steps with an empty response between them
+    const history = [
+      statusEntry(AIOperationStatus.Processing, { timestamp: 0 }),
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 4_000,
+        content: "\n",
+      }),
+      statusEntry(AIOperationStatus.RunningQuery, { timestamp: 5_000 }),
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 60_000,
+        content: "Done.",
+      }),
+    ]
+
+    // When
+    const result = buildInterleavedTimeline(history)
+
+    // Then
+    expect(result[0]).toMatchObject({
+      type: "operations",
+      timestamp: 0,
+      endTimestamp: 60_000,
+    })
+    expect(
+      result[0].type === "operations" && result[0].operations,
+    ).toHaveLength(2)
+  })
+
   it("handles interleaved operations and content", () => {
     const history = [
       statusEntry(AIOperationStatus.RetrievingTables, { timestamp: 1 }),
@@ -486,5 +517,106 @@ describe("buildInterleavedTimeline", () => {
     ]
     const result = buildInterleavedTimeline(history)
     expect(result).toHaveLength(0)
+  })
+})
+
+describe("extendContentSlices", () => {
+  it.each([
+    {
+      name: "starts the slices of a step that has none",
+      slices: undefined,
+      next: { messageId: "a", start: 4, end: 9 },
+      expected: [{ messageId: "a", start: 4, end: 9 }],
+    },
+    {
+      name: "continues the last slice with text that follows it",
+      slices: [{ messageId: "a", start: 0, end: 4 }],
+      next: { messageId: "a", start: 4, end: 9 },
+      expected: [{ messageId: "a", start: 0, end: 9 }],
+    },
+    {
+      name: "adds a slice for text after a gap in the same message",
+      slices: [{ messageId: "a", start: 0, end: 4 }],
+      next: { messageId: "a", start: 12, end: 20 },
+      expected: [
+        { messageId: "a", start: 0, end: 4 },
+        { messageId: "a", start: 12, end: 20 },
+      ],
+    },
+    {
+      name: "adds a slice for text of another message",
+      slices: [{ messageId: "a", start: 0, end: 4 }],
+      next: { messageId: "b", start: 4, end: 9 },
+      expected: [
+        { messageId: "a", start: 0, end: 4 },
+        { messageId: "b", start: 4, end: 9 },
+      ],
+    },
+  ])("$name", ({ slices, next, expected }) => {
+    expect(extendContentSlices(slices, next)).toEqual(expected)
+  })
+})
+
+describe("withResponseTexts", () => {
+  it("reads each response step's text from the messages its slices point into", () => {
+    // Given
+    const messages = [
+      msg({ id: "first", role: "assistant", content: "Looking. Found it." }),
+      msg({ id: "second", role: "assistant", content: "Here it is." }),
+    ]
+    const thinking = statusEntry(AIOperationStatus.Thinking, {
+      timestamp: 1,
+      content: "Hmm",
+    })
+    const history: StatusEntry[] = [
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 2,
+        contentSlices: [{ messageId: "first", start: 0, end: 8 }],
+      }),
+      thinking,
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 3,
+        contentSlices: [
+          { messageId: "first", start: 8, end: 18 },
+          { messageId: "second", start: 0, end: 11 },
+          { messageId: "removed", start: 0, end: 5 },
+        ],
+      }),
+    ]
+
+    // When
+    const resolved = withResponseTexts(history, messages)
+
+    // Then
+    expect(resolved).toEqual([
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 2,
+        content: "Looking.",
+      }),
+      thinking,
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 3,
+        content: " Found it.Here it is.",
+      }),
+    ])
+    expect(resolved[1]).toBe(thinking)
+  })
+
+  it("keeps the history of a chat saved before slices, whose steps hold their text", () => {
+    // Given
+    const history = [
+      statusEntry(AIOperationStatus.GeneratingResponse, {
+        timestamp: 1,
+        content: "Saved text",
+      }),
+    ]
+
+    // When
+    const resolved = withResponseTexts(history, [
+      msg({ id: "answer", role: "assistant", content: "Saved text" }),
+    ])
+
+    // Then
+    expect(resolved).toBe(history)
   })
 })

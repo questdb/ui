@@ -16,7 +16,10 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it } from "vitest"
 import { SetupAIAssistant } from "../../../src/components/SetupAIAssistant"
-import { ModelDropdown } from "../../../src/components/SetupAIAssistant/ModelDropdown"
+import {
+  ChatModelControls,
+  openModelPicker,
+} from "../../../src/components/SetupAIAssistant/test/setupHarness"
 import type { AiAssistantSettings } from "../../../src/providers/LocalStorageProvider/types"
 
 const click = (hook: string) => userEvent.click(getByHook(hook))
@@ -60,14 +63,14 @@ const mountSettings = (settings?: AiAssistantSettings) =>
   renderAISettings(
     <>
       <SetupAIAssistant />
-      <ModelDropdown />
+      <ChatModelControls />
     </>,
     settings,
   )
 const expectDropdownModels = async (models: string[]) => {
-  await click("ai-settings-model-dropdown")
+  await openModelPicker()
   expect(
-    getAllByHook("ai-settings-model-item").map((item) => item.textContent),
+    getAllByHook("chat-model-picker-option").map((item) => item.textContent),
   ).toEqual(models)
   await userEvent.keyboard("{Escape}")
 }

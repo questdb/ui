@@ -46,6 +46,8 @@ export enum StoreKey {
   LEFT_PANEL_STATE = "left.panel.state",
   AI_ASSISTANT_SETTINGS = "ai.assistant.settings",
   AI_CHAT_PANEL_WIDTH = "ai.chat.panel.width",
+  LOCAL_AGENT_INVITE_DISMISSED = "ai.localAgent.inviteDismissed",
+  AGENT_PROMO_SEEN = "ai.agentPromo.seen",
   CLIENT_ID = "client.id",
   NOTEBOOK_ONBOARDING = "notebook.onboarding",
   RUN_WITH_SELECTION = "editor.runWithSelection",

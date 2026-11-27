@@ -54,6 +54,19 @@ export const applyUserActionToDigest = (
   }
 }
 
+export type UserActionDigestCapture = {
+  digest: UserActionDigest
+  finish: (sent: boolean) => void
+}
+
+const copyDigest = (digest: UserActionDigest): UserActionDigest => ({
+  ...digest,
+  added: new Set(digest.added),
+  deleted: new Set(digest.deleted),
+  edited: new Set(digest.edited),
+  ran: new Map(digest.ran),
+})
+
 export const isEmptyDigest = (d: UserActionDigest): boolean =>
   d.added.size === 0 &&
   d.deleted.size === 0 &&
@@ -62,3 +75,31 @@ export const isEmptyDigest = (d: UserActionDigest): boolean =>
   d.layoutModeTo === undefined &&
   d.autoRefreshDefaultTo === undefined &&
   d.notebookStatusChange === undefined
+
+export const createUserActionDigestState = () => {
+  let pending = createEmptyDigest()
+  let sinceCapture: UserActionDigest | undefined
+
+  return {
+    peek: (): UserActionDigest => pending,
+    apply(event: UserActionEvent) {
+      applyUserActionToDigest(pending, event)
+      if (sinceCapture) applyUserActionToDigest(sinceCapture, event)
+    },
+    capture(): UserActionDigestCapture | undefined {
+      if (isEmptyDigest(pending)) return undefined
+      const suffix = createEmptyDigest()
+      sinceCapture = suffix
+      return {
+        digest: copyDigest(pending),
+        finish(sent) {
+          // Only the current submission owns the capture. A stopped submission
+          // can settle after its successor has already captured the digest.
+          if (sinceCapture !== suffix) return
+          if (sent) pending = suffix
+          sinceCapture = undefined
+        },
+      }
+    },
+  }
+}

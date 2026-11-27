@@ -1,9 +1,10 @@
+import type { AgentPromptImage } from "../../utils/localAgent/protocol"
 import type { PartitionBy, TableKind } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import type { Message } from "../../utils/ai/types"
 import type { RanStatus } from "../../utils/ai/runStatus"
 import type { AutoRefresh } from "../../store/notebook"
-import type { TokenUsage } from "../../utils/ai/aiAssistant"
+import type { ContextUsage, TokenUsage } from "../../utils/ai/aiAssistant"
 import type { OperationHistory } from "../AIStatusProvider"
 
 export type ConversationId = string
@@ -22,12 +23,16 @@ export type HealthIssueDisplayData = {
   severity: "critical" | "warning"
 }
 
-export type UserMessageDisplayType =
-  | "fix_request"
-  | "explain_request"
-  | "ask_request"
-  | "schema_explain_request"
-  | "health_issue_request"
+// Requests the chat shows from their display data, not from their content.
+export const USER_MESSAGE_DISPLAY_TYPES = [
+  "fix_request",
+  "explain_request",
+  "ask_request",
+  "schema_explain_request",
+  "health_issue_request",
+] as const
+
+export type UserMessageDisplayType = (typeof USER_MESSAGE_DISPLAY_TYPES)[number]
 
 export type ConversationMessage = Message & {
   id: string
@@ -35,6 +40,12 @@ export type ConversationMessage = Message & {
   error?: string
   sql?: string
   tokenUsage?: TokenUsage
+  // How full the model's context was after this answer.
+  contextUsage?: ContextUsage
+  // Images the user attached to this message, for an agent that reads them.
+  images?: AgentPromptImage[]
+  // The message is one of the agent's own commands, sent as typed.
+  agentCommand?: boolean
   previousSQL?: string // SQL before this change (for diff display)
   isRejected?: boolean
   contentTimestamp?: number // When text content started streaming
@@ -43,6 +54,17 @@ export type ConversationMessage = Message & {
   isCompacted?: boolean
   operationHistory?: OperationHistory
   model?: string
+  // Wall-clock time for the whole assistant turn, stored on its anchor.
+  turnDurationMs?: number
+  // Legacy agent type marker; it does not identify a session.
+  localAgentId?: string
+  // The agent session a turn was addressed to, set on its request and answer
+  // when the turn starts. The turn is never handed to that session as earlier
+  // history, whether or not the bridge accepted it.
+  addressedToLocalAgentSessionId?: string
+  // Set on a regular chat turn's answer once the bridge accepted the turn:
+  // the session has seen the history before it.
+  localAgentSessionId?: string
   displayType?: UserMessageDisplayType
   displayUserMessage?: string
   displaySchemaData?: SchemaDisplayData

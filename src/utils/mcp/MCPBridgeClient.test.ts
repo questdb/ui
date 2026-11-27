@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { MCPBridgeClient } from "./MCPBridgeClient"
+import {
+  HELLO_TIMEOUT_MS,
+  MAX_RECONNECT_ATTEMPTS,
+  MCPBridgeClient,
+} from "./MCPBridgeClient"
 import { EXPECTED_MCP_VERSION } from "./protocolVersion"
 import { WS_CLOSE_CODES, type HelloMessage, type ToolSchema } from "./types"
 
@@ -335,6 +339,68 @@ describe("MCPBridgeClient", () => {
     expect(client.status).toBe("reconnecting")
   })
 
+  it("retires silent reconnect sockets and exhausts the retry budget", () => {
+    vi.useFakeTimers()
+    const { client, socket } = makeClient()
+    const retry = vi.fn()
+    client.on("retryAttempt", retry)
+    client.connect()
+    handshake(client, socket())
+    socket().dropFromServer()
+
+    for (let i = 0; i < MAX_RECONNECT_ATTEMPTS; i++) {
+      const previous = socket()
+      vi.advanceTimersToNextTimer()
+      const waiting = socket()
+      expect(waiting).not.toBe(previous)
+      waiting.open()
+      vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1)
+      expect(client.status).toBe("reconnecting")
+      vi.advanceTimersByTime(1)
+      expect(waiting.lastCloseArgs?.reason).toBe("hello_timeout")
+    }
+    expect(client.status).toBe("disconnected")
+    expect(retry.mock.calls.flat()).toEqual(
+      Array.from({ length: MAX_RECONNECT_ATTEMPTS + 1 }, (_, i) => i + 1),
+    )
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("isolates old socket events and clears the deadline on ack or disconnect", () => {
+    vi.useFakeTimers()
+    const { client, socket } = makeClient()
+    client.connect()
+    const old = socket()
+    old.open()
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS)
+    vi.advanceTimersToNextTimer()
+    const replacement = socket()
+    replacement.open()
+    old.receive({
+      v: EXPECTED_MCP_VERSION,
+      type: "hello_ack",
+      sessionId: "old",
+    })
+    old.dropFromServer()
+    expect(client.status).toBe("reconnecting")
+    replacement.receive({
+      v: EXPECTED_MCP_VERSION,
+      type: "hello_ack",
+      sessionId: "new",
+      heartbeatIntervalMs: HELLO_TIMEOUT_MS * 2,
+    })
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS)
+    expect(client.status).toBe("connected")
+    expect(replacement.lastCloseArgs).toBeNull()
+
+    replacement.dropFromServer()
+    vi.advanceTimersToNextTimer()
+    socket().open()
+    client.disconnect()
+    expect(client.status).toBe("disconnected")
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   // Bridge-originated terminal close codes must NOT enter the reconnect
   // loop — reconnecting hits the same wall. Stop retrying and surface a
   // typed `error` so the UI can distinguish them from "bridge is dead".
@@ -347,17 +413,17 @@ describe("MCPBridgeClient", () => {
       {
         code: WS_CLOSE_CODES.superseded,
         label: "superseded (4001)",
-        expectInMessage: "Another browser tab is paired",
+        expectInMessage: "Your agent is connected to another browser tab",
       },
       {
         code: WS_CLOSE_CODES.token_invalid,
         label: "token_invalid (4002)",
-        expectInMessage: "token is no longer valid",
+        expectInMessage: "This link no longer works",
       },
       {
         code: WS_CLOSE_CODES.major_version_mismatch,
         label: "major_version_mismatch (4004)",
-        expectInMessage: "incompatible with what this console expects",
+        expectInMessage: "runs a version this console does not support",
       },
     ]
     for (const { code, label, expectInMessage } of cases) {

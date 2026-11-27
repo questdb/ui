@@ -31,8 +31,16 @@ export type QueryChart = {
   name?: string
 }
 
+// A horizontal line at a fixed value, like RSI's 30 and 70.
+export type ReferenceLine = {
+  value: number
+  axis?: SeriesAxis
+  label?: string
+}
+
 export type ChartConfig = {
   xColumn: string | null
   queries: (QueryChart | null)[]
   rightAxis?: { name?: string; min?: number; max?: number }
+  referenceLines?: ReferenceLine[]
 }

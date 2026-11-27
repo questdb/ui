@@ -12,8 +12,8 @@ export type MetaToolContext = {
   getActiveBufferId: () => number | null
   getWorkspace: () => WorkspaceInfo | null
   getDigest: () => UserActionDigest | null
-  // Snapshot + reset in one shot; dispatchMCPTool uses this to avoid
-  // re-emitting the same actions in successive "since last check" blocks.
+  // The actions one tool result reports. The caller marks them as told only
+  // once it sends that result, so they are not repeated in the next one.
   consumeDigest?: () => UserActionDigest | null
 }
 

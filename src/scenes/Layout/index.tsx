@@ -38,6 +38,7 @@ import {
 import { Help } from "./help"
 import { Warnings } from "./warning"
 import { AIChatButton } from "./AIChatButton"
+import { LocalAgentChatLauncher } from "./LocalAgentChatLauncher"
 import { TableDetailsButton } from "./TableDetailsButton"
 import { QueryActivityButton } from "./QueryActivityButton"
 import { TableDetailsDrawer } from "../Schema/TableDetailsDrawer"
@@ -46,7 +47,8 @@ import { AIChatWindowLazy } from "../Editor/AIChatWindow/AIChatWindowLazy"
 
 import { AIStatusProvider } from "../../providers/AIStatusProvider"
 import { MCPBridgeProvider } from "../../providers/MCPBridgeProvider"
-import { NotebookOnboardingModal } from "../../components/NotebookOnboardingModal"
+import { ConnectCodingAgentProvider } from "../../components/ConnectCodingAgent"
+import { AgentPromoModal } from "../../components/AgentPromo"
 
 const Page = styled.div`
   display: flex;
@@ -94,35 +96,38 @@ const Layout = () => {
     <SearchProvider>
       <EditorProvider>
         <AIConversationProvider>
-          <AIStatusProvider>
-            <MCPBridgeProvider>
-              <TopBar />
-              <Warnings />
-              <Root>
-                <Main>
-                  <Page>
-                    <Console />
-                  </Page>
-                </Main>
+          <MCPBridgeProvider>
+            <AIStatusProvider>
+              <ConnectCodingAgentProvider>
+                <TopBar />
+                <Warnings />
+                <Root>
+                  <Main>
+                    <Page>
+                      <Console />
+                    </Page>
+                  </Main>
 
-                <Sidebar align="top">
-                  <AIChatButton />
-                  <TableDetailsButton />
-                  <QueryActivityButton />
-                  <News />
-                  <Help />
-                </Sidebar>
-                <TableDetailsDrawer />
-                <QueryActivityDrawer />
-                <AIChatWindowLazy />
-              </Root>
+                  <Sidebar align="top">
+                    <AIChatButton />
+                    <TableDetailsButton />
+                    <QueryActivityButton />
+                    <News />
+                    <Help />
+                  </Sidebar>
+                  <TableDetailsDrawer />
+                  <QueryActivityDrawer />
+                  <AIChatWindowLazy />
+                  <LocalAgentChatLauncher />
+                </Root>
 
-              <SideMenu />
+                <SideMenu />
 
-              <Footer />
-              <NotebookOnboardingModal />
-            </MCPBridgeProvider>
-          </AIStatusProvider>
+                <Footer />
+                <AgentPromoModal />
+              </ConnectCodingAgentProvider>
+            </AIStatusProvider>
+          </MCPBridgeProvider>
         </AIConversationProvider>
       </EditorProvider>
     </SearchProvider>

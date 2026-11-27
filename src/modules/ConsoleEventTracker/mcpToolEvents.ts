@@ -4,7 +4,7 @@ import {
   STATE_NOT_FETCHED_MESSAGE,
   STATE_STALE_MESSAGE,
 } from "../../utils/notebooks/notebookToolMessages"
-import { mcpTools } from "../../utils/tools/tools"
+import { bridgeTools } from "../../utils/tools/tools"
 import type { Permissions } from "../../utils/tools/permissions"
 
 export type McpDeniedReasonCode =
@@ -22,7 +22,7 @@ export type McpToolResultLike = {
 }
 
 const CONSOLE_EVENT_VALUES = new Set<string>(Object.values(ConsoleEvent))
-const MCP_TOOL_NAMES = new Set(mcpTools.map((tool) => tool.name))
+const MCP_TOOL_NAMES = new Set(bridgeTools.map((tool) => tool.name))
 
 export const mcpToolCallEvent = (toolName: string): ConsoleEvent | null => {
   if (!MCP_TOOL_NAMES.has(toolName)) return null

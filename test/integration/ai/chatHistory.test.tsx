@@ -6,11 +6,18 @@ import {
   queryByHook,
   seedChat,
   getAllByHook,
+  chatServer,
+  fixtures,
+  sendMessage,
 } from "./support/chatHarness"
 import { describe, expect, it } from "vitest"
 import { fireEvent, waitFor, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { db } from "../../../src/store/db"
+import {
+  AIOperationStatus,
+  type OperationHistory,
+} from "../../../src/providers/AIStatusProvider"
 
 describe("chat history", () => {
   it("deletes an unsent conversation on close and opens a fresh conversation", async () => {
@@ -49,6 +56,134 @@ describe("chat history", () => {
       ),
     )
     expect(await db.ai_conversations.count()).toBe(2)
+  })
+
+  it("opens saved chats offline on a local-only selection without changing the destination", async () => {
+    await seedChat("Saved local chat")
+    const settings = {
+      modelValueFormat: 2 as const,
+      selectedModel: "local-agent",
+      providers: {},
+    }
+    const mounted = renderChat("openai", undefined, settings)
+    await screen.findByRole("button", { name: "Open AI Assistant" })
+    await openChat()
+    expect(getByHook("chat-message-user")).toHaveTextContent(
+      "Question about Saved local chat",
+    )
+    expect(getByHook("chat-input-textarea")).toBeDisabled()
+    await userEvent.click(getByHook("chat-window-close"))
+    await openChat()
+    expect(getByHook("chat-input-textarea")).toBeDisabled()
+    expect(
+      JSON.parse(localStorage.getItem("ai.assistant.settings") ?? "{}"),
+    ).toMatchObject({ selectedModel: "local-agent" })
+    expect(fetch).not.toHaveBeenCalled()
+    mounted.unmount()
+  })
+
+  it("opens a saved chat whose answer holds a step without a type, as an earlier build saved a tool it did not have", async () => {
+    // Given
+    await seedChat("Saved chat", {
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: "List my tables",
+          timestamp: 1,
+        },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "All done here.",
+          timestamp: 2,
+          operationHistory: [
+            { type: AIOperationStatus.Processing, timestamp: 3 },
+            {
+              args: { failed: "Unknown tool: constructor" },
+              timestamp: 4,
+              endedAt: 5,
+            },
+            {
+              type: AIOperationStatus.GeneratingResponse,
+              timestamp: 6,
+              content: "All done here.",
+            },
+          ] as OperationHistory,
+        },
+      ],
+    })
+    renderChat()
+
+    // When
+    await openChat()
+
+    // Then
+    await waitFor(() =>
+      expect(getByHook("chat-message-assistant")).toHaveTextContent(
+        "All done here.",
+      ),
+    )
+    expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument()
+  })
+
+  it("shows an image-only message without displaying the agent's workspace context", async () => {
+    // Given
+    await seedChat("Image-only chat", {
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          timestamp: Date.now(),
+          content: "<workspace>Internal workspace context</workspace>",
+          displayUserMessage: "",
+          images: [{ mimeType: "image/png", data: "iVBORw0KGgo=" }],
+        },
+      ],
+    })
+    renderChat()
+
+    // When
+    await openChat()
+
+    // Then
+    await waitFor(() => {
+      const bubble = getByHook("chat-message-user")
+      expect(bubble).toContainElement(getByHook("chat-image-enlarge"))
+      expect(bubble).not.toHaveTextContent(/workspace/i)
+    })
+  })
+
+  it("keeps a user's literal Markdown while stripping inline images from assistant history", async () => {
+    const userImage = "![dot](data:image/png;base64,iVBORw0KGgo=)"
+    const assistantImage = "![preview](data:image/png;base64,iVBORw0KGgo=)"
+    await seedChat("Markdown discussion", {
+      messages: [
+        {
+          id: "user",
+          role: "user",
+          content: `Explain ${userImage}`,
+          timestamp: 1,
+        },
+        {
+          id: "assistant",
+          role: "assistant",
+          content: `Here is ${assistantImage}`,
+          timestamp: 2,
+        },
+      ],
+    })
+    const server = chatServer("openai", [
+      fixtures.createFinalResponse("openai", "That is an inline image."),
+    ])
+    renderChat()
+    await openChat()
+    await sendMessage("What was the exact Markdown syntax?")
+    await screen.findByText("That is an inline image.")
+    const history = JSON.stringify(server.requests[0]?.body.input)
+    expect(history).toContain(userImage)
+    expect(history).toContain("Here is [image: preview]")
+    expect(history).not.toContain(assistantImage)
   })
 
   it("filters stored conversations and handles clear and Escape without closing too early", async () => {

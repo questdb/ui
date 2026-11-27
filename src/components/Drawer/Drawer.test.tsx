@@ -10,6 +10,7 @@ import rootReducer from "../../store/reducers"
 import { actions, selectors } from "../../store"
 import { Button } from "../Button"
 import { Drawer } from "."
+import { DRAWER_ESCAPE_EVENT, escapeClaimOf } from "./escapeClaim"
 import { DrawerHost } from "../../scenes/Schema/TableDetailsDrawer/test/DrawerHost"
 vi.mock("../../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
 
@@ -114,5 +115,79 @@ describe("drawer history controls", () => {
     // Then
     expect(getHook("current-panel")).toHaveTextContent("prices")
     expect(getHook("sidebar-forward-button")).toBeDisabled()
+  })
+})
+
+describe("drawer and Escape", () => {
+  const SideDrawer = ({
+    claim,
+    onDismiss,
+    onClaimed,
+  }: {
+    claim: boolean
+    onDismiss: () => void
+    onClaimed: () => void
+  }) => (
+    <Drawer
+      mode="side"
+      title="Chat"
+      trigger={<span />}
+      open
+      onDismiss={onDismiss}
+    >
+      <section
+        {...escapeClaimOf(claim)}
+        data-hook="waiting-card"
+        ref={(node) => node?.addEventListener(DRAWER_ESCAPE_EVENT, onClaimed)}
+      >
+        <Button>Answer</Button>
+      </section>
+    </Drawer>
+  )
+
+  it("hands Escape to a card that claims it, and stays open", async () => {
+    // Given a card waiting on the user, with focus in it
+    const onDismiss = vi.fn()
+    const onClaimed = vi.fn()
+    renderComponent(
+      <Provider store={createStore(rootReducer)}>
+        <DrawerHost>
+          <SideDrawer claim onDismiss={onDismiss} onClaimed={onClaimed} />
+        </DrawerHost>
+      </Provider>,
+    )
+    screen.getByRole("button", { name: "Answer" }).focus()
+
+    // When
+    await userEvent.keyboard("{Escape}")
+
+    // Then
+    expect(onClaimed).toHaveBeenCalledTimes(1)
+    expect(onDismiss).not.toHaveBeenCalled()
+  })
+
+  it("closes on Escape when no card claims it", async () => {
+    // Given
+    const onDismiss = vi.fn()
+    const onClaimed = vi.fn()
+    renderComponent(
+      <Provider store={createStore(rootReducer)}>
+        <DrawerHost>
+          <SideDrawer
+            claim={false}
+            onDismiss={onDismiss}
+            onClaimed={onClaimed}
+          />
+        </DrawerHost>
+      </Provider>,
+    )
+    screen.getByRole("button", { name: "Answer" }).focus()
+
+    // When
+    await userEvent.keyboard("{Escape}")
+
+    // Then
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+    expect(onClaimed).not.toHaveBeenCalled()
   })
 })

@@ -99,6 +99,11 @@ export const createQuestdbTheme = (colors: ColorShape) => {
       textStyle: { color: colors.contentSecondary, fontSize: 12 },
       borderColor: colors.borderDefault,
     },
+    // Reference lines, like RSI's 30 and 70: quiet next to the data.
+    markLine: {
+      lineStyle: { color: colors.contentMuted },
+      label: { color: colors.contentSecondary, fontSize: 12 },
+    },
     toolbox: {
       iconStyle: { borderColor: colors.contentSecondary },
       emphasis: { iconStyle: { borderColor: colors.contentPrimary } },

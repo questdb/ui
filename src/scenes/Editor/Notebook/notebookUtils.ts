@@ -1,3 +1,4 @@
+import isEqual from "lodash.isequal"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import {
   isSessionEnded,
@@ -839,7 +840,22 @@ const normalizeChartConfig = (
     xColumn: cfg.xColumn ?? null,
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
-  if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
+  // Canonicalize optional fields that disappear in a chart snapshot.
+  if (cfg.rightAxis) {
+    const { name, min, max } = cfg.rightAxis
+    next.rightAxis = {
+      ...(name && { name }),
+      ...(min != null && { min }),
+      ...(max != null && { max }),
+    }
+  }
+  if (cfg.referenceLines?.length) {
+    next.referenceLines = cfg.referenceLines.map(({ value, axis, label }) => ({
+      value,
+      ...(axis === "right" && { axis }),
+      ...(label && { label }),
+    }))
+  }
   return next
 }
 
@@ -936,6 +952,14 @@ export const buildAppliedCells = (
     }
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
+    const valueChanged = existing != null && existing.value !== value
+    const chartUnchanged =
+      chartConfig != null &&
+      existing != null &&
+      !valueChanged &&
+      // Run is stored as an absent mode; the snapshot reports it as "run".
+      (existing.mode === "draw") === (resolvedMode === "draw") &&
+      isEqual(chartConfig, normalizeChartConfig(existing.chartConfig))
     // PUT semantics like chartConfig: an omitted config clears the rules.
     const highlightConfig = req.highlightConfig ?? undefined
 
@@ -978,20 +1002,29 @@ export const buildAppliedCells = (
         "cells",
       )
     }
-    if (req.chartConfig && req.chartConfig.queries.length === 0) {
-      throw new ApplyNotebookStateError(
-        `Cell at index ${index} has a chart_config with no queries. Provide one entry per ;-split query (apply replaces the chart wholesale).`,
-        "cells",
-      )
-    }
-    if (req.chartConfig && req.chartConfig.queries.length > 0) {
-      const statementCount = getQueriesFromText(value).length
+    const statements = chartConfig ? getQueriesFromText(value) : undefined
+    if (chartConfig && statements) {
+      const queryCount = chartConfig.queries.length
+      const statementCount = statements.length
+      // Clearing the last reference line can leave a saved, inference-only
+      // chart. Allow its empty override list on an unchanged replay.
       if (
-        statementCount > 0 &&
-        req.chartConfig.queries.length !== statementCount
+        queryCount === 0 &&
+        !chartUnchanged &&
+        !chartConfig.referenceLines?.length
       ) {
         throw new ApplyNotebookStateError(
-          `Cell at index ${index} has ${req.chartConfig.queries.length} chart queries but ${statementCount} ;-split statement${statementCount === 1 ? "" : "s"}. Send exactly one entry per statement (index-aligned); apply replaces all per-query configs.`,
+          `Cell at index ${index} has a chart_config with no queries. Provide one entry per ;-split query (apply replaces the chart wholesale).`,
+          "cells",
+        )
+      }
+      if (
+        queryCount > 0 &&
+        statementCount > 0 &&
+        queryCount !== statementCount
+      ) {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index} has ${queryCount} chart queries but ${statementCount} ;-split statement${statementCount === 1 ? "" : "s"}. Send exactly one entry per statement (index-aligned); apply replaces all per-query configs.`,
           "cells",
         )
       }
@@ -1074,7 +1107,6 @@ export const buildAppliedCells = (
 
     if (existing) {
       updated.push(existing.id)
-      const valueChanged = existing.value !== value
       // Results carry over by statement content: unchanged statements keep
       // theirs, zero survivors collapse the frame. A released cell (result on
       // disk only) keeps its snapshot — hydration reconciles it on load.

@@ -19,6 +19,7 @@ import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import { floatingSurfaceStyles } from "../overlayStyles"
+import { useLocalAgent } from "../../utils/localAgent/LocalAgentContext"
 
 const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => {
   const theme = useTheme()
@@ -244,6 +245,10 @@ export const AIStatusIndicator: React.FC = () => {
   const assistantModesRef = useRef<HTMLDivElement | null>(null)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const statusRef = useRef<AIOperationStatus | null>(null)
+  // An agent question waits in the chat; say so while the chat is closed.
+  const pendingQuestion = useLocalAgent()?.questions[0]
+  const viewChatId =
+    pendingQuestion?.conversationId ?? chatWindowState.activeConversationId
 
   const operationSections = useMemo(
     () => buildOperationSections(currentOperation, status, true),
@@ -339,7 +344,13 @@ export const AIStatusIndicator: React.FC = () => {
             aria-live="polite"
             data-hook="ai-status-text"
           >
-            {isAborted ? "Cancelled" : isCompleted ? "Completed" : "Working..."}
+            {isAborted
+              ? "Cancelled"
+              : isCompleted
+                ? "Completed"
+                : pendingQuestion
+                  ? "Waiting for your answer"
+                  : "Working..."}
           </WorkingText>
           {isBlockingAIStatus(status) && (
             <AIStopButton
@@ -349,11 +360,9 @@ export const AIStatusIndicator: React.FC = () => {
               dataHook="ai-status-stop"
             />
           )}
-          {chatWindowState.activeConversationId && (
+          {viewChatId && (
             <ViewChatButton
-              onClick={() =>
-                openChatWindow(chatWindowState.activeConversationId!)
-              }
+              onClick={() => openChatWindow(viewChatId)}
               data-hook="ai-status-view-chat"
             >
               View chat

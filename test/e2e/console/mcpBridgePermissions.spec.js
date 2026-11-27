@@ -30,7 +30,7 @@ const acknowledge = (permissions) => {
     expect(hello.permissions).to.deep.equal(permissions)
   })
   cy.window().then((win) => win.__mcpFakeWS.helloAck())
-  cy.getByDataHook("mcp-status-pill").should("contain", "MCP connected")
+  cy.getByDataHook("mcp-status-pill").should("contain", "Agent connected")
 }
 
 const call = (name, args, id) => {
@@ -106,7 +106,7 @@ describe("MCP consent and live permissions", () => {
     cy.getByDataHook("mcp-status-pill").click()
     cy.getByDataHook("permissions-trigger").click()
     cy.getByDataHook("permission-level-write").click()
-    cy.getByDataHook("mcp-pair-submit").should("contain", "Connect").click()
+    cy.getByDataHook("mcp-pair-submit").should("contain", "Save").click()
     cy.window().then((win) => {
       expect(
         JSON.parse(win.localStorage.getItem("mcp:permissions")),
@@ -115,7 +115,7 @@ describe("MCP consent and live permissions", () => {
       expect(win.__mcpFakeSockets).to.have.length(1)
       expect(socket.framesOfType("hello")).to.have.length(1)
     })
-    cy.getByDataHook("mcp-status-pill").should("contain", "MCP connected")
+    cy.getByDataHook("mcp-status-pill").should("contain", "Agent connected")
     call("run_query", { sql: deniedSQL[0], limit: 10 }, "write-after").then(
       successful,
     )

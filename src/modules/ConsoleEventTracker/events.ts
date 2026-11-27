@@ -149,9 +149,10 @@ export enum ConsoleEvent {
   NOTEBOOK_VARIABLES_APPLY = "notebook.variables_apply",
   NOTEBOOK_VARIABLES_IMPORT = "notebook.variables_import",
   NOTEBOOK_RESULT_TAB_SWITCH = "notebook.result_tab_switch",
-  NOTEBOOK_ONBOARDING_OPEN = "notebook.onboarding_open",
-  NOTEBOOK_ONBOARDING_STEP = "notebook.onboarding_step",
-  NOTEBOOK_ONBOARDING_CLOSE = "notebook.onboarding_close",
+  AGENT_PROMO_OPEN = "agent_promo.open",
+  AGENT_PROMO_CLOSE = "agent_promo.close",
+  AGENT_PROMO_FLOW = "agent_promo.flow",
+  AGENT_PROMO_AGENT = "agent_promo.agent",
 
   MCP_ADD_CELL = "mcp.add_cell",
   MCP_UPDATE_CELL = "mcp.update_cell",
@@ -187,6 +188,7 @@ export enum ConsoleEvent {
   MCP_GET_QUESTDB_DOCUMENTATION = "mcp.get_questdb_documentation",
   MCP_GET_WORKSPACE_STATE = "mcp.get_workspace_state",
   MCP_GET_RECENT_USER_ACTIONS = "mcp.get_recent_user_actions",
+  MCP_SUGGEST_QUERY = "mcp.suggest_query",
   MCP_UNKNOWN_TOOL = "mcp.unknown_tool",
 
   MCP_PAIRING_PROMPTED = "mcp.pairing_prompted",
@@ -203,4 +205,12 @@ export enum ConsoleEvent {
   MCP_AGENT_CHANGES_VIEW = "mcp.agent_changes_view",
   MCP_AGENT_CHANGES_DISMISS = "mcp.agent_changes_dismiss",
   MCP_STATUS_POPOVER_OPEN = "mcp.status_popover_open",
+
+  LOCAL_AGENT_CONNECTED = "local_agent.connected",
+  LOCAL_AGENT_TURN = "local_agent.turn",
+  LOCAL_AGENT_QUESTION = "local_agent.question",
+  LOCAL_AGENT_RESTART = "local_agent.restart",
+  LOCAL_AGENT_SETUP_OPEN = "local_agent.setup_open",
+  LOCAL_AGENT_COMMAND_COPY = "local_agent.command_copy",
+  LOCAL_AGENT_INVITE_DISMISS = "local_agent.invite_dismiss",
 }

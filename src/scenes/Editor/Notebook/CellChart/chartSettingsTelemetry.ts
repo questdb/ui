@@ -17,7 +17,9 @@ export type ChartSettingsSavePayload = {
 export type ChartSettingsTelemetry = {
   onCancel?: (method: ChartSettingsCancelMethod) => void
   onSave?: (payload: ChartSettingsSavePayload) => void
-  onSaveBlocked?: (reason: "ohlc_incomplete") => void
+  onSaveBlocked?: (
+    reason: "ohlc_incomplete" | "reference_line_without_value",
+  ) => void
   onTypeChange?: (from: ChartType, to: ChartType) => void
   onResetAuto?: (chartType: ChartType) => void
 }

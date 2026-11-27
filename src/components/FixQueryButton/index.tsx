@@ -1,17 +1,20 @@
 import React, { useContext } from "react"
 import styled from "styled-components"
-import { Button } from ".."
+import { Button, toast } from ".."
 import { AISparkle } from "../AISparkle"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
+import { useLocalAgentChannel } from "../../utils/localAgent/LocalAgentContext"
 import { useAIStatus } from "../../providers/AIStatusProvider"
-import { useAIConversation } from "../../providers/AIConversationProvider"
+import { useAIConversationActions } from "../../providers/AIConversationProvider"
+import type { ConversationId } from "../../providers/AIConversationProvider/types"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
 import {
   executeAIFlow,
   createFixFlowConfig,
+  localAgentDispatchError,
 } from "../../utils/ai/executeAIFlow"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -20,40 +23,61 @@ const FixButton = styled(Button)`
   gap: 1rem;
 `
 
-export const FixQueryButton = () => {
+export const FixQueryButton = ({
+  conversationId,
+}: {
+  conversationId: ConversationId
+}) => {
   const { quest } = useContext(QuestContext)
-  const { editorRef, executionRefs } = useEditor()
+  const { activeBuffer, editorRef, executionRefs } = useEditor()
   const tables = useSelector(selectors.query.getTables)
+  const localAgentChannel = useLocalAgentChannel()
   const {
+    canUse,
     setStatus,
-    abortController,
+    getOperationSignal,
+    isOperationBlocking,
     hasSchemaAccess,
     currentModel,
     apiKey,
     aiAssistantSettings,
   } = useAIStatus()
   const {
-    chatWindowState,
+    getChatDispatchState,
     getConversationMeta,
     addMessage,
     updateMessage,
     updateConversationName,
     persistMessages,
     setIsStreaming,
-  } = useAIConversation()
+  } = useAIConversationActions()
 
   const handleFixQuery = () => {
-    const conversationId = chatWindowState.activeConversationId
-    if (!conversationId) return
+    if (
+      !canUse ||
+      isOperationBlocking() ||
+      !getChatDispatchState(conversationId)
+    )
+      return
+    const unavailable = localAgentDispatchError(currentModel, localAgentChannel)
+    if (unavailable) {
+      toast.error(unavailable)
+      return
+    }
     const conversation = getConversationMeta(conversationId)
-    if (!conversation?.queryKey || conversation.bufferId == null) return
+    if (
+      !conversation?.queryKey ||
+      conversation.bufferId == null ||
+      conversation.bufferId !== activeBuffer.id
+    )
+      return
     const errorInfo = extractErrorByQueryKey(
       conversation.queryKey,
       conversation.bufferId,
       executionRefs,
       editorRef,
     )
-    if (!errorInfo) return
+    if (!errorInfo?.queryText.trim()) return
     void trackEvent(ConsoleEvent.AI_FIX_QUERY)
 
     const { errorMessage, queryText, word } = errorInfo
@@ -64,12 +88,13 @@ export const FixQueryButton = () => {
         queryText,
         errorMessage,
         errorWord: word ?? undefined,
-        settings: { model: currentModel!, apiKey: apiKey! },
+        settings: { model: currentModel, apiKey },
+        localAgentChannel,
         aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,
-        abortSignal: abortController?.signal,
+        abortSignal: getOperationSignal(),
       }),
       {
         addMessage,

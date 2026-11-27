@@ -18,7 +18,10 @@ import type {
   NotebookCell,
   NotebookVariable,
 } from "../../store/notebook"
-import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type {
+  ChartConfig,
+  ReferenceLine,
+} from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import { loadRe2 } from "../../components/ResultGrid/highlight"
 import {
   denyReasonUnresolvedSql,
@@ -36,9 +39,13 @@ import {
 } from "../../scenes/Editor/Notebook/declareUtils"
 import type { ToolExecutionContext } from "../ai/shared"
 import {
+  hasRightAxisLineWithoutQuery,
   mapQueryChart,
+  mapReferenceLines,
   mapRightAxis,
+  RIGHT_AXIS_LINE_WITHOUT_QUERY,
   type ToolQueryChart,
+  type ToolReferenceLine,
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
@@ -244,6 +251,7 @@ export const dispatchApplyNotebookState = async (
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
           right_axis?: ToolRightAxis | null
+          reference_lines?: ToolReferenceLine[] | null
         } | null
         grid?: { x: number; y: number; w: number } | null
       }>
@@ -290,6 +298,9 @@ export const dispatchApplyNotebookState = async (
       is_error: true,
     }
   }
+  // Each cell's reference lines, mapped once: the checks below and the
+  // request read them.
+  const referenceLinesOf: ReferenceLine[][] = []
   for (const [idx, c] of cells.entries()) {
     if (hasExplicitModeForEditor(c.mode, c.view)) {
       return validationError(
@@ -323,6 +334,25 @@ export const dispatchApplyNotebookState = async (
         }),
         is_error: true,
       }
+    }
+    const referenceLines = mapReferenceLines(
+      c.chart_config?.reference_lines ?? [],
+      `cells[${idx}].chart_config.reference_lines`,
+    )
+    if (!referenceLines.ok) return validationError(referenceLines.error)
+    referenceLinesOf[idx] = referenceLines.lines
+    if (
+      c.chart_config &&
+      hasRightAxisLineWithoutQuery({
+        queries: (c.chart_config.queries ?? []).map((q) =>
+          q ? mapQueryChart(q) : null,
+        ),
+        referenceLines: referenceLines.lines,
+      })
+    ) {
+      return validationError(
+        `cells[${idx}].chart_config: ${RIGHT_AXIS_LINE_WITHOUT_QUERY}`,
+      )
     }
     if (preserves && !(typeof c.id === "string" && c.id.length > 0)) {
       return {
@@ -424,7 +454,7 @@ export const dispatchApplyNotebookState = async (
       maximized_cell_id === undefined ? undefined : maximized_cell_id,
     variables:
       variables === undefined || variables === null ? undefined : variables,
-    cells: cells.map<ApplyNotebookStateCellRequest>((c) => {
+    cells: cells.map<ApplyNotebookStateCellRequest>((c, index) => {
       const cell: ApplyNotebookStateCellRequest =
         c.preserve_value === true ? { preserveValue: true } : { value: c.value }
       if (c.id !== undefined && c.id !== null) cell.id = c.id
@@ -444,6 +474,8 @@ export const dispatchApplyNotebookState = async (
           ),
         }
         if (cfg.right_axis) chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
+        if (referenceLinesOf[index].length > 0)
+          chartConfig.referenceLines = referenceLinesOf[index]
         cell.chartConfig = chartConfig
       }
       if (c.grid) cell.grid = c.grid

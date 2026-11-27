@@ -6,6 +6,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { ButtonBase } from "../Button"
 import { IconButton } from "../IconButton"
 import { Input } from "../Input"
+import { isImeKeyEvent } from "../../utils/isImeKeyEvent"
 import { SelectMenuTriggerButton } from "../SelectMenu"
 import {
   menuContainerStyles,
@@ -302,7 +303,7 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
   }, [focusedIndex, open])
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.nativeEvent.isComposing) return
+    if (isImeKeyEvent(event)) return
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault()
       const direction = event.key === "ArrowDown" ? 1 : -1

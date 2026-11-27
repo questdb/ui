@@ -7,6 +7,7 @@ import {
   fixtures,
   getByHook,
   getAllByHook,
+  queryByHook,
   gate,
   seedChat,
   editorAdapter,
@@ -228,3 +229,53 @@ it("sends decisions created by Accept and Reject in later requests and persists 
     /User accepted[\s\S]*SELECT 2[\s\S]*User rejected[\s\S]*User accepted[\s\S]*SELECT 5/,
   )
 })
+
+it.each(["accept", "reject"] as const)(
+  "shows command feedback after an inline SQL %s",
+  async (decision) => {
+    const buffer = { id: 42, label: "Query", value: "SELECT 0", position: 0 }
+    editorAdapter.overrides = {
+      buffers: [buffer],
+      activeBuffer: buffer,
+      applyAISQLChange: () => ({
+        success: true,
+        finalQueryKey: createQueryKey("SELECT 1", 0),
+      }),
+    }
+    const chat = await seedChat("SQL refinement", {
+      bufferId: buffer.id,
+      queryKey: createQueryKey(buffer.value, 0),
+      currentSQL: buffer.value,
+      messages: [],
+    })
+    const server = chatServer(
+      "openai",
+      suggestion("openai", "SELECT 1", "Suggestion 1."),
+    )
+    renderChat()
+    await openChat()
+    await sendMessage("Select 1")
+    await finishTurn("Suggestion 1.")
+    await sendMessage("/effort high")
+    expect(getByHook("chat-command-done")).toHaveTextContent(
+      "Effort set to High",
+    )
+    await userEvent.click(getByHook(`message-action-${decision}`))
+    await waitFor(async () =>
+      expect(
+        (await aiConversationStore.getMessages(chat.id)).at(-1),
+      ).toMatchObject({ role: "user", hideFromUI: true }),
+    )
+
+    await sendMessage("/effort default")
+    const notes = getAllByHook("chat-command-done")
+    expect(notes).toHaveLength(2)
+    expect(notes[1]).toHaveTextContent("Effort set to Default")
+    expect(
+      getByHook("inline-diff-container").compareDocumentPosition(notes[1]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(queryByHook("chat-command-error")).not.toBeInTheDocument()
+    expect(server.requests).toHaveLength(2)
+  },
+)

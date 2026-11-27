@@ -93,6 +93,7 @@ export type QueryControlsProps = {
   query: QueryChart
   xColumn: string | null
   anchorLabel: string
+  compatible: boolean
   isAnchorTab: boolean
   ohlcError: boolean
   onUpdateQuery: (patch: Partial<QueryChart>) => void
@@ -127,6 +128,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
   query,
   xColumn,
   anchorLabel,
+  compatible,
   isAnchorTab,
   ohlcError,
   onUpdateQuery,
@@ -158,7 +160,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         <SqlPre code={activeTab.query} />
       </FieldGroup>
 
-      {!activeTab.compatible && (
+      {!compatible && (
         <IncompatibleNote>
           <IncompatibleIcon size={14} weight="fill" />
           <Text color="statusWarning" size="xs" lineHeight="1.2">

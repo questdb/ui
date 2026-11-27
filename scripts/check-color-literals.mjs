@@ -15,6 +15,7 @@ const ignoredDirectories = new Set(["__tests__"])
 const paletteFile = join("src", "theme", "index.ts")
 const fixedBrandAssets = new Set([
   join("src", "providers", "SettingsProvider", "QuestDBLogo.tsx"),
+  join("src", "components", "AgentPromo", "AgentLogos.tsx"),
 ])
 
 const literalPattern =

@@ -4,16 +4,18 @@ import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import { Close } from "../icons"
 import {
-  RowsPlusBottomIcon,
+  CaretDownIcon,
+  CaretUpIcon,
+  ChartBarIcon,
+  ChartLineUpIcon,
+  MinusCircleIcon,
+  PulseIcon,
   StethoscopeIcon,
-  GradientIcon,
-  HammerIcon,
-  FileSqlIcon,
+  type Icon as PhosphorIcon,
 } from "@phosphor-icons/react"
-import { Button } from "../Button"
+import { Button, ButtonBase } from "../Button"
+import { glassLens } from "../SegmentedControl"
 import { IconButton } from "../IconButton"
-import { Text } from "../Text"
-import { Box } from "../Box"
 import { AISparkle } from "../AISparkle"
 import { TransitionDuration } from "../Transition"
 import { usePopper } from "../../hooks"
@@ -44,7 +46,7 @@ const Arrow = styled.div<{ $styles?: React.CSSProperties }>`
     background: linear-gradient(
       to bottom,
       ${({ theme }) => theme.color.transparent} 0%,
-      ${({ theme }) => theme.color.borderDefault} 100%
+      ${({ theme }) => theme.color.borderSubtle} 100%
     );
     clip-path: polygon(50% 100%, 0% 0%, 100% 0%);
     transform: rotate(180deg);
@@ -66,33 +68,69 @@ const Arrow = styled.div<{ $styles?: React.CSSProperties }>`
 
 const Content = styled.div`
   ${floatingSurfaceStyles}
-  width: 38.3rem;
-  padding: 1.2rem;
+  /* The shadow already sets the popover apart; a softer edge than other
+     floating surfaces keeps the card inside it in front. */
+  border-color: ${({ theme }) => theme.color.borderSubtle};
+  width: 34rem;
+  padding: 0.4rem;
+  border-radius: 0.8rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.8rem;
 `
 
-const Header = styled(Box).attrs({
-  align: "center",
-  justifyContent: "space-between",
-})`
-  width: 100%;
+// The card with the header and the features, inset in the popover.
+const Card = styled.div`
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0.6rem;
+  background: ${({ theme }) => theme.color.surfaceBase};
+  box-shadow: 0 0 0 1px ${({ theme }) => theme.color.borderSubtle};
 `
 
-const AssistantTitle = styled(Box).attrs({
-  align: "center",
-  gap: "1rem",
-})`
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 1.2rem;
+  background: ${({ theme }) => theme.color.surfaceInset};
+  border: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  border-top: none;
+  border-radius: 0.6rem 0.6rem 0.8rem 0.8rem;
+`
+
+// The glass lens of the side panels' selected buttons, like the AI
+// Assistant button this promo points at.
+const HeaderIcon = styled.div`
+  ${glassLens}
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 0.6rem;
+`
+
+const HeaderText = styled.div`
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  min-width: 0;
 `
 
-const TitleText = styled(Text)`
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.6rem;
-  text-transform: uppercase;
+const Title = styled.span`
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 2.1rem;
   color: ${({ theme }) => theme.color.contentPrimary};
-  line-height: 2.25rem;
+`
+
+const Subtitle = styled.span`
+  font-size: 1.5rem;
+  line-height: 2.1rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const CloseButton = styled(IconButton).attrs({
@@ -103,93 +141,165 @@ const CloseButton = styled(IconButton).attrs({
   padding: 0.4rem;
 `
 
-const Description = styled(Text)`
-  font-size: 1.3rem;
-  line-height: 1.857rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-  padding-right: 0.8rem;
+const Row = styled.div`
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.2rem;
+
+  & + & {
+    border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  }
 `
 
-const AssistantModes = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "1rem",
-})`
-  padding-top: 1.4rem;
+const StatusRow = styled(Row)`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 4.4rem;
+  padding-top: 0;
+  padding-bottom: 0;
 `
 
-const AssistantMode = styled(Box).attrs({
-  gap: "1rem",
-  align: "flex-start",
-})`
-  width: 100%;
+const Term = styled.span`
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 2.1rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
-const IconContainer = styled(Box).attrs({
-  align: "center",
-  justifyContent: "center",
-})`
-  background: ${({ theme }) => theme.color.interactionNeutralHover};
-  border-radius: 0.4rem;
-  padding: 0.8rem;
-  width: 4.8rem;
-  height: 4rem;
-  flex-shrink: 0;
-`
-
-const ModeIconWrapper = styled(Box).attrs({
-  align: "center",
-  justifyContent: "center",
-})`
-  width: 2.4rem;
+const StatusPill = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   height: 2.4rem;
-  color: ${({ theme }) => theme.color.aiPinkStart};
+  padding: 0 0.8rem 0 0.6rem;
+  border-radius: 1.2rem;
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  background: ${({ theme }) => theme.color.surfaceInset};
 `
 
-const ModeContent = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "0.5rem",
-  align: "flex-start",
-})`
+const FeatureToggle = styled(ButtonBase)<{ $open: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 2.1rem;
+  color: ${({ theme, $open }) =>
+    $open ? theme.color.contentPrimary : theme.color.contentSecondary};
+
+  &:hover {
+    color: ${({ theme }) => theme.color.contentPrimary};
+  }
+`
+
+const FeatureName = styled.span<{ $open: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+
+  svg {
+    flex-shrink: 0;
+    color: ${({ theme, $open }) =>
+      $open ? theme.color.contentAccentStrong : theme.color.contentSecondary};
+  }
+`
+
+const Caret = styled.span`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.8rem;
+  height: 2.8rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
+`
+
+// Slides the description open and closed: the grid row grows from 0 to the
+// content's height.
+const Collapse = styled.div<{ $open: boolean }>`
+  display: grid;
+  grid-template-rows: ${({ $open }) => ($open ? "1fr" : "0fr")};
+  opacity: ${({ $open }) => ($open ? 1 : 0)};
+  transition:
+    grid-template-rows 200ms ease,
+    opacity 200ms ease;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
+  & > * {
+    overflow: hidden;
+    min-height: 0;
+  }
+`
+
+const FeatureDescription = styled.p`
+  margin: 0;
+  padding-top: 0.8rem;
+  padding-right: 2.8rem;
+  font-size: 1.3rem;
+  line-height: 1.8rem;
+  color: ${({ theme }) => theme.color.contentPrimary};
+`
+
+const Actions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+`
+
+const PrimaryAction = styled(Button).attrs({ variant: "primary" })`
   flex: 1;
 `
 
-const ModeTitleRow = styled(Box).attrs({
-  align: "center",
-  gap: "1rem",
-})`
-  width: 100%;
-`
+type Feature = {
+  key: string
+  name: string
+  description: string
+  Icon: PhosphorIcon
+}
 
-const ModeTitle = styled(Text)`
-  font-weight: 600;
-  font-size: 1.4rem;
-  line-height: 1.8rem;
-  text-align: left;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
-
-const ModeDescription = styled(Text)`
-  font-size: 1.3rem;
-  line-height: 1.857rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
-
-const Footer = styled(Box).attrs({
-  align: "center",
-  justifyContent: "space-between",
-})`
-  padding-top: 1.4rem;
-  width: 100%;
-`
-
-const SetupButton = styled(Button).attrs({
-  variant: "primary",
-})`
-  margin-left: auto;
-`
+// What the coding agent does in the console. One opens at a time.
+const FEATURES: Feature[] = [
+  {
+    key: "dashboards",
+    name: "Build Dashboards",
+    description:
+      "Turn a question into a notebook of queries and charts, laid out as a live dashboard.",
+    Icon: ChartBarIcon,
+  },
+  {
+    key: "analysis",
+    name: "Analyze Data",
+    description:
+      "Ask about trends, outliers and patterns. It writes and runs the queries for you.",
+    Icon: ChartLineUpIcon,
+  },
+  {
+    key: "monitoring",
+    name: "Monitor Your Instance",
+    description:
+      "Keep an eye on ingestion, query load and storage, and see what changed.",
+    Icon: PulseIcon,
+  },
+  {
+    key: "health",
+    name: "Diagnose Health Issues",
+    description: "Find out why a table is unhealthy and how to fix it.",
+    Icon: StethoscopeIcon,
+  },
+]
 
 type Props = {
   triggerRef: React.RefObject<HTMLElement | null>
+  onConnectAgentClick: () => void
   onSetupClick: () => void
   showPromo: boolean
   setShowPromo: (show: boolean) => void
@@ -197,6 +307,7 @@ type Props = {
 
 export const AIAssistantPromo = ({
   triggerRef,
+  onConnectAgentClick,
   onSetupClick,
   showPromo,
   setShowPromo,
@@ -212,6 +323,7 @@ export const AIAssistantPromo = ({
   }, [])
   const [positionReady, setPositionReady] = useState(false)
   const promoKeyRef = useRef(0)
+  const [openFeature, setOpenFeature] = useState<string | null>(FEATURES[0].key)
 
   const { attributes, styles, forceUpdate } = usePopper(
     triggerRef.current || undefined,
@@ -243,6 +355,11 @@ export const AIAssistantPromo = ({
     setShowPromo(false)
     onSetupClick()
   }, [onSetupClick])
+
+  const handleConnectAgentClick = useCallback(() => {
+    setShowPromo(false)
+    onConnectAgentClick()
+  }, [onConnectAgentClick])
 
   useEffect(() => {
     document.body.appendChild(container)
@@ -340,112 +457,83 @@ export const AIAssistantPromo = ({
               data-popper-arrow
             />
             <Content data-hook="ai-promo-modal">
-              <Header>
-                <AssistantTitle>
-                  <AISparkle size={28} variant="filled" />
-                  <TitleText>Meet QuestDB Assistant</TitleText>
-                </AssistantTitle>
-                <CloseButton
-                  onClick={handleClose}
-                  aria-label="Close"
-                  data-hook="ai-promo-close"
-                >
-                  <Close size="2rem" />
-                </CloseButton>
-              </Header>
+              <Card>
+                <Header>
+                  <HeaderIcon>
+                    <AISparkle size={24} variant="filled" />
+                  </HeaderIcon>
+                  <HeaderText>
+                    <Title>Set up the AI Assistant</Title>
+                    <Subtitle>Drive Web Console with AI.</Subtitle>
+                  </HeaderText>
+                  <CloseButton
+                    onClick={handleClose}
+                    aria-label="Close"
+                    data-hook="ai-promo-close"
+                  >
+                    <Close size="1.8rem" />
+                  </CloseButton>
+                </Header>
 
-              <Description>
-                Our AI Assistant is a specialized programming and support agent
-                that makes you more effective and helps you solve problems as
-                you interface with your QuestDB database. It can help you in the
-                following ways:
-              </Description>
+                <div>
+                  <StatusRow>
+                    <Term>Status</Term>
+                    <StatusPill data-hook="ai-promo-status">
+                      <MinusCircleIcon size={16} weight="fill" />
+                      Disabled
+                    </StatusPill>
+                  </StatusRow>
+                  {FEATURES.map(({ key, name, description, Icon }) => {
+                    const open = openFeature === key
+                    return (
+                      <Row key={key}>
+                        <FeatureToggle
+                          type="button"
+                          $open={open}
+                          aria-expanded={open}
+                          onClick={() => setOpenFeature(open ? null : key)}
+                          data-hook={`ai-promo-feature-${key}`}
+                        >
+                          <FeatureName $open={open}>
+                            <Icon size={18} />
+                            {name}
+                          </FeatureName>
+                          <Caret>
+                            {open ? (
+                              <CaretUpIcon size={18} />
+                            ) : (
+                              <CaretDownIcon size={18} />
+                            )}
+                          </Caret>
+                        </FeatureToggle>
+                        <Collapse $open={open} aria-hidden={!open}>
+                          <div>
+                            <FeatureDescription>
+                              {description}
+                            </FeatureDescription>
+                          </div>
+                        </Collapse>
+                      </Row>
+                    )
+                  })}
+                </div>
+              </Card>
 
-              <AssistantModes>
-                <AssistantMode>
-                  <IconContainer>
-                    <ModeIconWrapper>
-                      <RowsPlusBottomIcon size={24} />
-                    </ModeIconWrapper>
-                  </IconContainer>
-                  <ModeContent>
-                    <ModeTitleRow>
-                      <ModeTitle>Generate Queries</ModeTitle>
-                    </ModeTitleRow>
-                    <ModeDescription>
-                      Create SQL queries from natural language, with
-                      schema-aware context.
-                    </ModeDescription>
-                  </ModeContent>
-                </AssistantMode>
-                <AssistantMode>
-                  <IconContainer>
-                    <ModeIconWrapper>
-                      <FileSqlIcon size={24} />
-                    </ModeIconWrapper>
-                  </IconContainer>
-                  <ModeContent>
-                    <ModeTitleRow>
-                      <ModeTitle>Explain Queries</ModeTitle>
-                    </ModeTitleRow>
-                    <ModeDescription>
-                      Get an inline explanation of your query.
-                    </ModeDescription>
-                  </ModeContent>
-                </AssistantMode>
-
-                <AssistantMode>
-                  <IconContainer>
-                    <ModeIconWrapper>
-                      <HammerIcon size={24} />
-                    </ModeIconWrapper>
-                  </IconContainer>
-                  <ModeContent>
-                    <ModeTitle>Fix Queries</ModeTitle>
-                    <ModeDescription>
-                      Documentation-referenced suggestions to fix query errors.
-                    </ModeDescription>
-                  </ModeContent>
-                </AssistantMode>
-
-                <AssistantMode>
-                  <IconContainer>
-                    <ModeIconWrapper>
-                      <GradientIcon size={24} />
-                    </ModeIconWrapper>
-                  </IconContainer>
-                  <ModeContent>
-                    <ModeTitle>Explain Schema</ModeTitle>
-                    <ModeDescription>
-                      Detailed overview and structure of tables.
-                    </ModeDescription>
-                  </ModeContent>
-                </AssistantMode>
-
-                <AssistantMode>
-                  <IconContainer>
-                    <ModeIconWrapper>
-                      <StethoscopeIcon size={24} />
-                    </ModeIconWrapper>
-                  </IconContainer>
-                  <ModeContent>
-                    <ModeTitle>Analyze Health Issues</ModeTitle>
-                    <ModeDescription>
-                      Diagnose and resolve table health issues with AI-powered
-                      recommendations.
-                    </ModeDescription>
-                  </ModeContent>
-                </AssistantMode>
-              </AssistantModes>
-
-              <Footer>
-                <SetupButton
+              <Actions>
+                <Button
+                  variant="secondary"
                   onClick={handleSetupClick}
                   data-hook="ai-promo-continue"
                 >
-                  Setup Assistant
-                </SetupButton>
-              </Footer>
+                  Use an API key
+                </Button>
+                <PrimaryAction
+                  onClick={handleConnectAgentClick}
+                  data-hook="ai-promo-connect-agent"
+                >
+                  Connect your agent
+                </PrimaryAction>
+              </Actions>
             </Content>
           </TooltipContainer>
         </CSSTransition>,

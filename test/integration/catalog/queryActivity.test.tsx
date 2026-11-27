@@ -86,6 +86,27 @@ const Harness = () => {
   )
 }
 
+const renderHarness = (client: Client) =>
+  act(async () => {
+    render(
+      <QuestContext.Provider
+        value={{
+          quest: client,
+          questExecution: {} as React.ContextType<
+            typeof QuestContext
+          >["questExecution"],
+          buildVersion: { type: "oss", version: "test" },
+          commitHash: "test",
+        }}
+      >
+        <ThemeProvider theme={darkTheme}>
+          <Harness />
+        </ThemeProvider>
+      </QuestContext.Provider>,
+    )
+    await Promise.resolve()
+  })
+
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
@@ -113,26 +134,7 @@ describe("query activity stale response integration", () => {
       .mockImplementationOnce(() => oldRequest.promise)
       .mockImplementationOnce(() => freshRequest.promise)
     vi.stubGlobal("fetch", fetch)
-    const client = new Client()
-    await act(async () => {
-      render(
-        <QuestContext.Provider
-          value={{
-            quest: client,
-            questExecution: {} as React.ContextType<
-              typeof QuestContext
-            >["questExecution"],
-            buildVersion: { type: "oss", version: "test" },
-            commitHash: "test",
-          }}
-        >
-          <ThemeProvider theme={darkTheme}>
-            <Harness />
-          </ThemeProvider>
-        </QuestContext.Provider>,
-      )
-      await Promise.resolve()
-    })
+    await renderHarness(new Client())
     expect(screen.getByLabelText("Current queries")).toHaveTextContent("4142")
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000)
@@ -170,5 +172,34 @@ describe("query activity stale response integration", () => {
         QUERY_ACTIVITY_SQL,
       )
     }
+  })
+
+  it("fetches once on a manual refresh and keeps polling one interval later", async () => {
+    // Given
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-01-01T00:00:01Z"))
+    const fetch = vi.fn(() => Promise.resolve(listing([42])))
+    vi.stubGlobal("fetch", fetch)
+    await renderHarness(new Client())
+    expect(fetch).toHaveBeenCalledTimes(1)
+
+    // When
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    // Then the restarted poll does not repeat the refresh's fetch
+    expect(fetch).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(999)
+    })
+    expect(fetch).toHaveBeenCalledTimes(2)
+
+    // And it polls again one interval later
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(fetch).toHaveBeenCalledTimes(3)
   })
 })

@@ -1,18 +1,20 @@
 import React, { useContext } from "react"
 import styled from "styled-components"
-import { Button, Box, Key } from ".."
+import { Button, Box, Key, toast } from ".."
 import { color } from "../../utils"
 import { ctrlCmd } from "../../utils/platform"
 import { useSelector } from "react-redux"
 import { AISparkle } from "../AISparkle"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
+import { useLocalAgentChannel } from "../../utils/localAgent/LocalAgentContext"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { useAIConversationActions } from "../../providers/AIConversationProvider"
 import type { ConversationId } from "../../providers/AIConversationProvider/types"
 import {
   executeAIFlow,
   createExplainFlowConfig,
+  localAgentDispatchError,
 } from "../../utils/ai/executeAIFlow"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -38,15 +40,19 @@ export const ExplainQueryButton = ({
 }: ExplainQueryButtonProps) => {
   const { quest } = useContext(QuestContext)
   const tables = useSelector(selectors.query.getTables)
+  const localAgentChannel = useLocalAgentChannel()
   const {
+    canUse,
     setStatus,
-    abortController,
+    getOperationSignal,
+    isOperationBlocking,
     hasSchemaAccess,
-    currentModel: currentModelValue,
-    apiKey: apiKeyValue,
+    currentModel,
+    apiKey,
     aiAssistantSettings,
   } = useAIStatus()
   const {
+    getChatDispatchState,
     addMessage,
     updateMessage,
     updateConversationName,
@@ -55,20 +61,31 @@ export const ExplainQueryButton = ({
   } = useAIConversationActions()
 
   const handleExplainQuery = () => {
+    if (
+      !canUse ||
+      isOperationBlocking() ||
+      !queryText.trim() ||
+      !getChatDispatchState(conversationId)
+    )
+      return
+    const unavailable = localAgentDispatchError(currentModel, localAgentChannel)
+    if (unavailable) {
+      toast.error(unavailable)
+      return
+    }
     void trackEvent(ConsoleEvent.AI_EXPLAIN_QUERY)
-    const currentModel = currentModelValue!
-    const apiKey = apiKeyValue!
 
     void executeAIFlow(
       createExplainFlowConfig({
         conversationId,
         queryText,
         settings: { model: currentModel, apiKey },
+        localAgentChannel,
         aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,
-        abortSignal: abortController?.signal,
+        abortSignal: getOperationSignal(),
       }),
       {
         addMessage,
