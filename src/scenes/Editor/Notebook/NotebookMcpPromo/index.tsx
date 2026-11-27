@@ -7,6 +7,7 @@ import {
   TitleRow,
 } from "../../../../components/NotebookOnboardingModal/shared"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
+import { useSettings } from "../../../../providers/SettingsProvider"
 import {
   isMcpPromoCollapsed,
   shouldShowMcpPromo,
@@ -87,8 +88,9 @@ const FootNote = styled.p`
 
 export const NotebookMcpPromo = () => {
   const { notebookOnboarding, updateNotebookOnboarding } = useLocalStorage()
+  const { consoleConfig } = useSettings()
 
-  const isVisible = shouldShowMcpPromo(notebookOnboarding)
+  const isVisible = shouldShowMcpPromo(notebookOnboarding, consoleConfig)
   const isCollapsed = isMcpPromoCollapsed(notebookOnboarding)
 
   if (!isVisible) {

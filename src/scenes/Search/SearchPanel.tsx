@@ -7,6 +7,8 @@ import {
   LoadingSpinner,
   PaneWrapper,
   PaneContent,
+  PaneHeader,
+  PaneHeaderRow,
   SegmentedControlButton,
 } from "../../components"
 import { SearchService, SearchResult } from "./service"
@@ -66,19 +68,6 @@ const Content = styled(PaneContent)`
   && {
     background: ${({ theme }) => theme.color.surfaceRaised};
   }
-`
-
-const SearchInputContainer = styled.div`
-  padding: 1.2rem 1.4rem 1rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
-`
-
-const InputWrapper = styled.div`
-  position: relative;
-  height: 4.5rem;
-  display: flex;
-  align-items: center;
-  width: 100%;
 `
 
 const StyledInput = styled(Input)`
@@ -769,8 +758,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(
     return (
       <Wrapper $open={open}>
         <Content>
-          <SearchInputContainer>
-            <InputWrapper>
+          <PaneHeader>
+            <PaneHeaderRow>
               <StyledInput
                 ref={inputRef}
                 placeholder="Search in tabs..."
@@ -826,7 +815,7 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(
                   .*
                 </ToggleButton>
               </ToggleButtonsContainer>
-            </InputWrapper>
+            </PaneHeaderRow>
 
             <CheckboxWrapper>
               <Checkbox
@@ -850,7 +839,7 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(
                 {searchError.message}
               </SearchError>
             )}
-          </SearchInputContainer>
+          </PaneHeader>
 
           <SearchSummary data-hook="search-summary">
             {getSummaryText()}

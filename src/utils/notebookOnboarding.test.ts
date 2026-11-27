@@ -38,6 +38,25 @@ describe("notebook onboarding visibility", () => {
     })
   })
 
+  describe("onboarding modal and the deployment config", () => {
+    it("stays hidden when the deployment ships example dashboards", () => {
+      // Given a fresh install on a showcase deployment
+      const example = { id: "x", title: "X", path: "assets/examples/x.json" }
+      // When deciding whether to show the modal
+      // Then the examples take its place
+      expect(
+        shouldShowNotebookModal(freshInstall, { exampleDashboards: [example] }),
+      ).toBe(false)
+    })
+
+    it("shows when the deployment has no example dashboards", () => {
+      expect(shouldShowNotebookModal(freshInstall, {})).toBe(true)
+      expect(
+        shouldShowNotebookModal(freshInstall, { exampleDashboards: [] }),
+      ).toBe(true)
+    })
+  })
+
   describe("in-notebook promo section", () => {
     it("shows on a fresh install", () => {
       // Given a fresh install
@@ -52,6 +71,16 @@ describe("notebook onboarding visibility", () => {
       // When deciding whether to show the section
       // Then it stays hidden
       expect(shouldShowMcpPromo(onboarding)).toBe(false)
+    })
+
+    it("stays hidden on a deployment that ships example dashboards", () => {
+      const example = { id: "x", title: "X", path: "assets/examples/x.json" }
+      expect(
+        shouldShowMcpPromo(freshInstall, { exampleDashboards: [example] }),
+      ).toBe(false)
+      expect(shouldShowMcpPromo(freshInstall, { exampleDashboards: [] })).toBe(
+        true,
+      )
     })
 
     it("stays hidden once an MCP server has ever connected", () => {

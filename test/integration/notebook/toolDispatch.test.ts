@@ -189,7 +189,11 @@ const makeClient = (
       activated: true,
     }),
   ),
-  deleteNotebook: vi.fn(() => Promise.resolve()),
+  archiveTab: vi.fn(() => Promise.resolve()),
+  restoreTab: vi.fn(() => Promise.resolve()),
+  activateTab: vi.fn(() => Promise.resolve()),
+  renameTab: vi.fn(() => Promise.resolve()),
+  deleteTab: vi.fn(() => Promise.resolve()),
   activateNotebook: vi.fn(() => Promise.resolve(true)),
   ...overrides,
 })
@@ -4268,5 +4272,164 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
     expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1", {
       kind: "autoRun",
     })
+  })
+})
+
+describe("dispatchTool — tab management", () => {
+  it("archive_tab routes to the workspace without a notebook read", async () => {
+    // Given a workspace client and no prior get_notebook_state call
+    const client = makeClient()
+
+    // When the agent closes a tab
+    const res = await dispatchTool(
+      "archive_tab",
+      { buffer_id: 7 },
+      client,
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the tab is archived and no freshness gate blocks it
+    expect(res.is_error).toBeUndefined()
+    expect(client.archiveTab).toHaveBeenCalledWith(7)
+  })
+
+  it("restore_tab routes to the workspace", async () => {
+    // Given a workspace client
+    const client = makeClient()
+
+    // When the agent reopens a closed tab
+    const res = await dispatchTool(
+      "restore_tab",
+      { buffer_id: 7 },
+      client,
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the tab is restored
+    expect(res.is_error).toBeUndefined()
+    expect(client.restoreTab).toHaveBeenCalledWith(7)
+  })
+
+  it("activate_tab routes to the workspace", async () => {
+    // Given a workspace client
+    const client = makeClient()
+
+    // When the agent switches to a tab
+    const res = await dispatchTool(
+      "activate_tab",
+      { buffer_id: 7 },
+      client,
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the tab is activated
+    expect(res.is_error).toBeUndefined()
+    expect(client.activateTab).toHaveBeenCalledWith(7)
+  })
+
+  it("rename_tab routes to the workspace and echoes the trimmed label", async () => {
+    // Given a workspace client
+    const client = makeClient()
+
+    // When the agent renames a tab
+    const res = await dispatchTool(
+      "rename_tab",
+      { buffer_id: 7, label: "  Trades  " },
+      client,
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the workspace receives the label and the result echoes it trimmed
+    expect(res.is_error).toBeUndefined()
+    expect(client.renameTab).toHaveBeenCalledWith(7, "  Trades  ")
+    expect(JSON.parse(res.content)).toEqual({ buffer_id: 7, label: "Trades" })
+  })
+
+  it("delete_tab routes to the workspace", async () => {
+    // Given a workspace client
+    const client = makeClient()
+
+    // When the agent deletes a tab
+    const res = await dispatchTool(
+      "delete_tab",
+      { buffer_id: 7 },
+      client,
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the tab is deleted
+    expect(res.is_error).toBeUndefined()
+    expect(client.deleteTab).toHaveBeenCalledWith(7)
+  })
+
+  it.each([
+    ["archive_tab", { buffer_id: 7 }, "archiveTab"],
+    ["restore_tab", { buffer_id: 7 }, "restoreTab"],
+    ["activate_tab", { buffer_id: 7 }, "activateTab"],
+    ["rename_tab", { buffer_id: 7, label: "Trades" }, "renameTab"],
+    ["delete_tab", { buffer_id: 7 }, "deleteTab"],
+  ] as const)(
+    "%s marks the turn replay-unsafe without requiring a notebook read",
+    async (toolName, input, method) => {
+      // Given an AI flow context that has never read buffer 7
+      const client = makeClient()
+      const toolContext: ToolExecutionContext = {
+        notebookFreshness: createNotebookFreshness(),
+      }
+
+      // When the agent runs a tab-management tool
+      const res = await dispatchTool(
+        toolName,
+        input,
+        client,
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+        undefined,
+        toolContext,
+      )
+
+      // Then the freshness gate does not block it
+      expect(res.is_error).toBeUndefined()
+      expect(client[method]).toHaveBeenCalled()
+      // And a retryable provider error can no longer replay the turn
+      expect(toolContext.notebookMutated).toBe(true)
+    },
+  )
+
+  it("surfaces the last_tab guard as a tool error", async () => {
+    // Given a workspace that refuses to close the only open tab
+    const client = makeClient({
+      archiveTab: vi.fn(() =>
+        Promise.reject(
+          new NotebookToolError("last_tab", "Cannot close the only open tab."),
+        ),
+      ),
+    })
+
+    // When the agent tries to close it
+    const res = await dispatchTool(
+      "archive_tab",
+      { buffer_id: 1 },
+      client,
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the error code reaches the agent
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code: string }
+    expect(parsed.error_code).toBe("last_tab")
   })
 })

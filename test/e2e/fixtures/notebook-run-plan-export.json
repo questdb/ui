@@ -1,0 +1,59 @@
+{
+  "formatName": "dexie",
+  "formatVersion": 1,
+  "data": {
+    "databaseName": "web-console",
+    "databaseVersion": 9,
+    "tables": [
+      {
+        "name": "buffers",
+        "schema": "++id,label,position,archived,archivedAt",
+        "rowCount": 1
+      }
+    ],
+    "data": [
+      {
+        "tableName": "buffers",
+        "inbound": true,
+        "rows": [
+          {
+            "label": "Imported notebook runs",
+            "value": "",
+            "position": 0,
+            "id": 1,
+            "notebookViewState": {
+              "cells": [
+                {
+                  "id": "dql",
+                  "position": 0,
+                  "value": "SELECT 7 AS answer;",
+                  "name": "Read only",
+                  "paneView": "result",
+                  "lastRunStatus": "success"
+                },
+                {
+                  "id": "dml",
+                  "position": 1,
+                  "value": "CREATE TABLE IF NOT EXISTS import_run_plan_t (ts TIMESTAMP) TIMESTAMP(ts) PARTITION BY DAY WAL;",
+                  "name": "Write",
+                  "paneView": "result",
+                  "lastRunStatus": "success"
+                },
+                {
+                  "id": "never",
+                  "position": 2,
+                  "value": "SELECT 9 AS never_ran;",
+                  "name": "Never ran",
+                  "paneView": "editor_result"
+                }
+              ],
+              "settings": {
+                "layoutMode": "list"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

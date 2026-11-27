@@ -1813,6 +1813,7 @@ describe("CellRefreshEngine", () => {
       slotErrors: new Map<string, string>(),
       cancelledSlots: new Set<string>(),
       slotVerifiedAt: new Map<string, number>(),
+      slotVerifiedTimings: new Map(),
       fetchCancelled: false,
     }
 
@@ -3050,6 +3051,64 @@ describe("CellRefreshEngine", () => {
       expect(deps.executeSingle).toHaveBeenCalledTimes(2)
     })
 
+    it.each(["manual", "poll"])(
+      "updates %s refresh timing even when an 8s result's rows are unchanged",
+      async (kind) => {
+        const cell = gridCell(
+          "g1",
+          "select 1",
+          ["select 1"],
+          kind === "manual" ? false : "1s",
+        )
+        const frame = cell.result!
+        const previous = frame.results[0]
+        if (previous.type !== "dql") throw new Error("Expected DQL fixture")
+        previous.fetchedAt = Date.now() - 1000
+        previous.timings = {
+          compiler: 0,
+          authentication: 0,
+          count: 0,
+          execute: 7_000_000_000,
+          fetch: 8_000_000_000,
+        }
+        const freshTimings = {
+          compiler: 0,
+          authentication: 0,
+          count: 0,
+          execute: 400_000_000,
+          fetch: 500_000_000,
+        }
+        deps.executeSingle.mockResolvedValue({
+          type: "dql",
+          query: previous.query,
+          columns: previous.columns,
+          dataset: previous.dataset,
+          count: previous.count,
+          timings: freshTimings,
+        })
+        syncOnScreen([cell])
+        await flushAsync()
+        if (kind === "manual") {
+          void engine.refresh("g1")
+          await flushAsync()
+        }
+        expect(deps.executeSingle).toHaveBeenCalledOnce()
+        expect(deps.setCellResult).not.toHaveBeenCalled()
+        expect(cellResults.get("g1")).toBe(frame)
+        const slots = buildStatementSlotViews(
+          deriveStatementFrame(["select 1"], frame)!,
+          engine.getState("g1"),
+        )
+        expect(slots[0].result).toBe(previous)
+        expect(slots[0].timings).toEqual(freshTimings)
+        expect(slots[0].fetchedAt).toBeGreaterThan(previous.fetchedAt)
+
+        // A later explicit run owns its own timings, not this refresh overlay.
+        engine.noteCellRan("g1")
+        expect(engine.getState("g1")?.slotVerifiedTimings.size).toBe(0)
+      },
+    )
+
     it("skips the commit on identical rows, while the fetch time advances", async () => {
       // Given a polling grid whose first tick swapped fresh rows in
       const cell = gridCell("g1", "select 1", ["select 1"], "1s")
@@ -4054,6 +4113,7 @@ describe("CellRefreshEngine", () => {
       // Then the overlay is gone — the status line must follow the run, not
       // the superseded refresh round
       expect(engine.getState("g1")?.slotVerifiedAt.size).toBe(0)
+      expect(engine.getState("g1")?.slotVerifiedTimings.size).toBe(0)
     })
 
     it("a per-statement rerun clears only that statement's stamp", async () => {
@@ -4078,6 +4138,8 @@ describe("CellRefreshEngine", () => {
       const state = engine.getState("g1")
       expect(state?.slotVerifiedAt.has(keyOf("select 1"))).toBe(false)
       expect(state?.slotVerifiedAt.has(keyOf("select 2"))).toBe(true)
+      expect(state?.slotVerifiedTimings.has(keyOf("select 1"))).toBe(false)
+      expect(state?.slotVerifiedTimings.has(keyOf("select 2"))).toBe(true)
     })
 
     it("a superseded round's late settle leaves the replacement round's slot state intact", async () => {

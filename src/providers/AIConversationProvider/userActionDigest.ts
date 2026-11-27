@@ -1,12 +1,31 @@
 import type { UserActionEvent } from "../../utils/notebooks/notebookAIBridge"
-import type { UserActionDigest } from "./types"
+import type { TabChange, UserActionDigest } from "./types"
+
+// Whether a chat hears about a user action. Closing or deleting a tab concerns
+// the whole workspace, of which every chat sees the tab list, so it reaches
+// every chat; cell-level edits only reach the chat bound to that notebook.
+export const routesUserAction = (
+  conversation: { notebookBufferId?: number },
+  evt: UserActionEvent,
+): boolean =>
+  evt.kind === "user_archived_tab" ||
+  evt.kind === "user_deleted_tab" ||
+  conversation.notebookBufferId === evt.bufferId
 
 export const createEmptyDigest = (): UserActionDigest => ({
   added: new Set(),
   deleted: new Set(),
   edited: new Set(),
   ran: new Map(),
+  tabChanges: [],
 })
+
+const recordTabChange = (digest: UserActionDigest, change: TabChange) => {
+  digest.tabChanges = [
+    ...digest.tabChanges.filter((c) => c.bufferId !== change.bufferId),
+    change,
+  ]
+}
 
 // Coalesces user-action events into the digest. Notes:
 // - delete after add in same digest cancels both (add wins → erased).
@@ -43,11 +62,21 @@ export const applyUserActionToDigest = (
     case "user_changed_autorefresh_default":
       digest.autoRefreshDefaultTo = evt.value
       return digest
-    case "user_archived_notebook":
-      digest.notebookStatusChange = "archived"
+    case "user_archived_tab":
+      recordTabChange(digest, {
+        bufferId: evt.bufferId,
+        kind: evt.tabKind,
+        label: evt.label,
+        status: "closed",
+      })
       return digest
-    case "user_deleted_notebook":
-      digest.notebookStatusChange = "deleted"
+    case "user_deleted_tab":
+      recordTabChange(digest, {
+        bufferId: evt.bufferId,
+        kind: evt.tabKind,
+        label: evt.label,
+        status: "deleted",
+      })
       return digest
     default:
       return digest
@@ -61,4 +90,4 @@ export const isEmptyDigest = (d: UserActionDigest): boolean =>
   d.ran.size === 0 &&
   d.layoutModeTo === undefined &&
   d.autoRefreshDefaultTo === undefined &&
-  d.notebookStatusChange === undefined
+  d.tabChanges.length === 0
