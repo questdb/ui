@@ -128,7 +128,8 @@ export const CellToolbar: React.FC<Props> = ({
     useNotebookActions()
   const bufferId = useNotebookBufferId()
   const preview = useNotebookPreview()
-  const showInlineCopy = isMaximized || toolbarTier === "expanded"
+  const tier = toolbarTier ?? "compact"
+  const showInlineCopy = isMaximized || tier !== "compact"
 
   // Grid positions cells via settings.layout, so swapping array order doesn't
   // move them visually — hide move up/down there.
@@ -176,7 +177,7 @@ export const CellToolbar: React.FC<Props> = ({
     groupAHasItems,
     groupBHasItems,
   } = cellToolbarMenuFlags({
-    tier: toolbarTier ?? "compact",
+    tier,
     view,
     isMarkdown,
     chartZoomed,

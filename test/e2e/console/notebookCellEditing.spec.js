@@ -67,8 +67,23 @@ describe("notebook cell edit menu focus", () => {
     menuOf("target").should("have.focus")
   })
 
-  it("offers Copy in the menu when the cell is narrow", () => {
-    cy.viewport(680, 820)
+  it("keeps Copy in the toolbar at standard cell widths", () => {
+    cy.viewport(1100, 820)
+    cy.get('[data-cell-id="source"] .cell-drag-handle').should(($header) => {
+      expect($header[0].getBoundingClientRect().width).to.be.within(480, 719)
+    })
+    cy.get('[data-cell-id="source"] button[aria-label="Copy cell"]').should(
+      "be.visible",
+    )
+    menuOf("source").click()
+    cy.contains('[role="menuitem"]', "Copy cell").should("not.exist")
+  })
+
+  it("offers Copy in the menu when the cell is compact", () => {
+    cy.viewport(600, 820)
+    cy.get('[data-cell-id="source"] .cell-drag-handle').should(($header) => {
+      expect($header[0].getBoundingClientRect().width).to.be.lessThan(480)
+    })
     cy.get('[data-cell-id="source"] button[aria-label="Copy cell"]').should(
       "not.exist",
     )
