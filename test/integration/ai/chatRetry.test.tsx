@@ -9,9 +9,10 @@ import {
   queryByHook,
   getAllByHook,
   httpResponse,
+  seedChat,
 } from "./support/chatHarness"
 import { describe, expect, it, vi } from "vitest"
-import { act, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { AiAssistantSettings } from "../../../src/providers/LocalStorageProvider/types"
 
@@ -73,6 +74,42 @@ const finishScroll = async () => {
 }
 
 describe("chat recovery", () => {
+  it("preserves a failed table diagnosis when the selected model lacks schema access", async () => {
+    await seedChat("Table diagnosis", {
+      tableId: 1,
+      messages: [
+        {
+          id: "diagnosis",
+          role: "user",
+          content: "Private table diagnostics",
+          timestamp: Date.now(),
+          displayType: "health_issue_request",
+          displayHealthIssueData: {
+            tableName: "trades",
+            issueMessage: "Small transactions",
+            severity: "warning",
+          },
+        },
+        {
+          id: "failed-answer",
+          role: "assistant",
+          content: null,
+          error: "Connection lost",
+          timestamp: Date.now(),
+        },
+      ],
+    })
+    renderChat("openai-chat-completions", undefined, customSettings)
+    await openChat()
+    await userEvent.click(getByHook("retry-button"))
+
+    expect(
+      await screen.findByText("Enable schema access before retrying."),
+    ).toBeVisible()
+    expect(getByHook("chat-message-error")).toHaveTextContent("Connection lost")
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it.each(["anthropic", "openai-chat-completions"] as const)(
     "retries the failed %s question and replaces its error with the answer",
     async (provider) => {
