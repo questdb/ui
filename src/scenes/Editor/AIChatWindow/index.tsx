@@ -14,7 +14,6 @@ import React, {
   useEffect,
   useLayoutEffect,
 } from "react"
-import type { MutableRefObject } from "react"
 import styled from "styled-components"
 import { Button, Box, Drawer, Text } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
@@ -36,7 +35,6 @@ import {
   getQueryInfoFromKey,
   normalizeQueryText,
 } from "../Monaco/utils"
-import type { ExecutionRefs } from "../index"
 import { trimSemicolonForDisplay } from "../../../providers/AIConversationProvider/utils"
 import { captureChatDispatch } from "../../../providers/AIConversationProvider/chatDispatch"
 import {
@@ -139,13 +137,14 @@ const ChatWindowContent = styled.div`
   background: ${({ theme }) => theme.color.surfaceRaised};
 `
 
-const InitialQueryContainer = styled.div`
+const InitialQueryContainer = styled.div<{ $withCommandNotes: boolean }>`
   display: flex;
   flex-direction: column;
   gap: 1rem;
   padding: 1.5rem;
   overflow-y: auto;
-  flex: 1 1 auto;
+  flex: ${({ $withCommandNotes }) =>
+    $withCommandNotes ? "0 1 auto" : "1 1 auto"};
   min-height: 0;
   width: 100%;
 `
@@ -388,41 +387,23 @@ const AIChatWindow: React.FC = () => {
     )
   }, [messages, activeCommandNotes.length, isLoadingMessages])
 
-  const shouldShowExplainButton = useMemo(() => {
-    return (
-      messages.length === 0 &&
-      currentSQL &&
-      currentSQL.trim() !== "\n" &&
-      canUse &&
-      !isBlockingAIStatus(aiStatus)
-    )
-  }, [messages.length, currentSQL, canUse, aiStatus])
-
-  const hasErrorForCurrentQuery = useMemo(() => {
-    if (
-      !shouldShowExplainButton ||
-      !conversation ||
-      !conversation.queryKey ||
-      !conversation.bufferId ||
-      !editorRef.current
-    ) {
-      return false
-    }
-
-    const errorInfo = extractErrorByQueryKey(
-      conversation.queryKey,
-      conversation.bufferId,
-      executionRefs as MutableRefObject<ExecutionRefs> | undefined,
-      editorRef,
-    )
-    return errorInfo !== null
-  }, [shouldShowExplainButton, conversation, editorRef, executionRefs])
-
-  const shouldShowFixButton =
+  const initialQuery =
+    conversation?.queryKey && messages.length === 0 ? currentSQL.trim() : ""
+  const shouldShowExplainButton =
+    Boolean(initialQuery) && canUse && !isBlockingAIStatus(aiStatus)
+  const queryError =
     shouldShowExplainButton &&
-    hasErrorForCurrentQuery &&
-    canUse &&
-    !isBlockingAIStatus(aiStatus)
+    conversation?.queryKey &&
+    conversation.bufferId != null &&
+    conversation.bufferId === activeBuffer.id
+      ? extractErrorByQueryKey(
+          conversation.queryKey,
+          conversation.bufferId,
+          executionRefs,
+          editorRef,
+        )
+      : null
+  const shouldShowFixButton = Boolean(queryError?.queryText.trim())
 
   const isHistoryOpen = chatWindowState.isHistoryOpen ?? false
   const hasConversations = conversationMetas.size > 0
@@ -971,7 +952,8 @@ const AIChatWindow: React.FC = () => {
       return
     }
     if (
-      userMessage.displayType === "schema_explain_request" &&
+      (userMessage.displayType === "schema_explain_request" ||
+        userMessage.displayType === "health_issue_request") &&
       !hasSchemaAccess
     ) {
       toast.error("Enable schema access before retrying.")
@@ -1181,18 +1163,6 @@ const AIChatWindow: React.FC = () => {
     return { label, warn, onClick }
   })()
 
-  const queryActions = (shouldShowExplainButton || shouldShowFixButton) && (
-    <ButtonContainer ref={explainButtonRef}>
-      {conversation && shouldShowExplainButton && (
-        <ExplainQueryButton
-          conversationId={conversation.id}
-          queryText={currentSQL.trim()}
-        />
-      )}
-      {shouldShowFixButton && <FixQueryButton />}
-    </ButtonContainer>
-  )
-
   return (
     <>
       <Drawer
@@ -1259,7 +1229,35 @@ const AIChatWindow: React.FC = () => {
             />
           ) : (
             <ChatPanel data-chat-panel="">
-              {shouldShowMessages && queryActions}
+              {conversation && initialQuery && (
+                <InitialQueryContainer $withCommandNotes={shouldShowMessages}>
+                  <InitialQueryBox data-hook="chat-initial-query-box">
+                    <InitialQueryEditor data-hook="chat-lite-editor">
+                      <LiteEditor
+                        value={initialQuery}
+                        maxHeight={216}
+                        onOpenInEditor={() =>
+                          handleOpenInEditor(
+                            { type: "code", value: initialQuery },
+                            true,
+                          )
+                        }
+                      />
+                    </InitialQueryEditor>
+                  </InitialQueryBox>
+                  {shouldShowExplainButton && (
+                    <ButtonContainer ref={explainButtonRef}>
+                      <ExplainQueryButton
+                        conversationId={conversation.id}
+                        queryText={initialQuery}
+                      />
+                      {shouldShowFixButton && (
+                        <FixQueryButton conversationId={conversation.id} />
+                      )}
+                    </ButtonContainer>
+                  )}
+                </InitialQueryContainer>
+              )}
               {shouldShowMessages ? (
                 <ChatMessages
                   messages={messages}
@@ -1284,25 +1282,7 @@ const AIChatWindow: React.FC = () => {
                   scrollToMessageId={scrollToMessageId}
                   onScrollToMessageComplete={handleScrollToMessageComplete}
                 />
-              ) : currentSQL && currentSQL.trim() ? (
-                <InitialQueryContainer>
-                  <InitialQueryBox data-hook="chat-initial-query-box">
-                    <InitialQueryEditor data-hook="chat-lite-editor">
-                      <LiteEditor
-                        value={currentSQL.trim()}
-                        maxHeight={216}
-                        onOpenInEditor={() =>
-                          handleOpenInEditor(
-                            { type: "code", value: currentSQL.trim() },
-                            true,
-                          )
-                        }
-                      />
-                    </InitialQueryEditor>
-                  </InitialQueryBox>
-                  {queryActions}
-                </InitialQueryContainer>
-              ) : (
+              ) : !initialQuery ? (
                 <BlankChatContainer data-hook="chat-blank-state">
                   <BlankChatHeading>
                     Leverage AI directly in your database
@@ -1313,7 +1293,7 @@ const AIChatWindow: React.FC = () => {
                       : "Our AI Assistant is a specialized programming and support agent that makes you more effective and helps you solve problems as you interface with your QuestDB database. Start a conversation."}
                   </BlankChatSubheading>
                 </BlankChatContainer>
-              )}
+              ) : null}
               <ChatInput
                 ref={chatInputRef}
                 queue={chatQueue}

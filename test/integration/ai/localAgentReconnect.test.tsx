@@ -14,6 +14,7 @@ import {
   sendMessage,
   seedChat,
   failQuery,
+  editorAdapter,
 } from "./support/chatHarness"
 import { darkTheme } from "../../../src/theme"
 import { Button } from "../../../src/components/Button"
@@ -48,6 +49,7 @@ import * as notebookSnapshot from "../../../src/utils/ai/notebookSnapshot"
 import { emitUserAction } from "../../../src/utils/notebooks/notebookAIBridge"
 import type {
   AgentCommand,
+  AgentConfigSetting,
   AgentPromptMessage,
   AgentTurnResult,
 } from "../../../src/utils/localAgent/protocol"
@@ -128,8 +130,10 @@ const reportReady = (
     model,
     commands = [],
     acceptsImages = false,
+    effort = null,
   }: {
     model?: string
+    effort?: AgentConfigSetting | null
     commands?: AgentCommand[]
     acceptsImages?: boolean
   } = {},
@@ -139,7 +143,7 @@ const reportReady = (
     type: "agent_status",
     state: "ready",
     config: model
-      ? { model: { id: "model", current: model, choices: [] }, effort: null }
+      ? { model: { id: "model", current: model, choices: [] }, effort }
       : null,
     error: null,
     commands,
@@ -160,11 +164,21 @@ const openLocalChat = async (
     position: 0,
     ...(!query && { notebookViewState: { cells: [] } }),
   })
-  if (failedQuery)
+  if (failedQuery) {
+    editorAdapter.overrides = {
+      ...editorAdapter.overrides,
+      activeBuffer: {
+        id: bufferId,
+        value: "SELECT 1",
+        position: 0,
+        label: "Query",
+      },
+    }
     failQuery(bufferId, "SELECT 1", {
       message: "unexpected token [1]",
       position: 7,
     })
+  }
   const Probe = () => {
     const { connect, status } = useMCPBridge()
     const { openNotebookChat, handleGlyphClick } = useAIConversationActions()
@@ -411,6 +425,38 @@ it.each(["initial model only", "later model change"])(
     }
   },
 )
+
+it("shows the query preview through /effort and keeps query actions out of a fresh chat", async () => {
+  const { first } = await openLocalChat(true)
+  act(() =>
+    reportReady(first, {
+      model: "mock-default",
+      effort: {
+        id: "effort",
+        current: "high",
+        choices: [
+          { value: "high", name: "High", description: null, group: null },
+          { value: "low", name: "Low", description: null, group: null },
+        ],
+      },
+    }),
+  )
+
+  await sendMessage("/effort low")
+  expect(getByHook("chat-command-done")).toHaveTextContent("Effort set to Low")
+  expect.soft(queryByHook("chat-initial-query-box")).toBeVisible()
+  expect(getByHook("button-explain-query")).toBeVisible()
+
+  await userEvent.click(getByHook("chat-window-new"))
+  await waitFor(() => expect(getByHook("chat-blank-state")).toBeVisible())
+
+  await sendMessage("/effort low")
+  expect(getByHook("chat-command-done")).toHaveTextContent("Effort set to Low")
+  expect(queryByHook("button-explain-query")).not.toBeInTheDocument()
+  expect(queryByHook("button-fix-query")).not.toBeInTheDocument()
+  expect(getByHook("chat-window-new")).toBeDisabled()
+  expect(first.prompts()).toHaveLength(0)
+})
 
 it.each([
   ["Explain", "button-explain-query", "explain this SQL query"],

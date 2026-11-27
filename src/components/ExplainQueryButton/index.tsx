@@ -52,6 +52,7 @@ export const ExplainQueryButton = ({
     aiAssistantSettings,
   } = useAIStatus()
   const {
+    getChatDispatchState,
     addMessage,
     updateMessage,
     updateConversationName,
@@ -60,7 +61,13 @@ export const ExplainQueryButton = ({
   } = useAIConversationActions()
 
   const handleExplainQuery = () => {
-    if (!canUse || isOperationBlocking()) return
+    if (
+      !canUse ||
+      isOperationBlocking() ||
+      !queryText.trim() ||
+      !getChatDispatchState(conversationId)
+    )
+      return
     const unavailable = localAgentDispatchError(currentModel, localAgentChannel)
     if (unavailable) {
       toast.error(unavailable)

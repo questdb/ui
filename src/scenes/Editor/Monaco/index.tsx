@@ -299,7 +299,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     isNavigatingFromSearchRef,
   } = editorContext
   const { quest, questExecution } = useContext(QuestContext)
-  const { canUse: canUseAI, status: aiStatus } = useAIStatus()
+  const {
+    canUse: canUseAI,
+    status: aiStatus,
+    isOperationBlocking,
+  } = useAIStatus()
   const { runWithSelectionMode } = useLocalStorage()
   const {
     handleGlyphClick,
@@ -726,15 +730,19 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const handleAskAI = async (query?: Request) => {
     setDropdownOpen(false)
+    const bufferId = activeBufferRef.current.id
+    if (
+      !query?.query.trim() ||
+      !editorRef.current ||
+      typeof bufferId !== "number" ||
+      !canUseAIRef.current ||
+      isOperationBlocking()
+    )
+      return
+
     void trackEvent(ConsoleEvent.AI_GLYPH_CLICK)
-    if (!query || !editorRef.current) return
-
     const queryKey = createQueryKeyFromRequest(editorRef.current, query)
-
-    await handleGlyphClick({
-      queryKey,
-      bufferId: activeBufferRef.current.id!,
-    })
+    await handleGlyphClick({ queryKey, bufferId })
   }
   const handleAskAIRef = useRef(handleAskAI)
   useEffect(() => {
