@@ -207,6 +207,27 @@ const cases: Case[] = [
     }),
   },
   {
+    name: "opens the configured example beside a monitoring dashboard with the same template id",
+    search: "?templateId=monitoring%3Atable",
+    config: [{ ...linkedExample, id: "monitoring:table" }],
+    buffers: [
+      sqlTab,
+      tab({
+        templateId: "monitoring:table",
+        monitoring: { target: { name: "trades", kind: "table" } },
+        notebookViewState: notebook,
+      }),
+    ],
+    search_after: "",
+    fetched: "monitoring:table",
+    plan: {
+      kind: "open",
+      example: { ...linkedExample, id: "monitoring:table" },
+      source: "link",
+      markAutoOpened: false,
+    },
+  },
+  {
     name: "opens a new copy next to an archived one",
     search: "?templateId=linked&keep=yes",
     buffers: [

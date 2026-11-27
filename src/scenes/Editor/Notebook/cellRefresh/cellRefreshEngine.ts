@@ -535,16 +535,11 @@ export class CellRefreshEngine {
 
   cancelSlot(cellId: string, statementKey: StatementKey) {
     const entry = this.entries.get(cellId)
-    if (!entry || entry.kind !== "grid") return
-    const slotAbort = entry.slotAborts.get(statementKey)
-    if (slotAbort) {
-      slotAbort.abort()
-      return
-    }
-    if (!entry.inFlight) return
+    if (!entry || entry.kind !== "grid" || !entry.inFlight) return
     const cancelledSlots = new Set(entry.state.cancelledSlots)
     cancelledSlots.add(statementKey)
     this.setState(entry, { cancelledSlots })
+    entry.slotAborts.get(statementKey)?.abort()
   }
 
   refreshAll(): { refreshed: number; skippedWrites: number } {

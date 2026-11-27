@@ -90,6 +90,7 @@ const opens =
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.getById.mockResolvedValue(buffer)
+  mocks.editor.setActiveBuffer.mockResolvedValue(true)
   mocks.openDashboard
     .mockImplementation(opens("reused"))
     .mockImplementationOnce(opens("created"))
@@ -100,7 +101,7 @@ afterEach(() => {
 
 describe("monitoring dashboard opening lock", () => {
   it("ignores repeated clicks until the dashboard is activated, then unlocks", async () => {
-    const activation = deferred<void>()
+    const activation = deferred<boolean>()
     mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
     const hook = mount()
     const onOpened = vi.fn()
@@ -113,7 +114,7 @@ describe("monitoring dashboard opening lock", () => {
     expect(mocks.openDashboard).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      activation.resolve()
+      activation.resolve(true)
       await initial
     })
     expect(onOpened).toHaveBeenCalledTimes(1)
@@ -129,7 +130,7 @@ describe("monitoring dashboard opening lock", () => {
   // The drawer's action unmounts when the drawer switches to Details and
   // back, and the one shown again must still see the open in progress.
   it("keeps an open in progress across a remount of the action", async () => {
-    const activation = deferred<void>()
+    const activation = deferred<boolean>()
     mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
     const first = mount()
     let initial!: Promise<void>
@@ -145,7 +146,7 @@ describe("monitoring dashboard opening lock", () => {
     expect(mocks.openDashboard).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      activation.resolve()
+      activation.resolve(true)
       await initial
     })
     expect(second().busy).toBe(false)
@@ -153,7 +154,7 @@ describe("monitoring dashboard opening lock", () => {
   })
 
   it("does not unlock a later opening when an earlier one finishes", async () => {
-    const activation = deferred<void>()
+    const activation = deferred<boolean>()
     mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
     const hook = mount()
     let initial!: Promise<void>
@@ -162,7 +163,7 @@ describe("monitoring dashboard opening lock", () => {
     })
     expect(hook().busy).toBe(true)
     await act(async () => {
-      activation.resolve()
+      activation.resolve(true)
       await initial
     })
     const reopening = deferred<MonitoringOpenResult>()
@@ -186,7 +187,7 @@ describe("monitoring dashboard opening lock", () => {
 
   it("never shows progress for an open dashboard, but still ignores repeated clicks", async () => {
     mocks.openDashboard.mockReset().mockImplementation(opens("reused"))
-    const activation = deferred<void>()
+    const activation = deferred<boolean>()
     mocks.editor.setActiveBuffer.mockReturnValueOnce(activation.promise)
     const hook = mount()
     const onOpened = vi.fn()
@@ -199,7 +200,7 @@ describe("monitoring dashboard opening lock", () => {
     expect(mocks.openDashboard).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      activation.resolve()
+      activation.resolve(true)
       await initial
     })
     expect(hook().busy).toBe(false)

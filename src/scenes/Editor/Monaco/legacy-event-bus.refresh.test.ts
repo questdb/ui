@@ -21,7 +21,25 @@ describe("legacy editor events", () => {
       isPreviewing: () => false,
       openQueryInNewTab: vi.fn(),
     })
-    eventBus.publish(EventType.MSG_QUERY_EXEC, { q: "select 2" })
-    expect(onRefresh).toHaveBeenCalledWith("select 2")
+    const result = { q: "select 2", sourceBufferId: 3 }
+    eventBus.publish(EventType.MSG_QUERY_EXEC, result)
+    expect(onRefresh).toHaveBeenCalledWith(result)
+  })
+
+  it("keeps result refresh out of a read-only tab preview", () => {
+    const onRefresh = vi.fn()
+    cleanup = registerLegacyEventBusEvents({
+      editor: {} as editor.IStandaloneCodeEditor,
+      onRefresh,
+      toggleRunning: vi.fn(),
+      getRunning: () => RunningType.NONE,
+      isPreviewing: () => true,
+      openQueryInNewTab: vi.fn(),
+    })
+    eventBus.publish(EventType.MSG_QUERY_EXEC, {
+      q: "select 2",
+      sourceBufferId: 3,
+    })
+    expect(onRefresh).not.toHaveBeenCalled()
   })
 })

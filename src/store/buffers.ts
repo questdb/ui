@@ -234,11 +234,14 @@ export const bufferStore = {
   getActiveId: () =>
     db.editor_settings.where("key").equals("activeBufferId").first(),
 
-  setActiveId: (id: number) =>
+  setActiveId: (id: number, expectedId?: number) =>
     db.editor_settings
       .where("key")
       .equals("activeBufferId")
-      .modify({ value: id }),
+      .modify((setting) => {
+        if (expectedId === undefined || setting.value === expectedId)
+          setting.value = id
+      }),
 
   getBufferTypeById: (id: number) =>
     db.buffers

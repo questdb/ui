@@ -166,8 +166,12 @@ export type EditorContext = {
   activeBuffer: Buffer
   setActiveBuffer: (
     buffer: Buffer,
-    options?: { focus?: boolean; fromSearch?: boolean },
-  ) => Promise<void>
+    options?: {
+      focus?: boolean
+      fromSearch?: boolean
+      canActivate?: () => boolean
+    },
+  ) => Promise<boolean>
   addBuffer: (
     buffer?: Partial<Buffer>,
     options?: {
@@ -227,7 +231,7 @@ const defaultValues = {
   setTabsDisabled: () => undefined,
   buffers: [],
   activeBuffer: fallbackBuffer,
-  setActiveBuffer: () => Promise.resolve(),
+  setActiveBuffer: () => Promise.resolve(false),
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => Promise.resolve(),
   archiveBuffer: () => Promise.resolve(),
@@ -276,11 +280,13 @@ const EditorContext = createContext<EditorContext>(defaultValues)
 export type ActiveBufferSummary = {
   id: number | undefined
   isNotebook: boolean
+  canRerunResult: boolean
 }
 
 const ActiveBufferSummaryContext = createContext<ActiveBufferSummary>({
   id: undefined,
   isNotebook: false,
+  canRerunResult: false,
 })
 
 export const EditorProvider: React.FC = ({ children }) => {
@@ -316,9 +322,15 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const activeIsNotebook = !!activeBuffer.notebookViewState
+  const canRerunResult =
+    activeBuffer.editorViewState !== undefined && !activeBuffer.isTemporary
   const activeBufferSummary = useMemo<ActiveBufferSummary>(
-    () => ({ id: activeBuffer.id, isNotebook: activeIsNotebook }),
-    [activeBuffer.id, activeIsNotebook],
+    () => ({
+      id: activeBuffer.id,
+      isNotebook: activeIsNotebook,
+      canRerunResult,
+    }),
+    [activeBuffer.id, activeIsNotebook, canRerunResult],
   )
   const activeBufferRef = useRef(activeBuffer)
   const focusEditorOnMountRef = useRef(true)
@@ -405,11 +417,13 @@ export const EditorProvider: React.FC = ({ children }) => {
     delete executionRefs.current[bufferId.toString()]
   }, [])
 
-  const setActiveBuffer = useCallback(
-    (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => {
+  const setActiveBuffer = useCallback<EditorContext["setActiveBuffer"]>(
+    (buffer, options) => {
       const switchBuffer = async () => {
+        const canActivate = options?.canActivate
         try {
           const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+          if (canActivate && !canActivate()) return false
 
           // Already active only if it is also the tab on screen: the stored id
           // alone can lag behind (see activateStored).
@@ -420,7 +434,7 @@ export const EditorProvider: React.FC = ({ children }) => {
             ) {
               activeBufferRef.current = buffer
               setActiveBufferState(buffer)
-              return
+              return true
             }
           }
 
@@ -430,7 +444,19 @@ export const EditorProvider: React.FC = ({ children }) => {
               ? await bufferStore.getById(previousBufferId)
               : undefined
 
+          if (canActivate && !canActivate()) return false
           await bufferStore.setActiveId(buffer.id as number)
+          if (canActivate && !canActivate()) {
+            // The editor or drawer changed while IndexedDB was writing. Keep
+            // the visible tab and restore its id if this write still owns it.
+            const restoreId =
+              typeof currentActiveBufferId === "number"
+                ? currentActiveBufferId
+                : previousBufferId
+            if (typeof restoreId === "number")
+              await bufferStore.setActiveId(restoreId, buffer.id)
+            return false
+          }
           const recentIds = recentBufferIdsRef.current.filter(
             (id) => id !== buffer.id,
           )
@@ -473,12 +499,18 @@ export const EditorProvider: React.FC = ({ children }) => {
               editorRef.current.focus()
             }
           }
+          return true
         } catch (e) {
+          if (canActivate) throw e
           console.warn("Error setting active buffer:", e)
+          return false
         }
       }
       const request = bufferSwitchQueueRef.current.then(switchBuffer)
-      bufferSwitchQueueRef.current = request
+      bufferSwitchQueueRef.current = request.then(
+        () => undefined,
+        () => undefined,
+      )
       return request
     },
     [],
@@ -1203,15 +1235,19 @@ export const EditorProvider: React.FC = ({ children }) => {
       let archive = false
       await enqueueBufferRemoval(id, "user", async (_target, snapshot) => {
         await enqueueBufferTask(id, async () => {
-          // Pending document writes must settle before deciding: the render's
-          // buffer snapshot may still carry a link that an edit just removed.
-          const current = await bufferStore.getById(id)
-          if (!current || current.archived) return
-          if (!isTemplate(current)) {
-            archive = true
-            return
-          }
+          let current: Buffer
           try {
+            // A chat keeps its notebook. Finish that lookup before checking
+            // the stored and live document so edits made meanwhile survive.
+            const hasConversation =
+              await aiConversationStore.hasNotebookConversation(id)
+            const stored = await bufferStore.getById(id)
+            if (!stored || stored.archived) return
+            if (!isTemplate(stored)) {
+              archive = true
+              return
+            }
+            current = stored
             const live = getController(id) ?? liveAtClose
             const view = await live?.readView()
             if (
@@ -1233,12 +1269,7 @@ export const EditorProvider: React.FC = ({ children }) => {
               archive = true
               return
             }
-            if (getBufferActionSeq(id) !== actionSeq) {
-              archive = true
-              return
-            }
-            // An AI chat about the notebook keeps it to point at.
-            if (await aiConversationStore.hasNotebookConversation(id)) {
+            if (hasConversation || getBufferActionSeq(id) !== actionSeq) {
               archive = true
               return
             }

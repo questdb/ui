@@ -183,7 +183,13 @@ const DownloadMenuItem = styled(Button)`
   padding: 0 1rem;
 `
 
-const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
+const Result = ({
+  viewMode,
+  canRerun,
+}: {
+  viewMode: ResultViewMode
+  canRerun: boolean
+}) => {
   const { quest, questExecution } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
@@ -434,12 +440,15 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           label="Re-run query"
           data-hook="grid-toolbar-refresh"
           variant="ghost"
-          disabled={activeQueryExecution !== null}
+          disabled={!canRerun || activeQueryExecution !== null}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_REFRESH)
             const sql = gridRef?.current?.getSQL()
             if (sql) {
-              eventBus.publish(EventType.MSG_QUERY_EXEC, { q: sql })
+              eventBus.publish(EventType.MSG_QUERY_EXEC, {
+                q: sql,
+                sourceBufferId: resultSource?.bufferId,
+              })
             }
           }}
         >

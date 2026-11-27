@@ -304,7 +304,8 @@ const sanitizeNotebookCell = (
     const highlightConfig = sanitizeHighlightConfig(item.highlightConfig)
     if (highlightConfig) cell.highlightConfig = highlightConfig
     if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
-    if (item.deferInitialDraw === true) cell.deferInitialDraw = true
+    // A tab export does not carry the source result for a deferred draw.
+    // Imported charts start fresh through the normal auto-run gate.
     cell.paneView = isCellPaneView(item.paneView)
       ? item.paneView
       : inferredMaximized

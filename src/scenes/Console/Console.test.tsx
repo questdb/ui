@@ -17,7 +17,11 @@ import type { ActiveBufferSummary } from "../../providers/EditorProvider"
 import Console from "./index"
 
 const active = vi.hoisted(() => ({
-  summary: { id: 1, isNotebook: false } as ActiveBufferSummary,
+  summary: {
+    id: 1,
+    isNotebook: false,
+    canRerunResult: true,
+  } as ActiveBufferSummary,
 }))
 
 vi.mock("../../providers/EditorProvider", () => ({
@@ -115,7 +119,7 @@ const resultPaneVisible = () =>
 
 describe("result pane on notebook tabs", () => {
   it("keeps the SQL editor's result hidden while a notebook is active", () => {
-    active.summary = { id: 2, isNotebook: true }
+    active.summary = { id: 2, isNotebook: true, canRerunResult: false }
     const { store } = mountConsole()
     act(() => {
       store.dispatch(queryActions.setResult(dql, 1))
@@ -127,7 +131,7 @@ describe("result pane on notebook tabs", () => {
   })
 
   it("shows a result run from the active notebook (e.g. AI chat)", () => {
-    active.summary = { id: 2, isNotebook: true }
+    active.summary = { id: 2, isNotebook: true, canRerunResult: false }
     const { store } = mountConsole()
     act(() => {
       store.dispatch(queryActions.setResult(dql, 2))
@@ -139,7 +143,7 @@ describe("result pane on notebook tabs", () => {
   })
 
   it("shows the result on a SQL tab", () => {
-    active.summary = { id: 1, isNotebook: false }
+    active.summary = { id: 1, isNotebook: false, canRerunResult: true }
     const { store } = mountConsole()
     act(() => {
       store.dispatch(queryActions.setResult(dql, 1))
@@ -148,7 +152,7 @@ describe("result pane on notebook tabs", () => {
   })
 
   it("keeps the open Import panel when a hidden result arrives, and shows the result on its tab", () => {
-    active.summary = { id: 2, isNotebook: true }
+    active.summary = { id: 2, isNotebook: true, canRerunResult: false }
     const { store, rerender } = mountConsole()
     act(() => {
       store.dispatch(consoleActions.setActiveBottomPanel("import"))
@@ -158,14 +162,14 @@ describe("result pane on notebook tabs", () => {
     })
     expect(store.getState().console.activeBottomPanel).toBe("import")
 
-    active.summary = { id: 1, isNotebook: false }
+    active.summary = { id: 1, isNotebook: false, canRerunResult: true }
     rerender()
     expect(store.getState().console.activeBottomPanel).toBe("result")
     expect(resultPaneVisible()).toBe(true)
   })
 
   it("shows a hidden result on its tab, as a result run there would", () => {
-    active.summary = { id: 2, isNotebook: true }
+    active.summary = { id: 2, isNotebook: true, canRerunResult: false }
     const { store, rerender } = mountConsole()
     act(() => {
       store.dispatch(queryActions.setResult(dql, 1))
@@ -174,13 +178,13 @@ describe("result pane on notebook tabs", () => {
       store.dispatch(consoleActions.setActiveBottomPanel("import"))
     })
 
-    active.summary = { id: 1, isNotebook: false }
+    active.summary = { id: 1, isNotebook: false, canRerunResult: true }
     rerender()
     expect(store.getState().console.activeBottomPanel).toBe("result")
   })
 
   it("takes a hidden result out of the layout, so its controls can't take focus", () => {
-    active.summary = { id: 1, isNotebook: false }
+    active.summary = { id: 1, isNotebook: false, canRerunResult: true }
     const { store, rerender } = mountConsole()
     act(() => {
       store.dispatch(queryActions.setResult(dql, 1))
@@ -188,11 +192,11 @@ describe("result pane on notebook tabs", () => {
     const resultTab = () => screen.getByTestId("result").parentElement!
     expect(resultTab()).toHaveStyle({ display: "flex" })
 
-    active.summary = { id: 2, isNotebook: true }
+    active.summary = { id: 2, isNotebook: true, canRerunResult: false }
     rerender()
     expect(resultTab()).toHaveStyle({ display: "none" })
 
-    active.summary = { id: 1, isNotebook: false }
+    active.summary = { id: 1, isNotebook: false, canRerunResult: true }
     rerender()
     expect(resultTab()).toHaveStyle({ display: "flex" })
   })
@@ -202,22 +206,22 @@ describe("result pane on notebook tabs", () => {
     // stored panel still reads "result". Signing in again remounts the console.
     const store = createStore(rootReducer)
     store.dispatch(consoleActions.setActiveBottomPanel("result"))
-    active.summary = { id: 2, isNotebook: true }
+    active.summary = { id: 2, isNotebook: true, canRerunResult: false }
     const { rerender } = mountConsole(store)
 
-    active.summary = { id: 1, isNotebook: false }
+    active.summary = { id: 1, isNotebook: false, canRerunResult: true }
     rerender()
     expect(store.getState().console.activeBottomPanel).toBe("zeroState")
   })
   it("keeps an Import panel opened on a notebook when the user switches to a SQL tab", () => {
     const store = createStore(rootReducer)
-    active.summary = { id: 2, isNotebook: true }
+    active.summary = { id: 2, isNotebook: true, canRerunResult: false }
     const { rerender } = mountConsole(store)
     act(() => {
       store.dispatch(consoleActions.setActiveBottomPanel("import"))
     })
 
-    active.summary = { id: 1, isNotebook: false }
+    active.summary = { id: 1, isNotebook: false, canRerunResult: true }
     rerender()
     expect(store.getState().console.activeBottomPanel).toBe("import")
   })

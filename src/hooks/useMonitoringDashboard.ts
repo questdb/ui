@@ -126,36 +126,45 @@ export const useMonitoringDashboard = () => {
             : `${failures.length} monitoring cells could not run. Check their errors in the notebook.`,
         )
       stage = "activate"
-      if (isCurrentTarget()) {
-        const current = await bufferStore.getById(buffer.id)
-        if (!session.isCurrent()) return
-        if (!current || current.archived) {
-          trackFailure(current ? "archived" : "deleted")
-          return
-        }
-        // The dashboard stays in the tab bar for the user to open once the
-        // editor's script or query is done.
-        if (isEditorBusy()) {
-          trackFailure("editor_running")
-          toast.info(
-            `${current.label} is ready. Open its tab once the editor finishes running.`,
-          )
-          return
-        }
-        await setActiveBuffer(current)
-        if (!session.isCurrent()) return
-        onOpened()
-        void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_OPEN, {
-          notebookId,
-          kind: request.target.kind,
-          outcome,
-          // Table history is WAL telemetry, recorded whatever the setting.
-          history: request.target.kind === "table" || request.telemetryEnabled,
-        })
-      } else {
-        // Navigation cancellation is distinguishable from a technical error.
+      if (!isCurrentTarget()) {
         trackFailure("target_changed")
+        return
       }
+      const current = await bufferStore.getById(buffer.id)
+      if (!session.isCurrent()) return
+      if (!current || current.archived) {
+        trackFailure(current ? "archived" : "deleted")
+        return
+      }
+      let targetChanged = false
+      const canActivate = () => {
+        targetChanged = !isCurrentTarget()
+        return session.isCurrent() && !targetChanged && !isEditorBusy()
+      }
+      if (
+        !canActivate() ||
+        !(await setActiveBuffer(current, { canActivate }))
+      ) {
+        if (!session.isCurrent()) return
+        if (targetChanged) {
+          trackFailure("target_changed")
+          return
+        }
+        trackFailure("editor_running")
+        toast.info(
+          `${current.label} is ready. Open its tab once the editor finishes running.`,
+        )
+        return
+      }
+      if (!session.isCurrent()) return
+      onOpened()
+      void trackEvent(ConsoleEvent.MONITORING_DASHBOARD_OPEN, {
+        notebookId,
+        kind: request.target.kind,
+        outcome,
+        // Table history is WAL telemetry, recorded whatever the setting.
+        history: request.target.kind === "table" || request.telemetryEnabled,
+      })
     } catch (error) {
       trackFailure(notebookFailureReason(error))
       if (session.isCurrent())

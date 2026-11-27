@@ -448,7 +448,12 @@ const Console = () => {
                 >
                   <Bottom>
                     <Tab ref={resultRef}>
-                      {result && <Result viewMode={resultViewMode} />}
+                      {result && (
+                        <Result
+                          viewMode={resultViewMode}
+                          canRerun={activeBufferSummary.canRerunResult}
+                        />
+                      )}
                     </Tab>
                     <Tab ref={importRef}>
                       <Import />

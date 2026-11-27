@@ -3,7 +3,7 @@ import {
   sortClosedBuffers,
   sortPinnedBuffers,
 } from "../../utils/buffers/tabOrder"
-import { isMonitoringDashboard } from "../../utils/monitoring/identity"
+import { exampleTemplateIdOf } from "../../utils/examples/exampleIdentity"
 
 export type TabGroup = {
   type: BufferType
@@ -35,7 +35,7 @@ export const buildTabGroups = (
   const userTabs = buffers.filter(
     (buffer) =>
       !buffer.isPreviewBuffer &&
-      (buffer.templateId === undefined || isMonitoringDashboard(buffer)) &&
+      exampleTemplateIdOf(buffer) === undefined &&
       matchesFilter(buffer.label, filter),
   )
   const open = sortPinnedBuffers(userTabs)

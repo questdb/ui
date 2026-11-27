@@ -90,7 +90,7 @@ const resultFor = (query: string) => ({
   timings: { compiler: 0, authentication: 0, count: 0, execute: 0, fetch: 0 },
 })
 
-const mountResult = (viewMode: "grid" | "chart" = "grid") => {
+const mountResult = (viewMode: "grid" | "chart" = "grid", canRerun = true) => {
   const store = createStore(rootReducer)
   render(
     <ThemeProvider theme={darkTheme}>
@@ -105,7 +105,7 @@ const mountResult = (viewMode: "grid" | "chart" = "grid") => {
                 commitHash: "test",
               }}
             >
-              <Result viewMode={viewMode} />
+              <Result viewMode={viewMode} canRerun={canRerun} />
               <ToastContainer />
             </QuestContext.Provider>
           </LocalStorageProvider>
@@ -383,6 +383,17 @@ describe("result notebook actions", () => {
       store.dispatch(queryActions.setResult(resultFor(shown), 1))
     })
     await userEvent.click(screen.getByRole("button", { name: "Re-run query" }))
-    expect(publish).toHaveBeenCalledWith(EventType.MSG_QUERY_EXEC, { q: shown })
+    expect(publish).toHaveBeenCalledWith(EventType.MSG_QUERY_EXEC, {
+      q: shown,
+      sourceBufferId: 1,
+    })
+  })
+
+  it("disables re-run when there is no editable SQL tab", () => {
+    const store = mountResult("grid", false)
+    act(() => {
+      store.dispatch(queryActions.setResult(resultFor("select 1"), 1))
+    })
+    expect(screen.getByRole("button", { name: "Re-run query" })).toBeDisabled()
   })
 })

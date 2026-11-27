@@ -3856,6 +3856,15 @@ describe("CellRefreshEngine", () => {
       engine.cancelSlot("g1", keyOf("select 2"))
       await flushAsync()
 
+      expect(trackNotebookExecution).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          notebookId: BUFFER_ID,
+          cellId: "g1",
+          trigger: "manual_refresh",
+          outcome: "cancelled",
+        }),
+      )
+
       // Then the slot keeps its rows with no error, the sibling settled, and
       // the round finished
       const state = engine.getState("g1")

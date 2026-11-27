@@ -344,7 +344,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   >([])
   const pendingScriptRunRef = useRef<ScriptRunPlan | undefined>(undefined)
   const scriptRunPlanRef = useRef<ScriptRunPlan | undefined>(undefined)
-  const pendingQueryRequestRef = useRef<Request | undefined>(undefined)
+  const pendingQueryRequestRef = useRef<{
+    request: Request
+    resultSource?: { bufferId?: number }
+  }>()
   const queriesToRunRef = useRef<Request[]>([])
   const scriptStopRef = useRef(false)
   const stopAfterFailureRef = useRef(true)
@@ -723,7 +726,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           )
           return
         }
-        pendingQueryRequestRef.current = query
+        pendingQueryRequestRef.current = { request: query }
         if (!preserveSelection) {
           setCursorBeforeRunning(query)
         }
@@ -1061,9 +1064,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     cleanupActionsRef.current.push(
       registerLegacyEventBusEvents({
         editor,
-        onRefresh: (query) => {
-          pendingQueryRequestRef.current = query
-            ? getQueryRequestFromLastExecutedQuery(query)
+        onRefresh: (result) => {
+          const request =
+            result && getQueryRequestFromLastExecutedQuery(result.q)
+          pendingQueryRequestRef.current = request
+            ? { request, resultSource: { bufferId: result.sourceBufferId } }
             : undefined
           toggleRunning(RunningType.REFRESH)
         },
@@ -2062,7 +2067,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (![RunningType.NONE, RunningType.SCRIPT].includes(running)) {
       applyGlyphsAndLineMarkings(monaco, editor)
 
-      const capturedRequest = pendingQueryRequestRef.current
+      const captured = pendingQueryRequestRef.current
+      const capturedRequest = captured?.request
       pendingQueryRequestRef.current = undefined
       const request =
         running === RunningType.REFRESH
@@ -2219,7 +2225,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             if (result.type === QuestDB.Type.DQL && !isRunningExplain) {
               dispatch(actions.query.recordQueryExecution(result.query))
             }
-            dispatch(actions.query.setResult(result, targetBufferId))
+            dispatch(
+              actions.query.setResult(
+                result,
+                captured?.resultSource
+                  ? captured.resultSource.bufferId
+                  : targetBufferId,
+              ),
+            )
 
             if (
               result.type === QuestDB.Type.DDL ||

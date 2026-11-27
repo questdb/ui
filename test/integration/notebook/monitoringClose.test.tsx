@@ -14,6 +14,7 @@ import {
   type NotebookActions,
 } from "../../../src/scenes/Editor/Notebook/NotebookProvider"
 import { db } from "../../../src/store/db"
+import { aiConversationStore } from "../../../src/store/aiConversations"
 import { makeBuffer } from "../../../src/store/buffers"
 import type { NotebookViewState } from "../../../src/store/notebook"
 import { buildMonitoringDashboard } from "../../../src/utils/monitoring/dashboard"
@@ -164,6 +165,40 @@ describe("closing an open monitoring dashboard", () => {
     const archived = await stored()
     expect(archived?.archived).toBe(true)
     expect(archived?.notebookViewState?.focusedCellId).toBe(focused)
+  })
+
+  it("keeps an edit made while checking whether a closing dashboard has a chat", async () => {
+    await mount()
+    let finishLookup!: (found: boolean) => void
+    const lookup = vi
+      .spyOn(aiConversationStore, "hasNotebookConversation")
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            finishLookup = resolve
+          }),
+      )
+    try {
+      let closing!: Promise<void>
+      act(() => {
+        closing = editor.closeBuffer(DASHBOARD)
+      })
+      await waitFor(() => expect(lookup).toHaveBeenCalledWith(DASHBOARD))
+      act(() => {
+        actions.updateCell(panelId(), { value: "select 42" })
+        signalUserEdit(DASHBOARD)
+      })
+      expect(await storedPanelValue()).not.toBe("select 42")
+
+      await act(async () => {
+        finishLookup(false)
+        await closing
+      })
+      expect((await stored())?.archived).toBe(true)
+      expect(await storedPanelValue()).toBe("select 42")
+    } finally {
+      lookup.mockRestore()
+    }
   })
 
   it("still discards an untouched dashboard that is open with a live controller", async () => {

@@ -62,7 +62,7 @@ const mountBridge = (initial: Buffer[], activeId: number) => {
     setActiveBuffer: vi.fn((buffer: Buffer) => {
       activeBufferId = buffer.id as number
       rerender()
-      return Promise.resolve()
+      return Promise.resolve(true)
     }),
     archiveBuffer: vi.fn((id: number) => {
       patch(id, { archived: true, archivedAt: Date.now(), position: -1 })

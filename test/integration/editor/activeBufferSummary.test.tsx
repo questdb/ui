@@ -10,7 +10,12 @@ import {
   type EditorContext,
 } from "../../../src/providers/EditorProvider"
 import { db } from "../../../src/store/db"
-import { makeBuffer } from "../../../src/store/buffers"
+import { bufferStore, makeBuffer } from "../../../src/store/buffers"
+import { useMonitoringDashboard } from "../../../src/hooks/useMonitoringDashboard"
+import { Provider } from "react-redux"
+import { createStore } from "redux"
+import { rootReducer } from "../../../src/store"
+import { Dexie } from "dexie"
 
 vi.mock("@monaco-editor/react", () => ({
   loader: { config: () => {}, init: () => new Promise(() => {}) },
@@ -97,4 +102,55 @@ describe("active buffer summary", () => {
       expect(screen.getByTestId("summary")).toHaveTextContent("2:true"),
     )
   })
+})
+
+it("keeps the SQL editor active when a script starts during a monitoring tab handoff", async () => {
+  await db.buffers.update(2, {
+    templateId: "monitoring:table",
+    monitoring: { target: { kind: "table", name: "trades" } },
+  })
+
+  let monitor!: ReturnType<typeof useMonitoringDashboard>
+  const Harness = () => {
+    editor = useEditor()
+    monitor = useMonitoringDashboard()
+    return null
+  }
+  renderComponent(
+    <Provider store={createStore(rootReducer)}>
+      <EditorProvider>
+        <Harness />
+        <SummaryProbe />
+      </EditorProvider>
+    </Provider>,
+  )
+  await waitFor(() =>
+    expect(screen.getByTestId("summary")).toHaveTextContent("1:false"),
+  )
+  let finishRead!: () => void
+  const read = vi.spyOn(bufferStore, "getActiveId").mockImplementationOnce(
+    () =>
+      new Dexie.Promise((resolve) => {
+        finishRead = () => resolve({ key: "activeBufferId", value: 1 })
+      }),
+  )
+  let opening!: Promise<void>
+  const onOpened = vi.fn()
+  act(() => {
+    opening = monitor.open(
+      { target: { kind: "table", name: "trades" }, telemetryEnabled: false },
+      () => true,
+      onOpened,
+    )
+  })
+  await waitFor(() => expect(read).toHaveBeenCalledOnce())
+  act(() => editor.setTabsDisabled(true))
+  await act(async () => {
+    finishRead()
+    await opening
+  })
+  expect(editor.activeBuffer.id).toBe(1)
+  expect(onOpened).not.toHaveBeenCalled()
+  expect((await bufferStore.getActiveId())?.value).toBe(1)
+  read.mockRestore()
 })

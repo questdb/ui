@@ -27,6 +27,8 @@ import { EventType } from "../../../modules/EventBus/types"
 import type { editor } from "monaco-editor"
 import { RunningType } from "../../../store/Query/types"
 
+type ResultRefresh = { q: string; sourceBufferId?: number }
+
 export const registerLegacyEventBusEvents = ({
   editor,
   onRefresh,
@@ -37,7 +39,7 @@ export const registerLegacyEventBusEvents = ({
 }: {
   editor: editor.IStandaloneCodeEditor
   // Re-runs the given query (the result grid's), else the last executed one.
-  onRefresh: (query?: string) => void
+  onRefresh: (result?: ResultRefresh) => void
   toggleRunning: (runningType?: RunningType) => void
   getRunning: () => RunningType
   isPreviewing: () => boolean
@@ -60,8 +62,8 @@ export const registerLegacyEventBusEvents = ({
     },
   )
 
-  eventBus.subscribe<{ q: string }>(EventType.MSG_QUERY_EXEC, (payload) => {
-    onRefresh(payload?.q)
+  eventBus.subscribe<ResultRefresh>(EventType.MSG_QUERY_EXEC, (payload) => {
+    if (!isPreviewing()) onRefresh(payload)
   })
 
   eventBus.subscribe(EventType.MSG_EDITOR_FOCUS, () => {

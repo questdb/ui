@@ -155,14 +155,18 @@ export const useNotebookTransfer = () => {
       // A script or query started while the results were saved would be
       // aborted by switching away from the editor. The notebook stays in the
       // tab bar instead.
-      if (isEditorBusy()) {
+      const canActivate = () => session.isCurrent() && !isEditorBusy()
+      if (
+        !canActivate() ||
+        !(await setActiveBuffer(current, { focus: true, canActivate }))
+      ) {
+        if (!session.isCurrent()) return
         trackFailure("editor_running")
         toast.info(
           `${current.label} is ready. Open its tab once the editor finishes running.`,
         )
         return
       }
-      await setActiveBuffer(current, { focus: true })
       requireSession()
       void trackEvent(ConsoleEvent.NOTEBOOK_TRANSFER, {
         source: request.source,

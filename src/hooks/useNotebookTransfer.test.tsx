@@ -81,6 +81,7 @@ beforeEach(() => {
   }
   mocks.addBuffer.mockResolvedValue(buffer)
   mocks.getById.mockResolvedValue(buffer)
+  mocks.setActiveBuffer.mockResolvedValue(true)
   vi.mocked(createTransferCells).mockReturnValue([
     { id: "c1", position: 0, value: "select 1" },
   ])

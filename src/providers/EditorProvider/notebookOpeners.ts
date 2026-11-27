@@ -12,6 +12,7 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { requestCellReveal } from "../../scenes/Editor/Notebook/cellReveal"
 import { resolveAutoRefresh } from "../../scenes/Editor/Notebook/notebookUtils"
 import { fetchExampleDashboard } from "../../utils/examples/exampleDashboards"
+import { exampleTemplateIdOf } from "../../utils/examples/exampleIdentity"
 import { exampleAutoRunCellIds } from "../../utils/examples/exampleAutoRun"
 import { appendCellToNotebook } from "../../utils/notebooks/appendCellToNotebook"
 import { emitUserAction } from "../../utils/notebooks/notebookAIBridge"
@@ -194,7 +195,8 @@ export const createNotebookOpeners = ({
 
   const openExampleDashboardNow = async (example: ExampleDashboard) => {
     const open = buffers.find(
-      (b) => b.templateId === example.id && !b.archived && !b.isTemporary,
+      (b) =>
+        exampleTemplateIdOf(b) === example.id && !b.archived && !b.isTemporary,
     )
     void trackEvent(ConsoleEvent.TAB_PANEL_EXAMPLE_OPEN, {
       id: example.id,

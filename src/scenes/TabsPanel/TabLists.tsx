@@ -4,6 +4,7 @@ import { Text } from "../../components"
 import { useEditor, useSettings } from "../../providers"
 import type { Buffer } from "../../store/buffers"
 import { hasExampleDashboards } from "../../utils/examples/hasExampleDashboards"
+import { exampleTemplateIdOf } from "../../utils/examples/exampleIdentity"
 import {
   sortClosedBuffers,
   sortPinnedBuffers,
@@ -34,9 +35,9 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
   const { buffers, activeBuffer } = useEditor()
   // Read the link from the live rows: a rename detaches the notebook from its
   // example at once, and the cached activeBuffer would lag behind.
-  const activeTemplateId = buffers.find(
-    (buffer) => buffer.id === activeBuffer.id,
-  )?.templateId
+  const activeTemplateId = exampleTemplateIdOf(
+    buffers.find((buffer) => buffer.id === activeBuffer.id),
+  )
   const { consoleConfig } = useSettings()
 
   const hasExamples = hasExampleDashboards(consoleConfig)

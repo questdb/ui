@@ -194,7 +194,7 @@ describe("SQL work → notebook", () => {
     cy.then(() => expect(executions).to.have.length(2))
   })
 
-  it("re-runs the displayed query, not the editor's last executed one", () => {
+  it("re-runs the displayed query and keeps its transfer attached to the source tab", () => {
     const executions = load(SQL, [
       {
         label: "Notes",
@@ -202,13 +202,14 @@ describe("SQL work → notebook", () => {
           cells: [{ id: "note", position: 0, value: "select 42" }],
         },
       },
+      { label: "Other SQL", value: SQL_TWO },
     ])
     run()
-    // A notebook tab unmounts the SQL editor, which forgets its last executed
-    // query; the grid still shows the probe_one result on return.
+    // The notebook unmounts Monaco. The next editor shows another tab's
+    // SQL while the grid still shows the original result.
     cy.getEditorTabByTitle("Notes").find(".chrome-tab-drag-handle").click()
     cy.get("[data-notebook-cell]").should("be.visible")
-    cy.getEditorTabByTitle("Analysis").find(".chrome-tab-drag-handle").click()
+    cy.getEditorTabByTitle("Other SQL").find(".chrome-tab-drag-handle").click()
     cy.getEditor().should("be.visible")
     cy.getByDataHook("grid-toolbar-refresh").should("be.enabled").click()
     cy.wait("@probeQuery")
@@ -216,6 +217,8 @@ describe("SQL work → notebook", () => {
       expect(executions).to.have.length(2)
       expect(executions[1]).to.contain("probe_one")
     })
+    cy.getByDataHook("result-auto-refresh-notebook").click()
+    cy.getEditorTabByTitle("Analysis – notebook").should("have.attr", "active")
   })
 
   it("monitors a repeated query in a notebook with polling off until an interval is chosen", () => {
