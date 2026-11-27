@@ -605,7 +605,7 @@ describe("tabs panel", () => {
     setViewMode("groups")
   })
 
-  it("sorts open tabs by name by default and allows dragging in tab bar order", () => {
+  it("sorts open tabs by name by default and allows dragging in manual order", () => {
     // Given three open tabs and two closed in reverse alphabetical order
     createTab("Alpha", "select 1;")
     createTab("Beta", "select 2;")
@@ -645,7 +645,9 @@ describe("tabs panel", () => {
     assertClosedOrder()
 
     cy.getByDataHook("tabs-panel-sort").click()
-    cy.getByDataHook("tabs-panel-sort-tab-bar").click()
+    cy.getByDataHook("tabs-panel-sort-tab-bar")
+      .should("have.text", "Manual order")
+      .click()
     cy.getByDataHook("tabs-panel-open")
       .find(ROW)
       .should(($rows) => {
@@ -655,7 +657,10 @@ describe("tabs panel", () => {
           "Beta",
         ])
       })
-    cy.getByDataHook("tabs-panel-open-drag-handle").should("have.length", 3)
+    cy.getByDataHook("tabs-panel-open-drag-handle")
+      .should("have.length", 3)
+      .first()
+      .should("have.attr", "title", "Drag to reorder tabs")
     assertClosedOrder()
 
     // When the user drags Beta above Alpha
@@ -709,7 +714,7 @@ describe("tabs panel", () => {
       "true",
     )
     cy.getByDataHook("tabs-panel-open").should("be.visible")
-    cy.getByDataHook("tabs-panel-sort").should("contain.text", "Tab bar order")
+    cy.getByDataHook("tabs-panel-sort").should("contain.text", "Manual order")
     setViewMode("groups")
     editors().should("be.visible")
     cy.getByDataHook("tabs-panel-sort").should("not.exist")

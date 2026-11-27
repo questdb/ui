@@ -144,7 +144,10 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
             }}
             leading={
               reorderable && (
-                <DragHandle data-hook="tabs-panel-open-drag-handle">
+                <DragHandle
+                  data-hook="tabs-panel-open-drag-handle"
+                  title="Drag to reorder tabs"
+                >
                   <DotsSixVerticalIcon size={14} weight="bold" />
                 </DragHandle>
               )
