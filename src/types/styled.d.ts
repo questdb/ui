@@ -105,6 +105,7 @@ export type ColorShape = {
   glassEdge: string
   gridRow: string
   gridHeader: string
+  gridHeaderEditor: string
   gridSelection: string
   editorCanvas: string
   editorBorder: string

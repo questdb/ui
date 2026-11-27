@@ -12,6 +12,7 @@ import {
   type ResultGridHandle,
   type ResultGridRow,
 } from "../../components/ResultGrid"
+import { color } from "../../utils"
 import type { ColumnDefinition } from "../../utils/questdb/types"
 import type { IQuestDBGrid } from "../../js/console/grid"
 import { usePagedDataSource, type PaginationFn } from "./usePagedDataSource"
@@ -25,6 +26,7 @@ import {
 } from "./columnLayoutStore"
 
 const AdapterRoot = styled.div<{ $visible: boolean }>`
+  --result-grid-header-background: ${color("gridHeaderEditor")};
   display: ${({ $visible }) => ($visible ? "flex" : "none")};
   flex-direction: column;
   flex: 1;

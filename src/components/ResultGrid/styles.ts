@@ -42,7 +42,7 @@ export const ScrollContainer = styled.div<{ $scrollable: boolean }>`
 
 export const HeaderRow = styled.div<{ $shadowBottom: boolean }>`
   display: flex;
-  background: ${color("gridHeader")};
+  background: var(--result-grid-header-background, ${color("gridHeader")});
   border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
   flex-shrink: 0;
   height: ${HEADER_HEIGHT}px;
@@ -66,7 +66,7 @@ export const HeaderCell = styled.div<{ $align: string; $frozen?: boolean }>`
   ${({ $frozen }) =>
     $frozen &&
     css`
-      background: ${color("gridHeader")};
+      background: var(--result-grid-header-background, ${color("gridHeader")});
       justify-content: flex-start;
     `}
 

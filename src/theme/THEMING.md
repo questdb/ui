@@ -265,6 +265,8 @@ bar is the structure cue.
 | `gridHeader`    | `#202126` / `#e7eaee` | Column header background. Header names are `contentPrimary` at weight 600. |
 | `gridSelection` | `#252830` / `#d8dce3` | Monaco selection substrate. The React grid does not read it.               |
 
+The SQL editor's result grid uses `gridHeaderEditor` (`#25262c` / `#e7eaee`) for its column headers.
+
 Grid interaction is composed from shared roles: row hover is one
 `interactionHover` over `gridRow`, the selected row is `interactionSelected`
 over `gridRow`, the focused cell stacks `statusInfoSurface` over that with a

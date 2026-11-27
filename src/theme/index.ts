@@ -162,6 +162,7 @@ export const darkColors: ColorShape = {
   // Result grid
   gridRow: "#17181d",
   gridHeader: "#202126",
+  gridHeaderEditor: "#25262c",
   gridSelection: "#252830",
 
   // Editor
@@ -322,6 +323,7 @@ export const lightColors: ColorShape = {
   // Result grid
   gridRow: "#f4f5f7",
   gridHeader: "#e7eaee",
+  gridHeaderEditor: "#e7eaee",
   gridSelection: "#d8dce3",
 
   // Editor
