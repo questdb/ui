@@ -45,6 +45,7 @@ export enum StoreKey {
   LEFT_PANEL_STATE = "left.panel.state",
   TABS_PANEL_INCLUDE_CLOSED = "tabs.panel.includeClosed",
   TABS_PANEL_VIEW_MODE = "tabs.panel.viewMode",
+  TABS_PANEL_SORT_ORDER = "tabs.panel.sortOrder",
   EXAMPLE_DASHBOARD_AUTO_OPENED = "tabs.panel.exampleAutoOpened",
   AI_ASSISTANT_SETTINGS = "ai.assistant.settings",
   AI_CHAT_PANEL_WIDTH = "ai.chat.panel.width",

@@ -605,31 +605,58 @@ describe("tabs panel", () => {
     setViewMode("groups")
   })
 
-  it("lists tabs in tab bar order with closed ones apart in List mode, and reorders by drag", () => {
-    // Given three open tabs and a closed one
+  it("sorts open tabs by name by default and allows dragging in tab bar order", () => {
+    // Given three open tabs and two closed in reverse alphabetical order
     createTab("Alpha", "select 1;")
     createTab("Beta", "select 2;")
-    createTab("Gone", "select 3;")
-    closeFromPanel("Gone")
+    createTab("Archived Alpha", "select 3;")
+    closeFromPanel("Archived Alpha")
+    createTab("Archived Zulu", "select 4;")
+    closeFromPanel("Archived Zulu")
 
     // When the user switches to List mode
     setViewMode("list")
 
-    // Then the kind folders are replaced by Open and Closed, in bar order,
-    // and the closed-tabs checkbox is gone
+    // Then open tabs sort by name without reordering the tab bar
     cy.getByDataHook("tabs-panel-include-closed").should("not.exist")
     editors().should("not.exist")
+    cy.getByDataHook("tabs-panel-sort").should("contain.text", "Name (A–Z)")
     cy.getByDataHook("tabs-panel-open")
       .find(ROW)
-      .then(($rows) => {
+      .should(($rows) => {
+        expect([...$rows].map((row) => row.textContent)).to.deep.equal([
+          "Alpha",
+          "Beta",
+          "SQL",
+        ])
+      })
+    cy.getByDataHook("tabs-panel-open-drag-handle").should("not.exist")
+
+    // Closed tabs stay newest first in both modes
+    const assertClosedOrder = () =>
+      cy
+        .getByDataHook("tabs-panel-closed")
+        .find(ROW)
+        .should(($rows) => {
+          expect($rows).to.have.length(2)
+          expect($rows.eq(0)).to.contain.text("Archived Zulu")
+          expect($rows.eq(1)).to.contain.text("Archived Alpha")
+        })
+    assertClosedOrder()
+
+    cy.getByDataHook("tabs-panel-sort").click()
+    cy.getByDataHook("tabs-panel-sort-tab-bar").click()
+    cy.getByDataHook("tabs-panel-open")
+      .find(ROW)
+      .should(($rows) => {
         expect([...$rows].map((row) => row.textContent)).to.deep.equal([
           "SQL",
           "Alpha",
           "Beta",
         ])
       })
-    cy.getByDataHook("tabs-panel-closed").find(ROW).should("have.length", 1)
-    closedRow("Gone").should("be.visible")
+    cy.getByDataHook("tabs-panel-open-drag-handle").should("have.length", 3)
+    assertClosedOrder()
 
     // When the user drags Beta above Alpha
     openRow("Alpha").then(($alpha) => {
@@ -682,8 +709,10 @@ describe("tabs panel", () => {
       "true",
     )
     cy.getByDataHook("tabs-panel-open").should("be.visible")
+    cy.getByDataHook("tabs-panel-sort").should("contain.text", "Tab bar order")
     setViewMode("groups")
     editors().should("be.visible")
+    cy.getByDataHook("tabs-panel-sort").should("not.exist")
     cy.getByDataHook("tabs-panel-open").should("not.exist")
     cy.getByDataHook("tabs-panel-include-closed").should("exist")
   })

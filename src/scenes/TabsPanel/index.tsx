@@ -11,12 +11,13 @@ import {
   PaneWrapper,
   SegmentedControl,
   SegmentedControlButton,
+  SelectMenu,
 } from "../../components"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import { TabLists, type ViewMode } from "./TabLists"
+import { TabLists, type SortOrder, type ViewMode } from "./TabLists"
 
 type Props = {
   open: boolean
@@ -90,6 +91,11 @@ const ViewToggle = styled(SegmentedControl)`
   background: ${({ theme }) => theme.color.controlTrack};
 `
 
+const SortTrigger = styled(SelectMenu.Trigger)`
+  min-width: 0;
+  padding: 0 0.8rem;
+`
+
 const ViewSegment = styled(SegmentedControlButton)`
   svg {
     width: 1.6rem;
@@ -110,16 +116,31 @@ const readIncludeClosed = () =>
 const readViewMode = (): ViewMode =>
   getValue(StoreKey.TABS_PANEL_VIEW_MODE) === "list" ? "list" : "groups"
 
+const sortLabels = {
+  name: "Name (A–Z)",
+  tabBar: "Tab bar order",
+} satisfies Record<SortOrder, string>
+
+const readSortOrder = (): SortOrder =>
+  getValue(StoreKey.TABS_PANEL_SORT_ORDER) === "tabBar" ? "tabBar" : "name"
+
 export const TabsPanel = ({ open }: Props) => {
   const [filter, setFilter] = useState("")
   const [includeClosed, setIncludeClosed] = useState(readIncludeClosed)
   const [viewMode, setViewMode] = useState<ViewMode>(readViewMode)
+  const [sortOrder, setSortOrder] = useState(readSortOrder)
 
   const changeViewMode = (next: ViewMode) => {
     if (next === viewMode) return
     setViewMode(next)
     setValue(StoreKey.TABS_PANEL_VIEW_MODE, next)
     void trackEvent(ConsoleEvent.TAB_PANEL_VIEW_MODE, { mode: next })
+  }
+
+  const changeSortOrder = (value: string) => {
+    const next = value === "tabBar" ? "tabBar" : "name"
+    setSortOrder(next)
+    setValue(StoreKey.TABS_PANEL_SORT_ORDER, next)
   }
 
   const toggleIncludeClosed = () => {
@@ -188,28 +209,55 @@ export const TabsPanel = ({ open }: Props) => {
                 $activeTone="neutral"
                 aria-pressed={viewMode === "list"}
                 onClick={() => changeViewMode("list")}
-                title="List tabs in tab bar order"
+                title="List open and closed tabs"
                 data-hook="tabs-panel-view-list"
               >
                 <ListIcon />
                 List
               </ViewSegment>
             </ViewToggle>
-            <Option>
-              {viewMode === "groups" && (
-                <>
-                  <Checkbox
-                    id="tabs-panel-include-closed"
-                    checked={includeClosed}
-                    onChange={toggleIncludeClosed}
-                    data-hook="tabs-panel-include-closed"
-                  />
-                  <OptionLabel htmlFor="tabs-panel-include-closed">
-                    Include closed tabs
-                  </OptionLabel>
-                </>
-              )}
-            </Option>
+            {viewMode === "list" ? (
+              <SelectMenu.Root>
+                <SortTrigger
+                  label={sortLabels[sortOrder]}
+                  aria-label={`Sort open tabs: ${sortLabels[sortOrder]}`}
+                  dataHook="tabs-panel-sort"
+                />
+                <SelectMenu.Portal>
+                  <SelectMenu.Content align="end" sideOffset={4}>
+                    <SelectMenu.RadioGroup
+                      value={sortOrder}
+                      onValueChange={changeSortOrder}
+                    >
+                      <SelectMenu.Item
+                        value="name"
+                        data-hook="tabs-panel-sort-name"
+                      >
+                        {sortLabels.name}
+                      </SelectMenu.Item>
+                      <SelectMenu.Item
+                        value="tabBar"
+                        data-hook="tabs-panel-sort-tab-bar"
+                      >
+                        {sortLabels.tabBar}
+                      </SelectMenu.Item>
+                    </SelectMenu.RadioGroup>
+                  </SelectMenu.Content>
+                </SelectMenu.Portal>
+              </SelectMenu.Root>
+            ) : (
+              <Option>
+                <Checkbox
+                  id="tabs-panel-include-closed"
+                  checked={includeClosed}
+                  onChange={toggleIncludeClosed}
+                  data-hook="tabs-panel-include-closed"
+                />
+                <OptionLabel htmlFor="tabs-panel-include-closed">
+                  Include closed tabs
+                </OptionLabel>
+              </Option>
+            )}
           </Options>
         </PaneHeader>
         <ListScroller data-hook="tabs-panel-lists">
@@ -218,6 +266,7 @@ export const TabsPanel = ({ open }: Props) => {
               filter={filter}
               includeClosed={includeClosed}
               viewMode={viewMode}
+              sortOrder={sortOrder}
             />
           )}
         </ListScroller>

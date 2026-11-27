@@ -15,11 +15,13 @@ import { ExampleList } from "./ExampleList"
 import { buildTabGroups, groupCountLabel, matchesFilter } from "./tabGroups"
 
 export type ViewMode = "groups" | "list"
+export type SortOrder = "name" | "tabBar"
 
 type Props = {
   filter: string
   includeClosed: boolean
   viewMode: ViewMode
+  sortOrder: SortOrder
 }
 
 const Lists = styled.div`
@@ -30,7 +32,17 @@ const Empty = styled.div`
   padding: 0.6rem 1rem 0.6rem 2.5rem;
 `
 
-export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
+const tabNames = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+})
+
+export const TabLists = ({
+  filter,
+  includeClosed,
+  viewMode,
+  sortOrder,
+}: Props) => {
   const { buffers, activeBuffer } = useEditor()
   // Read the link from the live rows: a rename detaches the notebook from its
   // example at once, and the cached activeBuffer would lag behind.
@@ -47,13 +59,15 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
     : []
   const groups = buildTabGroups(buffers, { includeClosed, filter })
 
-  // List mode mirrors the tab bar: every open tab in bar order (examples
-  // included, once open), then closed tabs. Examples that are not open have
-  // no tab, so they are not listed.
+  // List mode includes examples once they have an open tab. Closed tabs
+  // always keep their history order.
   const userTabs = buffers.filter(
     (buffer) => !buffer.isPreviewBuffer && matchesFilter(buffer.label, filter),
   )
   const openTabs = sortPinnedBuffers(userTabs)
+  if (sortOrder === "name") {
+    openTabs.sort((a, b) => tabNames.compare(a.label, b.label))
+  }
   const closedTabs = sortClosedBuffers(userTabs)
 
   // A section gets the active tab's id only when it lists that tab.
@@ -125,8 +139,9 @@ export const TabLists = ({ filter, includeClosed, viewMode }: Props) => {
               </Empty>
             ) : (
               <OpenTabList
+                key={sortOrder}
                 buffers={openTabs}
-                reorderable={filter.trim() === ""}
+                reorderable={sortOrder === "tabBar" && filter.trim() === ""}
               />
             )}
           </TabSection>

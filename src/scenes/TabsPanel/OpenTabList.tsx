@@ -95,7 +95,6 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
   }
 
   const moveByKeyboard = async (buffer: Buffer, delta: -1 | 1) => {
-    if (!reorderable) return
     const fromIndex = rows.findIndex((b) => b.id === buffer.id)
     const toIndex = fromIndex + delta
     if (toIndex < 0 || toIndex >= rows.length) return
@@ -134,18 +133,18 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
                 event.preventDefault()
                 void setActiveBuffer(buffer)
               }
-              if (event.altKey && event.key === "ArrowUp") {
+              if (reorderable && event.altKey && event.key === "ArrowUp") {
                 event.preventDefault()
                 void moveByKeyboard(buffer, -1)
               }
-              if (event.altKey && event.key === "ArrowDown") {
+              if (reorderable && event.altKey && event.key === "ArrowDown") {
                 event.preventDefault()
                 void moveByKeyboard(buffer, 1)
               }
             }}
             leading={
               reorderable && (
-                <DragHandle>
+                <DragHandle data-hook="tabs-panel-open-drag-handle">
                   <DotsSixVerticalIcon size={14} weight="bold" />
                 </DragHandle>
               )
