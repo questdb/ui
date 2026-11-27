@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useRef, useState } from "react"
 import styled, { css } from "styled-components"
 import { ListIcon, SquaresFourIcon, XIcon } from "@phosphor-icons/react"
 import {
@@ -12,6 +12,7 @@ import {
   SegmentedControl,
   SegmentedControlButton,
   SelectMenu,
+  TOOLBAR_CONTROL_HEIGHT,
 } from "../../components"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -71,9 +72,10 @@ const ClearFilterButton = styled(IconButton)`
 
 const Options = styled.div`
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6rem 0.2rem;
   min-height: 3.2rem;
   padding: 0.4rem 0;
 
@@ -88,12 +90,31 @@ const Option = styled.div`
 `
 
 const ViewToggle = styled(SegmentedControl)`
+  flex-shrink: 0;
   background: ${({ theme }) => theme.color.controlTrack};
 `
 
-const SortTrigger = styled(SelectMenu.Trigger)`
-  min-width: 0;
-  padding: 0 0.8rem;
+const SortTrigger = styled(SelectMenu.Trigger)<{ $hideFocusRing: boolean }>`
+  flex-shrink: 0;
+  width: 138px;
+  height: auto;
+  min-height: ${TOOLBAR_CONTROL_HEIGHT};
+  margin-inline-start: auto;
+  gap: 0.4rem;
+  padding: 0 0.6rem;
+
+  > svg {
+    width: 1.4rem;
+  }
+
+  ${({ $hideFocusRing }) =>
+    $hideFocusRing &&
+    css`
+      &&:focus-visible {
+        outline: none;
+        border-color: ${({ theme }) => theme.color.borderStrong};
+      }
+    `}
 `
 
 const ViewSegment = styled(SegmentedControlButton)`
@@ -117,18 +138,38 @@ const readViewMode = (): ViewMode =>
   getValue(StoreKey.TABS_PANEL_VIEW_MODE) === "list" ? "list" : "groups"
 
 const sortLabels = {
-  name: "Name (A–Z)",
+  name: "Alphabetical (A-Z)",
+  "name-desc": "Alphabetical (Z-A)",
+  newest: "Newest first",
+  oldest: "Oldest first",
   tabBar: "Position",
 } satisfies Record<SortOrder, string>
 
-const readSortOrder = (): SortOrder =>
-  getValue(StoreKey.TABS_PANEL_SORT_ORDER) === "tabBar" ? "tabBar" : "name"
+const isSortOrder = (value: string): value is SortOrder =>
+  Object.prototype.hasOwnProperty.call(sortLabels, value)
+
+const readSortOrder = (): SortOrder => {
+  const value = getValue(StoreKey.TABS_PANEL_SORT_ORDER)
+  return isSortOrder(value) ? value : "name"
+}
 
 export const TabsPanel = ({ open }: Props) => {
   const [filter, setFilter] = useState("")
   const [includeClosed, setIncludeClosed] = useState(readIncludeClosed)
   const [viewMode, setViewMode] = useState<ViewMode>(readViewMode)
   const [sortOrder, setSortOrder] = useState(readSortOrder)
+  const sortLabel = sortLabels[sortOrder]
+  const sortTriggerRef = useRef<HTMLButtonElement>(null)
+  const [hideSortFocusRing, setHideSortFocusRing] = useState(false)
+
+  const handleSortCloseAutoFocus = () => {
+    // Let the menu restore focus first. A click outside can focus elsewhere.
+    queueMicrotask(() => {
+      if (sortTriggerRef.current === document.activeElement) {
+        setHideSortFocusRing(true)
+      }
+    })
+  }
 
   const changeViewMode = (next: ViewMode) => {
     if (next === viewMode) return
@@ -138,9 +179,9 @@ export const TabsPanel = ({ open }: Props) => {
   }
 
   const changeSortOrder = (value: string) => {
-    const next = value === "tabBar" ? "tabBar" : "name"
-    setSortOrder(next)
-    setValue(StoreKey.TABS_PANEL_SORT_ORDER, next)
+    if (!isSortOrder(value)) return
+    setSortOrder(value)
+    setValue(StoreKey.TABS_PANEL_SORT_ORDER, value)
   }
 
   const toggleIncludeClosed = () => {
@@ -219,28 +260,33 @@ export const TabsPanel = ({ open }: Props) => {
             {viewMode === "list" ? (
               <SelectMenu.Root>
                 <SortTrigger
-                  label={sortLabels[sortOrder]}
-                  aria-label={`Sort open tabs: ${sortLabels[sortOrder]}`}
+                  ref={sortTriggerRef}
+                  $hideFocusRing={hideSortFocusRing}
+                  onBlur={() => setHideSortFocusRing(false)}
+                  label={sortLabel}
+                  aria-label={`Sort open tabs: ${sortLabel}`}
+                  title={sortLabel}
                   dataHook="tabs-panel-sort"
                 />
                 <SelectMenu.Portal>
-                  <SelectMenu.Content align="end" sideOffset={4}>
+                  <SelectMenu.Content
+                    align="end"
+                    sideOffset={4}
+                    onCloseAutoFocus={handleSortCloseAutoFocus}
+                  >
                     <SelectMenu.RadioGroup
                       value={sortOrder}
                       onValueChange={changeSortOrder}
                     >
-                      <SelectMenu.Item
-                        value="name"
-                        data-hook="tabs-panel-sort-name"
-                      >
-                        {sortLabels.name}
-                      </SelectMenu.Item>
-                      <SelectMenu.Item
-                        value="tabBar"
-                        data-hook="tabs-panel-sort-tab-bar"
-                      >
-                        {sortLabels.tabBar}
-                      </SelectMenu.Item>
+                      {Object.entries(sortLabels).map(([value, label]) => (
+                        <SelectMenu.Item
+                          key={value}
+                          value={value}
+                          data-hook={`tabs-panel-sort-${value === "tabBar" ? "tab-bar" : value}`}
+                        >
+                          {label}
+                        </SelectMenu.Item>
+                      ))}
                     </SelectMenu.RadioGroup>
                   </SelectMenu.Content>
                 </SelectMenu.Portal>

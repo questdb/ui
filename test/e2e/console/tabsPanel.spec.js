@@ -143,6 +143,15 @@ const LONG_SQL = Array.from({ length: 300 }, (_, i) => `select ${i + 1};`).join(
   "\n",
 )
 
+// Retried until they match: the panel reorders at once, the tab bar once
+// the new positions are read back from IndexedDB.
+const expectTabTitles = (expected) =>
+  cy.get(".chrome-tab").should(($tabs) => {
+    expect(
+      [...$tabs].map((tab) => tab.getAttribute("data-tab-title")),
+    ).to.deep.equal(expected)
+  })
+
 describe("tabs panel", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth()
@@ -150,39 +159,16 @@ describe("tabs panel", () => {
     openTabsPanel()
   })
 
-  it("groups tabs by kind, hides empty folders and activates a tab from its row", () => {
-    // Given a second editor tab next to the default one
-    createTab("Alpha", "select 1;")
+  it("finds a tab by title and opens it in the editor", () => {
+    createTab("Trades Alpha", "select 'trades';")
+    createTab("Prices", "select 'prices';")
 
-    // Then only the Editors folder exists, with both tabs in bar order
-    editors()
-      .find('[data-hook="tabs-panel-section-count"]')
-      .should("have.text", "2")
-    editors().find(ROW).should("have.length", 2)
-    editors().find(ROW).first().should("contain", "SQL")
-    editors().find(ROW).last().should("contain", "Alpha")
-    notebooks().should("not.exist")
-    cy.getByDataHook("tabs-panel-group-metrics").should("not.exist")
-    cy.getByDataHook("tabs-panel-examples").should("not.exist")
+    cy.getByDataHook("tabs-panel-filter").type("trades")
+    openRow("Prices").should("not.exist")
+    openRow("Trades Alpha").click()
 
-    // When the user adds a notebook
-    cy.getByDataHook("new-tab-button").click()
-    cy.getByDataHook("new-tab-notebook").click()
-    cy.get("[data-notebook-root]").should("be.visible")
-
-    // Then the Notebooks folder appears first
-    notebooks().should("be.visible")
-    cy.getByDataHook("tabs-panel")
-      .find("section")
-      .first()
-      .should("have.attr", "data-hook", "tabs-panel-group-notebook")
-
-    // When the user clicks the default tab's row
-    openRow("SQL").click()
-
-    // Then the editor switches to it
-    cy.getEditorTabByTitle("SQL").should("have.attr", "active")
-    cy.getEditorTabByTitle("Alpha").should("not.have.attr", "active")
+    cy.getEditorTabByTitle("Trades Alpha").should("have.attr", "active")
+    cy.waitForActiveBufferValue("select 'trades';")
   })
 
   it("hides closed tabs until asked, then lists them after the open ones, newest first", () => {
@@ -521,50 +507,6 @@ describe("tabs panel", () => {
     )
   })
 
-  it("filters every folder by label", () => {
-    // Given an open "Alpha", an open "Beta" and a closed "Gamma"
-    createTab("Alpha", "select 1;")
-    createTab("Beta", "select 2;")
-    createTab("Gamma", "select 3;")
-    closeFromPanel("Gamma")
-    includeClosed()
-
-    // When the user filters by part of a label, in another case
-    cy.getByDataHook("tabs-panel-filter").type("alp")
-
-    // Then only matching rows are listed
-    editors().find(ROW).should("have.length", 1)
-    openRow("Alpha").should("be.visible")
-
-    // When nothing matches
-    cy.getByDataHook("tabs-panel-filter").clear().type("zzz")
-
-    // Then the folders are gone and the panel says so
-    editors().should("not.exist")
-    cy.getByDataHook("tabs-panel-empty").should("contain", "No tabs match")
-
-    // When the user clears the filter
-    cy.getByDataHook("tabs-panel-filter-clear").click()
-
-    // Then every tab is listed again
-    cy.getByDataHook("tabs-panel-filter").should("have.value", "")
-    editors().find(ROW).should("have.length", 4)
-    closedRow("Gamma").should("be.visible")
-  })
-
-  it("collapses and expands a folder from its header", () => {
-    // Given a second tab
-    createTab("Alpha", "select 1;")
-
-    // When the user clicks the Editors header
-    editors().find('[role="button"][aria-expanded]').first().click()
-
-    // Then the list is hidden, and shown again on a second click
-    editors().find(ROW).should("not.exist")
-    editors().find('[role="button"][aria-expanded="false"]').click()
-    openRow("Alpha").should("be.visible")
-  })
-
   it("keeps the editor read-only when the running tab is activated from its row", () => {
     // Given a script whose first statement is held in flight
     const script = "select 1;\nselect 2;"
@@ -605,121 +547,28 @@ describe("tabs panel", () => {
     setViewMode("groups")
   })
 
-  it("sorts open tabs by name by default and allows dragging when sorted by Position", () => {
-    // Given three open tabs and two closed in reverse alphabetical order
+  it("updates the tab bar after dragging a tab in the List view", () => {
     createTab("Alpha", "select 1;")
     createTab("Beta", "select 2;")
-    createTab("Archived Alpha", "select 3;")
-    closeFromPanel("Archived Alpha")
-    createTab("Archived Zulu", "select 4;")
-    closeFromPanel("Archived Zulu")
-
-    // When the user switches to List mode
     setViewMode("list")
-
-    // Then open tabs sort by name without reordering the tab bar
-    cy.getByDataHook("tabs-panel-include-closed").should("not.exist")
-    editors().should("not.exist")
-    cy.getByDataHook("tabs-panel-sort").should("contain.text", "Name (A–Z)")
-    cy.getByDataHook("tabs-panel-open")
-      .find(ROW)
-      .should(($rows) => {
-        expect([...$rows].map((row) => row.textContent)).to.deep.equal([
-          "Alpha",
-          "Beta",
-          "SQL",
-        ])
-      })
-    cy.getByDataHook("tabs-panel-open-drag-handle").should("not.exist")
-
-    // Closed tabs stay newest first in both modes
-    const assertClosedOrder = () =>
-      cy
-        .getByDataHook("tabs-panel-closed")
-        .find(ROW)
-        .should(($rows) => {
-          expect($rows).to.have.length(2)
-          expect($rows.eq(0)).to.contain.text("Archived Zulu")
-          expect($rows.eq(1)).to.contain.text("Archived Alpha")
-        })
-    assertClosedOrder()
-
     cy.getByDataHook("tabs-panel-sort").click()
-    cy.getByDataHook("tabs-panel-sort-tab-bar")
-      .should("have.text", "Position")
-      .click()
-    cy.getByDataHook("tabs-panel-open")
-      .find(ROW)
-      .should(($rows) => {
-        expect([...$rows].map((row) => row.textContent)).to.deep.equal([
-          "SQL",
-          "Alpha",
-          "Beta",
-        ])
-      })
-    cy.getByDataHook("tabs-panel-open-drag-handle")
-      .should("have.length", 3)
-      .first()
-      .should("have.attr", "title", "Drag to reorder tabs")
-    assertClosedOrder()
+    cy.getByDataHook("tabs-panel-sort-tab-bar").click()
+    expectTabTitles(["SQL", "Alpha", "Beta"])
 
-    // When the user drags Beta above Alpha
     openRow("Alpha").then(($alpha) => {
-      const targetY = $alpha[0].getBoundingClientRect().top + 2
-      openRow("Beta").then(($beta) => {
-        const rect = $beta[0].getBoundingClientRect()
-        const startY = rect.top + rect.height / 2
-        cy.wrap($beta).trigger("pointerdown", {
-          eventConstructor: "PointerEvent",
-          button: 0,
-          pointerId: 1,
-          clientX: rect.left + 20,
-          clientY: startY,
-        })
-        cy.document().then((doc) => {
-          const move = (clientY) =>
-            doc.dispatchEvent(
-              new PointerEvent("pointermove", { pointerId: 1, clientY }),
-            )
-          move(startY - 10)
-          move(targetY)
-          doc.dispatchEvent(
-            new PointerEvent("pointerup", { pointerId: 1, clientY: targetY }),
-          )
-        })
+      const { left, top, width, height } = $alpha[0].getBoundingClientRect()
+      const x = left + width / 2
+      const y = top + height / 2
+      openRow("Beta").realMouseDown({ scrollBehavior: false })
+      cy.get("body").realMouseMove(x, y, {
+        position: "topLeft",
+        keepMouseDownButton: "left",
+        scrollBehavior: false,
       })
+      cy.get("body").realMouseUp({ x, y, scrollBehavior: false })
     })
 
-    // Then the tab bar and the list agree on the new order
-    cy.getEditorTabs().should(($tabs) => {
-      const titles = [...$tabs].map((tab) =>
-        tab.querySelector(".chrome-tab-title").textContent.trim(),
-      )
-      expect(titles.indexOf("Beta")).to.be.lessThan(titles.indexOf("Alpha"))
-    })
-    cy.getByDataHook("tabs-panel-open")
-      .find(ROW)
-      .should(($rows) => {
-        const labels = [...$rows].map((row) => row.textContent)
-        expect(labels.indexOf("Beta")).to.be.lessThan(labels.indexOf("Alpha"))
-      })
-
-    // And the mode survives a reload; Groups brings the folders back
-    cy.reload()
-    cy.getEditorContent().should("be.visible")
-    openTabsPanel()
-    cy.getByDataHook("tabs-panel-view-list").should(
-      "have.attr",
-      "aria-pressed",
-      "true",
-    )
-    cy.getByDataHook("tabs-panel-open").should("be.visible")
-    cy.getByDataHook("tabs-panel-sort").should("contain.text", "Position")
-    setViewMode("groups")
-    editors().should("be.visible")
-    cy.getByDataHook("tabs-panel-sort").should("not.exist")
-    cy.getByDataHook("tabs-panel-open").should("not.exist")
-    cy.getByDataHook("tabs-panel-include-closed").should("exist")
+    expectTabTitles(["SQL", "Beta", "Alpha"])
   })
 })
 
@@ -1079,7 +928,7 @@ describe("tabs panel example dashboards", () => {
     setViewMode("list")
 
     // Then there is no Example dashboards folder, the open example sits in
-    // the Open folder in bar order, and the other example is nowhere
+    // the Open folder, and the other example is nowhere
     cy.getByDataHook("tabs-panel-examples").should("not.exist")
     cy.getByDataHook("tabs-panel-open")
       .find(ROW)
@@ -1454,15 +1303,6 @@ describe("tab history dropdown", () => {
 })
 
 describe("AI diff tab", () => {
-  // Retried until they match: the panel reorders at once, the tab bar once
-  // the new positions are read back from IndexedDB.
-  const expectTabTitles = (expected) =>
-    cy.get(".chrome-tab").should(($tabs) => {
-      expect(
-        [...$tabs].map((tab) => tab.getAttribute("data-tab-title")),
-      ).to.deep.equal(expected)
-    })
-
   const expectPanelLabels = (expected) =>
     cy
       .getByDataHook("tabs-panel-open")
@@ -1544,6 +1384,8 @@ describe("AI diff tab", () => {
     editors().find(ROW).should("have.length", 2)
     cy.getByDataHook("tabs-panel").should("not.contain", "AI Suggestion")
     setViewMode("list")
+    cy.getByDataHook("tabs-panel-sort").click()
+    cy.getByDataHook("tabs-panel-sort-tab-bar").click()
     expectPanelLabels(["SQL", "Beta"])
 
     // When the user moves SQL down from the keyboard in the list

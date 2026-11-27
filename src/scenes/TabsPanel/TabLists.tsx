@@ -15,7 +15,7 @@ import { ExampleList } from "./ExampleList"
 import { buildTabGroups, groupCountLabel, matchesFilter } from "./tabGroups"
 
 export type ViewMode = "groups" | "list"
-export type SortOrder = "name" | "tabBar"
+export type SortOrder = "name" | "name-desc" | "newest" | "oldest" | "tabBar"
 
 type Props = {
   filter: string
@@ -36,6 +36,14 @@ const tabNames = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: "base",
 })
+
+// Dexie assigns tab IDs in creation order, independent of tab-bar moves.
+const compareOpenTabs = {
+  name: (a: Buffer, b: Buffer) => tabNames.compare(a.label, b.label),
+  "name-desc": (a: Buffer, b: Buffer) => tabNames.compare(b.label, a.label),
+  newest: (a: Buffer, b: Buffer) => (b.id ?? 0) - (a.id ?? 0),
+  oldest: (a: Buffer, b: Buffer) => (a.id ?? 0) - (b.id ?? 0),
+}
 
 export const TabLists = ({
   filter,
@@ -65,8 +73,8 @@ export const TabLists = ({
     (buffer) => !buffer.isPreviewBuffer && matchesFilter(buffer.label, filter),
   )
   const openTabs = sortPinnedBuffers(userTabs)
-  if (sortOrder === "name") {
-    openTabs.sort((a, b) => tabNames.compare(a.label, b.label))
+  if (sortOrder !== "tabBar") {
+    openTabs.sort(compareOpenTabs[sortOrder])
   }
   const closedTabs = sortClosedBuffers(userTabs)
 
