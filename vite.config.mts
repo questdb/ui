@@ -214,7 +214,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       server: {
         deps: {
-          inline: [/@radix-ui\//],
+          inline: [/@radix-ui\//, /react-grid-layout/],
         },
       },
     },

@@ -7,6 +7,11 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { useSchema } from "../SchemaContext"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import {
+  claimEscape,
+  isEscape,
+  isEscapeClaimed,
+} from "../../../utils/escapeKey"
 
 const Root = styled(Box).attrs({
   justifyContent: "space-between",
@@ -78,7 +83,8 @@ export const Toolbar = ({
           onFocus={() => void trackEvent(ConsoleEvent.SCHEMA_FILTER)}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === "Escape") {
+            if (isEscape(e) && !isEscapeClaimed(e)) {
+              claimEscape(e)
               if (
                 queryRef.current?.value &&
                 queryRef.current.value.length > 0

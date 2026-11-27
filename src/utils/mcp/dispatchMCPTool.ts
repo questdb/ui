@@ -1,5 +1,6 @@
 import type { ModelToolsClient } from "../ai/aiAssistant"
 import { dispatchTool } from "../tools/dispatch"
+import { mcpNotebookTelemetry } from "../../modules/ConsoleEventTracker/mcpNotebookTelemetry"
 import {
   INVALID_BUFFER_ID_MESSAGE,
   STATE_NOT_FETCHED_MESSAGE,
@@ -35,6 +36,7 @@ export type PermissionsRefs = {
 }
 
 export type DispatchContext = {
+  onNotebookTelemetry?: (payload: Record<string, unknown>) => void
   modelToolsClient: ModelToolsClient
   freshness: NotebookFreshness
   metaToolContext: MetaToolContext
@@ -151,6 +153,9 @@ export const dispatchMCPTool = async (
   ctx: DispatchContext,
 ): Promise<ToolResultPayload> => {
   const result = await dispatchInner(call, ctx)
+  ctx.onNotebookTelemetry?.(
+    mcpNotebookTelemetry(call.name, call.arguments, result),
+  )
   // Suppress dirty-notice on a denial — the deny reason already names
   // the missing permission.
   const dirty = ctx.permissions.consumeDirty()

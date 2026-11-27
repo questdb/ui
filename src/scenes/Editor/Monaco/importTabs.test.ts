@@ -1026,6 +1026,29 @@ describe("sanitizeBuffer", () => {
       expect(state?.settings?.variables).toEqual([{ name: "v", value: "1" }])
     })
 
+    it("lets an imported transferred chart load because its source result is absent", () => {
+      const { notebookViewState } = sanitizeBuffer({
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "chart",
+              value: "select 1",
+              mode: "draw",
+              autoRefresh: false,
+              deferInitialDraw: true,
+            },
+          ],
+        },
+      })
+      const chart = notebookViewState?.cells[0]
+      expect(chart?.mode).toBe("draw")
+      expect(chart?.autoRefresh).toBe(false)
+      expect(chart?.deferInitialDraw).toBeUndefined()
+    })
+
     it("round-trips settings.autoRefreshDefault and drops an invalid token", () => {
       const input = {
         label: "Notebook",

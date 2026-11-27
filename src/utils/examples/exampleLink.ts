@@ -5,6 +5,7 @@ import type {
 } from "../../providers/SettingsProvider/types"
 import { isFreshWorkspace } from "./isFreshWorkspace"
 import { hasExampleDashboards } from "./hasExampleDashboards"
+import { exampleTemplateIdOf } from "./exampleIdentity"
 
 const TEMPLATE_PARAM = "templateId"
 
@@ -107,7 +108,7 @@ export const planExampleStartup = (
   if (linkedExample) {
     const open = buffers.find(
       (buffer) =>
-        buffer.templateId === linkedExample.id &&
+        exampleTemplateIdOf(buffer) === linkedExample.id &&
         !buffer.archived &&
         !buffer.isTemporary,
     )

@@ -13,7 +13,7 @@ import {
 } from "../../../../components/ResultGrid"
 import { copyToClipboard } from "../../../../utils/copyToClipboard"
 import { downloadQueryResult } from "../../../../utils/downloadQueryResult"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useNotebookActions } from "../NotebookProvider"
 import { expandGlobals } from "../declareUtils"
@@ -22,6 +22,7 @@ import { ActionButton, ActionsBar, FreezeToggle } from "./styles"
 const preventFocusSteal = (e: React.MouseEvent) => e.preventDefault()
 
 type Props = {
+  cellId: string
   data: DqlQueryResult
   gridRef: React.RefObject<ResultGridHandle | null>
   isFrozen: boolean
@@ -31,6 +32,7 @@ type Props = {
 }
 
 export const ResultActionsBar: React.FC<Props> = ({
+  cellId,
   data,
   gridRef,
   isFrozen,
@@ -39,6 +41,7 @@ export const ResultActionsBar: React.FC<Props> = ({
   onReRun,
 }) => {
   const { getVariables } = useNotebookActions()
+  const trackEvent = useNotebookTelemetry(cellId)
   const [isCopied, setIsCopied] = useState(false)
 
   const copyMarkdown = () => {
@@ -69,7 +72,11 @@ export const ResultActionsBar: React.FC<Props> = ({
   }
 
   const reRun = () => {
-    void trackEvent(ConsoleEvent.GRID_REFRESH, { source: "notebook" })
+    void trackEvent(ConsoleEvent.GRID_REFRESH, {
+      source: "notebook",
+      phase: "requested",
+      trigger: "manual",
+    })
     onReRun?.()
   }
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react"
 import { IconButton } from "../../../../components/IconButton"
 import { Stop } from "../../../../components/icons"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useNotebookActions } from "../NotebookProvider"
 import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
@@ -21,6 +21,7 @@ export const CellStopButton: React.FC<Props> = ({
   onUnmountWhileFocused,
 }) => {
   const { cancelCell } = useNotebookActions()
+  const trackEvent = useNotebookTelemetry(cellId)
   const cellRefresh = useCellRefresh()
   const focusedRef = useRef(false)
   const onUnmountWhileFocusedRef = useRef(onUnmountWhileFocused)

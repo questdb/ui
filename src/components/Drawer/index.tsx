@@ -1,6 +1,9 @@
-import React from "react"
+import React, { useRef, useState } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
+import { useEscapeLayer } from "../../hooks/useEscapeLayer"
+import { FocusOnOpen } from "./focus-on-open"
+import { EscapePriority, isTextFieldWithValue } from "../../utils/escapeKey"
 import styled, { css } from "styled-components"
 import { useSelector, useDispatch } from "react-redux"
 import { selectors, actions } from "../../store"
@@ -54,7 +57,7 @@ const animateHide = css`
   }
 `
 
-const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
+const drawerContentStyles = css<{
   width?: string
   mode: DrawerProps["mode"]
 }>`
@@ -91,6 +94,23 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   `};
 `
 
+const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })`
+  ${drawerContentStyles}
+`
+
+// A docked panel is not a dismissable overlay: it is an ambient Escape layer
+// (utils/escapeKey.ts), closed only by an Escape that nothing inside or in
+// front of it claimed. Radix's capture-phase listener would run first.
+const SideDrawerContent = styled.div`
+  ${drawerContentStyles}
+
+  &:focus {
+    outline: none;
+  }
+`
+
+let sideDrawerSeq = 0
+
 export const StyledClose = styled(IconButton).attrs({
   label: "Close",
   variant: "ghost",
@@ -124,11 +144,6 @@ const TitleWrapper = styled.div`
   min-width: 0;
 `
 
-const isTextFieldWithValue = (target: EventTarget | null) =>
-  (target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement) &&
-  target.value.length > 0
-
 export const Drawer = ({
   mode = "modal",
   children,
@@ -160,6 +175,19 @@ export const Drawer = ({
   }
 
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
+
+  const sideContentRef = useRef<HTMLDivElement>(null)
+  // Radix's trigger points `aria-controls` at its own content element, which
+  // a side panel does not render; it must name the panel instead.
+  const [sideContentId] = useState(() => `side-drawer-${++sideDrawerSeq}`)
+  useEscapeLayer(mode === "side" && !!open && closeOnEscape && !!onDismiss, {
+    priority: EscapePriority.sidePanel,
+    scope: () => sideContentRef.current,
+    onEscape: () => {
+      onDismiss?.()
+      return true
+    },
+  })
 
   // A text field with content owns Escape: it clears itself first, and the
   // drawer only closes on the next press.
@@ -219,13 +247,42 @@ export const Drawer = ({
       title
     )
 
+  const contents = (
+    <>
+      <RadixDialog.Title asChild>
+        <span style={{ display: "none" }}>
+          {typeof title === "string" ? title : "Drawer"}
+        </span>
+      </RadixDialog.Title>
+      {(title || withCloseButton) && (
+        <Panel.Header
+          title={titleWithNavigation}
+          afterTitle={afterTitle}
+          titleColor={titleColor}
+          {...(withCloseButton && {
+            afterTitle: (
+              <AfterTitleContainer>
+                {afterTitle}
+                {closeControl}
+              </AfterTitleContainer>
+            ),
+          })}
+        />
+      )}
+      {children}
+    </>
+  )
+
   return (
     <Dialog.Root
       onOpenChange={onOpenChange}
       open={open}
       modal={mode === "modal"}
     >
-      <RadixDialog.Trigger asChild>
+      <RadixDialog.Trigger
+        asChild
+        {...(mode === "side" && { "aria-controls": sideContentId })}
+      >
         <ForwardRef>{trigger}</ForwardRef>
       </RadixDialog.Trigger>
       <RadixDialog.Portal
@@ -238,43 +295,36 @@ export const Drawer = ({
             <Overlay primitive={RadixDialog.Overlay} />
           </ForwardRef>
         )}
-        <DrawerContent
-          aria-describedby={undefined}
-          data-hook={dataHook}
-          mode={mode}
-          width={width}
-          {...(onDismiss && {
-            onEscapeKeyDown: closeOnEscape ? handleEscapeKeyDown : undefined,
-            onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
-          })}
-          {...(mode === "side" && {
-            onInteractOutside: (e) => e.preventDefault(),
-            onEscapeKeyDown: handleEscapeKeyDown,
-            onPointerDownOutside: (e) => e.preventDefault(),
-          })}
-        >
-          <RadixDialog.Title asChild>
-            <span style={{ display: "none" }}>
-              {typeof title === "string" ? title : "Drawer"}
-            </span>
-          </RadixDialog.Title>
-          {(title || withCloseButton) && (
-            <Panel.Header
-              title={titleWithNavigation}
-              afterTitle={afterTitle}
-              titleColor={titleColor}
-              {...(withCloseButton && {
-                afterTitle: (
-                  <AfterTitleContainer>
-                    {afterTitle}
-                    {closeControl}
-                  </AfterTitleContainer>
-                ),
-              })}
-            />
-          )}
-          {children}
-        </DrawerContent>
+        {mode === "side" ? (
+          <SideDrawerContent
+            ref={sideContentRef}
+            id={sideContentId}
+            // Focusable, so a click on plain text inside the panel keeps
+            // focus (and Escape) in the panel instead of moving it to body.
+            tabIndex={-1}
+            role="dialog"
+            aria-label={typeof title === "string" ? title : "Drawer"}
+            data-hook={dataHook}
+            mode={mode}
+            width={width}
+          >
+            {contents}
+            <FocusOnOpen container={sideContentRef} />
+          </SideDrawerContent>
+        ) : (
+          <DrawerContent
+            aria-describedby={undefined}
+            data-hook={dataHook}
+            mode={mode}
+            width={width}
+            {...(onDismiss && {
+              onEscapeKeyDown: closeOnEscape ? handleEscapeKeyDown : undefined,
+              onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
+            })}
+          >
+            {contents}
+          </DrawerContent>
+        )}
       </RadixDialog.Portal>
     </Dialog.Root>
   )

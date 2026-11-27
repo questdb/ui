@@ -36,6 +36,7 @@ import {
 } from "scenes/Editor/Metrics/utils"
 import type { NotebookViewState } from "./notebook"
 import { createDefaultNotebookViewState } from "./notebook"
+import type { MonitoringSource } from "../utils/monitoring/types"
 
 export enum BufferType {
   SQL = "SQL",
@@ -99,12 +100,13 @@ export type Buffer = {
   editorViewState?: editor.ICodeEditorViewState
   metricsViewState?: MetricsViewState
   notebookViewState?: NotebookViewState
+  monitoring?: MonitoringSource
   isTemporary?: boolean
   isPreviewBuffer?: boolean
   previewContent?: PreviewContent
-  // Set on notebooks opened from the Tabs panel's example dashboards, so a
-  // second click on the same example activates the open tab instead of
-  // creating another copy.
+  // Set on notebooks opened from the Tabs panel's example dashboards, or
+  // created as a table's monitoring dashboard, so a second open of the same
+  // one activates the open tab instead of creating another copy.
   templateId?: string
 }
 
@@ -153,6 +155,7 @@ export const makeBuffer = ({
   editorViewState = defaultEditorViewState,
   metricsViewState,
   notebookViewState,
+  monitoring,
   position,
   archived,
   archivedAt,
@@ -166,6 +169,7 @@ export const makeBuffer = ({
   editorViewState?: editor.ICodeEditorViewState
   metricsViewState?: MetricsViewState
   notebookViewState?: NotebookViewState
+  monitoring?: MonitoringSource
   position: number
   archived?: boolean
   archivedAt?: number
@@ -182,6 +186,7 @@ export const makeBuffer = ({
       : editorViewState,
   metricsViewState,
   notebookViewState,
+  monitoring,
   position,
   archived,
   archivedAt,
@@ -229,11 +234,14 @@ export const bufferStore = {
   getActiveId: () =>
     db.editor_settings.where("key").equals("activeBufferId").first(),
 
-  setActiveId: (id: number) =>
+  setActiveId: (id: number, expectedId?: number) =>
     db.editor_settings
       .where("key")
       .equals("activeBufferId")
-      .modify({ value: id }),
+      .modify((setting) => {
+        if (expectedId === undefined || setting.value === expectedId)
+          setting.value = id
+      }),
 
   getBufferTypeById: (id: number) =>
     db.buffers

@@ -31,6 +31,8 @@ export type RunDetachedQueryConfig = {
   releaseExecution: (queryKey: QueryKey) => void
   onQueryStarted?: (queryId: QueryId) => void
   onSettled?: () => void
+  // The tab the query was run from; its result belongs to that tab.
+  sourceBufferId?: number
 }
 
 export async function runDetachedQuery(
@@ -66,7 +68,10 @@ export async function runDetachedQuery(
       endOffset: -1,
     }
 
-    dispatch(actions.setResult(result))
+    if (result.type === QuestDB.Type.DQL) {
+      dispatch(actions.recordQueryExecution(result.query))
+    }
+    dispatch(actions.setResult(result, config.sourceBufferId))
 
     if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {
       dispatch(

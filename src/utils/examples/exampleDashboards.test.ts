@@ -59,6 +59,8 @@ const notebookRow = (extra: Record<string, unknown> = {}) => ({
         position: 1,
         value: "select count() from trades",
         mode: "draw",
+        autoRefresh: false,
+        deferInitialDraw: true,
       },
     ],
     settings: { autoRefreshDefault: "5s" },
@@ -133,6 +135,8 @@ describe("parseExampleDashboard", () => {
     expect(grid.result).toBeUndefined()
     expect(grid.lastRunStatus).toBeUndefined()
     expect(chart.mode).toBe("draw")
+    expect(chart.autoRefresh).toBe(false)
+    expect(chart.deferInitialDraw).toBeUndefined()
   })
 
   it("accepts a tab row without value/position", async () => {

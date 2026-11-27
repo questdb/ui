@@ -126,6 +126,22 @@ const alignRowsToCategoryUnion = (
   return union.map((lbl) => (m.has(lbl) ? (m.get(lbl) ?? null) : null))
 }
 
+// The theme hides line symbols and a line needs two points to draw a
+// segment, so a series with fewer than two values (a single sampled bucket)
+// would draw nothing. Show its points instead.
+const sparseLineExtras = (
+  seriesType: "line" | "bar" | "scatter",
+  data: unknown[],
+): Record<string, unknown> => {
+  if (seriesType !== "line") return {}
+  let values = 0
+  for (const point of data) {
+    const y = Array.isArray(point) ? (point as unknown[])[1] : point
+    if (y !== null && y !== undefined && ++values >= 2) return {}
+  }
+  return { showSymbol: true, symbol: "circle" }
+}
+
 const buildCartesianSeries = (
   q: ResolvedQuery,
   ctx: SeriesContext,
@@ -187,6 +203,7 @@ const buildCartesianSeries = (
           yAxisIndex,
           data,
           ...lineExtras,
+          ...sparseLineExtras(seriesType, data),
           ...perfExtras,
           ...(stack ? { stack } : {}),
         })
@@ -215,6 +232,7 @@ const buildCartesianSeries = (
       yAxisIndex,
       data,
       ...lineExtras,
+      ...sparseLineExtras(seriesType, data),
       ...perfExtras,
       ...(stack ? { stack } : {}),
     })

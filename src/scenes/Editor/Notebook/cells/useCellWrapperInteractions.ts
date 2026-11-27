@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useCallback, useRef } from "react"
+import { useEscapeLayer } from "../../../../hooks/useEscapeLayer"
+import { EscapePriority } from "../../../../utils/escapeKey"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 // Wrapper-level interactions shared by every cell kind (SQL and markdown) so
@@ -27,23 +29,25 @@ export const useCellWrapperInteractions = ({
   const { moveCellUp, moveCellDown, setFocusedCell, getCellsSnapshot } =
     useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry(cellId)
 
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const canArrowMove = layoutMode !== "grid" && !isMaximized
 
-  // Esc blurs the cell. Respect defaultPrevented so a Radix popper close
-  // doesn't double up with cell blur on the same keystroke.
-  useEffect(() => {
-    if (!isFocused) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return
-      if (e.defaultPrevented) return
+  // Esc clears the focused cell: an ambient layer (utils/escapeKey.ts), so a
+  // grid selection or menu inside the cell closes first, and a side panel that
+  // holds the focus closes before the cell is cleared.
+  useEscapeLayer(isFocused, {
+    priority: EscapePriority.notebookCell,
+    scope: () => wrapperRef.current,
+    onEscape: () => {
       setFocusedCell(null)
-      ;(document.activeElement as HTMLElement | null)?.blur?.()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [isFocused, setFocusedCell])
+      const active = document.activeElement
+      if (active instanceof HTMLElement && wrapperRef.current?.contains(active))
+        active.blur()
+      return true
+    },
+  })
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -72,6 +76,7 @@ export const useCellWrapperInteractions = ({
       })
     },
     [
+      trackEvent,
       canArrowMove,
       cellId,
       moveCellUp,

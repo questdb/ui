@@ -70,6 +70,9 @@ export type NotebookCell = {
   // edit to the SQL never touches it.
   highlightConfig?: HighlightConfig
   autoRefresh?: AutoRefresh
+  // Imported charts may show their captured frame, but must not silently
+  // execute SQL when that frame is unavailable. Explicit refresh/polling works.
+  deferInitialDraw?: boolean
   // Stored pane arrangement for a cell with a result. A cell without one
   // shows only the editor; that never rewrites it.
   paneView?: CellPaneView

@@ -37,6 +37,7 @@ import { createValidateWithGlobals } from "../Notebook/declareUtils"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
 import { ClearHistoryDialog } from "../ClearHistoryDialog"
 import { EditorSettingsModal } from "../../../components/EditorSettingsModal"
+import { NotebookFromEditorMenu } from "./NotebookFromEditorMenu"
 import {
   Box,
   DropdownMenu,
@@ -105,11 +106,16 @@ const HistoryButton = styled(IconButton)`
   border-radius: 0.7rem;
 
   &[aria-pressed="true"] {
-    background: ${({ theme }) => theme.color.surfaceRaised};
     border-color: ${({ theme }) => theme.color.borderDefault};
     box-shadow:
       inset 0 1px 0 ${({ theme }) => theme.color.borderSubtle},
       0 4px 12px ${({ theme }) => theme.color.shadowSoft};
+  }
+
+  /* The ghost variant's pressed state reuses interactionHover; this rail
+     latch stays raised, so it must outrank that (0,5,0) rule. */
+  &&&[aria-pressed="true"]:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.surfaceRaised};
   }
 `
 
@@ -489,7 +495,12 @@ export const Tabs = () => {
   const rename = async (id: string, title: string) => {
     const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
     void trackEvent(ConsoleEvent.TAB_RENAME, {
-      ...(buffer ? { type: bufferTypeOf(buffer) } : {}),
+      ...(buffer
+        ? {
+            type: bufferTypeOf(buffer),
+            ...(buffer.notebookViewState ? { notebookId: buffer.id } : {}),
+          }
+        : {}),
     })
     await updateBuffer(parseInt(id), {
       label: title.slice(0, MAX_BUFFER_NAME_LENGTH),
@@ -725,6 +736,7 @@ export const Tabs = () => {
             >
               <Text color="contentPrimary">Export tabs</Text>
             </DropdownMenu.Item>
+            <NotebookFromEditorMenu />
             <DropdownMenu.Divider />
             <DropdownMenu.Item
               onClick={() => setSettingsOpen(true)}
@@ -777,9 +789,7 @@ export const Tabs = () => {
                   if (buffer) {
                     void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
                       source: "tab_menu",
-                    })
-                    void trackEvent(ConsoleEvent.NOTEBOOK_TAB_OPEN, {
-                      source: "tab_menu",
+                      notebookId: buffer.id,
                     })
                   }
                 })

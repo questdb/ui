@@ -16,6 +16,7 @@ export const clearLoginDataOnSessionEnd = (
   authSessionState.onEnd((options) => {
     if (options?.reload) return
     dispatch(queryActions.setResult(undefined))
+    dispatch(queryActions.clearQueryExecutions())
     dispatch(queryActions.setTables([]))
     dispatch(queryActions.setColumns([]))
   })

@@ -410,7 +410,10 @@ describe("resolveRunBarrier — the runner's pre-launch gate", () => {
 
     // Then the run is denied before anything executes
     expect(out.action).toBe("denied")
-    if (out.action === "denied") expect(out.reason).toMatch(/INSERT/)
+    if (out.action === "denied") {
+      expect(out.reason).toMatch(/INSERT/)
+      expect(out.code).toBe("permission")
+    }
   })
 
   it("explicit gate: grants a write with the write permission", async () => {
@@ -483,8 +486,10 @@ describe("resolveRunBarrier — the runner's pre-launch gate", () => {
 
     // Then the run is denied — an unclassifiable cell could hide a write
     expect(out.action).toBe("denied")
-    if (out.action === "denied")
+    if (out.action === "denied") {
       expect(out.reason).toMatch(/could not classify/)
+      expect(out.code).toBe("classify_failed")
+    }
   })
 
   it("fails closed when explicit-without-write cannot classify", async () => {

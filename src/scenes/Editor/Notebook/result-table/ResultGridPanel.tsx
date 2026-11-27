@@ -7,7 +7,7 @@ import {
   type ResultGridViewport,
 } from "../../../../components/ResultGrid"
 import type { DqlQueryResult } from "../../../../store/notebook"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "../useNotebookTelemetry"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
   loadNotebookColumnLayout,
@@ -57,15 +57,6 @@ type Props = {
   refreshIntervalMs: number | undefined
 }
 
-const trackHighlightOpen = () =>
-  void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" })
-
-const trackHighlightCancel = (method: SettingsDismissMethod) =>
-  void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CANCEL, {
-    source: "notebook",
-    method,
-  })
-
 const useInitialGridState = ({
   bufferId,
   cellId,
@@ -101,6 +92,22 @@ const ResultGridPanelInner: React.FC<Props> = ({
   cellColumns,
   refreshIntervalMs,
 }) => {
+  const trackEvent = useNotebookTelemetry(cellId)
+  const trackHighlightOpen = useCallback(
+    () =>
+      void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" }),
+    [trackEvent],
+  )
+
+  const trackHighlightCancel = useCallback(
+    (method: SettingsDismissMethod) =>
+      void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CANCEL, {
+        source: "notebook",
+        method,
+      }),
+    [trackEvent],
+  )
+
   const { queryKey, columnLayout, viewport } = useInitialGridState({
     bufferId,
     cellId,
@@ -188,6 +195,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   return (
     <>
       <ResultActionsBar
+        cellId={cellId}
         data={data}
         gridRef={gridRef}
         isFrozen={pinnedCount > 0}

@@ -3,6 +3,7 @@ import type { RunCancellation } from "../../scenes/Editor/Notebook/runCancellati
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
+import { runCellsAfterApply } from "../notebooks/runCellsAfterApply"
 import {
   applyNotebookStateTransition,
   withBoundNotebook,
@@ -155,52 +156,42 @@ type RunEntry = {
 const runAppliedCells = async (
   resolved: ResolvedRun[],
   bufferId: number,
-  perms: Permissions,
-  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal: AbortSignal | undefined,
 ): Promise<RunEntry[]> => {
-  const settled = await Promise.all(
-    resolved.map(async (r): Promise<RunEntry | null> => {
-      if (!r.runnable) return null
-      try {
-        // The runner's barrier classification decides auto-run eligibility —
-        // writes are skipped at launch, never pre-checked.
-        const result = await withBoundNotebook(
-          bufferId,
-          (ctrl) =>
-            ctrl.runCell(r.cellId, signal, r.value, { kind: "autoRun" }),
-          signal,
-        )
-        if (result.denied !== undefined) {
-          return { cellId: r.cellId, success: false, error: result.denied }
-        }
-        if (result.skipped !== undefined) {
-          return {
-            cellId: r.cellId,
-            success: true,
-            skipped: true,
-            note: result.skipped,
-          }
-        }
-        return {
-          cellId: r.cellId,
-          success: result.success,
-          queryCount: result.queryCount,
-          results: result.results,
-          ...(result.cancelled !== undefined
-            ? { cancelled: result.cancelled }
-            : {}),
-          ...(result.unverified ? { unverified: result.unverified } : {}),
-          ...(result.note ? { note: result.note } : {}),
-        }
-      } catch (runErr) {
-        const message =
-          runErr instanceof Error ? runErr.message : String(runErr)
-        return { cellId: r.cellId, success: false, error: message }
-      }
-    }),
+  // The runner's barrier classification decides auto-run eligibility —
+  // writes are skipped at launch, never pre-checked.
+  const outcomes = await runCellsAfterApply(
+    bufferId,
+    resolved
+      .filter((r) => r.runnable)
+      .map((r) => ({ cellId: r.cellId, sql: r.value })),
+    signal,
   )
-  return settled.filter((entry): entry is RunEntry => entry !== null)
+  return outcomes.map((outcome): RunEntry => {
+    if ("error" in outcome) {
+      const runErr = outcome.error
+      const message = runErr instanceof Error ? runErr.message : String(runErr)
+      return { cellId: outcome.cellId, success: false, error: message }
+    }
+    const { cellId, summary: result } = outcome
+    if (result.denied !== undefined) {
+      return { cellId, success: false, error: result.denied }
+    }
+    if (result.skipped !== undefined) {
+      return { cellId, success: true, skipped: true, note: result.skipped }
+    }
+    return {
+      cellId,
+      success: result.success,
+      queryCount: result.queryCount,
+      results: result.results,
+      ...(result.cancelled !== undefined
+        ? { cancelled: result.cancelled }
+        : {}),
+      ...(result.unverified ? { unverified: result.unverified } : {}),
+      ...(result.note ? { note: result.note } : {}),
+    }
+  })
 }
 
 // The apply_notebook_state handler: wholesale-PUT validation, the draw-cell
@@ -543,13 +534,7 @@ export const dispatchApplyNotebookState = async (
         value.trim().length > 0
       resolved.push({ cellId, value: value ?? "", runnable })
     }
-    const runs = await runAppliedCells(
-      resolved,
-      buffer_id,
-      perms,
-      validateSql,
-      signal,
-    )
+    const runs = await runAppliedCells(resolved, buffer_id, signal)
     const notes = cells.flatMap((c, index) =>
       c.highlight_config
         ? regexLiteralNotes(c.highlight_config).map(

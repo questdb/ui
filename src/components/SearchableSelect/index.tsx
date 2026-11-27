@@ -301,14 +301,6 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
       }
       const item = defaultItem(filtered, typed)
       if (item) selectItem(item)
-    } else if (event.key === "Escape") {
-      event.preventDefault()
-      event.stopPropagation()
-      if (query) {
-        setQuery("")
-      } else {
-        changeOpen(false)
-      }
     } else if (event.key === "Tab") {
       if (hasSelection && !event.shiftKey) return
       closeAndFocusTrigger()
@@ -339,9 +331,11 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
               event.preventDefault()
               inputRef.current?.focus()
             }}
+            // The popover is an overlay: Radix delivers Escape here in the
+            // capture phase, and preventDefault claims it for outer layers
+            // (utils/escapeKey.ts). The first press clears the search.
             onEscapeKeyDown={(event) => {
               event.preventDefault()
-              event.stopPropagation()
               if (query) setQuery("")
               else changeOpen(false)
             }}

@@ -9,6 +9,11 @@ import { OVERLAY_Z_INDEX } from "../../../components/Overlay"
 import { TransitionDuration } from "../../../components/Transition"
 import { IconButton, TextButton } from "../../../components"
 import { floatingSurfaceStyles } from "../../../components/overlayStyles"
+import {
+  claimEscape,
+  isEscape,
+  isEscapeClaimed,
+} from "../../../utils/escapeKey"
 
 const Card = styled.div`
   ${floatingSurfaceStyles}
@@ -118,8 +123,9 @@ export const AgentChangesPopper: React.FC<Props> = ({
     // Only claim Escape when focus is inside the popper, so a press meant for a
     // concurrent dialog doesn't dismiss this toast.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
+      if (!isEscape(event) || isEscapeClaimed(event)) return
       if (!container.contains(document.activeElement)) return
+      claimEscape(event)
       handleDismiss()
     }
     document.addEventListener("keydown", onKeyDown)

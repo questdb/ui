@@ -99,6 +99,8 @@ import {
   withBoundNotebookReadOnly,
 } from "../../utils/notebooks/notebookController"
 import { enqueueBufferTask } from "../../utils/notebooks/notebookBufferQueue"
+import { aiConversationStore } from "../../store/aiConversations"
+import { isMonitoringDashboard } from "../../utils/monitoring/identity"
 
 import { useLiveQuery } from "dexie-react-hooks"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -157,13 +159,19 @@ export type EditorContext = {
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string) => void
   tabsDisabled: boolean
+  // Live read for async flows that outlive the component that started them.
+  isTabsDisabled: () => boolean
   setTabsDisabled: (disabled: boolean) => void
   buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (
     buffer: Buffer,
-    options?: { focus?: boolean; fromSearch?: boolean },
-  ) => Promise<void>
+    options?: {
+      focus?: boolean
+      fromSearch?: boolean
+      canActivate?: () => boolean
+    },
+  ) => Promise<boolean>
   addBuffer: (
     buffer?: Partial<Buffer>,
     options?: {
@@ -219,10 +227,11 @@ const defaultValues = {
   insertTextAtCursor: () => undefined,
   appendQuery: () => undefined,
   tabsDisabled: false,
+  isTabsDisabled: () => false,
   setTabsDisabled: () => undefined,
   buffers: [],
   activeBuffer: fallbackBuffer,
-  setActiveBuffer: () => Promise.resolve(),
+  setActiveBuffer: () => Promise.resolve(false),
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => Promise.resolve(),
   archiveBuffer: () => Promise.resolve(),
@@ -265,6 +274,21 @@ const loadStoredBuffers = async () =>
 
 const EditorContext = createContext<EditorContext>(defaultValues)
 
+// The editor context value changes on every buffer write (each keystroke in the
+// SQL editor). Layout-level consumers that only need to know which tab is
+// active read this narrow, memoized summary instead.
+export type ActiveBufferSummary = {
+  id: number | undefined
+  isNotebook: boolean
+  canRerunResult: boolean
+}
+
+const ActiveBufferSummaryContext = createContext<ActiveBufferSummary>({
+  id: undefined,
+  isNotebook: false,
+  canRerunResult: false,
+})
+
 export const EditorProvider: React.FC = ({ children }) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
@@ -279,6 +303,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     tabsDisabledRef.current = disabled
     setTabsDisabledState(disabled)
   }, [])
+  const isTabsDisabled = useCallback(() => tabsDisabledRef.current, [])
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
     if (!rawBuffers) return undefined
@@ -296,6 +321,17 @@ export const EditorProvider: React.FC = ({ children }) => {
   )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
+  const activeIsNotebook = !!activeBuffer.notebookViewState
+  const canRerunResult =
+    activeBuffer.editorViewState !== undefined && !activeBuffer.isTemporary
+  const activeBufferSummary = useMemo<ActiveBufferSummary>(
+    () => ({
+      id: activeBuffer.id,
+      isNotebook: activeIsNotebook,
+      canRerunResult,
+    }),
+    [activeBuffer.id, activeIsNotebook, canRerunResult],
+  )
   const activeBufferRef = useRef(activeBuffer)
   const focusEditorOnMountRef = useRef(true)
   const recentBufferIdsRef = useRef<number[]>([])
@@ -358,7 +394,8 @@ export const EditorProvider: React.FC = ({ children }) => {
       (buffer) =>
         typeof buffer.id === "number" &&
         buffer.templateId !== undefined &&
-        !exampleIds.has(buffer.templateId),
+        !exampleIds.has(buffer.templateId) &&
+        !isMonitoringDashboard(buffer),
     )
     if (stale.length === 0) return
     void db
@@ -380,11 +417,13 @@ export const EditorProvider: React.FC = ({ children }) => {
     delete executionRefs.current[bufferId.toString()]
   }, [])
 
-  const setActiveBuffer = useCallback(
-    (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => {
+  const setActiveBuffer = useCallback<EditorContext["setActiveBuffer"]>(
+    (buffer, options) => {
       const switchBuffer = async () => {
+        const canActivate = options?.canActivate
         try {
           const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+          if (canActivate && !canActivate()) return false
 
           // Already active only if it is also the tab on screen: the stored id
           // alone can lag behind (see activateStored).
@@ -395,7 +434,7 @@ export const EditorProvider: React.FC = ({ children }) => {
             ) {
               activeBufferRef.current = buffer
               setActiveBufferState(buffer)
-              return
+              return true
             }
           }
 
@@ -405,7 +444,19 @@ export const EditorProvider: React.FC = ({ children }) => {
               ? await bufferStore.getById(previousBufferId)
               : undefined
 
+          if (canActivate && !canActivate()) return false
           await bufferStore.setActiveId(buffer.id as number)
+          if (canActivate && !canActivate()) {
+            // The editor or drawer changed while IndexedDB was writing. Keep
+            // the visible tab and restore its id if this write still owns it.
+            const restoreId =
+              typeof currentActiveBufferId === "number"
+                ? currentActiveBufferId
+                : previousBufferId
+            if (typeof restoreId === "number")
+              await bufferStore.setActiveId(restoreId, buffer.id)
+            return false
+          }
           const recentIds = recentBufferIdsRef.current.filter(
             (id) => id !== buffer.id,
           )
@@ -448,12 +499,18 @@ export const EditorProvider: React.FC = ({ children }) => {
               editorRef.current.focus()
             }
           }
+          return true
         } catch (e) {
+          if (canActivate) throw e
           console.warn("Error setting active buffer:", e)
+          return false
         }
       }
       const request = bufferSwitchQueueRef.current.then(switchBuffer)
-      bufferSwitchQueueRef.current = request
+      bufferSwitchQueueRef.current = request.then(
+        () => undefined,
+        () => undefined,
+      )
       return request
     },
     [],
@@ -1167,7 +1224,10 @@ export const EditorProvider: React.FC = ({ children }) => {
 
     if (sortPinnedBuffers(buffers).length === 1) return
 
-    if (buffer.templateId !== undefined && exampleIds.has(buffer.templateId)) {
+    const isTemplate = (target: Buffer) =>
+      target.templateId !== undefined &&
+      (exampleIds.has(target.templateId) || isMonitoringDashboard(target))
+    if (isTemplate(buffer)) {
       // Keep the live handle if a tab switch unmounts it while close waits for
       // another removal. Its refs still contain any not-yet-persisted edit.
       const liveAtClose = getController(id)
@@ -1175,18 +1235,19 @@ export const EditorProvider: React.FC = ({ children }) => {
       let archive = false
       await enqueueBufferRemoval(id, "user", async (_target, snapshot) => {
         await enqueueBufferTask(id, async () => {
-          // Pending document writes must settle before deciding: the render's
-          // buffer snapshot may still carry a link that an edit just removed.
-          const current = await bufferStore.getById(id)
-          if (!current || current.archived) return
-          if (
-            current.templateId === undefined ||
-            !exampleIds.has(current.templateId)
-          ) {
-            archive = true
-            return
-          }
+          let current: Buffer
           try {
+            // A chat keeps its notebook. Finish that lookup before checking
+            // the stored and live document so edits made meanwhile survive.
+            const hasConversation =
+              await aiConversationStore.hasNotebookConversation(id)
+            const stored = await bufferStore.getById(id)
+            if (!stored || stored.archived) return
+            if (!isTemplate(stored)) {
+              archive = true
+              return
+            }
+            current = stored
             const live = getController(id) ?? liveAtClose
             const view = await live?.readView()
             if (
@@ -1198,13 +1259,17 @@ export const EditorProvider: React.FC = ({ children }) => {
               await bufferStore.update(id, {
                 notebookViewState: {
                   ...view,
+                  // The live view carries no focus; keep the stored one.
+                  focusedCellId:
+                    view.focusedCellId ??
+                    current.notebookViewState?.focusedCellId,
                   cells: stripCellResults(view.cells),
                 },
               })
               archive = true
               return
             }
-            if (getBufferActionSeq(id) !== actionSeq) {
+            if (hasConversation || getBufferActionSeq(id) !== actionSeq) {
               archive = true
               return
             }
@@ -1478,6 +1543,7 @@ export const EditorProvider: React.FC = ({ children }) => {
           }
         },
         tabsDisabled,
+        isTabsDisabled,
         setTabsDisabled,
         buffers,
         activeBuffer,
@@ -1521,9 +1587,14 @@ export const EditorProvider: React.FC = ({ children }) => {
         },
       }}
     >
-      {children}
+      <ActiveBufferSummaryContext.Provider value={activeBufferSummary}>
+        {children}
+      </ActiveBufferSummaryContext.Provider>
     </EditorContext.Provider>
   )
 }
 
 export const useEditor = () => useContext(EditorContext)
+
+export const useActiveBufferSummary = () =>
+  useContext(ActiveBufferSummaryContext)

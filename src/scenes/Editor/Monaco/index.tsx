@@ -34,7 +34,7 @@ import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import type { RunWithSelectionMode } from "../../../providers/LocalStorageProvider/types"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
-import { MAX_CELL_LINES } from "../../../store/notebook"
+import { MAX_CELL_LINES, type ErrorQueryResult } from "../../../store/notebook"
 import type { NotificationShape } from "../../../store/Query/types"
 import { NotificationType } from "../../../types"
 import type { ErrorResult } from "../../../utils"
@@ -93,6 +93,7 @@ import {
   isAuthFailure,
   isSessionEnded,
   sessionEndedQueryMessage,
+  sessionFailureOf,
 } from "../../../modules/OAuth2/session"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
@@ -103,10 +104,13 @@ import {
   GlyphWidgetOptions,
 } from "./glyphUtils"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
+import { buildBatchTransfer } from "../../../utils/notebooks/notebookTransfer"
 
 type IndividualQueryResult = {
   success: boolean
+  fetchedAt?: number
   result?: QuestDB.QueryRawResult
+  error?: ErrorQueryResult
   notification:
     | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
     | null
@@ -340,7 +344,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   >([])
   const pendingScriptRunRef = useRef<ScriptRunPlan | undefined>(undefined)
   const scriptRunPlanRef = useRef<ScriptRunPlan | undefined>(undefined)
-  const pendingQueryRequestRef = useRef<Request | undefined>(undefined)
+  const pendingQueryRequestRef = useRef<{
+    request: Request
+    resultSource?: { bufferId?: number }
+  }>()
   const queriesToRunRef = useRef<Request[]>([])
   const scriptStopRef = useRef(false)
   const stopAfterFailureRef = useRef(true)
@@ -719,7 +726,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           )
           return
         }
-        pendingQueryRequestRef.current = query
+        pendingQueryRequestRef.current = { request: query }
         if (!preserveSelection) {
           setCursorBeforeRunning(query)
         }
@@ -1057,6 +1064,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     cleanupActionsRef.current.push(
       registerLegacyEventBusEvents({
         editor,
+        onRefresh: (result) => {
+          const request =
+            result && getQueryRequestFromLastExecutedQuery(result.q)
+          pendingQueryRequestRef.current = request
+            ? { request, resultSource: { bufferId: result.sourceBufferId } }
+            : undefined
+          toggleRunning(RunningType.REFRESH)
+        },
         toggleRunning,
         getRunning: () => runningValueRef.current,
         isPreviewing: () => activeBufferRef.current.isTemporary === true,
@@ -1552,6 +1567,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       editorQueryIdRef.current = scriptQueryId
 
       const result = await scriptQueryPromise
+      const fetchedAt = Date.now()
+      if (result.type === QuestDB.Type.DQL) {
+        dispatch(actions.query.recordQueryExecution(result.query))
+      }
 
       const bufferIdStr = activeBufferId.toString()
       if (executionRefs.current[bufferIdStr]) {
@@ -1614,16 +1633,20 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
 
       if (isLast) {
-        dispatch(actions.query.setResult(result))
+        dispatch(actions.query.setResult(result, activeBufferId, fetchedAt))
       }
 
       return {
         success: true,
+        fetchedAt,
         notification,
         result,
       }
     } catch (_error: unknown) {
       const error = _error as ErrorResult
+      const message = isSessionEnded(error)
+        ? sessionEndedQueryMessage(error)
+        : error.error || "Query failed"
 
       // A session end or failed renewal is no SQL error: it has no position
       // to mark in the query.
@@ -1645,18 +1668,19 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       notification = {
         query: queryKey,
-        content: (
-          <Text color="statusDanger">
-            {isSessionEnded(error)
-              ? sessionEndedQueryMessage(error)
-              : error.error}
-          </Text>
-        ),
+        content: <Text color="statusDanger">{message}</Text>,
         sideContent: <QueryInNotification query={query.query} />,
         type: NotificationType.ERROR,
       }
       return {
         success: false,
+        error: {
+          type: "error",
+          query: effectiveQueryText,
+          error: message,
+          fetchedAt: Date.now(),
+          ...sessionFailureOf(error),
+        },
         notification,
         result: undefined,
       }
@@ -1836,7 +1860,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     const lastResult = individualQueryResults[individualQueryResults.length - 1]
     if (lastResult && lastResult.result?.type === QuestDB.Type.DQL) {
-      dispatch(actions.query.setResult(lastResult.result))
+      dispatch(
+        actions.query.setResult(
+          lastResult.result,
+          activeBufferId,
+          lastResult.fetchedAt,
+        ),
+      )
       eventBus.publish(EventType.MSG_QUERY_DATASET, lastResult.result)
     }
 
@@ -1889,6 +1919,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (position) editor.revealPositionInCenterIfOutsideViewport(position)
 
     const completedGracefully = queries.length === individualQueryResults.length
+    const notificationAt = new Date()
+    const batch = buildBatchTransfer(
+      activeBufferId,
+      queries.map((query, index) => ({
+        ...individualQueryResults[index],
+        sql: query.selection?.queryText ?? query.query,
+      })),
+    )
+    dispatch(actions.query.setBatchTransfer({ ...batch, notificationAt }))
     if (
       completedGracefully ||
       (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries) ||
@@ -1910,6 +1949,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       actions.query.addNotification(
         {
           query: `${activeBuffer.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
+          createdAt: notificationAt,
           content: (
             <Text color="contentPrimary">
               {!completedGracefully && individualQueryResults.length === 0 ? (
@@ -2027,11 +2067,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (![RunningType.NONE, RunningType.SCRIPT].includes(running)) {
       applyGlyphsAndLineMarkings(monaco, editor)
 
-      const capturedRequest = pendingQueryRequestRef.current
+      const captured = pendingQueryRequestRef.current
+      const capturedRequest = captured?.request
       pendingQueryRequestRef.current = undefined
       const request =
         running === RunningType.REFRESH
-          ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
+          ? (capturedRequest ??
+            getQueryRequestFromLastExecutedQuery(lastExecutedQuery))
           : (capturedRequest ??
             getQueryRequestFromEditor(editor, runWithSelectionModeRef.current))
 
@@ -2180,7 +2222,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               }
             }
 
-            dispatch(actions.query.setResult(result))
+            if (result.type === QuestDB.Type.DQL && !isRunningExplain) {
+              dispatch(actions.query.recordQueryExecution(result.query))
+            }
+            dispatch(
+              actions.query.setResult(
+                result,
+                captured?.resultSource
+                  ? captured.resultSource.bufferId
+                  : targetBufferId,
+              ),
+            )
 
             if (
               result.type === QuestDB.Type.DDL ||

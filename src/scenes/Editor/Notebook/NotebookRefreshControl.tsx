@@ -21,7 +21,7 @@ import {
   emitUserAction,
   signalUserEdit,
 } from "../../../utils/notebooks/notebookAIBridge"
-import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { useNotebookTelemetry } from "./useNotebookTelemetry"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import {
   EditorRefreshButton,
@@ -47,6 +47,7 @@ export const NotebookRefreshControl: React.FC = () => {
   const { refreshAllCells, resetAutoRefreshOverrides, updateSettings } =
     useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const trackEvent = useNotebookTelemetry()
   const cellRefresh = useCellRefresh()
   const storedDefault = settings.autoRefreshDefault
   const defaultLabel = autoRefreshLabel(storedDefault ?? false)
@@ -69,6 +70,8 @@ export const NotebookRefreshControl: React.FC = () => {
     signalUserEdit(bufferId)
     const counts = refreshAllCells()
     void trackEvent(ConsoleEvent.NOTEBOOK_REFRESH_ALL, {
+      phase: "requested",
+      trigger: "manual",
       refreshedCount: counts.refreshed,
       skippedWriteCount: counts.skippedWrites,
     })

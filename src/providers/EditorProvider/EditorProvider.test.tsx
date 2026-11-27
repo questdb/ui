@@ -183,11 +183,11 @@ describe("EditorProvider: next active tab", () => {
       expect(editor.activeBuffer.id).toBe(a)
 
       // When the user switches to B and then removes B
-      await act(() =>
-        editor.setActiveBuffer(
+      await act(async () => {
+        await editor.setActiveBuffer(
           editor.buffers.find((x) => x.id === b) as Buffer,
-        ),
-      )
+        )
+      })
       await act(() => editor[remove](b))
 
       // Then the startup tab A becomes active instead of the neighbour C
@@ -210,11 +210,11 @@ describe("EditorProvider: next active tab", () => {
     renderProvider()
     await waitForReady()
     for (const id of [a, b, a, a]) {
-      await act(() =>
-        editor.setActiveBuffer(
+      await act(async () => {
+        await editor.setActiveBuffer(
           editor.buffers.find((x) => x.id === id) as Buffer,
-        ),
-      )
+        )
+      })
     }
 
     // When the revisited A is closed, followed by B
@@ -242,9 +242,11 @@ describe("EditorProvider: next active tab", () => {
     expect(editor.activeBuffer.id).toBe(a)
 
     // When the user switches to B and closes it
-    await act(() =>
-      editor.setActiveBuffer(editor.buffers.find((x) => x.id === b) as Buffer),
-    )
+    await act(async () => {
+      await editor.setActiveBuffer(
+        editor.buffers.find((x) => x.id === b) as Buffer,
+      )
+    })
     await act(() => editor.closeBuffer(b))
 
     // Then A was the actual outgoing tab and becomes active again
@@ -296,9 +298,11 @@ describe("EditorProvider: next active tab", () => {
     )
     renderProvider({}, true)
     await waitForReady()
-    await act(() =>
-      editor.setActiveBuffer(editor.buffers.find((x) => x.id === b) as Buffer),
-    )
+    await act(async () => {
+      await editor.setActiveBuffer(
+        editor.buffers.find((x) => x.id === b) as Buffer,
+      )
+    })
 
     // When B is closed and an agent reopens it in the background
     await act(() => editor.closeBuffer(b))
@@ -328,9 +332,11 @@ describe("EditorProvider: next active tab", () => {
 
     // When the user previews the closed tab, switches to C and reopens the preview in the background
     await act(() => editor.previewBuffer(closed))
-    await act(() =>
-      editor.setActiveBuffer(editor.buffers.find((x) => x.id === c) as Buffer),
-    )
+    await act(async () => {
+      await editor.setActiveBuffer(
+        editor.buffers.find((x) => x.id === c) as Buffer,
+      )
+    })
     await act(() => requireWorkspace().restoreTab(closed))
     await waitFor(() =>
       expect(editor.buffers.find((x) => x.id === closed)?.archived).toBe(false),
@@ -349,12 +355,16 @@ describe("EditorProvider: next active tab", () => {
     )
     renderProvider()
     await waitForReady()
-    await act(() =>
-      editor.setActiveBuffer(editor.buffers.find((x) => x.id === b) as Buffer),
-    )
-    await act(() =>
-      editor.setActiveBuffer(editor.buffers.find((x) => x.id === d) as Buffer),
-    )
+    await act(async () => {
+      await editor.setActiveBuffer(
+        editor.buffers.find((x) => x.id === b) as Buffer,
+      )
+    })
+    await act(async () => {
+      await editor.setActiveBuffer(
+        editor.buffers.find((x) => x.id === d) as Buffer,
+      )
+    })
 
     // When the active tab D is closed
     await act(() => editor.closeBuffer(d))
@@ -1247,6 +1257,43 @@ describe("EditorProvider: example dashboards", () => {
     expect(editor.openingExampleIds).toEqual([])
   })
 
+  it("opens a configured example separately from a monitoring template with the same id", async () => {
+    const example = {
+      id: "monitoring:table",
+      title: "Showcase",
+      path: "t.json",
+    }
+    const [, monitoringId] = await seed([
+      { value: "select 1" },
+      {
+        label: "Live monitoring",
+        templateId: example.id,
+        notebookViewState: initial,
+        monitoring: { target: { name: "trades", kind: "table" } },
+      },
+    ])
+    localStorage.setItem(StoreKey.EXAMPLE_DASHBOARD_AUTO_OPENED, "true")
+    const fetchExample = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify(exampleFile(example.title)))),
+    )
+    vi.stubGlobal("fetch", fetchExample)
+    renderProvider({ exampleDashboards: [example] })
+    await waitForReady()
+
+    await act(() => editor.openExampleDashboard(example))
+    expect(fetchExample).toHaveBeenCalledTimes(1)
+    const exampleId = editor.activeBuffer.id
+    expect(editor.activeBuffer.label).toBe(example.title)
+    expect(exampleId).not.toBe(monitoringId)
+
+    await act(() => editor.openExampleDashboard(example))
+    expect(fetchExample).toHaveBeenCalledTimes(1)
+    expect(editor.activeBuffer.id).toBe(exampleId)
+    expect((await bufferStore.getById(monitoringId))?.monitoring).toEqual({
+      target: { name: "trades", kind: "table" },
+    })
+  })
+
   it("loads a delayed example in the background when a script locks tabs", async () => {
     // Given an example starts loading while the SQL tab is active
     const [scriptId] = await seed([
@@ -1372,7 +1419,9 @@ describe("EditorProvider: example dashboards", () => {
     })
 
     // When the user activates tab B before the file arrives
-    await act(() => editor.setActiveBuffer(editor.buffers[1]))
+    await act(async () => {
+      await editor.setActiveBuffer(editor.buffers[1])
+    })
     await act(async () => {
       respond(new Response(JSON.stringify(exampleFile("Trades"))))
       await opening

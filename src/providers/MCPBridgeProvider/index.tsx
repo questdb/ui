@@ -34,6 +34,7 @@ import {
 import { consumePendingPairFromUrl } from "../../utils/mcp/consumePendingPair"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { mcpNotebookTelemetry } from "../../modules/ConsoleEventTracker/mcpNotebookTelemetry"
 import {
   applyNotebookStateLayoutMode,
   classifyToolResult,
@@ -223,6 +224,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     })
 
     const offToolCall = client.on("toolCall", (call: ToolCallMessage) => {
+      let notebookTelemetry = mcpNotebookTelemetry(call.name, call.arguments)
       const toolEvent = mcpToolCallEvent(call.name)
       if (toolEvent === null) {
         void trackEvent(ConsoleEvent.MCP_UNKNOWN_TOOL, {
@@ -261,11 +263,15 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         try {
           const result = await dispatchMCPTool(call, {
             ...dispatchCtxRef.current,
+            onNotebookTelemetry: (payload) => {
+              notebookTelemetry = payload
+            },
             signal: aborter.signal,
           })
           if (sendRevokedErrorIfNeeded()) {
             if (toolEvent) {
               void trackEvent(toolEvent, {
+                ...notebookTelemetry,
                 outcome: "aborted",
                 durationMs: Date.now() - startedAt,
               })
@@ -274,6 +280,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
           }
           if (toolEvent) {
             void trackEvent(toolEvent, {
+              ...notebookTelemetry,
               ...classifyToolResult(result),
               durationMs: Date.now() - startedAt,
               ...(call.name === "apply_notebook_state"
@@ -292,6 +299,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
           if (sendRevokedErrorIfNeeded()) {
             if (toolEvent) {
               void trackEvent(toolEvent, {
+                ...notebookTelemetry,
                 outcome: "aborted",
                 durationMs: Date.now() - startedAt,
               })
@@ -300,6 +308,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
           }
           if (toolEvent) {
             void trackEvent(toolEvent, {
+              ...notebookTelemetry,
               outcome: "dispatch_error",
               durationMs: Date.now() - startedAt,
             })

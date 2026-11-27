@@ -52,7 +52,7 @@ import {
   runHeadlessCell,
   type DexieControllerDeps,
 } from "../notebookHeadlessRun"
-import type { RunCellGate } from "../../tools/permissions"
+import type { RunCellGate, RunDenialCode } from "../../tools/permissions"
 import type { NotebookTransitionResult } from "./notebookTransitions"
 
 // The two NotebookController implementations, side by side. Both expose the same
@@ -72,7 +72,11 @@ export type RunCellSummary = {
   // Barrier decisions for gated (agent) runs: a permission denial or an
   // auto-run write skip. Nothing executed when either is set.
   denied?: string
+  deniedCode?: RunDenialCode
   skipped?: string
+  // A run whose result was not recorded because the notebook changed under
+  // it: the user opened it ("mounted"), or edited it or the cell.
+  interruption?: "mounted" | "user_changed" | "cell_changed"
 }
 
 // Runs a transition against the bound document and resolves its result. A
@@ -307,7 +311,9 @@ export const createNotebookController = (
       if (outcome.denied !== undefined || outcome.skipped !== undefined) {
         return {
           ...summarizeCellResults(undefined),
-          ...(outcome.denied !== undefined ? { denied: outcome.denied } : {}),
+          ...(outcome.denied !== undefined
+            ? { denied: outcome.denied, deniedCode: outcome.deniedCode }
+            : {}),
           ...(outcome.skipped !== undefined
             ? { skipped: outcome.skipped }
             : {}),

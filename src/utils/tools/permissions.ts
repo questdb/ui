@@ -169,8 +169,8 @@ export const hasWriteStatement = (stmts: ClassifiedStatement[]): boolean =>
 export type RunCellGate =
   | { kind: "explicit"; permissions: Permissions }
   // `initiator: "user"` marks an automatic run the console starts for the
-  // user (tab import, example dashboards): it is not reported as an agent
-  // change. Agent auto-runs leave it unset.
+  // user (tab import, example and monitoring dashboards): it is not reported
+  // as an agent change. Agent auto-runs leave it unset.
   | { kind: "autoRun"; initiator?: "user" }
 
 export const checkStatementsForRunQuery = (
@@ -268,9 +268,13 @@ export const checkStatementsForAutoRun = (
   }
 }
 
+// Why a run was denied: a permission refused it, or its SQL could not be
+// classified (the validate request failed), so it was refused to be safe.
+export type RunDenialCode = "permission" | "classify_failed"
+
 export type RunBarrierOutcome =
   | { action: "proceed"; classified: ClassifiedStatement[] | null }
-  | { action: "denied"; reason: string }
+  | { action: "denied"; reason: string; code: RunDenialCode }
   | { action: "skipped"; reason: string }
 
 // The runner's pre-launch barrier, shared by the live and headless paths: one
@@ -300,6 +304,7 @@ export const resolveRunBarrier = async (
       return {
         action: "denied",
         reason: denyReasonFailClosedClassify("execution", message),
+        code: "classify_failed",
       }
     }
     return { action: "proceed", classified: null }
@@ -307,7 +312,7 @@ export const resolveRunBarrier = async (
   if (gate?.kind === "explicit") {
     const decision = checkStatementsForExecution(classified, gate.permissions)
     if (!decision.granted) {
-      return { action: "denied", reason: decision.reason }
+      return { action: "denied", reason: decision.reason, code: "permission" }
     }
   }
   if (gate?.kind === "autoRun") {
