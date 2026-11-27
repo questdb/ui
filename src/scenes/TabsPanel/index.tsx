@@ -118,7 +118,7 @@ const readViewMode = (): ViewMode =>
 
 const sortLabels = {
   name: "Name (A–Z)",
-  tabBar: "Manual order",
+  tabBar: "Position",
 } satisfies Record<SortOrder, string>
 
 const readSortOrder = (): SortOrder =>
