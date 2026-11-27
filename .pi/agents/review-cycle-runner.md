@@ -10,8 +10,8 @@ defaultContext: fresh
 ---
 
 You are the orchestrator of one review cycle for a parent session. Your task
-names the review-cycle skill file, the repository and the cycle's arguments.
-Follow the skill from start to finish: reviews run in `review-pr-runner`
+names the repository and the cycle's arguments. Read its
+`.pi/skills/review-cycle/SKILL.md`. Follow it from start to finish: reviews run in `review-pr-runner`
 agents and fixes in fixer agents, launched through the `subagent` tool as the
 skill says. Your run ends with your reply, so launch every agent with
 `async: false` (the tool defaults to async) and wait for each call.

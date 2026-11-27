@@ -1,7 +1,6 @@
 ---
 name: review-pr
 description: Review a QuestDB Web Console pull request, a commit, staged or unstaged changes, or a local Git range against the Web Console standards. Use when asked to review a PR, given a PR number or URL, a commit hash, `staged`, `unstaged`, or --range=<base>..<head>, optionally with a review level 0..3. Performs an adversarial, blocking, evidence-gated code review.
-allowed-tools: bash read subagent
 metadata:
   argument-hint: "[PR number or URL | commit hash | staged | unstaged] [--range=<base>..<head>] [--level=0..3] [--block-at=critical|high|medium|low] [--body=<file>] [--prior=<file>,...] [--settled=<file>] [--headed]"
 ---
@@ -17,8 +16,9 @@ metadata:
            [--prior=<file>,...] [--settled=<file>] [--headed]
 ```
 
-Run as `/skill:review-pr <args>`, the args arrive as a `User:` message; treat
-that text as `$ARGUMENTS`. The target is one of:
+Select `$review-pr` in Codex and put arguments after the skill mention, or
+name the skill and target in your request.
+A delegated runner uses the exact arguments in its task. The target is one of:
 
 - a PR number or URL;
 - `--range=<base>..<head>`; `--range=<base>..` reviews the working tree,
@@ -29,7 +29,8 @@ that text as `$ARGUMENTS`. The target is one of:
 - a commit hash;
 - `staged` or `unstaged`: only that part of the working tree.
 
-If no target is given, ask for one. Flags:
+If no target is given, the main conversation asks for one; a delegated
+runner returns `NOT RUN: missing review target`. Flags:
 
 - `--level=N` or `-lN`, `N` in 0-3, default 2 ("Review level"). A bare digit
   is a PR number, never a level.
@@ -45,12 +46,37 @@ If no target is given, ask for one. Flags:
   heavy and opens windows, so it never runs without it. Cypress (rung 5)
   needs no flag.
 
+The cycle's final review also passes the internal `--fresh` flag: reject it
+with `--prior`, do not fetch PR comments or threads, and take only the
+pinned range, PR metadata (title, body, labels), and explicit `--settled`
+decisions. Do not read the cycle ledger, reports, fix history or search for
+any other review history. Never pass settled decisions to discovery.
+
+The cycle also passes an internal `--build-cache=<absolute path>`. It is an
+artifact-only directory, separate from cycle state and safe to pass to the
+fresh runner. Use only the supplied path, not neighboring directories or
+files. Standalone reviews default to a private `$RV/build-cache`.
+
 Strip the flags before passing the rest to `gh` or `git`.
 
-> Harness: pi. Use `bash` for read-only `gh`, `git`, `rg`, `fd`, `find`,
-> `read` for files, and `subagent(...)` for the agents. Never edit the user's
-> working tree, commit or push. Install, build and test only in the scratch
-> worktrees of Steps 1b and 3b.
+> Use Codex's native shell/file tools and native subagents.
+> Never edit the user's tree, commit or push. Install, build and test only
+> in scratch worktrees. GitHub is read-only: never post, comment, file,
+> edit, label or merge there. The main conversation owns user decisions.
+> A delegated runner returns `NOT RUN` for missing input or `needs
+> discussion` with a checkpoint and options, never an invented answer.
+
+## Defensive evidence only
+
+For a possible security weakness, inspect the source and document the
+broken invariant at file and line. This rule overrides the discovery,
+falsification, reproduction, risk and report templates: do not construct
+payloads or attack sequences, run a security reproduction or exploit, or
+ask an agent to do so. Route source-proved weaknesses through the static
+admission rule; if source alone cannot prove a load-bearing premise, omit
+it as unverified. Report only defensive source evidence and remediation,
+not reproduction steps or attack instructions, including in Adjacent drafts.
+Ordinary behavior probes with benign fixtures still use the evidence ladder.
 
 ## Review mindset
 
@@ -126,43 +152,59 @@ auth/SSO, Monaco.
   for changed tests or a fix claim; Agent 13 when a separate adversarial pass
   is warranted. Depth comes from evidence, not agent count.
 
-Open the review with one line, the model taken from pi, never from memory:
+Open with "Reviewing <target> at level <N> with <model>, thinking <level>,
+review-pr 2.0". Use client-reported model and effort; if not available say
+`model unknown` or `effort unknown`. If defaulted, mention that level 3 exists.
 
-```bash
-printf '%s/%s, thinking %s\n' "$PI_PROVIDER" "$PI_MODEL" "$PI_REASONING_LEVEL"
-```
+## Native review agents
 
-"Reviewing PR #565 at level 2 with <provider>/<model>, thinking <level>,
-review-pr <version>". With no model printed, write `model unknown`. If the
-level was defaulted, mention that level 3 exists.
+Use Codex's native `spawn_agent` with `agent_type` `explorer` for discovery,
+`review-prober` for falsification, `risk-assessor` for risk. Explicitly set
+`fork_context: false` on the classic schema (or `fork_turns: "none"` if that
+field is exposed instead). Spawn anew for every assignment and retry;
+never resume a child or send the parent transcript. Use `high` effort for
+explorer and at most `xhigh` for other roles.
 
-## Spawning review agents in pi
+Wait on active IDs with the native wait tool (`wait` or `wait_agent`, as
+exposed); consume only finished results and call `close_agent` on each
+consumed ID before refilling the pool. Completed open threads count against
+capacity. A wait timeout means work may still be running. Require a native
+toolset with named role selection, explicit fresh context, wait and close;
+if your mode lacks these, stop with `NOT RUN` rather than switching clients
+or doing required leaf work inline.
 
-All agents are fresh-context, read-only, self-contained tasks, launched in the
-foreground (`async: false`; a parallel fanout still runs at once). Discovery
-and risk agents only read, so they run in parallel. Falsifiers run in
-parallel too: their test runs wait in the machine-wide budget ("Running heavy
-commands").
+Standalone needs one layer; the cycle needs two. A trusted checkout's
+`.codex/config.toml` sets `agents.max_depth = 2`. If it is not loaded or is
+overridden, check effective depth and tools before starting. On versions
+accepting that key the user can start a new session with
+`codex -c agents.max_depth=2` if appropriate; don't edit their settings or
+bypass policy. Keep at most four leaves open, or fewer if
+`agents.max_concurrent_threads_per_session` (legacy `agents.max_threads`)
+or other open threads leave less room. Count the live cycle runner. If no
+slot is available even after consuming and closing finished threads, stop.
 
-- **Step 3 discovery:** builtin `reviewer`, one per role; no shell, thinking
-  high, default 30-minute timeout. Discovery starts on the static map.
-  Inputs, by file path: the diff, the PR title and body, the 2.4 verdicts,
-  `<RV>/surface.md`, the full "Known bug classes", the role text and the
-  discovery directive (Agent 13 is the exception). Agent 9 gets the Vitest
-  coverage output from Step 2.6 once `<RV>/test-run.exit` exists.
-  Never any history (Step 2.5f).
-- **Step 3b falsifiers:** `review-prober` (`.pi/agents/review-prober.md`), a
-  shell for probes, as many as the level table says, `timeoutMs: 3600000`
-  and a 30-minute budget in the task, counted from its first probe run, not
-  while it waits: what takes longer is marked `unknown`. The level-2 batched
-  falsifier gets 10 minutes per candidate (at least 30) and a `timeoutMs` of
-  twice that. Inputs in Step 3b.
-- **Step 3c risk:** `risk-assessor` (`.pi/agents/risk-assessor.md`), one per
-  rated finding, `timeoutMs: 3600000`. Inputs in Step 3c.
+Each child gets a self-contained task, pinned SHA(s), and only the inputs
+below. Give source and artifact paths as absolute paths; read pinned
+scratch source, not the user's working tree or a moving branch. Never give
+out the private history directory or preload earlier role context.
 
-Write large maps under `$RV` and name the file in the task. The parent owns
-role selection, the private ledger, admission, severity, risk and the report;
-children return candidates or evidence only.
+- **Step 3 discovery:** one static read-only agent per selected role; no
+  probes or edits. Give the saved diff, title and body, 2.4 verdicts,
+  `<RV>/surface.md`, the full Known bug classes, role text and discovery
+  directive; Agent 13 gets only its narrower inputs, no map or PR body.
+  Give Agent 9 the Vitest coverage after `<RV>/test-run.exit` exists.
+- **Step 3b falsifiers:** `review-prober` per the level table. Give only Step
+  3b inputs. Budget 30 minutes from the first probe execution, not including
+  slot waits. The level-2 batch gets 10 minutes per candidate (at least 30).
+  Mark probes beyond budget `unknown` and still return each required form.
+- **Step 3c risk:** `risk-assessor`, one per rated finding; only Step 3c
+  inputs. It does not run tests.
+
+Allow 30 minutes for discovery and 60 minutes for risk as workflow budgets,
+not native tool parameters. Do not treat timed-out or interrupted work as
+finished. Confirm stopped commands are gone before releasing locks or
+removing their worktrees. The parent owns role selection, the private
+ledger, admission, severity, risk and report.
 
 ## Running heavy commands
 
@@ -208,8 +250,11 @@ node "$REPO/scripts/with-slots.mjs" <weight> -- <command>
 - **Long runs detached:** start the full suite, the gates and Cypress in the
   background with output to a file (`nohup sh -c '<cmd>; echo $? >
   <file>.exit' > <file> 2>&1 &`, `setsid` on Linux, which macOS lacks) and
-  poll the exit file; give tool calls timeouts of at least 15 minutes (the
-  host can pause the machine for 10-35 minutes).
+  poll the exit file. With `exec_command`, retain the running session ID
+  and use `write_stdin` to wait/drain it when available. `yield_time_ms`
+  is not a process timeout; yielding does not mean the command exited.
+  The host may pause for 10–35 minutes. Before restarting a run, confirm
+  the old process has exited and clear the old exit file; no duplicates.
 - **Killed runs are "not run",** never passing and never failing: exit 129
   (SIGHUP: the session went away) or 137 (SIGKILL, usually OOM; on Linux
   `dmesg` shows "Killed process", on macOS rely on the exit code). Re-run
@@ -231,22 +276,27 @@ comments, threads, `--prior` and `--settled` files to `$HIST` **unread**
 
 ```bash
 PR='<PR number or URL from $ARGUMENTS, other tokens removed>'
-gh pr view "$PR" --json number,title,body,labels,state,baseRefName,headRefOid
-gh pr diff "$PR"
+gh pr view "$PR" --json number,title,body,labels,state,url,baseRefName,baseRefOid,headRefOid > "$RV/pr.json"
+# Skip this whole block with --fresh.
 gh pr view "$PR" --comments > "$HIST/comments.md"
 # Review-thread replies on the diff, which --comments leaves out:
-PR_API=$(gh pr view "$PR" --json url --jq .url | sed -E 's#https://github.com/([^/]+/[^/]+)/pull/#repos/\1/pulls/#')
+PR_API=$(jq -r .url "$RV/pr.json" | sed -E 's#https://github.com/([^/]+/[^/]+)/pull/#repos/\1/pulls/#')
 gh api "$PR_API/comments" --paginate --jq '.[] | "\(.user.login) on \(.path):\(.line // .original_line): \(.body)"' > "$HIST/threads.md"
-BASE=$(gh pr view "$PR" --json baseRefOid --jq .baseRefOid)
-NUM=$(gh pr view "$PR" --json number --jq .number)
-git fetch origin "pull/$NUM/head" \
-  "$(gh pr view "$PR" --json baseRefName --jq .baseRefName)"
-REV=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
+# With --range, skip this revision block.
+BASE=$(jq -r .baseRefOid "$RV/pr.json")
+NUM=$(jq -r .number "$RV/pr.json")
+git fetch origin "pull/$NUM/head" "$(jq -r .baseRefName "$RV/pr.json")"
+REV=$(jq -r .headRefOid "$RV/pr.json")
 ```
 
-**PR with a range:** run the PR commands except `gh pr diff` and the `BASE`,
-`git fetch` and `REV` lines; take `$BASE`, `$REV` and the diff as in range
-mode. Step 2 runs, on the `--body` file when given.
+Validate both captured SHAs as commits. If a pinned object is unavailable
+after fetch, return `NOT RUN`; never substitute a newer ref. For a PR or
+committed range, set `BASE` to `git merge-base "$BASE" "$REV"` so every
+stage sees the same comparison. Do not use a live `gh pr diff`.
+
+**PR with a range:** use the PR for metadata only (and history unless
+`--fresh`); do not fetch its head or use its SHAs. Use the local pinned
+range for all code and honor `--body` as usual.
 
 **Committed range, commit, or `staged`:**
 
@@ -297,13 +347,36 @@ snapshot works even when the only changes are untracked files. It leaves
 the real index's staged entries, refs and working tree unchanged. Without
 a PR, skip Step 2 and say so.
 
-**Each `bash` call is a new shell.** Once `$REV` is set, write
+Save `git diff "$BASE" "$REV"` as `$RV/diff.patch` once both are pinned.
+For `--fresh`, do not inspect branch logs, other transcripts or review
+history, even if available. This applies to the runner and all its roles.
+
+**Each shell call may be a new shell.** Use Bash for these snippets. Once
+`$REV` is set, write
 `printf 'export RV=%q REPO=%q BASE=%q REV=%q HIST=%q\n' "$RV" "$REPO"
 "$BASE" "$REV" "$HIST" > "$RV/env.sh"` and start every later block with
 `. <absolute path>/env.sh`. Give subagents absolute paths, never `$RV` or
 `$REPO`; `<RV>` and `<REPO>` below stand for them.
 
 ## Step 1b: Typecheck and build, once, first
+
+The review parent is the only publisher. Use `scripts/review-build-cache.mjs`
+from `$REPO`, not a worktree under review. Its key is the artifact kind,
+full commit SHA and effective build profile; a miss runs the command after
+`--` and publishes a copy only on successful exit and artifact validation.
+Stdout is the selected path; diagnostics and producer logs go to stderr.
+Use published paths read-only. Never publish from a probe, fixer, or any
+edited checkout, including ignored local inputs. A synthetic index/working
+snapshot checked out at its own `$REV` is not the live working tree.
+
+Use the standard review recipes below, without custom build flags or copied
+local `.env`/dependency files. The helper rejects local Vite env files not
+pinned by the requested revision. It keys common environment overrides
+and platform/toolchain inputs. If other effective build inputs differ or
+cannot be shown to match (e.g. changed user config, tool install or resolved
+dependencies), use `$RV/build-cache` instead of the shared directory; isolate
+incompatible profiles within the review as well. Do not reuse live
+worktrees, test output, coverage or logs from another attempt.
 
 A change that does not typecheck or build is not worth reviewing. Right after
 Step 1, create the head worktree and start both checks in the background, in
@@ -313,20 +386,29 @@ parallel, at every level; then go on with Steps 2-2.5 while they run.
 . <RV>/env.sh
 WT="$RV/head"
 git worktree add --detach "$WT" "$REV"
-cd "$WT" && node "$REPO/scripts/with-slots.mjs" 2 -- yarn install
-# A revision older than the coverage provider gets it here; no other step
-# adds a package:
-[ -d node_modules/@vitest/coverage-v8 ] || node "$REPO/scripts/with-slots.mjs" 2 -- \
-  yarn add -D "@vitest/coverage-v8@$(node -p 'require("vitest/package.json").version')"
+git worktree add --detach "$RV/base" "$(git merge-base "$BASE" "$REV")"
+cd "$WT" || exit
+node "$REPO/scripts/with-slots.mjs" 2 -- yarn install --immutable || exit
+# Set BUILD_CACHE from the internal flag first; otherwise unset it. Do not
+# inherit a cache path from the ambient shell.
+BUILD_CACHE=${BUILD_CACHE:-"$RV/build-cache"}
+CACHE_TOOL="$REPO/scripts/review-build-cache.mjs"
+YARN_VERSION=$(yarn --version) || exit
+UI_PROFILE="ui-yarn-build-v1:$YARN_VERSION"
+export BUILD_CACHE CACHE_TOOL UI_PROFILE
+printf 'export BUILD_CACHE=%q CACHE_TOOL=%q UI_PROFILE=%q\n' \
+  "$BUILD_CACHE" "$CACHE_TOOL" "$UI_PROFILE" >> "$RV/env.sh"
 nohup sh -c 'node "$REPO/scripts/with-slots.mjs" 3 -- yarn typecheck; echo $? > "$RV/typecheck.exit"' > "$RV/typecheck.txt" 2>&1 &
-nohup sh -c 'node "$REPO/scripts/with-slots.mjs" 4 -- yarn build; echo $? > "$RV/build.exit"' > "$RV/build.txt" 2>&1 &
+nohup sh -c 'node "$CACHE_TOOL" "$BUILD_CACHE" ui "$REV" "$UI_PROFILE" -- \
+  node "$REPO/scripts/with-slots.mjs" 4 -- yarn build > "$RV/head-dist.path"; \
+  echo $? > "$RV/build.exit"' > "$RV/build.txt" 2>&1 &
 ```
 
 Before Step 2.6 starts any test, wait for both exit files.
-- **Both pass:** go on. Neither check runs again on the head: no later step,
-  falsifier or other agent runs `yarn typecheck` or `yarn build`. The
-  build's `dist` serves the browser rungs. The base is built at most once,
-  and only for a browser probe (Step 3b, rungs 5-6).
+- **Both pass:** go on. Typecheck always runs; only a validated exact-key
+  hit can skip the build. The hit is recorded in this attempt's `build.txt`
+  and the chosen path in `head-dist.path`. No later step or leaf rebuilds
+  head. Resolve base `dist` only for a browser probe (Step 3b, rungs 5-6).
 - **Either fails:** a non-zero exit whose output holds a compiler or bundler
   error (`error TS`, a Vite or Rollup error naming a file). **Stop the
   review.** Run nothing else: no tests, no agents. Report only the opening
@@ -334,16 +416,20 @@ Before Step 2.6 starts any test, wait for both exit files.
   from its output with file and line, `blocks by rule: failing check`), and
   the verdict **request changes**. When the build fails only with the
   TypeScript errors typecheck reports (`vite-plugin-checker` type-checks
-  during the build), file one finding for both. Remove the worktree.
+  during the build), file one finding for both. Stop remaining checks and
+  remove the worktrees.
 - **Infrastructure failure:** any other non-zero exit, such as with-slots
   usage (2), a spawn failure (127), `MODULE_NOT_FOUND`, or an install error
-  the PR's lockfile did not cause: fix it and re-run; never a finding. Exit
-  129 or 137: not run; run that check again ("Running heavy commands").
-- **Fanout blocked:** at level 1 or above, if the `subagent` tool refuses to
-  launch the review's agents (nesting depth, launch budget), the review
-  cannot run: never do discovery, falsification or risk inline instead.
-  Remove the worktrees and reply `NOT RUN: subagent fanout blocked` with the
-  tool's message.
+  the PR's lockfile did not cause: fix it and re-run; never a finding.
+  Preserve the original log and exit before retrying. Exit 129 or 137:
+  not run; run that check again ("Running heavy commands").
+- **Fanout blocked or incomplete:** at every level with required agents
+  (including Step 3c at level 0), if any required role cannot launch fresh
+  or fails to return a valid required result, do not substitute inline
+  work or claim a clean review. Drain or stop the work safely. Remove only
+  worktrees no agent or command can still write to; retain the others and
+  report their paths with `NOT RUN: <stage, role and exact failure>`. Use
+  `NOT RUN` for unrecoverable gate infrastructure too.
 
 ## Step 2: PR title and description
 
@@ -505,7 +591,10 @@ required.
 
 ```bash
 . <RV>/env.sh
-cd "$RV/head"
+cd "$RV/head" || exit
+# Test-only dependency for older revisions, after both build/typecheck gates.
+[ -d node_modules/@vitest/coverage-v8 ] || node "$REPO/scripts/with-slots.mjs" 2 -- \
+  yarn add -D "@vitest/coverage-v8@$(node -p 'require("vitest/package.json").version')" || exit
 nohup sh -c 'node "$REPO/scripts/with-slots.mjs" 3 -- env TZ=UTC yarn vitest run \
   --maxWorkers=4 --minWorkers=1 --coverage --coverage.reporter=text \
   --coverage.all --coverage.include "src/**/*.{ts,tsx}"; echo $? > "$RV/test-run.exit"' \
@@ -522,7 +611,8 @@ toward Vitest coverage. Use the test layers in `web-console-tests`.
 
 A gap is Critical only if it leaves a reachable path to wrong or lost
 data, an unintended write, a security failure, or a broken console
-unprotected. Prove that impact with a focused probe and apply Step 3c.
+unprotected. Prove that impact with a focused ordinary-behavior probe (for
+security, use defensive source evidence only) and apply Step 3c.
 Bounded exposure is Moderate; cosmetic, unreachable or exotic paths are
 not gaps merely because they did not run.
 
@@ -533,11 +623,13 @@ For base and probe worktrees, link `node_modules` from `$RV/head` if their
 ## Step 3: Change-specific candidate discovery
 
 Launch only roles whose domain the change materially touches, within the
-level's cap. Agent count is never evidence. Inputs: "Spawning review agents
-in pi".
+level's cap. Agent count is never evidence. Inputs: "Native review agents".
 
 ### Candidate-discovery directive (applies to all agents)
 
+- For possible security weaknesses, inspect only defensive source evidence.
+  Do not design attack inputs, exploits or reproduction steps. This overrides
+  the reproduction instruction below.
 - You are a **hypothesis generator.** Return atomic propositions; no severity,
   fix, persuasive title, or "verified", "proved", "confirmed". Role text that
   names a finding says what to inspect.
@@ -748,9 +840,10 @@ blast radius.
 **Agent 13 — Fresh-context adversarial.** Receives ONLY the diff and changed
 file names (no maps, checklist or PR body) and one instruction: "generate a
 small set of falsifiable ways this code could be wrong, and try to disprove
-each before returning it." It may read anything; output follows the
-directive. Uniqueness is no signal; overlap is corroboration only with an
-independent evidence type.
+each before returning it, using defensive source analysis only for security
+weaknesses; never devise attack inputs or reproduction steps." It may read
+the pinned source; output follows the directive. Uniqueness is no signal;
+overlap is corroboration only with an independent evidence type.
 
 **Agent 14 — Agent tools and MCP.** `src/utils/tools/**`, `src/utils/mcp/**`,
 `src/providers/MCPBridgeProvider`, `src/consts/shared-definitions.json`,
@@ -861,7 +954,7 @@ yet.
 
 ### Quality gates
 
-Typecheck and build ran once, in Step 1b; nothing runs them again. Lint is
+Typecheck and the head build gate passed in Step 1b; do not repeat them. Lint is
 no gate: the pre-commit hook runs it on staged files. At levels 1-3 the test
 gate is the Step 2.6 Vitest run. Read `$RV/test-run.exit` and the Vitest
 summary in `$RV/test-run.txt` before the falsifier fanout. Level 0 has no
@@ -905,15 +998,13 @@ candidates: at levels 1 and 3, one `review-prober` per atomic candidate; at
 level 2, one `review-prober` that receives every neutral proposition and
 returns one admission form per candidate; level 0 runs the same protocol
 inline. At level 3, run them as a **rolling pool of four**: start four, and
-start the next one as soon as any returns; never in batches that wait for
-the slowest (in a workflow script, keep four `runs.run` promises and refill
-on `Promise.race`). First create the base
-worktree, `git worktree add --detach "$RV/base" "$(git merge-base "$BASE"
-"$REV")"`, and the probe worktree, `git worktree add --detach "$RV/probe"
-"$REV"`, each with `node_modules` linked or installed as in Step 2.6. Write
+refill as soon as you consume a finished result and close its thread.
+Use Step 1b's base source worktree and add `<RV>/probe` detached at `$REV`.
+Link or install `node_modules` in base and probe as in Step 2.6. Write
 the falsifier contract once per review to `<RV>/falsifier-contract.md`: the
-Falsification state machine, the strongest-disproof instruction, Admission
-fields, Special burdens, Net user impact and the Executed-evidence ladder,
+Falsification state machine, the defensive evidence rule, strongest
+disproof instruction, Admission fields, Special burdens, Net user impact
+and the Executed-evidence ladder,
 from this skill. **A falsifier receives only:**
 
 - the neutral proposition (level 2: all of them) and its matching "Checks by
@@ -941,9 +1032,12 @@ from this skill. **A falsifier receives only:**
   - browser rungs use the URL the parent gives;
 - its output directory, `<RV>/falsify/<id>/`.
 
-When a falsifier returns or times out and `<RV>/probe.lock/owner` names it,
-the parent runs `git -C <RV>/probe checkout -- . && git -C <RV>/probe clean
--fdq && rm -rf <RV>/probe.lock`.
+A wait timeout alone does not stop a falsifier or its commands. If the
+falsifier still owns `<RV>/probe.lock`, clean the tree and remove the lock
+only after the agent is terminal and its commands have exited. If that
+cannot be confirmed, stop or drain other probes safely, leave any worktree
+still in use and its lock untouched, and return `NOT RUN` with the retained
+paths. Do not reuse them on retry.
 
 **It must not receive** the role or step that found the candidate, role text,
 the discovery narrative, proposed severity or fix, author identity, votes,
@@ -1038,9 +1132,10 @@ load-bearing premise is runtime ordering, reachability or impact.
   to falsify the risk (indirect assertions, types, constrained inputs,
   downstream validation); prove reachability, population and consequence
   before Critical.
-- **Agent boundary:** drive the tool through `dispatch.ts` or
-  `dispatchMCPTool.ts` in a scratch test per permission level concerned and
-  quote the payload; an exposure claim names the field.
+- **Agent boundary:** cover ordinary allowed behavior and expected denials
+  through `dispatch.ts` or `dispatchMCPTool.ts` with benign synthetic
+  fixtures. For a possible exposure or bypass, inspect the source only;
+  name the field and its defensive contract, not a payload or reproduction.
 - **UX:** observed steps at `$REV` and base (component test, Cypress or headed
   browser, with screenshot or rendered text), or a static proof (a label
   contradicting the code, an error path rendering nothing, a new component
@@ -1102,31 +1197,94 @@ Rungs 5-6: **do not build state through the UI.** Seed `localStorage`,
 IndexedDB (Dexie database `web-console`: buffers, notebooks, settings) and
 auth directly, then go to the interaction. Browser probes run one at a time.
 
-**Browser environment.** Use a browser only when a lower rung cannot
-decide; when one is needed, start it, since setup is one command. A busy
-port or a running QuestDB is never a reason to leave a claim unverified.
-The parent serves **one worktree at a time**:
+**Browser environment.** Use a browser only when a lower rung cannot decide.
+Only now obtain the base `dist` (when comparing base) and QuestDB JAR. Stop
+any previous browser environment first. Use the exact head or merge-base
+worktree as `APP`, never a mutation worktree, and set `APP_SHA` to its
+pinned full SHA.
+
+- **UI:** head uses the path in `$RV/head-dist.path`. For base, compute
+  `UI_PROFILE` with the same recipe in the base (`yarn --version` there).
+  In that base worktree, look up
+  `node "$CACHE_TOOL" "$BUILD_CACHE" ui "$APP_SHA" "$UI_PROFILE"`.
+  On exit 1 (miss), detach a fresh scratch build worktree at `$APP_SHA`,
+  install with `with-slots` (2) and `yarn install --immutable`, then repeat
+  the lookup there with `-- node "$REPO/scripts/with-slots.mjs" 4 -- yarn build`.
+  As for head, capture the selected path, stderr and exit separately in
+  `$RV`; another nonzero exit is not a miss. Use the selected path as `DIST`.
+- **QuestDB:** take `QSHA` from `git ls-tree "$APP_SHA" -- test/e2e/questdb`
+  (require a `160000 commit` gitlink). Select `JAVA_HOME` for JDK 25+ (as in
+  `scripts/run_browser_tests.sh`, use `/usr/libexec/java_home -v 25` on
+  macOS if needed), export it and prepend its `bin` to `PATH` once for
+  this recipe (do not change the UI build's environment). Form the profile
+  below and look up before checking out or initializing a submodule:
+
+  ```bash
+  JAVA_VERSION=$("$JAVA_HOME/bin/java" -version 2>&1) || exit
+  MAVEN_VERSION=$(mvn -version 2>&1) || exit
+  QDB_PROFILE="questdb-core-package-local-if-snapshot-v1:$JAVA_VERSION:$MAVEN_VERSION"
+  node "$CACHE_TOOL" "$BUILD_CACHE" jar "$QSHA" "$QDB_PROFILE"
+  ```
+
+  On a miss, reuse an existing JAR only with independently recorded clean
+  build provenance for the same SHA and effective Java/Maven profile. Use
+  the same lookup with `--reuse "$CANDIDATE_JAR"` to verify and copy it;
+  a matching `Build-Commit-Hash` alone does not prove the profile or that
+  the source was clean. If no verified candidate is available (including
+  an import the helper rejects), use a separate, fresh scratch UI worktree
+  at `$APP_SHA`. Initialize `test/e2e/questdb` there with
+  `git submodule update --init --recursive -- test/e2e/questdb`, then `cd`
+  into that submodule, never the user's. With Bash:
+
+  ```bash
+  CLIENT_VERSION=$(sed -nE 's/.*<questdb\.client\.version>([^<]+)<.*/\1/p' core/pom.xml | head -n 1)
+  MAVEN_PROFILES=()
+  [[ "$CLIENT_VERSION" != *-SNAPSHOT ]] || MAVEN_PROFILES=(-P local-client)
+  JAR_ATTEMPT=$(mktemp -d "$RV/questdb-$QSHA.XXXXXX") || exit
+  STATUS=0
+  node "$CACHE_TOOL" "$BUILD_CACHE" jar "$QSHA" "$QDB_PROFILE" -- \
+    node "$REPO/scripts/with-slots.mjs" 4 -- mvn clean package -e \
+      -pl core -am -DskipTests "${MAVEN_PROFILES[@]}" \
+    > "$JAR_ATTEMPT/artifact.path" 2> "$JAR_ATTEMPT/build.txt" || STATUS=$?
+  printf '%s\n' "$STATUS" > "$JAR_ATTEMPT/build.exit"
+  ```
+
+  This builds the core JAR, not the runtime distribution. Use the path
+  selected on a successful hit, import or build as `VERIFIED_JAR`. The
+  helper checks the manifest against the full gitlink SHA even on hits.
+  If a verified JAR or UI build cannot be obtained, keep the failure logs
+  in this attempt and mark the browser evidence unverified.
+
+Preview uses a scratch copy of the selected `dist`; remove only the old
+`$APP/dist` (no trailing slash: it could be a symlink), never the cache.
+Check that `dist` is not tracked and the preview is stopped before replacing
+it. Pass the selected JAR explicitly on each start; do not use the script's
+fallback or inherit a previous JAR. The parent serves one worktree at a time:
 
 ```bash
-node "$REPO/scripts/review-browser-env.mjs" start --app "$RV/head" --dir "$RV/browser"
-. "$RV/browser/browser-env.sh"   # QDB_URL, PREVIEW_URL
-node "$REPO/scripts/with-slots.mjs" 2 -- env -u ELECTRON_RUN_AS_NODE \
-  yarn cypress run --spec <file> --config baseUrl="$PREVIEW_URL"
-node "$REPO/scripts/review-browser-env.mjs" stop --dir "$RV/browser"
+[ -n "$VERIFIED_JAR" ] && [ -f "$DIST/index.html" ] && \
+  [ "$(git -C "$APP" rev-parse HEAD)" = "$APP_SHA" ] && \
+  [ -z "$(git -C "$APP" ls-files -- dist)" ] || exit 1
+rm -rf -- "$APP/dist" && cp -R "$DIST" "$APP/dist" || exit
+BROWSER_DIR=$(mktemp -d "$RV/browser.XXXXXX") || exit
+QDB_JAVA="$JAVA_HOME/bin/java" QDB_JAR="$VERIFIED_JAR" \
+  node "$REPO/scripts/review-browser-env.mjs" start --app "$APP" --dir "$BROWSER_DIR" || exit
+. "$BROWSER_DIR/browser-env.sh"   # QDB_URL, PREVIEW_URL
+CYPRESS_STATUS=0
+(
+  cd "$APP" || exit
+  node "$REPO/scripts/with-slots.mjs" 2 -- env -u ELECTRON_RUN_AS_NODE \
+    yarn cypress run --spec <file> --config baseUrl="$PREVIEW_URL"
+) || CYPRESS_STATUS=$?
+node "$REPO/scripts/review-browser-env.mjs" stop --dir "$BROWSER_DIR" || exit
+exit "$CYPRESS_STATUS"
 ```
 
-The script:
-- starts the QuestDB server of `test/e2e/questdb` (the submodule's jar, from
-  the main checkout when a worktree has none) under the wrapper (weight 2,
-  held until `stop`), on free ports with its own data directory;
-- serves the worktree's built `dist` with `vite preview`, proxied to that
-  server with the same paths as `vite.config.mts`.
-
-It never touches a server the user runs (9000, 9999 may be taken). With no
-jar it prints how to build one (`mvn`, weight 4). Serve the head over Step
-1b's `dist`; serve the base over its own `dist`, built once (weight 4) the
-first time a browser probe needs the base, and stop the head's environment
-first. Falsifiers get `$PREVIEW_URL` and `$QDB_URL` from the parent.
+Record each `BROWSER_DIR` for cleanup. Each start uses a new database and
+free ports, never a user server. The QuestDB process holds 2 slots until
+`stop`; preview is weight 0. Falsifiers get URLs and any named artifacts
+read-only, not cache publication access. Remove the temporary build worktrees using the
+same cleanup rules as the other review worktrees.
 
 Below level 3, a claim needing rungs 5-6 is omitted with the limitation
 recorded; at level 3 without `--headed`, so is a claim that only rung 6 can
@@ -1189,7 +1347,7 @@ paths, the results at `$REV` and at the merge base, the relevant files, the PR
 body, the revision identities, and an output file under `<RV>/risk/`; it finds
 the population itself. **Never** the severity, the net impact, the narrative,
 the fix or votes. Its impact and likelihood tiers and risk matrix are in
-`.pi/agents/risk-assessor.md`.
+`.codex/agents/risk-assessor.toml`.
 
 **Check each reply:**
 
@@ -1200,11 +1358,15 @@ the fix or votes. Its impact and likelihood tiers and risk matrix are in
 - the trigger is no more common than its rarest condition;
 - the risk matches the matrix.
 
+With `--fresh`, explicitly tell the assessor to use only the designated
+pinned source and artifacts, not Git or review history.
+
 Correct by evidence in either direction and look the risk up again: missing
 evidence or artifacts showing more means the more common likelihood or worse
 impact; a rated consequence or trigger nothing shows means the milder impact
-or the rarer likelihood shown. A finding whose assessor fails twice is
-Blocking.
+or the rarer likelihood shown. If an assessor's result is missing or
+invalid, retry the role once in a fresh context. If it fails again, return
+`NOT RUN` rather than inventing a rating.
 
 If the author's reply holds, it is no defect of this change: omit it, or keep
 the remainder at its own severity (an avoidable non-regressing cost as a
@@ -1445,8 +1607,8 @@ are never proposed as changes here. Draft fields:
   legitimate producer;
 - **Suggested fix**; **Severity if filed standalone**.
 
-Offer to file them; **never file unasked.** Mark security weaknesses
-`[security]` and leave reporting to the user. A pre-existing bug this change
+Provide local drafts only; **never file or post them on GitHub.** Mark
+security weaknesses `[security]` and leave reporting to the user. A pre-existing bug this change
 moves onto a live path, so that shipping without its fix is unsafe, is
 out-of-diff breakage instead: state that argument; Step 3c rates it. Never so
 for a hostile-input failure.
@@ -1468,7 +1630,9 @@ every uncovered line.
   - **request changes:** a Blocking finding is open or the test gate fails.
   - **needs discussion:** a product, architecture or compatibility decision a
     reviewer cannot make alone.
-- **Correctness gate:** no "approve" with a Blocking finding open; Deferred
+- **Correctness gate:** no "approve" with a missing required agent or gate
+  result. A Step 1b gate failure is the early `request changes` exception
+  to required fanout. No "approve" with a Blocking finding open; Deferred
   and omitted items never count. First re-run the **admission audit**:
   falsification (strongest disproof per finding); producer (real trigger);
   independence (falsifiers got nothing forbidden, Step 3b); history-free
