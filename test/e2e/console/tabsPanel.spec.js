@@ -21,6 +21,13 @@ const openRow = (label) =>
 const closedRow = (label) =>
   cy.get('[data-hook="tabs-panel-closed-row"]').contains(ROW, label)
 
+const chooseRowAction = (row, label) => {
+  row.focus()
+  cy.realPress(["Shift", "F10"])
+  cy.contains('[role="menuitem"]', label).focus()
+  cy.realPress("Enter")
+}
+
 const setViewMode = (mode) => {
   cy.getByDataHook(`tabs-panel-view-${mode}`).click()
   cy.getByDataHook(`tabs-panel-view-${mode}`).should(
@@ -159,13 +166,15 @@ describe("tabs panel", () => {
     openTabsPanel()
   })
 
-  it("finds a tab by title and opens it in the editor", () => {
+  it("finds a tab by title and opens it in the editor with the keyboard", () => {
     createTab("Trades Alpha", "select 'trades';")
     createTab("Prices", "select 'prices';")
 
     cy.getByDataHook("tabs-panel-filter").type("trades")
     openRow("Prices").should("not.exist")
-    openRow("Trades Alpha").click()
+    cy.realPress("ArrowDown")
+    openRow("Trades Alpha").should("have.focus")
+    cy.realPress("Enter")
 
     cy.getEditorTabByTitle("Trades Alpha").should("have.attr", "active")
     cy.waitForActiveBufferValue("select 'trades';")
@@ -356,26 +365,24 @@ describe("tabs panel", () => {
     createTab("Beta", "select 2;")
 
     // When a keyboard user closes another tab from its row
-    openRow("Alpha").find('[data-hook="tabs-panel-close"]').focus()
-    cy.realPress("Enter")
+    chooseRowAction(openRow("Alpha"), "Close tab")
     cy.getEditorTabByTitle("Alpha").should("not.exist")
 
     // Then focus stays in the panel, on a neighbouring row, and typing does
     // not reach the active tab's SQL
-    cy.focused().should("have.attr", "data-hook", "tabs-panel-row-button")
+    cy.focused().should("have.attr", "data-hook", "tabs-panel-row")
     cy.focused().closest('[data-hook="tabs-panel"]').should("exist")
     cy.realType("x")
     cy.waitForActiveBufferValue("select 2;")
 
     // When the user deletes the active tab from its row
     cy.wait(600)
-    openRow("Beta").find('[data-hook="tabs-panel-delete"]').focus()
-    cy.realPress("Enter")
+    chooseRowAction(openRow("Beta"), "Delete tab")
     cy.getEditorTabByTitle("Beta").should("not.exist")
 
     // Then the panel keeps focus while another tab becomes active
     cy.getEditorTabByTitle("SQL").should("have.attr", "active")
-    cy.focused().should("have.attr", "data-hook", "tabs-panel-row-button")
+    cy.focused().should("have.attr", "data-hook", "tabs-panel-row")
   })
 
   it("ignores the second click of a double-click on Delete", () => {
@@ -641,14 +648,13 @@ describe("tabs panel closed notebook", () => {
 
   it("keeps keyboard focus in the panel when it is reopened from its row", () => {
     // When a keyboard user reopens the closed notebook from its row
-    closedRow("Trades").find('[data-hook="tabs-panel-reopen"]').focus()
-    cy.realPress("Enter")
+    chooseRowAction(closedRow("Trades"), "Reopen tab")
 
     // Then it is open and focus stays on a row of the panel
     cy.getEditorTabByTitle("Trades").should("have.attr", "active")
     openRow("Trades").should("be.visible")
     cy.focused()
-      .should("have.attr", "data-hook", "tabs-panel-row-button")
+      .should("have.attr", "data-hook", "tabs-panel-row")
       .closest('[data-hook="tabs-panel"]')
       .should("exist")
   })
@@ -972,9 +978,11 @@ describe("tabs panel example dashboards", () => {
     cy.getByDataHook("tabs-panel-example-list")
       .contains(ROW, "Trades overview")
       .should("not.have.attr", "data-active")
-    cy.getByDataHook("tabs-panel-group-notebook")
-      .find('[role="button"][aria-expanded]')
-      .should("have.attr", "aria-expanded", "true")
+    cy.getByDataHook("tabs-panel-group-notebook").should(
+      "have.attr",
+      "aria-expanded",
+      "true",
+    )
     cy.getByDataHook("tabs-panel-group-notebook")
       .find(ROW)
       .should("have.length", 1)
@@ -988,11 +996,13 @@ describe("tabs panel example dashboards", () => {
     cy.getEditorTabByTitle("My trades").should("not.exist")
     cy.getByDataHook("tabs-panel-include-closed").click({ force: true })
     // Show the archived notebook even if the folder remounted collapsed.
-    cy.getByDataHook("tabs-panel-group-notebook")
-      .find('[role="button"][aria-expanded]')
-      .then(($header) => {
-        if ($header.attr("aria-expanded") === "false") cy.wrap($header).click()
-      })
+    cy.getByDataHook("tabs-panel-group-notebook").then(($section) => {
+      if ($section.attr("aria-expanded") === "false") {
+        cy.wrap($section)
+          .find('[data-hook="tabs-panel-section-toggle"]')
+          .click()
+      }
+    })
     cy.get('[data-hook="tabs-panel-closed-row"]').should("contain", "My trades")
 
     // And the example opens a fresh copy again
@@ -1072,7 +1082,10 @@ describe("tabs panel example dashboards", () => {
     notebooks()
       .find('[data-hook="tabs-panel-section-count"]')
       .should("have.text", "0 open · 1 closed")
-    notebooks().find('[role="button"][aria-expanded="false"]').click()
+    notebooks()
+      .should("have.attr", "aria-expanded", "false")
+      .find('[data-hook="tabs-panel-section-toggle"]')
+      .click()
     notebooks()
       .find('[data-hook="tabs-panel-closed-row"]')
       .should("contain", "Trades overview")
@@ -1389,7 +1402,7 @@ describe("AI diff tab", () => {
     expectPanelLabels(["SQL", "Beta"])
 
     // When the user moves SQL down from the keyboard in the list
-    openRow("SQL").find('[data-hook="tabs-panel-row-button"]').focus()
+    openRow("SQL").focus()
     cy.realPress(["Alt", "ArrowDown"])
 
     // Then the list and the tab bar agree, and the diff tab is still last

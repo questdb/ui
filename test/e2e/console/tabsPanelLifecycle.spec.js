@@ -1,9 +1,6 @@
 /// <reference types="cypress" />
 
-const row = (label) =>
-  cy
-    .get('[data-hook="tabs-panel-row"]')
-    .contains('[data-hook="tabs-panel-row-button"]', label)
+const row = (label) => cy.contains('[data-hook="tabs-panel-row"]', label)
 
 const openPanel = () => {
   cy.getByDataHook("tabs-panel-button").then(($button) => {
@@ -231,17 +228,16 @@ describe("Tabs panel lifecycle", () => {
       }
 
       // When the keyboard user reopens the SQL tab from the panel
-      row("Closed SQL")
-        .closest('[data-hook="tabs-panel-row"]')
-        .find('[data-hook="tabs-panel-reopen"]')
-        .focus()
+      row("Closed SQL").focus()
+      cy.realPress(["Shift", "F10"])
+      cy.contains('[role="menuitem"]', "Reopen tab").focus()
       cy.realPress("Enter")
 
       // Then the restored tab is editable and focus stays in the panel
       cy.getEditorTabByTitle("Closed SQL").should("have.attr", "active")
       cy.getByDataHook("tab-preview-bar").should("not.exist")
       cy.focused()
-        .should("have.attr", "data-hook", "tabs-panel-row-button")
+        .should("have.attr", "data-hook", "tabs-panel-row")
         .closest('[data-hook="tabs-panel"]')
         .should("exist")
       cy.waitForActiveBufferValue("select 3;")

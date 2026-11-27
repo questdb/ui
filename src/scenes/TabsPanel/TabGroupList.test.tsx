@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react"
 import { ThemeProvider } from "styled-components"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"

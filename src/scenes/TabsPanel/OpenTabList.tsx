@@ -7,7 +7,7 @@ import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { TabRow, type LeadingVisibility } from "./TabRow"
 import { BufferIcon } from "./bufferIcon"
-import { RowActions } from "./rowActions"
+import { getTabRowActions } from "./rowActions"
 import { useRowDrag, type RowDragState } from "./useRowDrag"
 import { isOwnActivationKey } from "./keyboard"
 import { useRowActions } from "./useRowActions"
@@ -104,11 +104,10 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
   }
 
   return (
-    <div ref={listRef} role="list" data-hook="tabs-panel-open-list">
+    <div ref={listRef} data-hook="tabs-panel-open-list">
       {rows.map((buffer, index) => (
         <RowSlot
           key={buffer.id}
-          role="listitem"
           data-hook="tabs-panel-open-row"
           style={slotStyleFor(drag, buffer.id as number, index)}
           $sorting={drag !== null}
@@ -153,7 +152,7 @@ export const OpenTabList = ({ buffers, reorderable }: Props) => {
               )
             }
             leadingVisibility={handleVisibilityFor(drag, buffer.id as number)}
-            actions={<RowActions buffer={buffer} actions={rowActions} />}
+            actions={getTabRowActions(buffer, rowActions)}
           />
         </RowSlot>
       ))}

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react"
 import { ThemeProvider } from "styled-components"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
@@ -119,42 +120,21 @@ describe("OpenTabList remove gating", () => {
 })
 
 describe("OpenTabList row semantics", () => {
-  it("keeps Close/Delete outside the row's button", () => {
+  it("uses one tree item and keeps inline actions outside the keyboard Tab order", () => {
     const a = buffer(1, "alpha")
     const b = buffer(2, "beta")
     renderList([a, b], [a])
-
-    const rowButton = renderer!.root.find(
-      (node) =>
-        typeof node.type === "string" &&
-        node.props["data-hook"] === "tabs-panel-row-button",
-    )
-    expect(rowButton.props.role).toBe("button")
-    expect(
-      rowButton.findAll(
-        (node) =>
-          node !== rowButton &&
-          typeof node.type === "string" &&
-          node.props.role === "button",
-      ),
-    ).toHaveLength(0)
 
     const row = renderer!.root.find(
       (node) =>
         typeof node.type === "string" &&
         node.props["data-hook"] === "tabs-panel-row",
     )
-    expect(row.props.role).toBeUndefined()
-    expect(
-      row
-        .findAll(
-          (node) =>
-            typeof node.type === "string" && node.props.role === "button",
-        )
-        .map((node): string =>
-          String(node.props["aria-label"] ?? node.props["data-hook"]),
-        ),
-    ).toEqual(["tabs-panel-row-button", "Close tab", "Delete tab"])
+    expect(row.props.role).toBe("treeitem")
+    expect(row.props["aria-label"]).toBe("alpha")
+    expect(row.props["aria-haspopup"]).toBe("menu")
+    expect(buttons("tabs-panel-close")[0].props.tabIndex).toBe(-1)
+    expect(buttons("tabs-panel-delete")[0].props.tabIndex).toBe(-1)
   })
 })
 

@@ -2,25 +2,22 @@ import React, { useLayoutEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { CaretRightIcon } from "@phosphor-icons/react"
 import { Text } from "../../components"
-import { isOwnActivationKey } from "./keyboard"
+import { statusInfoFocus } from "../../theme"
+import { getTreeBranchAction } from "../../utils/treeKeyboard"
+import { canNavigate, isOwnActivationKey } from "./keyboard"
 
 type Props = {
   title: string
   // Rendered as-is next to the title, e.g. "3" or "2 open · 1 closed".
   count: string
   defaultExpanded?: boolean
+  hasRows?: boolean
   // Set only on the section containing the visible active row. The tab id,
   // rather than a boolean, also catches switches within a collapsed folder.
   activeTabId?: number
   children: React.ReactNode
   "data-hook": string
 }
-
-const Root = styled.section`
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-`
 
 const HeaderRow = styled.div`
   position: relative;
@@ -34,6 +31,22 @@ const HeaderRow = styled.div`
 
   &:hover {
     background: ${({ theme }) => theme.color.interactionHover};
+  }
+`
+
+const Root = styled.section`
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+
+  &:focus-visible {
+    outline: none;
+
+    > ${HeaderRow} {
+      outline: 1px solid
+        ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
+      outline-offset: -1px;
+    }
   }
 `
 
@@ -66,6 +79,7 @@ export const TabSection = ({
   title,
   count,
   defaultExpanded = true,
+  hasRows = true,
   activeTabId,
   children,
   "data-hook": dataHook,
@@ -102,17 +116,34 @@ export const TabSection = ({
   const toggle = () => setExpanded((value) => !value)
 
   return (
-    <Root ref={rootRef} data-hook={dataHook}>
+    <Root
+      ref={rootRef}
+      role="treeitem"
+      tabIndex={-1}
+      aria-label={title}
+      aria-expanded={expanded}
+      data-hook={dataHook}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || !canNavigate(event)) return
+        const action = getTreeBranchAction(
+          event.key,
+          hasRows ? expanded : undefined,
+        )
+        if (
+          isOwnActivationKey(event) ||
+          action === "expand" ||
+          action === "collapse"
+        ) {
+          event.preventDefault()
+          toggle()
+        }
+      }}
+    >
       <HeaderRow
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        onClick={toggle}
-        onKeyDown={(event) => {
-          if (isOwnActivationKey(event)) {
-            event.preventDefault()
-            toggle()
-          }
+        data-hook="tabs-panel-section-toggle"
+        onClick={() => {
+          rootRef.current?.focus({ preventScroll: true })
+          toggle()
         }}
       >
         <Caret $expanded={expanded} aria-hidden="true">
@@ -121,7 +152,7 @@ export const TabSection = ({
         <Title>{title}</Title>
         <Count data-hook="tabs-panel-section-count">{count}</Count>
       </HeaderRow>
-      {expanded && children}
+      {expanded && <div role="group">{children}</div>}
     </Root>
   )
 }

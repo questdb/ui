@@ -92,6 +92,7 @@ export const TabLists = ({
             <TabSection
               title="Example dashboards"
               count={String(examples.length)}
+              hasRows={examples.length > 0}
               activeTabId={
                 examples.some((example) => example.id === activeTemplateId)
                   ? activeBuffer.id
@@ -138,6 +139,7 @@ export const TabLists = ({
           <TabSection
             title="Open"
             count={String(openTabs.length)}
+            hasRows={openTabs.length > 0}
             activeTabId={activeIdIn(openTabs)}
             data-hook="tabs-panel-open"
           >
@@ -156,6 +158,7 @@ export const TabLists = ({
           <TabSection
             title="Closed"
             count={String(closedTabs.length)}
+            hasRows={closedTabs.length > 0}
             activeTabId={activeIdIn(closedTabs)}
             data-hook="tabs-panel-closed"
           >

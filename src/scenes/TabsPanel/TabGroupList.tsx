@@ -5,7 +5,7 @@ import type { Buffer } from "../../store/buffers"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../utils"
 import { TabRow } from "./TabRow"
 import { BufferIcon } from "./bufferIcon"
-import { RowActions } from "./rowActions"
+import { getTabRowActions } from "./rowActions"
 import { isOwnActivationKey } from "./keyboard"
 import { useRowActions } from "./useRowActions"
 
@@ -33,11 +33,10 @@ export const TabGroupList = ({ rows }: Props) => {
     ) : undefined
 
   return (
-    <div role="list" data-hook="tabs-panel-list">
+    <div data-hook="tabs-panel-list">
       {rows.map((buffer) => (
         <div
           key={buffer.id}
-          role="listitem"
           data-hook={
             buffer.archived ? "tabs-panel-closed-row" : "tabs-panel-open-row"
           }
@@ -57,7 +56,7 @@ export const TabGroupList = ({ rows }: Props) => {
                 void activate(buffer)
               }
             }}
-            actions={<RowActions buffer={buffer} actions={rowActions} />}
+            actions={getTabRowActions(buffer, rowActions)}
           />
         </div>
       ))}

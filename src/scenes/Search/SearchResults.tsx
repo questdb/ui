@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import styled from "styled-components"
 import type { SearchMatch } from "../../utils/textSearch"
+import { getTreeBranchAction } from "../../utils/treeKeyboard"
 import { useEditor } from "../../providers"
 import {
   CaretDownIcon,
@@ -429,26 +430,16 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     if (item.type === "header") {
       const isExpanded = expandedBuffers.get(item.bufferId) === true
 
-      if (e.key === "ArrowRight") {
-        e.preventDefault()
-        if (!isExpanded) {
-          toggleBufferExpansion(item.bufferId)
-        } else {
-          virtualizedTreeRef.current?.navigateInTree({
-            to: "next",
-            id: item.id,
-          })
-        }
-        return
-      }
-
-      if (e.key === "ArrowLeft" && isExpanded) {
+      const action = getTreeBranchAction(e.key, isExpanded)
+      if (action === "expand" || action === "collapse") {
         e.preventDefault()
         toggleBufferExpansion(item.bufferId)
-        return
+      } else if (action === "first-child") {
+        e.preventDefault()
+        virtualizedTreeRef.current?.navigateInTree({ to: "next", id: item.id })
       }
     } else if (item.type === "match") {
-      if (e.key === "ArrowLeft") {
+      if (getTreeBranchAction(e.key, undefined, true) === "parent") {
         e.preventDefault()
         const parentIndex = flattenedItems.findIndex(
           (i) => i.id === item.parentId,

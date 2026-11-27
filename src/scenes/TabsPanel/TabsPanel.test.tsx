@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from "react"
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { Button } from "../../components/Button"
 import { Tooltip } from "../../components/Tooltip"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -38,8 +39,13 @@ vi.mock("../../modules/ConsoleEventTracker", () => ({ trackEvent: vi.fn() }))
 import { TabsPanel } from "./index"
 
 const sectionHeader = (hook: string) =>
-  document.querySelector<HTMLElement>(
-    `[data-hook="${hook}"] [role="button"][aria-expanded]`,
+  document.querySelector<HTMLElement>(`[data-hook="${hook}"][role="treeitem"]`)
+
+const toggleSection = (hook: string) =>
+  fireEvent.click(
+    within(getHook(hook)).getByText(
+      sectionHeader(hook)!.getAttribute("aria-label")!,
+    ),
   )
 
 const switchTo = (mode: "Groups" | "List") =>
@@ -62,8 +68,8 @@ const selectSort = async (label: string) => {
 
 const expectRows = (section: string, titles: string[]) => {
   const list = within(getHook(section))
-  expect(list.queryAllByRole("listitem")).toEqual(
-    titles.map((title) => list.getByText(title).closest('[role="listitem"]')),
+  expect(list.queryAllByRole("treeitem")).toEqual(
+    titles.map((title) => list.getByText(title).closest('[role="treeitem"]')),
   )
 }
 
@@ -93,6 +99,9 @@ beforeEach(() => {
     value: scrollIntoView,
   })
   scrollIntoView.mockClear()
+  mocks.editor.setActiveBuffer.mockClear()
+  mocks.editor.closeBuffer.mockClear()
+  mocks.editor.reorderBuffer.mockClear()
   mocks.editor.buffers = [
     { id: 1, label: "SQL 1", value: "", position: 0 },
     { id: 2, label: "SQL 2", value: "", position: 1 },
@@ -122,7 +131,7 @@ describe("TabsPanel", () => {
   it("does not carry a collapsed section from Groups into List", () => {
     // Given the Example dashboards section is collapsed in Groups view
     renderComponent(<TabsPanel open />)
-    fireEvent.click(sectionHeader("tabs-panel-examples")!)
+    toggleSection("tabs-panel-examples")
 
     // When the user switches to List view
     switchTo("List")
@@ -140,7 +149,7 @@ describe("TabsPanel", () => {
     // Given the Open section is collapsed in List view
     renderComponent(<TabsPanel open />)
     switchTo("List")
-    fireEvent.click(sectionHeader("tabs-panel-open")!)
+    toggleSection("tabs-panel-open")
 
     // When the user switches back to Groups view
     switchTo("Groups")
@@ -168,11 +177,11 @@ describe("TabsPanel filtering and sorting", () => {
     renderComponent(<TabsPanel open />)
 
     expect(queryHook("tabs-panel-group-metrics")).not.toBeInTheDocument()
-    fireEvent.click(sectionHeader("tabs-panel-group-notebook")!)
+    toggleSection("tabs-panel-group-notebook")
     expectRows("tabs-panel-group-notebook", ["Daily Alpha"])
-    fireEvent.click(sectionHeader("tabs-panel-group-notebook")!)
+    toggleSection("tabs-panel-group-notebook")
     expectRows("tabs-panel-group-notebook", [])
-    fireEvent.click(sectionHeader("tabs-panel-group-notebook")!)
+    toggleSection("tabs-panel-group-notebook")
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Include closed tabs" }),
     )
@@ -359,6 +368,267 @@ describe("TabsPanel filtering and sorting", () => {
   })
 })
 
+describe("TabsPanel keyboard navigation", () => {
+  it("moves through visible rows and section headers in Groups", () => {
+    mocks.editor.buffers.push({
+      id: 3,
+      label: "Daily notebook",
+      position: 2,
+      notebookViewState: { cells: [] },
+    })
+    renderComponent(<TabsPanel open />)
+    const examples = sectionHeader("tabs-panel-examples")!
+    const notebooks = sectionHeader("tabs-panel-group-notebook")!
+    const editors = sectionHeader("tabs-panel-group-sql")!
+    const example = screen.getByRole("treeitem", { name: "Example One" })
+    const lastRow = screen.getByRole("treeitem", { name: "SQL 2" })
+
+    examples.focus()
+    fireEvent.keyDown(examples, { key: "ArrowDown" })
+    expect(example).toHaveFocus()
+    fireEvent.keyDown(example, { key: "ArrowRight" })
+    expect(notebooks).toHaveFocus()
+    expect(notebooks).toHaveAttribute("aria-expanded", "false")
+    fireEvent.keyDown(notebooks, { key: "ArrowDown" })
+    expect(editors).toHaveFocus()
+    fireEvent.keyDown(editors, { key: "ArrowUp" })
+    expect(notebooks).toHaveFocus()
+
+    fireEvent.keyDown(notebooks, { key: "ArrowRight" })
+    expect(notebooks).toHaveAttribute("aria-expanded", "true")
+    expect(notebooks).toHaveFocus()
+    fireEvent.keyDown(notebooks, { key: "ArrowRight" })
+    const notebook = screen.getByRole("treeitem", { name: "Daily notebook" })
+    expect(notebook).toHaveFocus()
+    fireEvent.keyDown(notebook, { key: "ArrowLeft" })
+    expect(notebooks).toHaveFocus()
+    fireEvent.keyDown(notebooks, { key: "ArrowLeft" })
+    expect(notebooks).toHaveAttribute("aria-expanded", "false")
+    expect(notebooks).toHaveFocus()
+    fireEvent.keyDown(notebooks, { key: "ArrowLeft" })
+    expect(notebooks).toHaveFocus()
+    fireEvent.keyDown(notebooks, { key: "End" })
+    expect(lastRow).toHaveFocus()
+    expect(scrollIntoView.mock.instances.at(-1)).toBe(lastRow)
+    fireEvent.keyDown(lastRow, { key: "Home" })
+    expect(examples).toHaveFocus()
+    expect(mocks.editor.setActiveBuffer).not.toHaveBeenCalled()
+  })
+
+  it("enters the sorted List results from the filter and opens the focused tab", async () => {
+    mocks.editor.buffers.push({ id: 3, label: "Unrelated", position: 2 })
+    renderComponent(<TabsPanel open />)
+    switchTo("List")
+    await selectSort("Alphabetical (Z-A)")
+
+    const filter = screen.getByRole("textbox", { name: "Filter tabs" })
+    filter.focus()
+    fireEvent.change(filter, { target: { value: "unknown" } })
+    expect(fireEvent.keyDown(filter, { key: "ArrowDown" })).toBe(true)
+    expect(filter).toHaveFocus()
+    fireEvent.change(filter, { target: { value: "SQL" } })
+    expect(fireEvent.keyDown(filter, { key: "Home" })).toBe(true)
+    expect(filter).toHaveFocus()
+
+    fireEvent.keyDown(filter, { key: "ArrowDown" })
+    const first = screen.getByRole("treeitem", { name: "SQL 2" })
+    const second = screen.getByRole("treeitem", { name: "SQL 1" })
+    expect(first).toHaveFocus()
+    fireEvent.keyDown(first, { key: "ArrowRight" })
+    expect(second).toHaveFocus()
+    fireEvent.keyDown(second, { key: "ArrowLeft" })
+    const open = sectionHeader("tabs-panel-open")!
+    expect(open).toHaveFocus()
+    fireEvent.keyDown(open, { key: "ArrowRight" })
+    expect(first).toHaveFocus()
+    fireEvent.keyDown(first, { key: "ArrowDown" })
+    fireEvent.keyDown(second, { key: "ArrowRight" })
+    const closed = sectionHeader("tabs-panel-closed")!
+    expect(closed).toHaveFocus()
+    fireEvent.keyDown(closed, { key: "ArrowLeft" })
+    expect(closed).toHaveAttribute("aria-expanded", "true")
+    expect(closed).toHaveFocus()
+    fireEvent.keyDown(closed, { key: "ArrowUp" })
+    expect(second).toHaveFocus()
+    expect(mocks.editor.setActiveBuffer).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(second, { key: "Enter" })
+    expect(mocks.editor.setActiveBuffer).toHaveBeenCalledOnce()
+    expect(mocks.editor.setActiveBuffer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1 }),
+    )
+  })
+
+  it.each([
+    { section: "open", laterNotebook: "Open beta" },
+    { section: "closed", laterNotebook: "Closed beta" },
+  ])(
+    "jumps from a later notebook directly to the $section heading",
+    ({ section, laterNotebook }) => {
+      mocks.editor.buffers = [
+        {
+          id: 1,
+          label: "Open alpha",
+          position: 0,
+          notebookViewState: { cells: [] },
+        },
+        {
+          id: 2,
+          label: "Open beta",
+          position: 1,
+          notebookViewState: { cells: [] },
+        },
+        {
+          id: 3,
+          label: "Closed alpha",
+          position: -1,
+          archived: true,
+          archivedAt: 200,
+          notebookViewState: { cells: [] },
+        },
+        {
+          id: 4,
+          label: "Closed beta",
+          position: -1,
+          archived: true,
+          archivedAt: 100,
+          notebookViewState: { cells: [] },
+        },
+      ]
+      renderComponent(<TabsPanel open />)
+      switchTo("List")
+      const notebook = screen.getByRole("treeitem", { name: laterNotebook })
+      const heading = sectionHeader(`tabs-panel-${section}`)!
+
+      notebook.focus()
+      fireEvent.keyDown(notebook, { key: "ArrowLeft" })
+
+      expect(heading).toHaveFocus()
+      expect(heading).toHaveAttribute("aria-expanded", "true")
+    },
+  )
+
+  it("pages to the visible edge and then advances by a viewport", () => {
+    mocks.editor.buffers.push({ id: 3, label: "SQL 3", position: 2 })
+    renderComponent(<TabsPanel open />)
+    switchTo("List")
+
+    const tree = screen.getByRole("tree", { name: "Tabs" })
+    const open = sectionHeader("tabs-panel-open")!
+    const first = screen.getByRole("treeitem", { name: "SQL 1" })
+    const second = screen.getByRole("treeitem", { name: "SQL 2" })
+    const third = screen.getByRole("treeitem", { name: "SQL 3" })
+    const closed = sectionHeader("tabs-panel-closed")!
+    const viewport = vi
+      .spyOn(tree, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 150, 60))
+
+    const surfaces = [
+      open.querySelector('[data-hook="tabs-panel-section-toggle"]')!,
+      first,
+      second,
+      third,
+      closed.querySelector('[data-hook="tabs-panel-section-toggle"]')!,
+    ]
+    surfaces.forEach((surface, index) => {
+      vi.spyOn(surface, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, index * 20, 150, 20),
+      )
+    })
+
+    first.focus()
+    fireEvent.keyDown(first, { key: "PageDown" })
+    expect(second).toHaveFocus()
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      behavior: "instant",
+      block: "end",
+      inline: "nearest",
+    })
+    fireEvent.keyDown(second, { key: "PageDown" })
+    expect(closed).toHaveFocus()
+
+    viewport.mockReturnValue(new DOMRect(0, 40, 150, 60))
+    fireEvent.keyDown(closed, { key: "PageUp" })
+    expect(second).toHaveFocus()
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      behavior: "instant",
+      block: "start",
+      inline: "nearest",
+    })
+    fireEvent.keyDown(second, { key: "PageUp" })
+    expect(open).toHaveFocus()
+  })
+
+  it("uses one Tab stop and keeps Alt+Arrow for Position reordering", async () => {
+    const user = userEvent.setup()
+    renderComponent(
+      <>
+        <TabsPanel open />
+        <Button>After panel</Button>
+      </>,
+    )
+    switchTo("List")
+    await selectSort("Position")
+
+    const first = screen.getByRole("treeitem", { name: "SQL 1" })
+    const second = screen.getByRole("treeitem", { name: "SQL 2" })
+    const close = within(first).getByRole("button", { name: "Close tab" })
+    expect(close).toHaveAttribute("tabindex", "-1")
+    await user.tab()
+    expect(first).toHaveFocus()
+    await user.tab()
+    expect(second).toHaveFocus()
+    await user.tab({ shift: true })
+    expect(first).toHaveFocus()
+    const open = sectionHeader("tabs-panel-open")!
+    await user.tab({ shift: true })
+    expect(open).toHaveFocus()
+    await user.tab({ shift: true })
+    expect(getSort()).toHaveFocus()
+    await user.tab()
+    expect(open).toHaveFocus()
+    await user.tab()
+    expect(first).toHaveFocus()
+
+    fireEvent.keyDown(first, { key: "ArrowDown" })
+    expect(second).toHaveFocus()
+    expect(mocks.editor.reorderBuffer).not.toHaveBeenCalled()
+    fireEvent.keyDown(second, { key: "ArrowUp", altKey: true })
+    expect(second).toHaveFocus()
+    expect(mocks.editor.reorderBuffer).toHaveBeenCalledWith(2, 0)
+    fireEvent.keyDown(second, { key: "End" })
+    expect(sectionHeader("tabs-panel-closed")).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole("button", { name: "After panel" })).toHaveFocus()
+  })
+
+  it("opens row actions with Shift+F10 and restores focus when dismissed or used", async () => {
+    renderComponent(<TabsPanel open />)
+    switchTo("List")
+    const first = screen.getByRole("treeitem", { name: "SQL 1" })
+    const next = screen.getByRole("treeitem", { name: "SQL 2" })
+
+    first.focus()
+    fireEvent.keyDown(first, { key: "F10", shiftKey: true })
+    const menu = await screen.findByRole("menu", { name: "SQL 1 actions" })
+    expect(
+      within(menu).getByRole("menuitem", { name: "Close tab" }),
+    ).toBeInTheDocument()
+    expect(
+      within(menu).getByRole("menuitem", { name: "Delete tab" }),
+    ).toBeInTheDocument()
+    fireEvent.keyDown(menu, { key: "Escape" })
+    await waitFor(() => expect(first).toHaveFocus())
+    expect(menu).not.toBeInTheDocument()
+
+    fireEvent.keyDown(first, { key: "F10", shiftKey: true })
+    const close = await screen.findByRole("menuitem", { name: "Close tab" })
+    fireEvent.click(close)
+    await waitFor(() => expect(next).toHaveFocus())
+    expect(mocks.editor.closeBuffer).toHaveBeenCalledWith(1, { focus: false })
+  })
+})
+
 describe("TabsPanel active tab reveal", () => {
   const expectRevealed = (section: string, rowSelector: string) => {
     expect(sectionHeader(section)).toHaveAttribute("aria-expanded", "true")
@@ -374,7 +644,7 @@ describe("TabsPanel active tab reveal", () => {
 
   it("reveals the active row after opening its group and preserves keyboard focus", () => {
     const { rerender } = renderComponent(<TabsPanel open />)
-    fireEvent.click(sectionHeader("tabs-panel-group-sql")!)
+    toggleSection("tabs-panel-group-sql")
     const filter = document.querySelector<HTMLInputElement>(
       '[data-hook="tabs-panel-filter"]',
     )!
@@ -388,7 +658,7 @@ describe("TabsPanel active tab reveal", () => {
 
   it("does not reopen or scroll on an unrelated buffer update", () => {
     const { rerender } = renderComponent(<TabsPanel open />)
-    fireEvent.click(sectionHeader("tabs-panel-group-sql")!)
+    toggleSection("tabs-panel-group-sql")
     scrollIntoView.mockClear()
     mocks.editor.buffers = [
       { id: 1, label: "Renamed", value: "select 42", position: 0 },
@@ -412,7 +682,7 @@ describe("TabsPanel active tab reveal", () => {
     }
     mocks.editor.buffers.push({ ...notebook, templateId: "ex1" })
     const { rerender } = renderComponent(<TabsPanel open />)
-    fireEvent.click(sectionHeader("tabs-panel-examples")!)
+    toggleSection("tabs-panel-examples")
     mocks.editor.activeBuffer = { id: 3 }
     rerender(<TabsPanel open />)
     expectRevealed("tabs-panel-examples", '[data-example-id="ex1"]')
@@ -432,8 +702,8 @@ describe("TabsPanel active tab reveal", () => {
     })
     const { rerender } = renderComponent(<TabsPanel open />)
     switchTo("List")
-    fireEvent.click(sectionHeader("tabs-panel-open")!)
-    fireEvent.click(sectionHeader("tabs-panel-closed")!)
+    toggleSection("tabs-panel-open")
+    toggleSection("tabs-panel-closed")
     mocks.editor.activeBuffer = { id: 2 }
     rerender(<TabsPanel open />)
     expectRevealed("tabs-panel-open", '[data-buffer-id="2"]')

@@ -19,6 +19,12 @@ import { StoreKey } from "../../utils/localStorage/types"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { TabLists, type SortOrder, type ViewMode } from "./TabLists"
+import {
+  enterTabListFromFilter,
+  focusAndReveal,
+  getTabTreeEntry,
+  navigateTabList,
+} from "./keyboard"
 
 type Props = {
   open: boolean
@@ -160,6 +166,9 @@ export const TabsPanel = ({ open }: Props) => {
   const [sortOrder, setSortOrder] = useState(readSortOrder)
   const sortLabel = sortLabels[sortOrder]
   const sortTriggerRef = useRef<HTMLButtonElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const lastTreeItem = useRef<HTMLElement | null>(null)
+  const [treeItemFocused, setTreeItemFocused] = useState(false)
   const [hideSortFocusRing, setHideSortFocusRing] = useState(false)
 
   const handleSortCloseAutoFocus = () => {
@@ -169,6 +178,18 @@ export const TabsPanel = ({ open }: Props) => {
         setHideSortFocusRing(true)
       }
     })
+  }
+
+  const handleTreeFocus = (event: React.FocusEvent<HTMLDivElement>) => {
+    const { target, currentTarget } = event
+    if (!currentTarget.contains(target)) return
+    if (target === currentTarget) {
+      const entry = getTabTreeEntry(currentTarget, lastTreeItem.current)
+      if (entry) focusAndReveal(entry)
+    } else if (target.matches('[role="treeitem"]')) {
+      lastTreeItem.current = target
+      setTreeItemFocused(true)
+    }
   }
 
   const changeViewMode = (next: ViewMode) => {
@@ -209,6 +230,7 @@ export const TabsPanel = ({ open }: Props) => {
                   event.preventDefault()
                   setFilter("")
                 }
+                enterTabListFromFilter(event, listRef.current)
               }}
               aria-label="Filter tabs"
               data-hook="tabs-panel-filter"
@@ -306,7 +328,24 @@ export const TabsPanel = ({ open }: Props) => {
             )}
           </Options>
         </PaneHeader>
-        <ListScroller data-hook="tabs-panel-lists">
+        <ListScroller
+          ref={listRef}
+          role="tree"
+          aria-label="Tabs"
+          tabIndex={open && !treeItemFocused ? 0 : -1}
+          data-hook="tabs-panel-lists"
+          onKeyDown={navigateTabList}
+          onFocus={handleTreeFocus}
+          onBlur={(event) => {
+            const next = event.relatedTarget
+            if (
+              !(next instanceof Node) ||
+              !event.currentTarget.contains(next)
+            ) {
+              setTreeItemFocused(false)
+            }
+          }}
+        >
           {open && (
             <TabLists
               filter={filter}

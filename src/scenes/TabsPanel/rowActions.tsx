@@ -1,5 +1,5 @@
 import React from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import {
   ArrowCounterClockwiseIcon,
   TrashIcon,
@@ -11,62 +11,81 @@ import type { RowActionHandlers } from "./useRowActions"
 
 const ROW_ICON_SIZE = 15
 
-const RowIconButton = styled(IconButton).attrs({
-  size: "sm",
-  variant: "ghost",
-})`
-  color: ${({ theme }) => theme.color.contentSecondary};
+const RowIconButton = styled(IconButton).attrs({ size: "sm" })<{
+  $danger: boolean
+}>`
+  ${({ $danger, theme }) =>
+    !$danger &&
+    css`
+      color: ${theme.color.contentSecondary};
 
-  &:hover:not(:disabled) {
-    color: ${({ theme }) => theme.color.contentPrimary};
-  }
+      &:hover:not(:disabled) {
+        color: ${theme.color.contentPrimary};
+      }
+    `}
 `
 
-const DeleteRowButton = styled(IconButton).attrs({
-  size: "sm",
-  variant: "dangerQuiet",
-})``
-
-type Props = {
-  buffer: Buffer
-  // From useRowActions, called once per list rather than once per row.
-  actions: RowActionHandlers
+export type TabRowAction = {
+  key: "close" | "reopen" | "delete"
+  label: string
+  disabled: boolean
+  icon: React.ReactNode
+  run: (origin: Element) => Promise<void>
 }
 
-// Close (Reopen for a closed tab) and Delete of a Tabs panel row.
-export const RowActions = ({
-  buffer,
-  actions: { canRemove, tabsDisabled, close, remove, reopen },
-}: Props) => (
+export const getTabRowActions = (
+  buffer: Buffer,
+  { canRemove, tabsDisabled, close, remove, reopen }: RowActionHandlers,
+): TabRowAction[] => [
+  buffer.archived
+    ? {
+        key: "reopen",
+        label: "Reopen tab",
+        disabled: tabsDisabled,
+        icon: <ArrowCounterClockwiseIcon size={ROW_ICON_SIZE} />,
+        run: (origin) => reopen(buffer, origin),
+      }
+    : {
+        key: "close",
+        label: "Close tab",
+        disabled: !canRemove,
+        icon: <XIcon size={ROW_ICON_SIZE} />,
+        run: (origin) => close(buffer, origin),
+      },
+  {
+    key: "delete",
+    label: "Delete tab",
+    disabled: buffer.archived ? tabsDisabled : !canRemove,
+    icon: <TrashIcon size={ROW_ICON_SIZE} />,
+    run: (origin) => remove(buffer, origin),
+  },
+]
+
+export const RowActions = ({ items }: { items: TabRowAction[] }) => (
   <>
-    {buffer.archived ? (
-      <Tooltip content="Reopen" placement="right">
+    {items.map(({ key, label, disabled, icon, run }) => {
+      const danger = key === "delete"
+      const button = (
         <RowIconButton
-          label="Reopen tab"
-          disabled={tabsDisabled}
-          data-hook="tabs-panel-reopen"
-          onClick={(event) => void reopen(buffer, event.currentTarget)}
+          key={key}
+          $danger={danger}
+          variant={danger ? "dangerQuiet" : "ghost"}
+          label={label}
+          disabled={disabled}
+          tabIndex={-1}
+          data-hook={`tabs-panel-${key}`}
+          onClick={(event) => void run(event.currentTarget)}
         >
-          <ArrowCounterClockwiseIcon size={ROW_ICON_SIZE} />
+          {icon}
         </RowIconButton>
-      </Tooltip>
-    ) : (
-      <RowIconButton
-        label="Close tab"
-        disabled={!canRemove}
-        data-hook="tabs-panel-close"
-        onClick={(event) => void close(buffer, event.currentTarget)}
-      >
-        <XIcon size={ROW_ICON_SIZE} />
-      </RowIconButton>
-    )}
-    <DeleteRowButton
-      label="Delete tab"
-      disabled={buffer.archived ? tabsDisabled : !canRemove}
-      data-hook="tabs-panel-delete"
-      onClick={(event) => void remove(buffer, event.currentTarget)}
-    >
-      <TrashIcon size={ROW_ICON_SIZE} />
-    </DeleteRowButton>
+      )
+      return key === "reopen" ? (
+        <Tooltip key={key} content="Reopen" placement="right">
+          {button}
+        </Tooltip>
+      ) : (
+        button
+      )
+    })}
   </>
 )

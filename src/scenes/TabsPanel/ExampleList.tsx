@@ -24,11 +24,11 @@ export const ExampleList = ({ examples, activeTemplateId }: Props) => {
   }
 
   return (
-    <div role="list" data-hook="tabs-panel-example-list">
+    <div data-hook="tabs-panel-example-list">
       {examples.map((example) => {
         const opening = openingExampleIds.includes(example.id)
         return (
-          <div key={example.id} role="listitem">
+          <div key={example.id}>
             <TabRow
               label={example.title}
               icon={<NotebookTabIcon />}

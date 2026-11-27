@@ -1,6 +1,14 @@
-import React from "react"
+import React, { useRef } from "react"
 import styled, { css } from "styled-components"
 import { Text } from "../../components"
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  MenuItem,
+} from "../../components/ContextMenu"
+import { statusInfoFocus } from "../../theme"
+import { RowActions, type TabRowAction } from "./rowActions"
 
 export type LeadingVisibility = "auto" | "visible" | "hidden"
 
@@ -11,7 +19,7 @@ type Props = React.ComponentPropsWithoutRef<"div"> & {
   dimmed: boolean
   disabled: boolean
   meta?: React.ReactNode
-  actions?: React.ReactNode
+  actions?: TabRowAction[]
   // Optional handle in the left gutter (e.g. a drag grip), shown on hover
   // unless the caller pins it visible or hidden.
   leading?: React.ReactNode
@@ -37,9 +45,6 @@ const Actions = styled.div`
   flex-shrink: 0;
 `
 
-// The activatable part of the row: icon, label and meta. It is the row's
-// button; the Close/Delete/Reopen actions are its siblings, so each stays a
-// separate control for assistive technology.
 const Main = styled.div`
   flex: 1;
   min-width: 0;
@@ -62,6 +67,12 @@ const Root = styled.div<{ $active: boolean; $disabled: boolean }>`
 
   &:hover {
     background: ${({ theme }) => theme.color.interactionHover};
+  }
+
+  &:focus-visible,
+  &[data-state="open"] {
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
+    outline-offset: -1px;
   }
 
   &:hover ${Leading}[data-visibility="auto"],
@@ -95,10 +106,6 @@ const Meta = styled.span`
   color: ${({ theme }) => theme.color.contentMuted};
 `
 
-// One row of the Tabs panel. The icon, label and meta form the row's button
-// (it takes focus and `onKeyDown`); the actions sit next to it, not inside it,
-// since a button cannot contain other controls. A click anywhere on the row
-// except an action activates it, as the mouse expects.
 export const TabRow = ({
   label,
   icon,
@@ -113,40 +120,118 @@ export const TabRow = ({
   onClick,
   onPointerDown,
   ...rest
-}: Props) => (
-  <Root
-    $active={active}
-    $disabled={disabled}
-    data-hook="tabs-panel-row"
-    data-active={active ? "true" : undefined}
-    onClick={disabled ? undefined : onClick}
-    onPointerDown={disabled ? undefined : onPointerDown}
-    {...rest}
-  >
-    {leading && (
-      <Leading
-        $visibility={leadingVisibility}
-        data-visibility={leadingVisibility}
-      >
-        {leading}
-      </Leading>
-    )}
-    <Main
-      role="button"
-      tabIndex={disabled ? -1 : 0}
+}: Props) => {
+  const rowRef = useRef<HTMLDivElement>(null)
+  const selectedAction = useRef(false)
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || event.defaultPrevented) return
+    const menuKey =
+      event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")
+    if (
+      actions &&
+      menuKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      event.preventDefault()
+      const row = event.currentTarget
+      const { left, bottom } = row.getBoundingClientRect()
+      // Anchor the keyboard-opened menu to its row on browsers where
+      // Shift+F10 does not dispatch a native contextmenu event.
+      row.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: left,
+          clientY: bottom,
+        }),
+      )
+      return
+    }
+    onKeyDown?.(event)
+  }
+
+  const row = (
+    <Root
+      ref={rowRef}
+      $active={active}
+      $disabled={disabled}
+      role="treeitem"
+      tabIndex={-1}
+      aria-label={label}
       aria-disabled={disabled || undefined}
       aria-current={active ? "page" : undefined}
-      data-hook="tabs-panel-row-button"
-      onKeyDown={disabled ? undefined : onKeyDown}
+      aria-haspopup={actions ? "menu" : undefined}
+      data-hook="tabs-panel-row"
+      data-active={active ? "true" : undefined}
+      onClick={disabled ? undefined : onClick}
+      onPointerDown={disabled ? undefined : onPointerDown}
+      onKeyDown={disabled ? undefined : handleKeyDown}
+      {...rest}
     >
-      {icon}
-      <Label color={dimmed ? "contentSecondary" : "contentPrimary"}>
-        {label}
-      </Label>
-      {meta && <Meta>{meta}</Meta>}
-    </Main>
-    {actions && (
-      <Actions onClick={(event) => event.stopPropagation()}>{actions}</Actions>
-    )}
-  </Root>
-)
+      {leading && (
+        <Leading
+          $visibility={leadingVisibility}
+          data-visibility={leadingVisibility}
+        >
+          {leading}
+        </Leading>
+      )}
+      <Main>
+        {icon}
+        <Label color={dimmed ? "contentSecondary" : "contentPrimary"}>
+          {label}
+        </Label>
+        {meta && <Meta>{meta}</Meta>}
+      </Main>
+      {actions && (
+        <Actions onClick={(event) => event.stopPropagation()}>
+          <RowActions items={actions} />
+        </Actions>
+      )}
+    </Root>
+  )
+
+  if (!actions) return row
+  return (
+    <ContextMenu
+      modal={false}
+      onOpenChange={(open) => {
+        if (open) selectedAction.current = false
+      }}
+    >
+      <ContextMenuTrigger asChild disabled={disabled}>
+        {row}
+      </ContextMenuTrigger>
+      <ContextMenuContent
+        aria-label={`${label} actions`}
+        onCloseAutoFocus={(event) => {
+          // A successful action already moved focus onto another tree item.
+          if (
+            selectedAction.current &&
+            document.activeElement !== document.body
+          ) {
+            event.preventDefault()
+          }
+        }}
+      >
+        {actions.map(({ key, label, icon, disabled, run }) => (
+          <MenuItem
+            key={key}
+            icon={icon}
+            disabled={disabled}
+            onSelect={() => {
+              if (!rowRef.current) return
+              selectedAction.current = true
+              void run(rowRef.current)
+            }}
+          >
+            {label}
+          </MenuItem>
+        ))}
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}

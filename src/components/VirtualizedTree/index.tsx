@@ -6,6 +6,7 @@ import React, {
 } from "react"
 import { Virtuoso, VirtuosoHandle, ListRange } from "react-virtuoso"
 import styled from "styled-components"
+import { getTreePageIndex } from "../../utils/treeKeyboard"
 
 export type VirtualizedTreeItem = {
   id: string
@@ -128,33 +129,21 @@ function VirtualizedTreeComponent<T extends VirtualizedTreeItem>(
           })
           break
         }
-        case "pageUp": {
-          if (!rangeRef.current) return
-          const { startIndex: upStart, endIndex: upEnd } = rangeRef.current
-          const upRangeLength = upEnd - upStart
-          const upIndex =
-            focusedIndex !== null && focusedIndex !== upStart
-              ? upStart
-              : Math.max(0, upStart - upRangeLength)
-          virtuosoRef.current.scrollIntoView({
-            index: upIndex,
-            align: "start",
-            done: () => setFocusedIndex(upIndex),
-          })
-          break
-        }
+        case "pageUp":
         case "pageDown": {
-          if (!rangeRef.current) return
-          const { startIndex: downStart, endIndex: downEnd } = rangeRef.current
-          const downRangeLength = downEnd - downStart
-          const downIndex =
-            focusedIndex !== null && focusedIndex !== downEnd
-              ? downEnd
-              : Math.min(items.length - 1, downEnd + downRangeLength)
+          const range = rangeRef.current
+          if (!range) return
+          const direction = to === "pageUp" ? "up" : "down"
+          const index = getTreePageIndex(
+            direction,
+            focusedIndex,
+            range,
+            items.length,
+          )
           virtuosoRef.current.scrollIntoView({
-            index: downIndex,
-            align: "end",
-            done: () => setFocusedIndex(downIndex),
+            index,
+            align: direction === "up" ? "start" : "end",
+            done: () => setFocusedIndex(index),
           })
           break
         }
