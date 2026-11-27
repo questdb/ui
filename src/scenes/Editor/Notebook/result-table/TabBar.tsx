@@ -21,11 +21,10 @@ const truncateQuery = (query: string, maxLen = 30): string => {
     : oneLine
 }
 
-// A refresh keeps the old rows on screen, so the tab — not the grid — carries
-// the refresh state: a spinner while in flight, a red refresh icon when the
-// last round failed. A statement with no result yet is neutral, never an error.
+// Keep the last status visible during polling. Manual runs and refreshes
+// still show progress, and a failed refresh shows its error icon.
 const SlotIcon: React.FC<{ slot: StatementSlotView }> = ({ slot }) => {
-  if (slot.refreshing || slot.result?.type === "running") {
+  if (slot.refreshing === "manual" || slot.result?.type === "running") {
     return (
       <TabSpinner data-hook="result-tab-loading">
         <LoadingIconSvg />

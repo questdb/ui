@@ -32,6 +32,7 @@ const selectSlotChannel = (
 ): SlotRefreshChannel | undefined =>
   state && {
     slotFetching: state.slotFetching,
+    manualGridRefresh: state.manualGridRefresh,
     slotErrors: state.slotErrors,
     slotVerifiedAt: state.slotVerifiedAt,
     slotVerifiedTimings: state.slotVerifiedTimings,

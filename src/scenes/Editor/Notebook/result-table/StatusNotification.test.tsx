@@ -16,7 +16,7 @@ it("shows the latest refresh duration instead of the retained row frame's durati
   const slot: StatementSlotView = {
     key: "select 1",
     sql: "select 1",
-    refreshing: false,
+    refreshing: null,
     fetchedAt: 1000,
     timings: old,
     result: {

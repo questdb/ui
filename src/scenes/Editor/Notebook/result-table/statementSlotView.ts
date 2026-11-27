@@ -5,7 +5,11 @@ import type { StatementFrame } from "../statementIdentity"
 
 export type SlotRefreshChannel = Pick<
   CellFetchState,
-  "slotFetching" | "slotErrors" | "slotVerifiedAt" | "slotVerifiedTimings"
+  | "slotFetching"
+  | "manualGridRefresh"
+  | "slotErrors"
+  | "slotVerifiedAt"
+  | "slotVerifiedTimings"
 >
 
 // One tab's view model. Tabs follow the editor's statement list, not the
@@ -15,7 +19,7 @@ export type StatementSlotView = {
   key: string
   sql: string
   result: SingleQueryResult | null
-  refreshing: boolean
+  refreshing: "manual" | "background" | null
   refreshError?: string
   // The status line's time: when the slot's rows were fetched, or the later
   // poll that verified them unchanged.
@@ -52,7 +56,11 @@ export const buildStatementSlotViews = (
       sql: slot.sql,
       result: slot.result,
       timings,
-      refreshing: fetchState?.slotFetching.has(slot.key) ?? false,
+      refreshing: fetchState?.slotFetching.has(slot.key)
+        ? fetchState.manualGridRefresh
+          ? "manual"
+          : "background"
+        : null,
       ...(refreshError !== undefined ? { refreshError } : {}),
       ...(fetchedAt !== undefined ? { fetchedAt } : {}),
     }

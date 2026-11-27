@@ -96,6 +96,7 @@ export type CellFetchState = {
   // slotErrors from their settled frame so both views feed one
   // last_refresh_error surface.
   slotFetching: ReadonlySet<StatementKey>
+  manualGridRefresh: boolean
   slotErrors: ReadonlyMap<StatementKey, string>
   cancelledSlots: ReadonlySet<StatementKey>
   // Session overlay: when a poll last returned identical rows for a slot. The
@@ -157,6 +158,7 @@ const initialFetchState = (queries: string[]): CellFetchState => ({
   classifyBlock: null,
   classifiedKey: null,
   slotFetching: new Set(),
+  manualGridRefresh: false,
   slotErrors: new Map(),
   cancelledSlots: new Set(),
   slotVerifiedAt: new Map(),
@@ -870,7 +872,11 @@ export class CellRefreshEngine {
     for (const abort of entry.slotAborts.values()) abort.abort()
     entry.slotAborts.clear()
     if (entry.state.fetching || entry.state.slotFetching.size > 0) {
-      this.setState(entry, { fetching: false, slotFetching: new Set() })
+      this.setState(entry, {
+        fetching: false,
+        slotFetching: new Set(),
+        manualGridRefresh: false,
+      })
     }
   }
 
@@ -1511,6 +1517,7 @@ export class CellRefreshEngine {
         }
       })
       const launchPatch: Partial<CellFetchState> = {
+        manualGridRefresh: manual,
         classifyBlock: null,
         classifiedKey: queriesKey,
       }
@@ -1604,7 +1611,11 @@ export class CellRefreshEngine {
       entry.inFlight = null
       entry.manualRefreshInFlight = false
       entry.lastFetchedAt = Date.now()
-      this.setState(entry, { fetching: false, slotFetching: new Set() })
+      this.setState(entry, {
+        fetching: false,
+        slotFetching: new Set(),
+        manualGridRefresh: false,
+      })
     }
   }
 

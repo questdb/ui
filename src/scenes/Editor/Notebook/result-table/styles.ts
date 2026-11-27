@@ -41,6 +41,7 @@ export const TabLabel = styled.span`
 
 export const Tab = styled(TabButton)`
   && {
+    justify-content: flex-start;
     padding: 0.5rem 1rem;
     max-width: 20rem;
     min-width: 15rem;

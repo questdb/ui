@@ -259,6 +259,78 @@ describe("SQL work → notebook", () => {
     })
   })
 
+  it("keeps the result notification and tabs steady during polling", () => {
+    load(SQL, [
+      {
+        label: "Live results",
+        notebookViewState: {
+          cells: [
+            {
+              id: "live",
+              position: 0,
+              value: `${SQL}
+${SQL_TWO}`,
+              autoRefresh: false,
+            },
+          ],
+        },
+      },
+    ])
+    cy.getEditorTabByTitle("Live results")
+      .find(".chrome-tab-drag-handle")
+      .click()
+    cy.get('[data-cell-id="live"] button[aria-label="Run cell"]').click()
+    cy.wait("@probeQuery")
+    cy.wait("@probeQuery")
+
+    const cell = () => cy.get('[data-cell-id="live"]')
+    const notification = (type) =>
+      cell().find(`[data-hook="${type}-notification"]`)
+    cell().find('[role="tab"]').first().click()
+    notification("success").should("contain.text", "4 rows")
+    let finish
+    cy.intercept({ method: "GET", pathname: "/exec" }, (req) => {
+      if (!String(req.query.query).includes("probe_one")) return
+      return new Cypress.Promise((resolve) => {
+        finish = (body) => {
+          finish = undefined
+          req.reply(body)
+          resolve()
+        }
+      })
+    })
+
+    cy.get(
+      '[data-cell-id="live"] button[aria-label^="Auto-refresh interval"]',
+    ).click()
+    cy.contains('[role="menuitemradio"]', /^1s$/).click()
+    cy.wrap(null).should(() => expect(finish).to.be.a("function"))
+    notification("success").should("contain.text", "4 rows")
+    notification("loading").should("not.exist")
+    cell().find('[data-hook="result-tab-loading"]').should("not.exist")
+    cell().find('[data-hook="result-tab-success"]').should("have.length", 2)
+    cell()
+      .find('button[aria-label="Refresh"]')
+      .should("have.attr", "aria-busy", "true")
+
+    cy.then(() =>
+      finish({ query: SQL, position: 0, error: "Refresh unavailable" }),
+    )
+    notification("error").should(
+      "contain.text",
+      "Refresh failed: Refresh unavailable",
+    )
+    cell()
+      .find('[data-hook="result-tab-refresh-error"]')
+      .should("have.length", 1)
+    cell().find('[role="columnheader"]').should("contain.text", "probe_one")
+
+    cy.wrap(null).should(() => expect(finish).to.be.a("function"))
+    cy.then(() => finish(rows(SQL)))
+    notification("error").should("not.exist")
+    notification("success").should("contain.text", "4 rows")
+  })
+
   it("opens a mixed script's read results side by side without replaying them", () => {
     cy.viewport(1600, 900)
     const executions = load(

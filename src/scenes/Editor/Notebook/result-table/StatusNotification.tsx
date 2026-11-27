@@ -1,6 +1,6 @@
 import React from "react"
 import { Stop } from "../../../../components/icons"
-import { ArrowClockwiseIcon, Queue } from "@phosphor-icons/react"
+import { Queue } from "@phosphor-icons/react"
 import { Box, Text } from "../../../../components"
 import { useHeldFlag } from "../../../../hooks"
 import Notification from "../../../Notifications/Notification"
@@ -20,7 +20,8 @@ const REFRESHING_MIN_VISIBLE_MS = 250
 // same rows keeps the message identical, so the screen reader stays quiet.
 // Failures, recoveries and row-count changes alter the text and are read out.
 const liveRegionMessage = (slot: StatementSlotView): string => {
-  if (slot.refreshing && slot.result === null) return "Refreshing query"
+  if (slot.refreshing === "manual" && slot.result === null)
+    return "Refreshing query"
   if (slot.result?.type === "running") return "Query running"
   if (slot.refreshError !== undefined) {
     return `Refresh failed: ${slot.refreshError}`
@@ -60,14 +61,18 @@ export const StatusNotification: React.FC<Props> = ({
   onCancelQuery,
 }) => {
   const trackEvent = useNotebookTelemetry(cellId)
-  const refreshingHeld = useHeldFlag(slot.refreshing, REFRESHING_MIN_VISIBLE_MS)
+  const manuallyRefreshing = slot.refreshing === "manual"
+  const refreshingHeld = useHeldFlag(
+    manuallyRefreshing,
+    REFRESHING_MIN_VISIBLE_MS,
+  )
   const activeResult: SingleQueryResult = slot.result ?? {
     type: "queued",
     query: slot.sql,
   }
   const { type } = activeResult
   const showsRefreshing =
-    slot.refreshing || (refreshingHeld && type !== "running")
+    manuallyRefreshing || (refreshingHeld && type !== "running")
   const isError =
     type === "error" || (slot.refreshError !== undefined && type !== "running")
   const isCancelled = type === "cancelled"
@@ -130,12 +135,7 @@ export const StatusNotification: React.FC<Props> = ({
     body = (
       <Notification
         {...baseProps}
-        content={
-          <Box gap="1rem" align="center">
-            <ArrowClockwiseIcon size={16} />
-            <span>{`Refresh failed: ${slot.refreshError}`}</span>
-          </Box>
-        }
+        content={<span>{`Refresh failed: ${slot.refreshError}`}</span>}
         type={NotificationType.ERROR}
       />
     )

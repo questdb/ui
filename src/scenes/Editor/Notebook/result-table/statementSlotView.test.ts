@@ -26,6 +26,7 @@ const fetchState = (over: Partial<CellFetchState> = {}): CellFetchState => ({
   classifyBlock: null,
   classifiedKey: null,
   slotFetching: new Set(),
+  manualGridRefresh: false,
   slotErrors: new Map(),
   cancelledSlots: new Set(),
   slotVerifiedAt: new Map(),
@@ -75,7 +76,7 @@ describe("buildStatementSlotViews", () => {
     )
   })
 
-  it("attaches refresh state to slots by statement content", () => {
+  it("tracks background refresh and errors independently by statement", () => {
     // Given a two-statement frame where the second is refreshing and the
     // first failed its last round
     const statements = ["select 1", "select 2"]
@@ -93,11 +94,11 @@ describe("buildStatementSlotViews", () => {
     // Then each slot carries its own refresh state and freshness
     expect(slots[0]).toMatchObject({
       key: key1,
-      refreshing: false,
+      refreshing: null,
       refreshError: "boom",
       fetchedAt: 1234,
     })
-    expect(slots[1]).toMatchObject({ key: key2, refreshing: true })
+    expect(slots[1]).toMatchObject({ key: key2, refreshing: "background" })
     expect(slots[1].refreshError).toBeUndefined()
   })
 
@@ -139,7 +140,7 @@ describe("buildStatementSlotViews", () => {
     // Then the added statement is a neutral, idle slot
     expect(slots).toHaveLength(2)
     expect(slots[1].result).toBeNull()
-    expect(slots[1].refreshing).toBe(false)
+    expect(slots[1].refreshing).toBeNull()
     expect(slots[1].refreshError).toBeUndefined()
   })
 
@@ -152,11 +153,11 @@ describe("buildStatementSlotViews", () => {
     // When the slot views are built
     const slots = buildStatementSlotViews(
       frame,
-      fetchState({ slotFetching: new Set([second]) }),
+      fetchState({ slotFetching: new Set([second]), manualGridRefresh: true }),
     )
 
     // Then only that occurrence shows the spinner
-    expect(slots[0]).toMatchObject({ key: first, refreshing: false })
-    expect(slots[1]).toMatchObject({ key: second, refreshing: true })
+    expect(slots[0]).toMatchObject({ key: first, refreshing: null })
+    expect(slots[1]).toMatchObject({ key: second, refreshing: "manual" })
   })
 })

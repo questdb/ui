@@ -2027,6 +2027,7 @@ describe("CellRefreshEngine", () => {
       classifyBlock: null,
       classifiedKey: null,
       slotFetching: new Set<string>(),
+      manualGridRefresh: false,
       slotErrors: new Map<string, string>(),
       cancelledSlots: new Set<string>(),
       slotVerifiedAt: new Map<string, number>(),
@@ -4451,11 +4452,13 @@ describe("CellRefreshEngine", () => {
       // Then the ticks are skipped instead of aborting the manual round
       expect(deps.executeSingle.mock.calls.length).toBe(settledCalls + 1)
       expect(engine.getState("g1")?.fetching).toBe(true)
+      expect(engine.getState("g1")?.manualGridRefresh).toBe(true)
 
       // And the user's own round settles
       resolveManual()
       await flushAsync()
       expect(engine.getState("g1")?.fetching).toBe(false)
+      expect(engine.getState("g1")?.manualGridRefresh).toBe(false)
     })
 
     it("a mid-edit collapse drops the frame but keeps the persisted snapshot", async () => {
