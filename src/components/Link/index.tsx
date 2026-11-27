@@ -28,9 +28,7 @@ import styled from "styled-components"
 import type { Color } from "../../types"
 import { color } from "../../utils"
 
-import { Text, textStyles, TextProps } from "../Text"
-
-const defaultProps = Text.defaultProps
+import { textDefaultProps, textStyles, TextProps } from "../Text"
 
 type Props = Readonly<{
   hoverColor: Color
@@ -52,6 +50,6 @@ const Wrapper = styled.a<Props>`
   }
 `
 
-export const Link = (props: Props) => <Wrapper {...props} />
-
-Link.defaultProps = defaultProps
+export const Link = (props: Props) => (
+  <Wrapper {...textDefaultProps} {...props} />
+)

@@ -42,7 +42,7 @@ export const SetupAIAssistant = () => {
     <>
       <Box gap="1.2rem" align="center">
         <ModelDropdown />
-        <div ref={configureButtonRef as React.RefObject<HTMLDivElement>}>
+        <div ref={configureButtonRef as React.RefObject<HTMLDivElement | null>}>
           <Button
             size="md"
             {...configureButtonVariantProps}

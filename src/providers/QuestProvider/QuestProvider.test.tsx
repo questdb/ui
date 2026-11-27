@@ -1,9 +1,16 @@
+// @vitest-environment jsdom
 import "../../test/stubBrowserGlobals"
-import React, { useContext } from "react"
+import React, { act, useContext } from "react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  RenderResult,
+  screen,
+} from "@testing-library/react"
 import { ThemeProvider } from "styled-components"
 import { darkTheme } from "../../theme"
 import { AuthRefreshUnavailableError } from "../../modules/OAuth2/session"
-import { act, create, ReactTestRenderer } from "react-test-renderer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { StoreKey } from "../../utils/localStorage/types"
 import type { AuthPayload } from "../../modules/OAuth2/types"
@@ -18,12 +25,7 @@ const mocks = vi.hoisted(() => ({
   prepareRenewalRetry: vi.fn(),
   headers: vi.fn<[Record<string, string>], void>(),
   dispatch: vi.fn(),
-  headingFocus: vi.fn(),
-  mainFocus: vi.fn(),
   signInAgain: vi.fn(),
-  mainSetAttribute: vi.fn(),
-  mainRemoveAttribute: vi.fn(),
-  mainAddEventListener: vi.fn<[string, () => void, unknown?], void>(),
   settings: {
     "acl.enabled": true,
     "acl.basic.auth.realm.enabled": false,
@@ -70,12 +72,15 @@ vi.mock("../../modules/ConsoleEventTracker", () => ({
 vi.mock("../../components/QueryExecutionConfirmDialog", () => ({
   QueryExecutionConfirmDialog: () => null,
 }))
-vi.mock("../../components", () => ({
-  Text: "span",
-  Button: "button",
-  CenteredLayout: "section",
-  Box: "div",
-}))
+vi.mock("../../components", async () => {
+  const { domStandIn } = await import("../../test/domStandIn")
+  return {
+    Text: "span",
+    Button: domStandIn("button", ["prefixIcon"]),
+    CenteredLayout: domStandIn("section", ["preloadedImages"]),
+    Box: domStandIn("div", ["flexDirection"]),
+  }
+})
 vi.mock("../../utils/questdb/queryExecution", () => ({ questExecution: {} }))
 vi.mock("../../components/Box", () => ({
   Box: ({ children }: React.PropsWithChildren<unknown>) => (
@@ -90,7 +95,7 @@ const QuestProvider = ({ children }: React.PropsWithChildren<unknown>) => (
   </ThemeProvider>
 )
 
-let renderer: ReactTestRenderer | undefined
+let view: RenderResult | undefined
 beforeEach(() => {
   mocks.sessionData = undefined
   mocks.settings = {
@@ -104,24 +109,25 @@ beforeEach(() => {
   authSessionState.endSession()
 })
 afterEach(() => {
-  act(() => renderer?.unmount())
+  cleanup()
+  view = undefined
   vi.clearAllMocks()
   vi.useRealTimers()
 })
 const mount = async (children = <div data-hook="ready" />) => {
   await act(async () => {
-    renderer = create(<QuestProvider>{children}</QuestProvider>, {
-      createNodeMock: (element) => ({
-        focus: element.type === "h1" ? mocks.headingFocus : mocks.mainFocus,
-        setAttribute: mocks.mainSetAttribute,
-        removeAttribute: mocks.mainRemoveAttribute,
-        addEventListener: mocks.mainAddEventListener,
-        removeEventListener: vi.fn(),
-      }),
-    })
+    view = render(<QuestProvider>{children}</QuestProvider>)
     await Promise.resolve()
   })
 }
+const readyCount = () => document.querySelectorAll('[data-hook="ready"]').length
+const textOf = (container: HTMLElement) => {
+  const spans = container.querySelectorAll("span")
+  expect(spans).toHaveLength(1)
+  return spans[0].textContent
+}
+const statusText = () => textOf(screen.getByRole("status"))
+const alertText = () => textOf(screen.getByRole("alert"))
 
 describe("QuestProvider authentication gate", () => {
   it.each([
@@ -136,19 +142,15 @@ describe("QuestProvider authentication gate", () => {
     async (failure) => {
       mocks.queryRaw.mockRejectedValue(failure)
       await mount()
-      expect(renderer!.root.findByType("h1").children).toEqual([
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
         "Could not renew your SSO session",
-      ])
-      const signIn = renderer!.root
-        .findAllByType("button")
-        .find((button) => button.children.includes("Sign in again"))!
-      const onSignIn = signIn.props.onClick as () => void
-      act(onSignIn)
+      )
+      const signIn = screen.getByRole("button", { name: "Sign in again" })
+      fireEvent.click(signIn)
       expect(mocks.signInAgain).toHaveBeenCalledOnce()
-      expect(
-        renderer!.root.findByProps({ role: "status" }).findByType("span")
-          .children,
-      ).toEqual(["Renewal failed. Retry connection, or sign in again."])
+      expect(statusText()).toBe(
+        "Renewal failed. Retry connection, or sign in again.",
+      )
     },
   )
 
@@ -166,31 +168,24 @@ describe("QuestProvider authentication gate", () => {
     )
 
     // When the user retries, while a renewal is still being answered
-    const retry = renderer!.root
-      .findAllByType("button")
-      .find((button) => button.children.includes("Retry connection"))!
+    const retry = screen.getByRole("button", { name: "Retry connection" })
     await act(async () => {
-      retry.props.onClick()
+      fireEvent.click(retry)
       await Promise.resolve()
     })
 
     // Then it shows that it is reconnecting, and checks only once renewed
     expect(mocks.prepareRenewalRetry).toHaveBeenCalledOnce()
     expect(checks()).toBe(failedChecks)
-    expect(retry.props["aria-busy"]).toBe(true)
-    expect(
-      renderer!.root.findByProps({ role: "status" }).findByType("span")
-        .children,
-    ).toEqual(["Reconnecting…"])
+    expect(retry.getAttribute("aria-busy")).toBe("true")
+    expect(statusText()).toBe("Reconnecting…")
     mocks.queryRaw.mockResolvedValue({ type: "dml" })
     await act(async () => {
       renewed()
       await Promise.resolve()
     })
     expect(checks()).toBe(failedChecks + 1)
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "ready" }),
-    ).toHaveLength(1)
+    expect(readyCount()).toBe(1)
   })
 
   it("shows a delayed status while an auth check waits, then removes it on completion", async () => {
@@ -204,20 +199,17 @@ describe("QuestProvider authentication gate", () => {
         : Promise.resolve({ type: "dml" }),
     )
     await mount()
-    expect(renderer!.root.findAllByProps({ role: "status" })).toHaveLength(0)
+    expect(screen.queryAllByRole("status")).toHaveLength(0)
     act(() => {
       vi.advanceTimersByTime(500)
     })
-    expect(
-      renderer!.root.findByProps({ role: "status" }).findByType("span")
-        .children,
-    ).toEqual(["Checking your session…"])
+    expect(statusText()).toBe("Checking your session…")
     await act(async () => {
       finish({ type: "dml" })
       await Promise.resolve()
     })
-    expect(renderer!.root.findAllByProps({ role: "status" })).toHaveLength(0)
-    expect(renderer!.root.findByType("main").props.tabIndex).toBeUndefined()
+    expect(screen.queryAllByRole("status")).toHaveLength(0)
+    expect(screen.getByRole("main").hasAttribute("tabindex")).toBe(false)
     expect(vi.getTimerCount()).toBe(0)
   })
   it("reads a rotated refresh token when the installed refresh method runs", async () => {
@@ -247,7 +239,7 @@ describe("QuestProvider authentication gate", () => {
   it("releases password headers and refresh callbacks on unmount", async () => {
     localStorage.setItem(StoreKey.REST_TOKEN, "private")
     await mount()
-    act(() => renderer?.unmount())
+    view!.unmount()
     expect(mocks.headers).toHaveBeenLastCalledWith({})
     expect(questClient.refreshTokenMethod).toBeUndefined()
   })
@@ -258,22 +250,25 @@ describe("QuestProvider authentication gate", () => {
         ? Promise.reject({ error: "Offline" })
         : Promise.resolve({ type: "dml" }),
     )
+    const focus = vi.spyOn(HTMLElement.prototype, "focus")
     await mount()
-    expect(mocks.headingFocus).toHaveBeenCalledOnce()
-    mocks.mainFocus.mockClear()
+    expect(focus).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { level: 1 }),
+    )
+    focus.mockClear()
     mocks.queryRaw.mockResolvedValue({ type: "dml" })
     await act(async () => {
-      renderer!.root.findByType("button").props.onClick()
+      fireEvent.click(screen.getByRole("button"))
       await Promise.resolve()
     })
-    expect(mocks.mainFocus).toHaveBeenCalledOnce()
-    expect(mocks.mainSetAttribute).toHaveBeenCalledWith("tabindex", "-1")
-    expect(renderer!.root.findByType("main").props.tabIndex).toBeUndefined()
-    const release = mocks.mainAddEventListener.mock.calls.find(
-      ([event]) => event === "blur",
-    )![1]
-    release()
-    expect(mocks.mainRemoveAttribute).toHaveBeenCalledWith("tabindex")
+    const main = screen.getByRole("main")
+    expect(focus).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(main)
+    expect(main.getAttribute("tabindex")).toBe("-1")
+    act(() => main.blur())
+    expect(main.hasAttribute("tabindex")).toBe(false)
+    focus.mockRestore()
   })
 
   it.each([StoreKey.REST_TOKEN, StoreKey.BASIC_AUTH_HEADER])(
@@ -331,9 +326,7 @@ describe("QuestProvider authentication gate", () => {
           expect(mocks.headers).toHaveBeenLastCalledWith({
             Authorization: authorization,
           })
-          expect(
-            renderer?.root.findAllByProps({ "data-hook": "ready" }),
-          ).toHaveLength(0)
+          expect(readyCount()).toBe(0)
           expect(mocks.dispatch).not.toHaveBeenCalled()
 
           if (change === "replacement") {
@@ -346,9 +339,7 @@ describe("QuestProvider authentication gate", () => {
             await Promise.resolve()
           })
 
-          expect(
-            renderer?.root.findAllByProps({ "data-hook": "ready" }),
-          ).toHaveLength(1)
+          expect(readyCount()).toBe(1)
           expect(mocks.headers).toHaveBeenLastCalledWith({
             Authorization: authorization,
           })
@@ -366,7 +357,7 @@ describe("QuestProvider authentication gate", () => {
         localStorage.setItem(key, replacement)
         mocks.settings = { ...mocks.settings, "release.version": "updated" }
         await act(async () => {
-          renderer?.update(
+          view!.rerender(
             <QuestProvider>
               <div data-hook="ready" />
             </QuestProvider>,
@@ -382,7 +373,7 @@ describe("QuestProvider authentication gate", () => {
         localStorage.setItem(key, credential)
         await mount()
         localStorage.setItem(key, replacement)
-        act(() => renderer?.unmount())
+        view!.unmount()
         await mount()
         expect(mocks.headers).toHaveBeenLastCalledWith({
           Authorization: replacementAuthorization,
@@ -419,7 +410,7 @@ describe("QuestProvider authentication gate", () => {
       ),
     )
     await act(async () => {
-      renderer!.root.findByType("button").props.onClick()
+      fireEvent.click(screen.getByRole("button"))
       await Promise.resolve()
     })
     expect(mocks.queryRaw).toHaveBeenCalledWith("select build", {
@@ -436,21 +427,16 @@ describe("QuestProvider authentication gate", () => {
         : Promise.resolve({ type: "dml" }),
     )
     await mount()
+    expect(alertText()).toBe("QuestDB is not reachable [502]")
     expect(
-      renderer?.root.findByProps({ role: "alert" }).findByType("span").children,
-    ).toEqual(["QuestDB is not reachable [502]"])
-    expect(
-      renderer?.root.findByProps({ role: "alert" }).findByType("span").props
-        .color,
+      screen.getByRole("alert").querySelector("span")!.getAttribute("color"),
     ).toBe("statusDanger")
     mocks.queryRaw.mockResolvedValue({ type: "dml" })
     await act(async () => {
-      renderer?.root.findByType("button").props.onClick()
+      fireEvent.click(screen.getByRole("button"))
       await Promise.resolve()
     })
-    expect(
-      renderer?.root.findAllByProps({ "data-hook": "ready" }),
-    ).toHaveLength(1)
+    expect(readyCount()).toBe(1)
   })
 
   it("keeps the recovery panel and retry button mounted while retrying", async () => {
@@ -460,7 +446,7 @@ describe("QuestProvider authentication gate", () => {
         : Promise.resolve({ type: "dml" }),
     )
     await mount()
-    const button = renderer!.root.findByType("button")
+    const button = screen.getByRole("button")
     let failRetry!: (error: { error: string }) => void
     const retry = new Promise((_, reject) => {
       failRetry = reject
@@ -469,47 +455,36 @@ describe("QuestProvider authentication gate", () => {
       query === "SELECT 1" ? retry : Promise.resolve({ type: "dml" }),
     )
     await act(async () => {
-      button.props.onClick()
+      fireEvent.click(button)
       await Promise.resolve()
     })
 
-    expect(renderer!.root.findByType("button")).toBe(button)
-    expect(button.props.disabled).not.toBe(true)
-    expect(button.props["aria-disabled"]).toBe(true)
-    expect(button.props["aria-busy"]).toBe(true)
-    expect(renderer!.root.findByProps({ role: "alert" })).toBeDefined()
-    expect(
-      renderer!.root.findByProps({ role: "status" }).findByType("span")
-        .children,
-    ).toContain("Reconnecting…")
+    expect(screen.getByRole("button")).toBe(button)
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+    expect(button.getAttribute("aria-disabled")).toBe("true")
+    expect(button.getAttribute("aria-busy")).toBe("true")
+    expect(screen.getByRole("alert")).toBeDefined()
+    expect(statusText()).toBe("Reconnecting…")
     const attempts = mocks.queryRaw.mock.calls.length
-    act(() => {
-      button.props.onClick()
-    })
+    fireEvent.click(button)
     expect(mocks.queryRaw).toHaveBeenCalledTimes(attempts)
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "ready" }),
-    ).toHaveLength(0)
+    expect(readyCount()).toBe(0)
 
     await act(async () => {
       failRetry({ error: "Still unavailable" })
       await Promise.resolve()
     })
-    expect(renderer!.root.findByType("button")).toBe(button)
-    expect(button.props["aria-disabled"]).toBe(false)
-    expect(button.props["aria-busy"]).toBe(false)
-    expect(
-      renderer!.root.findByProps({ role: "alert" }).findByType("span").children,
-    ).toEqual(["Still unavailable"])
+    expect(screen.getByRole("button")).toBe(button)
+    expect(button.getAttribute("aria-disabled")).toBe("false")
+    expect(button.getAttribute("aria-busy")).toBe("false")
+    expect(alertText()).toBe("Still unavailable")
 
     mocks.queryRaw.mockResolvedValue({ type: "dml" })
     await act(async () => {
-      button.props.onClick()
+      fireEvent.click(button)
       await Promise.resolve()
     })
-    expect(
-      renderer!.root.findAllByProps({ "data-hook": "ready" }),
-    ).toHaveLength(1)
+    expect(readyCount()).toBe(1)
   })
 
   it("does not start another probe when credentials refresh during a retry", async () => {
@@ -528,14 +503,14 @@ describe("QuestProvider authentication gate", () => {
           })
         : Promise.resolve({ type: "dml" }),
     )
-    const button = renderer!.root.findByType("button")
+    const button = screen.getByRole("button")
     await act(async () => {
-      button.props.onClick()
+      fireEvent.click(button)
       await Promise.resolve()
     })
     mocks.sessionData = { access_token: "refreshed", token_type: "Bearer" }
     await act(async () => {
-      renderer!.update(
+      view!.rerender(
         <QuestProvider>
           <div data-hook="ready" />
         </QuestProvider>,
@@ -545,13 +520,14 @@ describe("QuestProvider authentication gate", () => {
     expect(
       mocks.queryRaw.mock.calls.filter(([query]) => query === "SELECT 1"),
     ).toHaveLength(2)
-    expect(button.props["aria-busy"]).toBe(true)
+    expect(button.getAttribute("aria-busy")).toBe("true")
     expect(mocks.headers).toHaveBeenLastCalledWith({})
     await act(async () => {
       failRetry({ error: "QuestDB is not reachable [502]" })
       await Promise.resolve()
     })
-    expect(button.props["aria-busy"]).toBe(false)
+    expect(screen.getByRole("button")).toBe(button)
+    expect(button.getAttribute("aria-busy")).toBe("false")
   })
 
   it("announces consecutive identical retry failures", async () => {
@@ -562,8 +538,8 @@ describe("QuestProvider authentication gate", () => {
         : Promise.resolve({ type: "dml" }),
     )
     await mount()
-    const alert = renderer!.root.findByProps({ role: "alert" })
-    const button = renderer!.root.findByType("button")
+    const alert = screen.getByRole("alert")
+    const button = screen.getByRole("button")
     let reject!: (error: { error: string }) => void
     mocks.queryRaw.mockImplementation((query: string) =>
       query === "SELECT 1"
@@ -572,25 +548,23 @@ describe("QuestProvider authentication gate", () => {
           })
         : Promise.resolve({ type: "dml" }),
     )
-    const status = renderer!.root.findByProps({ role: "status" })
+    const status = screen.getByRole("status")
     for (let attempt = 0; attempt < 2; attempt++) {
       await act(async () => {
-        button.props.onClick()
+        fireEvent.click(button)
         await Promise.resolve()
       })
-      expect(status.findByType("span").children).toEqual(["Reconnecting…"])
+      expect(textOf(status)).toBe("Reconnecting…")
       await act(async () => {
         reject(error)
         await Promise.resolve()
       })
-      expect(renderer!.root.findByProps({ role: "alert" })).toBe(alert)
-      expect(alert.findByType("span").children).toEqual([error.error])
-      expect(renderer!.root.findByProps({ role: "status" })).toBe(status)
-      expect(status.findByType("span").children).toEqual([
-        "Connection failed. Retry connection.",
-      ])
-      expect(renderer!.root.findByType("button")).toBe(button)
-      expect(button.props["aria-busy"]).toBe(false)
+      expect(screen.getByRole("alert")).toBe(alert)
+      expect(textOf(alert)).toBe(error.error)
+      expect(screen.getByRole("status")).toBe(status)
+      expect(textOf(status)).toBe("Connection failed. Retry connection.")
+      expect(screen.getByRole("button")).toBe(button)
+      expect(button.getAttribute("aria-busy")).toBe("false")
     }
   })
 
@@ -600,7 +574,7 @@ describe("QuestProvider authentication gate", () => {
       sessionEnded: true,
     })
     await mount()
-    expect(renderer?.root.findAllByProps({ role: "alert" })).toHaveLength(0)
+    expect(screen.queryAllByRole("alert")).toHaveLength(0)
   })
 
   it("keeps QuestContext stable and skips SELECT 1 on token refresh", async () => {
@@ -618,7 +592,7 @@ describe("QuestProvider authentication gate", () => {
     ).length
     mocks.sessionData = { access_token: "refreshed", token_type: "Bearer" }
     await act(async () => {
-      renderer?.update(<QuestProvider>{child}</QuestProvider>)
+      view!.rerender(<QuestProvider>{child}</QuestProvider>)
       await Promise.resolve()
     })
     expect(values[values.length - 1]).toBe(value)

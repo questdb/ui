@@ -187,7 +187,9 @@ const defaultValues = {
 
 const EditorContext = createContext<EditorContext>(defaultValues)
 
-export const EditorProvider: React.FC = ({ children }) => {
+export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
   const executionRefs = useRef<ExecutionRefs>({})

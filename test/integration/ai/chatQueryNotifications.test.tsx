@@ -8,7 +8,7 @@ import {
 } from "./support/chatHarness"
 import React from "react"
 import { expect, it } from "vitest"
-import { waitFor } from "@testing-library/react"
+import { act, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import Notifications from "../../../src/scenes/Notifications"
 import { questExecution } from "../../../src/utils/questdb/queryExecution"
@@ -74,5 +74,5 @@ it("shows a failed chat query in notifications with its SQL and conversation ide
     store.getState().query.queryNotifications[chat.id][queryKey].latest,
   ).toMatchObject({ query: queryKey, type: "error" })
   expect(server.otherRequests).toHaveLength(1)
-  questExecution.reset()
+  act(() => questExecution.reset())
 })

@@ -298,8 +298,10 @@ describe("view catalog joins and warnings", () => {
       "data-table-name",
       "btc_trades_lv",
     )
-    // When
-    await userEvent.click(get("schema-suspension-dialog-restart-transaction"))
+    // When the dialog has loaded the view's WAL state
+    await userEvent.click(
+      await waitFor(() => get("schema-suspension-dialog-restart-transaction")),
+    )
     // Then
     await waitFor(() =>
       expect(server.queries).toContain(

@@ -38,7 +38,7 @@ const expectSignInError = async (message: string | RegExp) => {
     name: /something went wrong|missing ID token|sign in again/i,
   })
   expect(error).toHaveTextContent(message)
-  expect(error).toHaveFocus()
+  await waitFor(() => expect(error).toHaveFocus())
   await expectLogin()
   return error
 }
@@ -756,7 +756,8 @@ describe("auth recovery", () => {
     const heading = await screen.findByRole("heading", {
       name: "Could not connect to QuestDB",
     })
-    expect(heading).toHaveFocus()
+    // The recovery panel moves focus in an effect after it renders.
+    await waitFor(() => expect(heading).toHaveFocus())
     expect(screen.getByText("QuestDB is not reachable [502]")).toHaveStyle({
       color: darkTheme.color.statusDanger,
     })

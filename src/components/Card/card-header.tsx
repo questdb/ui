@@ -45,8 +45,7 @@ type Props = {
   className?: string
 }
 
-const has = (...value: unknown[]) =>
-  value.reduce((acc, curr) => acc || curr, false)
+const has = (...value: unknown[]): boolean => value.some(Boolean)
 
 export const CardHeader = ({
   title,

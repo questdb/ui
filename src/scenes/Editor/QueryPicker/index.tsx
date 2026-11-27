@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { forwardRef, Ref, useCallback, useEffect, useState } from "react"
+import React, { Ref, useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
 
 import { Key, Text } from "../../../components"
@@ -36,7 +36,7 @@ import { Query, QueryGroup } from "providers/SettingsProvider/types"
 type Props = {
   hidePicker: () => void
   queries: Array<Query | QueryGroup>
-  ref: Ref<HTMLDivElement>
+  ref?: Ref<HTMLDivElement>
 }
 
 const Wrapper = styled.div`
@@ -218,8 +218,4 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
   )
 }
 
-const QueryPickerWithRef = (props: Props, ref: Ref<HTMLDivElement>) => (
-  <QueryPicker {...props} ref={ref} />
-)
-
-export default forwardRef(QueryPickerWithRef)
+export default QueryPicker

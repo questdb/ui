@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import React from "react"
 import { ThemeProvider } from "styled-components"
-import { act, create, ReactTestRenderer } from "react-test-renderer"
+import { act, cleanup, render } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { darkTheme } from "../../theme"
 import { EventType } from "../../modules/EventBus/types"
@@ -136,19 +137,16 @@ const renewalFailure = {
   requestNotSent: true,
 }
 
-let renderer: ReactTestRenderer | undefined
 const settle = () =>
   act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
 const mount = async () => {
-  act(() => {
-    renderer = create(
-      <ThemeProvider theme={darkTheme}>
-        <Schema open />
-      </ThemeProvider>,
-    )
-  })
+  render(
+    <ThemeProvider theme={darkTheme}>
+      <Schema open />
+    </ThemeProvider>,
+  )
   await settle()
 }
 const panel = () => mocks.virtualTables.mock.lastCall![0]
@@ -162,7 +160,7 @@ beforeEach(() => {
   mocks.quest.showMaterializedViews.mockResolvedValue({ type: "dql", data: [] })
 })
 afterEach(() => {
-  act(() => renderer?.unmount())
+  cleanup()
   vi.resetAllMocks()
 })
 

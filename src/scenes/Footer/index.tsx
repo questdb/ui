@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { CSSTransition } from "react-transition-group"
 import styled, { createGlobalStyle } from "styled-components"
 import { Github } from "../../components/icons"
@@ -127,6 +127,7 @@ const CtaBannerTransition = createGlobalStyle`
 `
 
 const Footer = () => {
+  const bannerRef = useRef<HTMLDivElement>(null)
   const [showBanner, setShowBanner] = useState(false)
   const [showBuildVersion, setShowBuildVersion] = useState(true)
   const handleClick = useCallback(() => {
@@ -168,12 +169,13 @@ const Footer = () => {
 
       <CtaBannerTransition />
       <CSSTransition
+        nodeRef={bannerRef}
         classNames="cta-banner"
         in={showBanner && consoleConfig.ctaBanner}
         timeout={TransitionDuration.REG}
         unmountOnExit
       >
-        <CtaBanner onClick={handleClick} />
+        <CtaBanner ref={bannerRef} onClick={handleClick} />
       </CSSTransition>
     </Wrapper>
   )

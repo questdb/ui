@@ -1,5 +1,10 @@
 import React from "react"
-import ReactMarkdown, { type Components, type Options } from "react-markdown"
+import ReactMarkdown, {
+  defaultUrlTransform,
+  type Components,
+  type Options,
+  type UrlTransform,
+} from "react-markdown"
 import remarkGfm from "remark-gfm"
 
 // The security boundary for every markdown surface in the app (notebook
@@ -8,11 +13,14 @@ import remarkGfm from "remark-gfm"
 // styled container.
 //
 // Guarantees:
-//   - No raw HTML: react-markdown@8 escapes raw HTML by default and we never
+//   - No raw HTML: react-markdown@10 escapes raw HTML by default and we never
 //     add rehype-raw, so embedded <script>/<img onerror> stay inert text.
 //   - Safe links: http(s) links open in a new tab with rel="noopener
-//     noreferrer"; other protocols are passed through react-markdown's default
-//     uriTransformer (which neutralizes javascript: etc.).
+//     noreferrer"; tel: links are kept; other protocols are passed through
+//     react-markdown's default urlTransform, which empties javascript: and
+//     other unsafe URLs. An emptied link renders without an href, so a click
+//     does nothing instead of reloading the console. The default also drops
+//     data: URLs, so image sources keep data:image/ explicitly.
 //   - Images off by default: dropped entirely unless allowImages is set, in
 //     which case only http(s)/data:image sources render.
 
@@ -25,7 +33,7 @@ const isSafeImageSrc = (value?: string): value is string =>
 
 const SafeLink = ({ children, href, ...props }: React.ComponentProps<"a">) => (
   <a
-    href={href}
+    href={href || undefined}
     {...(isHttpUrl(href)
       ? { target: "_blank", rel: "noopener noreferrer" }
       : {})}
@@ -39,6 +47,12 @@ const SafeImage = ({ src, alt, ...props }: React.ComponentProps<"img">) =>
   isSafeImageSrc(src) ? <img src={src} alt={alt ?? ""} {...props} /> : null
 
 const DropImage = () => null
+
+const urlTransform: UrlTransform = (url, key) => {
+  if (key === "src" && /^data:image\//i.test(url)) return url
+  if (key === "href" && /^tel:/i.test(url)) return url
+  return defaultUrlTransform(url)
+}
 
 type SafeMarkdownProps = {
   children: string
@@ -64,7 +78,11 @@ export const SafeMarkdown = ({
   }
 
   return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} components={merged}>
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      components={merged}
+      urlTransform={urlTransform}
+    >
       {children}
     </ReactMarkdown>
   )

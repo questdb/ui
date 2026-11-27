@@ -6,8 +6,7 @@ import {
   Slide,
   ToastOptions as RTToastOptions,
   ToastContent,
-} from "react-toastify"
-import { useNotificationCenter as RTNotificationCenter } from "react-toastify/addons/use-notification-center"
+} from "react-toastify/unstyled"
 import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
 import { CloseCircle, ErrorWarning, Information } from "../icons"
 import { CheckmarkOutline } from "../icons"
@@ -24,7 +23,6 @@ type StyledIconProps = {
 
 export type ToastOptions = RTToastOptions
 
-export const useNotificationCenter = RTNotificationCenter
 export const REFRESH_FAILED_TOAST_ID = "sso-refresh-failed"
 
 export const ToastIcon = ({
@@ -70,9 +68,6 @@ const toast = {
     return rtToast.info(content, {
       icon: <ToastIcon type={BadgeType.INFO} />,
       className: "toast-info-container",
-      progressStyle: {
-        background: getThemeColor("statusInfo"),
-      },
       style: {
         borderColor: getThemeColor("statusInfo"),
         background: getThemeColor("surfaceRaised"),
@@ -85,9 +80,6 @@ const toast = {
     return rtToast.success(content, {
       icon: <ToastIcon type={BadgeType.SUCCESS} />,
       className: "toast-success-container",
-      progressStyle: {
-        background: getThemeColor("statusSuccess"),
-      },
       style: {
         borderColor: getThemeColor("statusSuccess"),
         background: getThemeColor("surfaceRaised"),
@@ -100,9 +92,6 @@ const toast = {
     return rtToast.warning(content, {
       icon: <ToastIcon type={BadgeType.WARNING} />,
       className: "toast-warning-container",
-      progressStyle: {
-        background: getThemeColor("statusWarning"),
-      },
       style: {
         borderColor: getThemeColor("statusWarning"),
         background: getThemeColor("surfaceRaised"),
@@ -114,9 +103,6 @@ const toast = {
   error: (content: ToastContent, options?: ToastOptions) => {
     return rtToast.error(content, {
       icon: <ToastIcon type={BadgeType.ERROR} />,
-      progressStyle: {
-        background: getThemeColor("statusDanger"),
-      },
       className: "toast-error-container",
       style: {
         borderColor: getThemeColor("statusDanger"),
@@ -145,6 +131,11 @@ export const ToastContainer = (props?: ToastContainerProps) => {
     closeOnClick: true,
     pauseOnHover: true,
     pauseOnFocusLoss: false,
+    // react-toastify's default Alt+T focuses the toasts, but Alt+T adds an
+    // editor tab here. Outside the SQL editor it would move the user's focus.
+    // The default label announces that shortcut, so it goes too.
+    hotKeys: () => false,
+    "aria-label": "Notifications",
     ...props,
   }
 

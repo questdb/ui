@@ -149,7 +149,7 @@ export const Graph = ({
   const theme = useContext(ThemeContext)
   const timeRef = useRef(null)
   const valueRef = useRef(null)
-  const uPlotRef = useRef<uPlot>()
+  const uPlotRef = useRef<uPlot>(undefined)
   const colorsString = useMemo(() => colors.join(","), [colors])
 
   const { isTableMetric, mapYValue, chartTitle } = widgetConfig

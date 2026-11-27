@@ -52,6 +52,19 @@ describe("SafeMarkdown", () => {
     expect(html).not.toContain("javascript:alert")
   })
 
+  // An empty href would navigate to the current page and reload the console.
+  it.each([
+    "javascript:alert(1)",
+    "file:///etc/hosts",
+    "vscode://file/x",
+  ])("renders a link to %s without an href", (url) => {
+    expect(render(`[x](${url})`)).toMatch(/<a(?![^>]*\shref=)[^>]*>x<\/a>/)
+  })
+
+  it("keeps tel: links", () => {
+    expect(render("[call](tel:+15551234)")).toContain('href="tel:+15551234"')
+  })
+
   it("renders GFM tables by default", () => {
     const html = render("| a | b |\n| - | - |\n| 1 | 2 |")
     expect(html).toContain("<table")

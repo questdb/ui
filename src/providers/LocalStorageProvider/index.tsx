@@ -73,8 +73,6 @@ const defaultConfig: LocalConfig = {
   exampleQueriesVisited: false,
   autoRefreshTables: true,
   autoRefreshQueryActivity: true,
-  useNewGrid: true,
-  useQuickVis: false,
   runWithSelectionMode: "partial",
   capitalizeKeywordsOnFormat: false,
   maxColumnWidth: "auto",
@@ -87,59 +85,6 @@ const defaultConfig: LocalConfig = {
   notebookOnboarding: DEFAULT_NOTEBOOK_ONBOARDING,
 }
 
-type BooleanFeatureOverride = {
-  queryParam: string
-  storeKey: StoreKey
-  fallback: boolean
-}
-
-const NEW_GRID_OVERRIDE: BooleanFeatureOverride = {
-  queryParam: "useNewGrid",
-  storeKey: StoreKey.USE_NEW_GRID,
-  fallback: defaultConfig.useNewGrid,
-}
-
-const QUICK_VIS_OVERRIDE: BooleanFeatureOverride = {
-  queryParam: "useQuickVis",
-  storeKey: StoreKey.USE_QUICK_VIS,
-  fallback: defaultConfig.useQuickVis,
-}
-
-const readBooleanQueryOverride = (queryParam: string): boolean | null => {
-  const value = new URLSearchParams(window.location.search).get(queryParam)
-  if (value === "1" || value === "true") return true
-  if (value === "0" || value === "false") return false
-  return null
-}
-
-const getInitialBooleanFeature = ({
-  queryParam,
-  storeKey,
-  fallback,
-}: BooleanFeatureOverride): boolean =>
-  readBooleanQueryOverride(queryParam) ??
-  parseBoolean(getValue(storeKey), fallback)
-
-const persistBooleanQueryOverride = ({
-  queryParam,
-  storeKey,
-}: Pick<BooleanFeatureOverride, "queryParam" | "storeKey">): void => {
-  const override = readBooleanQueryOverride(queryParam)
-  if (override === null) return
-
-  setValue(storeKey, String(override))
-  const params = new URLSearchParams(window.location.search)
-  params.delete(queryParam)
-  const query = params.toString()
-  window.history.replaceState(
-    {},
-    "",
-    window.location.pathname +
-      (query ? `?${query}` : "") +
-      window.location.hash,
-  )
-}
-
 type ContextProps = {
   editorCol: number
   editorLine: number
@@ -149,8 +94,6 @@ type ContextProps = {
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
   autoRefreshQueryActivity: boolean
-  useNewGrid: boolean
-  useQuickVis: boolean
   runWithSelectionMode: RunWithSelectionMode
   capitalizeKeywordsOnFormat: boolean
   maxColumnWidth: MaxColumnWidth
@@ -192,8 +135,6 @@ const defaultValues: ContextProps = {
   exampleQueriesVisited: false,
   autoRefreshTables: true,
   autoRefreshQueryActivity: true,
-  useNewGrid: true,
-  useQuickVis: false,
   runWithSelectionMode: "partial",
   capitalizeKeywordsOnFormat: false,
   maxColumnWidth: "auto",
@@ -250,14 +191,6 @@ export const LocalStorageProvider = ({
       ),
     )
 
-  const [useNewGrid, setUseNewGrid] = useState<boolean>(() =>
-    getInitialBooleanFeature(NEW_GRID_OVERRIDE),
-  )
-
-  const [useQuickVis, setUseQuickVis] = useState<boolean>(() =>
-    getInitialBooleanFeature(QUICK_VIS_OVERRIDE),
-  )
-
   const [runWithSelectionMode, setRunWithSelectionMode] =
     useState<RunWithSelectionMode>(
       parseRunWithSelectionMode(getValue(StoreKey.RUN_WITH_SELECTION)),
@@ -274,14 +207,6 @@ export const LocalStorageProvider = ({
   const [maxColumnWidth, setMaxColumnWidth] = useState<MaxColumnWidth>(
     parseMaxColumnWidth(getValue(StoreKey.MAX_COLUMN_WIDTH)),
   )
-
-  useEffect(() => {
-    persistBooleanQueryOverride(NEW_GRID_OVERRIDE)
-  }, [])
-
-  useEffect(() => {
-    persistBooleanQueryOverride(QUICK_VIS_OVERRIDE)
-  }, [])
 
   const getLeftPanelState = (): LeftPanelState => {
     const stored = getValue(StoreKey.LEFT_PANEL_STATE)
@@ -378,12 +303,6 @@ export const LocalStorageProvider = ({
       case StoreKey.AUTO_REFRESH_QUERY_ACTIVITY:
         setAutoRefreshQueryActivity(value === "true")
         break
-      case StoreKey.USE_NEW_GRID:
-        setUseNewGrid(value === "true")
-        break
-      case StoreKey.USE_QUICK_VIS:
-        setUseQuickVis(value === "true")
-        break
       case StoreKey.RUN_WITH_SELECTION:
         setRunWithSelectionMode(parseRunWithSelectionMode(value))
         break
@@ -439,8 +358,6 @@ export const LocalStorageProvider = ({
       exampleQueriesVisited,
       autoRefreshTables,
       autoRefreshQueryActivity,
-      useNewGrid,
-      useQuickVis,
       runWithSelectionMode,
       capitalizeKeywordsOnFormat,
       maxColumnWidth,
@@ -461,8 +378,6 @@ export const LocalStorageProvider = ({
       exampleQueriesVisited,
       autoRefreshTables,
       autoRefreshQueryActivity,
-      useNewGrid,
-      useQuickVis,
       runWithSelectionMode,
       capitalizeKeywordsOnFormat,
       maxColumnWidth,

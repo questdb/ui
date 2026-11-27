@@ -145,7 +145,7 @@ export const Metrics = () => {
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const telemetryEnabled = telemetryConfig && telemetryConfig.enabled
   const metricsFilteredRef = useRef<boolean>(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval>>()
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined)
   const refreshTooltip = useTriggerTooltip()
 
   const defaultDateFromRef = useRef(
