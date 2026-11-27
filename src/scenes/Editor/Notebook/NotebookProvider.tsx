@@ -11,6 +11,7 @@ import React, {
 import type { MutableRefObject } from "react"
 import { unstable_batchedUpdates } from "react-dom"
 import {
+  discardTransferSnapshot,
   hasTransferSnapshot,
   newerTransferSnapshot,
   peekTransferSnapshot,
@@ -574,7 +575,10 @@ export const NotebookProvider: React.FC<{
       void dropSnapshotsAfterPersist(
         persisted,
         droppedSnapshotCellIds(out),
-        (cellId) => deleteCellSnapshot(bufferId, cellId),
+        (cellId) => {
+          discardTransferSnapshot(bufferId, cellId)
+          return deleteCellSnapshot(bufferId, cellId)
+        },
       )
       return { result: out.result, persisted }
     },
@@ -649,6 +653,7 @@ export const NotebookProvider: React.FC<{
   // doesn't rehydrate on the next load.
   const clearCellResult = useCallback(
     (cellId: string) => {
+      discardTransferSnapshot(bufferId, cellId)
       store.updateCells((cells) =>
         cells.map((cell) =>
           cell.id === cellId ? discardCellResult(cell) : cell,

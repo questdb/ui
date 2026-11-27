@@ -1,3 +1,4 @@
+import { discardTransferSnapshot } from "../utils/notebooks/notebookTransferState"
 import { db } from "./db"
 import type { CellResult, SingleQueryResult } from "./notebook"
 
@@ -81,6 +82,7 @@ export const deleteCellSnapshot = async (
   bufferId: number,
   cellId: string,
 ): Promise<void> => {
+  discardTransferSnapshot(bufferId, cellId)
   await db.notebook_results.delete([bufferId, cellId])
 }
 

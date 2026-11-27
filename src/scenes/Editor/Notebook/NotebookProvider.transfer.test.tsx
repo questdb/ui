@@ -3,7 +3,12 @@ import React from "react"
 import { act, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderComponent } from "../../../test/component"
-import { NotebookProvider, useNotebookState } from "./NotebookProvider"
+import {
+  NotebookProvider,
+  useNotebookActions,
+  useNotebookState,
+} from "./NotebookProvider"
+import { useCellResultHydrationEngine } from "./resultHydration/CellResultHydrationContext"
 import { QuestContext } from "../../../providers/QuestProvider"
 import { questClient } from "../../../utils/questdb/queryClient"
 import { QueryExecutionManager } from "../../../utils/questdb/queryExecutionManager"
@@ -31,7 +36,7 @@ vi.mock("../../../hooks/useQueryExecution", () => ({
 vi.mock("./useNotebookPersistence", () => ({
   useNotebookPersistence: () => ({
     persistCells: vi.fn(),
-    persistImmediately: vi.fn(),
+    persistImmediately: () => Promise.resolve(),
     persistDebounced: vi.fn(),
   }),
 }))
@@ -67,11 +72,19 @@ const frame: NotebookResultSnapshot = {
   ],
 }
 
-afterEach(() => authSessionState.endSession())
+afterEach(() => {
+  authSessionState.endSession()
+  disk.indexRead = undefined
+  disk.snapshotRead = undefined
+})
 
 let cells!: ReturnType<typeof useNotebookState>["cells"]
+let actions!: ReturnType<typeof useNotebookActions>
+let hydration: ReturnType<typeof useCellResultHydrationEngine>
 const Probe = () => {
   cells = useNotebookState().cells
+  actions = useNotebookActions()
+  hydration = useCellResultHydrationEngine()
   return null
 }
 const mountNotebook = () =>
@@ -146,6 +159,24 @@ describe("NotebookProvider transferred results", () => {
     })
     await waitFor(() => expect(cells[0].result).toBeDefined())
     expect(cells[0].result?.results[0]).toMatchObject({ dataset: [[1]] })
+  })
+
+  it("discards the staged frame when the user closes a result before it is saved", async () => {
+    authSessionState.markNonSSOAuthenticated()
+    stageTransferSnapshot(frame)
+    mountNotebook()
+    await waitFor(() => expect(disk.snapshotRead).toBeDefined())
+    await act(async () => {
+      disk.indexRead?.([])
+      disk.snapshotRead?.(undefined)
+      await Promise.resolve()
+    })
+    expect(cells[0].result?.results[0]).toMatchObject({ dataset: [[1]] })
+
+    act(() => actions.clearCellResult("c1"))
+
+    expect(cells[0].result).toBeUndefined()
+    expect(hasTransferSnapshot(42, "c1")).toBe(false)
   })
 
   it("does not bring back a written result whose snapshot was deleted since", async () => {

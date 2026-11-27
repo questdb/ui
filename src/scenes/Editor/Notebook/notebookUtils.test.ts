@@ -628,6 +628,25 @@ describe("swapCellUp / swapCellDown", () => {
 })
 
 describe("duplicateCellAt", () => {
+  it("does not make a new chart wait for the original transfer", () => {
+    const transferred: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "draw",
+      autoRefresh: false,
+      deferInitialDraw: true,
+    }
+    const copy = duplicateCellAt([transferred], "a", "copy")[1]
+    expect(copy).toMatchObject({ mode: "draw", autoRefresh: false })
+    expect(copy.deferInitialDraw).toBeUndefined()
+    const cloned = cloneNotebookViewState(
+      { cells: [transferred] },
+      () => "clone",
+    ).cells[0]
+    expect(cloned).toMatchObject({ mode: "draw", autoRefresh: false })
+    expect(cloned.deferInitialDraw).toBeUndefined()
+    expect(transferred.deferInitialDraw).toBe(true)
+  })
+
   it("inserts a copy immediately after the original with the provided id", () => {
     const start: NotebookCell[] = [cell("a", "SELECT 1"), cell("b")]
     const out = duplicateCellAt(start, "a", "new-id")

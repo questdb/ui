@@ -6,6 +6,7 @@ import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 import { authSessionState } from "../modules/OAuth2/authSessionState"
 import {
+  discardTransferSnapshot,
   requestTransferMonitor,
   stageTransferSnapshot,
 } from "../utils/notebooks/notebookTransferState"
@@ -41,7 +42,10 @@ vi.mock("../store/buffers", () => ({
   },
   MAX_BUFFER_NAME_LENGTH: 100,
 }))
-vi.mock("../utils/notebooks/notebookTransferState", () => ({
+vi.mock("../utils/notebooks/notebookTransferState", async (original) => ({
+  ...(await original<
+    typeof import("../utils/notebooks/notebookTransferState")
+  >()),
   markTransferSnapshotWritten: vi.fn(),
   requestTransferMonitor: vi.fn(),
   stageTransferSnapshot: vi.fn(),
@@ -205,6 +209,36 @@ describe("notebook transfer telemetry", () => {
     })
     expect(persistCellSnapshot).toHaveBeenCalledTimes(3)
     expect(stageTransferSnapshot).toHaveBeenCalledTimes(3)
+  })
+
+  it("skips a later transfer write if the user already closed that result", async () => {
+    const firstWrite = deferred<boolean>()
+    vi.mocked(createTransferCells).mockReturnValue(
+      ["c1", "c2"].map((id, position) => ({
+        id,
+        position,
+        value: `select ${position}`,
+        result: { results: [], timestamp: 1, activeResultIndex: 0 },
+      })),
+    )
+    vi.mocked(persistCellSnapshot)
+      .mockReturnValueOnce(firstWrite.promise)
+      .mockResolvedValue(true)
+    const hook = mount()
+    let transfer!: Promise<void>
+    await act(async () => {
+      transfer = hook().transfer({ ...request, compare: true })
+      await Promise.resolve()
+    })
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+    discardTransferSnapshot(42, "c2")
+    await act(async () => {
+      firstWrite.resolve(true)
+      await transfer
+    })
+
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
   })
 
   it("does not activate a target whose lookup completes after logout", async () => {

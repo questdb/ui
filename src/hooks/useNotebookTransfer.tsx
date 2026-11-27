@@ -13,6 +13,7 @@ import {
 import {
   markTransferSnapshotWritten,
   requestTransferMonitor,
+  reserveTransferSnapshotWrite,
   stageTransferSnapshot,
 } from "../utils/notebooks/notebookTransferState"
 import { trackEvent } from "../modules/ConsoleEventTracker"
@@ -134,14 +135,24 @@ export const useNotebookTransfer = () => {
       // are written. Stage every result before the first write, in this same
       // continuation: a notebook that mounts mid-write then finds all of them,
       // and never marks a not-yet-written cell's result as missing.
-      snapshots.forEach(stageTransferSnapshot)
+      const writes = snapshots.map((snapshot) => {
+        stageTransferSnapshot(snapshot)
+        return {
+          snapshot,
+          slot: reserveTransferSnapshotWrite(bufferId, snapshot.cellId),
+        }
+      })
       stage = "persist_results"
-      for (const snapshot of snapshots) {
-        const saved = await persistCellSnapshot(snapshot)
-        requireSession()
-        if (saved)
-          markTransferSnapshotWritten(snapshot.bufferId, snapshot.cellId)
-        else trackFailure("result_not_saved")
+      try {
+        for (const { snapshot, slot } of writes) {
+          if (slot.wasDiscarded()) continue
+          const saved = await persistCellSnapshot(snapshot)
+          requireSession()
+          if (saved) markTransferSnapshotWritten(bufferId, snapshot.cellId)
+          else trackFailure("result_not_saved")
+        }
+      } finally {
+        writes.forEach(({ slot }) => slot.release())
       }
       if (request.monitor) requestTransferMonitor(bufferId, cells[0].id)
       stage = "activate"

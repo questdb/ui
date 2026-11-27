@@ -27,10 +27,39 @@ const snapshots = new Map<
 let bytesHeld = 0
 const keyOf = (bufferId: number, cellId: string) => `${bufferId}:${cellId}`
 
+// A transfer stages every row before writing them in order. An explicit
+// discard can land before a later cell's disk write has even started.
+const pendingWrites = new Map<string, { discarded: boolean }>()
+
+export const reserveTransferSnapshotWrite = (
+  bufferId: number,
+  cellId: string,
+) => {
+  const key = keyOf(bufferId, cellId)
+  const write = { discarded: false }
+  pendingWrites.set(key, write)
+  return {
+    wasDiscarded: () => write.discarded,
+    release: () => {
+      if (pendingWrites.get(key) === write) pendingWrites.delete(key)
+    },
+  }
+}
+
 const drop = (key: string) => {
   const value = snapshots.get(key)
   if (value) bytesHeld -= value.bytes
   snapshots.delete(key)
+}
+
+export const discardTransferSnapshot = (
+  bufferId: number,
+  cellId: string,
+): void => {
+  const key = keyOf(bufferId, cellId)
+  const write = pendingWrites.get(key)
+  if (write) write.discarded = true
+  drop(key)
 }
 
 export const stageTransferSnapshot = (
@@ -107,6 +136,7 @@ let monitorRequest:
 const listeners = new Set<() => void>()
 
 authSessionState.onEnd(() => {
+  pendingWrites.clear()
   snapshots.clear()
   bytesHeld = 0
   monitorRequest = undefined
